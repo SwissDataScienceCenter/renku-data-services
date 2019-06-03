@@ -51,6 +51,7 @@ try:
     with open(namespace_path, "rt") as f:
         kubernetes_namespace = f.read()
 except (config.ConfigException, FileNotFoundError):
+    kubernetes_namespace = ""
     warnings.warn(
         "No k8s service account found - not running inside a kubernetes cluster?"
     )
@@ -71,7 +72,7 @@ def annotate_servers(servers):
 
     for server_name, properties in servers.items():
         pod_annotations = annotations.get(
-            properties.get("state", {}).get("pod_name", {}), {}
+            properties.get("state", {}).get("pod_name", ""), {}
         )
         servers[server_name]["annotations"] = {
             key: value
@@ -79,3 +80,7 @@ def annotate_servers(servers):
             if key.startswith(current_app.config.get("RENKU_ANNOTATION_PREFIX"))
         }
     return servers
+
+
+def read_namespaced_pod_log(pod_name, kubernetes_namespace):
+    return v1.read_namespaced_pod_log(pod_name, kubernetes_namespace)

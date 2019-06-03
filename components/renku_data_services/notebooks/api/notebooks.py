@@ -21,12 +21,15 @@ import os
 
 import requests
 from flask import Blueprint, abort, current_app, jsonify, request, make_response
-from gitlab import DEVELOPER_ACCESS
 
 from .. import config
-from ..util.gitlab_ import get_notebook_image, get_project, get_project_permissions
+from ..util.gitlab_ import (
+    get_notebook_image,
+    get_project,
+    check_user_has_developer_permission,
+)
 from ..util.jupyterhub_ import get_user_server, server_name
-from ..util.kubernetes_ import annotate_servers, v1
+from ..util.kubernetes_ import annotate_servers, read_namespaced_pod_log
 from .auth import auth, authenticated, get_user_info
 
 bp = Blueprint("notebooks_blueprint", __name__, url_prefix=config.SERVICE_PREFIX)
@@ -113,8 +116,8 @@ def launch_notebook(user, namespace, project, commit_sha, notebook=None):
 
     gl_project = get_project(user, namespace, project)
 
-    # Check project permissions and return 401 if < developer
-    if get_project_permissions(user, gl_project) < DEVELOPER_ACCESS:
+    # Return 401 if user is not a developer
+    if not check_user_has_developer_permission(user, gl_project):
         return current_app.response_class(
             status=401,
             response="Not authorized to use interactive environments for this project.",
@@ -211,10 +214,9 @@ def server_logs(user, namespace, project, commit_sha):
     if request.environ["HTTP_ACCEPT"] == "application/json":
         return make_response("Only supporting text/plain.", 406)
     if server:
-        logs = v1.read_namespaced_pod_log(
-            server.get("state", {}).get("pod_name", ""),
-            os.getenv("KUBERNETES_NAMESPACE"),
-        )
+        pod_name = server.get("state", {}).get("pod_name", "")
+        kubernetes_namespace = os.getenv("KUBERNETES_NAMESPACE")
+        logs = read_namespaced_pod_log(pod_name, kubernetes_namespace)
         resp = make_response(logs, 200)
     else:
         resp = make_response("", 404)

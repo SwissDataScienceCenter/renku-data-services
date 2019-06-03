@@ -21,20 +21,22 @@ import os
 import gitlab
 from flask import current_app
 
-GITLAB_URL = os.environ.get("GITLAB_URL", "https://gitlab.com")
-"""The GitLab instance to use."""
+from .. import config
 
 
 def _get_oauth_token(user):
     """Retrieve the user's GitLab token from the oauth metadata."""
-    from .jupyterhub_ import get_user_info
+    from ..api.auth import get_user_info
 
-    return get_user_info(user).get("auth_state", {}).get("access_token")
+    auth_state = get_user_info(user).get("auth_state", None)
+    return None if not auth_state else auth_state.get("access_token")
 
 
 def get_project(user, namespace, project):
     """Retrieve the GitLab project."""
-    gl = gitlab.Gitlab(GITLAB_URL, api_version=4, oauth_token=_get_oauth_token(user))
+    gl = gitlab.Gitlab(
+        config.GITLAB_URL, api_version=4, oauth_token=_get_oauth_token(user)
+    )
     try:
         gl.auth()
         gl_project = gl.projects.get("{0}/{1}".format(namespace, project))
@@ -45,7 +47,11 @@ def get_project(user, namespace, project):
     return gl_project
 
 
-def get_project_permissions(user, gl_project):
+def check_user_has_developer_permission(user, gl_project):
+    return _get_project_permissions(user, gl_project) >= gitlab.DEVELOPER_ACCESS
+
+
+def _get_project_permissions(user, gl_project):
     """Return the user's access level for the given project."""
     permissions = gl_project.attributes["permissions"]
     access_level = max(
