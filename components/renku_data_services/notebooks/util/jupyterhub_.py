@@ -17,64 +17,57 @@
 # limitations under the License.
 """Functions for interfacing with JupyterHub."""
 
-import json
-import logging
 import os
 import string
-from functools import partial, wraps
+from functools import partial
 from urllib.parse import urljoin
 
 import escapism
-import requests
-from flask import Blueprint, current_app, make_response, redirect, request
+from flask import Blueprint, current_app
 
 from .. import config
 from ..api.auth import get_user_info
-from .kubernetes_ import _get_pods
 
-bp = Blueprint('jh_bp', __name__, url_prefix=config.SERVICE_PREFIX)
+bp = Blueprint("jh_bp", __name__, url_prefix=config.SERVICE_PREFIX)
 
 RENKU_ANNOTATION_PREFIX = config.RENKU_ANNOTATION_PREFIX
+
 
 def server_name(namespace, project, commit_sha):
     """Form a DNS-safe server name."""
     escape = partial(
         escapism.escape,
         safe=set(string.ascii_lowercase + string.digits),
-        escape_char='-',
+        escape_char="-",
     )
-    return '{namespace}-{project}-{commit_sha}'.format(
+    return "{namespace}-{project}-{commit_sha}".format(
         namespace=escape(namespace)[:10],
         project=escape(project)[:10],
-        commit_sha=commit_sha[:7]
+        commit_sha=commit_sha[:7],
     ).lower()
 
 
 def notebook_url(user, server_name, notebook=None):
     """Form the notebook server URL."""
     notebook_url = urljoin(
-        os.environ.get('JUPYTERHUB_BASE_URL'),
-        'user/{user[name]}/{server_name}/'.format(
-            user=user, server_name=server_name
-        )
+        os.environ.get("JUPYTERHUB_BASE_URL"),
+        "user/{user[name]}/{server_name}/".format(user=user, server_name=server_name),
     )
     if notebook:
-        notebook_url += 'lab/tree/{notebook}'.format(notebook=notebook)
+        notebook_url += "lab/tree/{notebook}".format(notebook=notebook)
     return notebook_url
 
 
 def get_user_server(user, namespace, project, commit_sha):
     """Fetch the user named server"""
     user_info = get_user_info(user)
-    servers = user_info.get('servers', {})
+    servers = user_info.get("servers", {})
     for server in servers.values():
-        annotations = server.get('annotations', {})
+        annotations = server.get("annotations", {})
         if (
-            annotations.get(RENKU_ANNOTATION_PREFIX + 'namespace') == namespace
-            and
-            annotations.get(RENKU_ANNOTATION_PREFIX + 'projectName') == project
-            and annotations.get(RENKU_ANNOTATION_PREFIX +
-                                'commit-sha') == commit_sha
+            annotations.get(RENKU_ANNOTATION_PREFIX + "namespace") == namespace
+            and annotations.get(RENKU_ANNOTATION_PREFIX + "projectName") == project
+            and annotations.get(RENKU_ANNOTATION_PREFIX + "commit-sha") == commit_sha
         ):
             current_app.logger.debug(server)
             return server

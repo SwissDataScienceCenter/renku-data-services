@@ -16,21 +16,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Notebooks service APIs """
-import os
-from urllib.parse import urljoin
-
 from flask import Blueprint, Response
 
-from . import auth, notebooks
 from .. import config
+from . import auth, notebooks
 
-bp = Blueprint('notebooks_service', __name__)
+bp = Blueprint("notebooks_service", __name__)
 
 
-@bp.route('/health')
+@bp.route("/health")
 def health():
     """Just a health check path."""
-    return Response('service running under {}'.format(config.SERVICE_PREFIX))
+    return Response("service running under {}".format(config.SERVICE_PREFIX))
 
 
 blueprints = [bp, auth.bp, notebooks.bp]

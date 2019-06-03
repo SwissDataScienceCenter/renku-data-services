@@ -17,8 +17,6 @@
 # limitations under the License.
 """Notebooks service flask app."""
 
-import os
-
 from flask import Flask
 
 from . import config
@@ -38,16 +36,16 @@ class _ReverseProxied(object):
         self.app = app
 
     def __call__(self, environ, start_response):
-        script_name = environ.get('HTTP_X_SCRIPT_NAME', '')
+        script_name = environ.get("HTTP_X_SCRIPT_NAME", "")
         if script_name:
-            environ['SCRIPT_NAME'] = script_name
-            path_info = environ['PATH_INFO']
+            environ["SCRIPT_NAME"] = script_name
+            path_info = environ["PATH_INFO"]
             if path_info.startswith(script_name):
-                environ['PATH_INFO'] = path_info[len(script_name):]
+                environ["PATH_INFO"] = path_info[len(script_name) :]
 
-        scheme = environ.get('HTTP_X_SCHEME', '')
+        scheme = environ.get("HTTP_X_SCHEME", "")
         if scheme:
-            environ['wsgi.url_scheme'] = scheme
+            environ["wsgi.url_scheme"] = scheme
         return self.app(environ, start_response)
 
 
@@ -59,17 +57,17 @@ def create_app():
     app.config.from_object(config)
 
     from .api import blueprints
+
     for bp in blueprints:
         app.register_blueprint(bp)
 
     app.logger.debug(app.config)
 
-    if 'SENTRY_DSN' in app.config:
+    if "SENTRY_DSN" in app.config:
         import sentry_sdk
         from sentry_sdk.integrations.flask import FlaskIntegration
 
         sentry_sdk.init(
-            dsn=app.config.get('SENTRY_DSN'),
-            integrations=[FlaskIntegration()]
+            dsn=app.config.get("SENTRY_DSN"), integrations=[FlaskIntegration()]
         )
     return app
