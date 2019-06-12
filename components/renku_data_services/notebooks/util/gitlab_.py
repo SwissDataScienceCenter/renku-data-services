@@ -24,14 +24,6 @@ from flask import current_app
 from .. import config
 
 
-def _get_oauth_token(user):
-    """Retrieve the user's GitLab token from the oauth metadata."""
-    from ..api.auth import get_user_info
-
-    auth_state = get_user_info(user).get("auth_state", None)
-    return None if not auth_state else auth_state.get("access_token")
-
-
 def get_project(user, namespace, project):
     """Retrieve the GitLab project."""
     gl = gitlab.Gitlab(
@@ -45,6 +37,14 @@ def get_project(user, namespace, project):
         current_app.logger.error(e)
 
     return gl_project
+
+
+def _get_oauth_token(user):
+    """Retrieve the user's GitLab token from the oauth metadata."""
+    from ..api.auth import get_user_info
+
+    auth_state = get_user_info(user).get("auth_state", None)
+    return None if not auth_state else auth_state.get("access_token")
 
 
 def check_user_has_developer_permission(user, gl_project):
@@ -67,16 +67,6 @@ def _get_project_permissions(user, gl_project):
     return access_level
 
 
-def get_job_status(pipeline, job_name):
-    """Retrieve GitLab CI job status based on the job name."""
-    status = [
-        job.attributes["status"]
-        for job in pipeline.jobs.list()
-        if job.attributes["name"] == job_name
-    ]
-    return status.pop() if status else None
-
-
 def get_notebook_image(user, namespace, project, commit_sha):
     """Check if the image built by GitLab CI is ready."""
     gl_project = get_project(user, namespace, project)
@@ -87,7 +77,7 @@ def get_notebook_image(user, namespace, project, commit_sha):
 
     for pipeline in gl_project.pipelines.list():
         if pipeline.attributes["sha"] == commit_sha:
-            status = get_job_status(pipeline, "image_build")
+            status = _get_job_status(pipeline, "image_build")
 
             if not status:
                 # there is no image_build job for this commit
@@ -117,3 +107,13 @@ def get_notebook_image(user, namespace, project, commit_sha):
             break
 
     return image
+
+
+def _get_job_status(pipeline, job_name):
+    """Retrieve GitLab CI job status based on the job name."""
+    status = [
+        job.attributes["status"]
+        for job in pipeline.jobs.list()
+        if job.attributes["name"] == job_name
+    ]
+    return status.pop() if status else None

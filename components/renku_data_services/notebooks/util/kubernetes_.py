@@ -16,9 +16,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Kubernetes helper functions."""
+
 import os
 import warnings
 from datetime import timezone
+from pathlib import Path
+from urllib.parse import urljoin
 
 import escapism
 from flask import current_app
@@ -29,8 +32,6 @@ from kubernetes.config.incluster_config import (
     SERVICE_TOKEN_FILENAME,
     InClusterConfigLoader,
 )
-from pathlib import Path
-from urllib.parse import urljoin
 
 from .. import config
 
@@ -63,25 +64,36 @@ except FileNotFoundError:
     )
 
 
-def get_user_server(user, namespace, project, commit_sha):
-    """Fetch the user named server"""
-    RENKU_ANNOTATION_PREFIX = config.RENKU_ANNOTATION_PREFIX
-    servers = get_user_servers(user)
-    for server in servers.values():
-        annotations = server["annotations"]
-        if (
-            annotations.get(RENKU_ANNOTATION_PREFIX + "namespace") == namespace
-            and annotations.get(RENKU_ANNOTATION_PREFIX + "projectName") == project
-            and annotations.get(RENKU_ANNOTATION_PREFIX + "commit-sha") == commit_sha
-        ):
-            current_app.logger.debug(server)
-            return server
-    return {}
+def get_user_servers(user, namespace=None, project=None, branch=None, commit_sha=None):
+    """Fetch all the user named servers that matches the provided criteria"""
+
+    def filter_server(server):
+        def check_annotation(annotation, value):
+            annotation_name = config.RENKU_ANNOTATION_PREFIX + annotation
+            if value:
+                return server.get("annotations", {}).get(annotation_name, "") == value
+            return True
+
+        return (
+            check_annotation("namespace", namespace)
+            and check_annotation("projectName", project)
+            and check_annotation("branch", branch)
+            and check_annotation("commit-sha", commit_sha)
+        )
+
+    servers = _get_all_user_servers(user)
+    filtered_servers = {k: v for k, v in servers.items() if filter_server(v)}
+    current_app.logger.debug(filtered_servers)
+    return filtered_servers
 
 
-def get_user_servers(user):
-    """Return all notebook servers for the user"""
+def get_user_server(user, server_name):
+    """Fetch the user server with specific name"""
+    servers = _get_all_user_servers(user)
+    return servers.get(server_name, {})
 
+
+def _get_all_user_servers(user):
     def get_user_server_pods(user):
         safe_username = escapism.escape(user["name"], escape_char="-").lower()
         pods = v1.list_namespaced_pod(
@@ -157,13 +169,5 @@ def get_user_servers(user):
     return servers
 
 
-def _get_pods():
-    """Get the running pods."""
-    pods = v1.list_namespaced_pod(
-        kubernetes_namespace, label_selector="heritage = jupyterhub"
-    )
-    return pods
-
-
-def read_namespaced_pod_log(pod_name, kubernetes_namespace):
+def read_namespaced_pod_log(pod_name):
     return v1.read_namespaced_pod_log(pod_name, kubernetes_namespace)

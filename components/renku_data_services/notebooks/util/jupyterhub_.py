@@ -17,22 +17,26 @@
 # limitations under the License.
 """Functions for interfacing with JupyterHub."""
 
+import json
 import os
 from hashlib import md5
 from urllib.parse import urljoin
-from flask import Blueprint
 
-from .. import config
-
-
-bp = Blueprint("jh_bp", __name__, url_prefix=config.SERVICE_PREFIX)
+import requests
+from jupyterhub.services.auth import HubOAuth
 
 
-def make_server_name(namespace, project, commit_sha, ref="master"):
-    """Form a DNS-safe server name."""
-    server_string = "{namespace}{project}{commit_sha}{ref}".format(
-        namespace=namespace, project=project, commit_sha=commit_sha, ref=ref
-    )
+auth = HubOAuth(
+    api_token=os.environ.get("JUPYTERHUB_API_TOKEN", "token"), cache_max_age=60
+)
+"""Wrap JupyterHub authentication service API."""
+__prefix = auth.api_url
+__headers = {auth.auth_header_name: f"token {auth.api_token}"}
+
+
+def make_server_name(namespace, project, branch, commit_sha):
+    """Form a 16-digit hash server ID."""
+    server_string = f"{namespace}{project}{branch}{commit_sha}"
     return md5(server_string.encode()).hexdigest()[:16]
 
 
@@ -45,3 +49,33 @@ def notebook_url(user, server_name, notebook=None):
     if notebook:
         notebook_url += "lab/tree/{notebook}".format(notebook=notebook)
     return notebook_url
+
+
+def check_user_has_named_server(user, server_name):
+    """Check if the named-server exists in user's JupyterHub servers"""
+    user_info = get_user_info(user)
+    servers = user_info.get("servers")
+    return servers is not None and server_name in servers
+
+
+def get_user_info(user):
+    """Return the full user object."""
+    response = requests.get(f"{__prefix}/users/{user['name']}", headers=__headers)
+    user_info = json.loads(response.text)
+    return user_info
+
+
+def create_named_server(user, server_name, payload):
+    """Create a named-server for user"""
+    return requests.post(
+        f"{__prefix}/users/{user['name']}/servers/{server_name}",
+        json=payload,
+        headers=__headers,
+    )
+
+
+def delete_named_server(user, server_name):
+    """Delete a named-server"""
+    return requests.delete(
+        f"{__prefix}/users/{user['name']}/servers/{server_name}", headers=__headers
+    )

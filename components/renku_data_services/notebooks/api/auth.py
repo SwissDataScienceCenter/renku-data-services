@@ -16,11 +16,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Authentication functions for the notebooks service."""
-import json
-import os
-from functools import wraps
 
-import requests
+from functools import wraps
 from flask import (
     Blueprint,
     current_app,
@@ -31,15 +28,10 @@ from flask import (
     abort,
 )
 
-from jupyterhub.services.auth import HubOAuth
-
 from .. import config
 from ..util.kubernetes_ import get_user_servers
+from ..util.jupyterhub_ import auth, get_user_info
 
-auth = HubOAuth(
-    api_token=os.environ.get("JUPYTERHUB_API_TOKEN", "token"), cache_max_age=60
-)
-"""Wrap JupyterHub authentication service API."""
 
 bp = Blueprint("auth_bp", __name__, url_prefix=config.SERVICE_PREFIX)
 
@@ -112,18 +104,5 @@ def oauth_callback():
 def whoami(user):
     """Return information about the authenticated user."""
     user_info = get_user_info(user)
+    user_info["servers"] = get_user_servers(user)
     return jsonify(user_info)
-
-
-def get_user_info(user):
-    """Return the full user object."""
-    headers = {auth.auth_header_name: "token {0}".format(auth.api_token)}
-    info = json.loads(
-        requests.request(
-            "GET",
-            "{prefix}/users/{user[name]}".format(prefix=auth.api_url, user=user),
-            headers=headers,
-        ).text
-    )
-    info["servers"] = get_user_servers(user)
-    return info

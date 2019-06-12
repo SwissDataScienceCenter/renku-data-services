@@ -19,7 +19,6 @@
 import json
 import os
 
-import requests
 from flask import Blueprint, abort, current_app, jsonify, request, make_response
 
 from .. import config
@@ -28,13 +27,19 @@ from ..util.gitlab_ import (
     get_project,
     check_user_has_developer_permission,
 )
-from ..util.jupyterhub_ import make_server_name
+from ..util.jupyterhub_ import (
+    make_server_name,
+    create_named_server,
+    delete_named_server,
+    check_user_has_named_server,
+)
 from ..util.kubernetes_ import (
     read_namespaced_pod_log,
     get_user_server,
     get_user_servers,
 )
-from .auth import auth, authenticated
+from .auth import authenticated
+
 
 bp = Blueprint("notebooks_blueprint", __name__, url_prefix=config.SERVICE_PREFIX)
 
@@ -43,60 +48,57 @@ bp = Blueprint("notebooks_blueprint", __name__, url_prefix=config.SERVICE_PREFIX
 @authenticated
 def user_servers(user):
     """Return a JSON of running servers for the user."""
-    servers = get_user_servers(user)
+    namespace = request.args.get("namespace")
+    project = request.args.get("project")
+    branch = request.args.get("branch")
+    commit_sha = request.args.get("commit_sha")
+
+    servers = get_user_servers(user, namespace, project, branch, commit_sha)
     return jsonify({"servers": servers})
 
 
-@bp.route("<namespace>/<project>/<commit_sha>/server_options")
+@bp.route("servers/<server_name>")
 @authenticated
-def server_options(user, namespace, project, commit_sha):
-    """Return a set of configurable server options."""
-    server_options_file = os.getenv(
-        "NOTEBOOKS_SERVER_OPTIONS_PATH", "/etc/renku-notebooks/server_options.json"
-    )
-    with open(server_options_file) as f:
-        server_options = json.load(f)
-
-    # TODO: append image-specific options to the options json
-    return jsonify(server_options)
-
-
-@bp.route("<namespace>/<project>/<commit_sha>")
-@bp.route("<namespace>/<project>/<commit_sha>/<path:notebook>")
-@authenticated
-def notebook_status(user, namespace, project, commit_sha, notebook=None):
-    """Returns the current status of a user named server or redirect to it if running"""
-    server = get_user_server(user, namespace, project, commit_sha)
+def user_server(user, server_name):
+    """Returns a user server based on its ID"""
+    server = get_user_server(user, server_name)
     return jsonify(server)
 
 
-@bp.route("<namespace>/<project>/<commit_sha>", methods=["POST"])
-@bp.route("<namespace>/<project>/<commit_sha>/<path:notebook>", methods=["POST"])
+@bp.route("servers", methods=["POST"])
 @authenticated
-def launch_notebook(user, namespace, project, commit_sha, notebook=None):
-    """Launch user server with a given name."""
-    branch = request.args.get("branch", "master")
+def launch_notebook(user):
+    """Launch user server with a given arguments."""
+    try:
+        payload = request.json
+        namespace = payload["namespace"]
+        project = payload["project"]
+        branch = payload.get("branch", "master")
+        commit_sha = payload["commit_sha"]
+        notebook = payload.get("notebook")
+    except (AttributeError, KeyError):
+        return current_app.response_class(
+            status=400,
+            response="Invalid payload. 'namespace', 'project', and 'commit_sha' are mandatory.",
+        )
+
     # 0. check if server already exists and if so return it
-    server = get_user_server(user, namespace, project, commit_sha)
-    if server:
+    server_name = make_server_name(namespace, project, branch, commit_sha)
+
+    if check_user_has_named_server(user, server_name):
+        server = get_user_server(user, server_name)
         return current_app.response_class(
             response=json.dumps(server), status=200, mimetype="application/json"
         )
 
     # 1. launch using spawner that checks the access
-    headers = {auth.auth_header_name: "token {0}".format(auth.api_token)}
 
     # set the notebook image
     image = get_notebook_image(user, namespace, project, commit_sha)
 
     # process the server options
     # server options from system configuration
-    server_options_file = os.getenv(
-        "NOTEBOOKS_SERVER_OPTIONS_PATH", "/etc/renku-notebooks/server_options.json"
-    )
-
-    with open(server_options_file) as f:
-        server_options_defaults = json.load(f)
+    server_options_defaults = _read_server_options_file()
 
     # process the requested options and set others to defaults from config
     server_options = (request.get_json() or {}).get("serverOptions", {})
@@ -120,12 +122,12 @@ def launch_notebook(user, namespace, project, commit_sha, notebook=None):
         )
 
     payload = {
+        "namespace": namespace,
+        "project": project,
         "branch": branch,
         "commit_sha": commit_sha,
-        "namespace": namespace,
-        "notebook": notebook,
-        "project": project,
         "project_id": gl_project.id,
+        "notebook": notebook,
         "image": image,
         "git_clone_image": os.getenv("GIT_CLONE_IMAGE", "renku/git-clone:latest"),
         "server_options": server_options,
@@ -136,87 +138,67 @@ def launch_notebook(user, namespace, project, commit_sha, notebook=None):
         payload["image_pull_secrets"] = payload.get("image_pull_secrets", [])
         payload["image_pull_secrets"].append(os.environ["GITLAB_REGISTRY_SECRET"])
 
-    server_name = make_server_name(namespace, project, commit_sha)
-
-    r = requests.request(
-        "POST",
-        "{prefix}/users/{user[name]}/servers/{server_name}".format(
-            prefix=auth.api_url, user=user, server_name=server_name, image=image
-        ),
-        json=payload,
-        headers=headers,
-    )
+    r = create_named_server(user, server_name, payload)
 
     # 2. check response, we expect:
     #   - HTTP 201 if the server is already running; in this case redirect to it
     #   - HTTP 202 if the server is spawning
     if r.status_code == 201:
-        current_app.logger.debug(
-            "server {server_name} already running".format(server_name=server_name)
-        )
+        current_app.logger.debug(f"server {server_name} already running")
     elif r.status_code == 202:
-        current_app.logger.debug(
-            "spawn initialized for {server_name}".format(server_name=server_name)
-        )
+        current_app.logger.debug(f"spawn initialized for {server_name}")
     elif r.status_code == 400:
         current_app.logger.debug("server in pending state")
     else:
         # unexpected status code, abort
         abort(r.status_code)
 
-    # fetch the server from JupyterHub
-    server = get_user_server(user, namespace, project, commit_sha)
+    # fetch the server
+    server = get_user_server(user, server_name)
     return current_app.response_class(
         response=json.dumps(server), status=r.status_code, mimetype="application/json"
     )
-
-
-@bp.route("<namespace>/<project>/<commit_sha>", methods=["DELETE"])
-@authenticated
-def stop_notebook(user, namespace, project, commit_sha):
-    """Stop user server with name."""
-    server_name = make_server_name(namespace, project, commit_sha)
-    headers = {"Authorization": "token %s" % auth.api_token}
-
-    r = requests.request(
-        "DELETE",
-        "{prefix}/users/{user[name]}/servers/{server_name}".format(
-            prefix=auth.api_url, user=user, server_name=server_name
-        ),
-        headers=headers,
-    )
-    return current_app.response_class(r.content, status=r.status_code)
 
 
 @bp.route("servers/<server_name>", methods=["DELETE"])
 @authenticated
 def stop_server(user, server_name):
     """Stop user server with name."""
-    headers = {"Authorization": "token %s" % auth.api_token}
-
-    r = requests.request(
-        "DELETE",
-        "{prefix}/users/{user[name]}/servers/{server_name}".format(
-            prefix=auth.api_url, user=user, server_name=server_name
-        ),
-        headers=headers,
-    )
+    r = delete_named_server(user, server_name)
     return current_app.response_class(r.content, status=r.status_code)
 
 
-@bp.route("<namespace>/<project>/<commit_sha>/logs")
+@bp.route("server_options")
 @authenticated
-def server_logs(user, namespace, project, commit_sha):
+def server_options(user):
+    """Return a set of configurable server options."""
+    server_options = _read_server_options_file()
+
+    # TODO: append image-specific options to the options json
+    return jsonify(server_options)
+
+
+@bp.route("logs/<server_name>")
+@authenticated
+def server_logs(user, server_name):
     """"Return the logs of the running server."""
-    server = get_user_server(user, namespace, project, commit_sha)
     if request.environ["HTTP_ACCEPT"] == "application/json":
         return make_response("Only supporting text/plain.", 406)
+    server = get_user_server(user, server_name)
     if server:
         pod_name = server.get("state", {}).get("pod_name", "")
-        kubernetes_namespace = os.getenv("KUBERNETES_NAMESPACE")
-        logs = read_namespaced_pod_log(pod_name, kubernetes_namespace)
-        resp = make_response(logs, 200)
+        logs = read_namespaced_pod_log(pod_name)
+        response = make_response(logs, 200)
     else:
-        resp = make_response("", 404)
-    resp.mimetype = "text/plain"
-    return resp
+        response = make_response("", 404)
+    response.mimetype = "text/plain"
+    return response
+
+
+def _read_server_options_file():
+    server_options_file = os.getenv(
+        "NOTEBOOKS_SERVER_OPTIONS_PATH", "/etc/renku-notebooks/server_options.json"
+    )
+    with open(server_options_file) as f:
+        server_options = json.load(f)
+    return server_options
