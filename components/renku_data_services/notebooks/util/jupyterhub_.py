@@ -18,11 +18,9 @@
 """Functions for interfacing with JupyterHub."""
 
 import os
-import string
-from functools import partial
+from hashlib import md5
 from urllib.parse import urljoin
 
-import escapism
 from flask import Blueprint, current_app
 
 from .. import config
@@ -33,18 +31,12 @@ bp = Blueprint("jh_bp", __name__, url_prefix=config.SERVICE_PREFIX)
 RENKU_ANNOTATION_PREFIX = config.RENKU_ANNOTATION_PREFIX
 
 
-def server_name(namespace, project, commit_sha):
+def server_name(namespace, project, commit_sha, ref="master"):
     """Form a DNS-safe server name."""
-    escape = partial(
-        escapism.escape,
-        safe=set(string.ascii_lowercase + string.digits),
-        escape_char="-",
+    server_string = "{namespace}{project}{commit_sha}{ref}".format(
+        namespace=namespace, project=project, commit_sha=commit_sha, ref=ref
     )
-    return "{namespace}-{project}-{commit_sha}".format(
-        namespace=escape(namespace)[:10],
-        project=escape(project)[:10],
-        commit_sha=commit_sha[:7],
-    ).lower()
+    return md5(server_string.encode()).hexdigest()[:16]
 
 
 def notebook_url(user, server_name, notebook=None):

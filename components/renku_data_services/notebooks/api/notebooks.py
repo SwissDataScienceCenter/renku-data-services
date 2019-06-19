@@ -79,6 +79,7 @@ def notebook_status(user, namespace, project, commit_sha, notebook=None):
 @authenticated
 def launch_notebook(user, namespace, project, commit_sha, notebook=None):
     """Launch user server with a given name."""
+    branch = request.args.get("branch", "master")
     # 0. check if server already exists and if so return it
     name = server_name(namespace, project, commit_sha)
     server = get_user_server(user, namespace, project, commit_sha)
@@ -124,7 +125,7 @@ def launch_notebook(user, namespace, project, commit_sha, notebook=None):
         )
 
     payload = {
-        "branch": request.args.get("branch", "master"),
+        "branch": branch,
         "commit_sha": commit_sha,
         "namespace": namespace,
         "notebook": notebook,
