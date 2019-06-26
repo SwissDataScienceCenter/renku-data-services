@@ -31,6 +31,9 @@ JUPYTERHUB_ANNOTATION_PREFIX = "hub.jupyter.org"
 JUPYTERHUB_API_TOKEN = os.environ.get("JUPYTERHUB_API_TOKEN", "")
 """The service api token."""
 
+JUPYTERHUB_ORIGIN = os.environ.get("JUPYTERHUB_ORIGIN", "")
+"""Origin property of Jupyterhub, typically https://renkudomain.org"""
+
 RENKU_ANNOTATION_PREFIX = "renku.io/"
 """The prefix used for annotations by Renku."""
 

@@ -34,7 +34,7 @@ from flask import (
 from jupyterhub.services.auth import HubOAuth
 
 from .. import config
-from ..util.kubernetes_ import annotate_servers
+from ..util.kubernetes_ import get_user_servers
 
 auth = HubOAuth(
     api_token=os.environ.get("JUPYTERHUB_API_TOKEN", "token"), cache_max_age=60
@@ -125,5 +125,5 @@ def get_user_info(user):
             headers=headers,
         ).text
     )
-    annotate_servers(info["servers"])
+    info["servers"] = get_user_servers(user)
     return info

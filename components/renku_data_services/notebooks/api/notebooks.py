@@ -28,24 +28,26 @@ from ..util.gitlab_ import (
     get_project,
     check_user_has_developer_permission,
 )
-from ..util.jupyterhub_ import get_user_server, server_name
-from ..util.kubernetes_ import annotate_servers, read_namespaced_pod_log
-from .auth import auth, authenticated, get_user_info
+from ..util.jupyterhub_ import make_server_name
+from ..util.kubernetes_ import (
+    read_namespaced_pod_log,
+    get_user_server,
+    get_user_servers,
+)
+from .auth import auth, authenticated
 
 bp = Blueprint("notebooks_blueprint", __name__, url_prefix=config.SERVICE_PREFIX)
-
-SERVER_STATUS_MAP = {"spawn": "spawning", "stop": "stopping"}
 
 
 @bp.route("servers")
 @authenticated
 def user_servers(user):
     """Return a JSON of running servers for the user."""
-    servers = annotate_servers(get_user_info(user).get("servers", {}))
+    servers = get_user_servers(user)
     return jsonify({"servers": servers})
 
 
-@bp.route("<namespace>/<project>/<commit_sha>/server_options", methods=["GET"])
+@bp.route("<namespace>/<project>/<commit_sha>/server_options")
 @authenticated
 def server_options(user, namespace, project, commit_sha):
     """Return a set of configurable server options."""
@@ -59,18 +61,12 @@ def server_options(user, namespace, project, commit_sha):
     return jsonify(server_options)
 
 
-@bp.route("<namespace>/<project>/<commit_sha>", methods=["GET"])
-@bp.route("<namespace>/<project>/<commit_sha>/<path:notebook>", methods=["GET"])
+@bp.route("<namespace>/<project>/<commit_sha>")
+@bp.route("<namespace>/<project>/<commit_sha>/<path:notebook>")
 @authenticated
 def notebook_status(user, namespace, project, commit_sha, notebook=None):
     """Returns the current status of a user named server or redirect to it if running"""
-    name = server_name(namespace, project, commit_sha)
-
     server = get_user_server(user, namespace, project, commit_sha)
-    status = SERVER_STATUS_MAP.get(server.get("pending"), "not found")
-
-    current_app.logger.debug(f"server {name}: {status}")
-
     return jsonify(server)
 
 
@@ -81,7 +77,6 @@ def launch_notebook(user, namespace, project, commit_sha, notebook=None):
     """Launch user server with a given name."""
     branch = request.args.get("branch", "master")
     # 0. check if server already exists and if so return it
-    name = server_name(namespace, project, commit_sha)
     server = get_user_server(user, namespace, project, commit_sha)
     if server:
         return current_app.response_class(
@@ -141,10 +136,12 @@ def launch_notebook(user, namespace, project, commit_sha, notebook=None):
         payload["image_pull_secrets"] = payload.get("image_pull_secrets", [])
         payload["image_pull_secrets"].append(os.environ["GITLAB_REGISTRY_SECRET"])
 
+    server_name = make_server_name(namespace, project, commit_sha)
+
     r = requests.request(
         "POST",
         "{prefix}/users/{user[name]}/servers/{server_name}".format(
-            prefix=auth.api_url, user=user, server_name=name, image=image
+            prefix=auth.api_url, user=user, server_name=server_name, image=image
         ),
         json=payload,
         headers=headers,
@@ -155,11 +152,11 @@ def launch_notebook(user, namespace, project, commit_sha, notebook=None):
     #   - HTTP 202 if the server is spawning
     if r.status_code == 201:
         current_app.logger.debug(
-            "server {server_name} already running".format(server_name=name)
+            "server {server_name} already running".format(server_name=server_name)
         )
     elif r.status_code == 202:
         current_app.logger.debug(
-            "spawn initialized for {server_name}".format(server_name=name)
+            "spawn initialized for {server_name}".format(server_name=server_name)
         )
     elif r.status_code == 400:
         current_app.logger.debug("server in pending state")
@@ -178,13 +175,13 @@ def launch_notebook(user, namespace, project, commit_sha, notebook=None):
 @authenticated
 def stop_notebook(user, namespace, project, commit_sha):
     """Stop user server with name."""
-    name = server_name(namespace, project, commit_sha)
+    server_name = make_server_name(namespace, project, commit_sha)
     headers = {"Authorization": "token %s" % auth.api_token}
 
     r = requests.request(
         "DELETE",
         "{prefix}/users/{user[name]}/servers/{server_name}".format(
-            prefix=auth.api_url, user=user, server_name=name
+            prefix=auth.api_url, user=user, server_name=server_name
         ),
         headers=headers,
     )
@@ -207,7 +204,7 @@ def stop_server(user, server_name):
     return current_app.response_class(r.content, status=r.status_code)
 
 
-@bp.route("<namespace>/<project>/<commit_sha>/logs", methods=["GET"])
+@bp.route("<namespace>/<project>/<commit_sha>/logs")
 @authenticated
 def server_logs(user, namespace, project, commit_sha):
     """"Return the logs of the running server."""
