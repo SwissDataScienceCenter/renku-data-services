@@ -123,7 +123,7 @@ def get_user_servers(user):
     def get_pod_status(pod):
         try:
             ready = pod.status.container_statuses[0].ready
-        except IndexError:
+        except (IndexError, TypeError):
             ready = False
 
         status = {"phase": pod.status.phase, "ready": ready}
