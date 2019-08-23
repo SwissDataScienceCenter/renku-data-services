@@ -37,6 +37,7 @@ from ..util.kubernetes_ import (
     read_namespaced_pod_log,
     get_user_server,
     get_user_servers,
+    delete_user_pod,
 )
 from .auth import authenticated
 
@@ -164,6 +165,17 @@ def launch_notebook(user):
 @authenticated
 def stop_server(user, server_name):
     """Stop user server with name."""
+    forced = request.args.get("force", "").lower() == "true"
+    if forced:
+        server = get_user_server(user, server_name)
+        if server:
+            pod_name = server.get("state", {}).get("pod_name", "")
+            if delete_user_pod(user, pod_name):
+                return make_response("", 204)
+            else:
+                return make_response("Cannot force delete server", 400)
+        return make_response("", 404)
+
     r = delete_named_server(user, server_name)
     return current_app.response_class(r.content, status=r.status_code)
 

@@ -26,6 +26,7 @@ from urllib.parse import urljoin
 import escapism
 from flask import current_app
 from kubernetes import client
+from kubernetes.client.rest import ApiException
 from kubernetes.config.config_exception import ConfigException
 from kubernetes.config.incluster_config import (
     SERVICE_CERT_FILENAME,
@@ -91,6 +92,19 @@ def get_user_server(user, server_name):
     """Fetch the user server with specific name"""
     servers = _get_all_user_servers(user)
     return servers.get(server_name, {})
+
+
+def delete_user_pod(user, pod_name):
+    """Delete user's server with specific name"""
+    try:
+        v1.delete_namespaced_pod(
+            pod_name, kubernetes_namespace, grace_period_seconds=30
+        )
+        return True
+    except ApiException as e:
+        msg = f"Cannot delete server: {pod_name} for user: {user}, error: {e}"
+        current_app.logger.error(msg)
+        return False
 
 
 def _get_all_user_servers(user):
