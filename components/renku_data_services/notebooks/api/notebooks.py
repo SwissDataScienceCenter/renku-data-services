@@ -55,6 +55,7 @@ def user_servers(user):
     commit_sha = request.args.get("commit_sha")
 
     servers = get_user_servers(user, namespace, project, branch, commit_sha)
+    current_app.logger.debug(servers)
     return jsonify({"servers": servers})
 
 
@@ -86,16 +87,20 @@ def launch_notebook(user):
     # 0. check if server already exists and if so return it
     server_name = make_server_name(namespace, project, branch, commit_sha)
 
+    current_app.logger.debug(
+        f"Request to create server: {server_name} with options: {payload} for user: {user}"
+    )
+
     if check_user_has_named_server(user, server_name):
         server = get_user_server(user, server_name)
+        current_app.logger.debug(
+            f"Server {server_name} already exists in JupyterHub: {server}"
+        )
         return current_app.response_class(
             response=json.dumps(server), status=200, mimetype="application/json"
         )
 
     # 1. launch using spawner that checks the access
-
-    # set the notebook image
-    image = get_notebook_image(user, namespace, project, commit_sha)
 
     # process the server options
     # server options from system configuration
@@ -115,12 +120,21 @@ def launch_notebook(user):
 
     gl_project = get_project(user, namespace, project)
 
+    if gl_project is None:
+        return current_app.response_class(
+            status=404,
+            response=f"Cannot find project {project} for user: {user['name']}.",
+        )
+
     # Return 401 if user is not a developer
     if not check_user_has_developer_permission(user, gl_project):
         return current_app.response_class(
             status=401,
             response="Not authorized to use interactive environments for this project.",
         )
+
+    # set the notebook image
+    image = get_notebook_image(user, namespace, project, commit_sha)
 
     payload = {
         "namespace": namespace,
@@ -133,7 +147,8 @@ def launch_notebook(user):
         "git_clone_image": os.getenv("GIT_CLONE_IMAGE", "renku/git-clone:latest"),
         "server_options": server_options,
     }
-    current_app.logger.debug(payload)
+
+    current_app.logger.debug(f"Creating server {server_name} with {payload}")
 
     if os.environ.get("GITLAB_REGISTRY_SECRET"):
         payload["image_pull_secrets"] = payload.get("image_pull_secrets", [])
@@ -151,6 +166,9 @@ def launch_notebook(user):
     elif r.status_code == 400:
         current_app.logger.debug("server in pending state")
     else:
+        current_app.logger.error(
+            f"creating server {server_name} failed with {r.status_code}"
+        )
         # unexpected status code, abort
         abort(r.status_code)
 
@@ -166,6 +184,11 @@ def launch_notebook(user):
 def stop_server(user, server_name):
     """Stop user server with name."""
     forced = request.args.get("force", "").lower() == "true"
+
+    current_app.logger.debug(
+        f"Request to delete server: {server_name} forced: {forced} for user: {user}"
+    )
+
     if forced:
         server = get_user_server(user, server_name)
         if server:

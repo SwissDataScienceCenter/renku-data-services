@@ -31,12 +31,11 @@ def get_project(user, namespace, project):
     )
     try:
         gl.auth()
-        gl_project = gl.projects.get("{0}/{1}".format(namespace, project))
-
+        return gl.projects.get("{0}/{1}".format(namespace, project))
     except Exception as e:
-        current_app.logger.error(e)
-
-    return gl_project
+        current_app.logger.error(
+            f"Cannot get project: {project} for user: {user}, error: {e}"
+        )
 
 
 def _get_oauth_token(user):

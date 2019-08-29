@@ -84,7 +84,6 @@ def get_user_servers(user, namespace=None, project=None, branch=None, commit_sha
 
     servers = _get_all_user_servers(user)
     filtered_servers = {k: v for k, v in servers.items() if filter_server(v)}
-    current_app.logger.debug(filtered_servers)
     return filtered_servers
 
 
