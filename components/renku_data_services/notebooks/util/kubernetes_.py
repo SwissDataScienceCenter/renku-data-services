@@ -182,5 +182,14 @@ def _get_all_user_servers(user):
     return servers
 
 
-def read_namespaced_pod_log(pod_name):
-    return v1.read_namespaced_pod_log(pod_name, kubernetes_namespace)
+def read_namespaced_pod_log(pod_name, max_log_lines=0):
+    """
+    Read pod's logs.
+    """
+    if max_log_lines == 0:
+        logs = v1.read_namespaced_pod_log(pod_name, kubernetes_namespace)
+    else:
+        logs = v1.read_namespaced_pod_log(
+            pod_name, kubernetes_namespace, tail_lines=max_log_lines
+        )
+    return logs
