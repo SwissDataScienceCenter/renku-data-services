@@ -53,10 +53,7 @@ def authenticated(f):
             return f(user, *args, **kwargs)
         else:
             # if the request is not coming from a browser, return 401
-            if (
-                request.is_xhr
-                or request.environ.get("HTTP_ACCEPT", "") == "application/json"
-            ):
+            if request.environ.get("HTTP_ACCEPT", "") == "application/json":
                 current_app.logger.info(
                     "Unauthorized non-browser request - returning 401."
                 )
