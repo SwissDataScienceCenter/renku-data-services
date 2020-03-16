@@ -159,6 +159,23 @@ def _get_all_user_servers(user):
         status.update(conditions_summary)
         return status
 
+    def get_pod_resources(pod):
+        try:
+            resources = pod.spec.containers[0].resources.requests
+            # translate the cpu weird numeric string to a normal number
+            # ref: https://kubernetes.io/docs/concepts/configuration/
+            #   manage-compute-resources-container/#how-pods-with-resource-limits-are-run
+            if (
+                "cpu" in resources
+                and isinstance(resources["cpu"], str)
+                and str.endswith(resources["cpu"], "m")
+                and resources["cpu"][:-1].isdigit()
+            ):
+                resources["cpu"] = str(int(resources["cpu"][:-1]) / 1000)
+        except (AttributeError, IndexError):
+            resources = {}
+        return resources
+
     def get_server_url(pod):
         url = "/jupyterhub/user/{username}/{servername}/".format(
             username=pod.metadata.annotations["hub.jupyter.org/username"],
@@ -176,6 +193,7 @@ def _get_all_user_servers(user):
             "started": isoformat(pod.status.start_time),
             "status": get_pod_status(pod),
             "url": get_server_url(pod),
+            "resources": get_pod_resources(pod),
         }
         for pod in pods
     }
