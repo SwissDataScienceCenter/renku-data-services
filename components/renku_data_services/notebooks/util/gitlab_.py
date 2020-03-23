@@ -70,49 +70,37 @@ def get_notebook_image(user, namespace, project, commit_sha):
     """Check if the image built by GitLab CI is ready."""
     gl_project = get_project(user, namespace, project)
 
-    image = os.getenv("NOTEBOOKS_DEFAULT_IMAGE", "renku/singleuser:latest")
+    default_image = os.getenv("NOTEBOOKS_DEFAULT_IMAGE", "renku/singleuser:latest")
 
     commit_sha_7 = commit_sha[:7]
-
-    for pipeline in gl_project.pipelines.list():
-        if pipeline.attributes["sha"] == commit_sha:
-            status = _get_job_status(pipeline, "image_build")
-
-            if not status:
-                # there is no image_build job for this commit
-                # so we use the default image
-                current_app.logger.info("No image_build job found in pipeline.")
-
-            # we have an image_build job in the pipeline, check status
-            elif status == "success":
-                # the image was built
-                # it *should* be there so lets use it
-                image = (
-                    "{image_registry}/{namespace}"
-                    "/{project}:{commit_sha_7}".format(
-                        image_registry=current_app.config.get("IMAGE_REGISTRY"),
-                        commit_sha_7=commit_sha_7,
-                        namespace=namespace,
-                        project=project,
-                    ).lower()
-                )
-                current_app.logger.info(f"Using image {image}.")
-
-            else:
-                current_app.logger.info(
-                    "No image found for project {0} commit {1} - "
-                    "using {2} instead".format(project, commit_sha, image)
-                )
+    registry_repo = "{image_registry}/{namespace}/{project}".format(
+        image_registry=current_app.config.get("IMAGE_REGISTRY"),
+        namespace=namespace,
+        project=project,
+    )
+    # find the image registry repository
+    repository_found = False
+    for repository in gl_project.repositories.list():
+        if repository.attributes.get("location", "") == registry_repo:
+            repository_found = True
             break
 
+    if not repository_found:
+        current_app.logger.warning(
+            f"Image registry repository {registry_repo} not found."
+        )
+        return default_image
+
+    try:
+        repository.tags.get(commit_sha_7)
+    except gitlab.GitlabGetError:
+        current_app.logger.warning(
+            "No image found for project {0} commit {1} - "
+            "using {2} instead".format(project, commit_sha, default_image)
+        )
+        return default_image
+
+    image = f"{registry_repo}:{commit_sha_7}".lower()
+    current_app.logger.info(f"Using image {image}.")
+
     return image
-
-
-def _get_job_status(pipeline, job_name):
-    """Retrieve GitLab CI job status based on the job name."""
-    status = [
-        job.attributes["status"]
-        for job in pipeline.jobs.list()
-        if job.attributes["name"] == job_name
-    ]
-    return status.pop() if status else None
