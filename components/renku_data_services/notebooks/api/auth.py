@@ -62,9 +62,11 @@ def authenticated(f):
                 return response
 
             # redirect to login url on failed auth
-            state = auth.generate_state(next_url=request.path)
+            state = auth.generate_state(next_url=request.url)
             current_app.logger.debug(
-                "Auth flow, redirecting to: {}".format(auth.login_url)
+                "Auth flow, redirecting to {} with next url {}".format(
+                    auth.login_url, request.url
+                )
             )
             response = make_response(redirect(auth.login_url + "&state=%s" % state))
             response.set_cookie(auth.state_cookie_name, state)
@@ -103,3 +105,10 @@ def whoami(user):
     user_info = get_user_info(user)
     user_info["servers"] = get_user_servers(user)
     return jsonify(user_info)
+
+
+@bp.route("login-tmp")
+@authenticated
+def redirect_to_ui(user):
+    """Return information about the authenticated user."""
+    return make_response(redirect(request.args["redirect_url"]))

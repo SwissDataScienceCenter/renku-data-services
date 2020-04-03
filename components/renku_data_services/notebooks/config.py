@@ -42,3 +42,9 @@ SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
 
 SERVICE_PREFIX = os.environ.get("JUPYTERHUB_SERVICE_PREFIX", "/")
 """Service prefix is set by JupyterHub service spawner."""
+
+GITLAB_AUTH = os.environ.get("JUPYTERHUB_AUTHENTICATOR", "gitlab") == "gitlab"
+"""Check if we're authenticating with GitLab (and thus have a GitLab oauth token)."""
+
+JUPYTERHUB_PATH_PREFIX = os.environ.get("JUPYTERHUB_BASE_URL", "/jupyterhub")
+"""Base path under which Jupyterhub is running."""

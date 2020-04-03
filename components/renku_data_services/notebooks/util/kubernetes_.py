@@ -177,7 +177,8 @@ def _get_all_user_servers(user):
         return resources
 
     def get_server_url(pod):
-        url = "/jupyterhub/user/{username}/{servername}/".format(
+        url = "{jh_path_prefix}/user/{username}/{servername}/".format(
+            jh_path_prefix=config.JUPYTERHUB_PATH_PREFIX.rstrip("/"),
             username=pod.metadata.annotations["hub.jupyter.org/username"],
             servername=pod.metadata.annotations["hub.jupyter.org/servername"],
         )

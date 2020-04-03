@@ -26,7 +26,6 @@ from .. import config
 from ..util.gitlab_ import (
     get_notebook_image,
     get_project,
-    check_user_has_developer_permission,
 )
 from ..util.jupyterhub_ import (
     make_server_name,
@@ -125,13 +124,6 @@ def launch_notebook(user):
         return current_app.response_class(
             status=404,
             response=f"Cannot find project {project} for user: {user['name']}.",
-        )
-
-    # Return 401 if user is not a developer
-    if not check_user_has_developer_permission(user, gl_project):
-        return current_app.response_class(
-            status=401,
-            response="Not authorized to use interactive environments for this project.",
         )
 
     # set the notebook image

@@ -30,7 +30,6 @@ def get_project(user, namespace, project):
         config.GITLAB_URL, api_version=4, oauth_token=_get_oauth_token(user)
     )
     try:
-        gl.auth()
         return gl.projects.get("{0}/{1}".format(namespace, project))
     except Exception as e:
         current_app.logger.error(
@@ -41,6 +40,9 @@ def get_project(user, namespace, project):
 def _get_oauth_token(user):
     """Retrieve the user's GitLab token from the oauth metadata."""
     from ..api.auth import get_user_info
+
+    if not config.GITLAB_AUTH:
+        return None
 
     auth_state = get_user_info(user).get("auth_state", None)
     return None if not auth_state else auth_state.get("access_token")
