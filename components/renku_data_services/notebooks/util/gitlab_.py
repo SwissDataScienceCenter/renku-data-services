@@ -73,13 +73,13 @@ def get_notebook_image(user, namespace, project, commit_sha):
     gl_project = get_project(user, namespace, project)
 
     default_image = os.getenv("NOTEBOOKS_DEFAULT_IMAGE", "renku/singleuser:latest")
-
     commit_sha_7 = commit_sha[:7]
     registry_repo = "{image_registry}/{namespace}/{project}".format(
         image_registry=current_app.config.get("IMAGE_REGISTRY"),
         namespace=namespace,
         project=project,
-    )
+    ).lower()
+
     # find the image registry repository
     repository_found = False
     for repository in gl_project.repositories.list():
