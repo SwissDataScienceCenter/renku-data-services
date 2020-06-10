@@ -38,6 +38,7 @@ from ..util.kubernetes_ import (
     get_user_server,
     get_user_servers,
     delete_user_pod,
+    create_or_replace_registry_secret,
 )
 from .auth import authenticated
 
@@ -143,9 +144,11 @@ def launch_notebook(user):
 
     current_app.logger.debug(f"Creating server {server_name} with {payload}")
 
-    if os.environ.get("GITLAB_REGISTRY_SECRET"):
-        payload["image_pull_secrets"] = payload.get("image_pull_secrets", [])
-        payload["image_pull_secrets"].append(os.environ["GITLAB_REGISTRY_SECRET"])
+    # only create a pull secret if the project has limited visibility and a token is available
+    if config.GITLAB_AUTH and gl_project.visibility in {"private", "internal"}:
+        secret_name = f"{user.get('name')}-registry"
+        create_or_replace_registry_secret(user, namespace, secret_name)
+        payload["image_pull_secrets"] = [secret_name]
 
     r = create_named_server(user, server_name, payload)
 

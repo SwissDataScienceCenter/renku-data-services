@@ -35,6 +35,7 @@ from kubernetes.config.incluster_config import (
 )
 
 from .. import config
+from .gitlab_ import _get_oauth_token
 
 
 # adjust k8s service account paths if running inside telepresence
@@ -212,3 +213,62 @@ def read_namespaced_pod_log(pod_name, max_log_lines=0):
             pod_name, kubernetes_namespace, tail_lines=max_log_lines
         )
     return logs
+
+
+def create_or_replace_registry_secret(user, namespace, secret_name):
+    """Read or replace a registry secret for a user."""
+    import base64
+    import json
+
+    token = _get_oauth_token(user)
+    payload = {
+        "auths": {
+            current_app.config.get("IMAGE_REGISTRY"): {
+                "Username": "oauth2",
+                "Password": token,
+                "Email": user.get("email"),
+            }
+        }
+    }
+
+    data = {
+        ".dockerconfigjson": base64.b64encode(json.dumps(payload).encode()).decode()
+    }
+
+    secret = client.V1Secret(
+        api_version="v1",
+        data=data,
+        kind="Secret",
+        metadata={
+            "name": secret_name,
+            "namespace": kubernetes_namespace,
+            "annotations": {
+                current_app.config.get("RENKU_ANNOTATION_PREFIX")
+                + "username": user.get("name")
+            },
+            "labels": {
+                "component": "singleuser-server",
+                current_app.config.get("RENKU_ANNOTATION_PREFIX")
+                + "username": user.get("name"),
+            },
+        },
+        type="kubernetes.io/dockerconfigjson",
+    )
+
+    if _secret_exists(secret_name, kubernetes_namespace):
+        v1.replace_namespaced_secret(secret_name, kubernetes_namespace, secret)
+    else:
+        v1.create_namespaced_secret(kubernetes_namespace, body=secret)
+
+    return secret
+
+
+def _secret_exists(name, namespace):
+    """Check if the secret exists."""
+
+    try:
+        v1.read_namespaced_secret(name, namespace)
+        return True
+    except client.rest.ApiException:
+        pass
+    return False
