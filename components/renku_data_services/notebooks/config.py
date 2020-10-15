@@ -40,6 +40,9 @@ RENKU_ANNOTATION_PREFIX = "renku.io/"
 SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
 """Sentry client registration."""
 
+SENTRY_ENV = os.environ.get("SENTRY_ENV", "")
+"""Sentry client environment."""
+
 SERVICE_PREFIX = os.environ.get("JUPYTERHUB_SERVICE_PREFIX", "/")
 """Service prefix is set by JupyterHub service spawner."""
 

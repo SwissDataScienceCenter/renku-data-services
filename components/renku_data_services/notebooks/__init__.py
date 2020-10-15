@@ -79,6 +79,8 @@ def create_app():
         from sentry_sdk.integrations.flask import FlaskIntegration
 
         sentry_sdk.init(
-            dsn=app.config.get("SENTRY_DSN"), integrations=[FlaskIntegration()]
+            dsn=app.config.get("SENTRY_DSN"),
+            environment=app.config.get("SENTRY_ENV"),
+            integrations=[FlaskIntegration()],
         )
     return app
