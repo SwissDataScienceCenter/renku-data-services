@@ -18,6 +18,7 @@
 """Notebooks service API."""
 import json
 import os
+from uuid import uuid4
 
 import escapism
 from flask import Blueprint, abort, current_app, jsonify, request, make_response
@@ -39,7 +40,7 @@ from ..util.kubernetes_ import (
     get_user_server,
     get_user_servers,
     delete_user_pod,
-    create_or_replace_registry_secret,
+    create_registry_secret,
 )
 from .auth import authenticated
 
@@ -148,8 +149,10 @@ def launch_notebook(user):
     # only create a pull secret if the project has limited visibility and a token is available
     if config.GITLAB_AUTH and gl_project.visibility in {"private", "internal"}:
         safe_username = escapism.escape(user.get("name"), escape_char="-").lower()
-        secret_name = f"{safe_username}-registry"
-        create_or_replace_registry_secret(user, namespace, secret_name)
+        secret_name = f"{safe_username}-registry-{str(uuid4())}"
+        create_registry_secret(
+            user, namespace, secret_name, project, commit_sha,
+        )
         payload["image_pull_secrets"] = [secret_name]
 
     r = create_named_server(user, server_name, payload)
