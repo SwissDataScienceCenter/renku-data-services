@@ -18,6 +18,7 @@
 """Notebooks service API."""
 import json
 import os
+from urllib.parse import urlparse
 from uuid import uuid4
 
 import escapism
@@ -148,10 +149,11 @@ def launch_notebook(user):
 
     # only create a pull secret if the project has limited visibility and a token is available
     if config.GITLAB_AUTH and gl_project.visibility in {"private", "internal"}:
+        git_host = urlparse(config.GITLAB_URL).netloc
         safe_username = escapism.escape(user.get("name"), escape_char="-").lower()
         secret_name = f"{safe_username}-registry-{str(uuid4())}"
         create_registry_secret(
-            user, namespace, secret_name, project, commit_sha,
+            user, namespace, secret_name, project, commit_sha, git_host
         )
         payload["image_pull_secrets"] = [secret_name]
 
