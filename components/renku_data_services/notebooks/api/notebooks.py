@@ -26,10 +26,8 @@ from flask import Blueprint, abort, current_app, jsonify, request, make_response
 from kubernetes.client.rest import ApiException
 
 from .. import config
-from ..util.gitlab_ import (
-    get_notebook_image,
-    get_project,
-)
+from ..util.check_image import get_docker_token, image_exists, parse_image_name
+from ..util.gitlab_ import get_renku_project
 from ..util.jupyterhub_ import (
     make_server_name,
     create_named_server,
@@ -82,6 +80,7 @@ def launch_notebook(user):
         branch = payload.get("branch", "master")
         commit_sha = payload["commit_sha"]
         notebook = payload.get("notebook")
+        requested_image = payload.get("image", None)
     except (AttributeError, KeyError):
         return current_app.response_class(
             status=400,
@@ -122,7 +121,7 @@ def launch_notebook(user):
     for key in server_options_defaults.keys():
         server_options.setdefault(key, server_options_defaults.get(key)["default"])
 
-    gl_project = get_project(user, namespace, project)
+    gl_project = get_renku_project(user, f"{namespace}/{project}")
 
     if gl_project is None:
         return current_app.response_class(
@@ -130,8 +129,43 @@ def launch_notebook(user):
             response=f"Cannot find project {project} for user: {user['name']}.",
         )
 
-    # set the notebook image
-    image = get_notebook_image(user, namespace, project, commit_sha)
+    # set the notebook image if not specified in the request
+    if requested_image is None:
+        parsed_image = {
+            "hostname": config.IMAGE_REGISTRY,
+            "image": gl_project.path_with_namespace.lower(),
+            "tag": commit_sha[:7],
+        }
+        commit_image = (
+            f"{config.IMAGE_REGISTRY}/{gl_project.path_with_namespace.lower()}"
+            f":{commit_sha[:7]}"
+        )
+    else:
+        parsed_image = parse_image_name(requested_image)
+    # get token
+    token, is_image_private = get_docker_token(**parsed_image, user=user)
+    # check if images exist
+    image_exists_result = image_exists(**parsed_image, token=token)
+    # assign image
+    if image_exists_result and requested_image is None:
+        # the image tied to the commit exists
+        image = commit_image
+    elif not image_exists_result and requested_image is None:
+        # the image tied to the commit does not exist, fallback to default image
+        image = config.DEFAULT_IMAGE
+        is_image_private = False
+        current_app.logger.debug(
+            f"Image for the selected commit {commit_sha} of {project}"
+            f" not found, using default image {config.DEFAULT_IMAGE}"
+        )
+    elif image_exists_result and requested_image is not None:
+        # a specific image was requested and it exists
+        image = requested_image
+    else:
+        # a specific image was requested but does not exist
+        return make_response(
+            jsonify({"error": f"Cannot find/access image {requested_image}."}), 404
+        )
 
     payload = {
         "namespace": namespace,
@@ -148,7 +182,7 @@ def launch_notebook(user):
     current_app.logger.debug(f"Creating server {server_name} with {payload}")
 
     # only create a pull secret if the project has limited visibility and a token is available
-    if config.GITLAB_AUTH and gl_project.visibility in {"private", "internal"}:
+    if config.GITLAB_AUTH and is_image_private:
         git_host = urlparse(config.GITLAB_URL).netloc
         safe_username = escapism.escape(user.get("name"), escape_char="-").lower()
         secret_name = f"{safe_username}-registry-{str(uuid4())}"

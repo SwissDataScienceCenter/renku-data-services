@@ -16,24 +16,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Integrating interactive environments with GitLab."""
-import os
-
 import gitlab
 from flask import current_app
 
 from .. import config
 
 
-def get_project(user, namespace, project):
+def get_renku_project(user, namespace_project):
     """Retrieve the GitLab project."""
     gl = gitlab.Gitlab(
         config.GITLAB_URL, api_version=4, oauth_token=_get_oauth_token(user)
     )
     try:
-        return gl.projects.get("{0}/{1}".format(namespace, project))
+        return gl.projects.get("{0}".format(namespace_project))
     except Exception as e:
         current_app.logger.error(
-            f"Cannot get project: {project} for user: {user}, error: {e}"
+            f"Cannot get project: {namespace_project} for user: {user}, error: {e}"
         )
 
 
@@ -66,43 +64,3 @@ def _get_project_permissions(user, gl_project):
         )
     )
     return access_level
-
-
-def get_notebook_image(user, namespace, project, commit_sha):
-    """Check if the image built by GitLab CI is ready."""
-    gl_project = get_project(user, namespace, project)
-
-    default_image = os.getenv("NOTEBOOKS_DEFAULT_IMAGE", "renku/singleuser:latest")
-    commit_sha_7 = commit_sha[:7]
-    registry_repo = "{image_registry}/{namespace}/{project}".format(
-        image_registry=current_app.config.get("IMAGE_REGISTRY"),
-        namespace=namespace,
-        project=project,
-    ).lower()
-
-    # find the image registry repository
-    repository_found = False
-    for repository in gl_project.repositories.list():
-        if repository.attributes.get("location", "") == registry_repo:
-            repository_found = True
-            break
-
-    if not repository_found:
-        current_app.logger.warning(
-            f"Image registry repository {registry_repo} not found."
-        )
-        return default_image
-
-    try:
-        repository.tags.get(commit_sha_7)
-    except gitlab.GitlabGetError:
-        current_app.logger.warning(
-            "No image found for project {0} commit {1} - "
-            "using {2} instead".format(project, commit_sha, default_image)
-        )
-        return default_image
-
-    image = f"{registry_repo}:{commit_sha_7}".lower()
-    current_app.logger.info(f"Using image {image}.")
-
-    return image

@@ -51,3 +51,7 @@ GITLAB_AUTH = os.environ.get("JUPYTERHUB_AUTHENTICATOR", "gitlab") == "gitlab"
 
 JUPYTERHUB_PATH_PREFIX = os.environ.get("JUPYTERHUB_BASE_URL", "/jupyterhub")
 """Base path under which Jupyterhub is running."""
+
+DEFAULT_IMAGE = os.environ.get("NOTEBOOKS_DEFAULT_IMAGE", "renku/singleuser:latest")
+"""The default image to use for an interactive session if the image tied to the
+current commit cannot be found."""

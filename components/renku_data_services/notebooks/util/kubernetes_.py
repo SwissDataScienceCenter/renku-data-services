@@ -189,13 +189,20 @@ def _get_all_user_servers(user):
 
     servers = {
         pod.metadata.annotations["hub.jupyter.org/servername"]: {
-            "annotations": pod.metadata.annotations,
+            "annotations": {
+                **pod.metadata.annotations,
+                config.RENKU_ANNOTATION_PREFIX
+                + "default_image_used": str(
+                    pod.spec.containers[0].image == config.DEFAULT_IMAGE
+                ),
+            },
             "name": pod.metadata.annotations["hub.jupyter.org/servername"],
             "state": {"pod_name": pod.metadata.name},
             "started": isoformat(pod.status.start_time),
             "status": get_pod_status(pod),
             "url": get_server_url(pod),
             "resources": get_pod_resources(pod),
+            "image": pod.spec.containers[0].image,
         }
         for pod in pods
     }
