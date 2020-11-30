@@ -176,6 +176,9 @@ def launch_notebook(user):
         "notebook": notebook,
         "image": image,
         "git_clone_image": os.getenv("GIT_CLONE_IMAGE", "renku/git-clone:latest"),
+        "git_https_proxy_image": os.getenv(
+            "GIT_HTTPS_PROXY_IMAGE", "renku/git-https-proxy:latest"
+        ),
         "server_options": server_options,
     }
 
