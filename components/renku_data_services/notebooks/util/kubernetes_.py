@@ -150,8 +150,10 @@ def _get_all_user_servers(user):
         return {"step": c.type, "message": c.message, "reason": c.reason}
 
     def get_pod_status(pod):
+        ready = getattr(pod.metadata, "deletion_timestamp", None) is None
         try:
-            ready = pod.status.container_statuses[0].ready
+            for status in pod.status.container_statuses:
+                ready = ready and status.ready
         except (IndexError, TypeError):
             ready = False
 
@@ -162,17 +164,19 @@ def _get_all_user_servers(user):
 
     def get_pod_resources(pod):
         try:
-            resources = pod.spec.containers[0].resources.requests
-            # translate the cpu weird numeric string to a normal number
-            # ref: https://kubernetes.io/docs/concepts/configuration/
-            #   manage-compute-resources-container/#how-pods-with-resource-limits-are-run
-            if (
-                "cpu" in resources
-                and isinstance(resources["cpu"], str)
-                and str.endswith(resources["cpu"], "m")
-                and resources["cpu"][:-1].isdigit()
-            ):
-                resources["cpu"] = str(int(resources["cpu"][:-1]) / 1000)
+            for container in pod.spec.containers:
+                if container.name == "notebook":
+                    resources = container.resources.requests
+                    # translate the cpu weird numeric string to a normal number
+                    # ref: https://kubernetes.io/docs/concepts/configuration/
+                    #   manage-compute-resources-container/#how-pods-with-resource-limits-are-run
+                    if (
+                        "cpu" in resources
+                        and isinstance(resources["cpu"], str)
+                        and str.endswith(resources["cpu"], "m")
+                        and resources["cpu"][:-1].isdigit()
+                    ):
+                        resources["cpu"] = str(int(resources["cpu"][:-1]) / 1000)
         except (AttributeError, IndexError):
             resources = {}
         return resources
