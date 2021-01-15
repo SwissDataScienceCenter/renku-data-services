@@ -213,15 +213,20 @@ def _get_all_user_servers(user):
     return servers
 
 
-def read_namespaced_pod_log(pod_name, max_log_lines=0):
+def read_namespaced_pod_log(pod_name, max_log_lines=0, container_name="notebook"):
     """
     Read pod's logs.
     """
     if max_log_lines == 0:
-        logs = v1.read_namespaced_pod_log(pod_name, kubernetes_namespace)
+        logs = v1.read_namespaced_pod_log(
+            pod_name, kubernetes_namespace, container=container_name
+        )
     else:
         logs = v1.read_namespaced_pod_log(
-            pod_name, kubernetes_namespace, tail_lines=max_log_lines
+            pod_name,
+            kubernetes_namespace,
+            tail_lines=max_log_lines,
+            container=container_name,
         )
     return logs
 

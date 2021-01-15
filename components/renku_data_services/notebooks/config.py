@@ -25,7 +25,7 @@ GITLAB_URL = os.environ.get("GITLAB_URL", "https://gitlab.com")
 IMAGE_REGISTRY = os.environ.get("IMAGE_REGISTRY", "")
 """The default image registry."""
 
-JUPYTERHUB_ANNOTATION_PREFIX = "hub.jupyter.org"
+JUPYTERHUB_ANNOTATION_PREFIX = "hub.jupyter.org/"
 """The prefix used for annotations by the KubeSpawner."""
 
 JUPYTERHUB_API_TOKEN = os.environ.get("JUPYTERHUB_API_TOKEN", "")
@@ -55,3 +55,16 @@ JUPYTERHUB_PATH_PREFIX = os.environ.get("JUPYTERHUB_BASE_URL", "/jupyterhub")
 DEFAULT_IMAGE = os.environ.get("NOTEBOOKS_DEFAULT_IMAGE", "renku/singleuser:latest")
 """The default image to use for an interactive session if the image tied to the
 current commit cannot be found."""
+
+OPENAPI_VERSION = "2.0"
+API_SPEC_URL = f"{SERVICE_PREFIX}api/v1/spec"
+SWAGGER_URL = f"{SERVICE_PREFIX}api/docs"
+SWAGGER_HEADER_ACCEPT = {
+    "name": "produces",
+    "in": "header",
+    "description": "Accept header in request should be set to anything"
+    " but 'application/json' for successful auth from swagger UI.",
+    "required": True,
+    "type": "string",
+    "default": "*/*",
+}

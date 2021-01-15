@@ -17,10 +17,24 @@
 # limitations under the License.
 """Notebooks service flask app."""
 
-from flask import Flask
+from flask import Flask, jsonify
+from flask_swagger_ui import get_swaggerui_blueprint
+from flask_apispec import FlaskApiSpec
+from apispec.ext.marshmallow import MarshmallowPlugin
+from apispec import APISpec
 import os
 
 from . import config
+from .api.notebooks import (
+    bp as notebooks_bp,
+    user_servers,
+    user_server,
+    launch_notebook,
+    stop_server,
+    server_options,
+    server_logs,
+)
+from .api.auth import bp as auth_bp, whoami
 
 
 # From: http://flask.pocoo.org/snippets/35/
@@ -72,6 +86,16 @@ def create_app():
     for bp in blueprints:
         app.register_blueprint(bp)
 
+    # Return validation errors as JSON
+    @app.errorhandler(422)
+    def handle_error(err):
+        headers = err.data.get("headers", None)
+        messages = err.data.get("messages", {"error": "Invalid request."})
+        if headers:
+            return jsonify({"messages": messages}), err.code, headers
+        else:
+            return jsonify({"messages": messages}), err.code
+
     app.logger.debug(app.config)
 
     if "SENTRY_DSN" in app.config:
@@ -83,4 +107,41 @@ def create_app():
             environment=app.config.get("SENTRY_ENV"),
             integrations=[FlaskIntegration()],
         )
+    return app
+
+
+def register_swagger(app):
+    apispec = APISpec(
+        title="Renku Notebooks API",
+        openapi_version=config.OPENAPI_VERSION,
+        version="v1",
+        plugins=[MarshmallowPlugin()],
+        produces=["text/plain"],
+        security=[{"token": []}],
+    )
+    security_scheme = {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Authorization",
+        "description": "Use the jupyterhub API token here. Include the word 'token', "
+        "a single space and the actual token as the value in the form."
+        "The token can be acquired by visiting "
+        f"{config.JUPYTERHUB_ORIGIN}/{config.JUPYTERHUB_PATH_PREFIX}/hub/token.",
+    }
+    apispec.components.security_scheme("token", security_scheme)
+    app.config.update(
+        {"APISPEC_SPEC": apispec, "APISPEC_SWAGGER_URL": config.API_SPEC_URL}
+    )
+    swaggerui_blueprint = get_swaggerui_blueprint(
+        config.SWAGGER_URL, config.API_SPEC_URL, config={"app_name": "Renku Notebooks"}
+    )
+    app.register_blueprint(swaggerui_blueprint, url_prefix=config.SWAGGER_URL)
+    docs = FlaskApiSpec(app, document_options=False)
+    docs.register(user_servers, blueprint=notebooks_bp.name)
+    docs.register(user_server, blueprint=notebooks_bp.name)
+    docs.register(launch_notebook, blueprint=notebooks_bp.name)
+    docs.register(stop_server, blueprint=notebooks_bp.name)
+    docs.register(server_options, blueprint=notebooks_bp.name)
+    docs.register(server_logs, blueprint=notebooks_bp.name)
+    docs.register(whoami, blueprint=auth_bp.name)
     return app
