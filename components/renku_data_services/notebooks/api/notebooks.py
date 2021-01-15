@@ -309,8 +309,6 @@ def stop_server(user, forced, server_name):
         return make_response(jsonify({"messages": {"error": "Server not found."}}), 404)
 
     r = delete_named_server(user, server_name)
-    current_app.logger.error(f"The return code is {r.status_code}")
-    current_app.logger.error(f"The return content is {r.text}")
     if r.status_code == 204:
         return "", 204
     elif r.status_code == 202:
