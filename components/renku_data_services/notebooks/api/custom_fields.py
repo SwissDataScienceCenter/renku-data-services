@@ -1,6 +1,7 @@
 from typing import List, Mapping, Any
 from marshmallow import fields
 from marshmallow.exceptions import ValidationError
+import re
 
 
 class UnionField(fields.Field):
@@ -48,3 +49,13 @@ class UnionField(fields.Field):
                 errors.append(error.messages)
 
         raise ValidationError(errors)
+
+
+serverOptionCpuValue = fields.Number(
+    validate=lambda x: x > 0.0 and (x % 1 >= 0.001 or x % 1 == 0.0), required=True,
+)
+serverOptionMemoryValue = fields.String(
+    validate=lambda x: re.match(r"^(?:[1-9][0-9]*|[0-9]\.[0-9]*)[EPTGMK][i]{0,1}$", x)
+    is not None,
+    required=True,
+)

@@ -54,6 +54,7 @@ from .schemas import (
     ServerOptions,
     FailedParsing,
 )
+from ..util.misc import read_server_options_file
 
 
 bp = Blueprint("notebooks_blueprint", __name__, url_prefix=config.SERVICE_PREFIX)
@@ -140,7 +141,7 @@ def launch_notebook(
 
     # process the server options
     # server options from system configuration
-    server_options_defaults = _read_server_options_file()
+    server_options_defaults = read_server_options_file()
 
     # process the requested options and set others to defaults from config
     server_options.setdefault(
@@ -351,7 +352,7 @@ def stop_server(user, forced, server_name):
 @authenticated
 def server_options(user):
     """Return a set of configurable server options."""
-    server_options = _read_server_options_file()
+    server_options = read_server_options_file()
 
     # TODO: append image-specific options to the options json
     return jsonify(server_options)
@@ -396,12 +397,3 @@ def server_logs(user, server_name):
             jsonify({"messages": {"error": "Cannot find server"}}), 404
         )
     return response
-
-
-def _read_server_options_file():
-    server_options_file = os.getenv(
-        "NOTEBOOKS_SERVER_OPTIONS_PATH", "/etc/renku-notebooks/server_options.json"
-    )
-    with open(server_options_file) as f:
-        server_options = json.load(f)
-    return server_options

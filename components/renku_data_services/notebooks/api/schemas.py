@@ -1,8 +1,42 @@
-from marshmallow import Schema, fields, post_load, post_dump
+from marshmallow import (
+    Schema,
+    fields,
+    post_load,
+    post_dump,
+    validates_schema,
+    ValidationError,
+)
 import collections
 
 from .. import config
-from .custom_fields import UnionField
+from .custom_fields import (
+    serverOptionCpuValue,
+    serverOptionMemoryValue,
+)
+from ..util.misc import read_server_options_file
+
+
+class LaunchNotebookRequestServerOptions(Schema):
+    defaultUrl = fields.String(required=True)
+    cpu_request = serverOptionCpuValue
+    mem_request = serverOptionMemoryValue
+    lfs_auto_fetch = fields.Bool(required=True)
+    gpu_request = fields.Integer(strict=True, validate=lambda x: x >= 0)
+
+    @validates_schema
+    def validate_server_options(self, data, **kwargs):
+        server_options = read_server_options_file()
+        for option in data.keys():
+            if option not in server_options.keys():
+                continue  # presence of option keys are already handled by marshmallow
+            if server_options[option]["type"] == "boolean":
+                continue  # boolean options are already validated by marshmallow
+            if data[option] not in server_options[option]["options"]:
+                # validate options that can have a set of values against allowed values
+                raise ValidationError(
+                    f"The value {data[option]} for sever option {option} is not valid, "
+                    f"it has to be one of {server_options[option]['options']}"
+                )
 
 
 class LaunchNotebookRequest(Schema):
@@ -14,8 +48,8 @@ class LaunchNotebookRequest(Schema):
     commit_sha = fields.Str(required=True)
     notebook = fields.Str(missing=None)
     image = fields.Str(missing=None)
-    server_options = fields.Dict(
-        keys=fields.Str(), missing={}, data_key="serverOptions"
+    server_options = fields.Nested(
+        LaunchNotebookRequestServerOptions(), missing={}, data_key="serverOptions"
     )
 
 
@@ -127,20 +161,54 @@ class FailedParsing(Schema):
     )
 
 
-class ServerOptionsOption(Schema):
-    """The schema used to describe a single option for the server_options endpoint."""
-
-    default = UnionField(
-        [
-            fields.Str(required=True),
-            fields.Number(required=True),
-            fields.Bool(required=True),
-        ]
-    )
+class ServerOptionBase(Schema):
     displayName = fields.Str(required=True)
     order = fields.Int(required=True)
-    type = fields.Str(required=True)
-    options = fields.List(UnionField([fields.Str(), fields.Number()]))
+    type = fields.String(validate=lambda x: x in ["boolean", "enum"], required=True,)
+
+
+class ServerOptionCpu(ServerOptionBase):
+    """The schema used to describe a single option for the server_options endpoint."""
+
+    default = serverOptionCpuValue
+    options = fields.List(
+        serverOptionCpuValue, validate=lambda x: len(x) >= 1, required=True
+    )
+
+
+class ServerOptionMemory(ServerOptionBase):
+    """The schema used to describe a single option for the server_options endpoint."""
+
+    default = serverOptionMemoryValue
+    options = fields.List(
+        serverOptionMemoryValue, validate=lambda x: len(x) >= 1, required=True
+    )
+
+
+class ServerOptionGpu(ServerOptionBase):
+    """The schema used to describe a single option for the server_options endpoint."""
+
+    default = fields.Integer(strict=True, validate=lambda x: x >= 0, required=True)
+    options = fields.List(
+        fields.Integer(strict=True, validate=lambda x: x >= 0),
+        validate=lambda x: len(x) >= 1,
+        required=True,
+    )
+
+
+class ServerOptionString(ServerOptionBase):
+    """The schema used to describe a single option for the server_options endpoint."""
+
+    default = fields.String(required=True)
+    options = fields.List(
+        fields.String(), validate=lambda x: len(x) >= 1, required=True
+    )
+
+
+class ServerOptionBool(ServerOptionBase):
+    """The schema used to describe a single option for the server_options endpoint."""
+
+    default = fields.Bool(required=True)
 
 
 class ServerOptions(Schema):
@@ -149,11 +217,11 @@ class ServerOptions(Schema):
     launching a jupyterhub server.
     """
 
-    cpu_request = fields.Nested(ServerOptionsOption())
-    defaultUrl = fields.Nested(ServerOptionsOption())
-    gpu_request = fields.Nested(ServerOptionsOption())
-    lfs_auto_fetch = fields.Nested(ServerOptionsOption())
-    mem_request = fields.Nested(ServerOptionsOption())
+    cpu_request = fields.Nested(ServerOptionCpu(), required=True)
+    defaultUrl = fields.Nested(ServerOptionString(), required=True)
+    gpu_request = fields.Nested(ServerOptionGpu())
+    lfs_auto_fetch = fields.Nested(ServerOptionBool(), required=True)
+    mem_request = fields.Nested(ServerOptionMemory(), required=True)
 
 
 class ServerLogs(Schema):
