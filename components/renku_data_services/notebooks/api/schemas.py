@@ -5,6 +5,7 @@ from marshmallow import (
     post_dump,
     validates_schema,
     ValidationError,
+    pre_load,
 )
 import collections
 
@@ -111,15 +112,23 @@ class UserPodAnnotations(
         return flatten_dict(data)
 
 
-UserPodResources = Schema.from_dict(
-    # Memory and CPU resources that should be present in the response to creating a
-    # jupyterhub noteboooks server.
-    {
-        "cpu": fields.Str(required=True),
-        "memory": fields.Str(required=True),
-        "ephemeral-storage": fields.Str(required=False),
-    }
-)
+class UserPodResources(
+    Schema.from_dict(
+        # Memory and CPU resources that should be present in the response to creating a
+        # jupyterhub noteboooks server.
+        {
+            "cpu": fields.Str(required=True),
+            "memory": fields.Str(required=True),
+            "ephemeral-storage": fields.Str(required=False),
+            "gpu": fields.Str(required=False),
+        }
+    )
+):
+    @pre_load
+    def resolve_gpu_fieldname(self, in_data, **kwargs):
+        if "nvidia.com/gpu" in in_data.keys():
+            in_data["gpu"] = in_data.pop("nvidia.com/gpu")
+        return in_data
 
 
 class LaunchNotebookResponse(Schema):
