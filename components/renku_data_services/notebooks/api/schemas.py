@@ -13,12 +13,13 @@ from .. import config
 from .custom_fields import (
     serverOptionCpuValue,
     serverOptionMemoryValue,
+    serverOptionUrlValue,
 )
 from ..util.misc import read_server_options_file
 
 
 class LaunchNotebookRequestServerOptions(Schema):
-    defaultUrl = fields.String(required=True)
+    defaultUrl = serverOptionUrlValue
     cpu_request = serverOptionCpuValue
     mem_request = serverOptionMemoryValue
     lfs_auto_fetch = fields.Bool(required=True)
@@ -30,6 +31,8 @@ class LaunchNotebookRequestServerOptions(Schema):
         for option in data.keys():
             if option not in server_options.keys():
                 continue  # presence of option keys are already handled by marshmallow
+            if option == "defaultUrl":
+                continue  # the defaultUrl field should not be limited to only server options
             if server_options[option]["type"] == "boolean":
                 continue  # boolean options are already validated by marshmallow
             if data[option] not in server_options[option]["options"]:
@@ -214,6 +217,15 @@ class ServerOptionString(ServerOptionBase):
     )
 
 
+class ServerOptionUrl(ServerOptionBase):
+    """The schema used to describe a single option for the server_options endpoint."""
+
+    default = serverOptionUrlValue
+    options = fields.List(
+        serverOptionUrlValue, validate=lambda x: len(x) >= 1, required=True
+    )
+
+
 class ServerOptionBool(ServerOptionBase):
     """The schema used to describe a single option for the server_options endpoint."""
 
@@ -227,7 +239,7 @@ class ServerOptions(Schema):
     """
 
     cpu_request = fields.Nested(ServerOptionCpu(), required=True)
-    defaultUrl = fields.Nested(ServerOptionString(), required=True)
+    defaultUrl = fields.Nested(ServerOptionUrl(), required=True)
     gpu_request = fields.Nested(ServerOptionGpu())
     lfs_auto_fetch = fields.Nested(ServerOptionBool(), required=True)
     mem_request = fields.Nested(ServerOptionMemory(), required=True)

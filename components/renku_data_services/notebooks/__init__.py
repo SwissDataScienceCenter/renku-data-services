@@ -91,6 +91,9 @@ def create_app():
     def handle_error(err):
         headers = err.data.get("headers", None)
         messages = err.data.get("messages", {"error": "Invalid request."})
+        app.logger.warning(
+            f"Validation of request parameters failed with the messages: {messages}"
+        )
         if headers:
             return jsonify({"messages": messages}), err.code, headers
         else:

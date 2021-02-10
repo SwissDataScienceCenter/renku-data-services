@@ -59,3 +59,4 @@ serverOptionMemoryValue = fields.String(
     is not None,
     required=True,
 )
+serverOptionUrlValue = fields.Str(required=True)
