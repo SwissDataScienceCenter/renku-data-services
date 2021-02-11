@@ -6,6 +6,7 @@ from marshmallow import (
     validates_schema,
     ValidationError,
     pre_load,
+    INCLUDE,
 )
 import collections
 
@@ -102,6 +103,9 @@ class UserPodAnnotations(
     Used to validate the annotations of a jupyterhub user pod
     that are returned to the UI as part of any endpoint that list servers.
     """
+
+    class Meta:
+        unknown = INCLUDE
 
     def get_attribute(self, obj, key, *args, **kwargs):
         # in marshmallow, any schema key with a dot in it is converted to nested dictionaries
