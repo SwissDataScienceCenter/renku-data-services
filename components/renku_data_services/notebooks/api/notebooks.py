@@ -121,6 +121,25 @@ def launch_notebook(
     """Launch user server with a given arguments."""
     # 0. check if server already exists and if so return it
     server_name = make_server_name(namespace, project, branch, commit_sha)
+    safe_username = escapism.escape(user.get("name"), escape_char="-").lower()
+
+    if len(safe_username) > 63:
+        return current_app.response_class(
+            response=json.dumps(
+                {
+                    "messages": {
+                        "json": {
+                            "username": [
+                                "A username cannot be longer than 63 characters, "
+                                f"your username is {len(safe_username)} characters long."
+                            ]
+                        }
+                    }
+                }
+            ),
+            status=422,
+            mimetype="application/json",
+        )
 
     current_app.logger.debug(
         f"Request to create server: {server_name} with namespace: {namespace}, "
@@ -226,10 +245,9 @@ def launch_notebook(
     # only create a pull secret if the project has limited visibility and a token is available
     if config.GITLAB_AUTH and is_image_private:
         git_host = urlparse(config.GITLAB_URL).netloc
-        safe_username = escapism.escape(user.get("name"), escape_char="-").lower()
         secret_name = f"{safe_username}-registry-{str(uuid4())}"
         create_registry_secret(
-            user, namespace, secret_name, project, commit_sha, git_host
+            user, namespace, secret_name, gl_project.id, commit_sha, git_host
         )
         payload["image_pull_secrets"] = [secret_name]
 

@@ -82,7 +82,9 @@ class UserPodAnnotations(
     Schema.from_dict(
         {
             f"{config.RENKU_ANNOTATION_PREFIX}namespace": fields.Str(required=True),
-            f"{config.RENKU_ANNOTATION_PREFIX}projectId": fields.Str(required=True),
+            f"{config.RENKU_ANNOTATION_PREFIX}gitlabProjectId": fields.Str(
+                required=False
+            ),
             f"{config.RENKU_ANNOTATION_PREFIX}projectName": fields.Str(required=True),
             f"{config.RENKU_ANNOTATION_PREFIX}branch": fields.Str(required=True),
             f"{config.RENKU_ANNOTATION_PREFIX}commit-sha": fields.Str(required=True),
