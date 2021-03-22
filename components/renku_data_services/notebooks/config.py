@@ -56,6 +56,20 @@ DEFAULT_IMAGE = os.environ.get("NOTEBOOKS_DEFAULT_IMAGE", "renku/singleuser:late
 """The default image to use for an interactive session if the image tied to the
 current commit cannot be found."""
 
+NOTEBOOKS_SESSION_PVS_ENABLED = (
+    os.environ.get("NOTEBOOKS_SESSION_PVS_ENABLED", "false") == "true"
+)
+"""Whether to use persistent volumes for user sessions.
+Default is false, in which case ephemeral volumes are used."""
+
+NOTEBOOKS_SESSION_PVS_STORAGE_CLASS = os.environ.get(
+    "NOTEBOOKS_SESSION_PVS_STORAGE_CLASS", "default"
+)
+"""Use a custom storage class for the user session persistent volumes."""
+
+GIT_CLONE_IMAGE = os.environ.get("GIT_CLONE_IMAGE", "renku/git-clone:latest")
+"""Image to use for the init container."""
+
 OPENAPI_VERSION = "2.0"
 API_SPEC_URL = f"{SERVICE_PREFIX}api/v1/spec"
 SWAGGER_URL = f"{SERVICE_PREFIX}api/docs"

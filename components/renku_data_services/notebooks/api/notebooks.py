@@ -43,6 +43,9 @@ from ..util.kubernetes_ import (
     get_user_servers,
     delete_user_pod,
     create_registry_secret,
+    create_pvc,
+    delete_pvc,
+    make_pvc_name,
 )
 from .auth import authenticated
 from .decorators import validate_response_with
@@ -74,7 +77,6 @@ def user_servers(user):
     commit_sha = request.args.get("commit_sha")
 
     servers = get_user_servers(user, namespace, project, branch, commit_sha)
-    current_app.logger.debug(servers)
     return jsonify({"servers": servers})
 
 
@@ -225,6 +227,27 @@ def launch_notebook(
             jsonify({"messages": {"error": f"Cannot find/access image {image}."}}), 404
         )
 
+    # create the PVC if requested
+    pvc_name = ""
+
+    if config.NOTEBOOKS_SESSION_PVS_ENABLED:
+        pvc_name = make_pvc_name(
+            username=user.get("name"), namespace=namespace, server_name=server_name
+        )
+        pvc = create_pvc(
+            name=pvc_name,
+            username=user.get("name"),
+            git_namespace=namespace,
+            project_id=gl_project.id,
+            project=project,
+            branch=branch,
+            commit_sha=commit_sha,
+            git_host=urlparse(config.GITLAB_URL).netloc,
+            storage_size=server_options.get("disk_request"),
+            storage_class=config.NOTEBOOKS_SESSION_PVS_STORAGE_CLASS,
+        )
+        current_app.logger.debug(f"Creating PVC: \n {pvc}")
+
     payload = {
         "namespace": namespace,
         "project": project,
@@ -233,12 +256,16 @@ def launch_notebook(
         "project_id": gl_project.id,
         "notebook": notebook,
         "image": verified_image,
-        "git_clone_image": os.getenv("GIT_CLONE_IMAGE", "renku/git-clone:latest"),
+        "git_clone_image": config.GIT_CLONE_IMAGE,
         "git_https_proxy_image": os.getenv(
             "GIT_HTTPS_PROXY_IMAGE", "renku/git-https-proxy:latest"
         ),
         "server_options": server_options,
     }
+
+    if pvc_name:
+        payload["pvc_name"] = pvc_name
+        payload["pvc_exists"] = "true" if pvc.get("status") == "existing" else "false"
 
     current_app.logger.debug(f"Creating server {server_name} with {payload}")
 
@@ -290,7 +317,7 @@ def launch_notebook(
                 {
                     "messages": {
                         "error": f"creating server {server_name} failed with "
-                        f"{r.status_code} from jupyterhub",
+                        f"{r.status_code} from jupyterhub"
                     }
                 }
             ),
@@ -324,8 +351,9 @@ def stop_server(user, forced, server_name):
         f"Request to delete server: {server_name} forced: {forced} for user: {user}"
     )
 
+    server = get_user_server(user, server_name)
+
     if forced:
-        server = get_user_server(user, server_name)
         if server:
             pod_name = server.get("state", {}).get("pod_name", "")
             if delete_user_pod(user, pod_name):
@@ -337,6 +365,20 @@ def stop_server(user, forced, server_name):
         return make_response(jsonify({"messages": {"error": "Server not found."}}), 404)
 
     r = delete_named_server(user, server_name)
+
+    # If the server was deleted gracefully, remove the PVC if it exists
+    if r.status_code < 300:
+        annotations = server.get("annotations")
+        pvc = delete_pvc(
+            make_pvc_name(
+                username=user.get("name"),
+                namespace=annotations.get(config.RENKU_ANNOTATION_PREFIX + "namespace"),
+                server_name=server_name,
+            )
+        )
+        if pvc:
+            current_app.logger.debug(f"pvc deleted: {pvc.metadata.name}")
+
     if r.status_code == 204:
         return "", 204
     elif r.status_code == 202:
@@ -371,8 +413,6 @@ def stop_server(user, forced, server_name):
 def server_options(user):
     """Return a set of configurable server options."""
     server_options = read_server_options_file()
-
-    # TODO: append image-specific options to the options json
     return jsonify(server_options)
 
 
@@ -387,7 +427,7 @@ def server_options(user):
             "examples": {
                 "application/json": ["Line 1 of logs", "Line 2 of logs"],
                 "text/plain": ["Line 1 of logs", "Line 2 of logs"],
-            },
+            }
         }
     },
 )

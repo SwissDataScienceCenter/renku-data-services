@@ -8,4 +8,5 @@ def read_server_options_file():
     )
     with open(server_options_file) as f:
         server_options = json.load(f)
+
     return server_options

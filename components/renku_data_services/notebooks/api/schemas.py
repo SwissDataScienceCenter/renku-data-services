@@ -13,16 +13,19 @@ import collections
 from .. import config
 from .custom_fields import (
     serverOptionCpuValue,
+    serverOptionDiskValue,
     serverOptionMemoryValue,
     serverOptionUrlValue,
 )
 from ..util.misc import read_server_options_file
+from ..util.file_size import parse_file_size
 
 
 class LaunchNotebookRequestServerOptions(Schema):
     defaultUrl = serverOptionUrlValue
     cpu_request = serverOptionCpuValue
     mem_request = serverOptionMemoryValue
+    disk_request = serverOptionDiskValue
     lfs_auto_fetch = fields.Bool(required=True)
     gpu_request = fields.Integer(strict=True, validate=lambda x: x >= 0)
 
@@ -37,6 +40,17 @@ class LaunchNotebookRequestServerOptions(Schema):
             if server_options[option]["type"] == "boolean":
                 continue  # boolean options are already validated by marshmallow
             if data[option] not in server_options[option]["options"]:
+                # check if we allow arbitrary options
+                if server_options[option].get("allow_any_value"):
+                    value_range = server_options[option].get("value_range")
+                    if not value_range:
+                        raise RuntimeError("You must specify a value range.")
+                    if not _in_range(data[option], value_range):
+                        raise ValidationError(
+                            f"The value {data[option]} is outside of the range "
+                            f"{value_range.get('min')} to {value_range.get('max')}."
+                        )
+                    continue
                 # validate options that can have a set of values against allowed values
                 raise ValidationError(
                     f"The value {data[option]} for sever option {option} is not valid, "
@@ -182,7 +196,7 @@ class FailedParsing(Schema):
 class ServerOptionBase(Schema):
     displayName = fields.Str(required=True)
     order = fields.Int(required=True)
-    type = fields.String(validate=lambda x: x in ["boolean", "enum"], required=True,)
+    type = fields.String(validate=lambda x: x in ["boolean", "enum"], required=True)
 
 
 class ServerOptionCpu(ServerOptionBase):
@@ -192,6 +206,30 @@ class ServerOptionCpu(ServerOptionBase):
     options = fields.List(
         serverOptionCpuValue, validate=lambda x: len(x) >= 1, required=True
     )
+
+
+class ResourceRequestValueRange(Schema):
+    """Specifies the valid range of a resource request."""
+
+    type = fields.String(validate=lambda x: x in ["bytes"], required=True)
+
+
+class DiskRequestValueRange(ResourceRequestValueRange):
+    """Specifies the valid disk request range."""
+
+    min = serverOptionDiskValue
+    max = serverOptionDiskValue
+
+
+class ServerOptionDisk(ServerOptionBase):
+    """The schema used to describe a single option for the server_options endpoint."""
+
+    default = serverOptionDiskValue
+    options = fields.List(
+        serverOptionDiskValue, validate=lambda x: len(x) >= 1, required=True
+    )
+    allow_any_value = fields.Boolean(required=False)
+    value_range = fields.Nested(DiskRequestValueRange, required=False)
 
 
 class ServerOptionMemory(ServerOptionBase):
@@ -249,6 +287,7 @@ class ServerOptions(Schema):
     gpu_request = fields.Nested(ServerOptionGpu())
     lfs_auto_fetch = fields.Nested(ServerOptionBool(), required=True)
     mem_request = fields.Nested(ServerOptionMemory(), required=True)
+    disk_request = fields.Nested(ServerOptionDisk(), required=False)
 
 
 class ServerLogs(Schema):
@@ -289,4 +328,24 @@ class User(Schema):
     server = fields.Str(missing=None)
     servers = fields.Dict(
         keys=fields.Str(), values=fields.Nested(LaunchNotebookResponse()), missing={}
+    )
+
+
+def _in_range(value, value_range):
+    """Check that the value is with the given value range."""
+
+    if value_range.get("type") == "bytes":
+        # convert file size notation
+        def convert(x):
+            return parse_file_size(x)
+
+    else:
+        # pass-through
+        def convert(x):
+            return x
+
+    return (
+        convert(value_range.get("min"))
+        <= convert(value)
+        <= convert(value_range.get("max"))
     )

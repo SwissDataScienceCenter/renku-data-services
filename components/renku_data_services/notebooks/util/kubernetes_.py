@@ -26,6 +26,7 @@ from urllib.parse import urljoin
 import escapism
 from flask import current_app
 from kubernetes import client
+from kubernetes.client.models.v1_resource_requirements import V1ResourceRequirements
 from kubernetes.client.rest import ApiException
 from kubernetes.config.config_exception import ConfigException
 from kubernetes.config.incluster_config import (
@@ -36,6 +37,7 @@ from kubernetes.config.incluster_config import (
 
 from .. import config
 from .gitlab_ import _get_oauth_token
+from .file_size import parse_file_size
 
 
 # adjust k8s service account paths if running inside telepresence
@@ -299,3 +301,97 @@ def _secret_exists(name, namespace):
     except client.rest.ApiException:
         pass
     return False
+
+
+def create_pvc(
+    name,
+    username,
+    git_namespace,
+    project_id,
+    project,
+    branch,
+    commit_sha,
+    git_host,
+    storage_size,
+    storage_class="default",
+):
+    """Create a PVC."""
+
+    # check if we already have this PVC
+    pvc = _get_pvc(name)
+    if pvc:
+        status = "existing"
+
+        # if the requested size is bigger than the original PVC, resize
+        if parse_file_size(
+            pvc.spec.resources.requests.get("storage")
+        ) < parse_file_size(storage_size):
+
+            pvc.spec.resources.requests["storage"] = storage_size
+            v1.patch_namespaced_persistent_volume_claim(
+                name=pvc.metadata.name, namespace=kubernetes_namespace, body=pvc
+            )
+
+    if not pvc:
+        pvc = client.V1PersistentVolumeClaim(
+            metadata=client.V1ObjectMeta(
+                name=name,
+                annotations={
+                    current_app.config.get("RENKU_ANNOTATION_PREFIX")
+                    + "git-host": git_host,
+                    current_app.config.get("RENKU_ANNOTATION_PREFIX")
+                    + "namespace": git_namespace,
+                    current_app.config.get("RENKU_ANNOTATION_PREFIX")
+                    + "username": username,
+                    current_app.config.get("RENKU_ANNOTATION_PREFIX")
+                    + "commit-sha": commit_sha,
+                    current_app.config.get("RENKU_ANNOTATION_PREFIX")
+                    + "branch": branch,
+                    current_app.config.get("RENKU_ANNOTATION_PREFIX")
+                    + "projectName": project,
+                },
+                labels={
+                    "component": "singleuser-server",
+                    current_app.config.get("RENKU_ANNOTATION_PREFIX")
+                    + "username": username,
+                    current_app.config.get("RENKU_ANNOTATION_PREFIX")
+                    + "commit-sha": commit_sha,
+                    current_app.config.get("RENKU_ANNOTATION_PREFIX")
+                    + "gitlabProjectId": str(project_id),
+                },
+            ),
+            spec=client.V1PersistentVolumeClaimSpec(
+                access_modes=["ReadWriteOnce"],
+                volume_mode="Filesystem",
+                storage_class_name=storage_class,
+                resources=V1ResourceRequirements(requests={"storage": storage_size}),
+            ),
+        )
+        v1.create_namespaced_persistent_volume_claim(kubernetes_namespace, pvc)
+        status = "created"
+    return {"status": status, "pvc": pvc}
+
+
+def delete_pvc(name):
+    """Delete a specified PVC."""
+    pvc = _get_pvc(name)
+    if pvc:
+        v1.delete_namespaced_persistent_volume_claim(
+            name=pvc.metadata.name, namespace=kubernetes_namespace
+        )
+        return pvc
+
+
+def _get_pvc(name):
+    """Fetch the PVC for the given username, project, commit combination."""
+
+    try:
+        return v1.read_namespaced_persistent_volume_claim(name, kubernetes_namespace)
+    except client.ApiException:
+        return None
+
+
+def make_pvc_name(username, namespace, server_name):
+    """Form a PVC name from a username and servername."""
+    safe_username = escapism.escape(username, escape_char="-").lower()
+    return f"{safe_username}-{namespace}-{server_name}-pvc"

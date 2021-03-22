@@ -52,7 +52,12 @@ class UnionField(fields.Field):
 
 
 serverOptionCpuValue = fields.Number(
-    validate=lambda x: x > 0.0 and (x % 1 >= 0.001 or x % 1 == 0.0), required=True,
+    validate=lambda x: x > 0.0 and (x % 1 >= 0.001 or x % 1 == 0.0), required=True
+)
+serverOptionDiskValue = fields.String(
+    validate=lambda x: re.match(r"^(?:[1-9][0-9]*|[0-9]\.[0-9]*)[EPTGMK][i]{0,1}$", x)
+    is not None,
+    required=False,
 )
 serverOptionMemoryValue = fields.String(
     validate=lambda x: re.match(r"^(?:[1-9][0-9]*|[0-9]\.[0-9]*)[EPTGMK][i]{0,1}$", x)
