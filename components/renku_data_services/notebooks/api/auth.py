@@ -27,13 +27,11 @@ from flask import (
     redirect,
     abort,
 )
-from flask_apispec import doc
+from flask_apispec import doc, marshal_with
 
 from .. import config
-from .decorators import validate_response_with
-from .schemas import User
-from ..util.kubernetes_ import get_user_servers
-from ..util.jupyterhub_ import auth, get_user_info
+from .classes.user import User
+from .schemas import UserSchema, JHUserInfo
 
 
 bp = Blueprint("auth_bp", __name__, url_prefix=config.SERVICE_PREFIX)
@@ -44,19 +42,14 @@ def authenticated(f):
 
     @wraps(f)
     def decorated(*args, **kwargs):
-        token = (
-            request.cookies.get(auth.cookie_name)
-            or request.headers.get("Authorization", "")[len("token") :].strip()
-        )
-        if token:
-            user = auth.user_for_token(token)
-        else:
-            user = None
-        if user:
+        user = User()
+        if user.hub_username:
+            # the user is logged in
             return f(user, *args, **kwargs)
         else:
-            # if the request is not coming from a browser, return 401
+            # the user is not logged in
             if request.environ.get("HTTP_ACCEPT", "") == "application/json":
+                # if the request is not coming from a browser, return 401
                 current_app.logger.info(
                     "Unauthorized non-browser request - returning 401."
                 )
@@ -67,16 +60,24 @@ def authenticated(f):
                 return response
 
             # redirect to login url on failed auth
-            state = auth.generate_state(next_url=request.url)
+            state = current_app.config["JUPYTERHUB_ADMIN_AUTH"].generate_state(
+                next_url=request.url
+            )
             current_app.logger.debug(
                 "Auth flow, redirecting to {} with next url {}".format(
-                    auth.login_url, request.url
+                    current_app.config["JUPYTERHUB_ADMIN_AUTH"].login_url, request.url
                 )
             )
             response = make_response(
-                redirect(auth.login_url + "&state=%s" % state, code=302)
+                redirect(
+                    current_app.config["JUPYTERHUB_ADMIN_AUTH"].login_url
+                    + "&state=%s" % state,
+                    code=302,
+                )
             )
-            response.set_cookie(auth.state_cookie_name, state)
+            response.set_cookie(
+                current_app.config["JUPYTERHUB_ADMIN_AUTH"].state_cookie_name, state
+            )
             return response
 
     return decorated
@@ -91,41 +92,38 @@ def oauth_callback():
 
     # validate state field
     arg_state = request.args.get("state", None)
-    cookie_state = request.cookies.get(auth.state_cookie_name)
+    cookie_state = request.cookies.get(
+        current_app.config["JUPYTERHUB_ADMIN_AUTH"].state_cookie_name
+    )
     if arg_state is None or arg_state != cookie_state:
         # state doesn't match
         abort(403)
 
-    token = auth.token_for_code(code)
-    next_url = auth.get_next_url(cookie_state) or current_app.config.get(
-        "SERVICE_PREFIX"
-    )
+    token = current_app.config["JUPYTERHUB_ADMIN_AUTH"].token_for_code(code)
+    next_url = current_app.config["JUPYTERHUB_ADMIN_AUTH"].get_next_url(
+        cookie_state
+    ) or current_app.config.get("SERVICE_PREFIX")
     response = make_response(redirect(next_url, code=302))
-    response.set_cookie(auth.cookie_name, token)
+    response.set_cookie(current_app.config["JUPYTERHUB_ADMIN_AUTH"].cookie_name, token)
     return response
 
 
 @bp.route("user")
-@validate_response_with(
-    {
-        200: {
-            "schema": User(),
-            "description": "Information about the authenticated user.",
-        }
-    }
+@marshal_with(
+    UserSchema(), code=200, description="Information about the authenticated user."
 )
 @doc(tags=["user"], summary="Information about the authenticated user.")
 @authenticated
 def whoami(user):
     """Return information about the authenticated user."""
-    user_info = get_user_info(user)
+    user_info = user.hub_user
     if user_info == {} or user_info is None:
         return make_response(
             jsonify({"message": {"info": "No information on the authenticated user"}}),
             404,
         )
-    user_info["servers"] = get_user_servers(user)
-    return make_response(jsonify(user_info), 200)
+    user_info = JHUserInfo().load(user_info)
+    return user_info
 
 
 @bp.route("login-tmp")

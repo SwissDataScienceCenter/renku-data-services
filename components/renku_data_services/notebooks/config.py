@@ -18,6 +18,7 @@
 """Notebooks service configuration."""
 import os
 
+from jupyterhub.services.auth import HubOAuth
 
 GITLAB_URL = os.environ.get("GITLAB_URL", "https://gitlab.com")
 """The GitLab instance to use."""
@@ -31,6 +32,17 @@ JUPYTERHUB_ANNOTATION_PREFIX = "hub.jupyter.org/"
 JUPYTERHUB_API_TOKEN = os.environ.get("JUPYTERHUB_API_TOKEN", "")
 """The service api token."""
 
+JUPYTERHUB_ADMIN_AUTH = HubOAuth(
+    api_token=os.environ.get("JUPYTERHUB_API_TOKEN", "token"), cache_max_age=60
+)
+"""The oauth object used to query the JH API as an admin to get user information."""
+
+JUPYTERHUB_URL = JUPYTERHUB_ADMIN_AUTH.api_url
+
+JUPYTERHUB_ADMIN_HEADERS = {
+    JUPYTERHUB_ADMIN_AUTH.auth_header_name: f"token {JUPYTERHUB_ADMIN_AUTH.api_token}"
+}
+
 JUPYTERHUB_ORIGIN = os.environ.get("JUPYTERHUB_ORIGIN", "")
 """Origin property of Jupyterhub, typically https://renkudomain.org"""
 
@@ -43,10 +55,13 @@ SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
 SENTRY_ENV = os.environ.get("SENTRY_ENV", "")
 """Sentry client environment."""
 
-SERVICE_PREFIX = os.environ.get("JUPYTERHUB_SERVICE_PREFIX", "/")
+SERVICE_PREFIX = os.environ.get("JUPYTERHUB_SERVICE_PREFIX", "/service")
 """Service prefix is set by JupyterHub service spawner."""
 
-GITLAB_AUTH = os.environ.get("JUPYTERHUB_AUTHENTICATOR", "gitlab") == "gitlab"
+JUPYTERHUB_AUTHENTICATOR = os.environ.get("JUPYTERHUB_AUTHENTICATOR", "gitlab")
+"""How we are authenticating with jupyterhub"""
+
+GITLAB_AUTH = JUPYTERHUB_AUTHENTICATOR == "gitlab"
 """Check if we're authenticating with GitLab (and thus have a GitLab oauth token)."""
 
 JUPYTERHUB_PATH_PREFIX = os.environ.get("JUPYTERHUB_BASE_URL", "/jupyterhub")
@@ -55,6 +70,14 @@ JUPYTERHUB_PATH_PREFIX = os.environ.get("JUPYTERHUB_BASE_URL", "/jupyterhub")
 DEFAULT_IMAGE = os.environ.get("NOTEBOOKS_DEFAULT_IMAGE", "renku/singleuser:latest")
 """The default image to use for an interactive session if the image tied to the
 current commit cannot be found."""
+
+GIT_CLONE_IMAGE = os.environ.get("GIT_CLONE_IMAGE", "renku/git-clone:latest")
+"""The image used to clone the git repository when a user session is started"""
+
+GIT_HTTPS_PROXY_IMAGE = os.environ.get(
+    "GIT_HTTPS_PROXY_IMAGE", "renku/git-https-proxy:latest"
+)
+"""The HTTPS proxy sidecar container image."""
 
 NOTEBOOKS_SESSION_PVS_ENABLED = (
     os.environ.get("NOTEBOOKS_SESSION_PVS_ENABLED", "false") == "true"
@@ -67,12 +90,9 @@ NOTEBOOKS_SESSION_PVS_STORAGE_CLASS = os.environ.get(
 )
 """Use a custom storage class for the user session persistent volumes."""
 
-GIT_CLONE_IMAGE = os.environ.get("GIT_CLONE_IMAGE", "renku/git-clone:latest")
-"""Image to use for the init container."""
-
 OPENAPI_VERSION = "2.0"
-API_SPEC_URL = f"{SERVICE_PREFIX}api/v1/spec"
-SWAGGER_URL = f"{SERVICE_PREFIX}api/docs"
+API_SPEC_URL = f"{SERVICE_PREFIX}/api/v1/spec"
+SWAGGER_URL = f"{SERVICE_PREFIX}/api/docs"
 SWAGGER_HEADER_ACCEPT = {
     "name": "produces",
     "in": "header",

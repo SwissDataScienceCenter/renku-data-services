@@ -3,7 +3,6 @@ import re
 import requests
 
 from .. import config
-from .gitlab_ import _get_oauth_token
 from werkzeug.http import parse_www_authenticate_header
 
 
@@ -38,7 +37,7 @@ def get_docker_token(hostname, image, tag, user):
         )
         is not None
     ):
-        oauth_token = _get_oauth_token(user)
+        oauth_token = user.oauth_token
         creds = base64.urlsafe_b64encode(f"oauth2:{oauth_token}".encode()).decode()
         token_req = requests.get(
             realm, params=params, headers={"Authorization": f"Basic {creds}"}

@@ -17,115 +17,91 @@
 # limitations under the License.
 """Notebooks service API."""
 import json
-import os
-from urllib.parse import urlparse
-from uuid import uuid4
 from time import sleep
 
-import escapism
 from flask import Blueprint, current_app, jsonify, request, make_response
-from flask_apispec import use_kwargs, doc
-from kubernetes.client.rest import ApiException
+from flask_apispec import use_kwargs, doc, marshal_with
 from marshmallow import fields
 
 from .. import config
-from ..util.check_image import get_docker_token, image_exists, parse_image_name
-from ..util.gitlab_ import get_renku_project
-from ..util.jupyterhub_ import (
-    make_server_name,
-    create_named_server,
-    delete_named_server,
-    check_user_has_named_server,
-)
-from ..util.kubernetes_ import (
-    read_namespaced_pod_log,
-    get_user_server,
-    get_user_servers,
-    delete_user_pod,
-    create_registry_secret,
-    create_pvc,
-    delete_pvc,
-    make_pvc_name,
-)
 from .auth import authenticated
-from .decorators import validate_response_with
 from .schemas import (
     LaunchNotebookRequest,
     LaunchNotebookResponse,
+    ServersGetRequest,
     ServersGetResponse,
     ServerLogs,
     ServerOptions,
     FailedParsing,
 )
 from ..util.misc import read_server_options_file
+from .classes.server import UserServer
 
 
 bp = Blueprint("notebooks_blueprint", __name__, url_prefix=config.SERVICE_PREFIX)
 
 
 @bp.route("servers")
-@validate_response_with(
-    {200: {"schema": ServersGetResponse(), "description": "List of all servers."}}
-)
+@use_kwargs(ServersGetRequest(), location="query")
+@marshal_with(ServersGetResponse(), code=200, description="List of all servers")
 @doc(tags=["servers"], summary="Information about all active servers.")
 @authenticated
-def user_servers(user):
+def user_servers(user, **query_params):
     """Return a JSON of running servers for the user."""
-    namespace = request.args.get("namespace")
-    project = request.args.get("project")
-    branch = request.args.get("branch")
-    commit_sha = request.args.get("commit_sha")
-
-    servers = get_user_servers(user, namespace, project, branch, commit_sha)
-    return jsonify({"servers": servers})
+    servers = [UserServer.from_pod(user, pod) for pod in user.pods]
+    filter_attrs = list(filter(lambda x: x[1] is not None, query_params.items()))
+    filtered_servers = {}
+    for server in servers:
+        if all([getattr(server, key, value) == value for key, value in filter_attrs]):
+            filtered_servers[server.server_name] = server
+    return {"servers": filtered_servers}
 
 
 @bp.route("servers/<server_name>")
-@validate_response_with(
-    {200: {"schema": LaunchNotebookResponse(), "description": "Server properties."}}
-)
+@marshal_with(LaunchNotebookResponse(), code=200, description="Server properties.")
 @doc(tags=["servers"], summary="Information about an active server.")
 @authenticated
 def user_server(user, server_name):
     """Returns a user server based on its ID"""
-    server = get_user_server(user, server_name)
-    return jsonify(server)
+    server = UserServer.from_server_name(user, server_name)
+    if server is not None:
+        return server
+    return make_response(jsonify({"messages": {"error": "Cannot find server"}}), 404)
 
 
 @bp.route("servers", methods=["POST"])
-@validate_response_with(
-    {
-        200: {
-            "schema": LaunchNotebookResponse(),
-            "description": "The request to create the server has been submitted.",
-        },
-        201: {
-            "schema": LaunchNotebookResponse(),
-            "description": "The requested server is already running.",
-        },
-        202: {
-            "schema": LaunchNotebookResponse(),
-            "description": "The requested server is still spawning.",
-        },
-        400: {
-            "schema": LaunchNotebookResponse(),
-            "description": "The requested server is in pending state.",
-        },
-        422: {"schema": FailedParsing(), "description": "Invalid request."},
-    }
+@marshal_with(
+    LaunchNotebookResponse(),
+    code=200,
+    description="The request to create the server has been submitted.",
 )
+@marshal_with(
+    LaunchNotebookResponse(),
+    code=201,
+    description="The requested server is already running.",
+)
+@marshal_with(
+    LaunchNotebookResponse(),
+    code=202,
+    description="The requested server is still spawning.",
+)
+@marshal_with(
+    LaunchNotebookResponse(),
+    code=400,
+    description="The requested server is in pending state.",
+)
+@marshal_with(FailedParsing(), code=422, description="Invalid request.")
 @use_kwargs(LaunchNotebookRequest(), location="json")
 @doc(tags=["servers"], summary="Start a server.")
 @authenticated
 def launch_notebook(
     user, namespace, project, branch, commit_sha, notebook, image, server_options
 ):
-    """Launch user server with a given arguments."""
-    # 0. check if server already exists and if so return it
-    server_name = make_server_name(namespace, project, branch, commit_sha)
-    safe_username = escapism.escape(user.get("name"), escape_char="-").lower()
+    server = UserServer(
+        user, namespace, project, branch, commit_sha, notebook, image, server_options
+    )
 
-    if len(safe_username) > 63:
+    if len(server.safe_username) > 63:
         return current_app.response_class(
             response=json.dumps(
                 {
@@ -133,7 +109,7 @@ def launch_notebook(
                         "json": {
                             "username": [
                                 "A username cannot be longer than 63 characters, "
-                                f"your username is {len(safe_username)} characters long."
+                                f"your username is {len(server.safe_username)} characters long."
                             ]
                         }
                     }
@@ -143,181 +119,50 @@ def launch_notebook(
             mimetype="application/json",
         )
 
-    current_app.logger.debug(
-        f"Request to create server: {server_name} with namespace: {namespace}, "
-        f"project: {project}, branch: {branch}, commit_sha:{commit_sha}, "
-        f"notebook: {notebook}, image: {image} for user: {user}"
-    )
+    if server.server_exists():
+        return server, 200
 
-    if check_user_has_named_server(user, server_name):
-        server = get_user_server(user, server_name)
-        current_app.logger.debug(
-            f"Server {server_name} already exists in JupyterHub: {server}"
-        )
-        return current_app.response_class(
-            response=json.dumps(server), status=200, mimetype="application/json"
-        )
-
-    # 1. launch using spawner that checks the access
-
-    # process the server options
-    # server options from system configuration
-    server_options_defaults = read_server_options_file()
-
-    # process the requested options and set others to defaults from config
-    server_options.setdefault(
-        "defaultUrl",
-        server_options_defaults.pop("defaultUrl", {}).get(
-            "default", os.getenv("JUPYTERHUB_SINGLEUSER_DEFAULT_URL")
-        ),
-    )
-
-    for key in server_options_defaults.keys():
-        server_options.setdefault(key, server_options_defaults.get(key)["default"])
-
-    gl_project = get_renku_project(user, f"{namespace}/{project}")
-
-    if gl_project is None:
-        return make_response(
-            jsonify(
-                {
-                    "messages": {
-                        "error": f"Cannot find project {project} for user: {user['name']}."
-                    }
-                }
-            ),
-            404,
-        )
-
-    # set the notebook image if not specified in the request
-    if image is None:
-        parsed_image = {
-            "hostname": config.IMAGE_REGISTRY,
-            "image": gl_project.path_with_namespace.lower(),
-            "tag": commit_sha[:7],
-        }
-        commit_image = (
-            f"{config.IMAGE_REGISTRY}/{gl_project.path_with_namespace.lower()}"
-            f":{commit_sha[:7]}"
-        )
-    else:
-        parsed_image = parse_image_name(image)
-    # get token
-    token, is_image_private = get_docker_token(**parsed_image, user=user)
-    # check if images exist
-    image_exists_result = image_exists(**parsed_image, token=token)
-    # assign image
-    if image_exists_result and image is None:
-        # the image tied to the commit exists
-        verified_image = commit_image
-    elif not image_exists_result and image is None:
-        # the image tied to the commit does not exist, fallback to default image
-        verified_image = config.DEFAULT_IMAGE
-        is_image_private = False
-        current_app.logger.debug(
-            f"Image for the selected commit {commit_sha} of {project}"
-            f" not found, using default image {config.DEFAULT_IMAGE}"
-        )
-    elif image_exists_result and image is not None:
-        # a specific image was requested and it exists
-        verified_image = image
-    else:
-        # a specific image was requested but does not exist
-        return make_response(
-            jsonify({"messages": {"error": f"Cannot find/access image {image}."}}), 404
-        )
-
-    # create the PVC if requested
-    pvc_name = ""
-
-    if config.NOTEBOOKS_SESSION_PVS_ENABLED:
-        pvc_name = make_pvc_name(
-            username=user.get("name"), namespace=namespace, server_name=server_name
-        )
-        pvc = create_pvc(
-            name=pvc_name,
-            username=user.get("name"),
-            git_namespace=namespace,
-            project_id=gl_project.id,
-            project=project,
-            branch=branch,
-            commit_sha=commit_sha,
-            git_host=urlparse(config.GITLAB_URL).netloc,
-            storage_size=server_options.get("disk_request"),
-            storage_class=config.NOTEBOOKS_SESSION_PVS_STORAGE_CLASS,
-        )
-        current_app.logger.debug(f"Creating PVC: \n {pvc}")
-
-    payload = {
-        "namespace": namespace,
-        "project": project,
-        "branch": branch,
-        "commit_sha": commit_sha,
-        "project_id": gl_project.id,
-        "notebook": notebook,
-        "image": verified_image,
-        "git_clone_image": config.GIT_CLONE_IMAGE,
-        "git_https_proxy_image": os.getenv(
-            "GIT_HTTPS_PROXY_IMAGE", "renku/git-https-proxy:latest"
-        ),
-        "server_options": server_options,
-    }
-
-    if pvc_name:
-        payload["pvc_name"] = pvc_name
-        payload["pvc_exists"] = "true" if pvc.get("status") == "existing" else "false"
-
-    current_app.logger.debug(f"Creating server {server_name} with {payload}")
-
-    # only create a pull secret if the project has limited visibility and a token is available
-    if config.GITLAB_AUTH and is_image_private:
-        git_host = urlparse(config.GITLAB_URL).netloc
-        secret_name = f"{safe_username}-registry-{str(uuid4())}"
-        create_registry_secret(
-            user, namespace, secret_name, gl_project.id, commit_sha, git_host
-        )
-        payload["image_pull_secrets"] = [secret_name]
-
-    r = create_named_server(user, server_name, payload)
-    server = get_user_server(user, server_name)
-
-    if r.status_code == 500:
+    r, error_msg = server.start()
+    if error_msg is None and r.status_code == 500:
         current_app.logger.warning(
-            f"Creating server {server_name} failed with status code 500, retrying once."
+            f"Creating server {server.server_name} failed with status code 500, retrying once."
         )
         sleep(1)
-        r = create_named_server(user, server_name, payload)
-        server = get_user_server(user, server_name)
+        r, error_msg = server.start()
 
-    # 2. check response, we expect:
+    if error_msg is not None or r is None:
+        current_app.logger.error(f"server launch failed because: {error_msg}")
+        return make_response(jsonify({"messages": {"error": error_msg}}), 404,)
+
+    # check response, we expect:
     #   - HTTP 201 if the server is already running
     #   - HTTP 202 if the server is spawning
-    if r.status_code == 201:
-        current_app.logger.debug(f"server {server_name} already running")
-        return current_app.response_class(
-            response=json.dumps(server), status=201, mimetype="application/json"
-        )
-    elif r.status_code == 202:
-        current_app.logger.debug(f"spawn initialized for {server_name}")
-        return current_app.response_class(
-            response=json.dumps(server), status=202, mimetype="application/json"
-        )
-    elif r.status_code == 400:
+    status_code = r.status_code
+    if status_code == 201:
+        current_app.logger.debug(f"server {server.server_name} already running")
+        return server, 201
+    elif status_code == 202:
+        current_app.logger.debug(f"spawn initialized for {server.server_name}")
+        return server, 202
+    elif status_code == 400:
         current_app.logger.debug("server in pending state")
-        return current_app.response_class(
-            response=json.dumps(server), status=400, mimetype="application/json"
+        return server, 400
+    elif status_code == 404:
+        current_app.logger.debug(
+            "Branch, commit, namespace, image or project does not exist"
         )
+        return r
     else:
         current_app.logger.error(
-            f"creating server {server_name} failed with {r.status_code}"
+            f"creating server {server.server_name} failed with {status_code}"
         )
         # unexpected status code, abort
         return make_response(
             jsonify(
                 {
                     "messages": {
-                        "error": f"creating server {server_name} failed with "
-                        f"{r.status_code} from jupyterhub"
+                        "error": f"creating server {server.server_name} failed with "
+                        f"{status_code} from jupyterhub",
                     }
                 }
             ),
@@ -340,80 +185,34 @@ def launch_notebook(
         404: {"description": "The server cannot be found."},
     },
 )
-@validate_response_with(
-    {422: {"schema": FailedParsing(), "description": "Invalid request."}}
-)
+@marshal_with(FailedParsing(), code=422, description="Invalid request.")
 @use_kwargs({"forced": fields.Bool(missing=False, data_key="force")}, location="query")
 @authenticated
 def stop_server(user, forced, server_name):
     """Stop user server with name."""
     current_app.logger.debug(
-        f"Request to delete server: {server_name} forced: {forced} for user: {user}"
+        f"Request to delete server: {server_name} forced: {forced}."
     )
-
-    server = get_user_server(user, server_name)
-
-    if forced:
-        if server:
-            pod_name = server.get("state", {}).get("pod_name", "")
-            if delete_user_pod(user, pod_name):
-                return "", 204
-            else:
-                return make_response(
-                    jsonify({"messages": {"error": "Cannot force delete server"}}), 400
-                )
-        return make_response(jsonify({"messages": {"error": "Server not found."}}), 404)
-
-    r = delete_named_server(user, server_name)
-
-    # If the server was deleted gracefully, remove the PVC if it exists
-    if r.status_code < 300:
-        annotations = server.get("annotations")
-        pvc = delete_pvc(
-            make_pvc_name(
-                username=user.get("name"),
-                namespace=annotations.get(config.RENKU_ANNOTATION_PREFIX + "namespace"),
-                server_name=server_name,
-            )
-        )
-        if pvc:
-            current_app.logger.debug(f"pvc deleted: {pvc.metadata.name}")
-
-    if r.status_code == 204:
-        return "", 204
-    elif r.status_code == 202:
+    server = UserServer.from_server_name(user, server_name)
+    if server is None:
         return make_response(
-            jsonify(
-                {
-                    "messages": {
-                        "information": "The server was not stopped, it is taking a while to stop."
-                    }
-                }
-            ),
-            r.status_code,
+            jsonify({"messages": {"error": "Cannot find server"}}), 404
         )
-    else:
-        message = r.json().get(
-            "message", "Something went wrong while tring to stop the server"
-        )
-        return make_response(jsonify({"messages": {"error": message}}), r.status_code)
+    return server.stop(forced)
 
 
 @bp.route("server_options")
-@validate_response_with(
-    {
-        200: {
-            "schema": ServerOptions(),
-            "description": "The options available when starting a server.",
-        }
-    }
+@marshal_with(
+    ServerOptions(),
+    code=200,
+    description="The options available when starting a server.",
 )
 @doc(tags=["servers"], summary="Get server options")
 @authenticated
 def server_options(user):
     """Return a set of configurable server options."""
-    server_options = read_server_options_file()
-    return jsonify(server_options)
+    # TODO: append image-specific options to the options json
+    return read_server_options_file()
 
 
 @bp.route("logs/<server_name>")
@@ -431,27 +230,14 @@ def server_options(user):
         }
     },
 )
-@validate_response_with(
-    {200: {"schema": ServerLogs(), "description": "List of server logs."}}
-)
+@marshal_with(ServerLogs(), code=200, description="List of server logs.")
 @authenticated
 def server_logs(user, server_name):
     """Return the logs of the running server."""
-    server = get_user_server(user, server_name)
-    if server:
-        pod_name = server.get("state", {}).get("pod_name", "")
-        try:
-            max_lines = request.args.get("max_lines", default=250, type=int)
-            logs = read_namespaced_pod_log(pod_name, max_lines)
-        # catch predictable k8s api errors and return a significative string
-        except ApiException as e:
-            logs = ""
-            if hasattr(e, "body"):
-                k8s_error = json.loads(e.body)
-                logs = f"Logs unavailable: {k8s_error['message']}"
-        response = jsonify({"items": str.splitlines(logs)})
-    else:
-        response = make_response(
-            jsonify({"messages": {"error": "Cannot find server"}}), 404
-        )
-    return response
+    server = UserServer.from_server_name(user, server_name)
+    if server is not None:
+        max_lines = request.args.get("max_lines", default=250, type=int)
+        logs = server.get_logs(max_lines)
+        if logs is not None:
+            return {"items": str.splitlines(logs)}, 200
+    return make_response(jsonify({"messages": {"error": "Cannot find server"}}), 404)
