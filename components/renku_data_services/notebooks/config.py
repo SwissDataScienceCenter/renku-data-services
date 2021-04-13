@@ -33,7 +33,7 @@ JUPYTERHUB_API_TOKEN = os.environ.get("JUPYTERHUB_API_TOKEN", "")
 """The service api token."""
 
 JUPYTERHUB_ADMIN_AUTH = HubOAuth(
-    api_token=os.environ.get("JUPYTERHUB_API_TOKEN", "token"), cache_max_age=60
+    api_token=os.environ.get("JUPYTERHUB_API_TOKEN", "token"), cache_max_age=300
 )
 """The oauth object used to query the JH API as an admin to get user information."""
 
