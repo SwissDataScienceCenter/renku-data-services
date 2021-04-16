@@ -33,6 +33,7 @@ from .api.notebooks import (
     stop_server,
     server_options,
     server_logs,
+    autosave_info,
 )
 from .api.auth import bp as auth_bp, whoami
 
@@ -146,5 +147,6 @@ def register_swagger(app):
     docs.register(stop_server, blueprint=notebooks_bp.name)
     docs.register(server_options, blueprint=notebooks_bp.name)
     docs.register(server_logs, blueprint=notebooks_bp.name)
+    docs.register(autosave_info, blueprint=notebooks_bp.name)
     docs.register(whoami, blueprint=auth_bp.name)
     return app

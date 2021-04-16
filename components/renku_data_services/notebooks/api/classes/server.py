@@ -512,4 +512,4 @@ class UserServer:
     @property
     def _pvc_name(self):
         """Form a PVC name from a username and servername."""
-        return f"{self.safe_username}-{self.namespace}-{self.server_name}-pvc"
+        return f"{self.server_name}-pvc"

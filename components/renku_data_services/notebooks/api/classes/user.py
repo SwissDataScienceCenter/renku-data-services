@@ -1,6 +1,8 @@
 import escapism
 from flask import request, current_app
 import gitlab
+from kubernetes import client
+import re
 import requests
 
 from ...util.kubernetes_ import get_k8s_client
@@ -69,6 +71,62 @@ class User:
             label_selector=f"heritage=jupyterhub,renku.io/username={self.safe_username}",
         )
         return pods.items
+
+    def get_autosaves(self, namespace_project=None):
+        """Get a list of autosaves for all projects for the user"""
+        autosaves = []
+        # add pvcs to list of autosaves only if pvcs are supported in deployment
+        if current_app.config["NOTEBOOKS_SESSION_PVS_ENABLED"]:
+            if namespace_project is None:
+                autosaves += self._get_pvcs()
+            else:
+                project_name_annotation_key = (
+                    current_app.config.get("RENKU_ANNOTATION_PREFIX") + "projectName"
+                )
+                autosaves += [
+                    pvc
+                    for pvc in self._get_pvcs()
+                    if pvc.metadata.annotations.get(project_name_annotation_key)
+                    == namespace_project.split("/")[-1]
+                ]
+        # add any autosave branches, regardless of wheter pvcs are supported or not
+        if namespace_project is None:  # get autosave branches from all projects
+            projects = self.gitlab_client.projects.list()
+        else:
+            projects = [self.get_renku_project(namespace_project)]
+        for project in projects:
+            for branch in project.branches.list():
+                if re.match(r"^renku\/autosave\/", branch.name) is not None:
+                    autosaves.append(
+                        {
+                            "branch": branch,
+                            "root_commit": project.commits.get(
+                                branch.name.split("/")[-2]
+                            ).id,
+                        }
+                    )
+        return autosaves
+
+    def _get_pvcs(self):
+        """Get all session pvcs that belong to this user"""
+        if not current_app.config["NOTEBOOKS_SESSION_PVS_ENABLED"]:
+            return []
+        else:
+            k8s_client, k8s_namespace = get_k8s_client()
+            label_selector = ",".join(
+                [
+                    "component=singleuser-server",
+                    current_app.config.get("RENKU_ANNOTATION_PREFIX")
+                    + "username="
+                    + self.safe_username,
+                ]
+            )
+            try:
+                return k8s_client.list_namespaced_persistent_volume_claim(
+                    k8s_namespace, label_selector=label_selector
+                ).items
+            except client.ApiException:
+                return []
 
     def get_renku_project(self, namespace_project):
         """Retrieve the GitLab project."""
