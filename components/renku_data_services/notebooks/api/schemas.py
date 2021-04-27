@@ -130,10 +130,10 @@ class UserPodAnnotations(
     class Meta:
         unknown = INCLUDE
 
-    def get_attribute(self, obj, key, *args, **kwargs):
+    def get_attribute(self, obj, key, default, *args, **kwargs):
         # in marshmallow, any schema key with a dot in it is converted to nested dictionaries
         # in marshmallow, this overrides that behaviour for dumping (serializing)
-        return obj[key]
+        return obj.get(key, default)
 
     @post_load
     def unnest_keys(self, data, **kwargs):
