@@ -3,6 +3,7 @@ import requests
 from kubernetes import client
 from kubernetes.client.rest import ApiException
 from kubernetes.client.models.v1_resource_requirements import V1ResourceRequirements
+from kubernetes.client import V1PersistentVolumeClaim
 from hashlib import md5
 import base64
 import json
@@ -246,13 +247,10 @@ class UserServer:
 
         if current_app.config["NOTEBOOKS_SESSION_PVS_ENABLED"]:
             pvc_exists = self.get_pvc() is not None
-            if not pvc_exists:
-                self._create_pvc(
-                    storage_size=self.server_options.get("disk_request"),
-                    storage_class=current_app.config[
-                        "NOTEBOOKS_SESSION_PVS_STORAGE_CLASS"
-                    ],
-                )
+            self._create_pvc(
+                storage_size=self.server_options.get("disk_request"),
+                storage_class=current_app.config["NOTEBOOKS_SESSION_PVS_STORAGE_CLASS"],
+            )
             payload["pvc_name"] = self._pvc_name
             payload["pvc_exists"] = pvc_exists
         return payload
@@ -279,6 +277,9 @@ class UserServer:
                 json=payload,
                 headers=current_app.config["JUPYTERHUB_ADMIN_HEADERS"],
             )
+            if res.status_code in [200, 201, 202]:
+                # cleanup old autosaves only if server successfully launched
+                self._cleanup_pvcs_autosave()
             return res, None
 
         msg = []
@@ -386,6 +387,66 @@ class UserServer:
             )
         return logs
 
+    def _cleanup_pvcs_autosave(self):
+        def _get_all_mounted_pvcs():
+            pvcs = []
+            for pod in self._user.pods:
+                for volume in pod.spec.volumes:
+                    pvc = volume.persistent_volume_claim
+                    if pvc is not None:
+                        pvcs.append(pvc.claim_name)
+            return pvcs
+
+        def _has_parent(commit, parent, gl_project):
+            res = requests.get(
+                headers={"Authorization": f"Bearer {self._user.oauth_token}"},
+                url=f"{current_app.config['GITLAB_URL']}/api/v4/"
+                f"projects/{gl_project.id}/repository/merge_base",
+                params={"refs[]": [commit.id, parent.id]},
+            )
+            if res.status_code == 200 and res.json().get("id") == parent.id:
+                return True
+            else:
+                return False
+
+        namespace_project = f"{self.namespace}/{self.project}"
+        autosaves = self._user.get_autosaves(namespace_project)
+        gl_project = self._user.gitlab_client.projects.get(namespace_project)
+        for autosave in autosaves:
+            autosave_commit = (
+                autosave.metadata.annotations.get(
+                    current_app.config.get("RENKU_ANNOTATION_PREFIX") + "commit-sha"
+                )
+                if type(autosave) is V1PersistentVolumeClaim
+                else autosave["root_commit"]
+            )
+            # check if the autosave refers to a parent commit, if so delete autosave
+            current_app.logger.debug(
+                f"Checking if session commit {self.commit_sha}, "
+                f"has parent commit {autosave_commit} for project {namespace_project}."
+            )
+            parent_check = _has_parent(
+                gl_project.commits.get(self.commit_sha),
+                gl_project.commits.get(autosave_commit),
+                gl_project,
+            )
+            if type(autosave) is V1PersistentVolumeClaim and parent_check:
+                mounted_pvcs = _get_all_mounted_pvcs()
+                if autosave.metadata.name not in mounted_pvcs:
+                    current_app.logger.debug(
+                        f"Removing old autosave pvc {autosave.metadata.name} "
+                        f"for project {namespace_project}."
+                    )
+                    self._k8s_client.delete_namespaced_persistent_volume_claim(
+                        autosave.metadata.name, self._k8s_namespace
+                    )
+            if type(autosave) is not V1PersistentVolumeClaim and parent_check:
+                current_app.logger.debug(
+                    f"Removing old autosave branch {autosave['branch'].name} "
+                    f"for project {namespace_project}."
+                )
+                gl_project.branches.get(autosave["branch"].name).delete()
+
     @property
     def server_url(self):
         """The URL where a user can access their session."""
@@ -429,7 +490,7 @@ class UserServer:
         return cls.from_pod(user, pod)
 
     def _create_pvc(
-        self, storage_size, storage_class="default",
+        self, storage_size, storage_class,
     ):
         """Create a PVC that will store the data and code for a user session."""
 

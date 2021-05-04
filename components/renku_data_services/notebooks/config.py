@@ -86,7 +86,7 @@ NOTEBOOKS_SESSION_PVS_ENABLED = (
 Default is false, in which case ephemeral volumes are used."""
 
 NOTEBOOKS_SESSION_PVS_STORAGE_CLASS = os.environ.get(
-    "NOTEBOOKS_SESSION_PVS_STORAGE_CLASS", "default"
+    "NOTEBOOKS_SESSION_PVS_STORAGE_CLASS",
 )
 """Use a custom storage class for the user session persistent volumes."""
 

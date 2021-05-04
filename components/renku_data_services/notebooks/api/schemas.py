@@ -22,7 +22,7 @@ from .custom_fields import (
     serverOptionMemoryValue,
     serverOptionUrlValue,
 )
-from ..util.misc import read_server_options_file
+from ..util.misc import read_server_options_file, read_server_options_defaults
 from .classes.server import UserServer
 from .classes.user import User
 from ..util.file_size import parse_file_size
@@ -75,7 +75,9 @@ class LaunchNotebookRequest(Schema):
     notebook = fields.Str(missing=None)
     image = fields.Str(missing=None)
     server_options = fields.Nested(
-        LaunchNotebookRequestServerOptions(), missing={}, data_key="serverOptions"
+        LaunchNotebookRequestServerOptions(),
+        missing=read_server_options_defaults(),
+        data_key="serverOptions",
     )
 
 
