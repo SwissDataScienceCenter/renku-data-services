@@ -3,6 +3,8 @@ from marshmallow import fields
 from marshmallow.exceptions import ValidationError
 import re
 
+from .. import config
+
 
 class UnionField(fields.Field):
     """
@@ -51,17 +53,72 @@ class UnionField(fields.Field):
         raise ValidationError(errors)
 
 
-serverOptionCpuValue = fields.Number(
-    validate=lambda x: x > 0.0 and (x % 1 >= 0.001 or x % 1 == 0.0), required=True
+def cpu_value_validation(x):
+    return x > 0.0 and (x % 1 >= 0.001 or x % 1 == 0.0)
+
+
+def memory_value_validation(x):
+    return re.match(r"^(?:[1-9][0-9]*|[0-9]\.[0-9]*)[EPTGMK][i]{0,1}$", x) is not None
+
+
+# used in the response from the server_options endpoint that is then
+# used by the UI to present a set of options for the user to select when launching a session
+serverOptionUICpuValue = fields.Number(validate=cpu_value_validation, required=True)
+serverOptionUIDiskValue = fields.String(
+    validate=memory_value_validation, required=True,
 )
-serverOptionDiskValue = fields.String(
-    validate=lambda x: re.match(r"^(?:[1-9][0-9]*|[0-9]\.[0-9]*)[EPTGMK][i]{0,1}$", x)
-    is not None,
+serverOptionUIMemoryValue = fields.String(
+    validate=memory_value_validation, required=True,
+)
+serverOptionUIUrlValue = fields.Str(required=True,)
+
+# used to validate the server options in the request to launch a notebook
+serverOptionRequestCpuValue = fields.Number(
+    validate=(
+        lambda x: cpu_value_validation(x)
+        if "cpu_request" in config.SERVER_OPTIONS_UI.keys()
+        else x == config.SERVER_OPTIONS_DEFAULTS["cpu_request"]
+    ),
+    required=False,
+    missing=config.SERVER_OPTIONS_DEFAULTS["cpu_request"],
+)
+serverOptionRequestDiskValue = fields.String(
+    validate=(
+        lambda x: memory_value_validation(x)
+        if "disk_request" in config.SERVER_OPTIONS_UI.keys()
+        else x == config.SERVER_OPTIONS_DEFAULTS["disk_request"]
+    ),
+    required=False,
+    missing=config.SERVER_OPTIONS_DEFAULTS["disk_request"],
+)
+serverOptionRequestMemoryValue = fields.String(
+    validate=(
+        lambda x: memory_value_validation(x)
+        if "mem_request" in config.SERVER_OPTIONS_UI.keys()
+        else x == config.SERVER_OPTIONS_DEFAULTS["mem_request"]
+    ),
+    required=False,
+    missing=config.SERVER_OPTIONS_DEFAULTS["mem_request"],
+)
+serverOptionRequestUrlValue = fields.Str(
+    required=False, missing=config.SERVER_OPTIONS_DEFAULTS["defaultUrl"]
+)
+serverOptionRequestGpuValue = fields.Integer(
+    strict=True,
+    validate=(
+        lambda x: x >= 0
+        if "gpu_request" in config.SERVER_OPTIONS_UI.keys()
+        else x == config.SERVER_OPTIONS_DEFAULTS["gpu_request"]
+    ),
+    missing=config.SERVER_OPTIONS_DEFAULTS["gpu_request"],
     required=False,
 )
-serverOptionMemoryValue = fields.String(
-    validate=lambda x: re.match(r"^(?:[1-9][0-9]*|[0-9]\.[0-9]*)[EPTGMK][i]{0,1}$", x)
-    is not None,
-    required=True,
+serverOptionRequestLfsAutoFetchValue = fields.Bool(
+    validate=(
+        lambda x: True
+        if "lfs_auto_fetch" in config.SERVER_OPTIONS_UI.keys()
+        else x == config.SERVER_OPTIONS_DEFAULTS["lfs_auto_fetch"]
+    ),
+    missing=config.SERVER_OPTIONS_DEFAULTS["lfs_auto_fetch"],
+    required=False,
 )
-serverOptionUrlValue = fields.Str(required=True)

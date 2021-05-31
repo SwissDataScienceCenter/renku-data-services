@@ -31,11 +31,10 @@ from .schemas import (
     ServersGetRequest,
     ServersGetResponse,
     ServerLogs,
-    ServerOptions,
+    ServerOptionsUI,
     FailedParsing,
     AutosavesList,
 )
-from ..util.misc import read_server_options_file
 from .classes.server import UserServer
 
 
@@ -204,16 +203,16 @@ def stop_server(user, forced, server_name):
 
 @bp.route("server_options")
 @marshal_with(
-    ServerOptions(),
+    ServerOptionsUI(),
     code=200,
-    description="The options available when starting a server.",
+    description="The options shown in the UI when starting a server.",
 )
 @doc(tags=["servers"], summary="Get server options")
 @authenticated
 def server_options(user):
     """Return a set of configurable server options."""
     # TODO: append image-specific options to the options json
-    return read_server_options_file()
+    return current_app.config["SERVER_OPTIONS_UI"]
 
 
 @bp.route("logs/<server_name>")
