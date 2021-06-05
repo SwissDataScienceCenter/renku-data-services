@@ -6,6 +6,7 @@ import re
 import requests
 
 from ...util.kubernetes_ import get_k8s_client
+from .storage import AutosaveBranch, SessionPVC
 
 
 class User:
@@ -78,13 +79,15 @@ class User:
         # add pvcs to list of autosaves only if pvcs are supported in deployment
         if current_app.config["NOTEBOOKS_SESSION_PVS_ENABLED"]:
             if namespace_project is None:
-                autosaves += self._get_pvcs()
+                autosaves += [
+                    SessionPVC.from_pvc(self, pvc) for pvc in self._get_pvcs()
+                ]
             else:
                 project_name_annotation_key = (
                     current_app.config.get("RENKU_ANNOTATION_PREFIX") + "projectName"
                 )
                 autosaves += [
-                    pvc
+                    SessionPVC.from_pvc(self, pvc)
                     for pvc in self._get_pvcs()
                     if pvc.metadata.annotations.get(project_name_annotation_key)
                     == namespace_project.split("/")[-1]
@@ -98,12 +101,9 @@ class User:
             for branch in project.branches.list():
                 if re.match(r"^renku\/autosave\/", branch.name) is not None:
                     autosaves.append(
-                        {
-                            "branch": branch,
-                            "root_commit": project.commits.get(
-                                branch.name.split("/")[-2]
-                            ).id,
-                        }
+                        AutosaveBranch.from_branch_name(
+                            self, namespace_project, branch.name
+                        )
                     )
         return autosaves
 

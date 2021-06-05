@@ -2,9 +2,6 @@ from flask.globals import current_app
 import requests
 from kubernetes import client
 from kubernetes.client.rest import ApiException
-from kubernetes.client.models.v1_resource_requirements import V1ResourceRequirements
-from kubernetes.client import V1PersistentVolumeClaim
-from hashlib import md5
 import base64
 import json
 from urllib.parse import urlparse
@@ -19,8 +16,9 @@ from ...util.kubernetes_ import (
     get_k8s_client,
     secret_exists,
     filter_pods_by_annotations,
+    make_server_name,
 )
-from ...util.file_size import parse_file_size
+from .storage import SessionPVC
 
 
 class UserServer:
@@ -50,6 +48,16 @@ class UserServer:
         self.image = image
         self.server_options = server_options
         self.using_default_image = self.image == current_app.config.get("DEFAULT_IMAGE")
+        self.session_pvc = (
+            SessionPVC(
+                self._user,
+                f"{self.namespace}/{self.project}",
+                self.branch,
+                self.commit_sha,
+            )
+            if current_app.config["NOTEBOOKS_SESSION_PVS_ENABLED"]
+            else None
+        )
 
     def _check_flask_config(self):
         """Check the app config and ensure minimum required parameters are present."""
@@ -72,16 +80,8 @@ class UserServer:
     @property
     def server_name(self):
         """Make the server that JupyterHub uses to identify a unique user session"""
-        return self.make_server_name(
+        return make_server_name(
             self.namespace, self.project, self.branch, self.commit_sha
-        )
-
-    @staticmethod
-    def make_server_name(namespace, project, branch, commit_sha):
-        """Form a 16-digit hash server ID."""
-        server_string = f"{namespace}{project}{branch}{commit_sha}"
-        return "{project}-{hash}".format(
-            project=project[:54], hash=md5(server_string.encode()).hexdigest()[:8]
         )
 
     def _project_exists(self):
@@ -246,13 +246,12 @@ class UserServer:
             payload["image_pull_secrets"] = [secret.metadata["name"]]
 
         if current_app.config["NOTEBOOKS_SESSION_PVS_ENABLED"]:
-            pvc_exists = self.get_pvc() is not None
-            self._create_pvc(
-                storage_size=self.server_options.get("disk_request", "2G"),
+            payload["pvc_name"] = self.session_pvc.name
+            payload["pvc_exists"] = self.session_pvc.exists
+            self.session_pvc.create(
+                storage_size=self.server_options.get("disk_request"),
                 storage_class=current_app.config["NOTEBOOKS_SESSION_PVS_STORAGE_CLASS"],
             )
-            payload["pvc_name"] = self._pvc_name
-            payload["pvc_exists"] = pvc_exists
         return payload
 
     def start(self):
@@ -326,7 +325,8 @@ class UserServer:
                 self._k8s_client.delete_namespaced_pod(
                     pod_name, self._k8s_namespace, grace_period_seconds=30
                 )
-                self._delete_pvc()
+                if current_app.config["NOTEBOOKS_SESSION_PVS_ENABLED"]:
+                    self.session_pvc.delete()
                 return make_response("", 204)
             except ApiException as e:
                 logging.warning(
@@ -345,7 +345,8 @@ class UserServer:
 
             # If the server was deleted gracefully, remove the PVC if it exists
             if r.status_code < 300:
-                self._delete_pvc()
+                if current_app.config["NOTEBOOKS_SESSION_PVS_ENABLED"]:
+                    self.session_pvc.delete()
 
             if r.status_code == 204:
                 return make_response("", 204)
@@ -388,64 +389,10 @@ class UserServer:
         return logs
 
     def _cleanup_pvcs_autosave(self):
-        def _get_all_mounted_pvcs():
-            pvcs = []
-            for pod in self._user.pods:
-                for volume in pod.spec.volumes:
-                    pvc = volume.persistent_volume_claim
-                    if pvc is not None:
-                        pvcs.append(pvc.claim_name)
-            return pvcs
-
-        def _has_parent(commit, parent, gl_project):
-            res = requests.get(
-                headers={"Authorization": f"Bearer {self._user.oauth_token}"},
-                url=f"{current_app.config['GITLAB_URL']}/api/v4/"
-                f"projects/{gl_project.id}/repository/merge_base",
-                params={"refs[]": [commit.id, parent.id]},
-            )
-            if res.status_code == 200 and res.json().get("id") == parent.id:
-                return True
-            else:
-                return False
-
         namespace_project = f"{self.namespace}/{self.project}"
         autosaves = self._user.get_autosaves(namespace_project)
-        gl_project = self._user.gitlab_client.projects.get(namespace_project)
         for autosave in autosaves:
-            autosave_commit = (
-                autosave.metadata.annotations.get(
-                    current_app.config.get("RENKU_ANNOTATION_PREFIX") + "commit-sha"
-                )
-                if type(autosave) is V1PersistentVolumeClaim
-                else autosave["root_commit"]
-            )
-            # check if the autosave refers to a parent commit, if so delete autosave
-            current_app.logger.debug(
-                f"Checking if session commit {self.commit_sha}, "
-                f"has parent commit {autosave_commit} for project {namespace_project}."
-            )
-            parent_check = _has_parent(
-                gl_project.commits.get(self.commit_sha),
-                gl_project.commits.get(autosave_commit),
-                gl_project,
-            )
-            if type(autosave) is V1PersistentVolumeClaim and parent_check:
-                mounted_pvcs = _get_all_mounted_pvcs()
-                if autosave.metadata.name not in mounted_pvcs:
-                    current_app.logger.debug(
-                        f"Removing old autosave pvc {autosave.metadata.name} "
-                        f"for project {namespace_project}."
-                    )
-                    self._k8s_client.delete_namespaced_persistent_volume_claim(
-                        autosave.metadata.name, self._k8s_namespace
-                    )
-            if type(autosave) is not V1PersistentVolumeClaim and parent_check:
-                current_app.logger.debug(
-                    f"Removing old autosave branch {autosave['branch'].name} "
-                    f"for project {namespace_project}."
-                )
-                gl_project.branches.get(autosave["branch"].name).delete()
+            autosave.cleanup(self.commit_sha)
 
     @property
     def server_url(self):
@@ -488,89 +435,3 @@ class UserServer:
             return None
         pod = pods[0]
         return cls.from_pod(user, pod)
-
-    def _create_pvc(
-        self, storage_size, storage_class,
-    ):
-        """Create a PVC that will store the data and code for a user session."""
-
-        # check if we already have this PVC
-        pvc = self.get_pvc()
-        if pvc:
-            # if the requested size is bigger than the original PVC, resize
-            if parse_file_size(
-                pvc.spec.resources.requests.get("storage")
-            ) < parse_file_size(storage_size):
-
-                pvc.spec.resources.requests["storage"] = storage_size
-                self._k8s_client.patch_namespaced_persistent_volume_claim(
-                    name=pvc.metadata.name, namespace=self._k8s_namespace, body=pvc,
-                )
-        else:
-            gl_project = self._user.gitlab_client.projects.get(
-                f"{self.namespace}/{self.project}"
-            )
-            git_host = urlparse(current_app.config.get("GITLAB_URL")).netloc
-            pvc = client.V1PersistentVolumeClaim(
-                metadata=client.V1ObjectMeta(
-                    name=self._pvc_name,
-                    annotations={
-                        current_app.config.get("RENKU_ANNOTATION_PREFIX")
-                        + "git-host": git_host,
-                        current_app.config.get("RENKU_ANNOTATION_PREFIX")
-                        + "namespace": self.namespace,
-                        current_app.config.get("RENKU_ANNOTATION_PREFIX")
-                        + "username": self.safe_username,
-                        current_app.config.get("RENKU_ANNOTATION_PREFIX")
-                        + "commit-sha": self.commit_sha,
-                        current_app.config.get("RENKU_ANNOTATION_PREFIX")
-                        + "branch": self.branch,
-                        current_app.config.get("RENKU_ANNOTATION_PREFIX")
-                        + "projectName": self.project,
-                    },
-                    labels={
-                        "component": "singleuser-server",
-                        current_app.config.get("RENKU_ANNOTATION_PREFIX")
-                        + "username": self.safe_username,
-                        current_app.config.get("RENKU_ANNOTATION_PREFIX")
-                        + "commit-sha": self.commit_sha,
-                        current_app.config.get("RENKU_ANNOTATION_PREFIX")
-                        + "gitlabProjectId": str(gl_project.id),
-                    },
-                ),
-                spec=client.V1PersistentVolumeClaimSpec(
-                    access_modes=["ReadWriteOnce"],
-                    volume_mode="Filesystem",
-                    storage_class_name=storage_class,
-                    resources=V1ResourceRequirements(
-                        requests={"storage": storage_size}
-                    ),
-                ),
-            )
-            self._k8s_client.create_namespaced_persistent_volume_claim(
-                self._k8s_namespace, pvc
-            )
-        return pvc
-
-    def _delete_pvc(self):
-        """Delete the PVC used by the current user session."""
-        pvc = self.get_pvc()
-        if pvc:
-            self._k8s_client.delete_namespaced_persistent_volume_claim(
-                name=pvc.metadata.name, namespace=self._k8s_namespace
-            )
-            current_app.logger.debug(f"pvc deleted: {pvc.metadata.name}")
-
-    def get_pvc(self):
-        """Fetch the PVC for the current user session."""
-        try:
-            return self._k8s_client.read_namespaced_persistent_volume_claim(
-                self._pvc_name, self._k8s_namespace
-            )
-        except client.ApiException:
-            return None
-
-    @property
-    def _pvc_name(self):
-        """Form a PVC name from a username and servername."""
-        return f"{self.server_name}-pvc"
