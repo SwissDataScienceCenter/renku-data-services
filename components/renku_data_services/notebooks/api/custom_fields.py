@@ -65,12 +65,16 @@ def memory_value_validation(x):
 # used by the UI to present a set of options for the user to select when launching a session
 serverOptionUICpuValue = fields.Number(validate=cpu_value_validation, required=True)
 serverOptionUIDiskValue = fields.String(
-    validate=memory_value_validation, required=True,
+    validate=memory_value_validation,
+    required=True,
 )
 serverOptionUIMemoryValue = fields.String(
-    validate=memory_value_validation, required=True,
+    validate=memory_value_validation,
+    required=True,
 )
-serverOptionUIUrlValue = fields.Str(required=True,)
+serverOptionUIUrlValue = fields.Str(
+    required=True,
+)
 
 # used to validate the server options in the request to launch a notebook
 serverOptionRequestCpuValue = fields.Number(

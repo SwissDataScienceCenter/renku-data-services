@@ -133,7 +133,10 @@ def launch_notebook(
 
     if error_msg is not None or r is None:
         current_app.logger.error(f"server launch failed because: {error_msg}")
-        return make_response(jsonify({"messages": {"error": error_msg}}), 404,)
+        return make_response(
+            jsonify({"messages": {"error": error_msg}}),
+            404,
+        )
 
     # check response, we expect:
     #   - HTTP 201 if the server is already running
@@ -271,7 +274,8 @@ def autosave_info(user, namespace_project):
 
 
 @bp.route(
-    "<path:namespace_project>/autosave/<path:autosave_name>", methods=["DELETE"],
+    "<path:namespace_project>/autosave/<path:autosave_name>",
+    methods=["DELETE"],
 )
 @doc(
     tags=["autosave"],

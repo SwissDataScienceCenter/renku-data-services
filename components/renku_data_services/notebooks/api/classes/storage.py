@@ -156,7 +156,9 @@ class SessionPVC(Autosave):
             ) < parse_file_size(storage_size):
                 pvc.spec.resources.requests["storage"] = storage_size
                 self._k8s_client.patch_namespaced_persistent_volume_claim(
-                    name=self.name, namespace=self._k8s_namespace, body=pvc,
+                    name=self.name,
+                    namespace=self._k8s_namespace,
+                    body=pvc,
                 )
         else:
             git_host = urlparse(current_app.config.get("GITLAB_URL")).netloc
