@@ -155,7 +155,7 @@ class UserPodResources(
         {
             "cpu": fields.Str(required=True),
             "memory": fields.Str(required=True),
-            "ephemeral-storage": fields.Str(required=False),
+            "storage": fields.Str(required=False),
             "gpu": fields.Str(required=False),
         }
     )
@@ -223,7 +223,8 @@ class LaunchNotebookResponse(Schema):
             status.update(conditions_summary)
             return status
 
-        def get_pod_resources(pod):
+        def get_server_resources(server):
+            pod = server.pod
             try:
                 for container in pod.spec.containers:
                     if container.name == "notebook":
@@ -232,14 +233,38 @@ class LaunchNotebookResponse(Schema):
                         # ref: https://kubernetes.io/docs/concepts/configuration/
                         #   manage-compute-resources-container/#how-pods-with-resource-limits-are-run
                         if (
-                            "cpu" in resources
+                            "cpu" in resources.keys()
                             and isinstance(resources["cpu"], str)
                             and str.endswith(resources["cpu"], "m")
                             and resources["cpu"][:-1].isdigit()
                         ):
                             resources["cpu"] = str(int(resources["cpu"][:-1]) / 1000)
+                        if "memory" in resources.keys():
+                            try:
+                                memory_formatted = (
+                                    str(round(int(resources["memory"]) / 1073741824))
+                                    + "G"
+                                )
+                            except ValueError:
+                                pass
+                            else:
+                                resources["memory"] = memory_formatted
             except (AttributeError, IndexError):
                 resources = {}
+            # add storage if PVCs are used
+            if server.session_pvc is not None and server.session_pvc.pvc is not None:
+                resources["storage"] = server.session_pvc.pvc.spec.resources.requests[
+                    "storage"
+                ]
+            # add storage if emptyDir is used and size limit is set
+            else:
+                volume_name = pod.metadata.name[:54] + "-git-repo"
+                volumes = [i for i in pod.spec.volumes if i.name == volume_name]
+                if len(volumes) == 1 and volumes[0].empty_dir.size_limit is not None:
+                    resources["storage"] = volumes[0].empty_dir.size_limit
+            # remove ephemeral-storage if present
+            if "ephemeral-storage" in resources.keys():
+                resources.pop("ephemeral-storage")
             return resources
 
         pod = server.pod
@@ -254,7 +279,7 @@ class LaunchNotebookResponse(Schema):
             "started": pod.status.start_time,
             "status": get_pod_status(pod),
             "url": server.server_url,
-            "resources": get_pod_resources(pod),
+            "resources": get_server_resources(server),
             "image": server.image,
         }
 
