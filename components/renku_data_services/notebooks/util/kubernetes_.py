@@ -22,6 +22,7 @@ import os
 import warnings
 from pathlib import Path
 
+import escapism
 from kubernetes import client
 from kubernetes.config.config_exception import ConfigException
 from kubernetes.config.incluster_config import (
@@ -106,7 +107,7 @@ def make_pvc_name(safe_username, namespace, project, branch, commit_sha):
     """Form a 16-digit hash persistent volume ID."""
     server_string = f"{safe_username}{namespace}{project}{branch}{commit_sha}"
     return "{username}-{project}-{hash}".format(
-        username=safe_username[:10],
-        project=project[:44],
-        hash=md5(server_string.encode()).hexdigest()[:8],
+        username=safe_username[:10].lower(),
+        project=escapism.escape(project, escape_char="-")[:44].lower(),
+        hash=md5(server_string.encode()).hexdigest()[:8].lower(),
     )
