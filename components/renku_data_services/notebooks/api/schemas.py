@@ -260,7 +260,11 @@ class LaunchNotebookResponse(Schema):
             else:
                 volume_name = pod.metadata.name[:54] + "-git-repo"
                 volumes = [i for i in pod.spec.volumes if i.name == volume_name]
-                if len(volumes) == 1 and volumes[0].empty_dir.size_limit is not None:
+                if (
+                    len(volumes) == 1
+                    and volumes[0].empty_dir is not None
+                    and volumes[0].empty_dir.size_limit is not None
+                ):
                     resources["storage"] = volumes[0].empty_dir.size_limit
             # remove ephemeral-storage if present
             if "ephemeral-storage" in resources.keys():
