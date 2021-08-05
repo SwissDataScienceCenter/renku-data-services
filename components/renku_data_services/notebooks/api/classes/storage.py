@@ -1,5 +1,6 @@
 from datetime import datetime
 from flask import current_app
+from gitlab.exceptions import GitlabGetError
 from kubernetes import client
 from kubernetes.client.models.v1_resource_requirements import V1ResourceRequirements
 import requests
@@ -18,29 +19,64 @@ class Autosave:
         self.project = self.namespace_project.split("/")[-1]
         self.gl_project = self.user.get_renku_project(self.namespace_project)
         self.root_branch_name = root_branch_name
-        if len(root_commit_sha) < 40:
-            root_commit_sha = self.gl_project.commits.get(root_commit_sha).id
         self.root_commit_sha = root_commit_sha
+        self.validated = False
+        self.valid = False
+        self.validation_messages = []
+
+    def _root_commit_is_parent_of(self, commit_sha):
+        self.validate()
+        if self.valid:
+            res = requests.get(
+                headers={"Authorization": f"Bearer {self.user.oauth_token}"},
+                url=f"{current_app.config['GITLAB_URL']}/api/v4/"
+                f"projects/{self.gl_project.id}/repository/merge_base",
+                params={"refs[]": [self.root_commit_sha, commit_sha]},
+            )
+            if res.status_code == 200 and res.json().get("id") == self.root_commit_sha:
+                return True
+        return False
+
+    def validate(self, force_rerun=False):
+        if self.validated and not force_rerun:
+            return
+        validation_messages = []
         if self.gl_project is None:
-            raise ValueError(f"Project {self.namespace_project} does not exist.")
+            validation_messages.append(
+                f"Project {self.namespace_project} does not exist."
+            )
+        try:
+            root_commit_sha = self.gl_project.commits.get(self.root_commit_sha).id
+            if len(self.root_commit_sha) < 40:
+                self.root_commit_sha = root_commit_sha
+        except GitlabGetError:
+            validation_messages.append(
+                "Root commit sha {root_commit_sha} does not exist."
+            )
+        if hasattr(self, "final_commit_sha"):
+            try:
+                final_commit_sha = self.gl_project.commits.get(self.final_commit_sha).id
+                if len(self.final_commit_sha) < 40:
+                    self.final_commit_sha = final_commit_sha
+            except GitlabGetError:
+                validation_messages.append(
+                    "Final commit sha {root_commit_sha} does not exist."
+                )
         self.gl_root_branch = self.gl_project.branches.get(self.root_branch_name)
         if self.gl_root_branch is None:
-            raise ValueError(
+            validation_messages.append(
                 f"Branch {self.root_branch_name} for project "
                 f"{self.namespace_project} does not exist."
             )
-
-    def _root_commit_is_parent_of(self, commit_sha):
-        res = requests.get(
-            headers={"Authorization": f"Bearer {self.user.oauth_token}"},
-            url=f"{current_app.config['GITLAB_URL']}/api/v4/"
-            f"projects/{self.gl_project.id}/repository/merge_base",
-            params={"refs[]": [self.root_commit_sha, commit_sha]},
-        )
-        if res.status_code == 200 and res.json().get("id") == self.root_commit_sha:
-            return True
+        self.validated = True
+        if len(validation_messages) == 0:
+            self.valid = True
         else:
-            return False
+            current_app.logger.warning(
+                "Validation for autosave branch/pvc "
+                f"failed because: {validation_messages.join(', ')}"
+            )
+        self.validation_messages = validation_messages
 
     def cleanup(self, session_commit_sha):
         if self._root_commit_is_parent_of(session_commit_sha):
@@ -74,8 +110,6 @@ class AutosaveBranch(Autosave):
         final_commit_sha,
     ):
         super().__init__(user, namespace_project, root_branch_name, root_commit_sha)
-        if len(final_commit_sha) < 40:
-            final_commit_sha = self.gl_project.commits.get(final_commit_sha).id
         self.final_commit_sha = final_commit_sha
         self.name = (
             f"renku/autosave/{self.user.hub_username}/{root_branch_name}/"
@@ -105,9 +139,10 @@ class AutosaveBranch(Autosave):
     def from_branch_name(cls, user, namespace_project, autosave_branch_name):
         match_res = re.match(cls.branch_name_regex, autosave_branch_name)
         if match_res is None:
-            raise ValueError(
+            current_app.logger.warning(
                 f"Invalid branch name {autosave_branch_name} for autosave branch."
             )
+            return None
         return cls(
             user,
             namespace_project,
@@ -145,6 +180,11 @@ class SessionPVC(Autosave):
             )
 
     def create(self, storage_size, storage_class):
+        self.validate()
+        if not self.valid:
+            raise ValueError(
+                "Cannot create PVC because of invalid or missing parameters."
+            )
         # check if we already have this PVC
         pvc = self.pvc
         if pvc is not None:
@@ -245,7 +285,8 @@ class SessionPVC(Autosave):
             root_commit_sha is None,
         ]
         if any(parameters_missing):
-            raise ValueError(
+            current_app.logger.warning(
                 "Required PVC annotations for creating SessionPVC are missing."
             )
+            return None
         return cls(user, f"{namespace}/{project}", root_branch_name, root_commit_sha)
