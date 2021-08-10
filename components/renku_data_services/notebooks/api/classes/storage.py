@@ -133,7 +133,10 @@ class AutosaveBranch(Autosave):
 
     @property
     def branch(self):
-        return self.gl_project.branches.get(self.name)
+        try:
+            return self.gl_project.branches.get(self.name)
+        except Exception:
+            current_app.logger.warning(f"Cannot find branch {self.name}.")
 
     @classmethod
     def from_branch_name(cls, user, namespace_project, autosave_branch_name):
@@ -193,9 +196,9 @@ class SessionPVC(Autosave):
                 pvc.spec.resources.requests.get("storage")
             ) < parse_file_size(storage_size):
                 pvc.spec.resources.requests["storage"] = storage_size
-                self._k8s_client.patch_namespaced_persistent_volume_claim(
+                self.k8s_client.patch_namespaced_persistent_volume_claim(
                     name=self.name,
-                    namespace=self._k8s_namespace,
+                    namespace=self.k8s_namespace,
                     body=pvc,
                 )
         else:
