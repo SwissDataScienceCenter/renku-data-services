@@ -1,107 +1,153 @@
+from abc import ABC, abstractmethod
 import escapism
-from flask import request, current_app
-import gitlab
+from flask import current_app
+from gitlab import Gitlab
 from kubernetes import client
 import re
-import requests
+import json
+import base64
 
 from ...util.kubernetes_ import get_k8s_client
-from .storage import AutosaveBranch, SessionPVC
+from .storage import AutosaveBranch
 
 
-class User:
-    def __init__(self):
-        self._validate_app_config()
-        self.hub_username = self._get_hub_username()
-        self.safe_username = (
-            escapism.escape(self.hub_username, escape_char="-").lower()
-            if self.hub_username is not None
-            else None
-        )
-        self.hub_user = self._get_hub_user()
-        self.oauth_token = self._get_oauth_token()
-        self.gitlab_client = gitlab.Gitlab(
-            current_app.config.get("GITLAB_URL"),
-            api_version=4,
-            oauth_token=self.oauth_token,
-        )
+class User(ABC):
+    @abstractmethod
+    def get_autosaves(self, *args, **kwargs):
+        pass
 
-    def _validate_app_config(self):
-        """Confirm that the app configuration contains the minimum required
-        parameters needed for the handling users."""
-        if (
-            current_app.config.get("JUPYTERHUB_ADMIN_AUTH") is None
-            or current_app.config.get("GITLAB_URL") is None
-            or current_app.config.get("JUPYTERHUB_ADMIN_HEADERS") is None
-        ):
-            raise ValueError("Flask app configuration is insufficient for User object.")
-
-    def _get_hub_username(self):
-        """Get the jupyterhub username of the user."""
-        token = (
-            request.cookies.get(current_app.config["JUPYTERHUB_ADMIN_AUTH"].cookie_name)
-            or request.headers.get("Authorization", "")[len("token") :].strip()
-        )
-        if token:
-            _user = current_app.config["JUPYTERHUB_ADMIN_AUTH"].user_for_token(token)
-            if _user:
-                return _user["name"]
-        else:
-            return None
-
-    def _get_hub_user(self):
-        """Get information (i.e. username, email, etc) about the logged in user from Jupyterhub"""
-        url = current_app.config["JUPYTERHUB_ADMIN_AUTH"].api_url
-        response = requests.get(
-            f"{url}/users/{self.hub_username}",
-            headers=current_app.config["JUPYTERHUB_ADMIN_HEADERS"],
-        )
-        return response.json()
-
-    def _get_oauth_token(self):
-        """Retrieve the user's GitLab token from the oauth metadata."""
-        auth_state = self.hub_user.get("auth_state", None)
-        return None if not auth_state else auth_state.get("access_token")
+    def setup_k8s(self):
+        self._k8s_client, self._k8s_namespace = get_k8s_client()
+        self._k8s_api_instance = client.CustomObjectsApi(client.ApiClient())
 
     @property
-    def pods(self):
-        """Get a list of k8s pod objects for all the active servers of a user."""
-        k8s_client, k8s_namespace = get_k8s_client()
-        pods = k8s_client.list_namespaced_pod(
-            k8s_namespace,
-            label_selector=f"heritage=jupyterhub,renku.io/username={self.safe_username}",
+    def jss(self):
+        """Get a list of k8s jupyterserver objects for all the active servers of a user."""
+        label_selector = (
+            f"{current_app.config['RENKU_ANNOTATION_PREFIX']}"
+            f"safe-username={self.safe_username}"
         )
-        return pods.items
+        jss = self._k8s_api_instance.list_namespaced_custom_object(
+            group=current_app.config["CRD_GROUP"],
+            version=current_app.config["CRD_VERSION"],
+            namespace=self._k8s_namespace,
+            plural=current_app.config["CRD_PLURAL"],
+            label_selector=label_selector,
+        )
+        return jss["items"]
+
+    def get_renku_project(self, namespace_project):
+        """Retrieve the GitLab project."""
+        try:
+            return self.gitlab_client.projects.get("{0}".format(namespace_project))
+        except Exception as e:
+            current_app.logger.error(
+                f"Cannot get project: {namespace_project} for user: {self.username}, error: {e}"
+            )
+
+
+class AnonymousUser(User):
+    auth_header = "Renku-Auth-Anon-Id"
+
+    def __init__(self, headers):
+        if not current_app.config["ANONYMOUS_SESSIONS_ENABLED"]:
+            raise ValueError(
+                "Cannot use AnonymousUser when anonymous sessions are not enabled."
+            )
+        self.authenticated = self.auth_header in headers.keys()
+        if not self.authenticated:
+            return
+        self.gitlab_client = Gitlab(current_app.config["GITLAB_URL"], api_version=4)
+        self.username = headers[self.auth_header]
+        self.safe_username = escapism.escape(self.username, escape_char="-").lower()
+        self.full_name = None
+        self.keycloak_user_id = None
+        self.email = None
+        self.oidc_issuer = None
+        self.git_token = None
+        self.setup_k8s()
+
+    def get_autosaves(self, *args, **kwargs):
+        return []
+
+
+class RegisteredUser(User):
+    auth_headers = [
+        "Renku-Auth-Access-Token",
+        "Renku-Auth-Id-Token",
+        "Renku-Auth-Git-Credentials",
+    ]
+
+    def __init__(self, headers):
+        self.authenticated = all(
+            [header in headers.keys() for header in self.auth_headers]
+        )
+        if not self.authenticated:
+            return
+        parsed_id_token = self.parse_jwt_from_headers(headers)
+        self.keycloak_user_id = parsed_id_token["sub"]
+        self.email = parsed_id_token["email"]
+        self.full_name = parsed_id_token["name"]
+        self.username = parsed_id_token["preferred_username"]
+        self.safe_username = escapism.escape(self.username, escape_char="-").lower()
+        self.oidc_issuer = parsed_id_token["iss"]
+
+        (
+            self.git_url,
+            self.git_auth_header,
+            self.git_token,
+        ) = self.git_creds_from_headers(headers)
+        self.gitlab_client = Gitlab(
+            self.git_url,
+            api_version=4,
+            oauth_token=self.git_token,
+        )
+        self.setup_k8s()
+
+    @property
+    def gitlab_user(self):
+        try:
+            return self.gitlab_client.user
+        except AttributeError:
+            self.gitlab_client.auth()
+            return self.gitlab_client.user
+
+    @staticmethod
+    def parse_jwt_from_headers(headers):
+        jwt = headers["Renku-Auth-Id-Token"]
+        return json.loads(base64.b64decode(jwt.split(".")[1].encode() + b"=="))
+
+    @staticmethod
+    def git_creds_from_headers(headers):
+        parsed_dict = json.loads(
+            base64.decodebytes(headers["Renku-Auth-Git-Credentials"].encode())
+        )
+        git_url, git_credentials = next(iter(parsed_dict.items()))
+        token_match = re.match(
+            r"^[^\s]+\ ([^\s]+)$", git_credentials["AuthorizationHeader"]
+        )
+        git_token = token_match.group(1) if token_match is not None else None
+        return git_url, git_credentials["AuthorizationHeader"], git_token
 
     def get_autosaves(self, namespace_project=None):
         """Get a list of autosaves for all projects for the user"""
+        gl_project = (
+            self.get_renku_project(namespace_project)
+            if namespace_project is not None
+            else None
+        )
         autosaves = []
-        # add pvcs to list of autosaves only if pvcs are supported in deployment
-        if current_app.config["NOTEBOOKS_SESSION_PVS_ENABLED"]:
-            if namespace_project is None:
-                pvcs = self._get_pvcs()
-            else:
-                project_name_annotation_key = (
-                    current_app.config.get("RENKU_ANNOTATION_PREFIX") + "projectName"
-                )
-                pvcs = [
-                    pvc
-                    for pvc in self._get_pvcs()
-                    if pvc.metadata.annotations.get(project_name_annotation_key)
-                    == namespace_project.split("/")[-1]
-                ]
-            for pvc in pvcs:
-                autosave = SessionPVC.from_pvc(self, pvc)
-                if autosave is not None:
-                    autosaves.append(autosave)
         # add any autosave branches, regardless of wheter pvcs are supported or not
         if namespace_project is None:  # get autosave branches from all projects
             projects = self.gitlab_client.projects.list()
         else:
-            projects = [self.get_renku_project(namespace_project)]
+            projects = [gl_project]
         for project in projects:
             for branch in project.branches.list():
-                if re.match(r"^renku\/autosave\/", branch.name) is not None:
+                if (
+                    re.match(r"^renku\/autosave\/" + self.username, branch.name)
+                    is not None
+                ):
                     autosave = AutosaveBranch.from_branch_name(
                         self, namespace_project, branch.name
                     )
@@ -113,33 +159,3 @@ class User:
                             f"{namespace_project} cannot be instantiated."
                         )
         return autosaves
-
-    def _get_pvcs(self):
-        """Get all session pvcs that belong to this user"""
-        if not current_app.config["NOTEBOOKS_SESSION_PVS_ENABLED"]:
-            return []
-        else:
-            k8s_client, k8s_namespace = get_k8s_client()
-            label_selector = ",".join(
-                [
-                    "component=singleuser-server",
-                    current_app.config.get("RENKU_ANNOTATION_PREFIX")
-                    + "username="
-                    + self.safe_username,
-                ]
-            )
-            try:
-                return k8s_client.list_namespaced_persistent_volume_claim(
-                    k8s_namespace, label_selector=label_selector
-                ).items
-            except client.ApiException:
-                return []
-
-    def get_renku_project(self, namespace_project):
-        """Retrieve the GitLab project."""
-        try:
-            return self.gitlab_client.projects.get("{0}".format(namespace_project))
-        except Exception as e:
-            current_app.logger.error(
-                f"Cannot get project: {namespace_project} for user: {self.hub_username}, error: {e}"
-            )

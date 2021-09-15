@@ -17,8 +17,7 @@
 # limitations under the License.
 """Notebooks service configuration."""
 import os
-
-from jupyterhub.services.auth import HubOAuth
+from yaml import safe_load
 
 from .util.misc import read_server_options_defaults, read_server_options_ui
 
@@ -28,25 +27,8 @@ GITLAB_URL = os.environ.get("GITLAB_URL", "https://gitlab.com")
 IMAGE_REGISTRY = os.environ.get("IMAGE_REGISTRY", "")
 """The default image registry."""
 
-JUPYTERHUB_ANNOTATION_PREFIX = "hub.jupyter.org/"
+JUPYTER_ANNOTATION_PREFIX = "jupyter.org/"
 """The prefix used for annotations by the KubeSpawner."""
-
-JUPYTERHUB_API_TOKEN = os.environ.get("JUPYTERHUB_API_TOKEN", "")
-"""The service api token."""
-
-JUPYTERHUB_ADMIN_AUTH = HubOAuth(
-    api_token=os.environ.get("JUPYTERHUB_API_TOKEN", "token"), cache_max_age=300
-)
-"""The oauth object used to query the JH API as an admin to get user information."""
-
-JUPYTERHUB_URL = JUPYTERHUB_ADMIN_AUTH.api_url
-
-JUPYTERHUB_ADMIN_HEADERS = {
-    JUPYTERHUB_ADMIN_AUTH.auth_header_name: f"token {JUPYTERHUB_ADMIN_AUTH.api_token}"
-}
-
-JUPYTERHUB_ORIGIN = os.environ.get("JUPYTERHUB_ORIGIN", "")
-"""Origin property of Jupyterhub, typically https://renkudomain.org"""
 
 RENKU_ANNOTATION_PREFIX = "renku.io/"
 """The prefix used for annotations by Renku."""
@@ -57,29 +39,25 @@ SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
 SENTRY_ENV = os.environ.get("SENTRY_ENV", "")
 """Sentry client environment."""
 
-SERVICE_PREFIX = os.environ.get("JUPYTERHUB_SERVICE_PREFIX", "/service")
-"""Service prefix is set by JupyterHub service spawner."""
-
-JUPYTERHUB_AUTHENTICATOR = os.environ.get("JUPYTERHUB_AUTHENTICATOR", "gitlab")
-"""How we are authenticating with jupyterhub"""
-
-GITLAB_AUTH = JUPYTERHUB_AUTHENTICATOR == "gitlab"
-"""Check if we're authenticating with GitLab (and thus have a GitLab oauth token)."""
-
-JUPYTERHUB_PATH_PREFIX = os.environ.get("JUPYTERHUB_BASE_URL", "/jupyterhub")
-"""Base path under which Jupyterhub is running."""
+SERVICE_PREFIX = os.environ.get("SERVICE_PREFIX", "/notebooks")
+"""Service prefix for the notebooks API."""
 
 DEFAULT_IMAGE = os.environ.get("NOTEBOOKS_DEFAULT_IMAGE", "renku/singleuser:latest")
 """The default image to use for an interactive session if the image tied to the
 current commit cannot be found."""
 
-GIT_CLONE_IMAGE = os.environ.get("GIT_CLONE_IMAGE", "renku/git-clone:latest")
+GIT_RPC_SERVER_IMAGE = os.environ.get(
+    "GIT_RPC_SERVER_IMAGE", "renku/git-sidecar:latest"
+)
 """The image used to clone the git repository when a user session is started"""
 
 GIT_HTTPS_PROXY_IMAGE = os.environ.get(
     "GIT_HTTPS_PROXY_IMAGE", "renku/git-https-proxy:latest"
 )
 """The HTTPS proxy sidecar container image."""
+
+GIT_CLONE_IMAGE = os.environ.get("GIT_CLONE_IMAGE", "renku/git-clone:latest")
+"""The git clone init container image."""
 
 NOTEBOOKS_SESSION_PVS_ENABLED = (
     os.environ.get("NOTEBOOKS_SESSION_PVS_ENABLED", "false") == "true"
@@ -93,17 +71,42 @@ NOTEBOOKS_SESSION_PVS_STORAGE_CLASS = os.environ.get(
 """Use a custom storage class for the user session persistent volumes."""
 
 OPENAPI_VERSION = "2.0"
-API_SPEC_URL = f"{SERVICE_PREFIX}/api/v1/spec"
-SWAGGER_URL = f"{SERVICE_PREFIX}/api/docs"
-SWAGGER_HEADER_ACCEPT = {
-    "name": "produces",
-    "in": "header",
-    "description": "Accept header in request should be set to anything"
-    " but 'application/json' for successful auth from swagger UI.",
-    "required": True,
-    "type": "string",
-    "default": "*/*",
-}
+API_SPEC_URL = f"{SERVICE_PREFIX}/spec.json"
 
 SERVER_OPTIONS_DEFAULTS = read_server_options_defaults()
 SERVER_OPTIONS_UI = read_server_options_ui()
+
+OIDC_CLIENT_ID = os.environ.get("OIDC_CLIENT_ID", "renku")
+OIDC_CLIENT_SECRET = os.environ.get("OIDC_CLIENT_SECRET")
+OIDC_TOKEN_URL = os.environ.get("OIDC_TOKEN_URL")
+OIDC_AUTH_URL = os.environ.get("OIDC_AUTH_URL")
+OIDC_ALLOW_UNVERIFIED_EMAIL = os.environ.get("OIDC_ALLOW_UNVERIFIED_EMAIL")
+
+CRD_GROUP = os.environ.get("CRD_GROUP")
+CRD_VERSION = os.environ.get("CRD_VERSION")
+CRD_PLURAL = os.environ.get("CRD_PLURAL")
+
+SESSION_HOST = os.environ.get("SESSION_HOST")
+SESSION_TLS_SECRET = os.environ.get("SESSION_TLS_SECRET")
+SESSION_INGRESS_ANNOTATIONS = safe_load(os.environ.get("SESSION_INGRESS_ANNOTATIONS"))
+
+ANONYMOUS_SESSIONS_ENABLED = (
+    os.environ.get("ANONYMOUS_SESSIONS_ENABLED", "false").lower() == "true"
+)
+
+AMALTHEA_CONTAINER_ORDER_ANONYMOUS_SESSION = [
+    "jupyter-server",
+]
+AMALTHEA_CONTAINER_ORDER_REGISTERED_SESSION = [
+    *AMALTHEA_CONTAINER_ORDER_ANONYMOUS_SESSION,
+    "oauth2-proxy",
+]
+
+IMAGE_DEFAULT_WORKDIR = "/home/jovyan"
+
+CULLING_REGISTERED_IDLE_SESSIONS_THRESHOLD_SECONDS = int(
+    os.getenv("CULLING_REGISTERED_IDLE_SESSIONS_THRESHOLD_SECONDS", 86400)
+)
+CULLING_ANONYMOUS_IDLE_SESSIONS_THRESHOLD_SECONDS = int(
+    os.getenv("CULLING_ANONYMOUS_IDLE_SESSIONS_THRESHOLD_SECONDS", 43200)
+)

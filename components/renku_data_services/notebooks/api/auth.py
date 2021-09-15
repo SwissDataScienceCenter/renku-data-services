@@ -20,114 +20,48 @@
 from functools import wraps
 from flask import (
     Blueprint,
-    current_app,
     jsonify,
     request,
-    make_response,
-    redirect,
-    abort,
+    current_app,
 )
-from flask_apispec import doc, marshal_with
 
 from .. import config
-from .classes.user import User
-from .schemas import UserSchema, JHUserInfo
+from .classes.user import RegisteredUser, AnonymousUser
 
 
 bp = Blueprint("auth_bp", __name__, url_prefix=config.SERVICE_PREFIX)
 
 
 def authenticated(f):
-    """Decorator for authenticating with the Hub"""
+    """Decorator for checking authentication status of the user given the headers."""
 
     @wraps(f)
     def decorated(*args, **kwargs):
-        user = User()
-        if user.hub_username:
+        current_app.logger.debug(f"Getting headers, {list(request.headers.keys())}")
+        registered_user = RegisteredUser(request.headers)
+        if registered_user.authenticated:
+            user = registered_user
+        if (
+            current_app.config["ANONYMOUS_SESSIONS_ENABLED"]
+            and not registered_user.authenticated
+        ):
+            user = AnonymousUser(request.headers)
+        if user.authenticated:
             # the user is logged in
             return f(user, *args, **kwargs)
         else:
             # the user is not logged in
-            if request.environ.get("HTTP_ACCEPT", "") == "application/json":
-                # if the request is not coming from a browser, return 401
-                current_app.logger.info(
-                    "Unauthorized non-browser request - returning 401."
-                )
-                response = jsonify(
-                    {"messages": {"error": "An authorization token is required."}}
-                )
-                response.status_code = 401
-                return response
-
-            # redirect to login url on failed auth
-            state = current_app.config["JUPYTERHUB_ADMIN_AUTH"].generate_state(
-                next_url=request.url
+            response = jsonify(
+                {
+                    "messages": {
+                        "error": "The required authentication headers "
+                        f"{RegisteredUser.auth_headers} are missing. "
+                        "If anonymous user sessions are supported then the header "
+                        f"{AnonymousUser.auth_header} can also be used."
+                    }
+                }
             )
-            current_app.logger.debug(
-                "Auth flow, redirecting to {} with next url {}".format(
-                    current_app.config["JUPYTERHUB_ADMIN_AUTH"].login_url, request.url
-                )
-            )
-            response = make_response(
-                redirect(
-                    current_app.config["JUPYTERHUB_ADMIN_AUTH"].login_url
-                    + "&state=%s" % state,
-                    code=302,
-                )
-            )
-            response.set_cookie(
-                current_app.config["JUPYTERHUB_ADMIN_AUTH"].state_cookie_name, state
-            )
+            response.status_code = 401
             return response
 
     return decorated
-
-
-@bp.route("oauth_callback")
-def oauth_callback():
-    """Set a token in the cookie."""
-    code = request.args.get("code", None)
-    if code is None:
-        abort(403)
-
-    # validate state field
-    arg_state = request.args.get("state", None)
-    cookie_state = request.cookies.get(
-        current_app.config["JUPYTERHUB_ADMIN_AUTH"].state_cookie_name
-    )
-    if arg_state is None or arg_state != cookie_state:
-        # state doesn't match
-        abort(403)
-
-    token = current_app.config["JUPYTERHUB_ADMIN_AUTH"].token_for_code(code)
-    next_url = current_app.config["JUPYTERHUB_ADMIN_AUTH"].get_next_url(
-        cookie_state
-    ) or current_app.config.get("SERVICE_PREFIX")
-    response = make_response(redirect(next_url, code=302))
-    response.set_cookie(current_app.config["JUPYTERHUB_ADMIN_AUTH"].cookie_name, token)
-    return response
-
-
-@bp.route("user")
-@marshal_with(
-    UserSchema(), code=200, description="Information about the authenticated user."
-)
-@doc(tags=["user"], summary="Information about the authenticated user.")
-@authenticated
-def whoami(user):
-    """Return information about the authenticated user."""
-    user_info = user.hub_user
-    if user_info == {} or user_info is None:
-        return make_response(
-            jsonify({"message": {"info": "No information on the authenticated user"}}),
-            404,
-        )
-    user_info = JHUserInfo().load(user_info)
-    return user_info
-
-
-@bp.route("login-tmp")
-@authenticated
-def redirect_to_ui(user):
-    """Return information about the authenticated user."""
-    return make_response(redirect(request.args["redirect_url"], code=302))

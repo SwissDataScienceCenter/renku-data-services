@@ -18,7 +18,6 @@
 """Notebooks service flask app."""
 
 from flask import Flask, jsonify
-from flask_swagger_ui import get_swaggerui_blueprint
 from flask_apispec import FlaskApiSpec
 from apispec.ext.marshmallow import MarshmallowPlugin
 from apispec import APISpec
@@ -36,7 +35,6 @@ from .api.notebooks import (
     autosave_info,
     delete_autosave,
 )
-from .api.auth import bp as auth_bp, whoami
 
 
 # From: http://flask.pocoo.org/snippets/35/
@@ -122,25 +120,21 @@ def register_swagger(app):
         version="v1",
         plugins=[MarshmallowPlugin()],
         produces=["text/plain"],
-        security=[{"token": []}],
+        basePath="/api",
+        security=[{"OAuth2": ["openid"]}],
+        securityDefinitions={
+            "OAuth2": {
+                "type": "oauth2",
+                "flow": "accessCode",
+                "authorizationUrl": config.OIDC_AUTH_URL,
+                "tokenUrl": config.OIDC_TOKEN_URL,
+                "scopes": {"openid": "openidconnect"},
+            }
+        },
     )
-    security_scheme = {
-        "type": "apiKey",
-        "in": "header",
-        "name": "Authorization",
-        "description": "Use the jupyterhub API token here. Include the word 'token', "
-        "a single space and the actual token as the value in the form."
-        "The token can be acquired by visiting "
-        f"{config.JUPYTERHUB_ORIGIN}/{config.JUPYTERHUB_PATH_PREFIX}/hub/token.",
-    }
-    apispec.components.security_scheme("token", security_scheme)
     app.config.update(
         {"APISPEC_SPEC": apispec, "APISPEC_SWAGGER_URL": config.API_SPEC_URL}
     )
-    swaggerui_blueprint = get_swaggerui_blueprint(
-        config.SWAGGER_URL, config.API_SPEC_URL, config={"app_name": "Renku Notebooks"}
-    )
-    app.register_blueprint(swaggerui_blueprint, url_prefix=config.SWAGGER_URL)
     docs = FlaskApiSpec(app, document_options=False)
     docs.register(user_servers, blueprint=notebooks_bp.name)
     docs.register(user_server, blueprint=notebooks_bp.name)
@@ -150,5 +144,4 @@ def register_swagger(app):
     docs.register(server_logs, blueprint=notebooks_bp.name)
     docs.register(autosave_info, blueprint=notebooks_bp.name)
     docs.register(delete_autosave, blueprint=notebooks_bp.name)
-    docs.register(whoami, blueprint=auth_bp.name)
     return app

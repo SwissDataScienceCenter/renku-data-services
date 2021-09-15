@@ -62,18 +62,18 @@ def get_k8s_client():
     return v1, kubernetes_namespace
 
 
-def filter_pods_by_annotations(
-    pods,
+def filter_resources_by_annotations(
+    resources,
     annotations,
 ):
     """Fetch all the user server pods that matches the provided annotations.
     If an annotation that is not present on the pod is provided the match fails."""
 
-    def filter_pod(pod):
+    def filter_resource(resource):
         res = []
         for annotation_name in annotations.keys():
             res.append(
-                pod.metadata.annotations.get(annotation_name)
+                resource["metadata"]["annotations"].get(annotation_name)
                 == annotations[annotation_name]
             )
         if len(res) == 0:
@@ -81,7 +81,7 @@ def filter_pods_by_annotations(
         else:
             return all(res)
 
-    return list(filter(filter_pod, pods))
+    return list(filter(filter_resource, resources))
 
 
 def secret_exists(name, k8s_client, k8s_namespace):
@@ -95,19 +95,11 @@ def secret_exists(name, k8s_client, k8s_namespace):
     return False
 
 
-def make_server_name(namespace, project, branch, commit_sha):
+def make_server_name(safe_username, namespace, project, branch, commit_sha):
     """Form a 16-digit hash server ID."""
-    server_string = f"{namespace}{project}{branch}{commit_sha}"
-    return "{project}-{hash}".format(
-        project=project[:54], hash=md5(server_string.encode()).hexdigest()[:8]
-    )
-
-
-def make_pvc_name(safe_username, namespace, project, branch, commit_sha):
-    """Form a 16-digit hash persistent volume ID."""
-    server_string = f"{safe_username}{namespace}{project}{branch}{commit_sha}"
+    server_string = f"{safe_username}-{namespace}-{project}-{branch}-{commit_sha}"
     return "{username}-{project}-{hash}".format(
         username=safe_username[:10].lower(),
-        project=escapism.escape(project, escape_char="-")[:44].lower(),
+        project=escapism.escape(project, escape_char="-")[:24].lower(),
         hash=md5(server_string.encode()).hexdigest()[:8].lower(),
     )

@@ -1,3 +1,4 @@
+from datetime import datetime
 from marshmallow import (
     Schema,
     fields,
@@ -11,6 +12,7 @@ from marshmallow import (
     EXCLUDE,
 )
 import collections
+import re
 
 from .. import config
 from .custom_fields import (
@@ -27,7 +29,6 @@ from .custom_fields import (
 )
 from .classes.server import UserServer
 from .classes.user import User
-from .classes.storage import SessionPVC
 from ..util.file_size import parse_file_size
 
 
@@ -69,7 +70,7 @@ class LaunchNotebookRequestServerOptions(Schema):
 
 
 class LaunchNotebookRequest(Schema):
-    """Used to validate the requesting for launching a jupyterhub server"""
+    """Used to validate the requesting for launching a jupyter server"""
 
     namespace = fields.Str(required=True)
     project = fields.Str(required=True)
@@ -121,15 +122,13 @@ class UserPodAnnotations(
             ),
             f"{config.RENKU_ANNOTATION_PREFIX}repository": fields.Str(required=True),
             f"{config.RENKU_ANNOTATION_PREFIX}git-host": fields.Str(required=False),
-            f"{config.JUPYTERHUB_ANNOTATION_PREFIX}servername": fields.Str(
-                required=True
-            ),
-            f"{config.JUPYTERHUB_ANNOTATION_PREFIX}username": fields.Str(required=True),
+            f"{config.JUPYTER_ANNOTATION_PREFIX}servername": fields.Str(required=True),
+            f"{config.JUPYTER_ANNOTATION_PREFIX}username": fields.Str(required=True),
         }
     )
 ):
     """
-    Used to validate the annotations of a jupyterhub user pod
+    Used to validate the annotations of a jupyter user pod
     that are returned to the UI as part of any endpoint that list servers.
     """
 
@@ -151,7 +150,7 @@ class UserPodAnnotations(
 class UserPodResources(
     Schema.from_dict(
         # Memory and CPU resources that should be present in the response to creating a
-        # jupyterhub noteboooks server.
+        # jupyter noteboooks server.
         {
             "cpu": fields.Str(required=True),
             "memory": fields.Str(required=True),
@@ -169,7 +168,7 @@ class UserPodResources(
 
 class LaunchNotebookResponse(Schema):
     """
-    The response sent after a successful creation of a jupyterhub server. Or
+    The response sent after a successful creation of a jupyter server. Or
     if the user tries to create a server that already exists. Used only for
     serializing the server class into a proper response.
     """
@@ -188,7 +187,7 @@ class LaunchNotebookResponse(Schema):
         """Convert and format a server object into what the API requires."""
 
         def summarise_pod_conditions(conditions):
-            def sort_conditions(conditions):
+            def get_latest_condition(conditions):
                 CONDITIONS_ORDER = {
                     "PodScheduled": 1,
                     "Unschedulable": 2,
@@ -196,92 +195,97 @@ class LaunchNotebookResponse(Schema):
                     "ContainersReady": 4,
                     "Ready": 5,
                 }
-                return sorted(conditions, key=lambda c: CONDITIONS_ORDER[c.type])
+                return sorted(
+                    conditions,
+                    key=lambda c: (
+                        c.get("lastTransitionTime"),
+                        CONDITIONS_ORDER[c.get("type", "PodScheduled")],
+                    ),
+                )[-1]
 
             if not conditions:
                 return {"step": None, "message": None, "reason": None}
+            else:
+                latest = get_latest_condition(conditions)
+                return {
+                    "step": latest.get("type"),
+                    "message": latest.get("message"),
+                    "reason": latest.get("reason"),
+                }
 
-            for c in sort_conditions(conditions):
-                if (
-                    (c.type == "Unschedulable" and c.status == "True")
-                    or (c.status != "True")
-                    or (c.type == "Ready" and c.status == "True")
-                ):
-                    break
-            return {"step": c.type, "message": c.message, "reason": c.reason}
-
-        def get_pod_status(pod):
-            ready = getattr(pod.metadata, "deletion_timestamp", None) is None
-            try:
-                for status in pod.status.container_statuses:
-                    ready = ready and status.ready
-            except (IndexError, TypeError):
-                ready = False
-
-            status = {"phase": pod.status.phase, "ready": ready}
-            conditions_summary = summarise_pod_conditions(pod.status.conditions)
-            status.update(conditions_summary)
-            return status
+        def get_status(js):
+            """Get the status of the jupyterserver."""
+            # Phases: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-phase
+            res = {
+                "phase": "Unknown",
+                "ready": False,
+                "step": None,
+                "message": None,
+                "reason": None,
+            }
+            if js is None:
+                return res
+            container_statuses = (
+                js["status"]
+                .get("mainPod", {})
+                .get("status", {})
+                .get("containerStatuses", [])
+            )
+            res["ready"] = (
+                len(container_statuses) > 0
+                and all([cs.get("ready") for cs in container_statuses])
+                and js["metadata"].get("deletionTimestamp", None) is None
+            )
+            res["phase"] = (
+                js["status"]
+                .get("mainPod", {})
+                .get("status", {})
+                .get("phase", "Unknown")
+            )
+            conditions = summarise_pod_conditions(
+                js["status"].get("mainPod", {}).get("status", {}).get("conditions", [])
+            )
+            return {**res, **conditions}
 
         def get_server_resources(server):
-            pod = server.pod
-            try:
-                for container in pod.spec.containers:
-                    if container.name == "notebook":
-                        resources = container.resources.requests
-                        # translate the cpu weird numeric string to a normal number
-                        # ref: https://kubernetes.io/docs/concepts/configuration/
-                        #   manage-compute-resources-container/#how-pods-with-resource-limits-are-run
-                        if (
-                            "cpu" in resources.keys()
-                            and isinstance(resources["cpu"], str)
-                            and str.endswith(resources["cpu"], "m")
-                            and resources["cpu"][:-1].isdigit()
-                        ):
-                            resources["cpu"] = str(int(resources["cpu"][:-1]) / 1000)
-                        if "memory" in resources.keys():
-                            try:
-                                memory_formatted = (
-                                    str(round(int(resources["memory"]) / 1073741824))
-                                    + "G"
-                                )
-                            except ValueError:
-                                pass
-                            else:
-                                resources["memory"] = memory_formatted
-            except (AttributeError, IndexError):
-                resources = {}
-            # add storage if PVCs are used
-            if server.session_pvc is not None and server.session_pvc.pvc is not None:
-                resources["storage"] = server.session_pvc.pvc.spec.resources.requests[
-                    "storage"
-                ]
-            # add storage if emptyDir is used and size limit is set
-            else:
-                volume_name = pod.metadata.name[:54] + "-git-repo"
-                volumes = [i for i in pod.spec.volumes if i.name == volume_name]
-                if (
-                    len(volumes) == 1
-                    and volumes[0].empty_dir is not None
-                    and volumes[0].empty_dir.size_limit is not None
-                ):
-                    resources["storage"] = volumes[0].empty_dir.size_limit
-            # remove ephemeral-storage if present
-            if "ephemeral-storage" in resources.keys():
-                resources.pop("ephemeral-storage")
+            server_options = UserServer._get_server_options_from_js(server.js)
+            server_options_keys = server_options.keys()
+            # translate the cpu weird numeric string to a normal number
+            # ref: https://kubernetes.io/docs/concepts/configuration/
+            #   manage-compute-resources-container/#how-pods-with-resource-limits-are-run
+            resources = {}
+            if (
+                "cpu_request" in server_options_keys
+                and isinstance(server_options["cpu_request"], str)
+                and str.endswith(server_options["cpu_request"], "m")
+                and server_options["cpu_request"][:-1].isdigit()
+            ):
+                resources["cpu"] = str(int(server_options["cpu_request"][:-1]) / 1000)
+            elif "cpu_request" in server_options_keys:
+                resources["cpu"] = server_options["cpu_request"]
+            if "mem_request" in server_options_keys:
+                resources["memory"] = server_options["mem_request"]
+            if "disk_request" in server_options_keys:
+                resources["storage"] = server_options["disk_request"]
+            if (
+                "gpu_request" in server_options_keys
+                and server_options["gpu_request"] > 0
+            ):
+                resources["gpu"] = server_options["gpu_request"]
             return resources
 
-        pod = server.pod
         return {
             "annotations": {
-                **pod.metadata.annotations,
+                **server.js["metadata"]["annotations"],
                 server._renku_annotation_prefix
                 + "default_image_used": str(server.using_default_image),
             },
-            "name": pod.metadata.annotations["hub.jupyter.org/servername"],
-            "state": {"pod_name": pod.metadata.name},
-            "started": pod.status.start_time,
-            "status": get_pod_status(pod),
+            "name": server.server_name,
+            "state": {"pod_name": server.js["status"].get("mainPod", {}).get("name")},
+            "started": datetime.fromisoformat(
+                re.sub(r"Z$", "+00:00", server.js["metadata"]["creationTimestamp"])
+            ),
+            "status": get_status(server.js),
             "url": server.server_url,
             "resources": get_server_resources(server),
             "image": server.image,
@@ -408,7 +412,7 @@ class ServerOptionUIBool(ServerOptionUIBase):
 class ServerOptionsUI(Schema):
     """
     Specifies which options are available to the user in the UI when
-    launching a jupyterhub server. Which fields are required is fully dictated
+    launching a jupyter server. Which fields are required is fully dictated
     by the server options specified in the values.yaml file which are available in
     the config under SERVER_OPTIONS_UI.
     """
@@ -438,7 +442,7 @@ class ServerOptionsUI(Schema):
 class ServerLogs(Schema):
     """
     The list of k8s logs (one log line per list element)
-    for the pod that runs the jupyterhub server.
+    for the pod that runs the jupyter server.
     """
 
     items = fields.List(fields.Str())
@@ -477,7 +481,7 @@ class UserSchema(Schema):
 
 
 class JHServerInfo(Schema):
-    """A server item in the servers dictionary returned by Jupyterhub."""
+    """A server item in the servers dictionary returned by the API."""
 
     class Meta:
         unknown = INCLUDE
@@ -486,7 +490,7 @@ class JHServerInfo(Schema):
 
 
 class JHUserInfo(UserSchema):
-    """Information about a logged in user from Jupyterhub."""
+    """Information about a logged in user."""
 
     servers = fields.Dict(
         keys=fields.Str(), values=fields.Nested(JHServerInfo()), missing={}
@@ -534,7 +538,7 @@ class AutosavesItem(Schema):
         return {
             "branch": autosave.root_branch_name,
             "commit": autosave.root_commit_sha,
-            "pvs": type(autosave) is SessionPVC,
+            "pvs": False,
             "date": autosave.creation_date,
             "name": autosave.name,
         }
