@@ -59,7 +59,8 @@ class UserServer:
             self.gl_project = self._user.get_renku_project(
                 f"{self.namespace}/{self.project}"
             )
-        except Exception:
+        except Exception as err:
+            current_app.logger.warning("Cannot find project because:", err)
             self.gl_project = None
         self.js = None
 
