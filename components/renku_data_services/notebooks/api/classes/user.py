@@ -41,7 +41,7 @@ class User(ABC):
         try:
             return self.gitlab_client.projects.get("{0}".format(namespace_project))
         except Exception as e:
-            current_app.logger.error(
+            current_app.logger.warning(
                 f"Cannot get project: {namespace_project} for user: {self.username}, error: {e}"
             )
 
