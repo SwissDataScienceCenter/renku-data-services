@@ -732,7 +732,7 @@ class UserServer:
                 "size": self.server_options["disk_request"],
                 "pvc": {
                     "enabled": True,
-                    "storageClass": current_app.config[
+                    "storageClassName": current_app.config[
                         "NOTEBOOKS_SESSION_PVS_STORAGE_CLASS"
                     ],
                     "mountPath": self.image_workdir.rstrip("/") + "/work",
