@@ -273,7 +273,7 @@ class LaunchNotebookResponse(Schema):
                 resources["storage"] = server_options["disk_request"]
             if (
                 "gpu_request" in server_options_keys
-                and server_options["gpu_request"] > 0
+                and int(server_options["gpu_request"]) > 0
             ):
                 resources["gpu"] = server_options["gpu_request"]
             return resources
