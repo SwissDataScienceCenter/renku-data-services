@@ -265,7 +265,11 @@ class LaunchNotebookResponse(Schema):
                 resources["cpu"] = server_options["cpu_request"]
             if "mem_request" in server_options_keys:
                 resources["memory"] = server_options["mem_request"]
-            if "disk_request" in server_options_keys:
+            if (
+                "disk_request" in server_options_keys
+                and server_options["disk_request"] is not None
+                and server_options["disk_request"] != ""
+            ):
                 resources["storage"] = server_options["disk_request"]
             if (
                 "gpu_request" in server_options_keys

@@ -740,7 +740,9 @@ class UserServer:
             }
         else:
             storage = {
-                "size": self.server_options["disk_request"],
+                "size": self.server_options["disk_request"]
+                if current_app.config["USE_EMPTY_DIR_SIZE_LIMIT"]
+                else "",
                 "pvc": {
                     "enabled": False,
                     "mountPath": self.image_workdir.rstrip("/") + "/work",
@@ -967,7 +969,7 @@ class UserServer:
         # url
         server_options["defaultUrl"] = js["spec"]["jupyterServer"]["defaultUrl"]
         # disk
-        server_options["disk_request"] = js["spec"]["storage"]["size"]
+        server_options["disk_request"] = js["spec"]["storage"].get("size")
         # cpu, memory, gpu, ephemeral storage
         k8s_res_name_xref = {
             "memory": "mem_request",
