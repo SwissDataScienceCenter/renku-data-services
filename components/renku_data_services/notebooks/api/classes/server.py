@@ -395,7 +395,7 @@ class UserServer:
                                     else "0",
                                 },
                                 {"name": "COMMIT_SHA", "value": self.commit_sha},
-                                {"name": "BRANCH", "value": "master"},
+                                {"name": "BRANCH", "value": self.branch},
                                 {
                                     # used only for naming autosave branch
                                     "name": "RENKU_USERNAME",
