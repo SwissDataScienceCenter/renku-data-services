@@ -27,7 +27,11 @@ class Autosave:
                 f"projects/{self.gl_project.id}/repository/merge_base",
                 params={"refs[]": [self.root_commit_sha, commit_sha]},
             )
-            if res.status_code == 200 and res.json().get("id") == self.root_commit_sha:
+            if (
+                res.status_code == 200
+                and res.json().get("id") == self.root_commit_sha
+                and self.root_commit_sha != commit_sha
+            ):
                 return True
         return False
 
