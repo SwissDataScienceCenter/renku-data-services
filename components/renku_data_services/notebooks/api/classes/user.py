@@ -6,6 +6,7 @@ from kubernetes import client
 import re
 import json
 import base64
+import jwt
 
 from ...util.kubernetes_ import get_k8s_client
 from .storage import AutosaveBranch
@@ -114,8 +115,8 @@ class RegisteredUser(User):
 
     @staticmethod
     def parse_jwt_from_headers(headers):
-        jwt = headers["Renku-Auth-Id-Token"]
-        return json.loads(base64.b64decode(jwt.split(".")[1].encode() + b"=="))
+        # No need to verify the signature because this is already done by the gateway
+        return jwt.decode(headers["Renku-Auth-Id-Token"], verify=False)
 
     @staticmethod
     def git_creds_from_headers(headers):
