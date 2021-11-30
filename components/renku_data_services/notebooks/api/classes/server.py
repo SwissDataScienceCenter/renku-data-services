@@ -210,14 +210,23 @@ class UserServer:
         return output
 
     def _get_session_k8s_resources(self):
-        cpu = float(self.server_options["cpu_request"])
+        cpu_request = float(self.server_options["cpu_request"])
         mem = self.server_options["mem_request"]
         gpu_req = self.server_options.get("gpu_request", {})
         gpu = {"nvidia.com/gpu": str(gpu_req)} if gpu_req else None
         resources = {
-            "requests": {"memory": mem, "cpu": cpu},
-            "limits": {"memory": mem, "cpu": cpu},
+            "requests": {"memory": mem, "cpu": cpu_request},
+            "limits": {"memory": mem},
         }
+        if current_app.config["ENFORCE_CPU_LIMITS"] == "lax":
+            if "cpu_request" in current_app.config["SERVER_OPTIONS_UI"]:
+                resources["limits"]["cpu"] = max(
+                    current_app.config["SERVER_OPTIONS_UI"]["cpu_request"]["options"]
+                )
+            else:
+                resources["limits"]["cpu"] = cpu_request
+        elif current_app.config["ENFORCE_CPU_LIMITS"] == "strict":
+            resources["limits"]["cpu"] = cpu_request
         if gpu:
             resources["requests"] = {**resources["requests"], **gpu}
             resources["limits"] = {**resources["limits"], **gpu}
