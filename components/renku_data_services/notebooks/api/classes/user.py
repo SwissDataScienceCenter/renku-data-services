@@ -55,7 +55,12 @@ class AnonymousUser(User):
             raise ValueError(
                 "Cannot use AnonymousUser when anonymous sessions are not enabled."
             )
-        self.authenticated = self.auth_header in headers.keys()
+        self.authenticated = (
+            self.auth_header in headers.keys()
+            and headers[self.auth_header] != ""
+            # The anonymous id must start with an alphanumeric character
+            and re.match(r"^[a-zA-Z0-9]", headers[self.auth_header]) is not None
+        )
         if not self.authenticated:
             return
         self.gitlab_client = Gitlab(current_app.config["GITLAB_URL"], api_version=4)
