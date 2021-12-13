@@ -827,7 +827,16 @@ class UserServer:
                         else current_app.config[
                             "CULLING_ANONYMOUS_IDLE_SESSIONS_THRESHOLD_SECONDS"
                         ]
-                    )
+                    ),
+                    "maxAgeSecondsThreshold": (
+                        current_app.config[
+                            "CULLING_REGISTERED_MAX_AGE_THRESHOLD_SECONDS"
+                        ]
+                        if type(self._user) is RegisteredUser
+                        else current_app.config[
+                            "CULLING_ANONYMOUS_MAX_AGE_THRESHOLD_SECONDS"
+                        ]
+                    ),
                 },
                 "jupyterServer": {
                     "defaultUrl": self.server_options["defaultUrl"],
