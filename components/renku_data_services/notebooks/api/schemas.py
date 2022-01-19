@@ -26,6 +26,7 @@ from .custom_fields import (
     serverOptionRequestUrlValue,
     serverOptionRequestLfsAutoFetchValue,
     serverOptionRequestGpuValue,
+    LowercaseString,
 )
 from .classes.server import UserServer
 from .classes.user import User
@@ -72,8 +73,11 @@ class LaunchNotebookRequestServerOptions(Schema):
 class LaunchNotebookRequest(Schema):
     """Used to validate the requesting for launching a jupyter server"""
 
-    namespace = fields.Str(required=True)
-    project = fields.Str(required=True)
+    # namespaces in gitlab are NOT case sensitive
+    namespace = LowercaseString(required=True)
+    # project names in gitlab are NOT case sensitive
+    project = LowercaseString(required=True)
+    # branch names in gitlab are case sensitive
     branch = fields.Str(missing="master")
     commit_sha = fields.Str(required=True)
     notebook = fields.Str(missing=None)
@@ -309,9 +313,12 @@ class ServersGetRequest(Schema):
         # passing unknown params does not error, but the params are ignored
         unknown = EXCLUDE
 
-    project = fields.String(required=False, default=None)
+    # project names in gitlab are NOT case sensitive
+    project = LowercaseString(required=False, default=None)
     commit_sha = fields.String(required=False, default=None)
-    namespace = fields.String(required=False, default=None)
+    # namespaces in gitlab are NOT case sensitive
+    namespace = LowercaseString(required=False, default=None)
+    # branch names in gitlab are case sensitive
     branch = fields.String(required=False, default=None)
 
 

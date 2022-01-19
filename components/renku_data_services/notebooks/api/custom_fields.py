@@ -126,3 +126,27 @@ serverOptionRequestLfsAutoFetchValue = fields.Bool(
     missing=config.SERVER_OPTIONS_DEFAULTS["lfs_auto_fetch"],
     required=False,
 )
+
+
+class LowercaseString(fields.String):
+    """Basic class for a string field that always serializes
+    and deserializes to lowercase string. Used for parameters that are
+    case insensitive."""
+
+    def _serialize(self, value, attr, obj, **kwargs):
+        value = super()._serialize(value, attr, obj, **kwargs)
+        if type(value) is str:
+            return value.lower()
+        else:
+            raise ValidationError(
+                f"The value {value} is not type string, but {type(value)}."
+            )
+
+    def _deserialize(self, value, attr, data, **kwargs):
+        value = super()._deserialize(value, attr, data, **kwargs)
+        if type(value) is str:
+            return value.lower()
+        else:
+            raise ValidationError(
+                f"The value {value} is not type string, but {type(value)}."
+            )

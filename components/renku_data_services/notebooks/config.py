@@ -125,3 +125,4 @@ SESSION_NODE_SELECTOR = safe_load(os.environ.get("SESSION_NODE_SELECTOR", "{}"))
 SESSION_AFFINITY = safe_load(os.environ.get("SESSION_AFFINITY", "{}"))
 SESSION_TOLERATIONS = safe_load(os.environ.get("SESSION_TOLERATIONS", "[]"))
 ENFORCE_CPU_LIMITS = os.getenv("ENFORCE_CPU_LIMITS", "off")
+CURRENT_RESOURCE_SCHEMA_VERSION = "1"
