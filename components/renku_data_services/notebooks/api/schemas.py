@@ -10,6 +10,7 @@ from marshmallow import (
     pre_dump,
     INCLUDE,
     EXCLUDE,
+    validate,
 )
 import collections
 import re
@@ -29,7 +30,7 @@ from .custom_fields import (
     LowercaseString,
 )
 from .classes.server import UserServer
-from .classes.user import User
+from .classes.s3mount import S3mount
 from ..util.file_size import parse_file_size
 
 
@@ -70,7 +71,37 @@ class LaunchNotebookRequestServerOptions(Schema):
                 )
 
 
-class LaunchNotebookRequest(Schema):
+class LaunchNotebookRequestS3mount(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    access_key = fields.Str(required=False, missing=None)
+    secret_key = fields.Str(required=False, missing=None)
+    endpoint = fields.Str(required=True, validate=validate.Length(min=1))
+    bucket = fields.Str(required=True, validate=validate.Length(min=1))
+
+    @post_load
+    def create_s3mount_object(self, data, **kwargs):
+        if data["access_key"] == "":
+            data.pop("access_key")
+        if data["secret_key"] == "":
+            data.pop("secret_key")
+        s3mount = S3mount(**data, mount_folder="/s3mounts", read_only=True)
+        if not s3mount.bucket_exists:
+            raise ValidationError(
+                f"Cannot find bucket {s3mount.bucket} at endpoint {s3mount.endpoint}. "
+                "Please make sure you have provided the correct "
+                "credentials, bucket name and endpoint."
+            )
+        return s3mount
+
+
+class LaunchNotebookResponseS3mount(LaunchNotebookRequestS3mount):
+    class Meta:
+        fields = ("endpoint", "bucket")
+
+
+class LaunchNotebookRequestWithoutS3(Schema):
     """Used to validate the requesting for launching a jupyter server"""
 
     # namespaces in gitlab are NOT case sensitive
@@ -88,6 +119,29 @@ class LaunchNotebookRequest(Schema):
         data_key="serverOptions",
         required=False,
     )
+
+
+class LaunchNotebookRequestWithS3(LaunchNotebookRequestWithoutS3):
+    """Used to validate the requesting for launching a jupyter server"""
+
+    s3mounts = fields.List(
+        fields.Nested(LaunchNotebookRequestS3mount()),
+        required=False,
+        missing=[],
+    )
+
+    @validates_schema
+    def validate_unique_bucket_names(self, data, **kwargs):
+        errors = {}
+        bucket_names = [i.bucket for i in data["s3mounts"]]
+        bucket_names_unique = set(bucket_names)
+        if len(bucket_names_unique) < len(bucket_names):
+            errors["s3mounts"] = [
+                "Found duplicate storage bucket names. "
+                "All provided bucket names have to be unique"
+            ]
+        if errors:
+            raise ValidationError(errors)
 
 
 def flatten_dict(d, parent_key="", sep="."):
@@ -170,12 +224,16 @@ class UserPodResources(
         return in_data
 
 
-class LaunchNotebookResponse(Schema):
+class LaunchNotebookResponseWithoutS3(Schema):
     """
     The response sent after a successful creation of a jupyter server. Or
     if the user tries to create a server that already exists. Used only for
     serializing the server class into a proper response.
     """
+
+    class Meta:
+        # passing unknown params does not error, but the params are ignored
+        unknown = EXCLUDE
 
     annotations = fields.Nested(UserPodAnnotations())
     name = fields.Str()
@@ -282,7 +340,7 @@ class LaunchNotebookResponse(Schema):
                 resources["gpu"] = server_options["gpu_request"]
             return resources
 
-        return {
+        output = {
             "annotations": {
                 **server.js["metadata"]["annotations"],
                 server._renku_annotation_prefix
@@ -298,13 +356,35 @@ class LaunchNotebookResponse(Schema):
             "resources": get_server_resources(server),
             "image": server.image,
         }
+        if config.S3_MOUNTS_ENABLED:
+            output["s3mounts"] = server.s3mounts
+        return output
+
+
+class LaunchNotebookResponseWithS3(LaunchNotebookResponseWithoutS3):
+    """
+    The response sent after a successful creation of a jupyter server. Or
+    if the user tries to create a server that already exists. Used only for
+    serializing the server class into a proper response.
+    """
+
+    s3mounts = fields.List(
+        fields.Nested(LaunchNotebookResponseS3mount()),
+        required=False,
+        missing=[],
+    )
 
 
 class ServersGetResponse(Schema):
     """The response for listing all servers that are active or launched by a user."""
 
     servers = fields.Dict(
-        keys=fields.Str(), values=fields.Nested(LaunchNotebookResponse())
+        keys=fields.Str(),
+        values=fields.Nested(
+            LaunchNotebookResponseWithS3()
+            if config.S3_MOUNTS_ENABLED
+            else LaunchNotebookResponseWithoutS3()
+        ),
     )
 
 
@@ -448,6 +528,9 @@ class ServerOptionsUI(Schema):
     disk_request = fields.Nested(
         ServerOptionUIDisk(), required="disk_request" in config.SERVER_OPTIONS_UI.keys()
     )
+    s3mounts = fields.Nested(
+        Schema.from_dict({"enabled": fields.Boolean(required=True)})(), required=True
+    )
 
 
 class ServerLogs(Schema):
@@ -462,57 +545,6 @@ class ServerLogs(Schema):
     @post_load
     def remove_item_key(self, data, **kwargs):
         return data.get("items", [])
-
-
-class AuthState(Schema):
-    """
-    This is part of the schema that specifies information about a logged in user.
-    It holds the username and access token for a logged in user.
-    """
-
-    access_token = fields.Str()
-    gitlab_user = fields.Dict(keys=fields.Str())
-
-
-class UserSchema(Schema):
-    """Information about a logged in user."""
-
-    admin = fields.Bool()
-    auth_state = fields.Nested(AuthState(), missing=None)
-    created = fields.DateTime(format="iso")
-    groups = fields.List(fields.Str())
-    kind = fields.Str()
-    last_activity = fields.DateTime(format="iso")
-    name = fields.Str()
-    pending = fields.Str(missing=None)
-    server = fields.Str(missing=None)
-    servers = fields.Dict(
-        keys=fields.Str(), values=fields.Nested(LaunchNotebookResponse()), missing={}
-    )
-
-
-class JHServerInfo(Schema):
-    """A server item in the servers dictionary returned by the API."""
-
-    class Meta:
-        unknown = INCLUDE
-
-    name: fields.String(required=True)
-
-
-class JHUserInfo(UserSchema):
-    """Information about a logged in user."""
-
-    servers = fields.Dict(
-        keys=fields.Str(), values=fields.Nested(JHServerInfo()), missing={}
-    )
-
-    @post_load
-    def get_server_objects(self, data, *args, **kwargs):
-        user = User()
-        for server in data["servers"].keys():
-            data["servers"][server] = UserServer.from_server_name(user, server)
-        return data
 
 
 def _in_range(value, value_range):
