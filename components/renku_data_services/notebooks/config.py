@@ -85,6 +85,9 @@ OIDC_CLIENT_SECRET = os.environ.get("OIDC_CLIENT_SECRET")
 OIDC_TOKEN_URL = os.environ.get("OIDC_TOKEN_URL")
 OIDC_AUTH_URL = os.environ.get("OIDC_AUTH_URL")
 OIDC_ALLOW_UNVERIFIED_EMAIL = os.environ.get("OIDC_ALLOW_UNVERIFIED_EMAIL")
+CUSTOM_CA_CERTS_PATH = "/usr/local/share/ca-certificates"
+CERTIFICATES_IMAGE = os.environ.get("CERTIFICATES_IMAGE")
+CUSTOM_CA_CERTS_SECRETS = safe_load(os.environ.get("CUSTOM_CA_CERTS_SECRETS", "[]"))
 
 CRD_GROUP = os.environ.get("CRD_GROUP")
 CRD_VERSION = os.environ.get("CRD_VERSION")
