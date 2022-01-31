@@ -592,3 +592,15 @@ class AutosavesList(Schema):
 
     pvsSupport = fields.Bool(required=True)
     autosaves = fields.List(fields.Nested(AutosavesItem), missing=[])
+
+
+LaunchNotebookResponse = (
+    LaunchNotebookResponseWithS3
+    if config.S3_MOUNTS_ENABLED
+    else LaunchNotebookResponseWithoutS3
+)
+LaunchNotebookRequest = (
+    LaunchNotebookRequestWithS3
+    if config.S3_MOUNTS_ENABLED
+    else LaunchNotebookRequestWithoutS3
+)

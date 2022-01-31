@@ -19,7 +19,7 @@
 from flask import Blueprint, Response
 
 from .. import config
-from . import auth, notebooks
+from . import notebooks
 
 bp = Blueprint("notebooks_service", __name__)
 
@@ -30,4 +30,4 @@ def health():
     return Response("service running under {}".format(config.SERVICE_PREFIX))
 
 
-blueprints = [bp, auth.bp, notebooks.bp]
+blueprints = [bp, notebooks.bp]

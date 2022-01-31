@@ -597,6 +597,12 @@ class UserServer:
             **server_options,
         }
 
+    def __str__(self):
+        return (
+            f"<UserServer user: {self._user.username} namespace: {self.namespace} "
+            f"project: {self.project} commit: {self.commit_sha} image: {self.image}>"
+        )
+
     def get_annotations(self):
         prefix = current_app.config["RENKU_ANNOTATION_PREFIX"]
         annotations = {

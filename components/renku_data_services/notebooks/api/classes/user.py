@@ -77,6 +77,9 @@ class AnonymousUser(User):
     def get_autosaves(self, *args, **kwargs):
         return []
 
+    def __str__(self):
+        return f"<Anonymous user id:{self.username[:5]}****>"
+
 
 class RegisteredUser(User):
     auth_headers = [
@@ -166,3 +169,9 @@ class RegisteredUser(User):
                             f"{namespace_project} cannot be instantiated."
                         )
         return autosaves
+
+    def __str__(self):
+        return (
+            f"<Registered user username:{self.username} name: "
+            f"{self.full_name} email: {self.email}>"
+        )

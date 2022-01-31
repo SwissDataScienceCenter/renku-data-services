@@ -17,15 +17,24 @@
 # limitations under the License.
 """Notebooks service flask app."""
 
-from flask import Flask, jsonify
-from flask_apispec import FlaskApiSpec
+from flask import Flask, jsonify, Blueprint
 from apispec.ext.marshmallow import MarshmallowPlugin
+from apispec_webframeworks.flask import FlaskPlugin
 from apispec import APISpec
 import os
 
 from . import config
+from .api.schemas import (
+    LaunchNotebookRequest,
+    LaunchNotebookResponse,
+    ServersGetRequest,
+    ServersGetResponse,
+    ServerLogs,
+    ServerOptionsUI,
+    FailedParsing,
+    AutosavesList,
+)
 from .api.notebooks import (
-    bp as notebooks_bp,
     user_servers,
     user_server,
     launch_notebook,
@@ -114,34 +123,53 @@ def create_app():
 
 
 def register_swagger(app):
-    apispec = APISpec(
+    spec = APISpec(
         title="Renku Notebooks API",
-        openapi_version=config.OPENAPI_VERSION,
+        openapi_version="3.0.2",
         version="v1",
-        plugins=[MarshmallowPlugin()],
-        produces=["text/plain"],
-        basePath="/api",
-        security=[{"OAuth2": ["openid"]}],
-        securityDefinitions={
-            "OAuth2": {
-                "type": "oauth2",
-                "flow": "accessCode",
-                "authorizationUrl": config.OIDC_AUTH_URL,
-                "tokenUrl": config.OIDC_TOKEN_URL,
-                "scopes": {"openid": "openidconnect"},
-            }
+        plugins=[FlaskPlugin(), MarshmallowPlugin()],
+        info={
+            "description": "An API to launch and manage Jupyter servers for Renku. "
+            "To get authorized select the `OAuth2, authorizationCode` flow and the "
+            "`openid` scope. Scroll up to find the proper flow in the list. "
+            "If the deployment supports anonymous sessions you can also use the API "
+            "without getting authorized at all."
         },
+        security=[{"oauth2-swagger": ["openid"]}],
+        servers=[{"url": "/api"}],
     )
-    app.config.update(
-        {"APISPEC_SPEC": apispec, "APISPEC_SWAGGER_URL": config.API_SPEC_URL}
-    )
-    docs = FlaskApiSpec(app, document_options=False)
-    docs.register(user_servers, blueprint=notebooks_bp.name)
-    docs.register(user_server, blueprint=notebooks_bp.name)
-    docs.register(launch_notebook, blueprint=notebooks_bp.name)
-    docs.register(stop_server, blueprint=notebooks_bp.name)
-    docs.register(server_options, blueprint=notebooks_bp.name)
-    docs.register(server_logs, blueprint=notebooks_bp.name)
-    docs.register(autosave_info, blueprint=notebooks_bp.name)
-    docs.register(delete_autosave, blueprint=notebooks_bp.name)
+    # Register schemas
+    spec.components.schema("LaunchNotebookRequest", schema=LaunchNotebookRequest)
+    spec.components.schema("LaunchNotebookResponse", schema=LaunchNotebookResponse)
+    spec.components.schema("ServersGetRequest", schema=ServersGetRequest)
+    spec.components.schema("ServersGetResponse", schema=ServersGetResponse)
+    spec.components.schema("ServerLogs", schema=ServerLogs)
+    spec.components.schema("ServerOptionsUI", schema=ServerOptionsUI)
+    spec.components.schema("FailedParsing", schema=FailedParsing)
+    spec.components.schema("AutosavesList", schema=AutosavesList)
+    # Register endpoints
+    with app.test_request_context():
+        spec.path(view=user_server)
+        spec.path(view=user_servers)
+        spec.path(view=launch_notebook)
+        spec.path(view=stop_server)
+        spec.path(view=server_options)
+        spec.path(view=server_logs)
+        spec.path(view=autosave_info)
+        spec.path(view=delete_autosave)
+    # Register security scheme
+    security_scheme = {
+        "type": "openIdConnect",
+        "description": "PKCE flow for swagger.",
+        "openIdConnectUrl": config.OIDC_CONFIG_URL,
+    }
+    spec.components.security_scheme("oauth2-swagger", security_scheme)
+
+    bp = Blueprint("swagger_blueprint", __name__, url_prefix=config.SERVICE_PREFIX)
+
+    @bp.route("spec.json")
+    def render_openapi_spec():
+        return jsonify(spec.to_dict())
+
+    app.register_blueprint(bp)
     return app

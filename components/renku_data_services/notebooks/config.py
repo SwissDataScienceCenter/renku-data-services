@@ -74,9 +74,6 @@ USE_EMPTY_DIR_SIZE_LIMIT = (
     os.environ.get("USE_EMPTY_DIR_SIZE_LIMIT", "false").lower() == "true"
 )
 
-OPENAPI_VERSION = "2.0"
-API_SPEC_URL = f"{SERVICE_PREFIX}/spec.json"
-
 SERVER_OPTIONS_DEFAULTS = read_server_options_defaults()
 SERVER_OPTIONS_UI = read_server_options_ui()
 
@@ -88,6 +85,11 @@ OIDC_ALLOW_UNVERIFIED_EMAIL = os.environ.get("OIDC_ALLOW_UNVERIFIED_EMAIL")
 CUSTOM_CA_CERTS_PATH = "/usr/local/share/ca-certificates"
 CERTIFICATES_IMAGE = os.environ.get("CERTIFICATES_IMAGE")
 CUSTOM_CA_CERTS_SECRETS = safe_load(os.environ.get("CUSTOM_CA_CERTS_SECRETS", "[]"))
+
+OIDC_CONFIG_URL = os.getenv(
+    "OIDC_CONFIG_URL", "/auth/realms/Renku/.well-known/openid-configuration"
+)
+"""URL for fetching the OIDC configuration."""
 
 CRD_GROUP = os.environ.get("CRD_GROUP")
 CRD_VERSION = os.environ.get("CRD_VERSION")
