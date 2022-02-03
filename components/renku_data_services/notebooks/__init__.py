@@ -118,6 +118,7 @@ def create_app():
             dsn=app.config.get("SENTRY_DSN"),
             environment=app.config.get("SENTRY_ENV"),
             integrations=[FlaskIntegration()],
+            traces_sample_rate=app.config.get("SENTRY_SAMPLE_RATE"),
         )
     return app
 

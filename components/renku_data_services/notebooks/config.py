@@ -39,6 +39,9 @@ SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
 SENTRY_ENV = os.environ.get("SENTRY_ENV", "")
 """Sentry client environment."""
 
+SENTRY_SAMPLE_RATE = os.environ.get("SENTRY_SAMPLE_RATE", 0.2)
+"""Sentry sample rate for performance monitoring."""
+
 SERVICE_PREFIX = os.environ.get("SERVICE_PREFIX", "/notebooks")
 """Service prefix for the notebooks API."""
 
