@@ -117,7 +117,7 @@ def launch_notebook(
     notebook,
     image,
     server_options,
-    s3mounts=[],
+    cloudstorage=[],
 ):
     """
     Launch a Jupyter server.
@@ -154,7 +154,7 @@ def launch_notebook(
         notebook,
         image,
         server_options,
-        s3mounts,
+        cloudstorage,
     )
 
     if len(server.safe_username) > 63:
@@ -286,7 +286,9 @@ def server_options(user):
     return ServerOptionsUI().dump(
         {
             **current_app.config["SERVER_OPTIONS_UI"],
-            "s3mounts": {"enabled": current_app.config["S3_MOUNTS_ENABLED"]},
+            "cloudstorage": {
+                "s3": {"enabled": current_app.config["S3_MOUNTS_ENABLED"]}
+            },
         },
     )
 

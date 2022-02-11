@@ -10,14 +10,14 @@ from urllib.parse import urlparse, urljoin
 
 
 from ..amalthea_patches import (
-    autosave,
-    general,
-    git_proxy,
-    git_sidecar,
-    init_containers,
-    inject_certificates,
-    jupyter_server,
-    s3mounts as s3mounts_patches,
+    autosave as autosave_patches,
+    general as general_patches,
+    git_proxy as git_proxy_patches,
+    git_sidecar as git_sidecar_patches,
+    init_containers as init_containers_patches,
+    inject_certificates as inject_certificates_patches,
+    jupyter_server as jupyter_server_patches,
+    cloudstorage as cloudstorage_patches,
 )
 from ...util.check_image import (
     parse_image_name,
@@ -48,7 +48,7 @@ class UserServer:
         notebook,
         image,
         server_options,
-        s3mounts,
+        cloudstorage,
     ):
         self._renku_annotation_prefix = "renku.io/"
         self._check_flask_config()
@@ -68,7 +68,7 @@ class UserServer:
         self.verified_image = None
         self.is_image_private = None
         self.image_workdir = None
-        self.s3mounts = s3mounts
+        self.cloudstorage = cloudstorage
         try:
             self.gl_project = self._user.get_renku_project(
                 f"{self.namespace}/{self.project}"
@@ -279,24 +279,24 @@ class UserServer:
         """Compose the body of the user session for the k8s operator"""
         patches = list(
             chain(
-                general.test(self),
-                general.session_tolerations(),
-                general.session_affinity(),
-                general.session_node_selector(),
-                jupyter_server.args(),
-                jupyter_server.env(self),
-                jupyter_server.image_pull_secret(self),
-                jupyter_server.disable_service_links(),
-                autosave.main(),
-                git_proxy.main(self),
-                git_sidecar.main(),
-                general.oidc_unverified_email(self),
-                s3mounts_patches.main(self),
+                general_patches.test(self),
+                general_patches.session_tolerations(),
+                general_patches.session_affinity(),
+                general_patches.session_node_selector(),
+                jupyter_server_patches.args(),
+                jupyter_server_patches.env(self),
+                jupyter_server_patches.image_pull_secret(self),
+                jupyter_server_patches.disable_service_links(),
+                autosave_patches.main(),
+                git_proxy_patches.main(self),
+                git_sidecar_patches.main(),
+                general_patches.oidc_unverified_email(self),
+                cloudstorage_patches.main(self),
                 # init container for certs must come before all other init containers
                 # so that it runs first before all other init containers
-                init_containers.certificates(),
-                init_containers.git_clone(self),
-                inject_certificates.proxy(self),
+                init_containers_patches.certificates(),
+                init_containers_patches.git_clone(self),
+                inject_certificates_patches.proxy(self),
             )
         )
         # Storage

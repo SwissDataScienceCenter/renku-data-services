@@ -86,7 +86,7 @@ class LaunchNotebookRequestS3mount(Schema):
             data.pop("access_key")
         if data["secret_key"] == "":
             data.pop("secret_key")
-        s3mount = S3mount(**data, mount_folder="/s3mounts", read_only=True)
+        s3mount = S3mount(**data, mount_folder="/cloudstorage", read_only=True)
         if not s3mount.bucket_exists:
             raise ValidationError(
                 f"Cannot find bucket {s3mount.bucket} at endpoint {s3mount.endpoint}. "
@@ -124,7 +124,7 @@ class LaunchNotebookRequestWithoutS3(Schema):
 class LaunchNotebookRequestWithS3(LaunchNotebookRequestWithoutS3):
     """Used to validate the requesting for launching a jupyter server"""
 
-    s3mounts = fields.List(
+    cloudstorage = fields.List(
         fields.Nested(LaunchNotebookRequestS3mount()),
         required=False,
         missing=[],
@@ -133,10 +133,10 @@ class LaunchNotebookRequestWithS3(LaunchNotebookRequestWithoutS3):
     @validates_schema
     def validate_unique_bucket_names(self, data, **kwargs):
         errors = {}
-        bucket_names = [i.bucket for i in data["s3mounts"]]
+        bucket_names = [i.bucket for i in data["cloudstorage"]]
         bucket_names_unique = set(bucket_names)
         if len(bucket_names_unique) < len(bucket_names):
-            errors["s3mounts"] = [
+            errors["cloudstorage"] = [
                 "Found duplicate storage bucket names. "
                 "All provided bucket names have to be unique"
             ]
@@ -357,7 +357,7 @@ class LaunchNotebookResponseWithoutS3(Schema):
             "image": server.image,
         }
         if config.S3_MOUNTS_ENABLED:
-            output["s3mounts"] = server.s3mounts
+            output["cloudstorage"] = server.cloudstorage
         return output
 
 
@@ -368,7 +368,7 @@ class LaunchNotebookResponseWithS3(LaunchNotebookResponseWithoutS3):
     serializing the server class into a proper response.
     """
 
-    s3mounts = fields.List(
+    cloudstorage = fields.List(
         fields.Nested(LaunchNotebookResponseS3mount()),
         required=False,
         missing=[],
@@ -500,6 +500,15 @@ class ServerOptionUIBool(ServerOptionUIBase):
     default = fields.Bool(required=True)
 
 
+class CloudStorageServerOption(Schema):
+    """Used to indicate in the server options which types of cloud storage is enabled."""
+
+    s3 = fields.Nested(
+        Schema.from_dict({"enabled": fields.Bool(required=True)})(),
+        required=True,
+    )
+
+
 class ServerOptionsUI(Schema):
     """
     Specifies which options are available to the user in the UI when
@@ -528,9 +537,7 @@ class ServerOptionsUI(Schema):
     disk_request = fields.Nested(
         ServerOptionUIDisk(), required="disk_request" in config.SERVER_OPTIONS_UI.keys()
     )
-    s3mounts = fields.Nested(
-        Schema.from_dict({"enabled": fields.Boolean(required=True)})(), required=True
-    )
+    cloudstorage = fields.Nested(CloudStorageServerOption(), required=True)
 
 
 class ServerLogs(Schema):
