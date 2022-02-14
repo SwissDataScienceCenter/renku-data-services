@@ -33,6 +33,9 @@ JUPYTER_ANNOTATION_PREFIX = "jupyter.org/"
 RENKU_ANNOTATION_PREFIX = "renku.io/"
 """The prefix used for annotations by Renku."""
 
+SENTRY_ENABLED = os.environ.get("SENTRY_ENABLED", "").lower() == "true"
+"""Sentry on/off switch."""
+
 SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
 """Sentry client registration."""
 

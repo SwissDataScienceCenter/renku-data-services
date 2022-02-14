@@ -110,7 +110,7 @@ def create_app():
 
     app.logger.debug(app.config)
 
-    if "SENTRY_DSN" in app.config:
+    if app.config.get("SENTRY_ENABLED"):
         import sentry_sdk
         from sentry_sdk.integrations.flask import FlaskIntegration
 
