@@ -286,9 +286,11 @@ def server_options(user):
     return ServerOptionsUI().dump(
         {
             **current_app.config["SERVER_OPTIONS_UI"],
-            "cloudstorage": {
-                "s3": {"enabled": current_app.config["S3_MOUNTS_ENABLED"]}
-            },
+            # TODO: enable when the UI supports fully s3 buckets
+            # currently passing this breaks the sessions settings page
+            # "cloudstorage": {
+            #     "s3": {"enabled": current_app.config["S3_MOUNTS_ENABLED"]}
+            # },
         },
     )
 

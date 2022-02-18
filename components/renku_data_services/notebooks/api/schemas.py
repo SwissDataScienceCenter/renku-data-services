@@ -537,7 +537,9 @@ class ServerOptionsUI(Schema):
     disk_request = fields.Nested(
         ServerOptionUIDisk(), required="disk_request" in config.SERVER_OPTIONS_UI.keys()
     )
-    cloudstorage = fields.Nested(CloudStorageServerOption(), required=True)
+    # TODO: enable when the UI supports fully s3 buckets
+    # currently passing this breaks the sessions settings page
+    # cloudstorage = fields.Nested(CloudStorageServerOption(), required=True)
 
 
 class ServerLogs(Schema):
