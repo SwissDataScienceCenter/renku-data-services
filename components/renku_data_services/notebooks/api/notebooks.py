@@ -33,12 +33,45 @@ from .schemas import (
     ServersGetRequest,
     ServersGetResponse,
     ServerLogs,
+    VersionResponse,
 )
 from .classes.server import UserServer
 from .classes.storage import Autosave
 
 
 bp = Blueprint("notebooks_blueprint", __name__, url_prefix=config.SERVICE_PREFIX)
+
+
+@bp.route("/version")
+def version():
+    """
+    Return notebook services version.
+
+    ---
+    get:
+      description: Information about notebooks service.
+      responses:
+        200:
+          description: Notebooks service info.
+          content:
+            application/json:
+              schema: VersionResponse
+    """
+    info = {
+        "name": "renku-notebooks",
+        "versions": [
+            {
+                "version": config.NOTEBOOKS_SERVICE_VERSION,
+                "data": {
+                    "anonymousSessionsEnabled": config.ANONYMOUS_SESSIONS_ENABLED,
+                    "cloudstorageEnabled": {
+                        "s3": config.S3_MOUNTS_ENABLED,
+                    },
+                },
+            }
+        ],
+    }
+    return VersionResponse().dump(info), 200
 
 
 @bp.route("servers", methods=["GET"])

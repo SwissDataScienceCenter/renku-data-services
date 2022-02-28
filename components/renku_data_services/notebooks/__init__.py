@@ -33,6 +33,7 @@ from .api.schemas import (
     ServerOptionsUI,
     FailedParsing,
     AutosavesList,
+    VersionResponse,
 )
 from .api.notebooks import (
     user_servers,
@@ -148,6 +149,7 @@ def register_swagger(app):
     spec.components.schema("ServerOptionsUI", schema=ServerOptionsUI)
     spec.components.schema("FailedParsing", schema=FailedParsing)
     spec.components.schema("AutosavesList", schema=AutosavesList)
+    spec.components.schema("VersionResponse", schema=VersionResponse)
     # Register endpoints
     with app.test_request_context():
         spec.path(view=user_server)
