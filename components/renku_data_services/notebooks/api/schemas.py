@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 from marshmallow import (
     Schema,
     fields,
@@ -224,6 +225,27 @@ class UserPodResources(
         return in_data
 
 
+class ServerStatusEnum(Enum):
+    """Simple Enum for server status."""
+
+    Running = "running"
+    Starting = "starting"
+    Stopping = "stopping"
+    Failed = "failed"
+
+    @classmethod
+    def list(cls):
+        return list(map(lambda c: c.value, cls))
+
+
+class ServerStatus(Schema):
+    state = fields.String(
+        required=True,
+        validate=validate.OneOf(ServerStatusEnum.list()),
+    )
+    message = fields.String(required=False)
+
+
 class LaunchNotebookResponseWithoutS3(Schema):
     """
     The response sent after a successful creation of a jupyter server. Or
@@ -239,7 +261,7 @@ class LaunchNotebookResponseWithoutS3(Schema):
     name = fields.Str()
     state = fields.Dict()
     started = fields.DateTime(format="iso", allow_none=True)
-    status = fields.Dict()
+    status = fields.Nested(ServerStatus())
     url = fields.Str()
     resources = fields.Nested(UserPodResources())
     image = fields.Str()
@@ -248,66 +270,149 @@ class LaunchNotebookResponseWithoutS3(Schema):
     def format_user_pod_data(self, server, *args, **kwargs):
         """Convert and format a server object into what the API requires."""
 
-        def summarise_pod_conditions(conditions):
-            def get_latest_condition(conditions):
-                CONDITIONS_ORDER = {
-                    "PodScheduled": 1,
-                    "Unschedulable": 2,
-                    "Initialized": 3,
-                    "ContainersReady": 4,
-                    "Ready": 5,
-                }
-                return sorted(
-                    conditions,
-                    key=lambda c: (
-                        c.get("lastTransitionTime"),
-                        CONDITIONS_ORDER[c.get("type", "PodScheduled")],
-                    ),
-                )[-1]
+        def get_failed_container_exit_code(container_status):
+            """Assumes the container is truly failed and extracts the exit code."""
+            last_states = list(container_status.get("lastState", {}).values())
+            last_state = last_states[-1] if len(last_states) > 0 else {}
+            exit_code = last_state.get("exitCode", "unknown")
+            return exit_code
 
-            if not conditions:
-                return {"step": None, "message": None, "reason": None}
-            else:
-                latest = get_latest_condition(conditions)
-                return {
-                    "step": latest.get("type"),
-                    "message": latest.get("message"),
-                    "reason": latest.get("reason"),
-                }
+        def get_user_correctable_message(exit_code):
+            """Maps failure codes to messages that can help the user resolve a failed session."""
+            default_server_error_message = (
+                "The server shut down unexpectedly. Please ensure "
+                "that your Dockerfile is correct and up-to-date."
+            )
+            exit_code_msg_xref = {
+                # INFO: the command is found but cannot be invoked
+                125: "The command to start the server was invoked but "
+                "it did not complete successfully. Please make sure your Dockerfile "
+                "is correct and up-to-date.",
+                # INFO: the command is found but cannot be invoked
+                126: "The command to start the server cannot be invoked. "
+                "Please make sure your Dockerfile is correct and up-to-date.",
+                # INFO: the command cannot be found at all
+                127: "The image does not contain the required command to start the server. "
+                "Please make sure your Dockerfile is correct and up-to-date.",
+                # INFO: the container exited with an invalid exit code
+                # happens when container fully runs out of storage
+                128: "The server shut down unexpectedly. Please ensure"
+                "that your Dockerfile is correct and up-to-date. "
+                "In some cases this can be the result of low disk space, "
+                "please restart your server with more storage.",
+                # INFO: the container aborted itself using the abort() function.
+                134: default_server_error_message,
+                # INFO: receiving SIGKILL - eviction or oomkilled should trigger this
+                137: "The server was terminated by the cluster. Potentially because of "
+                "consuming too much resources. Please restart your server and request "
+                "more memory and storage.",
+                # INFO: segmentation fault
+                139: default_server_error_message,
+                # INFO: receiving SIGTERM
+                143: default_server_error_message,
+            }
+            return exit_code_msg_xref.get(exit_code, default_server_error_message)
+
+        def get_failed_message(failed_containers):
+            """The failed message tries to extract a meaningful error info from the containers."""
+            num_failed_containers = len(failed_containers)
+            if num_failed_containers == 0:
+                return None
+            for container in failed_containers:
+                exit_code = get_failed_container_exit_code(container)
+                container_name = container.get("name", "Unknown")
+                if (
+                    container_name == "git-clone" and exit_code == 128
+                ) or container_name == "jupyter-server":
+                    # INFO: The git-clone init container ran out of disk space
+                    # or the server container failed
+                    user_correctable_message = get_user_correctable_message(exit_code)
+                    return user_correctable_message
+            return (
+                f"There are failures in {num_failed_containers} auxiliary "
+                "server containers. Please restart your session as this may be "
+                "an intermittent problem. If issues persist contact your "
+                "administrator or the Renku team."
+            )
+
+        def get_all_container_statuses(js):
+            return js["status"].get("mainPod", {}).get("status", {}).get(
+                "containerStatuses", []
+            ) + js["status"].get("mainPod", {}).get("status", {}).get(
+                "initContainerStatuses", []
+            )
+
+        def get_failed_containers(container_statuses):
+            failed_containers = [
+                container_status
+                for container_status in container_statuses
+                if (
+                    container_status.get("state", {})
+                    .get("terminated", {})
+                    .get("exitCode", 0)
+                    != 0
+                    or container_status.get("lastState", {})
+                    .get("terminated", {})
+                    .get("exitCode", 0)
+                    != 0
+                )
+            ]
+            return failed_containers
+
+        def get_starting_message(container_statuses):
+            containers_not_ready = [
+                container_status.get("name", "Unknown")
+                for container_status in container_statuses
+                if not container_status.get("ready", False)
+            ]
+            if len(containers_not_ready) > 0:
+                return f"Containers with non-ready statuses: {', '.join(containers_not_ready)}."
+            return None
 
         def get_status(js):
             """Get the status of the jupyterserver."""
-            # Phases: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-phase
-            res = {
-                "phase": "Unknown",
-                "ready": False,
-                "step": None,
-                "message": None,
-                "reason": None,
+            # Is the server terminating?
+            if js["metadata"].get("deletionTimestamp") is not None:
+                return {
+                    "state": ServerStatusEnum.Stopping.value,
+                }
+
+            pod_phase = js["status"].get("mainPod", {}).get("status", {}).get("phase")
+            pod_conditions = (
+                js["status"]
+                .get("mainPod", {})
+                .get("status", {})
+                .get("conditions", [{"status": "False"}])
+            )
+            container_statuses = get_all_container_statuses(js)
+            failed_containers = get_failed_containers(container_statuses)
+            all_pod_conditions_good = all(
+                [
+                    condition.get("status", "False") == "True"
+                    for condition in pod_conditions
+                ]
+            )
+
+            # Is the pod fully running?
+            if (
+                pod_phase == "Running"
+                and len(failed_containers) == 0
+                and all_pod_conditions_good
+            ):
+                return {"state": ServerStatusEnum.Running.value}
+
+            # The pod has failed (either directly or by having containers stuck in restart loops)
+            if pod_phase == "Failed" or len(failed_containers) > 0:
+                return {
+                    "state": ServerStatusEnum.Failed.value,
+                    "message": get_failed_message(failed_containers),
+                }
+
+            # If none of the above match the container must be starting
+            return {
+                "state": ServerStatusEnum.Starting.value,
+                "message": get_starting_message(container_statuses),
             }
-            if js is None:
-                return res
-            container_statuses = (
-                js["status"]
-                .get("mainPod", {})
-                .get("status", {})
-                .get("containerStatuses", [])
-            )
-            res["ready"] = (
-                len(container_statuses) > 0
-                and all([cs.get("ready") for cs in container_statuses])
-                and js["metadata"].get("deletionTimestamp", None) is None
-            )
-            res["phase"] = (
-                js["status"]
-                .get("mainPod", {})
-                .get("status", {})
-                .get("phase", "Unknown")
-            )
-            conditions = summarise_pod_conditions(
-                js["status"].get("mainPod", {}).get("status", {}).get("conditions", [])
-            )
-            return {**res, **conditions}
 
         def get_server_resources(server):
             server_options = UserServer._get_server_options_from_js(server.js)
