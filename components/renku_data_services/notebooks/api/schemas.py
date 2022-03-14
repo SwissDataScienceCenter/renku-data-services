@@ -647,18 +647,17 @@ class ServerOptionsUI(Schema):
     # cloudstorage = fields.Nested(CloudStorageServerOption(), required=True)
 
 
-class ServerLogs(Schema):
-    """
-    The list of k8s logs (one log line per list element)
-    for the pod that runs the jupyter server.
-    """
+_ServerLogs = Schema.from_dict({"jupyter-server": fields.String(required=False)})
 
-    items = fields.List(fields.Str())
 
-    @post_dump
-    @post_load
-    def remove_item_key(self, data, **kwargs):
-        return data.get("items", [])
+class ServerLogs(_ServerLogs):
+    class Meta:
+        unknown = INCLUDE  # only affects loading, not dumping
+
+    @post_dump(pass_original=True)
+    def keep_unknowns(self, output, orig, **kwargs):
+        output = {**orig, **output}
+        return output
 
 
 def _in_range(value, value_range):

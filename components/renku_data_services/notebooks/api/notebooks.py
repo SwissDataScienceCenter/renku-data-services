@@ -350,9 +350,6 @@ def server_logs(user, server_name):
           content:
             application/json:
               schema: ServerLogs
-              example:
-                - Line 1 of logs
-                - Line 2 of logs
         404:
           description: The specified server does not exist.
       tags:
@@ -363,10 +360,7 @@ def server_logs(user, server_name):
         max_lines = request.args.get("max_lines", default=250, type=int)
         logs = server.get_logs(max_lines)
         if logs is not None:
-            return (
-                ServerLogs().dumps({"items": str.splitlines(logs)}),
-                200,
-            )
+            return ServerLogs().dump(logs)
     return make_response(jsonify({"messages": {"error": "Cannot find server"}}), 404)
 
 

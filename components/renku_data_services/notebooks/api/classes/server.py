@@ -2,7 +2,7 @@ from flask import current_app
 import gitlab
 from itertools import chain
 from kubernetes import client
-from kubernetes.client.rest import ApiException
+from kubernetes.client.exceptions import ApiException
 from kubernetes.client.models import V1DeleteOptions
 import base64
 import json
@@ -475,24 +475,38 @@ class UserServer:
         else:
             return status
 
-    def get_logs(self, max_log_lines=0, container_name="jupyter-server"):
-        """Get the logs of the k8s pod that runs the user server."""
+    def get_logs(self, max_log_lines=0):
+        """Get the logs of all containers in the server pod."""
         js = self.js
         if js is None:
             return None
+        output = {}
         pod_name = js["status"]["mainPod"]["name"]
-        if max_log_lines == 0:
-            logs = self._k8s_client.read_namespaced_pod_log(
-                pod_name, self._k8s_namespace, container=container_name
-            )
+        all_containers = js["status"]["mainPod"]["status"].get(
+            "containerStatuses", []
+        ) + js["status"]["mainPod"]["status"].get("initContainerStatuses", [])
+        for container in all_containers:
+            container_name = container["name"]
+            try:
+                logs = self._k8s_client.read_namespaced_pod_log(
+                    pod_name,
+                    self._k8s_namespace,
+                    container=container_name,
+                    tail_lines=max_log_lines if max_log_lines > 0 else None,
+                    timestamps=True,
+                )
+            except ApiException as err:
+                if err.status in [400, 404]:
+                    continue  # container does not exist or is not ready yet
+                else:
+                    raise
+            else:
+                output[container_name] = logs
+
+        if len(output.keys()) == 0:
+            return None
         else:
-            logs = self._k8s_client.read_namespaced_pod_log(
-                pod_name,
-                self._k8s_namespace,
-                tail_lines=max_log_lines,
-                container=container_name,
-            )
-        return logs
+            return output
 
     @property
     def server_url(self):
