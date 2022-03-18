@@ -642,9 +642,7 @@ class ServerOptionsUI(Schema):
     disk_request = fields.Nested(
         ServerOptionUIDisk(), required="disk_request" in config.SERVER_OPTIONS_UI.keys()
     )
-    # TODO: enable when the UI supports fully s3 buckets
-    # currently passing this breaks the sessions settings page
-    # cloudstorage = fields.Nested(CloudStorageServerOption(), required=True)
+    cloudstorage = fields.Nested(CloudStorageServerOption(), required=True)
 
 
 _ServerLogs = Schema.from_dict({"jupyter-server": fields.String(required=False)})
