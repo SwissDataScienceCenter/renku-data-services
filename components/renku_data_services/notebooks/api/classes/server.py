@@ -10,7 +10,6 @@ from urllib.parse import urlparse, urljoin
 
 
 from ..amalthea_patches import (
-    autosave as autosave_patches,
     general as general_patches,
     git_proxy as git_proxy_patches,
     git_sidecar as git_sidecar_patches,
@@ -287,9 +286,8 @@ class UserServer:
                 jupyter_server_patches.env(self),
                 jupyter_server_patches.image_pull_secret(self),
                 jupyter_server_patches.disable_service_links(),
-                autosave_patches.main(),
                 git_proxy_patches.main(self),
-                git_sidecar_patches.main(),
+                git_sidecar_patches.main(self),
                 general_patches.oidc_unverified_email(self),
                 cloudstorage_patches.main(self),
                 # init container for certs must come before all other init containers
