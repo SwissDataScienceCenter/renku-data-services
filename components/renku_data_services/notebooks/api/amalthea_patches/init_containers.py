@@ -1,5 +1,6 @@
 from flask import current_app
 from kubernetes import client
+import os
 
 from ..classes.user import RegisteredUser
 from .utils import get_certificates_volume_mounts
@@ -42,6 +43,26 @@ def git_clone(server):
         {
             "name": "GIT_CLONE_USER__OAUTH_TOKEN",
             "value": server._user.git_token,
+        },
+        {
+            "name": "GIT_CLONE_SENTRY__ENABLED",
+            "value": os.environ.get("GIT_CLONE_SENTRY_ENABLED"),
+        },
+        {
+            "name": "GIT_CLONE_SENTRY__DSN",
+            "value": os.environ.get("GIT_CLONE_SENTRY_DSN"),
+        },
+        {
+            "name": "GIT_CLONE_SENTRY__ENVIRONMENT",
+            "value": os.environ.get("GIT_CLONE_SENTRY_ENV"),
+        },
+        {
+            "name": "GIT_CLONE_SENTRY__SAMPLE_RATE",
+            "value": os.environ.get("GIT_CLONE_SENTRY_SAMPLE_RATE"),
+        },
+        {
+            "name": "SENTRY_RELEASE",
+            "value": os.environ.get("SENTRY_RELEASE"),
         },
     ]
     if type(server._user) is RegisteredUser:

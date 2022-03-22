@@ -28,19 +28,23 @@ def main(server):
                             },
                             {
                                 "name": "GIT_RPC_SENTRY__ENABLED",
-                                "value": os.environ.get("SENTRY_ENABLED"),
+                                "value": os.environ.get("SIDECAR_SENTRY_ENABLED"),
                             },
                             {
                                 "name": "GIT_RPC_SENTRY__DSN",
-                                "value": os.environ.get("SENTRY_DSN"),
+                                "value": os.environ.get("SIDECAR_SENTRY_DSN"),
                             },
                             {
                                 "name": "GIT_RPC_SENTRY__ENVIRONMENT",
-                                "value": os.environ.get("SENTRY_ENV"),
+                                "value": os.environ.get("SIDECAR_SENTRY_ENV"),
                             },
                             {
                                 "name": "GIT_RPC_SENTRY__SAMPLE_RATE",
-                                "value": os.environ.get("SENTRY_SAMPLE_RATE"),
+                                "value": os.environ.get("SIDECAR_SENTRY_SAMPLE_RATE"),
+                            },
+                            {
+                                "name": "SENTRY_RELEASE",
+                                "value": os.environ.get("SENTRY_RELEASE"),
                             },
                             {
                                 "name": "CI_COMMIT_SHA",
