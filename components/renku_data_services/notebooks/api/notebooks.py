@@ -23,6 +23,12 @@ from flask import Blueprint, current_app, jsonify, request, make_response
 from webargs import fields
 from webargs.flaskparser import use_args
 
+from renku_notebooks.util.check_image import (
+    get_docker_token,
+    image_exists,
+    parse_image_name,
+)
+
 from .. import config
 from .auth import authenticated
 from .schemas import (
@@ -462,3 +468,47 @@ def delete_autosave(user, namespace_project, autosave_name):
         )
     autosave.delete()
     return make_response("", 204)
+
+
+@bp.route("images", methods=["GET"])
+@use_args({"image_url": fields.String(required=True)}, as_kwargs=True, location="query")
+@authenticated
+def check_docker_image(user, image_url):
+    """
+    Return the availability of the docker image.
+
+    ---
+    get:
+      description: Docker image availability.
+      parameters:
+        - in: query
+          schema:
+            type: string
+          required: true
+          name: image_url
+          description: The Docker image URL (tag included) that should be fetched.
+      responses:
+        200:
+          description: The Docker image is available.
+        404:
+          description: The Docker image is not available.
+      tags:
+        - images
+    """
+    parsed_image = parse_image_name(image_url)
+    if parsed_image is None:
+        return (
+            jsonify(
+                {
+                    "message": f"The image {image_url} cannot be parsed, "
+                    "ensure you are providing a valid Docker image name.",
+                }
+            ),
+            422,
+        )
+    token, _ = get_docker_token(**parsed_image, user=user)
+    image_exists_result = image_exists(**parsed_image, token=token)
+    if image_exists_result:
+        return "", 200
+    else:
+        return "", 404

@@ -36,6 +36,7 @@ from .api.schemas import (
     VersionResponse,
 )
 from .api.notebooks import (
+    check_docker_image,
     user_servers,
     user_server,
     launch_notebook,
@@ -160,6 +161,7 @@ def register_swagger(app):
         spec.path(view=server_logs)
         spec.path(view=autosave_info)
         spec.path(view=delete_autosave)
+        spec.path(view=check_docker_image)
     # Register security scheme
     security_scheme = {
         "type": "openIdConnect",
