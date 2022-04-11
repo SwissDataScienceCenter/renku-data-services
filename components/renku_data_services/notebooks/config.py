@@ -119,17 +119,20 @@ AMALTHEA_CONTAINER_ORDER_REGISTERED_SESSION = [
 
 IMAGE_DEFAULT_WORKDIR = "/home/jovyan"
 
+# NOTE: K8s can convert large numbers to scientific notation and the to strings
+# as they are passed down to the container through environment variables.
+# Python considers scientific notation as float, so int("1e6") raises an error.
 CULLING_REGISTERED_IDLE_SESSIONS_THRESHOLD_SECONDS = int(
-    os.getenv("CULLING_REGISTERED_IDLE_SESSIONS_THRESHOLD_SECONDS", 86400)
+    float(os.getenv("CULLING_REGISTERED_IDLE_SESSIONS_THRESHOLD_SECONDS", 86400))
 )
 CULLING_ANONYMOUS_IDLE_SESSIONS_THRESHOLD_SECONDS = int(
-    os.getenv("CULLING_ANONYMOUS_IDLE_SESSIONS_THRESHOLD_SECONDS", 43200)
+    float(os.getenv("CULLING_ANONYMOUS_IDLE_SESSIONS_THRESHOLD_SECONDS", 43200))
 )
 CULLING_REGISTERED_MAX_AGE_THRESHOLD_SECONDS = int(
-    os.getenv("CULLING_REGISTERED_MAX_AGE_THRESHOLD_SECONDS", 0)
+    float(os.getenv("CULLING_REGISTERED_MAX_AGE_THRESHOLD_SECONDS", 0))
 )
 CULLING_ANONYMOUS_MAX_AGE_THRESHOLD_SECONDS = int(
-    os.getenv("CULLING_ANONYMOUS_MAX_AGE_THRESHOLD_SECONDS", 0)
+    float(os.getenv("CULLING_ANONYMOUS_MAX_AGE_THRESHOLD_SECONDS", 0))
 )
 
 SESSION_NODE_SELECTOR = safe_load(os.environ.get("SESSION_NODE_SELECTOR", "{}"))
@@ -138,5 +141,22 @@ SESSION_TOLERATIONS = safe_load(os.environ.get("SESSION_TOLERATIONS", "[]"))
 ENFORCE_CPU_LIMITS = os.getenv("ENFORCE_CPU_LIMITS", "off")
 CURRENT_RESOURCE_SCHEMA_VERSION = "1"
 S3_MOUNTS_ENABLED = os.getenv("S3_MOUNTS_ENABLED", "false").lower() == "true"
-
 NOTEBOOKS_SERVICE_VERSION = os.getenv("NOTEBOOKS_SERVICE_VERSION", "0.0.0")
+
+SESSION_TERMINATION_GRACE_PERIOD_SECONDS = int(
+    float(os.getenv("SESSION_TERMINATION_GRACE_PERIOD_SECONDS", 600))
+)
+
+GIT_PROXY_PORT = "8080"
+"""The port for the proxy that injects user credentials (if needed) in Git requests."""
+
+GIT_PROXY_HEALTH_PORT = "8081"
+"""The port for the health checks of the Git proxy, also used to signal that it is
+safe for the Git proxy to shut down. This shutdown is necessary because the Git proxy
+otherwise shuts down before an autosave branch can be created."""
+
+AUTOSAVE_MINIMUM_LFS_FILE_SIZE_BYTES = int(
+    float(os.getenv("AUTOSAVE_MINIMUM_LFS_FILE_SIZE_BYTES", 1000000))
+)
+"""Used to determine which files should be checked in LFS when creating an autosave in a
+session."""

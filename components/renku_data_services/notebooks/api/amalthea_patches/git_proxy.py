@@ -26,8 +26,14 @@ def main(server):
                                 "name": "REPOSITORY_URL",
                                 "value": server.gl_project.http_url_to_repo,
                             },
-                            {"name": "MITM_PROXY_PORT", "value": "8080"},
-                            {"name": "HEALTH_PORT", "value": "8081"},
+                            {
+                                "name": "GIT_PROXY_PORT",
+                                "value": current_app.config["GIT_PROXY_PORT"],
+                            },
+                            {
+                                "name": "GIT_PROXY_HEALTH_PORT",
+                                "value": current_app.config["GIT_PROXY_HEALTH_PORT"],
+                            },
                             {
                                 "name": "GITLAB_OAUTH_TOKEN",
                                 "value": server._user.git_token,
@@ -40,13 +46,31 @@ def main(server):
                                     else "true"
                                 ),
                             },
+                            {
+                                "name": "SESSION_TERMINATION_GRACE_PERIOD_SECONDS",
+                                "value": str(
+                                    current_app.config[
+                                        "SESSION_TERMINATION_GRACE_PERIOD_SECONDS"
+                                    ]
+                                ),
+                            },
                         ],
                         "livenessProbe": {
-                            "httpGet": {"path": "/health", "port": 8081},
+                            "httpGet": {
+                                "path": "/health",
+                                "port": int(
+                                    current_app.config["GIT_PROXY_HEALTH_PORT"]
+                                ),
+                            },
                             "initialDelaySeconds": 3,
                         },
                         "readinessProbe": {
-                            "httpGet": {"path": "/health", "port": 8081},
+                            "httpGet": {
+                                "path": "/health",
+                                "port": int(
+                                    current_app.config["GIT_PROXY_HEALTH_PORT"]
+                                ),
+                            },
                             "initialDelaySeconds": 3,
                         },
                         "volumeMounts": etc_cert_volume_mount,

@@ -282,6 +282,7 @@ class UserServer:
                 general_patches.session_tolerations(),
                 general_patches.session_affinity(),
                 general_patches.session_node_selector(),
+                general_patches.termination_grace_period(),
                 jupyter_server_patches.args(),
                 jupyter_server_patches.env(self),
                 jupyter_server_patches.image_pull_secret(self),
