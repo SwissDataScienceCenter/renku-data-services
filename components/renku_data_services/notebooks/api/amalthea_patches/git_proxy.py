@@ -20,6 +20,12 @@ def main(server):
                     "path": "/statefulset/spec/template/spec/containers/-",
                     "value": {
                         "image": current_app.config["GIT_HTTPS_PROXY_IMAGE"],
+                        "securityContext": {
+                            "fsGroup": 100,
+                            "runAsGroup": 1000,
+                            "runAsUser": 1000,
+                            "allowPrivilegeEscalation": False,
+                        },
                         "name": "git-proxy",
                         "env": [
                             {
