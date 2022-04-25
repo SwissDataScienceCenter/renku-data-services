@@ -25,6 +25,7 @@ def main(server):
                             "runAsGroup": 1000,
                             "runAsUser": 1000,
                             "allowPrivilegeEscalation": False,
+                            "runAsNonRoot": True,
                         },
                         "name": "git-proxy",
                         "env": [

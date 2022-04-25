@@ -92,6 +92,7 @@ def git_clone(server):
                             "fsGroup": 100,
                             "runAsGroup": 100,
                             "runAsUser": 1000,
+                            "runAsNonRoot": True,
                         },
                         "volumeMounts": [
                             {
