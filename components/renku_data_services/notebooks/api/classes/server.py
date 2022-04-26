@@ -1,4 +1,5 @@
 from flask import current_app
+from functools import lru_cache
 import gitlab
 from itertools import chain
 from kubernetes import client
@@ -68,13 +69,7 @@ class UserServer:
         self.is_image_private = None
         self.image_workdir = None
         self.cloudstorage = cloudstorage
-        try:
-            self.gl_project = self._user.get_renku_project(
-                f"{self.namespace}/{self.project}"
-            )
-        except Exception as err:
-            current_app.logger.warning("Cannot find project because:", err)
-            self.gl_project = None
+        self.gl_project_name = f"{self.namespace}/{self.project}"
         self.js = None
 
     def _check_flask_config(self):
@@ -89,6 +84,11 @@ class UserServer:
                 "The url to the docker image registry is missing, it must be provided in "
                 "an environment variable called IMAGE_REGISTRY"
             )
+
+    @property
+    @lru_cache(maxsize=5)
+    def gl_project(self):
+        return self._user.get_renku_project(self.gl_project_name)
 
     @property
     def server_name(self):
@@ -108,6 +108,7 @@ class UserServer:
         )
 
     @property
+    @lru_cache(maxsize=5)
     def autosave_allowed(self):
         allowed = False
         if self._user is not None and type(self._user) is RegisteredUser:
@@ -136,27 +137,29 @@ class UserServer:
         """Check if a specific branch exists in the user's gitlab
         project. The branch name is not required by the API and therefore
         passing None to this function will return True."""
-        if self.branch is not None:
+        if self.branch is not None and self.gl_project is not None:
             try:
-                self._user.get_renku_project(
-                    f"{self.namespace}/{self.project}"
-                ).branches.get(self.branch)
-            except Exception:
-                return False
+                self.gl_project.branches.get(self.branch)
+            except Exception as err:
+                current_app.logger.warning(
+                    f"Branch {self.branch} cannot be verified or does not exist. {err}"
+                )
             else:
                 return True
-        return True
+        return False
 
     def _commit_sha_exists(self):
         """Check if a specific commit sha exists in the user's gitlab project"""
-        try:
-            self._user.get_renku_project(
-                f"{self.namespace}/{self.project}"
-            ).commits.get(self.commit_sha)
-        except Exception:
-            return False
-        else:
-            return True
+        if self.commit_sha is not None and self.gl_project is not None:
+            try:
+                self.gl_project.commits.get(self.commit_sha)
+            except Exception as err:
+                current_app.logger.warning(
+                    f"Commit {self.commit_sha} cannot be verified or does not exist. {err}"
+                )
+            else:
+                return True
+        return False
 
     def _verify_image(self):
         """Set the notebook image if not specified in the request. If specific image
