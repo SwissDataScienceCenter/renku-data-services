@@ -310,6 +310,13 @@ class LaunchNotebookResponseWithoutS3(Schema):
                 139: default_server_error_message,
                 # INFO: receiving SIGTERM
                 143: default_server_error_message,
+                200: "Cannot clone repository: Unhandled git error.",
+                201: "Cannot clone repository: Git remote server is unavailable. Try again later.",
+                202: "Cannot clone repository: "
+                "Autosave branch name is in an unexpected format and cannot be processed.",
+                203: "Cannot clone repository: No disk space left on device.",
+                204: "Cannot clone repository: Requested branch doesn't exist on remote.",
+                205: "Cannot clone repository: Error fetching submodules.",
             }
             return exit_code_msg_xref.get(exit_code, default_server_error_message)
 
@@ -321,9 +328,7 @@ class LaunchNotebookResponseWithoutS3(Schema):
             for container in failed_containers:
                 exit_code = get_failed_container_exit_code(container)
                 container_name = container.get("name", "Unknown")
-                if (
-                    container_name == "git-clone" and exit_code == 128
-                ) or container_name == "jupyter-server":
+                if container_name == "git-clone" or container_name == "jupyter-server":
                     # INFO: The git-clone init container ran out of disk space
                     # or the server container failed
                     user_correctable_message = get_user_correctable_message(exit_code)
