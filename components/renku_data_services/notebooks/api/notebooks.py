@@ -17,7 +17,6 @@
 # limitations under the License.
 """Notebooks service API."""
 import json
-from time import sleep
 
 from flask import Blueprint, current_app, jsonify, request, make_response
 from webargs import fields
@@ -220,25 +219,19 @@ def launch_notebook(
 
     js, error = server.start()
     if js is None:
-        current_app.logger.warning(
-            f"Creating server {server.server_name} failed, retrying once."
+        current_app.logger.error(
+            f"Server {server.server_name} launch failed because {error}."
         )
-        sleep(1)
-        js, error = server.start()
-        if js is None:
-            current_app.logger.error(
-                f"Server {server.server_name} launch failed on retry."
-            )
-            return make_response(
-                jsonify(
-                    {
-                        "messages": {
-                            "error": f"Cannot start server {server.server_name}, because {error}"
-                        }
+        return make_response(
+            jsonify(
+                {
+                    "messages": {
+                        "error": f"Cannot start server {server.server_name}, because {error}"
                     }
-                ),
-                404,
-            )
+                }
+            ),
+            404,
+        )
 
     current_app.logger.debug(f"Server {server.server_name} has been started")
     for autosave in user.get_autosaves(server.gl_project.path_with_namespace):
@@ -459,14 +452,19 @@ def delete_autosave(user, namespace_project, autosave_name):
             404,
         )
     autosave = Autosave.from_name(user, namespace_project, autosave_name)
-    if not autosave.exists:
+    response = autosave.delete()
+    if not response:
         return make_response(
             jsonify(
-                {"messages": {"error": f"The autosave {autosave_name} does not exist"}}
+                {
+                    "messages": {
+                        "error": f"The autosave {autosave_name} could not be deleted, "
+                        "are you certain it exists?"
+                    }
+                }
             ),
             404,
         )
-    autosave.delete()
     return make_response("", 204)
 
 

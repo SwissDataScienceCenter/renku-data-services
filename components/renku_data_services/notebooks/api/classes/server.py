@@ -86,7 +86,6 @@ class UserServer:
             )
 
     @property
-    @lru_cache(maxsize=5)
     def gl_project(self):
         return self._user.get_renku_project(self.gl_project_name)
 
@@ -108,7 +107,7 @@ class UserServer:
         )
 
     @property
-    @lru_cache(maxsize=5)
+    @lru_cache(maxsize=8)
     def autosave_allowed(self):
         allowed = False
         if self._user is not None and type(self._user) is RegisteredUser:
