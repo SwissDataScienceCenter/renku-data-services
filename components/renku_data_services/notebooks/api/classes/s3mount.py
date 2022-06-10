@@ -3,6 +3,8 @@ import boto3
 from botocore import UNSIGNED
 from botocore.client import Config
 from botocore.exceptions import EndpointConnectionError, ClientError, NoCredentialsError
+from typing import Optional
+from urllib.parse import urlparse
 
 
 class S3mount:
@@ -37,6 +39,7 @@ class S3mount:
                 endpoint_url=self.endpoint,
             )
         self.mount_folder = mount_folder
+        self.__head_bucket = {}
 
     def get_manifest_patches(
         self, k8s_res_name, k8s_namespace, labels={}, annotations={}
@@ -46,7 +49,9 @@ class S3mount:
         s3mount_spec = {
             "local": {
                 "type": "COS",
-                "endpoint": self.endpoint,
+                "endpoint": self.region_specific_endpoint
+                if self.region_specific_endpoint
+                else self.endpoint,
                 "bucket": self.bucket,
                 "readonly": "true" if self.read_only else "false",
             }
@@ -124,16 +129,49 @@ class S3mount:
         return patch
 
     @property
-    def bucket_exists(self):
+    def head_bucket(self):
+        """Used to determine the AWS location for the bucket and if the bucket
+        exists or not."""
+        if self.__head_bucket != {}:
+            return self.__head_bucket
         try:
-            self.client.head_bucket(Bucket=self.bucket)
+            self.__head_bucket = self.client.head_bucket(Bucket=self.bucket)
         except (ClientError, EndpointConnectionError, NoCredentialsError, ValueError):
-            current_app.logger.warning(
-                f"Failed to confirm bucket {self.bucket} for endpoint {self.endpoint} exists"
-            )
+            self.__head_bucket = None
+        return self.__head_bucket
+
+    @property
+    def bucket_exists(self):
+        if self.head_bucket is None:
             return False
-        else:
-            return True
+        amz_bucket_region = (
+            self.head_bucket.get("ResponseMetadata", {})
+            .get("HTTPHeaders", {})
+            .get("x-amz-bucket-region")
+        )
+        if (
+            amz_bucket_region
+            and urlparse(self.endpoint).netloc != "s3.amazonaws.com"
+            and amz_bucket_region not in self.endpoint
+        ):
+            return False
+        return True
+
+    @property
+    def region_specific_endpoint(self) -> Optional[str]:
+        """Get the region specific endpoint if the bucket exists and the general
+        non-region-specific URL for AWS is used."""
+        if not self.head_bucket:
+            return None
+        # INFO: If the region is not the default (us-east-1) and it is not specified explicitly in
+        # the endpoint then datashim has trouble mounting the bucket even though boto can find it.
+        amz_bucket_region = (
+            self.head_bucket.get("ResponseMetadata", {})
+            .get("HTTPHeaders", {})
+            .get("x-amz-bucket-region")
+        )
+        if amz_bucket_region and urlparse(self.endpoint).netloc == "s3.amazonaws.com":
+            return f"https://s3.{amz_bucket_region}.amazonaws.com"
 
     @classmethod
     def s3mounts_from_js(cls, js):
