@@ -1,6 +1,7 @@
 from flask import current_app
 from kubernetes import client
 import os
+from pathlib import Path
 
 from ..classes.user import RegisteredUser
 from .utils import get_certificates_volume_mounts
@@ -63,6 +64,18 @@ def git_clone(server):
         {
             "name": "SENTRY_RELEASE",
             "value": os.environ.get("SENTRY_RELEASE"),
+        },
+        {
+            "name": "REQUESTS_CA_BUNDLE",
+            "value": str(
+                Path(etc_cert_volume_mount[0]["mountPath"]) / "ca-certificates.crt"
+            ),
+        },
+        {
+            "name": "SSL_CERT_FILE",
+            "value": str(
+                Path(etc_cert_volume_mount[0]["mountPath"]) / "ca-certificates.crt"
+            ),
         },
     ]
     if type(server._user) is RegisteredUser:
