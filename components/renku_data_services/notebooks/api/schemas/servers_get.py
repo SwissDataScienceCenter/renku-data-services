@@ -292,7 +292,7 @@ class LaunchNotebookResponseWithoutS3(Schema):
                     output["message"] = get_failed_message(
                         get_failed_containers(container_statuses)
                     )
-            if state == ServerStatusEnum.Starting:
+            if state == ServerStatusEnum.Starting.value:
                 output["message"] = get_starting_message(container_statuses)
             return output
 
