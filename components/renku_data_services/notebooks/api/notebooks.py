@@ -30,16 +30,12 @@ from renku_notebooks.util.check_image import (
 
 from .. import config
 from .auth import authenticated
-from .schemas import (
-    AutosavesList,
-    ServerOptionsUI,
-    LaunchNotebookRequest,
-    LaunchNotebookResponse,
-    ServersGetRequest,
-    ServersGetResponse,
-    ServerLogs,
-    VersionResponse,
-)
+from .schemas.servers_post import LaunchNotebookRequest
+from .schemas.servers_get import NotebookResponse, ServersGetRequest, ServersGetResponse
+from .schemas.logs import ServerLogs
+from .schemas.config_server_options import ServerOptionsChoices
+from .schemas.autosave import AutosavesList
+from .schemas.version import VersionResponse
 from .classes.server import UserServer
 from .classes.storage import Autosave
 
@@ -131,7 +127,7 @@ def user_server(user, server_name):
           description: Server properties.
           content:
             application/json:
-              schema: LaunchNotebookResponse
+              schema: NotebookResponse
         404:
           description: The specified server does not exist.
       tags:
@@ -139,7 +135,7 @@ def user_server(user, server_name):
     """
     server = UserServer.from_server_name(user, server_name)
     if server is not None:
-        return LaunchNotebookResponse().dump(server)
+        return NotebookResponse().dump(server)
     return make_response(jsonify({"messages": {"error": "Cannot find server"}}), 404)
 
 
@@ -172,12 +168,12 @@ def launch_notebook(
           description: The server exists and is already running.
           content:
             application/json:
-              schema: LaunchNotebookResponse
+              schema: NotebookResponse
         201:
           description: The requested server has been created.
           content:
             application/json:
-              schema: LaunchNotebookResponse
+              schema: NotebookResponse
         404:
           description: The server could not be launched.
       tags:
@@ -215,7 +211,7 @@ def launch_notebook(
 
     server.get_js()
     if server.server_exists():
-        return LaunchNotebookResponse().dump(server)
+        return NotebookResponse().dump(server)
 
     js, error = server.start()
     if js is None:
@@ -236,11 +232,11 @@ def launch_notebook(
     current_app.logger.debug(f"Server {server.server_name} has been started")
     for autosave in user.get_autosaves(server.gl_project.path_with_namespace):
         autosave.cleanup(server.commit_sha)
-    return LaunchNotebookResponse().dump(server), 201
+    return NotebookResponse().dump(server), 201
 
 
 @bp.route("servers/<server_name>", methods=["DELETE"])
-@use_args({"forced": fields.Boolean(missing=False)}, as_kwargs=True)
+@use_args({"forced": fields.Boolean(load_default=False)}, as_kwargs=True)
 @authenticated
 def stop_server(user, forced, server_name):
     """
@@ -310,12 +306,12 @@ def server_options(user):
           description: Server options such as CPU, memory, storage, etc.
           content:
             application/json:
-              schema: ServerOptionsUI
+              schema: ServerOptionsChoices
       tags:
         - servers
     """
     # TODO: append image-specific options to the options json
-    return ServerOptionsUI().dump(
+    return ServerOptionsChoices().dump(
         {
             **current_app.config["SERVER_OPTIONS_UI"],
             "cloudstorage": {

@@ -2,7 +2,7 @@ import json
 import os
 
 
-def read_server_options_ui():
+def read_choices():
     server_options_file = os.getenv(
         "NOTEBOOKS_SERVER_OPTIONS_UI_PATH",
         "/etc/renku-notebooks/server_options/server_options.json",
@@ -18,7 +18,7 @@ def read_server_options_ui():
     return server_options
 
 
-def read_server_options_defaults():
+def read_defaults():
     server_options_file = os.getenv(
         "NOTEBOOKS_SERVER_OPTIONS_DEFAULTS_PATH",
         "/etc/renku-notebooks/server_options/server_defaults.json",

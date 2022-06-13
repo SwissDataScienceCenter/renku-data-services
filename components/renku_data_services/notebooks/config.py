@@ -19,7 +19,11 @@
 import os
 from yaml import safe_load
 
-from .util.misc import read_server_options_defaults, read_server_options_ui
+from .util.server_options import read_defaults, read_choices
+from .api.schemas.config_server_options import (
+    ServerOptionsChoices,
+    ServerOptionsDefaults,
+)
 
 GITLAB_URL = os.environ.get("GITLAB_URL", "https://gitlab.com")
 """The GitLab instance to use."""
@@ -80,8 +84,8 @@ USE_EMPTY_DIR_SIZE_LIMIT = (
     os.environ.get("USE_EMPTY_DIR_SIZE_LIMIT", "false").lower() == "true"
 )
 
-SERVER_OPTIONS_DEFAULTS = read_server_options_defaults()
-SERVER_OPTIONS_UI = read_server_options_ui()
+SERVER_OPTIONS_DEFAULTS = ServerOptionsDefaults().load(read_defaults())
+SERVER_OPTIONS_UI = ServerOptionsChoices().load(read_choices())
 
 OIDC_CLIENT_ID = os.environ.get("OIDC_CLIENT_ID", "renku")
 OIDC_CLIENT_SECRET = os.environ.get("OIDC_CLIENT_SECRET")
