@@ -20,7 +20,7 @@ class CpuField(fields.Field):
             raise ValidationError(
                 "Invalid value during serialization, must be greater than zero."
             )
-        return str(value)
+        return value
 
     def _deserialize(self, value, attr, data, **kwargs):
         """Always deserialize to fractional cores"""
@@ -135,7 +135,7 @@ class GpuField(fields.Field):
                 "Invalid value during GPU amount serialization, "
                 f"must be greater than or equal to zero, got {value}."
             )
-        return str(value)
+        return value
 
     def _deserialize(self, value, attr, data, **kwargs):
         """Always deserialize to whole GPUs as integer."""
