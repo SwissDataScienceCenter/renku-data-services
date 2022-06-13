@@ -160,7 +160,7 @@ class LaunchNotebookResponseWithoutS3(Schema):
                 "Please make sure your Dockerfile is correct and up-to-date.",
                 # INFO: the container exited with an invalid exit code
                 # happens when container fully runs out of storage
-                128: "The server shut down unexpectedly. Please ensure"
+                128: "The server shut down unexpectedly. Please ensure "
                 "that your Dockerfile is correct and up-to-date. "
                 "In some cases this can be the result of low disk space, "
                 "please restart your server with more storage.",
@@ -178,7 +178,8 @@ class LaunchNotebookResponseWithoutS3(Schema):
                 201: "Cannot clone repository: Git remote server is unavailable. Try again later.",
                 202: "Cannot clone repository: "
                 "Autosave branch name is in an unexpected format and cannot be processed.",
-                203: "Cannot clone repository: No disk space left on device.",
+                203: "Cannot clone repository: No disk space left on device, "
+                "please stop this session and start a new one with more storage.",
                 204: "Cannot clone repository: Requested branch doesn't exist on remote.",
                 205: "Cannot clone repository: Error fetching submodules.",
             }

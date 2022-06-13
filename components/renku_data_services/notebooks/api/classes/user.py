@@ -151,12 +151,13 @@ class RegisteredUser(User):
             if namespace_project is not None
             else None
         )
+        projects = []
         autosaves = []
         # add any autosave branches, regardless of wheter pvcs are supported or not
         if namespace_project is None:  # get autosave branches from all projects
             projects = self.gitlab_client.projects.list()
-        else:
-            projects = [gl_project]
+        elif gl_project:
+            projects.append(gl_project)
         for project in projects:
             try:
                 branches = project.branches.list(search="^renku/autosave/")
