@@ -472,10 +472,12 @@ class UserServer:
         if js is None:
             return None
         output = {}
-        pod_name = js["status"]["mainPod"]["name"]
-        all_containers = js["status"]["mainPod"]["status"].get(
+        pod_name = js.get("status", {}).get("mainPod", {}).get("name")
+        if not pod_name:
+            return None
+        all_containers = js["status"]["mainPod"].get("status", {}).get(
             "containerStatuses", []
-        ) + js["status"]["mainPod"]["status"].get("initContainerStatuses", [])
+        ) + js["status"]["mainPod"].get("status", {}).get("initContainerStatuses", [])
         for container in all_containers:
             container_name = container["name"]
             try:
