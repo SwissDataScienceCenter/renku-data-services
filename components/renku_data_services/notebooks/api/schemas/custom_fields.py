@@ -41,7 +41,7 @@ class CpuField(fields.Field):
         return num
 
 
-class MemoryField(fields.Field):
+class ByteSizeField(fields.Field):
     """
     Field that handles memory/disk requests/limits in the same format as k8s.
     """

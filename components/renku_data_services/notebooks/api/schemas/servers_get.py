@@ -20,7 +20,7 @@ from ..classes.server import UserServer
 from .custom_fields import (
     CpuField,
     GpuField,
-    MemoryField,
+    ByteSizeField,
 )
 
 
@@ -88,8 +88,8 @@ class UserPodAnnotations(
 
 class ResourceRequests(Schema):
     cpu = CpuField(required=True)
-    memory = MemoryField(required=True)
-    storage = MemoryField(required=False)
+    memory = ByteSizeField(required=True)
+    storage = ByteSizeField(required=False)
     gpu = GpuField(required=False)
 
     @pre_load
@@ -101,8 +101,8 @@ class ResourceRequests(Schema):
 
 class ResourceUsage(Schema):
     cpu = CpuField(required=False)
-    memory = MemoryField(required=False)
-    storage = MemoryField(required=False)
+    memory = ByteSizeField(required=False)
+    storage = ByteSizeField(required=False)
 
 
 class UserPodResources(Schema):
@@ -305,20 +305,23 @@ class LaunchNotebookResponseWithoutS3(Schema):
             #   manage-compute-resources-container/#how-pods-with-resource-limits-are-run
             resources = {}
             if "cpu_request" in server_options_keys:
-                resources["cpu"] = server_options["cpu_request"]
+                resources["cpu"] = CpuField().deserialize(server_options["cpu_request"])
             if "mem_request" in server_options_keys:
-                resources["memory"] = float(server_options["mem_request"])
+                resources["memory"] = ByteSizeField().deserialize(
+                    server_options["mem_request"]
+                )
             if (
                 "disk_request" in server_options_keys
                 and server_options["disk_request"] is not None
                 and server_options["disk_request"] != ""
             ):
-                resources["storage"] = float(server_options["disk_request"])
-            if (
-                "gpu_request" in server_options_keys
-                and int(server_options["gpu_request"]) > 0
-            ):
-                resources["gpu"] = server_options["gpu_request"]
+                resources["storage"] = ByteSizeField().deserialize(
+                    server_options["disk_request"]
+                )
+            if "gpu_request" in server_options_keys:
+                gpu_request = GpuField().deserialize(server_options["gpu_request"])
+                if gpu_request > 0:
+                    resources["gpu"] = gpu_request
             return resources
 
         def get_resource_usage(server):

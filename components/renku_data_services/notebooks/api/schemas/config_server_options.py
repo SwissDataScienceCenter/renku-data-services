@@ -7,7 +7,7 @@ from marshmallow import (
 from .custom_fields import (
     CpuField,
     GpuField,
-    MemoryField,
+    ByteSizeField,
 )
 
 
@@ -56,13 +56,13 @@ class GpuServerOptionsChoice(BaseServerOptionsChoice):
 
 
 class MemoryServerOptionsChoice(BaseServerOptionsChoice):
-    default = MemoryField(required=True)
-    options = fields.List(MemoryField(required=True))
+    default = ByteSizeField(required=True)
+    options = fields.List(ByteSizeField(required=True))
     value_range = fields.Nested(
         Schema.from_dict(
             {
-                "min": MemoryField(required=True),
-                "max": MemoryField(required=True),
+                "min": ByteSizeField(required=True),
+                "max": ByteSizeField(required=True),
                 # NOTE: type is unused, left in for backwards compatibility with older Helm charts
                 "type": fields.Str(required=False),
             }
@@ -99,7 +99,7 @@ class ServerOptionsDefaults(Schema):
 
     defaultUrl = fields.Str(required=True)
     cpu_request = CpuField(required=True)
-    mem_request = MemoryField(required=True)
-    disk_request = MemoryField(required=True)
+    mem_request = ByteSizeField(required=True)
+    disk_request = ByteSizeField(required=True)
     lfs_auto_fetch = fields.Bool(required=True)
     gpu_request = GpuField(required=True)

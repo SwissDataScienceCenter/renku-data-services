@@ -4,7 +4,7 @@ from ...config import SERVER_OPTIONS_DEFAULTS, SERVER_OPTIONS_UI
 from .custom_fields import (
     CpuField,
     GpuField,
-    MemoryField,
+    ByteSizeField,
 )
 
 
@@ -52,14 +52,14 @@ class LaunchNotebookRequestServerOptions(Schema):
             "cpu_request", SERVER_OPTIONS_UI, SERVER_OPTIONS_DEFAULTS
         ),
     )
-    mem_request = MemoryField(
+    mem_request = ByteSizeField(
         required=False,
         missing=SERVER_OPTIONS_DEFAULTS["mem_request"],
         validate=get_validator(
             "mem_request", SERVER_OPTIONS_UI, SERVER_OPTIONS_DEFAULTS
         ),
     )
-    disk_request = MemoryField(
+    disk_request = ByteSizeField(
         required=False,
         missing=SERVER_OPTIONS_DEFAULTS["disk_request"],
         validate=get_validator(

@@ -293,7 +293,7 @@ class UserServer:
         # Storage
         if current_app.config["NOTEBOOKS_SESSION_PVS_ENABLED"]:
             storage = {
-                "size": str(self.server_options["disk_request"]),
+                "size": self.server_options["disk_request"],
                 "pvc": {
                     "enabled": True,
                     "storageClassName": current_app.config[
@@ -304,7 +304,7 @@ class UserServer:
             }
         else:
             storage = {
-                "size": str(self.server_options["disk_request"])
+                "size": self.server_options["disk_request"]
                 if current_app.config["USE_EMPTY_DIR_SIZE_LIMIT"]
                 else "",
                 "pvc": {
