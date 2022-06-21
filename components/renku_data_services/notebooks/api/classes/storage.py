@@ -95,6 +95,8 @@ class AutosaveBranch(Autosave):
                 f"Invalid branch name {autosave_branch_name} for autosave branch."
             )
             return None
+        if match_res.group("username") != user.username:
+            return None
         return cls(
             user,
             namespace_project,
