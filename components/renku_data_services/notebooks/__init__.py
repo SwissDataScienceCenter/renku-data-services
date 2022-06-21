@@ -31,7 +31,7 @@ from .api.schemas.servers_get import (
     ServersGetResponse,
 )
 from .api.schemas.logs import ServerLogs
-from .api.schemas.config_server_options import ServerOptionsChoices
+from .api.schemas.config_server_options import ServerOptionsEndpointResponse
 from .api.schemas.autosave import AutosavesList
 from .api.schemas.version import VersionResponse
 from .api.notebooks import (
@@ -148,7 +148,9 @@ def register_swagger(app):
     spec.components.schema("ServersGetRequest", schema=ServersGetRequest)
     spec.components.schema("ServersGetResponse", schema=ServersGetResponse)
     spec.components.schema("ServerLogs", schema=ServerLogs)
-    spec.components.schema("ServerOptionsChoices", schema=ServerOptionsChoices)
+    spec.components.schema(
+        "ServerOptionsEndpointResponse", schema=ServerOptionsEndpointResponse
+    )
     spec.components.schema("AutosavesList", schema=AutosavesList)
     spec.components.schema("VersionResponse", schema=VersionResponse)
     # Register endpoints

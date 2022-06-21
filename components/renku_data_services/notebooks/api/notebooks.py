@@ -33,7 +33,7 @@ from .auth import authenticated
 from .schemas.servers_post import LaunchNotebookRequest
 from .schemas.servers_get import NotebookResponse, ServersGetRequest, ServersGetResponse
 from .schemas.logs import ServerLogs
-from .schemas.config_server_options import ServerOptionsChoices
+from .schemas.config_server_options import ServerOptionsEndpointResponse
 from .schemas.autosave import AutosavesList
 from .schemas.version import VersionResponse
 from .classes.server import UserServer
@@ -306,12 +306,12 @@ def server_options(user):
           description: Server options such as CPU, memory, storage, etc.
           content:
             application/json:
-              schema: ServerOptionsChoices
+              schema: ServerOptionsEndpointResponse
       tags:
         - servers
     """
     # TODO: append image-specific options to the options json
-    return ServerOptionsChoices().dump(
+    return ServerOptionsEndpointResponse().dump(
         {
             **current_app.config["SERVER_OPTIONS_UI"],
             "cloudstorage": {
