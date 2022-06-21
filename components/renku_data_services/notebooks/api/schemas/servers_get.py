@@ -224,20 +224,21 @@ class LaunchNotebookResponseWithoutS3(Schema):
             msg = conditions[0].get("message")
             if not msg:
                 return
-            re_match = re.match(
-                r"^[0-9]+\/[0-9]+ nodes are available: (.+), that the pod didn't tolerate.$",
-                msg,
-            )
-            if not re_match:
-                return
-            filtered_mgs = re_match.group(1)
-            parts = filtered_mgs.split(", ")
-            sorted_parts = sorted(
-                parts, key=lambda x: int(x.split(" ")[0]), reverse=True
-            )
-            reason = " ".join(sorted_parts[0].split()[1:])
+            initial_test = re.match(r"^[0-9]+\/[0-9]+ nodes are available", msg)
+            msg_parts = re.split(r",\ (?=[0-9])|:\ (?=[0-9])", msg.rstrip("."))
+            if not initial_test or len(msg_parts) < 2:
+                # INFO: The unschedulable message cannot be parsed, so return all of it.
+                return msg
+            msg_parts = msg_parts[1:]
+            try:
+                sorted_parts = sorted(
+                    msg_parts, key=lambda x: int(x.split(" ")[0]), reverse=True
+                )
+            except (ValueError, KeyError):
+                return msg
+            reason = sorted_parts[0].lstrip("1234567890 ")
             return (
-                "You session cannot be scheduled due insufficent resources. "
+                "You session cannot be scheduled due to insufficent resources. "
                 f"The most likely reason is: '{reason}'. You may wait for resources "
                 "to free up or you can adjust the specific resource and restart your session."
             )
