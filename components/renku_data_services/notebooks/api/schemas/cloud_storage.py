@@ -9,7 +9,9 @@ class LaunchNotebookRequestS3mount(Schema):
 
     access_key = fields.Str(required=False, load_default=None)
     secret_key = fields.Str(required=False, load_default=None)
-    endpoint = fields.Str(required=True, validate=validate.Length(min=1))
+    endpoint = fields.Url(
+        required=True, schemes=["http", "https"], relative=False, require_tld=True
+    )
     bucket = fields.Str(required=True, validate=validate.Length(min=1))
 
     @post_load

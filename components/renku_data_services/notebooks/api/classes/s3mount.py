@@ -149,9 +149,11 @@ class S3mount:
             .get("HTTPHeaders", {})
             .get("x-amz-bucket-region")
         )
+        parsed_endpoint = urlparse(self.endpoint)
         if (
             amz_bucket_region
-            and urlparse(self.endpoint).netloc != "s3.amazonaws.com"
+            and parsed_endpoint.netloc.endswith("amazonaws.com")
+            and parsed_endpoint.netloc != "s3.amazonaws.com"
             and amz_bucket_region not in self.endpoint
         ):
             return False
