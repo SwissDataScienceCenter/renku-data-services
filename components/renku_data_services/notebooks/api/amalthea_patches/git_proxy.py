@@ -1,10 +1,15 @@
+from typing import TYPE_CHECKING
+
 from flask import current_app
 
 from ..classes.user import RegisteredUser
 from .utils import get_certificates_volume_mounts
 
+if TYPE_CHECKING:
+    from renku_notebooks.api.classes.server import UserServer
 
-def main(server):
+
+def main(server: "UserServer"):
     etc_cert_volume_mount = get_certificates_volume_mounts(
         custom_certs=False,
         etc_certs=True,

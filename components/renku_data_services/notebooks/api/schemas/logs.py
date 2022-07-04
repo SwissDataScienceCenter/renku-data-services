@@ -1,5 +1,4 @@
-from marshmallow import Schema, INCLUDE, post_dump, fields
-
+from marshmallow import INCLUDE, Schema, fields, post_dump
 
 _ServerLogs = Schema.from_dict({"jupyter-server": fields.String(required=False)})
 

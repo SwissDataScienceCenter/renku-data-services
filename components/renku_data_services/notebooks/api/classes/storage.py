@@ -1,8 +1,9 @@
+import re
 from datetime import datetime
+
+import requests
 from flask import current_app
 from gitlab.exceptions import GitlabError
-import requests
-import re
 
 
 class Autosave:

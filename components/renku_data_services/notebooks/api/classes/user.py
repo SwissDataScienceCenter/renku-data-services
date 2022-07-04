@@ -1,14 +1,17 @@
+import base64
+import json
+import re
 from abc import ABC, abstractmethod
-import escapism
-from flask import current_app
 from functools import lru_cache
+from typing import Optional
+
+import escapism
+import jwt
+from flask import current_app
 from gitlab import Gitlab
 from gitlab.exceptions import GitlabListError
+from gitlab.v4.objects.projects import Project
 from kubernetes import client
-import re
-import json
-import base64
-import jwt
 
 from ...util.kubernetes_ import get_k8s_client
 from .storage import AutosaveBranch
@@ -40,7 +43,7 @@ class User(ABC):
         return jss["items"]
 
     @lru_cache(maxsize=8)
-    def get_renku_project(self, namespace_project):
+    def get_renku_project(self, namespace_project) -> Optional[Project]:
         """Retrieve the GitLab project."""
         try:
             return self.gitlab_client.projects.get("{0}".format(namespace_project))

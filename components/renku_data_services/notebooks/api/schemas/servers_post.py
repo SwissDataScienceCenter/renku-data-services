@@ -1,9 +1,9 @@
-from marshmallow import fields, Schema, ValidationError, validates_schema
+from marshmallow import Schema, ValidationError, fields, validates_schema
 
+from ... import config
+from .cloud_storage import LaunchNotebookRequestS3mount
 from .custom_fields import LowercaseString
 from .server_options import LaunchNotebookRequestServerOptions
-from .cloud_storage import LaunchNotebookRequestS3mount
-from ... import config
 
 
 class LaunchNotebookRequestWithoutS3(Schema):
@@ -23,6 +23,9 @@ class LaunchNotebookRequestWithoutS3(Schema):
         load_default=config.SERVER_OPTIONS_DEFAULTS,
         data_key="serverOptions",
         required=False,
+    )
+    environment_variables = fields.Dict(
+        keys=fields.Str(), values=fields.Str(), load_default=dict()
     )
 
 

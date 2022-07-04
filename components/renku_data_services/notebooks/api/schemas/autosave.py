@@ -1,4 +1,4 @@
-from marshmallow import fields, pre_dump, Schema
+from marshmallow import Schema, fields, pre_dump
 
 
 class AutosavesItem(Schema):

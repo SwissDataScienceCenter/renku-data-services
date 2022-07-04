@@ -1,10 +1,12 @@
 import base64
 import re
-import requests
 from json import JSONDecodeError
+from typing import Optional
+
+import requests
+from werkzeug.http import parse_www_authenticate_header
 
 from .. import config
-from werkzeug.http import parse_www_authenticate_header
 from ..api.classes.user import RegisteredUser
 
 
@@ -76,7 +78,7 @@ def image_exists(hostname, image, tag, token=None):
         return auth_req.status_code == 200
 
 
-def get_image_workdir(hostname, image, tag, token=None):
+def get_image_workdir(hostname, image, tag, token=None) -> Optional[str]:
     """Query the docker API to get the workdir of an image."""
     headers = {
         "Accept": "application/vnd.docker.distribution.manifest.v2+json",

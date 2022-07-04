@@ -1,10 +1,11 @@
-from flask import current_app
+from typing import Optional
+from urllib.parse import urlparse
+
 import boto3
 from botocore import UNSIGNED
 from botocore.client import Config
-from botocore.exceptions import EndpointConnectionError, ClientError, NoCredentialsError
-from typing import Optional
-from urllib.parse import urlparse
+from botocore.exceptions import ClientError, EndpointConnectionError, NoCredentialsError
+from flask import current_app
 
 
 class S3mount:

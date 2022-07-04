@@ -17,13 +17,14 @@
 # limitations under the License.
 """Notebooks service configuration."""
 import os
+
 from yaml import safe_load
 
-from .util.server_options import read_defaults, read_choices
 from .api.schemas.config_server_options import (
     ServerOptionsChoices,
     ServerOptionsDefaults,
 )
+from .util.server_options import read_choices, read_defaults
 
 GITLAB_URL = os.environ.get("GITLAB_URL", "https://gitlab.com")
 """The GitLab instance to use."""

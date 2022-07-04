@@ -1,4 +1,4 @@
-from marshmallow import fields, EXCLUDE, validate, ValidationError, Schema, post_load
+from marshmallow import EXCLUDE, Schema, ValidationError, fields, post_load, validate
 
 from ..classes.s3mount import S3mount
 

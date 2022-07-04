@@ -1,6 +1,11 @@
+from typing import TYPE_CHECKING
+
 from flask import current_app
 
 from ..classes.user import RegisteredUser
+
+if TYPE_CHECKING:
+    from renku_notebooks.api.classes.server import UserServer
 
 
 def session_tolerations():
@@ -76,7 +81,7 @@ def session_node_selector():
     ]
 
 
-def test(server):
+def test(server: "UserServer"):
     """RFC 6901 patches support test statements that will cause the whole patch
     to fail if the test statements are not correct. This is used to ensure that the
     order of containers in the amalthea manifests is what the notebook service expects."""
@@ -105,7 +110,7 @@ def test(server):
     return patches
 
 
-def oidc_unverified_email(server):
+def oidc_unverified_email(server: "UserServer"):
     patches = []
     if type(server._user) is RegisteredUser:
         # modify oauth2 proxy to accept users whose email has not been verified

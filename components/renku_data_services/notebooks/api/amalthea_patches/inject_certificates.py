@@ -1,10 +1,14 @@
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ..classes.user import RegisteredUser
 from .utils import get_certificates_volume_mounts
 
+if TYPE_CHECKING:
+    from renku_notebooks.api.classes.server import UserServer
 
-def proxy(server):
+
+def proxy(server: "UserServer"):
     etc_cert_volume_mounts = get_certificates_volume_mounts(
         custom_certs=False,
         etc_certs=True,

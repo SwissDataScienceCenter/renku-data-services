@@ -1,11 +1,7 @@
-from marshmallow import Schema, fields, ValidationError
+from marshmallow import Schema, ValidationError, fields
 
 from ...config import SERVER_OPTIONS_DEFAULTS, SERVER_OPTIONS_UI
-from .custom_fields import (
-    CpuField,
-    GpuField,
-    ByteSizeField,
-)
+from .custom_fields import ByteSizeField, CpuField, GpuField
 
 
 def get_validator(field_name, server_options_ui, server_options_defaults):

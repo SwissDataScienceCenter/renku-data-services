@@ -3,9 +3,9 @@ from kubernetes import client
 
 
 def get_certificates_volume_mounts(
-    etc_certs=True,
-    custom_certs=True,
-    read_only_etc_certs=False,
+    etc_certs: bool = True,
+    custom_certs: bool = True,
+    read_only_etc_certs: bool = False,
 ):
     volume_mounts = []
     etc_ssl_certs = client.V1VolumeMount(

@@ -1,37 +1,36 @@
-from flask import current_app
+import base64
+import json
 from functools import lru_cache
-import gitlab
 from itertools import chain
+from typing import Any, Dict, List, Optional
+from urllib.parse import urljoin, urlparse
+
+import gitlab
+from flask import current_app
 from kubernetes import client
 from kubernetes.client.exceptions import ApiException
 from kubernetes.client.models import V1DeleteOptions
-import base64
-import json
-from urllib.parse import urlparse, urljoin
 
-
-from ..amalthea_patches import (
-    general as general_patches,
-    git_proxy as git_proxy_patches,
-    git_sidecar as git_sidecar_patches,
-    init_containers as init_containers_patches,
-    inject_certificates as inject_certificates_patches,
-    jupyter_server as jupyter_server_patches,
-    cloudstorage as cloudstorage_patches,
-)
 from ...util.check_image import (
-    parse_image_name,
     get_docker_token,
-    image_exists,
     get_image_workdir,
+    image_exists,
+    parse_image_name,
 )
 from ...util.kubernetes_ import (
-    get_k8s_client,
     filter_resources_by_annotations,
+    get_k8s_client,
     make_server_name,
 )
-from .user import RegisteredUser
+from ..amalthea_patches import cloudstorage as cloudstorage_patches
+from ..amalthea_patches import general as general_patches
+from ..amalthea_patches import git_proxy as git_proxy_patches
+from ..amalthea_patches import git_sidecar as git_sidecar_patches
+from ..amalthea_patches import init_containers as init_containers_patches
+from ..amalthea_patches import inject_certificates as inject_certificates_patches
+from ..amalthea_patches import jupyter_server as jupyter_server_patches
 from .s3mount import S3mount
+from .user import RegisteredUser, User
 
 
 class UserServer:
@@ -39,22 +38,23 @@ class UserServer:
 
     def __init__(
         self,
-        user,
-        namespace,
-        project,
-        branch,
-        commit_sha,
-        notebook,
-        image,
-        server_options,
-        cloudstorage,
+        user: User,
+        namespace: str,
+        project: str,
+        branch: str,
+        commit_sha: str,
+        notebook: Optional[str],  # TODO: Is this value actually needed?
+        image: Optional[str],
+        server_options: Dict[str, Any],
+        environment_variables: Dict[str, str],
+        cloudstorage: List[Dict[str, str]],
     ):
         self._renku_annotation_prefix = "renku.io/"
         self._check_flask_config()
         self._user = user
         self._k8s_client, self._k8s_namespace = get_k8s_client()
         self._k8s_api_instance = client.CustomObjectsApi(client.ApiClient())
-        self.safe_username = self._user.safe_username
+        self.safe_username = self._user.safe_username  # type:ignore
         self.namespace = namespace
         self.project = project
         self.branch = branch
@@ -62,14 +62,17 @@ class UserServer:
         self.notebook = notebook
         self.image = image
         self.server_options = server_options
-        self.using_default_image = self.image == current_app.config.get("DEFAULT_IMAGE")
+        self.environment_variables = environment_variables
+        self.using_default_image: bool = self.image == current_app.config.get(
+            "DEFAULT_IMAGE"
+        )
         self.git_host = urlparse(current_app.config["GITLAB_URL"]).netloc
-        self.verified_image = None
-        self.is_image_private = None
-        self.image_workdir = None
-        self.cloudstorage = cloudstorage
+        self.verified_image: Optional[str] = None
+        self.is_image_private: Optional[bool] = None
+        self.image_workdir: Optional[str] = None
+        self.cloudstorage: Optional[Dict[str, str]] = cloudstorage
         self.gl_project_name = f"{self.namespace}/{self.project}"
-        self.js = None
+        self.js: Optional[Dict[str, Any]] = None
 
     def _check_flask_config(self):
         """Check the app config and ensure minimum required parameters are present."""
@@ -321,9 +324,7 @@ class UserServer:
                     "clientId": current_app.config["OIDC_CLIENT_ID"],
                     "clientSecret": {"value": current_app.config["OIDC_CLIENT_SECRET"]},
                     "issuerUrl": self._user.oidc_issuer,
-                    "authorizedEmails": [
-                        self._user.email,
-                    ],
+                    "authorizedEmails": [self._user.email],
                 },
             }
         else:
@@ -535,6 +536,7 @@ class UserServer:
             None,
             js["spec"]["jupyterServer"]["image"],
             cls._get_server_options_from_js(js),
+            cls._get_environment_variables_from_js(js),
             S3mount.s3mounts_from_js(js),
         )
         server.set_js(js)
@@ -591,16 +593,42 @@ class UserServer:
             for patch in patches.get("patch", []):
                 if (
                     patch.get("path")
-                    == "statefulset/spec/template/spec/containers/0/env/-"
-                    and patch.get("value", {}).get("name") == "GIT_AUTOSAVE"
+                    == "/statefulset/spec/template/spec/initContainers/-"
                 ):
-                    server_options["lfs_auto_fetch"] = (
-                        patch.get("value", {}).get("value") == "1"
-                    )
+                    for env in patch.get("value", {}).get("env", []):
+                        if env.get("name") == "GIT_CLONE_LFS_AUTO_FETCH":
+                            server_options["lfs_auto_fetch"] = env.get("value") == "1"
         return {
             **current_app.config["SERVER_OPTIONS_DEFAULTS"],
             **server_options,
         }
+
+    @staticmethod
+    def _get_environment_variables_from_js(js):
+        env = {}
+
+        system_envs = [
+            "GIT_AUTOSAVE",
+            "RENKU_USERNAME",
+            "CI_COMMIT_SHA",
+            "NOTEBOOK_DIR",
+            "MOUNT_PATH",
+            "PROJECT_NAME",
+            "GIT_CLONE_REPO",
+        ]
+
+        for patches in js["spec"]["patches"]:
+            for patch in patches.get("patch", []):
+                if (
+                    patch.get("path")
+                    == "/statefulset/spec/template/spec/containers/0/env/-"
+                    and patch.get("value", {}).get("name") not in system_envs
+                ):
+                    env[patch.get("value", {}).get("name")] = patch.get(
+                        "value", {}
+                    ).get("value")
+
+        return env
 
     def __str__(self):
         return (

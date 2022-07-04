@@ -1,10 +1,15 @@
 import os
+from typing import TYPE_CHECKING
+
 from flask import current_app
 
 from ..classes.user import RegisteredUser
 
+if TYPE_CHECKING:
+    from renku_notebooks.api.classes.server import UserServer
 
-def main(server):
+
+def main(server: "UserServer"):
     # NOTE: Autosaves can be created only for registered users
     lifecycle = (
         {

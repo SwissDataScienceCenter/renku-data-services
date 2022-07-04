@@ -1,27 +1,23 @@
 import collections
+import re
 from datetime import datetime
 from enum import Enum
+
 from marshmallow import (
-    Schema,
-    fields,
     EXCLUDE,
     INCLUDE,
+    Schema,
+    fields,
     post_load,
-    pre_load,
     pre_dump,
+    pre_load,
     validate,
 )
-import re
 
 from ... import config
-from .custom_fields import LowercaseString
-from .cloud_storage import LaunchNotebookResponseS3mount
 from ..classes.server import UserServer
-from .custom_fields import (
-    CpuField,
-    GpuField,
-    ByteSizeField,
-)
+from .cloud_storage import LaunchNotebookResponseS3mount
+from .custom_fields import ByteSizeField, CpuField, GpuField, LowercaseString
 
 
 class ServerStatusEnum(Enum):

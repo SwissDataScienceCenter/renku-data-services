@@ -17,10 +17,11 @@
 # limitations under the License.
 """Kubernetes helper functions."""
 
-from hashlib import md5
 import os
 import warnings
+from hashlib import md5
 from pathlib import Path
+from typing import Optional, Tuple
 
 import escapism
 from kubernetes import client
@@ -32,7 +33,7 @@ from kubernetes.config.incluster_config import (
 )
 
 
-def get_k8s_client():
+def get_k8s_client() -> Tuple[Optional[client.CoreV1Api], str]:
     # adjust k8s service account paths if running inside telepresence
     tele_root = Path(os.getenv("TELEPRESENCE_ROOT", "/"))
 

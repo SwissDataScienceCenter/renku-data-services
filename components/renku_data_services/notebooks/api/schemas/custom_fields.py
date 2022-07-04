@@ -1,6 +1,7 @@
+import re
+
 from marshmallow import fields
 from marshmallow.exceptions import ValidationError
-import re
 
 
 class CpuField(fields.Field):

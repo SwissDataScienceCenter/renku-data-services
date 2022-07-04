@@ -18,7 +18,7 @@
 """Notebooks service API."""
 import json
 
-from flask import Blueprint, current_app, jsonify, request, make_response
+from flask import Blueprint, current_app, jsonify, make_response, request
 from webargs import fields
 from webargs.flaskparser import use_args
 
@@ -30,15 +30,14 @@ from renku_notebooks.util.check_image import (
 
 from .. import config
 from .auth import authenticated
-from .schemas.servers_post import LaunchNotebookRequest
-from .schemas.servers_get import NotebookResponse, ServersGetRequest, ServersGetResponse
-from .schemas.logs import ServerLogs
-from .schemas.config_server_options import ServerOptionsEndpointResponse
-from .schemas.autosave import AutosavesList
-from .schemas.version import VersionResponse
 from .classes.server import UserServer
 from .classes.storage import Autosave
-
+from .schemas.autosave import AutosavesList
+from .schemas.config_server_options import ServerOptionsEndpointResponse
+from .schemas.logs import ServerLogs
+from .schemas.servers_get import NotebookResponse, ServersGetRequest, ServersGetResponse
+from .schemas.servers_post import LaunchNotebookRequest
+from .schemas.version import VersionResponse
 
 bp = Blueprint("notebooks_blueprint", __name__, url_prefix=config.SERVICE_PREFIX)
 
@@ -65,9 +64,7 @@ def version():
                 "version": config.NOTEBOOKS_SERVICE_VERSION,
                 "data": {
                     "anonymousSessionsEnabled": config.ANONYMOUS_SESSIONS_ENABLED,
-                    "cloudstorageEnabled": {
-                        "s3": config.S3_MOUNTS_ENABLED,
-                    },
+                    "cloudstorageEnabled": {"s3": config.S3_MOUNTS_ENABLED},
                 },
             }
         ],
@@ -151,6 +148,7 @@ def launch_notebook(
     notebook,
     image,
     server_options,
+    environment_variables,
     cloudstorage=[],
 ):
     """
@@ -188,6 +186,7 @@ def launch_notebook(
         notebook,
         image,
         server_options,
+        environment_variables,
         cloudstorage,
     )
 

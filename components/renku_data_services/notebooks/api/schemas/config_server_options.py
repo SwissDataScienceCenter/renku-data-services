@@ -1,14 +1,6 @@
-from marshmallow import (
-    Schema,
-    validate,
-    fields,
-)
+from marshmallow import Schema, fields, validate
 
-from .custom_fields import (
-    CpuField,
-    GpuField,
-    ByteSizeField,
-)
+from .custom_fields import ByteSizeField, CpuField, GpuField
 
 
 class BaseServerOptionsChoice(Schema):

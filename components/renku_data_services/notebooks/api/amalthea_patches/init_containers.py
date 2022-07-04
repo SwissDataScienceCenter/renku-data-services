@@ -1,23 +1,25 @@
-from flask import current_app
-from kubernetes import client
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+from flask import current_app
+from kubernetes import client
 
 from ..classes.user import RegisteredUser
 from .utils import get_certificates_volume_mounts
 
+if TYPE_CHECKING:
+    from renku_notebooks.api.classes.server import UserServer
 
-def git_clone(server):
+
+def git_clone(server: "UserServer"):
     etc_cert_volume_mount = get_certificates_volume_mounts(
         custom_certs=False,
         etc_certs=True,
         read_only_etc_certs=True,
     )
     env = [
-        {
-            "name": "GIT_CLONE_MOUNT_PATH",
-            "value": f"/work/{server.gl_project.path}",
-        },
+        {"name": "GIT_CLONE_MOUNT_PATH", "value": f"/work/{server.gl_project.path}"},
         {
             "name": "GIT_CLONE_REPOSITORY_URL",
             "value": server.gl_project.http_url_to_repo,
@@ -37,14 +39,8 @@ def git_clone(server):
             "name": "GIT_CLONE_GIT_AUTOSAVE",
             "value": "1" if server.autosave_allowed else "0",
         },
-        {
-            "name": "GIT_CLONE_GIT_URL",
-            "value": server._user.gitlab_client._base_url,
-        },
-        {
-            "name": "GIT_CLONE_USER__OAUTH_TOKEN",
-            "value": server._user.git_token,
-        },
+        {"name": "GIT_CLONE_GIT_URL", "value": server._user.gitlab_client._base_url},
+        {"name": "GIT_CLONE_USER__OAUTH_TOKEN", "value": server._user.git_token},
         {
             "name": "GIT_CLONE_SENTRY__ENABLED",
             "value": os.environ.get("GIT_CLONE_SENTRY_ENABLED"),
@@ -61,10 +57,7 @@ def git_clone(server):
             "name": "GIT_CLONE_SENTRY__SAMPLE_RATE",
             "value": os.environ.get("GIT_CLONE_SENTRY_SAMPLE_RATE"),
         },
-        {
-            "name": "SENTRY_RELEASE",
-            "value": os.environ.get("SENTRY_RELEASE"),
-        },
+        {"name": "SENTRY_RELEASE", "value": os.environ.get("SENTRY_RELEASE")},
         {
             "name": "REQUESTS_CA_BUNDLE",
             "value": str(
@@ -80,10 +73,7 @@ def git_clone(server):
     ]
     if type(server._user) is RegisteredUser:
         env += [
-            {
-                "name": "GIT_CLONE_USER__EMAIL",
-                "value": server._user.gitlab_user.email,
-            },
+            {"name": "GIT_CLONE_USER__EMAIL", "value": server._user.gitlab_user.email},
             {
                 "name": "GIT_CLONE_USER__FULL_NAME",
                 "value": server._user.gitlab_user.name,
@@ -108,10 +98,7 @@ def git_clone(server):
                             "runAsNonRoot": True,
                         },
                         "volumeMounts": [
-                            {
-                                "mountPath": "/work",
-                                "name": "workspace",
-                            },
+                            {"mountPath": "/work", "name": "workspace"},
                             *etc_cert_volume_mount,
                         ],
                         "env": env,
