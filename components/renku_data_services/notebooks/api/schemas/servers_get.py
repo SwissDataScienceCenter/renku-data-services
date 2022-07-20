@@ -217,7 +217,7 @@ class LaunchNotebookResponseWithoutS3(Schema):
                 and sorted_conditions[0].get("reason") == "Unschedulable"
             ):
                 return
-            msg = conditions[0].get("message")
+            msg = sorted_conditions[0].get("message")
             if not msg:
                 return
             initial_test = re.match(r"^[0-9]+\/[0-9]+ nodes are available", msg)
