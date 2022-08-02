@@ -1,9 +1,9 @@
 import os
 from typing import TYPE_CHECKING
 
-from flask import current_app
 
 from ..classes.user import RegisteredUser
+from ...config import config
 
 if TYPE_CHECKING:
     from renku_notebooks.api.classes.server import UserServer
@@ -37,7 +37,7 @@ def main(server: "UserServer"):
                     "op": "add",
                     "path": "/statefulset/spec/template/spec/containers/-",
                     "value": {
-                        "image": current_app.config["GIT_RPC_SERVER_IMAGE"],
+                        "image": config.sessions.git_rpc_server.image,
                         "name": "git-sidecar",
                         # Do not expose this until access control is in place
                         # "ports": [
@@ -54,19 +54,23 @@ def main(server: "UserServer"):
                             },
                             {
                                 "name": "GIT_RPC_SENTRY__ENABLED",
-                                "value": os.environ.get("SIDECAR_SENTRY_ENABLED"),
+                                "value": str(
+                                    config.sessions.git_rpc_server.sentry.enabled
+                                ).lower(),
                             },
                             {
                                 "name": "GIT_RPC_SENTRY__DSN",
-                                "value": os.environ.get("SIDECAR_SENTRY_DSN"),
+                                "value": config.sessions.git_rpc_server.sentry.dsn,
                             },
                             {
                                 "name": "GIT_RPC_SENTRY__ENVIRONMENT",
-                                "value": os.environ.get("SIDECAR_SENTRY_ENV"),
+                                "value": config.sessions.git_rpc_server.sentry.env,
                             },
                             {
                                 "name": "GIT_RPC_SENTRY__SAMPLE_RATE",
-                                "value": os.environ.get("SIDECAR_SENTRY_SAMPLE_RATE"),
+                                "value": str(
+                                    config.sessions.git_rpc_server.sentry.sample_rate
+                                ),
                             },
                             {
                                 "name": "SENTRY_RELEASE",
@@ -85,14 +89,12 @@ def main(server: "UserServer"):
                             # created.
                             {
                                 "name": "GIT_PROXY_HEALTH_PORT",
-                                "value": current_app.config["GIT_PROXY_HEALTH_PORT"],
+                                "value": str(config.sessions.git_proxy.health_port),
                             },
                             {
                                 "name": "AUTOSAVE_MINIMUM_LFS_FILE_SIZE_BYTES",
                                 "value": str(
-                                    current_app.config[
-                                        "AUTOSAVE_MINIMUM_LFS_FILE_SIZE_BYTES"
-                                    ]
+                                    config.sessions.autosave_minimum_lfs_file_size_bytes
                                 ),
                             },
                         ],

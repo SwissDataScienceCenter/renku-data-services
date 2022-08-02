@@ -1,8 +1,7 @@
 from typing import TYPE_CHECKING
 
-from flask import current_app
-
 from ..classes.user import RegisteredUser
+from ...config import config
 
 if TYPE_CHECKING:
     from renku_notebooks.api.classes.server import UserServer
@@ -12,12 +11,12 @@ def session_tolerations():
     patches = []
     tolerations = [
         {
-            "key": f"{current_app.config['RENKU_ANNOTATION_PREFIX']}dedicated",
+            "key": f"{config.session_get_endpoint_annotations.renku_annotation_prefix}dedicated",
             "operator": "Equal",
             "value": "user",
             "effect": "NoSchedule",
         },
-        *current_app.config["SESSION_TOLERATIONS"],
+        *config.sessions.tolerations,
     ]
     patches.append(
         {
@@ -42,9 +41,7 @@ def termination_grace_period():
                 {
                     "op": "add",
                     "path": "/statefulset/spec/template/spec/terminationGracePeriodSeconds",
-                    "value": current_app.config[
-                        "SESSION_TERMINATION_GRACE_PERIOD_SECONDS"
-                    ],
+                    "value": config.sessions.termination_grace_period_seconds,
                 }
             ],
         }
@@ -59,7 +56,7 @@ def session_affinity():
                 {
                     "op": "add",
                     "path": "/statefulset/spec/template/spec/affinity",
-                    "value": current_app.config["SESSION_AFFINITY"],
+                    "value": config.sessions.affinity,
                 }
             ],
         }
@@ -74,7 +71,7 @@ def session_node_selector():
                 {
                     "op": "add",
                     "path": "/statefulset/spec/template/spec/nodeSelector",
-                    "value": current_app.config["SESSION_NODE_SELECTOR"],
+                    "value": config.sessions.node_selector,
                 }
             ],
         }
@@ -87,9 +84,9 @@ def test(server: "UserServer"):
     order of containers in the amalthea manifests is what the notebook service expects."""
     patches = []
     container_names = (
-        current_app.config["AMALTHEA_CONTAINER_ORDER_REGISTERED_SESSION"]
+        config.sessions.container_order_registered
         if type(server._user) is RegisteredUser
-        else current_app.config["AMALTHEA_CONTAINER_ORDER_ANONYMOUS_SESSION"]
+        else config.sessions.container_order_anonymous
     )
     for container_ind, container_name in enumerate(container_names):
         patches.append(
@@ -124,7 +121,9 @@ def oidc_unverified_email(server: "UserServer"):
                         "path": "/statefulset/spec/template/spec/containers/1/env/-",
                         "value": {
                             "name": "OAUTH2_PROXY_INSECURE_OIDC_ALLOW_UNVERIFIED_EMAIL",
-                            "value": current_app.config["OIDC_ALLOW_UNVERIFIED_EMAIL"],
+                            "value": str(
+                                config.sessions.oidc.allow_unverified_email
+                            ).lower(),
                         },
                     },
                 ],

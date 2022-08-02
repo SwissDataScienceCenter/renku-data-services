@@ -19,7 +19,6 @@ from ...util.check_image import (
 )
 from ...util.kubernetes_ import (
     filter_resources_by_annotations,
-    get_k8s_client,
     make_server_name,
 )
 from ..amalthea_patches import cloudstorage as cloudstorage_patches
@@ -31,6 +30,7 @@ from ..amalthea_patches import inject_certificates as inject_certificates_patche
 from ..amalthea_patches import jupyter_server as jupyter_server_patches
 from .s3mount import S3mount
 from .user import RegisteredUser, User
+from ...config import config
 
 
 class UserServer:
@@ -49,10 +49,9 @@ class UserServer:
         environment_variables: Dict[str, str],
         cloudstorage: List[Dict[str, str]],
     ):
-        self._renku_annotation_prefix = "renku.io/"
         self._check_flask_config()
         self._user = user
-        self._k8s_client, self._k8s_namespace = get_k8s_client()
+        self._k8s_client, self._k8s_namespace = config.k8s.client, config.k8s.namespace
         self._k8s_api_instance = client.CustomObjectsApi(client.ApiClient())
         self.safe_username = self._user.safe_username  # type:ignore
         self.namespace = namespace
@@ -63,10 +62,8 @@ class UserServer:
         self.image = image
         self.server_options = server_options
         self.environment_variables = environment_variables
-        self.using_default_image: bool = self.image == current_app.config.get(
-            "DEFAULT_IMAGE"
-        )
-        self.git_host = urlparse(current_app.config["GITLAB_URL"]).netloc
+        self.using_default_image: bool = self.image == config.sessions.default_image
+        self.git_host = urlparse(config.git.url).netloc
         self.verified_image: Optional[str] = None
         self.is_image_private: Optional[bool] = None
         self.image_workdir: Optional[str] = None
@@ -76,15 +73,14 @@ class UserServer:
 
     def _check_flask_config(self):
         """Check the app config and ensure minimum required parameters are present."""
-        if current_app.config.get("GITLAB_URL", None) is None:
+        if config.git.url is None:
             raise ValueError(
-                "The gitlab URL is missing, it must be provided in "
-                "an environment variable called GITLAB_URL"
+                "The gitlab URL is missing, it must be provided in the configuration"
             )
-        if current_app.config.get("IMAGE_REGISTRY", None) is None:
+        if config.git.registry is None:
             raise ValueError(
-                "The url to the docker image registry is missing, it must be provided in "
-                "an environment variable called IMAGE_REGISTRY"
+                "The url to the docker image registry is missing, "
+                "it must be provided in the configuration"
             )
 
     @property
@@ -94,7 +90,7 @@ class UserServer:
     @property
     def server_name(self):
         """Make the name that is used to identify a unique user session"""
-        prefix = current_app.config["RENKU_ANNOTATION_PREFIX"]
+        prefix = config.session_get_endpoint_annotations.renku_annotation_prefix
         if self.js is not None:
             try:
                 return self.js["metadata"]["annotations"][f"{prefix}servername"]
@@ -170,12 +166,12 @@ class UserServer:
         image = self.image
         if image is None:
             parsed_image = {
-                "hostname": current_app.config.get("IMAGE_REGISTRY"),
+                "hostname": config.git.registry,
                 "image": self.gl_project.path_with_namespace.lower(),
                 "tag": self.commit_sha[:7],
             }
             commit_image = (
-                f"{current_app.config.get('IMAGE_REGISTRY')}/"
+                f"{config.git.registry}/"
                 f"{self.gl_project.path_with_namespace.lower()}"
                 f":{self.commit_sha[:7]}"
             )
@@ -191,12 +187,12 @@ class UserServer:
             verified_image = commit_image
         elif not image_exists_result and image is None:
             # the image tied to the commit does not exist, fallback to default image
-            verified_image = current_app.config.get("DEFAULT_IMAGE")
+            verified_image = config.sessions.default_image
             is_image_private = False
             current_app.logger.warn(
                 f"Image for the selected commit {self.commit_sha} of {self.project}"
                 " not found, using default image "
-                f"{current_app.config.get('DEFAULT_IMAGE')}"
+                f"{config.sessions.default_image}"
             )
         elif image_exists_result and image is not None:
             # a specific image was requested and it exists
@@ -205,14 +201,14 @@ class UserServer:
             # a specific image was requested and it does not exist or any other case
             verified_image = None
             is_image_private = None
-        self.using_default_image = verified_image == current_app.config["DEFAULT_IMAGE"]
+        self.using_default_image = verified_image == config.sessions.default_image
         self.verified_image = verified_image
         self.is_image_private = is_image_private
         image_workdir = get_image_workdir(**parsed_image, token=token)
         self.image_workdir = (
             image_workdir
             if image_workdir is not None
-            else current_app.config["IMAGE_DEFAULT_WORKDIR"]
+            else config.sessions.image_default_workdir
         )
 
     def _get_registry_secret(self, b64encode=True):
@@ -220,7 +216,7 @@ class UserServer:
         create an image pull secret in k8s so that the private image can be used."""
         payload = {
             "auths": {
-                current_app.config.get("IMAGE_REGISTRY"): {
+                config.git.registry: {
                     "Username": "oauth2",
                     "Password": self._user.git_token,
                     "Email": self._user.gitlab_user.email,
@@ -241,14 +237,14 @@ class UserServer:
             "requests": {"memory": mem, "cpu": cpu_request},
             "limits": {"memory": mem},
         }
-        if current_app.config["ENFORCE_CPU_LIMITS"] == "lax":
-            if "cpu_request" in current_app.config["SERVER_OPTIONS_UI"]:
+        if config.sessions.enforce_cpu_limits == "lax":
+            if "cpu_request" in config.server_options.ui_choices:
                 resources["limits"]["cpu"] = max(
-                    current_app.config["SERVER_OPTIONS_UI"]["cpu_request"]["options"]
+                    config.server_options.ui_choices["cpu_request"]["options"]
                 )
             else:
                 resources["limits"]["cpu"] = cpu_request
-        elif current_app.config["ENFORCE_CPU_LIMITS"] == "strict":
+        elif config.sessions.enforce_cpu_limits == "strict":
             resources["limits"]["cpu"] = cpu_request
         if gpu:
             resources["requests"] = {**resources["requests"], **gpu}
@@ -256,7 +252,7 @@ class UserServer:
         if "ephemeral-storage" in self.server_options.keys():
             ephemeral_storage = (
                 self.server_options["ephemeral-storage"]
-                if current_app.config["NOTEBOOKS_SESSION_PVS_ENABLED"]
+                if config.sessions.storage.pvs_enabled
                 else self.server_options["disk_request"]
             )
             resources["requests"] = {
@@ -294,21 +290,19 @@ class UserServer:
             )
         )
         # Storage
-        if current_app.config["NOTEBOOKS_SESSION_PVS_ENABLED"]:
+        if config.sessions.storage.pvs_enabled:
             storage = {
                 "size": self.server_options["disk_request"],
                 "pvc": {
                     "enabled": True,
-                    "storageClassName": current_app.config[
-                        "NOTEBOOKS_SESSION_PVS_STORAGE_CLASS"
-                    ],
+                    "storageClassName": config.sessions.storage.pvs_storage_class,
                     "mountPath": self.image_workdir.rstrip("/") + "/work",
                 },
             }
         else:
             storage = {
                 "size": self.server_options["disk_request"]
-                if current_app.config["USE_EMPTY_DIR_SIZE_LIMIT"]
+                if config.sessions.storage.use_empty_dir_size_limit
                 else "",
                 "pvc": {
                     "enabled": False,
@@ -321,8 +315,8 @@ class UserServer:
                 "token": "",
                 "oidc": {
                     "enabled": True,
-                    "clientId": current_app.config["OIDC_CLIENT_ID"],
-                    "clientSecret": {"value": current_app.config["OIDC_CLIENT_SECRET"]},
+                    "clientId": config.sessions.oidc.client_id,
+                    "clientSecret": {"value": config.sessions.oidc.client_secret},
                     "issuerUrl": self._user.oidc_issuer,
                     "authorizedEmails": [self._user.email],
                 },
@@ -334,7 +328,7 @@ class UserServer:
             }
         # Combine everything into the manifest
         manifest = {
-            "apiVersion": f"{current_app.config['CRD_GROUP']}/{current_app.config['CRD_VERSION']}",
+            "apiVersion": f"{config.amalthea.group}/{config.amalthea.version}",
             "kind": "JupyterServer",
             "metadata": {
                 "name": self.server_name,
@@ -345,22 +339,14 @@ class UserServer:
                 "auth": session_auth,
                 "culling": {
                     "idleSecondsThreshold": (
-                        current_app.config[
-                            "CULLING_REGISTERED_IDLE_SESSIONS_THRESHOLD_SECONDS"
-                        ]
+                        config.sessions.culling.registered.idle_seconds
                         if type(self._user) is RegisteredUser
-                        else current_app.config[
-                            "CULLING_ANONYMOUS_IDLE_SESSIONS_THRESHOLD_SECONDS"
-                        ]
+                        else config.sessions.culling.anonymous.idle_seconds
                     ),
                     "maxAgeSecondsThreshold": (
-                        current_app.config[
-                            "CULLING_REGISTERED_MAX_AGE_THRESHOLD_SECONDS"
-                        ]
+                        config.sessions.culling.registered.max_age_seconds
                         if type(self._user) is RegisteredUser
-                        else current_app.config[
-                            "CULLING_ANONYMOUS_MAX_AGE_THRESHOLD_SECONDS"
-                        ]
+                        else config.sessions.culling.anonymous.max_age_seconds
                     ),
                 },
                 "jupyterServer": {
@@ -373,12 +359,10 @@ class UserServer:
                 "routing": {
                     "host": urlparse(self.server_url).netloc,
                     "path": urlparse(self.server_url).path,
-                    "ingressAnnotations": current_app.config[
-                        "SESSION_INGRESS_ANNOTATIONS"
-                    ],
+                    "ingressAnnotations": config.sessions.ingress.annotations,
                     "tls": {
-                        "enabled": True,
-                        "secretName": current_app.config["SESSION_TLS_SECRET"],
+                        "enabled": config.sessions.ingress.tls_secret is not None,
+                        "secretName": config.sessions.ingress.tls_secret,
                     },
                 },
                 "storage": storage,
@@ -403,10 +387,10 @@ class UserServer:
         if len(error) == 0:
             try:
                 js = self._k8s_api_instance.create_namespaced_custom_object(
-                    group=current_app.config["CRD_GROUP"],
-                    version=current_app.config["CRD_VERSION"],
+                    group=config.amalthea.group,
+                    version=config.amalthea.version,
                     namespace=self._k8s_namespace,
-                    plural=current_app.config["CRD_PLURAL"],
+                    plural=config.amalthea.plural,
                     body=self._get_session_manifest(),
                 )
             except ApiException as e:
@@ -425,11 +409,10 @@ class UserServer:
 
     def get_js(self):
         """Get the js resource of the user jupyter user session from k8s."""
+        prefix = config.session_get_endpoint_annotations.renku_annotation_prefix
         jss = filter_resources_by_annotations(
             self._user.jss,
-            {
-                f"{current_app.config['RENKU_ANNOTATION_PREFIX']}servername": self.server_name
-            },
+            {f"{prefix}servername": self.server_name},
         )
         if len(jss) == 0:
             self.js = None
@@ -450,10 +433,10 @@ class UserServer:
         """Stop user's server with specific name"""
         try:
             status = self._k8s_api_instance.delete_namespaced_custom_object(
-                group=current_app.config["CRD_GROUP"],
-                version=current_app.config["CRD_VERSION"],
+                group=config.amalthea.group,
+                version=config.amalthea.version,
                 namespace=self._k8s_namespace,
-                plural=current_app.config["CRD_PLURAL"],
+                plural=config.amalthea.plural,
                 name=self.server_name,
                 grace_period_seconds=0 if forced else None,
                 body=V1DeleteOptions(propagation_policy="Foreground"),
@@ -507,32 +490,25 @@ class UserServer:
         """The URL where a user can access their session."""
         if type(self._user) is RegisteredUser:
             return urljoin(
-                "https://" + current_app.config["SESSION_HOST"],
+                "https://" + config.sessions.ingress.host,
                 f"sessions/{self.server_name}",
             )
         else:
             return urljoin(
-                "https://" + current_app.config["SESSION_HOST"],
+                "https://" + config.sessions.ingress.host,
                 f"sessions/{self.server_name}?token={self._user.username}",
             )
 
     @classmethod
     def from_js(cls, user, js):
         """Create a Server instance from a k8s jupyterserver object."""
+        prefix = config.session_get_endpoint_annotations.renku_annotation_prefix
         server = cls(
             user,
-            js["metadata"]["annotations"].get(
-                current_app.config["RENKU_ANNOTATION_PREFIX"] + "namespace"
-            ),
-            js["metadata"]["annotations"].get(
-                current_app.config["RENKU_ANNOTATION_PREFIX"] + "projectName"
-            ),
-            js["metadata"]["annotations"].get(
-                current_app.config["RENKU_ANNOTATION_PREFIX"] + "branch"
-            ),
-            js["metadata"]["annotations"].get(
-                current_app.config["RENKU_ANNOTATION_PREFIX"] + "commit-sha"
-            ),
+            js["metadata"]["annotations"].get(f"{prefix}namespace"),
+            js["metadata"]["annotations"].get(f"{prefix}projectName"),
+            js["metadata"]["annotations"].get(f"{prefix}branch"),
+            js["metadata"]["annotations"].get(f"{prefix}commit-sha"),
             None,
             js["spec"]["jupyterServer"]["image"],
             cls._get_server_options_from_js(js),
@@ -546,9 +522,10 @@ class UserServer:
     def from_server_name(cls, user, server_name):
         """Create a Server instance from a Jupyter server name."""
         jss = user.jss
+        prefix = config.session_get_endpoint_annotations.renku_annotation_prefix
         jss = filter_resources_by_annotations(
             jss,
-            {f"{current_app.config['RENKU_ANNOTATION_PREFIX']}servername": server_name},
+            {f"{prefix}servername": server_name},
         )
         if len(jss) != 1:
             return None
@@ -585,7 +562,7 @@ class UserServer:
         if "ephemeral-storage" in server_options.keys():
             server_options["ephemeral-storage"] = (
                 server_options["ephemeral-storage"]
-                if current_app.config["NOTEBOOKS_SESSION_PVS_ENABLED"]
+                if config.sessions.storage.pvs_enabled
                 else server_options["disk_request"]
             )
         # lfs auto fetch
@@ -599,7 +576,7 @@ class UserServer:
                         if env.get("name") == "GIT_CLONE_LFS_AUTO_FETCH":
                             server_options["lfs_auto_fetch"] = env.get("value") == "1"
         return {
-            **current_app.config["SERVER_OPTIONS_DEFAULTS"],
+            **config.server_options.defaults,
             **server_options,
         }
 
@@ -637,7 +614,7 @@ class UserServer:
         )
 
     def get_annotations(self):
-        prefix = current_app.config["RENKU_ANNOTATION_PREFIX"]
+        prefix = config.session_get_endpoint_annotations.renku_annotation_prefix
         annotations = {
             f"{prefix}commit-sha": self.commit_sha,
             f"{prefix}gitlabProjectId": None,
@@ -657,7 +634,7 @@ class UserServer:
         return annotations
 
     def get_labels(self):
-        prefix = current_app.config["RENKU_ANNOTATION_PREFIX"]
+        prefix = config.session_get_endpoint_annotations.renku_annotation_prefix
         labels = {
             "app": "jupyter",
             "component": "singleuser-server",

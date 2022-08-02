@@ -1,7 +1,6 @@
 from typing import TYPE_CHECKING
 
-from flask import current_app
-
+from ...config import config
 from ..classes.user import RegisteredUser
 from .utils import get_certificates_volume_mounts
 
@@ -24,7 +23,7 @@ def main(server: "UserServer"):
                     "op": "add",
                     "path": "/statefulset/spec/template/spec/containers/-",
                     "value": {
-                        "image": current_app.config["GIT_HTTPS_PROXY_IMAGE"],
+                        "image": config.sessions.git_proxy.image,
                         "securityContext": {
                             "fsGroup": 100,
                             "runAsGroup": 1000,
@@ -40,11 +39,11 @@ def main(server: "UserServer"):
                             },
                             {
                                 "name": "GIT_PROXY_PORT",
-                                "value": current_app.config["GIT_PROXY_PORT"],
+                                "value": str(config.sessions.git_proxy.port),
                             },
                             {
                                 "name": "GIT_PROXY_HEALTH_PORT",
-                                "value": current_app.config["GIT_PROXY_HEALTH_PORT"],
+                                "value": str(config.sessions.git_proxy.health_port),
                             },
                             {
                                 "name": "GITLAB_OAUTH_TOKEN",
@@ -61,27 +60,21 @@ def main(server: "UserServer"):
                             {
                                 "name": "SESSION_TERMINATION_GRACE_PERIOD_SECONDS",
                                 "value": str(
-                                    current_app.config[
-                                        "SESSION_TERMINATION_GRACE_PERIOD_SECONDS"
-                                    ]
+                                    config.sessions.termination_grace_period_seconds
                                 ),
                             },
                         ],
                         "livenessProbe": {
                             "httpGet": {
                                 "path": "/health",
-                                "port": int(
-                                    current_app.config["GIT_PROXY_HEALTH_PORT"]
-                                ),
+                                "port": config.sessions.git_proxy.health_port,
                             },
                             "initialDelaySeconds": 3,
                         },
                         "readinessProbe": {
                             "httpGet": {
                                 "path": "/health",
-                                "port": int(
-                                    current_app.config["GIT_PROXY_HEALTH_PORT"]
-                                ),
+                                "port": config.sessions.git_proxy.health_port,
                             },
                             "initialDelaySeconds": 3,
                         },

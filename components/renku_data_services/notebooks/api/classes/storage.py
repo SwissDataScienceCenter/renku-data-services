@@ -5,6 +5,8 @@ import requests
 from flask import current_app
 from gitlab.exceptions import GitlabError
 
+from ...config import config
+
 
 class Autosave:
     def __init__(self, user, namespace_project, root_branch_name, root_commit_sha):
@@ -21,7 +23,7 @@ class Autosave:
             return False
         res = requests.get(
             headers={"Authorization": f"Bearer {self.user.git_token}"},
-            url=f"{current_app.config['GITLAB_URL']}/api/v4/"
+            url=f"{config.git.url}/api/v4/"
             f"projects/{self.gl_project.id}/repository/merge_base",
             params={"refs[]": [self.root_commit_sha, commit_sha]},
         )

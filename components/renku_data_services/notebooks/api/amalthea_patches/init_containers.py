@@ -2,10 +2,10 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from flask import current_app
 from kubernetes import client
 
 from ..classes.user import RegisteredUser
+from ...config import config
 from .utils import get_certificates_volume_mounts
 
 if TYPE_CHECKING:
@@ -43,19 +43,19 @@ def git_clone(server: "UserServer"):
         {"name": "GIT_CLONE_USER__OAUTH_TOKEN", "value": server._user.git_token},
         {
             "name": "GIT_CLONE_SENTRY__ENABLED",
-            "value": os.environ.get("GIT_CLONE_SENTRY_ENABLED"),
+            "value": str(config.sessions.git_clone.sentry.enabled).lower(),
         },
         {
             "name": "GIT_CLONE_SENTRY__DSN",
-            "value": os.environ.get("GIT_CLONE_SENTRY_DSN"),
+            "value": config.sessions.git_clone.sentry.dsn,
         },
         {
             "name": "GIT_CLONE_SENTRY__ENVIRONMENT",
-            "value": os.environ.get("GIT_CLONE_SENTRY_ENV"),
+            "value": config.sessions.git_clone.sentry.env,
         },
         {
             "name": "GIT_CLONE_SENTRY__SAMPLE_RATE",
-            "value": os.environ.get("GIT_CLONE_SENTRY_SAMPLE_RATE"),
+            "value": str(config.sessions.git_clone.sentry.sample_rate),
         },
         {"name": "SENTRY_RELEASE", "value": os.environ.get("SENTRY_RELEASE")},
         {
@@ -87,7 +87,7 @@ def git_clone(server: "UserServer"):
                     "op": "add",
                     "path": "/statefulset/spec/template/spec/initContainers/-",
                     "value": {
-                        "image": current_app.config["GIT_CLONE_IMAGE"],
+                        "image": config.sessions.git_clone.image,
                         "name": "git-clone",
                         "resources": {},
                         "securityContext": {
@@ -112,7 +112,7 @@ def git_clone(server: "UserServer"):
 def certificates():
     initContainer = client.V1Container(
         name="init-certificates",
-        image=current_app.config["CERTIFICATES_IMAGE"],
+        image=config.sessions.ca_certs.image,
         volume_mounts=get_certificates_volume_mounts(
             etc_certs=True,
             custom_certs=True,
@@ -128,7 +128,7 @@ def certificates():
             default_mode=440,
             sources=[
                 {"secret": {"name": i.get("secret")}}
-                for i in current_app.config["CUSTOM_CA_CERTS_SECRETS"]
+                for i in config.sessions.ca_certs.secrets
                 if i is not None and i.get("secret") is not None
             ],
         ),

@@ -5,7 +5,8 @@ import boto3
 from botocore import UNSIGNED
 from botocore.client import Config
 from botocore.exceptions import ClientError, EndpointConnectionError, NoCredentialsError
-from flask import current_app
+
+from ...config import config
 
 
 class S3mount:
@@ -79,7 +80,7 @@ class S3mount:
                             "labels": labels,
                             "annotations": {
                                 **annotations,
-                                current_app.config["RENKU_ANNOTATION_PREFIX"]
+                                config.session_get_endpoint_annotations.renku_annotation_prefix
                                 + "mount_folder": self.mount_folder,
                             },
                         },
@@ -195,7 +196,7 @@ class S3mount:
                             "read_only": patch["value"]["spec"]["local"]["readonly"]
                             == "true",
                             "mount_folder": patch["value"]["metadata"]["annotations"][
-                                current_app.config["RENKU_ANNOTATION_PREFIX"]
+                                config.session_get_endpoint_annotations.renku_annotation_prefix
                                 + "mount_folder"
                             ],
                         }

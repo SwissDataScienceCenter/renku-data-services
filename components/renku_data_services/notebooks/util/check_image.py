@@ -6,7 +6,7 @@ from typing import Optional
 import requests
 from werkzeug.http import parse_www_authenticate_header
 
-from .. import config
+from ..config import config
 from ..api.classes.user import RegisteredUser
 
 
@@ -39,7 +39,7 @@ def get_docker_token(hostname, image, tag, user):
     # ensure that you won't send oauth token somewhere randomly
     if (
         re.match(
-            r"^" + re.escape(f"https://{config.IMAGE_REGISTRY}") + r".*",
+            r"^" + re.escape(f"https://{config.git.registry}") + r".*",
             image_digest_url,
         )
         is not None

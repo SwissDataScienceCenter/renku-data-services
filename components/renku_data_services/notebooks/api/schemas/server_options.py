@@ -1,6 +1,6 @@
 from marshmallow import Schema, ValidationError, fields
 
-from ...config import SERVER_OPTIONS_DEFAULTS, SERVER_OPTIONS_UI
+from ...config import config
 from .custom_fields import ByteSizeField, CpuField, GpuField
 
 
@@ -39,36 +39,44 @@ def get_validator(field_name, server_options_ui, server_options_defaults):
 class LaunchNotebookRequestServerOptions(Schema):
     defaultUrl = fields.Str(
         required=False,
-        missing=SERVER_OPTIONS_DEFAULTS["defaultUrl"],
+        missing=config.server_options.defaults["defaultUrl"],
     )
     cpu_request = CpuField(
         required=False,
-        missing=SERVER_OPTIONS_DEFAULTS["cpu_request"],
+        missing=config.server_options.defaults["cpu_request"],
         validate=get_validator(
-            "cpu_request", SERVER_OPTIONS_UI, SERVER_OPTIONS_DEFAULTS
+            "cpu_request",
+            config.server_options.ui_choices,
+            config.server_options.defaults,
         ),
     )
     mem_request = ByteSizeField(
         required=False,
-        missing=SERVER_OPTIONS_DEFAULTS["mem_request"],
+        missing=config.server_options.defaults["mem_request"],
         validate=get_validator(
-            "mem_request", SERVER_OPTIONS_UI, SERVER_OPTIONS_DEFAULTS
+            "mem_request",
+            config.server_options.ui_choices,
+            config.server_options.defaults,
         ),
     )
     disk_request = ByteSizeField(
         required=False,
-        missing=SERVER_OPTIONS_DEFAULTS["disk_request"],
+        missing=config.server_options.defaults["disk_request"],
         validate=get_validator(
-            "disk_request", SERVER_OPTIONS_UI, SERVER_OPTIONS_DEFAULTS
+            "disk_request",
+            config.server_options.ui_choices,
+            config.server_options.defaults,
         ),
     )
     lfs_auto_fetch = fields.Bool(
-        required=False, missing=SERVER_OPTIONS_DEFAULTS["lfs_auto_fetch"]
+        required=False, missing=config.server_options.defaults["lfs_auto_fetch"]
     )
     gpu_request = GpuField(
         required=False,
-        missing=SERVER_OPTIONS_DEFAULTS["gpu_request"],
+        missing=config.server_options.defaults["gpu_request"],
         validate=get_validator(
-            "gpu_request", SERVER_OPTIONS_UI, SERVER_OPTIONS_DEFAULTS
+            "gpu_request",
+            config.server_options.ui_choices,
+            config.server_options.defaults,
         ),
     )

@@ -24,7 +24,7 @@ from apispec.ext.marshmallow import MarshmallowPlugin
 from apispec_webframeworks.flask import FlaskPlugin
 from flask import Blueprint, Flask, jsonify
 
-from . import config
+from .config import config as config
 from .api.notebooks import (
     autosave_info,
     check_docker_image,
@@ -90,8 +90,6 @@ def create_app():
     app = Flask(__name__)
     app.wsgi_app = _ReverseProxied(app.wsgi_app)
 
-    app.config.from_object(config)
-
     from .api.auth import bp as auth_bp
     from .api.health import bp as health_bp
     from .api.notebooks import bp as notebooks_bp
@@ -112,17 +110,17 @@ def create_app():
         else:
             return jsonify({"messages": messages}), err.code
 
-    app.logger.debug(app.config)
+    app.logger.debug(config)
 
-    if app.config.get("SENTRY_ENABLED"):
+    if config.sentry.enabled:
         import sentry_sdk
         from sentry_sdk.integrations.flask import FlaskIntegration
 
         sentry_sdk.init(
-            dsn=app.config.get("SENTRY_DSN"),
-            environment=app.config.get("SENTRY_ENV"),
+            dsn=config.sentry.dsn,
+            environment=config.sentry.env,
             integrations=[FlaskIntegration()],
-            traces_sample_rate=app.config.get("SENTRY_SAMPLE_RATE"),
+            traces_sample_rate=config.sentry.sample_rate,
         )
     return app
 
@@ -169,11 +167,11 @@ def register_swagger(app):
     security_scheme = {
         "type": "openIdConnect",
         "description": "PKCE flow for swagger.",
-        "openIdConnectUrl": config.OIDC_CONFIG_URL,
+        "openIdConnectUrl": config.sessions.oidc.config_url,
     }
     spec.components.security_scheme("oauth2-swagger", security_scheme)
 
-    bp = Blueprint("swagger_blueprint", __name__, url_prefix=config.SERVICE_PREFIX)
+    bp = Blueprint("swagger_blueprint", __name__, url_prefix=config.service_prefix)
 
     @bp.route("spec.json")
     def render_openapi_spec():
