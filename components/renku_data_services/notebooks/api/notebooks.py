@@ -18,7 +18,8 @@
 """Notebooks service API."""
 import json
 
-from flask import Blueprint, current_app, jsonify, make_response, request
+from flask import Blueprint, current_app, jsonify, make_response
+from marshmallow import validate
 from webargs import fields
 from webargs.flaskparser import use_args
 
@@ -321,8 +322,18 @@ def server_options(user):
 
 
 @bp.route("logs/<server_name>", methods=["GET"])
+@use_args(
+    {
+        "max_lines": fields.Integer(
+            load_default=250,
+            validate=validate.Range(min=1, max=None, min_inclusive=True),
+        )
+    },
+    as_kwargs=True,
+    location="query",
+)
 @authenticated
-def server_logs(user, server_name):
+def server_logs(user, max_lines, server_name):
     """
     Return the logs of the running server.
 
@@ -336,6 +347,15 @@ def server_logs(user, server_name):
           required: true
           name: server_name
           description: The name of the server whose logs should be fetched.
+        - in: query
+          schema:
+            type: integer
+            default: 250
+            minimum: 1
+          name: max_lines
+          required: false
+          description: |
+            The maximum number of (most recent) lines to return from the logs.
       responses:
         200:
           description: Server logs. An array of strings where each element is a line of the logs.
@@ -349,7 +369,6 @@ def server_logs(user, server_name):
     """
     server = UserServer.from_server_name(user, server_name)
     if server is not None:
-        max_lines = request.args.get("max_lines", default=250, type=int)
         logs = server.get_logs(max_lines)
         if logs is not None:
             return ServerLogs().dump(logs)
