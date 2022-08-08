@@ -620,6 +620,7 @@ class UserServer:
             f"{prefix}gitlabProjectId": None,
             f"{prefix}safe-username": self._user.safe_username,
             f"{prefix}username": self._user.username,
+            f"{prefix}userId": self._user.id,
             f"{prefix}servername": self.server_name,
             f"{prefix}branch": self.branch,
             f"{prefix}git-host": self.git_host,

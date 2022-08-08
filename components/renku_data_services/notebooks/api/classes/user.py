@@ -74,10 +74,10 @@ class AnonymousUser(User):
         self.username = headers[self.auth_header]
         self.safe_username = escapism.escape(self.username, escape_char="-").lower()
         self.full_name = None
-        self.keycloak_user_id = None
         self.email = None
         self.oidc_issuer = None
         self.git_token = None
+        self.id = headers[self.auth_header]
         self.setup_k8s()
 
     def get_autosaves(self, *args, **kwargs):
@@ -101,12 +101,12 @@ class RegisteredUser(User):
         if not self.authenticated:
             return
         parsed_id_token = self.parse_jwt_from_headers(headers)
-        self.keycloak_user_id = parsed_id_token["sub"]
         self.email = parsed_id_token["email"]
         self.full_name = parsed_id_token["name"]
         self.username = parsed_id_token["preferred_username"]
         self.safe_username = escapism.escape(self.username, escape_char="-").lower()
         self.oidc_issuer = parsed_id_token["iss"]
+        self.id = parsed_id_token["sub"]
 
         (
             self.git_url,
