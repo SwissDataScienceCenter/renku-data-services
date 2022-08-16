@@ -1,4 +1,3 @@
-import collections
 import re
 from datetime import datetime
 from enum import Enum
@@ -356,26 +355,6 @@ class ServersGetRequest(Schema):
     namespace = LowercaseString(required=False)
     # branch names in gitlab are case sensitive
     branch = fields.String(required=False)
-
-
-def flatten_dict(d, parent_key="", sep="."):
-    """
-    Convert a nested dictionary into a dictionary that is one level deep.
-    Nested dictionaries of any depth have their keys combined by a ".".
-    I.e. calling this function on {"A": 1, "B": {"C": {"D": 2}}}
-    will result in {"A":1, "B.C.D":2}. Used to address the fact that
-    marshamallow will parse schema keys with dots in them as a series
-    of nested dictionaries.
-    From: https://stackoverflow.com/a/6027615
-    """
-    items = []
-    for k, v in d.items():
-        new_key = parent_key + sep + k if parent_key else k
-        if isinstance(v, collections.MutableMapping):
-            items.extend(flatten_dict(v, new_key, sep=sep).items())
-        else:
-            items.append((new_key, v))
-    return dict(items)
 
 
 NotebookResponse = (

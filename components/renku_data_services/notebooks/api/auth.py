@@ -19,10 +19,11 @@
 
 from functools import wraps
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, request
 
 from ..config import config
-from .classes.user import AnonymousUser, RegisteredUser
+from .classes.user import RegisteredUser, AnonymousUser
+from ..errors.user import AuthenticationError
 
 bp = Blueprint("auth_bp", __name__, url_prefix=config.service_prefix)
 
@@ -40,17 +41,11 @@ def authenticated(f):
             return f(user, *args, **kwargs)
         else:
             # the user is not logged in
-            response = jsonify(
-                {
-                    "messages": {
-                        "error": "The required authentication headers "
-                        f"{RegisteredUser.auth_headers} are missing. "
-                        "If anonymous user sessions are supported then the header "
-                        f"{AnonymousUser.auth_header} can also be used."
-                    }
-                }
+            raise AuthenticationError(
+                detail="The required authentication headers "
+                f"{RegisteredUser.auth_headers} are missing. "
+                "If anonymous user sessions are supported then the header "
+                f"{AnonymousUser.auth_header} can also be used.",
             )
-            response.status_code = 401
-            return response
 
     return decorated

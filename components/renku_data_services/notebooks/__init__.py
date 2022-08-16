@@ -38,6 +38,7 @@ from .api.notebooks import (
 )
 from .api.schemas.autosave import AutosavesList
 from .api.schemas.config_server_options import ServerOptionsEndpointResponse
+from .api.schemas.errors import ErrorResponse
 from .api.schemas.logs import ServerLogs
 from .api.schemas.servers_get import (
     NotebookResponse,
@@ -46,6 +47,7 @@ from .api.schemas.servers_get import (
 )
 from .api.schemas.servers_post import LaunchNotebookRequest
 from .api.schemas.version import VersionResponse
+from .errors.utils import handle_exception
 
 
 # From: http://flask.pocoo.org/snippets/35/
@@ -97,18 +99,8 @@ def create_app():
     for bp in [auth_bp, health_bp, notebooks_bp]:
         app.register_blueprint(bp)
 
-    # Return validation errors as JSON
-    @app.errorhandler(422)
-    def handle_error(err):
-        headers = err.data.get("headers", None)
-        messages = err.data.get("messages", {"error": "Invalid request."})
-        app.logger.warning(
-            f"Validation of request parameters failed with the messages: {messages}"
-        )
-        if headers:
-            return jsonify({"messages": messages}), err.code, headers
-        else:
-            return jsonify({"messages": messages}), err.code
+    # Return errors as JSON
+    app.errorhandler(Exception)(handle_exception)
 
     app.logger.debug(config)
 
@@ -152,6 +144,7 @@ def register_swagger(app):
     )
     spec.components.schema("AutosavesList", schema=AutosavesList)
     spec.components.schema("VersionResponse", schema=VersionResponse)
+    spec.components.schema("ErrorResponse", schema=ErrorResponse)
     # Register endpoints
     with app.test_request_context():
         spec.path(view=user_server)

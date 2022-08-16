@@ -16,9 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Notebooks service API."""
-import json
-
-from flask import Blueprint, current_app, jsonify, make_response
+from flask import Blueprint, current_app, request, make_response
 from marshmallow import validate
 from webargs import fields
 from webargs.flaskparser import use_args
@@ -32,7 +30,8 @@ from renku_notebooks.util.check_image import (
 from ..config import config
 from .auth import authenticated
 from .classes.server import UserServer
-from .classes.storage import Autosave
+from .classes.storage import AutosaveBranch
+from ..errors.user import ImageParseError, MissingResourceError, UserInputError
 from .schemas.autosave import AutosavesList
 from .schemas.config_server_options import ServerOptionsEndpointResponse
 from .schemas.logs import ServerLogs
@@ -128,13 +127,14 @@ def user_server(user, server_name):
               schema: NotebookResponse
         404:
           description: The specified server does not exist.
+          content:
+            application/json:
+              schema: ErrorResponse
       tags:
         - servers
     """
     server = UserServer.from_server_name(user, server_name)
-    if server is not None:
-        return NotebookResponse().dump(server)
-    return make_response(jsonify({"messages": {"error": "Cannot find server"}}), 404)
+    return NotebookResponse().dump(server)
 
 
 @bp.route("servers", methods=["POST"])
@@ -175,6 +175,9 @@ def launch_notebook(
               schema: NotebookResponse
         404:
           description: The server could not be launched.
+          content:
+            application/json:
+              schema: ErrorResponse
       tags:
         - servers
     """
@@ -192,42 +195,17 @@ def launch_notebook(
     )
 
     if len(server.safe_username) > 63:
-        return current_app.response_class(
-            response=json.dumps(
-                {
-                    "messages": {
-                        "json": {
-                            "username": [
-                                "A username cannot be longer than 63 characters, "
-                                f"your username is {len(server.safe_username)} characters long."
-                            ]
-                        }
-                    }
-                }
-            ),
-            status=422,
-            mimetype="application/json",
+        raise UserInputError(
+            message="A username cannot be longer than 63 characters, "
+            f"your username is {len(server.safe_username)} characters long.",
+            detail="This can occur if your username has been changed manually or by an admin.",
         )
 
     server.get_js()
     if server.server_exists():
         return NotebookResponse().dump(server)
 
-    js, error = server.start()
-    if js is None:
-        current_app.logger.error(
-            f"Server {server.server_name} launch failed because {error}."
-        )
-        return make_response(
-            jsonify(
-                {
-                    "messages": {
-                        "error": f"Cannot start server {server.server_name}, because {error}"
-                    }
-                }
-            ),
-            404,
-        )
+    server.start()
 
     current_app.logger.debug(f"Server {server.server_name} has been started")
     for autosave in user.get_autosaves(server.gl_project.path_with_namespace):
@@ -266,30 +244,20 @@ def stop_server(user, forced, server_name):
           description: The server was stopped successfully.
         404:
           description: The server cannot be found.
+          content:
+            application/json:
+              schema: ErrorResponse
         500:
           description: The server exists but could not be successfully deleted.
+          content:
+            application/json:
+              schema: ErrorResponse
       tags:
         - servers
     """
-    current_app.logger.debug(
-        f"Request to delete server: {server_name} forced: {forced}."
-    )
     server = UserServer.from_server_name(user, server_name)
-    if server is None:
-        return make_response(
-            jsonify({"messages": {"error": f"Cannot find server {server_name}"}}), 404
-        )
-    else:
-        status = server.stop(forced)
-        if status is not None:
-            return "", 204
-        else:
-            return make_response(
-                jsonify(
-                    {"messages": {"error": f"Cannot delete the server {server_name}"}}
-                ),
-                500,
-            )
+    server.stop(forced)
+    return "", 204
 
 
 @bp.route("server_options", methods=["GET"])
@@ -362,15 +330,16 @@ def server_logs(user, max_lines, server_name):
               schema: ServerLogs
         404:
           description: The specified server does not exist.
+          content:
+            application/json:
+              schema: ErrorResponse
       tags:
         - logs
     """
     server = UserServer.from_server_name(user, server_name)
-    if server is not None:
-        logs = server.get_logs(max_lines)
-        if logs is not None:
-            return ServerLogs().dump(logs)
-    return make_response(jsonify({"messages": {"error": "Cannot find server"}}), 404)
+    max_lines = request.args.get("max_lines", default=250, type=int)
+    logs = server.get_logs(max_lines)
+    return ServerLogs().dump(logs)
 
 
 @bp.route("<path:namespace_project>/autosave", methods=["GET"])
@@ -400,16 +369,14 @@ def autosave_info(user, namespace_project):
               schema: AutosavesList
         404:
           description: The requested project and/or namespace cannot be found
+          content:
+            application/json:
+              schema: ErrorResponse
       tags:
         - autosave
     """
     if user.get_renku_project(namespace_project) is None:
-        return make_response(
-            jsonify(
-                {"messages": {"error": f"Cannot find project {namespace_project}"}}
-            ),
-            404,
-        )
+        raise MissingResourceError(message=f"Cannot find project {namespace_project}")
     return AutosavesList().dump(
         {
             "pvsSupport": config.sessions.storage.pvs_enabled,
@@ -453,30 +420,25 @@ def delete_autosave(user, namespace_project, autosave_name):
           description: The autosave branch and/or PV has been deleted successfully.
         404:
           description: The requested project, namespace and/or autosave cannot be found.
+          content:
+            application/json:
+              schema: ErrorResponse
       tags:
         - autosave
     """
     if user.get_renku_project(namespace_project) is None:
-        return make_response(
-            jsonify(
-                {"messages": {"error": f"Cannot find project {namespace_project}"}}
+        raise MissingResourceError(message=f"Cannot find project {namespace_project}")
+    autosave = AutosaveBranch.from_name(user, namespace_project, autosave_name)
+    if not autosave:
+        raise MissingResourceError(
+            message=f"Cannot initialize or find the autosave {autosave_name}.",
+            detail=(
+                "This could be the result of a malformed autosave name or changing your username. "
+                "If the problem persists you can always find all autosave branches in your "
+                "Gitlab project."
             ),
-            404,
         )
-    autosave = Autosave.from_name(user, namespace_project, autosave_name)
-    response = autosave.delete()
-    if not response:
-        return make_response(
-            jsonify(
-                {
-                    "messages": {
-                        "error": f"The autosave {autosave_name} could not be deleted, "
-                        "are you certain it exists?"
-                    }
-                }
-            ),
-            404,
-        )
+    autosave.delete()
     return make_response("", 204)
 
 
@@ -507,14 +469,9 @@ def check_docker_image(user, image_url):
     """
     parsed_image = parse_image_name(image_url)
     if parsed_image is None:
-        return (
-            jsonify(
-                {
-                    "message": f"The image {image_url} cannot be parsed, "
-                    "ensure you are providing a valid Docker image name.",
-                }
-            ),
-            422,
+        raise ImageParseError(
+            f"The image {image_url} cannot be parsed, "
+            "ensure you are providing a valid Docker image name."
         )
     token, _ = get_docker_token(**parsed_image, user=user)
     image_exists_result = image_exists(**parsed_image, token=token)

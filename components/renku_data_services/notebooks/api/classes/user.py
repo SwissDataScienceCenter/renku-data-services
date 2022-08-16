@@ -15,6 +15,7 @@ from kubernetes import client
 
 from ...config import config
 from .storage import AutosaveBranch
+from ...errors.programming import ConfigurationError
 
 
 class User(ABC):
@@ -58,9 +59,7 @@ class AnonymousUser(User):
 
     def __init__(self, headers):
         if not config.anonymous_sessions_enabled:
-            raise ValueError(
-                "Cannot use AnonymousUser when anonymous sessions are not enabled."
-            )
+            raise ConfigurationError(message="Anonymous sessions are not enabled.")
         self.authenticated = (
             self.auth_header in headers.keys()
             and headers[self.auth_header] != ""
@@ -168,7 +167,7 @@ class RegisteredUser(User):
             except GitlabListError:
                 branches = []
             for branch in branches:
-                autosave = AutosaveBranch.from_branch_name(
+                autosave = AutosaveBranch.from_name(
                     self, namespace_project, branch.name
                 )
                 if autosave is not None:

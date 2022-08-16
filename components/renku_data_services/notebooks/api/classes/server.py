@@ -11,6 +11,23 @@ from kubernetes import client
 from kubernetes.client.exceptions import ApiException
 from kubernetes.client.models import V1DeleteOptions
 
+from ..amalthea_patches import cloudstorage as cloudstorage_patches
+from ..amalthea_patches import general as general_patches
+from ..amalthea_patches import git_proxy as git_proxy_patches
+from ..amalthea_patches import git_sidecar as git_sidecar_patches
+from ..amalthea_patches import init_containers as init_containers_patches
+from ..amalthea_patches import inject_certificates as inject_certificates_patches
+from ..amalthea_patches import jupyter_server as jupyter_server_patches
+from ...config import config
+from ...errors.intermittent import (
+    CannotStartServerError,
+    DeleteServerError,
+    IntermittentError,
+)
+from ...errors.programming import ConfigurationError, FilteringResourcesError
+from ...errors.user import MissingResourceError
+from .s3mount import S3mount
+from .user import RegisteredUser, User
 from ...util.check_image import (
     get_docker_token,
     get_image_workdir,
@@ -21,16 +38,6 @@ from ...util.kubernetes_ import (
     filter_resources_by_annotations,
     make_server_name,
 )
-from ..amalthea_patches import cloudstorage as cloudstorage_patches
-from ..amalthea_patches import general as general_patches
-from ..amalthea_patches import git_proxy as git_proxy_patches
-from ..amalthea_patches import git_sidecar as git_sidecar_patches
-from ..amalthea_patches import init_containers as init_containers_patches
-from ..amalthea_patches import inject_certificates as inject_certificates_patches
-from ..amalthea_patches import jupyter_server as jupyter_server_patches
-from .s3mount import S3mount
-from .user import RegisteredUser, User
-from ...config import config
 
 
 class UserServer:
@@ -74,13 +81,14 @@ class UserServer:
     def _check_flask_config(self):
         """Check the app config and ensure minimum required parameters are present."""
         if config.git.url is None:
-            raise ValueError(
-                "The gitlab URL is missing, it must be provided in the configuration"
+            raise ConfigurationError(
+                message="The gitlab URL is missing, it must be provided in "
+                "an environment variable called GITLAB_URL"
             )
         if config.git.registry is None:
-            raise ValueError(
-                "The url to the docker image registry is missing, "
-                "it must be provided in the configuration"
+            raise ConfigurationError(
+                message="The url to the docker image registry is missing, it must be provided in "
+                "an environment variable called IMAGE_REGISTRY"
             )
 
     @property
@@ -397,11 +405,19 @@ class UserServer:
                 current_app.logger.debug(
                     f"Cannot start the session {self.server_name}, error: {e}"
                 )
-                error.append("session could not be started in the cluster")
+                raise CannotStartServerError(
+                    message=f"Cannot start the session {self.server_name}",
+                )
             else:
                 self.js = js
-        error_msg = None if len(error) == 0 else ", ".join(error)
-        return js, error_msg
+        else:
+            raise MissingResourceError(
+                message=(
+                    "Cannot start the session because the following Git "
+                    f"or Docker resources are missing: {', '.join(error)}"
+                )
+            )
+        return js
 
     def server_exists(self):
         """Check if the user server exists (i.e. is an actual pod in k8s)."""
@@ -421,8 +437,8 @@ class UserServer:
             self.js = jss[0]
             return jss[0]
         else:  # more than one pod was matched
-            raise Exception(
-                f"The user session matches {len(jss)} k8s jupyterserver resources, "
+            raise FilteringResourcesError(
+                message=f"The user session matches {len(jss)} k8s jupyterserver resources, "
                 "it should match only one."
             )
 
@@ -441,12 +457,8 @@ class UserServer:
                 grace_period_seconds=0 if forced else None,
                 body=V1DeleteOptions(propagation_policy="Foreground"),
             )
-        except ApiException as e:
-            current_app.logger.warning(
-                f"Cannot delete server: {self.server_name} for user: "
-                f"{self._user.username}, error: {e}"
-            )
-            return None
+        except ApiException:
+            raise DeleteServerError()
         else:
             return status
 
@@ -454,11 +466,16 @@ class UserServer:
         """Get the logs of all containers in the server pod."""
         js = self.js
         if js is None:
-            return None
+            raise MissingResourceError(
+                f"The server {self.server_name} cannot be found."
+            )
         output = {}
         pod_name = js.get("status", {}).get("mainPod", {}).get("name")
         if not pod_name:
-            return None
+            raise MissingResourceError(
+                f"The main component of the server {self.server_name} that contains "
+                "the logs cannot be found."
+            )
         all_containers = js["status"]["mainPod"].get("status", {}).get(
             "containerStatuses", []
         ) + js["status"]["mainPod"].get("status", {}).get("initContainerStatuses", [])
@@ -476,14 +493,13 @@ class UserServer:
                 if err.status in [400, 404]:
                     continue  # container does not exist or is not ready yet
                 else:
-                    raise
+                    raise IntermittentError(
+                        f"Logs cannot be read for server {self.server_name}."
+                    )
             else:
                 output[container_name] = logs
 
-        if len(output.keys()) == 0:
-            return None
-        else:
-            return output
+        return output
 
     @property
     def server_url(self):
@@ -527,8 +543,20 @@ class UserServer:
             jss,
             {f"{prefix}servername": server_name},
         )
-        if len(jss) != 1:
-            return None
+        if len(jss) == 0:
+            raise MissingResourceError(
+                f"The server {server_name} cannot be found.",
+                detail=(
+                    "This can happen if you have mistyped the server name, "
+                    "logged in with different credentials or have deleted "
+                    "the server you are requesting."
+                ),
+            )
+        if len(jss) > 1:
+            raise FilteringResourcesError(
+                f"Filtering servers for {server_name} matched too many servers. "
+                f"Expected 1 match but got {len(jss)} matches. This is a bug."
+            )
         js = jss[0]
         return cls.from_js(user, js)
 
