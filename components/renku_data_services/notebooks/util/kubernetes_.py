@@ -56,11 +56,30 @@ def secret_exists(name, k8s_client, k8s_namespace):
     return False
 
 
-def make_server_name(safe_username, namespace, project, branch, commit_sha):
-    """Form a 16-digit hash server ID."""
-    server_string = f"{safe_username}-{namespace}-{project}-{branch}-{commit_sha}"
-    return "{username}-{project}-{hash}".format(
-        username=safe_username[:10].lower(),
+def make_server_name(
+    safe_username: str, namespace: str, project: str, branch: str, commit_sha: str
+) -> str:
+    """Form a unique server name.
+
+    This is used in naming all of the k8s resources created by amalthea.
+    """
+    server_string_for_hashing = (
+        f"{safe_username}-{namespace}-{project}-{branch}-{commit_sha}"
+    )
+    safe_username_lowercase = safe_username.lower()
+    if safe_username_lowercase[0].isalpha() and safe_username_lowercase[0].isascii():
+        prefix = ""
+    else:
+        # NOTE: Username starts with an invalid character. This has to be modified because a
+        # k8s service object cannot start with anything other than a lowercase alphabet character.
+        # NOTE: We do not have worry about collisions with already exsiting servers from older
+        # versions because the server name includes the hash of the original username, so the hash
+        # would be different because the original username differs between someone whose username
+        # is for example 7User vs. n7User.
+        prefix = "n"
+    return "{prefix}{username}-{project}-{hash}".format(
+        prefix=prefix,
+        username=safe_username_lowercase[:10],
         project=escapism.escape(project, escape_char="-")[:24].lower(),
-        hash=md5(server_string.encode()).hexdigest()[:8].lower(),
+        hash=md5(server_string_for_hashing.encode()).hexdigest()[:8].lower(),
     )
