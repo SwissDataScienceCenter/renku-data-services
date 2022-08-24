@@ -90,6 +90,8 @@ sessions {
         }
     }
     git_rpc_server {
+        host = "0.0.0.0"
+        port = 4000
         image= "renku/git-rpc-server:latest"
         sentry = {
             enabled = false

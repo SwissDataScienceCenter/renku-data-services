@@ -1,7 +1,6 @@
 import os
 from typing import TYPE_CHECKING
 
-
 from ..classes.user import RegisteredUser
 from ...config import config
 
@@ -11,24 +10,22 @@ if TYPE_CHECKING:
 
 def main(server: "UserServer"):
     # NOTE: Autosaves can be created only for registered users
-    lifecycle = (
-        {
-            "preStop": {
-                "exec": {
-                    "command": [
-                        "poetry",
-                        "run",
-                        "python",
-                        "-m",
-                        "git_services.sidecar.run_command",
-                        "autosave",
-                    ]
-                }
+    if type(server._user) is not RegisteredUser:
+        return []
+    lifecycle = {
+        "preStop": {
+            "exec": {
+                "command": [
+                    "poetry",
+                    "run",
+                    "python",
+                    "-m",
+                    "git_services.sidecar.run_command",
+                    "autosave",
+                ]
             }
         }
-        if type(server._user) is RegisteredUser
-        else {}
-    )
+    }
     patches = [
         {
             "type": "application/json-patch+json",
@@ -39,18 +36,33 @@ def main(server: "UserServer"):
                     "value": {
                         "image": config.sessions.git_rpc_server.image,
                         "name": "git-sidecar",
-                        # Do not expose this until access control is in place
-                        # "ports": [
-                        #     {
-                        #         "containerPort": 4000,
-                        #         "name": "git-port",
-                        #         "protocol": "TCP",
-                        #     }
-                        # ],
+                        "ports": [
+                            {
+                                "containerPort": config.sessions.git_rpc_server.port,
+                                "name": "git-port",
+                                "protocol": "TCP",
+                            }
+                        ],
+                        "resources": {
+                            "requests": {"memory": "84Mi", "cpu": "100m"},
+                            "limits": {"memory": "168Mi", "cpu": "200m"},
+                        },
                         "env": [
                             {
                                 "name": "MOUNT_PATH",
                                 "value": f"/work/{server.gl_project.path}",
+                            },
+                            {
+                                "name": "GIT_RPC_PORT",
+                                "value": str(config.sessions.git_rpc_server.port),
+                            },
+                            {
+                                "name": "GIT_RPC_HOST",
+                                "value": config.sessions.git_rpc_server.host,
+                            },
+                            {
+                                "name": "GIT_RPC_URL_PREFIX",
+                                "value": f"/sessions/{server.server_name}/sidecar/",
                             },
                             {
                                 "name": "GIT_RPC_SENTRY__ENABLED",
@@ -100,7 +112,6 @@ def main(server: "UserServer"):
                         ],
                         # NOTE: Autosave Branch creation
                         "lifecycle": lifecycle,
-                        "resources": {},
                         "securityContext": {
                             "allowPrivilegeEscalation": False,
                             "fsGroup": 100,
@@ -115,43 +126,124 @@ def main(server: "UserServer"):
                                 "subPath": f"{server.gl_project.path}/",
                             }
                         ],
-                        # Enable readiness and liveness only when control is in place
-                        # "livenessProbe": {
-                        #     "httpGet": {"port": 4000, "path": "/"},
-                        #     "periodSeconds": 30,
-                        #     # delay should equal periodSeconds x failureThreshold
-                        #     # from readiness probe values
-                        #     "initialDelaySeconds": 600,
-                        # },
-                        # the readiness probe will retry 36 times over 360 seconds to see
-                        # if the pod is ready to accept traffic - this gives the user session
-                        # a maximum of 360 seconds to setup the git sidecar and clone the repo
-                        # "readinessProbe": {
-                        #     "httpGet": {"port": 4000, "path": "/"},
-                        #     "periodSeconds": 10,
-                        #     "failureThreshold": 60,
-                        # },
+                        "livenessProbe": {
+                            "httpGet": {
+                                "port": config.sessions.git_rpc_server.port,
+                                "path": f"/sessions/{server.server_name}/sidecar/health",
+                            },
+                            "periodSeconds": 10,
+                            "failureThreshold": 2,
+                        },
+                        "readinessProbe": {
+                            "httpGet": {
+                                "port": config.sessions.git_rpc_server.port,
+                                "path": f"/sessions/{server.server_name}/sidecar/health",
+                            },
+                            "periodSeconds": 10,
+                            "failureThreshold": 6,
+                        },
+                        "startupProbe": {
+                            "httpGet": {
+                                "port": config.sessions.git_rpc_server.port,
+                                "path": f"/sessions/{server.server_name}/sidecar/health",
+                            },
+                            "periodSeconds": 10,
+                            "failureThreshold": 30,
+                        },
                     },
                 }
             ],
         }
     ]
-    # We can add this to expose the git side-car once it's protected.
-    # patches.append(
-    #     {
-    #         "type": "application/json-patch+json",
-    #         "patch": [
-    #             {
-    #                 "op": "add",
-    #                 "path": "/service/spec/ports/-",
-    #                 "value": {
-    #                     "name": "git-service",
-    #                     "port": 4000,
-    #                     "protocol": "TCP",
-    #                     "targetPort": 4000,
-    #                 },
-    #             }
-    #         ],
-    #     }
-    # )
+    # NOTE: The oauth2proxy is used to authenticate requests for the sidecar
+    patches.append(
+        {
+            "type": "application/json-patch+json",
+            "patch": [
+                {
+                    "op": "replace",
+                    "path": "/statefulset/spec/template/spec/containers/1/args/6",
+                    "value": f"--upstream=http://127.0.0.1:8888/sessions/{server.server_name}/",
+                },
+                {
+                    "op": "add",
+                    "path": "/statefulset/spec/template/spec/containers/1/args/-",
+                    "value": (
+                        f"--upstream=http://127.0.0.1:{config.sessions.git_rpc_server.port}"
+                        f"/sessions/{server.server_name}/sidecar/"
+                    ),
+                },
+                {
+                    "op": "add",
+                    "path": "/statefulset/spec/template/spec/containers/1/args/-",
+                    "value": (
+                        f"--skip-auth-route=^/sessions/{server.server_name}/sidecar/health$"
+                    ),
+                },
+                {
+                    "op": "add",
+                    "path": "/statefulset/spec/template/spec/containers/1/args/-",
+                    "value": (
+                        f"--skip-auth-route=^/sessions/{server.server_name}/sidecar/health/$"
+                    ),
+                },
+                {
+                    "op": "add",
+                    "path": "/statefulset/spec/template/spec/containers/1/args/-",
+                    "value": "--skip-jwt-bearer-tokens=true",
+                },
+                {
+                    "op": "add",
+                    "path": "/statefulset/spec/template/spec/containers/1/args/-",
+                    "value": (
+                        f"--skip-auth-route=^/sessions/{server.server_name}/sidecar/jsonrpc/map$"
+                    ),
+                },
+                {
+                    "op": "add",
+                    "path": "/statefulset/spec/template/spec/containers/1/image",
+                    "value": "bitnami/oauth2-proxy:7.3.0",
+                },
+                {
+                    "op": "add",
+                    "path": "/statefulset/spec/template/spec/containers/1/args/-",
+                    "value": "--oidc-extra-audience=renku",
+                },
+            ],
+        }
+    )
+    # INFO: Add a k8s service so that the RPC server can be directly reached by the ui server
+    patches.append(
+        {
+            "type": "application/json-patch+json",
+            "patch": [
+                {
+                    "op": "add",
+                    "path": "/serviceRpcServer",
+                    "value": {
+                        "apiVersion": "v1",
+                        "kind": "Service",
+                        "metadata": {
+                            "name": f"{server.server_name}-rpc-server",
+                            "namespace": config.k8s.namespace,
+                        },
+                        "spec": {
+                            "ports": [
+                                {
+                                    "name": "http",
+                                    "port": 80,
+                                    "protocol": "TCP",
+                                    "targetPort": config.sessions.git_rpc_server.port,
+                                },
+                            ],
+                            "selector": {
+                                "app": server.server_name,
+                            },
+                        },
+                    },
+                },
+            ],
+        }
+    )
+
     return patches

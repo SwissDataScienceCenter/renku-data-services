@@ -83,8 +83,13 @@ class _GitProxyConfig:
 
 @dataclass
 class _GitRpcServerConfig:
+    host: Text = "0.0.0.0"
+    port: Union[Text, int] = 4000
     image: Text = "renku/git-rpc-server:latest"
     sentry: _SentryConfig = _SentryConfig(enabled=False)
+
+    def __post_init__(self):
+        self.port = _parse_value_as_numeric(self.port, int)
 
 
 @dataclass
