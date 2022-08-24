@@ -49,7 +49,7 @@ def main(server: "UserServer"):
                         },
                         "env": [
                             {
-                                "name": "MOUNT_PATH",
+                                "name": "GIT_RPC_MOUNT_PATH",
                                 "value": f"/work/{server.gl_project.path}",
                             },
                             {
@@ -100,7 +100,7 @@ def main(server: "UserServer"):
                             # can safely shut down after any autosave branches have been properly
                             # created.
                             {
-                                "name": "GIT_PROXY_HEALTH_PORT",
+                                "name": "GIT_RPC_GIT_PROXY_HEALTH_PORT",
                                 "value": str(config.sessions.git_proxy.health_port),
                             },
                             {
