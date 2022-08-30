@@ -72,7 +72,7 @@ def make_server_name(
     else:
         # NOTE: Username starts with an invalid character. This has to be modified because a
         # k8s service object cannot start with anything other than a lowercase alphabet character.
-        # NOTE: We do not have worry about collisions with already exsiting servers from older
+        # NOTE: We do not have worry about collisions with already existing servers from older
         # versions because the server name includes the hash of the original username, so the hash
         # would be different because the original username differs between someone whose username
         # is for example 7User vs. n7User.

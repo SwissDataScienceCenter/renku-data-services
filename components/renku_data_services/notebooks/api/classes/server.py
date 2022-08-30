@@ -502,7 +502,7 @@ class UserServer:
         return output
 
     @property
-    def server_url(self):
+    def server_url(self) -> str:
         """The URL where a user can access their session."""
         if type(self._user) is RegisteredUser:
             return urljoin(
@@ -618,6 +618,7 @@ class UserServer:
             "CI_COMMIT_SHA",
             "NOTEBOOK_DIR",
             "MOUNT_PATH",
+            "SESSION_URL",
             "PROJECT_NAME",
             "GIT_CLONE_REPO",
         ]

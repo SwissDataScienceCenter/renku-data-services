@@ -42,9 +42,9 @@ def get_config(default_config: str) -> _NotebooksConfig:
 
     If the "CONFIG_FILE" environment variable is set then that file is read and used.
     The values from the file can be overridden by environment variables that start with
-    "NB_" followed by the appropirate name. Refer to the dataconf documentation about
+    "NB_" followed by the appropriate name. Refer to the dataconf documentation about
     how to set nested or list values. Although more complicated values are more easily set through
-    a config file than envirionment variables.
+    a config file than environment variables.
     """
     config_file = os.getenv("CONFIG_FILE")
     config = dataconf.multi.string(default_config)

@@ -51,6 +51,11 @@ def env(server: "UserServer"):
         {
             "op": "add",
             "path": "/statefulset/spec/template/spec/containers/0/env/-",
+            "value": {"name": "SESSION_URL", "value": server.server_url},
+        },
+        {
+            "op": "add",
+            "path": "/statefulset/spec/template/spec/containers/0/env/-",
             "value": {"name": "PROJECT_NAME", "value": server.project},
         },
         {
