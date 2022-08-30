@@ -70,6 +70,12 @@ def git_clone(server: "UserServer"):
                 Path(etc_cert_volume_mount[0]["mountPath"]) / "ca-certificates.crt"
             ),
         },
+        {
+            "name": "GIT_CLONE_S3_MOUNT",
+            "value": server.cloudstorage[0].mount_folder
+            if config.s3_mounts_enabled and server.cloudstorage
+            else "",
+        },
     ]
     if type(server._user) is RegisteredUser:
         env += [

@@ -54,7 +54,7 @@ class UserServer:
         image: Optional[str],
         server_options: Dict[str, Any],
         environment_variables: Dict[str, str],
-        cloudstorage: List[Dict[str, str]],
+        cloudstorage: List[S3mount],
     ):
         self._check_flask_config()
         self._user = user
@@ -74,7 +74,7 @@ class UserServer:
         self.verified_image: Optional[str] = None
         self.is_image_private: Optional[bool] = None
         self.image_workdir: Optional[str] = None
-        self.cloudstorage: Optional[Dict[str, str]] = cloudstorage
+        self.cloudstorage: Optional[List[S3mount]] = cloudstorage
         self.gl_project_name = f"{self.namespace}/{self.project}"
         self.js: Optional[Dict[str, Any]] = None
 
