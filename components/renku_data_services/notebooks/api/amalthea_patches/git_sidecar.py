@@ -16,9 +16,7 @@ def main(server: "UserServer"):
         "preStop": {
             "exec": {
                 "command": [
-                    "poetry",
-                    "run",
-                    "python",
+                    ".venv/bin/python",
                     "-m",
                     "git_services.sidecar.run_command",
                     "autosave",
@@ -45,7 +43,6 @@ def main(server: "UserServer"):
                         ],
                         "resources": {
                             "requests": {"memory": "84Mi", "cpu": "100m"},
-                            "limits": {"memory": "168Mi", "cpu": "200m"},
                         },
                         "env": [
                             {

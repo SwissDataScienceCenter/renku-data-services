@@ -81,7 +81,6 @@ def main(server: "UserServer"):
                         "volumeMounts": etc_cert_volume_mount,
                         "resources": {
                             "requests": {"memory": "16Mi", "cpu": "50m"},
-                            "limits": {"memory": "64Mi", "cpu": "200m"},
                         },
                     },
                 }
