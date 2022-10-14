@@ -173,3 +173,25 @@ def certificates():
         },
     ]
     return patches
+
+
+def download_image(server: "UserServer"):
+    container = client.V1Container(
+        name="download-image",
+        image=server.verified_image,
+        command=["sh", "-c"],
+        args=["exit", "0"],
+    )
+    api_client = client.ApiClient()
+    return [
+        {
+            "type": "application/json-patch+json",
+            "patch": [
+                {
+                    "op": "add",
+                    "path": "/statefulset/spec/template/spec/initContainers/-",
+                    "value": api_client.sanitize_for_serialization(container),
+                },
+            ],
+        },
+    ]

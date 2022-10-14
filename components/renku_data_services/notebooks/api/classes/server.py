@@ -293,6 +293,7 @@ class UserServer:
                 # init container for certs must come before all other init containers
                 # so that it runs first before all other init containers
                 init_containers_patches.certificates(),
+                init_containers_patches.download_image(self),
                 init_containers_patches.git_clone(self),
                 inject_certificates_patches.proxy(self),
             )

@@ -1,4 +1,5 @@
 import re
+from collections import OrderedDict
 from datetime import datetime
 from enum import Enum
 
@@ -30,12 +31,40 @@ class ServerStatusEnum(Enum):
         return list(map(lambda c: c.value, cls))
 
 
+class StepStatusEnum(Enum):
+    ready: str = "ready"  # An init job completely done or container fully running
+    waiting: str = "waiting"  # Waiting to start
+    executing: str = "executing"  # Running but not complete or fully ready
+    failed: str = "failed"
+
+    @classmethod
+    def list(cls):
+        return list(map(lambda c: c.value, cls))
+
+
+class ServerStatusDetail(Schema):
+    step = fields.String(required=True)
+    status = fields.String(
+        required=True,
+        validate=validate.OneOf(StepStatusEnum.list()),
+    )
+
+
 class ServerStatus(Schema):
     state = fields.String(
         required=True,
         validate=validate.OneOf(ServerStatusEnum.list()),
     )
     message = fields.String(required=False)
+    details = fields.List(fields.Nested(ServerStatusDetail), required=True)
+    totalNumContainers = fields.Integer(
+        required=True,
+        validate=validate.Range(min=0, min_inclusive=True),
+    )
+    readyNumContainers = fields.Integer(
+        required=True,
+        validate=validate.Range(min=0, min_inclusive=True),
+    )
 
 
 class ResourceRequests(Schema):
@@ -190,7 +219,7 @@ class LaunchNotebookResponseWithoutS3(Schema):
                 return msg
             reason = sorted_parts[0].lstrip("1234567890 ")
             return (
-                "You session cannot be scheduled due to insufficent resources. "
+                "Your session cannot be scheduled due to insufficent resources. "
                 f"The most likely reason is: '{reason}'. You may wait for resources "
                 "to free up or you can adjust the specific resource and restart your session."
             )
@@ -219,15 +248,87 @@ class LaunchNotebookResponseWithoutS3(Schema):
             ]
             return failed_containers
 
-        def get_starting_message(container_statuses):
-            containers_not_ready = [
-                container_status.get("name", "Unknown")
-                for container_status in container_statuses
-                if not container_status.get("ready", False)
+        def get_starting_message(step_summary):
+            steps_not_ready = [
+                step["step"].lower()
+                for step in step_summary
+                if step["status"] != StepStatusEnum.ready.value
             ]
-            if len(containers_not_ready) > 0:
-                return f"Containers with non-ready statuses: {', '.join(containers_not_ready)}."
+            if len(steps_not_ready) > 0:
+                return f"Steps with non-ready statuses: {', '.join(steps_not_ready)}."
             return None
+
+        def get_status_breakdown(js):
+            init_container_summary = (
+                js.get("status", {}).get("containerStates", {}).get("init", {})
+            )
+            container_summary = (
+                js.get("status", {}).get("containerStates", {}).get("regular", {})
+            )
+            output = []
+            init_container_name_desc_xref = OrderedDict(
+                [
+                    ("init-certificates", "Initialization"),
+                    ("download-image", "Downloading server image"),
+                    ("git-clone", "Cloning and configuring the repository"),
+                ]
+            )
+            container_name_desc_xref = OrderedDict(
+                [
+                    ("git-proxy", "Git credentials services"),
+                    ("oauth2-proxy", "Authentication and proxying services"),
+                    ("passthrough-proxy", "Proxying services"),
+                    ("git-sidecar", "Auxiliary session services"),
+                    ("jupyter-server", "Starting session"),
+                ]
+            )
+            current_state = js.get("status", {}).get("state")
+            if (
+                current_state is None
+                or current_state == ServerStatusEnum.Starting.value
+            ):
+                # NOTE: This means that the server is starting and the statuses are not populated
+                # yet, therefore in this case we will use defaults and set all statuses to waiting
+                if len(init_container_summary) == 0:
+                    init_container_summary = {
+                        container_name: StepStatusEnum.waiting.value
+                        for container_name in config.sessions.init_containers
+                    }
+                if len(container_summary) == 0:
+                    annotations = js.get("metadata", {}).get("annotations", {})
+                    prefix = (
+                        config.session_get_endpoint_annotations.renku_annotation_prefix
+                    )
+                    is_user_anonymous = (
+                        annotations.get(f"{prefix}userId", "").startswith("anon-")
+                        and annotations.get(f"{prefix}username", "").startswith("anon-")
+                        and js.get("metadata", {}).get("name", "").startswith("anon-")
+                    )
+                    container_summary = {
+                        container_name: StepStatusEnum.waiting.value
+                        for container_name in (
+                            config.sessions.containers.anonymous
+                            if is_user_anonymous
+                            else config.sessions.containers.registered
+                        )
+                    }
+            for (container, desc) in init_container_name_desc_xref.items():
+                if container in init_container_summary:
+                    output.append(
+                        {
+                            "step": desc,
+                            "status": init_container_summary[container],
+                        }
+                    )
+            for (container, desc) in container_name_desc_xref.items():
+                if container in container_summary:
+                    output.append(
+                        {
+                            "step": desc,
+                            "status": container_summary[container],
+                        }
+                    )
+            return output
 
         def get_status(js):
             """Get the status of the jupyterserver."""
@@ -237,17 +338,25 @@ class LaunchNotebookResponseWithoutS3(Schema):
             }
             container_statuses = get_all_container_statuses(js)
             if state == ServerStatusEnum.Failed.value:
+                failed_container_statuses = get_failed_containers(container_statuses)
                 unschedulable_msg = get_unschedulable_message(
                     js.get("status", {}).get("mainPod", {})
                 )
                 if unschedulable_msg:
                     output["message"] = unschedulable_msg
                 else:
-                    output["message"] = get_failed_message(
-                        get_failed_containers(container_statuses)
-                    )
+                    output["message"] = get_failed_message(failed_container_statuses)
+            output["details"] = get_status_breakdown(js)
             if state == ServerStatusEnum.Starting.value:
-                output["message"] = get_starting_message(container_statuses)
+                output["message"] = get_starting_message(output["details"])
+            output["totalNumContainers"] = len(output["details"])
+            output["readyNumContainers"] = len(
+                [
+                    step
+                    for step in output["details"]
+                    if step["status"] in [StepStatusEnum.ready.value]
+                ]
+            )
             return output
 
         def get_resource_requests(server):

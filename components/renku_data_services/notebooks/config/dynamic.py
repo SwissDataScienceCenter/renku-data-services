@@ -173,6 +173,12 @@ class _SessionCullingConfig:
 
 
 @dataclass
+class _SessionContainers:
+    anonymous: List[Text]
+    registered: List[Text]
+
+
+@dataclass
 class _SessionConfig:
     culling: _SessionCullingConfig
     git_proxy: _GitProxyConfig
@@ -182,6 +188,7 @@ class _SessionConfig:
     ca_certs: _CustomCaCertsConfig
     oidc: _SessionOidcConfig
     storage: _SessionStorageConfig
+    containers: _SessionContainers
     default_image: Text = "renku/singleuser:latest"
     enforce_cpu_limits: Union[Text, bool] = False
     autosave_minimum_lfs_file_size_bytes: Union[int, Text] = 1000000
@@ -190,15 +197,11 @@ class _SessionConfig:
     node_selector: Text = "{}"
     affinity: Text = "{}"
     tolerations: Text = "[]"
-    container_order_anonymous: List[Text] = field(
+    init_containers: List[Text] = field(
         default_factory=lambda: [
-            "jupyter-server",
-        ]
-    )
-    container_order_registered: List[Text] = field(
-        default_factory=lambda: [
-            "jupyter-server",
-            "oauth2-proxy",
+            "init-certificates",
+            "download-image",
+            "git-clone",
         ]
     )
 

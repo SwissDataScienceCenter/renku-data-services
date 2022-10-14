@@ -83,10 +83,13 @@ def test(server: "UserServer"):
     to fail if the test statements are not correct. This is used to ensure that the
     order of containers in the amalthea manifests is what the notebook service expects."""
     patches = []
+    # NOTE: Only the first 1 or 2 containers come "included" from Amalthea, the rest are patched in
+    # This tests checks whether the expected number and order is received from Amalthea and
+    # does not use all containers.
     container_names = (
-        config.sessions.container_order_registered
+        config.sessions.containers.registered[:2]
         if type(server._user) is RegisteredUser
-        else config.sessions.container_order_anonymous
+        else config.sessions.containers.anonymous[:1]
     )
     for container_ind, container_name in enumerate(container_names):
         patches.append(

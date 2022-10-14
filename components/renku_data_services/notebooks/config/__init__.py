@@ -113,6 +113,19 @@ sessions {
     storage {
         pvs_enabled: true
     }
+    containers {
+        anonymous = [
+            jupyter-server,
+            passthrough-proxy,
+            git-proxy,
+        ]
+        registered = [
+            jupyter-server,
+            oauth2-proxy,
+            git-proxy,
+            git-sidecar,
+        ]
+    }
     enforce_cpu_limits: false
     autosave_minimum_lfs_file_size_bytes: 1000000
     termination_grace_period_seconds: 600
@@ -120,13 +133,6 @@ sessions {
     node_selector: "{}"
     affinity: "{}"
     tolerations: "[]"
-    container_order_anonymous = [
-        jupyter-server
-    ]
-    container_order_registered = [
-        jupyter-server
-        oauth2-proxy
-    ]
 }
 amalthea {
     group = amalthea.dev
