@@ -222,7 +222,7 @@ def main(server: "UserServer"):
                         "kind": "Service",
                         "metadata": {
                             "name": f"{server.server_name}-rpc-server",
-                            "namespace": config.k8s.namespace,
+                            "namespace": server._k8s_client.preferred_namespace,
                         },
                         "spec": {
                             "ports": [

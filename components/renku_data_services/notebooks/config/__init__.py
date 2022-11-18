@@ -13,6 +13,7 @@ from .dynamic import (
     _parse_str_as_bool,
 )
 from .static import _ServersGetEndpointAnnotations
+from ..api.classes.k8s_client import K8sClient, JsServerCache, NamespacedK8sClient
 
 
 @dataclass
@@ -35,6 +36,31 @@ class _NotebooksConfig:
             self.anonymous_sessions_enabled
         )
         self.session_get_endpoint_annotations = _ServersGetEndpointAnnotations()
+        if not self.k8s.enabled:
+            return
+        username_label = (
+            self.session_get_endpoint_annotations.renku_annotation_prefix
+            + "safe-username"
+        )
+        if self.k8s.enabled:
+            renku_ns_client = NamespacedK8sClient(
+                self.k8s.renku_namespace,
+                self.amalthea.group,
+                self.amalthea.version,
+                self.amalthea.plural,
+                username_label,
+            )
+            session_ns_client = None
+            if self.k8s.sessions_namespace:
+                session_ns_client = NamespacedK8sClient(
+                    self.k8s.sessions_namespace,
+                    self.amalthea.group,
+                    self.amalthea.version,
+                    self.amalthea.plural,
+                    username_label,
+                )
+            js_cache = JsServerCache(self.amalthea.cache_url)
+            self.k8s.client = K8sClient(js_cache, renku_ns_client, session_ns_client)
 
 
 def get_config(default_config: str) -> _NotebooksConfig:
@@ -138,6 +164,7 @@ amalthea {
     group = amalthea.dev
     version = v1alpha1
     plural = jupyterservers
+    cache_url = http://renku-k8s-watcher
 }
 sentry {
     enabled = false
@@ -149,6 +176,7 @@ git {
 }
 k8s {
     enabled = true
+    renku_namespace = renku
 }
 s3_mounts_enabled = false
 anonymous_sessions_enabled = false

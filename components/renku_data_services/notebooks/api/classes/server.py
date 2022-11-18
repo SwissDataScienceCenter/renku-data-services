@@ -7,9 +7,6 @@ from urllib.parse import urljoin, urlparse
 
 import gitlab
 from flask import current_app
-from kubernetes import client
-from kubernetes.client.exceptions import ApiException
-from kubernetes.client.models import V1DeleteOptions
 
 from ..amalthea_patches import cloudstorage as cloudstorage_patches
 from ..amalthea_patches import general as general_patches
@@ -19,13 +16,9 @@ from ..amalthea_patches import init_containers as init_containers_patches
 from ..amalthea_patches import inject_certificates as inject_certificates_patches
 from ..amalthea_patches import jupyter_server as jupyter_server_patches
 from ...config import config
-from ...errors.intermittent import (
-    CannotStartServerError,
-    DeleteServerError,
-    IntermittentError,
-)
 from ...errors.programming import ConfigurationError, FilteringResourcesError
 from ...errors.user import MissingResourceError
+from .k8s_client import K8sClient
 from .s3mount import S3mount
 from .user import RegisteredUser, User
 from ...util.check_image import (
@@ -55,11 +48,11 @@ class UserServer:
         server_options: Dict[str, Any],
         environment_variables: Dict[str, str],
         cloudstorage: List[S3mount],
+        k8s_client: K8sClient,
     ):
         self._check_flask_config()
         self._user = user
-        self._k8s_client, self._k8s_namespace = config.k8s.client, config.k8s.namespace
-        self._k8s_api_instance = client.CustomObjectsApi(client.ApiClient())
+        self._k8s_client: K8sClient = k8s_client
         self.safe_username = self._user.safe_username  # type:ignore
         self.namespace = namespace
         self.project = project
@@ -394,23 +387,8 @@ class UserServer:
         if self.verified_image is None:
             error.append(f"image {self.image} does not exist or cannot be accessed")
         if len(error) == 0:
-            try:
-                js = self._k8s_api_instance.create_namespaced_custom_object(
-                    group=config.amalthea.group,
-                    version=config.amalthea.version,
-                    namespace=self._k8s_namespace,
-                    plural=config.amalthea.plural,
-                    body=self._get_session_manifest(),
-                )
-            except ApiException as e:
-                current_app.logger.debug(
-                    f"Cannot start the session {self.server_name}, error: {e}"
-                )
-                raise CannotStartServerError(
-                    message=f"Cannot start the session {self.server_name}",
-                )
-            else:
-                self.js = js
+            js = self._k8s_client.create_server(self._get_session_manifest())
+            self.js = js
         else:
             raise MissingResourceError(
                 message=(
@@ -426,81 +404,31 @@ class UserServer:
 
     def get_js(self):
         """Get the js resource of the user jupyter user session from k8s."""
-        prefix = config.session_get_endpoint_annotations.renku_annotation_prefix
-        jss = filter_resources_by_annotations(
-            self._user.jss,
-            {f"{prefix}servername": self.server_name},
-        )
-        if len(jss) == 0:
-            self.js = None
-            return None
-        elif len(jss) == 1:
-            self.js = jss[0]
-            return jss[0]
-        else:  # more than one pod was matched
-            raise FilteringResourcesError(
-                message=f"The user session matches {len(jss)} k8s jupyterserver resources, "
-                "it should match only one."
-            )
+        self.js = self._k8s_client.get_server(self.server_name)
+        return self.js
 
     def set_js(self, js):
         self.js = js
 
     def stop(self, forced=False):
         """Stop user's server with specific name"""
-        try:
-            status = self._k8s_api_instance.delete_namespaced_custom_object(
-                group=config.amalthea.group,
-                version=config.amalthea.version,
-                namespace=self._k8s_namespace,
-                plural=config.amalthea.plural,
-                name=self.server_name,
-                grace_period_seconds=0 if forced else None,
-                body=V1DeleteOptions(propagation_policy="Foreground"),
-            )
-        except ApiException:
-            raise DeleteServerError()
-        else:
-            return status
+        return self._k8s_client.delete_server(self.server_name, forced)
 
     def get_logs(self, max_log_lines=0):
         """Get the logs of all containers in the server pod."""
-        js = self.js
-        if js is None:
+        if self.js is None:
             raise MissingResourceError(
                 f"The server {self.server_name} cannot be found."
             )
-        output = {}
-        pod_name = js.get("status", {}).get("mainPod", {}).get("name")
+        pod_name = self.js.get("status", {}).get("mainPod", {}).get("name")
         if not pod_name:
             raise MissingResourceError(
                 f"The main component of the server {self.server_name} that contains "
                 "the logs cannot be found."
             )
-        all_containers = js["status"]["mainPod"].get("status", {}).get(
-            "containerStatuses", []
-        ) + js["status"]["mainPod"].get("status", {}).get("initContainerStatuses", [])
-        for container in all_containers:
-            container_name = container["name"]
-            try:
-                logs = self._k8s_client.read_namespaced_pod_log(
-                    pod_name,
-                    self._k8s_namespace,
-                    container=container_name,
-                    tail_lines=max_log_lines if max_log_lines > 0 else None,
-                    timestamps=True,
-                )
-            except ApiException as err:
-                if err.status in [400, 404]:
-                    continue  # container does not exist or is not ready yet
-                else:
-                    raise IntermittentError(
-                        f"Logs cannot be read for server {self.server_name}."
-                    )
-            else:
-                output[container_name] = logs
-
-        return output
+        return self._k8s_client.get_server_logs(
+            self.server_name, max_log_lines if max_log_lines > 0 else None
+        )
 
     @property
     def server_url(self) -> str:
@@ -517,7 +445,7 @@ class UserServer:
             )
 
     @classmethod
-    def from_js(cls, user, js):
+    def from_js(cls, user, js, k8s_client: K8sClient):
         """Create a Server instance from a k8s jupyterserver object."""
         prefix = config.session_get_endpoint_annotations.renku_annotation_prefix
         server = cls(
@@ -531,14 +459,15 @@ class UserServer:
             cls._get_server_options_from_js(js),
             cls._get_environment_variables_from_js(js),
             S3mount.s3mounts_from_js(js),
+            k8s_client,
         )
         server.set_js(js)
         return server
 
     @classmethod
-    def from_server_name(cls, user, server_name):
+    def from_server_name(cls, user, server_name, k8s_client: K8sClient):
         """Create a Server instance from a Jupyter server name."""
-        jss = user.jss
+        jss = k8s_client.list_servers(user.safe_username)
         prefix = config.session_get_endpoint_annotations.renku_annotation_prefix
         jss = filter_resources_by_annotations(
             jss,
@@ -559,7 +488,7 @@ class UserServer:
                 f"Expected 1 match but got {len(jss)} matches. This is a bug."
             )
         js = jss[0]
-        return cls.from_js(user, js)
+        return cls.from_js(user, js, k8s_client)
 
     @staticmethod
     def _get_server_options_from_js(js):

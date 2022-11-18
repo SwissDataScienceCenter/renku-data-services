@@ -2,14 +2,6 @@ from dataclasses import dataclass, field
 from typing import Callable, Optional, Union, List, Dict, Any, Text
 import yaml
 
-from kubernetes import client as k8s_client, config
-from kubernetes.config.config_exception import ConfigException
-from kubernetes.config.incluster_config import (
-    SERVICE_CERT_FILENAME,
-    SERVICE_TOKEN_FILENAME,
-    InClusterConfigLoader,
-)
-
 from ..api.schemas.config_server_options import (
     ServerOptionsChoices,
     ServerOptionsDefaults,
@@ -136,6 +128,7 @@ class _CustomCaCertsConfig:
 
 @dataclass
 class _AmaltheaConfig:
+    cache_url: Text
     group: Text = "amalthea.dev"
     version: Text = "v1alpha1"
     plural: Text = "jupyterservers"
@@ -215,30 +208,12 @@ class _SessionConfig:
 class _K8sConfig:
     """Defines the k8s client and namespace."""
 
+    renku_namespace: Text
+    sessions_namespace: Optional[Text] = None
     enabled: Union[Text, bool] = True
-    namespace: Optional[Text] = None
 
     def __post_init__(self):
         self.enabled = _parse_str_as_bool(self.enabled)
-        if not self.enabled:
-            self.client = None
-            return
-        # NOTE: If the k8s namespace is not defined from dataconf, then try to read it from /var/run
-        # This will only work for in-cluster operation
-        if not self.namespace:
-            with open(
-                "/var/run/secrets/kubernetes.io/serviceaccount/namespace", "rt"
-            ) as f:
-                self.namespace = f.read().strip()
-        # NOTE: Try to load in-cluster config first, if that fails try to load kube config
-        try:
-            InClusterConfigLoader(
-                token_filename=SERVICE_TOKEN_FILENAME,
-                cert_filename=SERVICE_CERT_FILENAME,
-            ).load_and_set()
-        except ConfigException:
-            config.load_config()
-        self.client = k8s_client.CoreV1Api()
 
 
 @dataclass

@@ -20,7 +20,6 @@
 from hashlib import md5
 
 import escapism
-from kubernetes import client
 
 
 def filter_resources_by_annotations(
@@ -43,17 +42,6 @@ def filter_resources_by_annotations(
             return all(res)
 
     return list(filter(filter_resource, resources))
-
-
-def secret_exists(name, k8s_client, k8s_namespace):
-    """Check if the secret exists."""
-
-    try:
-        k8s_client.read_namespaced_secret(name, k8s_namespace)
-        return True
-    except client.rest.ApiException:
-        pass
-    return False
 
 
 def make_server_name(

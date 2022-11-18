@@ -94,7 +94,10 @@ def user_servers(user, **query_params):
       tags:
         - servers
     """
-    servers = [UserServer.from_js(user, js) for js in user.jss]
+    servers = [
+        UserServer.from_js(user, js, config.k8s.client)
+        for js in config.k8s.client.list_servers(user.safe_username)
+    ]
     filter_attrs = list(filter(lambda x: x[1] is not None, query_params.items()))
     filtered_servers = {}
     for server in servers:
@@ -133,7 +136,7 @@ def user_server(user, server_name):
       tags:
         - servers
     """
-    server = UserServer.from_server_name(user, server_name)
+    server = UserServer.from_server_name(user, server_name, config.k8s.client)
     return NotebookResponse().dump(server)
 
 
@@ -192,6 +195,7 @@ def launch_notebook(
         server_options,
         environment_variables,
         cloudstorage,
+        config.k8s.client,
     )
 
     if len(server.safe_username) > 63:
@@ -255,7 +259,7 @@ def stop_server(user, forced, server_name):
       tags:
         - servers
     """
-    server = UserServer.from_server_name(user, server_name)
+    server = UserServer.from_server_name(user, server_name, config.k8s.client)
     server.stop(forced)
     return "", 204
 
@@ -336,7 +340,7 @@ def server_logs(user, max_lines, server_name):
       tags:
         - logs
     """
-    server = UserServer.from_server_name(user, server_name)
+    server = UserServer.from_server_name(user, server_name, config.k8s.client)
     max_lines = request.args.get("max_lines", default=250, type=int)
     logs = server.get_logs(max_lines)
     return ServerLogs().dump(logs)

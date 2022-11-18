@@ -114,7 +114,7 @@ def image_pull_secret(server: "UserServer"):
                             "kind": "Secret",
                             "metadata": {
                                 "name": image_pull_secret_name,
-                                "namespace": server._k8s_namespace,
+                                "namespace": server._k8s_client.preferred_namespace,
                             },
                             "type": "kubernetes.io/dockerconfigjson",
                         },

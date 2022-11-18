@@ -47,3 +47,24 @@ class CannotStartServerError(IntermittentError):
         "with the underlying infrastructure."
     )
     code: int = IntermittentError.code + 2
+
+
+@dataclass
+class JSCacheError(IntermittentError):
+    """Raised when the jupyter server cache responds with anything other than a 200 status
+    code. This indicates trouble with the path requested (i.e. the jupyter cache is not aware
+    of the path) or the jypyter server cache is not functioning properly. When this error
+    is raised the regular (non-cached) k8s client takes over the fulfils the request. Please
+    note that this is possible because the jypyter server cache will respond with 200 and
+    an empty response if resource that do not exist are requested."""
+
+    message: str = "The jupyter server cache produced and unexpected error."
+    code: int = IntermittentError.code + 3
+
+
+class RetryTimeoutError(IntermittentError):
+    """Raised when something was expected to be retried and to evenentually succeed but was retried
+    too many times so that it timed out."""
+
+    message: str = "Retrying the request timed out."
+    code: int = IntermittentError.code + 4
