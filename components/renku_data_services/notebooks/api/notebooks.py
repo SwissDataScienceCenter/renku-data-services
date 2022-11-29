@@ -296,7 +296,7 @@ def server_options(user):
     {
         "max_lines": fields.Integer(
             load_default=250,
-            validate=validate.Range(min=1, max=None, min_inclusive=True),
+            validate=validate.Range(min=0, max=None, min_inclusive=True),
         )
     },
     as_kwargs=True,
@@ -321,7 +321,7 @@ def server_logs(user, max_lines, server_name):
           schema:
             type: integer
             default: 250
-            minimum: 1
+            minimum: 0
           name: max_lines
           required: false
           description: |
