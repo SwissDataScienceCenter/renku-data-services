@@ -47,7 +47,37 @@ def main(server: "UserServer"):
                             },
                             {
                                 "name": "GITLAB_OAUTH_TOKEN",
-                                "value": server._user.git_token,
+                                "value": str(server._user.git_token),
+                            },
+                            {
+                                "name": "GITLAB_OAUTH_TOKEN_EXPIRES_AT",
+                                "value": str(server._user.git_token_expires_at),
+                            },
+                            {
+                                "name": "RENKU_ACCESS_TOKEN",
+                                "value": str(server._user.access_token),
+                            },
+                            {
+                                "name": "RENKU_REFRESH_TOKEN",
+                                "value": str(server._user.refresh_token),
+                            },
+                            {
+                                "name": "RENKU_REALM",
+                                "value": config.keycloak_realm,
+                            },
+                            {
+                                "name": "RENKU_CLIENT_ID",
+                                "value": str(config.sessions.git_proxy.renku_client_id),
+                            },
+                            {
+                                "name": "RENKU_CLIENT_SECRET",
+                                "value": str(
+                                    config.sessions.git_proxy.renku_client_secret
+                                ),
+                            },
+                            {
+                                "name": "RENKU_URL",
+                                "value": "https://" + config.sessions.ingress.host,
                             },
                             {
                                 "name": "ANONYMOUS_SESSION",

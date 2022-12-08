@@ -3,6 +3,7 @@ import json
 import re
 from abc import ABC, abstractmethod
 from functools import lru_cache
+from math import floor
 from typing import Optional
 
 import escapism
@@ -55,6 +56,9 @@ class AnonymousUser(User):
         self.email = None
         self.oidc_issuer = None
         self.git_token = None
+        self.git_token_expires_at = 0
+        self.access_token = None
+        self.refresh_token = None
         self.id = headers[self.auth_header]
 
     def get_autosaves(self, *args, **kwargs):
@@ -84,11 +88,14 @@ class RegisteredUser(User):
         self.safe_username = escapism.escape(self.username, escape_char="-").lower()
         self.oidc_issuer = parsed_id_token["iss"]
         self.id = parsed_id_token["sub"]
+        self.access_token = headers["Renku-Auth-Access-Token"]
+        self.refresh_token = headers["Renku-Auth-Refresh-Token"]
 
         (
             self.git_url,
             self.git_auth_header,
             self.git_token,
+            self.git_token_expires_at,
         ) = self.git_creds_from_headers(headers)
         self.gitlab_client = Gitlab(
             self.git_url,
@@ -120,7 +127,24 @@ class RegisteredUser(User):
             r"^[^\s]+\ ([^\s]+)$", git_credentials["AuthorizationHeader"]
         )
         git_token = token_match.group(1) if token_match is not None else None
-        return git_url, git_credentials["AuthorizationHeader"], git_token
+        git_token_expires_at = git_credentials["AccessTokenExpiresAt"]
+        if git_token_expires_at is None:
+            # INFO: Indicates that the token does not expire
+            git_token_expires_at = -1
+        else:
+            try:
+                # INFO: Sometimes this can be a float, sometimes an int
+                git_token_expires_at = float(git_token_expires_at)
+            except ValueError:
+                git_token_expires_at = -1
+            else:
+                git_token_expires_at = floor(git_token_expires_at)
+        return (
+            git_url,
+            git_credentials["AuthorizationHeader"],
+            git_token,
+            git_token_expires_at,
+        )
 
     def get_autosaves(self, namespace_project=None):
         """Get a list of autosaves for all projects for the user"""

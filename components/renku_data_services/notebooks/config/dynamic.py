@@ -63,10 +63,12 @@ class _GitConfig:
 
 @dataclass
 class _GitProxyConfig:
+    renku_client_secret: Text
     port: Union[Text, int] = 8080
     health_port: Union[Text, int] = 8081
     image: Text = "renku/git-https-proxy:latest"
     sentry: _SentryConfig = _SentryConfig(enabled=False)
+    renku_client_id: Text = "renku"
 
     def __post_init__(self):
         self.port = _parse_value_as_numeric(self.port, int)
