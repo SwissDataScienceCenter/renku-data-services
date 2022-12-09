@@ -16,9 +16,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Notebooks service API."""
-from flask import Blueprint, current_app, request, make_response
-from marshmallow import validate
-from webargs import fields
+from flask import Blueprint, current_app, request, make_response, jsonify
+from marshmallow import fields, validate
 from webargs.flaskparser import use_args
 
 from renku_notebooks.util.check_image import (
@@ -107,6 +106,9 @@ def user_servers(user, **query_params):
 
 
 @bp.route("servers/<server_name>", methods=["GET"])
+@use_args(
+    {"server_name": fields.Str(required=True)}, location="view_args", as_kwargs=True
+)
 @authenticated
 def user_server(user, server_name):
     """
@@ -137,7 +139,7 @@ def user_server(user, server_name):
         - servers
     """
     server = UserServer.from_server_name(user, server_name, config.k8s.client)
-    return NotebookResponse().dump(server)
+    return jsonify(NotebookResponse().dump(server))
 
 
 @bp.route("servers", methods=["POST"])
@@ -218,7 +220,12 @@ def launch_notebook(
 
 
 @bp.route("servers/<server_name>", methods=["DELETE"])
-@use_args({"forced": fields.Boolean(load_default=False)}, as_kwargs=True)
+@use_args(
+    {"server_name": fields.Str(required=True)}, location="view_args", as_kwargs=True
+)
+@use_args(
+    {"forced": fields.Boolean(load_default=False)}, location="query", as_kwargs=True
+)
 @authenticated
 def stop_server(user, forced, server_name):
     """
@@ -302,6 +309,9 @@ def server_options(user):
     as_kwargs=True,
     location="query",
 )
+@use_args(
+    {"server_name": fields.Str(required=True)}, location="view_args", as_kwargs=True
+)
 @authenticated
 def server_logs(user, max_lines, server_name):
     """
@@ -343,7 +353,7 @@ def server_logs(user, max_lines, server_name):
     server = UserServer.from_server_name(user, server_name, config.k8s.client)
     max_lines = request.args.get("max_lines", default=250, type=int)
     logs = server.get_logs(max_lines)
-    return ServerLogs().dump(logs)
+    return jsonify(ServerLogs().dump(logs))
 
 
 @bp.route("<path:namespace_project>/autosave", methods=["GET"])
@@ -381,11 +391,13 @@ def autosave_info(user, namespace_project):
     """
     if user.get_renku_project(namespace_project) is None:
         raise MissingResourceError(message=f"Cannot find project {namespace_project}")
-    return AutosavesList().dump(
-        {
-            "pvsSupport": config.sessions.storage.pvs_enabled,
-            "autosaves": user.get_autosaves(namespace_project),
-        },
+    return jsonify(
+        AutosavesList().dump(
+            {
+                "pvsSupport": config.sessions.storage.pvs_enabled,
+                "autosaves": user.get_autosaves(namespace_project),
+            },
+        )
     )
 
 
