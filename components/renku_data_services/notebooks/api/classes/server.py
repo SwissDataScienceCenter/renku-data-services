@@ -279,6 +279,7 @@ class UserServer:
                 jupyter_server_patches.env(self),
                 jupyter_server_patches.image_pull_secret(self),
                 jupyter_server_patches.disable_service_links(),
+                jupyter_server_patches.rstudio_env_variables(self),
                 git_proxy_patches.main(self),
                 git_sidecar_patches.main(self),
                 general_patches.oidc_unverified_email(self),

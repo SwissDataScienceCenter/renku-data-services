@@ -1,4 +1,5 @@
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, List
 
 if TYPE_CHECKING:
     from renku_notebooks.api.classes.server import UserServer
@@ -147,6 +148,63 @@ def disable_service_links():
                     "path": "/statefulset/spec/template/spec/enableServiceLinks",
                     "value": False,
                 }
+            ],
+        }
+    ]
+
+
+def rstudio_env_variables(server: "UserServer") -> List[Dict[str, Any]]:
+    """Makes sure environment variables propagate for R and Rstudio.
+    Since we cannot be certain that R/Rstudio is or isn't used we inject this every time
+    the user has custom environment variables. These will not break jupyterlab.
+    See: https://rviews.rstudio.com/2017/04/19/r-for-enterprise-understanding-r-s-startup/"""
+    if not server.environment_variables:
+        return []
+    secret_name = f"{server.server_name}-renviron"
+    mount_location = Path("/home/jovyan/.Renviron")
+    return [
+        {
+            "type": "application/json-patch+json",
+            "patch": [
+                # INFO: Put the environment variables in a secret
+                {
+                    "op": "add",
+                    "path": "/renviron",
+                    "value": {
+                        "apiVersion": "v1",
+                        "kind": "Secret",
+                        "metadata": {"name": secret_name},
+                        "stringData": {
+                            mount_location.name: "\n".join(
+                                [
+                                    f"{k}={v}"
+                                    for k, v in server.environment_variables.items()
+                                ]
+                            )
+                        },
+                    },
+                },
+                # INFO: Mount the secret with environment variables in the session as a file
+                {
+                    "op": "add",
+                    "path": "/statefulset/spec/template/spec/volumes/-",
+                    "value": {
+                        "name": secret_name,
+                        "secret": {
+                            "secretName": secret_name,
+                        },
+                    },
+                },
+                {
+                    "op": "add",
+                    "path": "/statefulset/spec/template/spec/containers/0/volumeMounts/-",
+                    "value": {
+                        "name": secret_name,
+                        "mountPath": mount_location.absolute().as_posix(),
+                        "subPath": mount_location.name,
+                        "readOnly": True,
+                    },
+                },
             ],
         }
     ]
