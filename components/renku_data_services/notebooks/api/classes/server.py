@@ -16,10 +16,10 @@ from ..amalthea_patches import init_containers as init_containers_patches
 from ..amalthea_patches import inject_certificates as inject_certificates_patches
 from ..amalthea_patches import jupyter_server as jupyter_server_patches
 from ...config import config
-from ...errors.programming import ConfigurationError, FilteringResourcesError
+from ...errors.programming import ConfigurationError
 from ...errors.user import MissingResourceError
 from .k8s_client import K8sClient
-from .s3mount import S3mount
+from .cloud_storage import ICloudStorageRequest
 from .user import RegisteredUser, User
 from ...util.check_image import (
     get_docker_token,
@@ -27,10 +27,7 @@ from ...util.check_image import (
     image_exists,
     parse_image_name,
 )
-from ...util.kubernetes_ import (
-    filter_resources_by_annotations,
-    make_server_name,
-)
+from ...util.kubernetes_ import make_server_name
 
 
 class UserServer:
@@ -47,7 +44,7 @@ class UserServer:
         image: Optional[str],
         server_options: Dict[str, Any],
         environment_variables: Dict[str, str],
-        cloudstorage: List[S3mount],
+        cloudstorage: List[ICloudStorageRequest],
         k8s_client: K8sClient,
     ):
         self._check_flask_config()
@@ -67,9 +64,8 @@ class UserServer:
         self.verified_image: Optional[str] = None
         self.is_image_private: Optional[bool] = None
         self.image_workdir: Optional[str] = None
-        self.cloudstorage: Optional[List[S3mount]] = cloudstorage
+        self.cloudstorage: Optional[List[ICloudStorageRequest]] = cloudstorage
         self.gl_project_name = f"{self.namespace}/{self.project}"
-        self.js: Optional[Dict[str, Any]] = None
 
     def _check_flask_config(self):
         """Check the app config and ensure minimum required parameters are present."""
@@ -91,12 +87,6 @@ class UserServer:
     @property
     def server_name(self):
         """Make the name that is used to identify a unique user session"""
-        prefix = config.session_get_endpoint_annotations.renku_annotation_prefix
-        if self.js is not None:
-            try:
-                return self.js["metadata"]["annotations"][f"{prefix}servername"]
-            except KeyError:
-                pass  # make server name from params - required fields missing from k8s resource
         return make_server_name(
             self._user.safe_username,
             self.namespace,
@@ -374,7 +364,7 @@ class UserServer:
         }
         return manifest
 
-    def start(self):
+    def start(self) -> Optional[Dict[str, Any]]:
         """Create the jupyterserver resource in k8s."""
         error = []
         js = None
@@ -388,8 +378,9 @@ class UserServer:
         if self.verified_image is None:
             error.append(f"image {self.image} does not exist or cannot be accessed")
         if len(error) == 0:
-            js = self._k8s_client.create_server(self._get_session_manifest())
-            self.js = js
+            js = self._k8s_client.create_server(
+                self._get_session_manifest(), self.safe_username
+            )
         else:
             raise MissingResourceError(
                 message=(
@@ -398,38 +389,6 @@ class UserServer:
                 )
             )
         return js
-
-    def server_exists(self):
-        """Check if the user server exists (i.e. is an actual pod in k8s)."""
-        return self.js is not None
-
-    def get_js(self):
-        """Get the js resource of the user jupyter user session from k8s."""
-        self.js = self._k8s_client.get_server(self.server_name)
-        return self.js
-
-    def set_js(self, js):
-        self.js = js
-
-    def stop(self, forced=False):
-        """Stop user's server with specific name"""
-        return self._k8s_client.delete_server(self.server_name, forced)
-
-    def get_logs(self, max_log_lines=0):
-        """Get the logs of all containers in the server pod."""
-        if self.js is None:
-            raise MissingResourceError(
-                f"The server {self.server_name} cannot be found."
-            )
-        pod_name = self.js.get("status", {}).get("mainPod", {}).get("name")
-        if not pod_name:
-            raise MissingResourceError(
-                f"The main component of the server {self.server_name} that contains "
-                "the logs cannot be found."
-            )
-        return self._k8s_client.get_server_logs(
-            self.server_name, max_log_lines if max_log_lines > 0 else None
-        )
 
     @property
     def server_url(self) -> str:
@@ -444,128 +403,6 @@ class UserServer:
                 "https://" + config.sessions.ingress.host,
                 f"sessions/{self.server_name}?token={self._user.username}",
             )
-
-    @classmethod
-    def from_js(cls, user, js, k8s_client: K8sClient):
-        """Create a Server instance from a k8s jupyterserver object."""
-        prefix = config.session_get_endpoint_annotations.renku_annotation_prefix
-        server = cls(
-            user,
-            js["metadata"]["annotations"].get(f"{prefix}namespace"),
-            js["metadata"]["annotations"].get(f"{prefix}projectName"),
-            js["metadata"]["annotations"].get(f"{prefix}branch"),
-            js["metadata"]["annotations"].get(f"{prefix}commit-sha"),
-            None,
-            js["spec"]["jupyterServer"]["image"],
-            cls._get_server_options_from_js(js),
-            cls._get_environment_variables_from_js(js),
-            S3mount.s3mounts_from_js(js),
-            k8s_client,
-        )
-        server.set_js(js)
-        return server
-
-    @classmethod
-    def from_server_name(cls, user, server_name, k8s_client: K8sClient):
-        """Create a Server instance from a Jupyter server name."""
-        jss = k8s_client.list_servers(user.safe_username)
-        prefix = config.session_get_endpoint_annotations.renku_annotation_prefix
-        jss = filter_resources_by_annotations(
-            jss,
-            {f"{prefix}servername": server_name},
-        )
-        if len(jss) == 0:
-            raise MissingResourceError(
-                f"The server {server_name} cannot be found.",
-                detail=(
-                    "This can happen if you have mistyped the server name, "
-                    "logged in with different credentials or have deleted "
-                    "the server you are requesting."
-                ),
-            )
-        if len(jss) > 1:
-            raise FilteringResourcesError(
-                f"Filtering servers for {server_name} matched too many servers. "
-                f"Expected 1 match but got {len(jss)} matches. This is a bug."
-            )
-        js = jss[0]
-        return cls.from_js(user, js, k8s_client)
-
-    @staticmethod
-    def _get_server_options_from_js(js):
-        server_options = {}
-        # url
-        server_options["defaultUrl"] = js["spec"]["jupyterServer"]["defaultUrl"]
-        # disk
-        server_options["disk_request"] = js["spec"]["storage"].get("size")
-        # NOTE: Amalthea accepts only strings for disk request, but k8s allows bytes as number
-        # so try to convert to number if possible
-        try:
-            server_options["disk_request"] = float(server_options["disk_request"])
-        except ValueError:
-            pass
-        # cpu, memory, gpu, ephemeral storage
-        k8s_res_name_xref = {
-            "memory": "mem_request",
-            "nvidia.com/gpu": "gpu_request",
-            "cpu": "cpu_request",
-            "ephemeral-storage": "ephemeral-storage",
-        }
-        js_resources = js["spec"]["jupyterServer"]["resources"]["requests"]
-        for k8s_res_name in k8s_res_name_xref.keys():
-            if k8s_res_name in js_resources.keys():
-                server_options[k8s_res_name_xref[k8s_res_name]] = js_resources[
-                    k8s_res_name
-                ]
-        # adjust ephemeral storage properly based on whether persistent volumes are used
-        if "ephemeral-storage" in server_options.keys():
-            server_options["ephemeral-storage"] = (
-                server_options["ephemeral-storage"]
-                if config.sessions.storage.pvs_enabled
-                else server_options["disk_request"]
-            )
-        # lfs auto fetch
-        for patches in js["spec"]["patches"]:
-            for patch in patches.get("patch", []):
-                if (
-                    patch.get("path")
-                    == "/statefulset/spec/template/spec/initContainers/-"
-                ):
-                    for env in patch.get("value", {}).get("env", []):
-                        if env.get("name") == "GIT_CLONE_LFS_AUTO_FETCH":
-                            server_options["lfs_auto_fetch"] = env.get("value") == "1"
-        return {
-            **config.server_options.defaults,
-            **server_options,
-        }
-
-    @staticmethod
-    def _get_environment_variables_from_js(js):
-        env = {}
-
-        system_envs = [
-            "GIT_AUTOSAVE",
-            "RENKU_USERNAME",
-            "CI_COMMIT_SHA",
-            "NOTEBOOK_DIR",
-            "MOUNT_PATH",
-            "SESSION_URL",
-            "PROJECT_NAME",
-            "GIT_CLONE_REPO",
-        ]
-
-        for patches in js["spec"]["patches"]:
-            for patch in patches.get("patch", []):
-                if (
-                    patch.get("path")
-                    == "/statefulset/spec/template/spec/containers/0/env/-"
-                    and patch.get("value", {}).get("name") not in system_envs
-                ):
-                    env[patch.get("value", {}).get("name")] = patch.get(
-                        "value", {}
-                    ).get("value")
-
-        return env
 
     def __str__(self):
         return (

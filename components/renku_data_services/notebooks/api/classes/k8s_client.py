@@ -33,13 +33,11 @@ class NamespacedK8sClient:
         amalthea_group: str,
         amalthea_version: str,
         amalthea_plural: str,
-        username_label: str,
     ):
         self.namespace = namespace
         self.amalthea_group = amalthea_group
         self.amalthea_version = amalthea_version
         self.amalthea_plural = amalthea_plural
-        self.username_label = username_label
         # NOTE: Try to load in-cluster config first, if that fails try to load kube config
         try:
             InClusterConfigLoader(
@@ -150,9 +148,10 @@ class NamespacedK8sClient:
             return
         return js
 
-    def list_servers(self, safe_username: str) -> List[Dict[str, Any]]:
+    def list_servers(
+        self, label_selector: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """Get a list of k8s jupyterserver objects for a specific user."""
-        label_selector = f"{self.username_label}={safe_username}"
         try:
             jss = self._custom_objects.list_namespaced_custom_object(
                 group=self.amalthea_group,
@@ -163,11 +162,9 @@ class NamespacedK8sClient:
             )
         except ApiException as err:
             if err.status not in [400, 404]:
-                logging.exception(
-                    f"Cannot list servers of user {safe_username} because of {err}"
-                )
+                logging.exception(f"Cannot list servers because of {err}")
                 raise IntermittentError(
-                    f"Cannot list servers for user {safe_username} from the k8s API."
+                    f"Cannot list servers from the k8s API with selector {label_selector}."
                 )
             return []
         return jss.get("items", [])
@@ -228,11 +225,15 @@ class K8sClient:
         self,
         js_cache: JsServerCache,
         renku_ns_client: NamespacedK8sClient,
-        session_ns_client: NamespacedK8sClient = None,
+        username_label: str,
+        session_ns_client: Optional[NamespacedK8sClient] = None,
     ):
         self.js_cache = js_cache
         self.renku_ns_client = renku_ns_client
+        self.username_label = username_label
         self.session_ns_client = session_ns_client
+        if not self.username_label:
+            raise ProgrammingError("username_label has to be provided to K8sClient")
 
     def list_servers(self, safe_username: str) -> List[Dict[str, Any]]:
         """Get a list of servers that belong to a user. Attempt to use the cache
@@ -243,17 +244,19 @@ class K8sClient:
             logging.warning(
                 f"Skipping the cache to list servers for user: {safe_username}"
             )
-            return self.renku_ns_client.list_servers(safe_username) + (
-                self.session_ns_client.list_servers(safe_username)
+            label_selector = f"{self.username_label}={safe_username}"
+            return self.renku_ns_client.list_servers(label_selector) + (
+                self.session_ns_client.list_servers(label_selector)
                 if self.session_ns_client is not None
                 else []
             )
 
-    def get_server(self, name: str) -> Optional[Dict[str, Any]]:
+    def get_server(self, name: str, safe_username: str) -> Optional[Dict[str, Any]]:
         """Attempt to get a specific server by name from the cache. If the request
         to the cache fails, fallback to the k8s API."""
+        server = None
         try:
-            return self.js_cache.get_server(name)
+            server = self.js_cache.get_server(name)
         except JSCacheError:
             output = []
             res = None
@@ -271,15 +274,22 @@ class K8sClient:
                 )
             if len(output) == 0:
                 return
-            return output[0]
+            server = output[0]
+        if server:
+            if (
+                server.get("metadata", {}).get("labels", {}).get(self.username_label)
+                != safe_username
+            ):
+                return
+        return server
 
     def get_server_logs(
-        self, server_name: str, max_log_lines: Optional[int] = None
+        self, server_name: str, safe_username: str, max_log_lines: Optional[int] = None
     ) -> Dict[str, str]:
-        server = self.get_server(server_name)
+        server = self.get_server(server_name, safe_username)
         if server is None:
             raise MissingResourceError(
-                f"Cannot find server {server_name} to read the logs from."
+                f"Cannot find server {server_name} for user {safe_username} to read the logs from."
             )
         containers = list(
             server.get("status", {}).get("containerStates", {}).get("init", {}).keys()
@@ -304,9 +314,9 @@ class K8sClient:
                 return secret
         return self.renku_ns_client.get_secret(name)
 
-    def create_server(self, manifest: Dict[str, Any]):
+    def create_server(self, manifest: Dict[str, Any], safe_username: str):
         server_name = manifest.get("metadata", {}).get("name")
-        server = self.get_server(server_name)
+        server = self.get_server(server_name, safe_username)
         if server:
             # NOTE: server already exists
             return server
@@ -314,15 +324,14 @@ class K8sClient:
             return self.renku_ns_client.create_server(manifest)
         return self.session_ns_client.create_server(manifest)
 
-    def delete_server(self, server_name: str, forced: bool = False):
-        server = self.get_server(server_name)
+    def delete_server(self, server_name: str, safe_username: str, forced: bool = False):
+        server = self.get_server(server_name, safe_username)
         if not server:
             raise MissingResourceError(
-                f"Cannot find server {server_name} in order to delete it."
+                f"Cannot find server {server_name} for user "
+                f"{safe_username} in order to delete it."
             )
         namespace = server.get("metadata", {}).get("namespace")
-        logging.warning(f"Namespace: {namespace}")
-        logging.warning(server)
         if namespace == self.renku_ns_client.namespace:
             self.renku_ns_client.delete_server(server_name, forced)
         else:

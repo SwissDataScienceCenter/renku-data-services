@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
 import boto3
@@ -6,10 +6,11 @@ from botocore import UNSIGNED
 from botocore.client import Config
 from botocore.exceptions import ClientError, EndpointConnectionError, NoCredentialsError
 
-from ...config import config
+from ....config import config
+from . import ICloudStorageRequest
 
 
-class S3mount:
+class S3Request(ICloudStorageRequest):
     def __init__(
         self,
         bucket,
@@ -22,7 +23,7 @@ class S3mount:
         self.access_key = access_key if access_key != "" else None
         self.secret_key = secret_key if secret_key != "" else None
         self.endpoint = endpoint
-        self.bucket = bucket
+        self._bucket = bucket
         self.read_only = read_only
         self.public = False
         if self.access_key is None and self.secret_key is None:
@@ -40,13 +41,13 @@ class S3mount:
                 aws_secret_access_key=self.secret_key,
                 endpoint_url=self.endpoint,
             )
-        self.mount_folder = mount_folder
+        self._mount_folder = str(mount_folder).rstrip("/")
         self.__head_bucket = {}
 
-    def get_manifest_patches(
-        self, k8s_res_name, k8s_namespace, labels={}, annotations={}
-    ):
-        secret_name = f"{k8s_res_name}-secret"
+    def get_manifest_patch(
+        self, base_name: str, namespace: str, labels={}, annotations={}
+    ) -> Dict[str, Any]:
+        secret_name = f"{base_name}-secret"
         # prepare datashim dataset spec
         s3mount_spec = {
             "local": {
@@ -60,7 +61,7 @@ class S3mount:
         }
         if not self.public:
             s3mount_spec["local"]["secret-name"] = f"{secret_name}"
-            s3mount_spec["local"]["secret-namespace"] = k8s_namespace
+            s3mount_spec["local"]["secret-namespace"] = namespace
         else:
             s3mount_spec["local"]["accessKeyID"] = ""
             s3mount_spec["local"]["secretAccessKey"] = "secret"
@@ -70,13 +71,13 @@ class S3mount:
                 # add whole datashim dataset spec
                 {
                     "op": "add",
-                    "path": f"/{k8s_res_name}",
+                    "path": f"/{base_name}",
                     "value": {
                         "apiVersion": "com.ie.ibm.hpsys/v1alpha1",
                         "kind": "Dataset",
                         "metadata": {
-                            "name": k8s_res_name,
-                            "namespace": k8s_namespace,
+                            "name": base_name,
+                            "namespace": namespace,
                             "labels": labels,
                             "annotations": {
                                 **annotations,
@@ -92,16 +93,16 @@ class S3mount:
                     "op": "add",
                     "path": "/statefulset/spec/template/spec/containers/0/volumeMounts/-",
                     "value": {
-                        "mountPath": self.mount_folder.rstrip("/") + "/" + self.bucket,
-                        "name": k8s_res_name,
+                        "mountPath": self.mount_folder + "/" + self.bucket,
+                        "name": base_name,
                     },
                 },
                 {
                     "op": "add",
                     "path": "/statefulset/spec/template/spec/volumes/-",
                     "value": {
-                        "name": k8s_res_name,
-                        "persistentVolumeClaim": {"claimName": k8s_res_name},
+                        "name": base_name,
+                        "persistentVolumeClaim": {"claimName": base_name},
                     },
                 },
             ],
@@ -117,7 +118,7 @@ class S3mount:
                         "kind": "Secret",
                         "metadata": {
                             "name": secret_name,
-                            "namespace": k8s_namespace,
+                            "namespace": namespace,
                             "labels": labels,
                             "annotations": annotations,
                         },
@@ -143,7 +144,7 @@ class S3mount:
         return self.__head_bucket
 
     @property
-    def bucket_exists(self):
+    def exists(self) -> bool:
         if self.head_bucket is None:
             return False
         amz_bucket_region = (
@@ -162,6 +163,10 @@ class S3mount:
         return True
 
     @property
+    def bucket(self) -> str:
+        return self._bucket
+
+    @property
     def region_specific_endpoint(self) -> Optional[str]:
         """Get the region specific endpoint if the bucket exists and the general
         non-region-specific URL for AWS is used."""
@@ -177,47 +182,6 @@ class S3mount:
         if amz_bucket_region and urlparse(self.endpoint).netloc == "s3.amazonaws.com":
             return f"https://s3.{amz_bucket_region}.amazonaws.com"
 
-    @classmethod
-    def s3mounts_from_js(cls, js):
-        s3mounts = []
-        for patch_collection in js["spec"]["patches"]:
-            for patch in patch_collection["patch"]:
-                if patch["op"] == "test":
-                    continue
-                if (
-                    type(patch["value"]) is dict
-                    and patch["value"].get("kind") == "Dataset"
-                ):
-                    s3mount_args = {}
-                    s3mount_args.update(
-                        {
-                            "endpoint": patch["value"]["spec"]["local"]["endpoint"],
-                            "bucket": patch["value"]["spec"]["local"]["bucket"],
-                            "read_only": patch["value"]["spec"]["local"]["readonly"]
-                            == "true",
-                            "mount_folder": patch["value"]["metadata"]["annotations"][
-                                config.session_get_endpoint_annotations.renku_annotation_prefix
-                                + "mount_folder"
-                            ],
-                        }
-                    )
-                    if "secret-name" in patch["value"]["spec"]["local"].keys():
-                        secret_name = patch["value"]["spec"]["local"]["secret-name"]
-                        for patch in patch_collection["patch"]:
-                            if (
-                                type(patch["value"]) is dict
-                                and patch["value"].get("kind") == "Secret"
-                                and patch["value"]["metadata"]["name"] == secret_name
-                            ):
-                                s3mount_args.update(
-                                    {
-                                        "access_key": patch["value"]["stringData"][
-                                            "accessKeyID"
-                                        ],
-                                        "secret_key": patch["value"]["stringData"][
-                                            "secretAccessKey"
-                                        ],
-                                    }
-                                )
-                    s3mounts.append(cls(**s3mount_args))
-        return s3mounts
+    @property
+    def mount_folder(self):
+        return self._mount_folder

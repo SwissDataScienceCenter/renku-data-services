@@ -72,8 +72,8 @@ def git_clone(server: "UserServer"):
         },
         {
             "name": "GIT_CLONE_S3_MOUNT",
-            "value": server.cloudstorage[0].mount_folder
-            if config.s3_mounts_enabled and server.cloudstorage
+            "value": config.cloud_storage.mount_folder
+            if config.cloud_storage.any_enabled and server.cloudstorage
             else "",
         },
     ]

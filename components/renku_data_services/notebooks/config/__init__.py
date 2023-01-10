@@ -10,6 +10,7 @@ from .dynamic import (
     _SentryConfig,
     _GitConfig,
     _K8sConfig,
+    _CloudStorage,
     _parse_str_as_bool,
 )
 from .static import _ServersGetEndpointAnnotations
@@ -24,15 +25,14 @@ class _NotebooksConfig:
     sentry: _SentryConfig
     git: _GitConfig
     k8s: _K8sConfig
+    cloud_storage: _CloudStorage
     current_resource_schema_version: int = 1
-    s3_mounts_enabled: Union[Text, bool] = False
     anonymous_sessions_enabled: Union[Text, bool] = False
     service_prefix: str = "/notebooks"
     version: str = "0.0.0"
     keycloak_realm: str = "Renku"
 
     def __post_init__(self):
-        self.s3_mounts_enabled = _parse_str_as_bool(self.s3_mounts_enabled)
         self.anonymous_sessions_enabled = _parse_str_as_bool(
             self.anonymous_sessions_enabled
         )
@@ -49,7 +49,6 @@ class _NotebooksConfig:
                 self.amalthea.group,
                 self.amalthea.version,
                 self.amalthea.plural,
-                username_label,
             )
             session_ns_client = None
             if self.k8s.sessions_namespace:
@@ -58,10 +57,14 @@ class _NotebooksConfig:
                     self.amalthea.group,
                     self.amalthea.version,
                     self.amalthea.plural,
-                    username_label,
                 )
             js_cache = JsServerCache(self.amalthea.cache_url)
-            self.k8s.client = K8sClient(js_cache, renku_ns_client, session_ns_client)
+            self.k8s.client = K8sClient(
+                js_cache=js_cache,
+                renku_ns_client=renku_ns_client,
+                session_ns_client=session_ns_client,
+                username_label=username_label,
+            )
 
 
 def get_config(default_config: str) -> _NotebooksConfig:
@@ -181,7 +184,17 @@ k8s {
     enabled = true
     renku_namespace = renku
 }
-s3_mounts_enabled = false
+cloud_storage {
+    s3 {
+        enabled = false
+        read_only = true
+    }
+    azure_blob {
+        enabled = false
+        read_only = true
+    }
+    mount_folder = /cloudstorage
+}
 anonymous_sessions_enabled = false
 service_prefix = /notebooks
 version = 0.0.0

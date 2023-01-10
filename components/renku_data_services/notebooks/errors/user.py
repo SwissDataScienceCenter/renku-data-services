@@ -60,3 +60,11 @@ class ImageParseError(UserInputError):
 
     message: str = "The provided image name cannot be parsed."
     code: int = UserInputError.code + 2
+
+
+@dataclass
+class InvalidCloudStorageUrl(UserInputError):
+    """Raised when the url for a cloud storage buckeet/container cannot be parsed."""
+
+    message: str = "The url for the cloud storage endpoint is not valid."
+    code: int = UserInputError.code + 3

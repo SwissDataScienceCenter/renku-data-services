@@ -16,7 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Notebooks service API."""
-from flask import Blueprint, current_app, request, make_response, jsonify
+from flask import Blueprint, current_app, make_response, jsonify
 from marshmallow import fields, validate
 from webargs.flaskparser import use_args
 
@@ -29,6 +29,7 @@ from renku_notebooks.util.check_image import (
 from ..config import config
 from .auth import authenticated
 from .classes.server import UserServer
+from .classes.server_manifest import UserServerManifest
 from .classes.storage import AutosaveBranch
 from ..errors.user import ImageParseError, MissingResourceError, UserInputError
 from .schemas.autosave import AutosavesList
@@ -37,6 +38,7 @@ from .schemas.logs import ServerLogs
 from .schemas.servers_get import NotebookResponse, ServersGetRequest, ServersGetResponse
 from .schemas.servers_post import LaunchNotebookRequest
 from .schemas.version import VersionResponse
+from ..util.kubernetes_ import make_server_name
 
 bp = Blueprint("notebooks_blueprint", __name__, url_prefix=config.service_prefix)
 
@@ -63,7 +65,10 @@ def version():
                 "version": config.version,
                 "data": {
                     "anonymousSessionsEnabled": config.anonymous_sessions_enabled,
-                    "cloudstorageEnabled": {"s3": config.s3_mounts_enabled},
+                    "cloudstorageEnabled": {
+                        "s3": config.cloud_storage.s3.enabled,
+                        "azure_blob": config.cloud_storage.azure_blob.enabled,
+                    },
                 },
             }
         ],
@@ -94,13 +99,19 @@ def user_servers(user, **query_params):
         - servers
     """
     servers = [
-        UserServer.from_js(user, js, config.k8s.client)
-        for js in config.k8s.client.list_servers(user.safe_username)
+        UserServerManifest(s)
+        for s in config.k8s.client.list_servers(user.safe_username)
     ]
     filter_attrs = list(filter(lambda x: x[1] is not None, query_params.items()))
     filtered_servers = {}
+    ann_prefix = config.session_get_endpoint_annotations.renku_annotation_prefix
     for server in servers:
-        if all([getattr(server, key, value) == value for key, value in filter_attrs]):
+        if all(
+            [
+                server.annotations.get(f"{ann_prefix}{key}") == value
+                for key, value in filter_attrs
+            ]
+        ):
             filtered_servers[server.server_name] = server
     return ServersGetResponse().dump({"servers": filtered_servers})
 
@@ -138,7 +149,10 @@ def user_server(user, server_name):
       tags:
         - servers
     """
-    server = UserServer.from_server_name(user, server_name, config.k8s.client)
+    server = config.k8s.client.get_server(server_name, user.safe_username)
+    if server is None:
+        raise MissingResourceError(message=f"The server {server_name} does not exist.")
+    server = UserServerManifest(server)
     return jsonify(NotebookResponse().dump(server))
 
 
@@ -186,6 +200,13 @@ def launch_notebook(
       tags:
         - servers
     """
+    server_name = make_server_name(
+        user.safe_username, namespace, project, branch, commit_sha
+    )
+    server = config.k8s.client.get_server(server_name, user.safe_username)
+    if server:
+        return NotebookResponse().dump(UserServerManifest(server)), 200
+
     server = UserServer(
         user,
         namespace,
@@ -207,16 +228,12 @@ def launch_notebook(
             detail="This can occur if your username has been changed manually or by an admin.",
         )
 
-    server.get_js()
-    if server.server_exists():
-        return NotebookResponse().dump(server)
-
-    server.start()
+    manifest = server.start()
 
     current_app.logger.debug(f"Server {server.server_name} has been started")
     for autosave in user.get_autosaves(server.gl_project.path_with_namespace):
         autosave.cleanup(server.commit_sha)
-    return NotebookResponse().dump(server), 201
+    return NotebookResponse().dump(UserServerManifest(manifest)), 201
 
 
 @bp.route("servers/<server_name>", methods=["DELETE"])
@@ -266,8 +283,9 @@ def stop_server(user, forced, server_name):
       tags:
         - servers
     """
-    server = UserServer.from_server_name(user, server_name, config.k8s.client)
-    server.stop(forced)
+    config.k8s.client.delete_server(
+        server_name, forced=forced, safe_username=user.safe_username
+    )
     return "", 204
 
 
@@ -293,7 +311,10 @@ def server_options(user):
     return ServerOptionsEndpointResponse().dump(
         {
             **config.server_options.ui_choices,
-            "cloudstorage": {"s3": {"enabled": config.s3_mounts_enabled}},
+            "cloudstorage": {
+                "s3": {"enabled": config.cloud_storage.s3.enabled},
+                "azure_blob": {"enabled": config.cloud_storage.azure_blob.enabled},
+            },
         },
     )
 
@@ -350,9 +371,11 @@ def server_logs(user, max_lines, server_name):
       tags:
         - logs
     """
-    server = UserServer.from_server_name(user, server_name, config.k8s.client)
-    max_lines = request.args.get("max_lines", default=250, type=int)
-    logs = server.get_logs(max_lines)
+    logs = config.k8s.client.get_server_logs(
+        server_name=server_name,
+        max_log_lines=max_lines,
+        safe_username=user.safe_username,
+    )
     return jsonify(ServerLogs().dump(logs))
 
 

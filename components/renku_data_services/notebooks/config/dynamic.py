@@ -225,13 +225,32 @@ class _DynamicConfig:
     amalthea: _AmaltheaConfig
     sentry: _SentryConfig
     git: _GitConfig
-    s3_mounts_enabled: Union[Text, bool] = False
     anonymous_sessions_enabled: Union[Text, bool] = False
     service_prefix: str = "/notebooks"
     version: str = "0.0.0"
 
     def __post_init__(self):
-        self.s3_mounts_enabled = _parse_str_as_bool(self.s3_mounts_enabled)
         self.anonymous_sessions_enabled = _parse_str_as_bool(
             self.anonymous_sessions_enabled
         )
+
+
+@dataclass
+class _CloudStorageProvider:
+    enabled: Union[Text, bool] = False
+    read_only: Union[Text, bool] = True
+
+    def __post_init__(self):
+        self.enabled = _parse_str_as_bool(self.enabled)
+        self.read_only = _parse_str_as_bool(self.read_only)
+
+
+@dataclass
+class _CloudStorage:
+    s3: _CloudStorageProvider
+    azure_blob: _CloudStorageProvider
+    mount_folder: Text = "/cloudstorage"
+
+    @property
+    def any_enabled(self):
+        return any([self.s3.enabled, self.azure_blob.enabled])

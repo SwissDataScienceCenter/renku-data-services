@@ -1,7 +1,7 @@
 from marshmallow import Schema, ValidationError, fields, validates_schema
 
 from ...config import config
-from .cloud_storage import LaunchNotebookRequestS3mount
+from .cloud_storage import LaunchNotebookRequestCloudStorage
 from .custom_fields import LowercaseString
 from .server_options import LaunchNotebookRequestServerOptions
 
@@ -33,7 +33,7 @@ class LaunchNotebookRequestWithS3(LaunchNotebookRequestWithoutS3):
     """Used to validate the requesting for launching a jupyter server"""
 
     cloudstorage = fields.List(
-        fields.Nested(LaunchNotebookRequestS3mount()),
+        fields.Nested(LaunchNotebookRequestCloudStorage()),
         required=False,
         load_default=[],
     )
@@ -54,6 +54,6 @@ class LaunchNotebookRequestWithS3(LaunchNotebookRequestWithoutS3):
 
 LaunchNotebookRequest = (
     LaunchNotebookRequestWithS3
-    if config.s3_mounts_enabled
+    if config.cloud_storage.any_enabled
     else LaunchNotebookRequestWithoutS3
 )

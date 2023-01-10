@@ -2,6 +2,7 @@ import re
 from collections import OrderedDict
 from datetime import datetime
 from enum import Enum
+from typing import Dict, Union
 
 from marshmallow import (
     EXCLUDE,
@@ -13,8 +14,8 @@ from marshmallow import (
 )
 
 from ...config import config
-from ..classes.server import UserServer
-from .cloud_storage import LaunchNotebookResponseS3mount
+from ..classes.server_manifest import UserServerManifest
+from .cloud_storage import LaunchNotebookResponseCloudStorage
 from .custom_fields import ByteSizeField, CpuField, GpuField, LowercaseString
 
 
@@ -112,8 +113,8 @@ class LaunchNotebookResponseWithoutS3(Schema):
     image = fields.Str()
 
     @pre_dump
-    def format_user_pod_data(self, server, *args, **kwargs):
-        """Convert and format a server object into what the API requires."""
+    def format_user_pod_data(self, server: UserServerManifest, *args, **kwargs):
+        """Convert and format a server manifest object into what the API requires."""
 
         def get_failed_container_exit_code(container_status):
             """Assumes the container is truly failed and extracts the exit code."""
@@ -224,10 +225,10 @@ class LaunchNotebookResponseWithoutS3(Schema):
                 "to free up or you can adjust the specific resource and restart your session."
             )
 
-        def get_all_container_statuses(js):
-            return js["status"].get("mainPod", {}).get("status", {}).get(
+        def get_all_container_statuses(server: UserServerManifest):
+            return server.manifest["status"].get("mainPod", {}).get("status", {}).get(
                 "containerStatuses", []
-            ) + js["status"].get("mainPod", {}).get("status", {}).get(
+            ) + server.manifest["status"].get("mainPod", {}).get("status", {}).get(
                 "initContainerStatuses", []
             )
 
@@ -258,7 +259,8 @@ class LaunchNotebookResponseWithoutS3(Schema):
                 return f"Steps with non-ready statuses: {', '.join(steps_not_ready)}."
             return None
 
-        def get_status_breakdown(js):
+        def get_status_breakdown(server: UserServerManifest):
+            js = server.manifest
             init_container_summary = (
                 js.get("status", {}).get("containerStates", {}).get("init", {})
             )
@@ -330,23 +332,25 @@ class LaunchNotebookResponseWithoutS3(Schema):
                     )
             return output
 
-        def get_status(js):
+        def get_status(server: UserServerManifest):
             """Get the status of the jupyterserver."""
-            state = js.get("status", {}).get("state", ServerStatusEnum.Starting.value)
+            state = server.manifest.get("status", {}).get(
+                "state", ServerStatusEnum.Starting.value
+            )
             output = {
                 "state": state,
             }
-            container_statuses = get_all_container_statuses(js)
+            container_statuses = get_all_container_statuses(server)
             if state == ServerStatusEnum.Failed.value:
                 failed_container_statuses = get_failed_containers(container_statuses)
                 unschedulable_msg = get_unschedulable_message(
-                    js.get("status", {}).get("mainPod", {})
+                    server.manifest.get("status", {}).get("mainPod", {})
                 )
                 if unschedulable_msg:
                     output["message"] = unschedulable_msg
                 else:
                     output["message"] = get_failed_message(failed_container_statuses)
-            output["details"] = get_status_breakdown(js)
+            output["details"] = get_status_breakdown(server)
             if state == ServerStatusEnum.Starting.value:
                 output["message"] = get_starting_message(output["details"])
             output["totalNumContainers"] = len(output["details"])
@@ -359,8 +363,8 @@ class LaunchNotebookResponseWithoutS3(Schema):
             )
             return output
 
-        def get_resource_requests(server):
-            server_options = UserServer._get_server_options_from_js(server.js)
+        def get_resource_requests(server: UserServerManifest):
+            server_options = server.server_options
             server_options_keys = server_options.keys()
             # translate the cpu weird numeric string to a normal number
             # ref: https://kubernetes.io/docs/concepts/configuration/
@@ -386,9 +390,13 @@ class LaunchNotebookResponseWithoutS3(Schema):
                     resources["gpu"] = gpu_request
             return resources
 
-        def get_resource_usage(server):
+        def get_resource_usage(
+            server: UserServerManifest,
+        ) -> Dict[str, Union[str, int]]:
             usage = (
-                server.js.get("status", {}).get("mainPod", {}).get("resourceUsage", {})
+                server.manifest.get("status", {})
+                .get("mainPod", {})
+                .get("resourceUsage", {})
             )
             formatted_output = {}
             if "cpuMillicores" in usage:
@@ -402,25 +410,29 @@ class LaunchNotebookResponseWithoutS3(Schema):
         output = {
             "annotations": config.session_get_endpoint_annotations.sanitize_dict(
                 {
-                    **server.js["metadata"]["annotations"],
+                    **server.annotations,
                     config.session_get_endpoint_annotations.renku_annotation_prefix
                     + "default_image_used": str(server.using_default_image),
                 }
             ),
-            "name": server.server_name,
-            "state": {"pod_name": server.js["status"].get("mainPod", {}).get("name")},
+            "name": server.name,
+            "state": {
+                "pod_name": server.manifest["status"].get("mainPod", {}).get("name")
+            },
             "started": datetime.fromisoformat(
-                re.sub(r"Z$", "+00:00", server.js["metadata"]["creationTimestamp"])
+                re.sub(
+                    r"Z$", "+00:00", server.manifest["metadata"]["creationTimestamp"]
+                )
             ),
-            "status": get_status(server.js),
-            "url": server.server_url,
+            "status": get_status(server),
+            "url": server.url,
             "resources": {
                 "requests": get_resource_requests(server),
                 "usage": get_resource_usage(server),
             },
             "image": server.image,
         }
-        if config.s3_mounts_enabled:
+        if config.cloud_storage.any_enabled:
             output["cloudstorage"] = server.cloudstorage
         return output
 
@@ -433,7 +445,7 @@ class LaunchNotebookResponseWithS3(LaunchNotebookResponseWithoutS3):
     """
 
     cloudstorage = fields.List(
-        fields.Nested(LaunchNotebookResponseS3mount()),
+        fields.Nested(LaunchNotebookResponseCloudStorage()),
         required=False,
         dump_default=[],
     )
@@ -446,7 +458,7 @@ class ServersGetResponse(Schema):
         keys=fields.Str(),
         values=fields.Nested(
             LaunchNotebookResponseWithS3()
-            if config.s3_mounts_enabled
+            if config.cloud_storage.any_enabled
             else LaunchNotebookResponseWithoutS3()
         ),
     )
@@ -458,8 +470,8 @@ class ServersGetRequest(Schema):
         unknown = EXCLUDE
 
     # project names in gitlab are NOT case sensitive
-    project = LowercaseString(required=False)
-    commit_sha = fields.String(required=False)
+    project = LowercaseString(required=False, data_key="projectName")
+    commit_sha = fields.String(required=False, data_key="commit-sha")
     # namespaces in gitlab are NOT case sensitive
     namespace = LowercaseString(required=False)
     # branch names in gitlab are case sensitive
@@ -468,6 +480,6 @@ class ServersGetRequest(Schema):
 
 NotebookResponse = (
     LaunchNotebookResponseWithS3
-    if config.s3_mounts_enabled
+    if config.cloud_storage.any_enabled
     else LaunchNotebookResponseWithoutS3
 )
