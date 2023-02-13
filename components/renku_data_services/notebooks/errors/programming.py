@@ -39,3 +39,11 @@ class FilteringResourcesError(ProgrammingError):
 
     message: str
     code: int = ProgrammingError.code + 2
+
+
+@dataclass
+class DuplicateEnvironmentVariableError(ProgrammingError):
+    """Raised when amalthea patches are overriding an env var with different values."""
+
+    message: str
+    code: int = ProgrammingError.code + 3

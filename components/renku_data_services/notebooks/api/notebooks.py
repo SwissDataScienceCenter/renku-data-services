@@ -169,7 +169,7 @@ def launch_notebook(
     image,
     server_options,
     environment_variables,
-    cloudstorage=[],
+    cloudstorage=None,
 ):
     """
     Launch a Jupyter server.
@@ -217,7 +217,7 @@ def launch_notebook(
         image,
         server_options,
         environment_variables,
-        cloudstorage,
+        cloudstorage or [],
         config.k8s.client,
     )
 

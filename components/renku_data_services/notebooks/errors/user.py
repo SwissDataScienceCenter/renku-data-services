@@ -68,3 +68,11 @@ class InvalidCloudStorageUrl(UserInputError):
 
     message: str = "The url for the cloud storage endpoint is not valid."
     code: int = UserInputError.code + 3
+
+
+@dataclass
+class OverriddenEnvironmentVariableError(UserInputError):
+    """Raised when an amalthea patch is overriding a session's env var with a different value."""
+
+    message: str
+    code: int = UserInputError.code + 4

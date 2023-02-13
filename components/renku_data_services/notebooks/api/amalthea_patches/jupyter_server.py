@@ -1,12 +1,13 @@
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List
 
+from renku_notebooks.errors.user import OverriddenEnvironmentVariableError
+
 if TYPE_CHECKING:
     from renku_notebooks.api.classes.server import UserServer
 
 
 def env(server: "UserServer"):
-    patches = []
     # amalthea always makes the jupyter server the first container in the statefulset
     patch_list = [
         {
@@ -66,8 +67,15 @@ def env(server: "UserServer"):
         },
     ]
 
+    env_vars = {p["value"]["name"]: p["value"]["value"] for p in patch_list}
+
     if server.environment_variables:
         for key, value in server.environment_variables.items():
+            if key in env_vars and value != env_vars[key]:
+                raise OverriddenEnvironmentVariableError(
+                    message=f"Cannot override environment variable '{key}'"
+                )
+
             patch_list.append(
                 {
                     "op": "add",

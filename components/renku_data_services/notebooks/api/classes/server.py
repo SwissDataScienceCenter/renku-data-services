@@ -16,7 +16,7 @@ from ..amalthea_patches import init_containers as init_containers_patches
 from ..amalthea_patches import inject_certificates as inject_certificates_patches
 from ..amalthea_patches import jupyter_server as jupyter_server_patches
 from ...config import config
-from ...errors.programming import ConfigurationError
+from ...errors.programming import ConfigurationError, DuplicateEnvironmentVariableError
 from ...errors.user import MissingResourceError
 from .k8s_client import K8sClient
 from .cloud_storage import ICloudStorageRequest
@@ -282,6 +282,9 @@ class UserServer:
                 inject_certificates_patches.proxy(self),
             )
         )
+
+        self._check_environment_variables_overrides(patches)
+
         # Storage
         if config.sessions.storage.pvs_enabled:
             storage = {
@@ -363,6 +366,30 @@ class UserServer:
             },
         }
         return manifest
+
+    @staticmethod
+    def _check_environment_variables_overrides(patches_list):
+        """Check if any patch overrides server's environment variables with a different value,
+        or if two patches create environment variables with different values."""
+        env_vars = {}
+
+        for patch_list in patches_list:
+            patches = patch_list["patch"]
+
+            for patch in patches:
+                path = patch["path"].lower()
+                if path.endswith("/env/-"):
+                    name = patch["value"]["name"]
+                    value = patch["value"]["value"]
+                    key = (path, name)
+
+                    if key in env_vars and env_vars[key] != value:
+                        raise DuplicateEnvironmentVariableError(
+                            message=f"Environment variable {path}::{name} is being overridden by "
+                            "multiple patches"
+                        )
+                    else:
+                        env_vars[key] = value
 
     def start(self) -> Optional[Dict[str, Any]]:
         """Create the jupyterserver resource in k8s."""
