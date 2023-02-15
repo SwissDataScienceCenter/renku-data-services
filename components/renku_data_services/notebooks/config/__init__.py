@@ -28,6 +28,7 @@ class _NotebooksConfig:
     cloud_storage: _CloudStorage
     current_resource_schema_version: int = 1
     anonymous_sessions_enabled: Union[Text, bool] = False
+    ssh_enabled: Union[Text, bool] = False
     service_prefix: str = "/notebooks"
     version: str = "0.0.0"
     keycloak_realm: str = "Renku"
@@ -36,6 +37,7 @@ class _NotebooksConfig:
         self.anonymous_sessions_enabled = _parse_str_as_bool(
             self.anonymous_sessions_enabled
         )
+        self.ssh_enabled = _parse_str_as_bool(self.ssh_enabled)
         self.session_get_endpoint_annotations = _ServersGetEndpointAnnotations()
         if not self.k8s.enabled:
             return
@@ -158,6 +160,7 @@ sessions {
             git-sidecar,
         ]
     }
+    ssh {}
     enforce_cpu_limits: false
     autosave_minimum_lfs_file_size_bytes: 1000000
     termination_grace_period_seconds: 600
@@ -196,6 +199,7 @@ cloud_storage {
     mount_folder = /cloudstorage
 }
 anonymous_sessions_enabled = false
+ssh_enabled = false
 service_prefix = /notebooks
 version = 0.0.0
 keycloak_realm = Renku

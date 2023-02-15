@@ -69,6 +69,7 @@ def version():
                         "s3": config.cloud_storage.s3.enabled,
                         "azure_blob": config.cloud_storage.azure_blob.enabled,
                     },
+                    "sshEnabled": config.ssh_enabled,
                 },
             }
         ],

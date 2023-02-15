@@ -15,6 +15,7 @@ from ..amalthea_patches import git_sidecar as git_sidecar_patches
 from ..amalthea_patches import init_containers as init_containers_patches
 from ..amalthea_patches import inject_certificates as inject_certificates_patches
 from ..amalthea_patches import jupyter_server as jupyter_server_patches
+from ..amalthea_patches import ssh as ssh_patches
 from ...config import config
 from ...errors.programming import ConfigurationError, DuplicateEnvironmentVariableError
 from ...errors.user import MissingResourceError
@@ -274,6 +275,7 @@ class UserServer:
                 git_sidecar_patches.main(self),
                 general_patches.oidc_unverified_email(self),
                 cloudstorage_patches.main(self),
+                ssh_patches.main(),
                 # init container for certs must come before all other init containers
                 # so that it runs first before all other init containers
                 init_containers_patches.certificates(),
