@@ -8,6 +8,7 @@ class NotebooksServiceInfo(Schema):
     cloudstorageEnabled = fields.Dict(
         required=True, keys=fields.String, values=fields.Boolean
     )
+    sshEnabled = fields.Boolean(required=True)
 
 
 class NotebooksServiceVersions(Schema):
