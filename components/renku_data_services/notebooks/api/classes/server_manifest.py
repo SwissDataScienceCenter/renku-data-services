@@ -18,7 +18,7 @@ class UserServerManifest:
 
     @property
     def using_default_image(self) -> bool:
-        self.image == config.sessions.default_image
+        return self.image == config.sessions.default_image
 
     @property
     def server_options(self) -> Dict[str, Any]:
