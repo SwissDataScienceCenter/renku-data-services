@@ -470,8 +470,8 @@ class ServersGetRequest(Schema):
         unknown = EXCLUDE
 
     # project names in gitlab are NOT case sensitive
-    project = LowercaseString(required=False, data_key="projectName")
-    commit_sha = fields.String(required=False, data_key="commit-sha")
+    project = LowercaseString(required=False, attribute="projectName")
+    commit_sha = fields.String(required=False, attribute="commit-sha")
     # namespaces in gitlab are NOT case sensitive
     namespace = LowercaseString(required=False)
     # branch names in gitlab are case sensitive
