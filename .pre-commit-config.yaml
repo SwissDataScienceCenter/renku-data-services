@@ -1,0 +1,13 @@
+repos:
+  - repo: local
+    hooks:
+      - id: style-checks
+        name: Style checks
+        entry: make style_checks
+        language: system
+        pass_filenames: false
+      - id: yesqa
+        name: Run yesqa
+        entry: make yesqa
+        language: system
+        pass_filenames: false
