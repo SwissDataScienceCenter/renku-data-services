@@ -1,6 +1,6 @@
 from sanic_testing.testing import SanicTestClient
 
-from src.crack.app import app
+from src.renku_crack.app import app
 
 
 def test_sample():

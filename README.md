@@ -6,7 +6,7 @@ A set of services that handle reading and writing data from Postgres about compu
 
 1. `poetry install`
 2. `pre-commit install` to install pre commit hooks
-3. `poetry run sanic crack.app:app --port=8000 --dev`, for production replace `--dev` with `--fast`
+3. `poetry run sanic renku_crack.app:app --port=8000 --dev`, for production replace `--dev` with `--fast`
 
 ## Developing
 

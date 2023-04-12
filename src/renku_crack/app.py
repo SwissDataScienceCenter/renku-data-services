@@ -1,7 +1,7 @@
 """Crack app."""
 from sanic import Sanic, text
 
-app = Sanic("crack")
+app = Sanic("renku_crack")
 
 
 @app.get("/")

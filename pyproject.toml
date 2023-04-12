@@ -5,7 +5,7 @@ description = "Collection of services that deal with data in Postgres."
 authors = ["Swiss Data Science Center <contact@datascience.ch>"]
 readme = "README.md"
 license = "Apache License 2.0"
-packages = [{include = "crack", from = "src"}]
+packages = [{include = "renku_crack", from = "src"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
