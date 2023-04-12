@@ -6,8 +6,19 @@ repos:
         entry: make style_checks
         language: system
         pass_filenames: false
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: debug-statements
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+      - id: trailing-whitespace
+  - repo: https://github.com/asottile/yesqa
+    rev: v1.4.0
+    hooks:
       - id: yesqa
-        name: Run yesqa
-        entry: make yesqa
-        language: system
-        pass_filenames: false

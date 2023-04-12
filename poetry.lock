@@ -978,14 +978,6 @@ python-versions = ">=3.8"
 pbr = ">=2.0.0,<2.1.0 || >2.1.0"
 
 [[package]]
-name = "tokenize-rt"
-version = "5.0.0"
-description = "A wrapper around the stdlib `tokenize` which roundtrips."
-category = "dev"
-optional = false
-python-versions = ">=3.7"
-
-[[package]]
 name = "toml"
 version = "0.10.2"
 description = "Python Library for Tom's Obvious, Minimal Language"
@@ -1079,22 +1071,10 @@ category = "main"
 optional = false
 python-versions = ">=3.7"
 
-[[package]]
-name = "yesqa"
-version = "1.4.0"
-description = "Automatically remove unnecessary `# noqa` comments."
-category = "dev"
-optional = false
-python-versions = ">=3.7"
-
-[package.dependencies]
-flake8 = ">=3.9"
-tokenize-rt = ">=2.1"
-
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.11"
-content-hash = "39cd880d2bdcd57c41bd47c92058f7c45b68bfff62495aa2abb584567a8dd84d"
+content-hash = "b12b5d49d35d4b4a22ebc056c966a81a84d3b8fc3874fba633f93e98a808701f"
 
 [metadata.files]
 aiofiles = [
@@ -1873,10 +1853,6 @@ stevedore = [
     {file = "stevedore-5.0.0-py3-none-any.whl", hash = "sha256:bd5a71ff5e5e5f5ea983880e4a1dd1bb47f8feebbb3d95b592398e2f02194771"},
     {file = "stevedore-5.0.0.tar.gz", hash = "sha256:2c428d2338976279e8eb2196f7a94910960d9f7ba2f41f3988511e95ca447021"},
 ]
-tokenize-rt = [
-    {file = "tokenize_rt-5.0.0-py2.py3-none-any.whl", hash = "sha256:c67772c662c6b3dc65edf66808577968fb10badfc2042e3027196bed4daf9e5a"},
-    {file = "tokenize_rt-5.0.0.tar.gz", hash = "sha256:3160bc0c3e8491312d0485171dea861fc160a240f5f5766b72a1165408d10740"},
-]
 toml = [
     {file = "toml-0.10.2-py2.py3-none-any.whl", hash = "sha256:806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b"},
     {file = "toml-0.10.2.tar.gz", hash = "sha256:b3bda1d108d5dd99f4a20d24d9c348e91c4db7ab1b749200bded2f839ccbe68f"},
@@ -2093,8 +2069,4 @@ websockets = [
     {file = "websockets-11.0-pp39-pypy39_pp73-win_amd64.whl", hash = "sha256:6ae209f11e433575e17d5d6e61a2f77ceda53b4bce07df55af614aa1d618e2e7"},
     {file = "websockets-11.0-py3-none-any.whl", hash = "sha256:6ebd971b9b2c0aaa2188c472016e4dad93108b3db425a33ad584bdc41b22026d"},
     {file = "websockets-11.0.tar.gz", hash = "sha256:19d638549c470f5fd3b67b52b2a08f2edba5a04e05323a706937e35f5f19d056"},
-]
-yesqa = [
-    {file = "yesqa-1.4.0-py2.py3-none-any.whl", hash = "sha256:8d66f162731173b20b29f0107804b51a7c8573f5c8d82f8ee2c8cf1724a2c84b"},
-    {file = "yesqa-1.4.0.tar.gz", hash = "sha256:7d9d784b7fb91987f9eded7d03b1a5af578e51dee59b97f0475898a2fe6a9527"},
 ]
