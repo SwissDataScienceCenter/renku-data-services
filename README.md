@@ -1,1 +1,15 @@
-# Renku Data Store Service
+# Renku Data Services
+
+A set of services that handle reading and writing data from Postgres about compute resources.
+
+## Initial Setup
+
+1. `poetry install`
+2. `pre-commit install` to install pre commit hooks
+3. `poetry run sanic renku_crack.app:app --port=8000 --dev`, for production replace `--dev` with `--fast`
+
+## Developing
+
+1. Write code
+2. Run tests: `make tests`
+3. Style checks: `make style_checks`
