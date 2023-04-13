@@ -684,9 +684,9 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /info:
+  /version:
     get:
-      summary: Get the version or other basic information about the service
+      summary: Get the version of the service
       responses:
         "200":
           description: The error
