@@ -31,12 +31,12 @@ class UserORM(BaseORM):
     resource_pools: Mapped[List["ResourcePoolORM"]] = relationship(
         secondary=resource_pools_users, back_populates="users", default_factory=list
     )
-    id: Optional[int] = mapped_column("id", Integer, primary_key=True, default=None)  # type: ignore[assignment]
+    id: Mapped[int] = mapped_column(primary_key=True, init=False)
 
     @classmethod
     def load(cls, user: models.User):
         """Create an ORM object from a user model."""
-        return cls(id=user.id, keycloak_id=user.keycloak_id, username=user.username)
+        return cls(keycloak_id=user.keycloak_id, username=user.username)
 
     def dump(self) -> models.User:
         """Create a user model from the ORM object."""
@@ -51,14 +51,12 @@ class QuotaORM(BaseORM):
     memory: Mapped[int] = mapped_column(BigInteger)
     storage: Mapped[int] = mapped_column(BigInteger)
     gpu: Mapped[int] = mapped_column(BigInteger, default=0)
-    id: Optional[int] = mapped_column("id", Integer, primary_key=True, default=None)  # type: ignore[assignment]
-    resource_pool_id: Optional[int] = mapped_column(
-        "resource_pool_id",
-        Integer,
+    id: Mapped[int] = mapped_column(primary_key=True, init=False)
+    resource_pool_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("resource_pools.id"),
         unique=True,
         default=None,
-    )  # type: ignore[assignment]
+    )
     resource_pool: Mapped[Optional["ResourcePoolORM"]] = relationship(back_populates="quota", default=None)
 
     @classmethod
@@ -67,7 +65,6 @@ class QuotaORM(BaseORM):
         if quota is None:
             return None
         return cls(
-            id=quota.id,
             cpu=quota.cpu,
             memory=quota.memory,
             storage=quota.storage,
@@ -90,13 +87,12 @@ class ResourceClassORM(BaseORM):
     gpu: Mapped[int] = mapped_column(BigInteger, default=0)
     resource_pool_id: Mapped[Optional[int]] = mapped_column(ForeignKey("resource_pools.id"), default=None)
     resource_pool: Mapped[Optional["ResourcePoolORM"]] = relationship(back_populates="classes", default=None)
-    id: Optional[int] = mapped_column("id", Integer, primary_key=True, default=None)  # type: ignore[assignment]
+    id: Mapped[int] = mapped_column(primary_key=True, default=None, init=False)
 
     @classmethod
     def load(cls, resource_class: models.ResourceClass):
         """Create a ORM object from the resource class model."""
         return cls(
-            id=resource_class.id,
             name=resource_class.name,
             cpu=resource_class.cpu,
             memory=resource_class.memory,
@@ -126,13 +122,12 @@ class ResourcePoolORM(BaseORM):
         secondary=resource_pools_users, back_populates="resource_pools", default_factory=list
     )
     classes: Mapped[List["ResourceClassORM"]] = relationship(back_populates="resource_pool", default_factory=list)
-    id: Optional[int] = mapped_column("id", Integer, primary_key=True, default=None)  # type: ignore[assignment]
+    id: Mapped[int] = mapped_column("id", Integer, primary_key=True, default=None, init=False)
 
     @classmethod
     def load(cls, resource_pool: models.ResourcePool):
         """Create an ORM object from the resource pool model."""
         return cls(
-            id=resource_pool.id,
             name=resource_pool.name,
             quota=QuotaORM.load(resource_pool.quota),
             classes=[ResourceClassORM.load(resource_class) for resource_class in resource_pool.classes],
