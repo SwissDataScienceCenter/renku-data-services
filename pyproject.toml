@@ -32,6 +32,7 @@ sanic-testing = "^23.3.0"
 aiosqlite = "^0.18.0"
 types-pyyaml = "^6.0.12.9"
 schemathesis = "^3.19.0"
+hypothesis = {extras = ["cli"], version = "^6.72.2"}
 
 [build-system]
 requires = ["poetry-core"]

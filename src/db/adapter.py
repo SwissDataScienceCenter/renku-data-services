@@ -1,7 +1,8 @@
 """Adapter based on SQLAlchemy."""
 from typing import List, Optional
 
-from sqlalchemy import delete, select, update
+from alembic import command, config
+from sqlalchemy import delete, select, update, create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import selectinload, sessionmaker
 
@@ -13,11 +14,21 @@ from src.models import errors
 class DB:
     """The adapter used for database access with SQLAlchemy."""
 
-    def __init__(self, sql_alchemy_url: str):
-        self.engine = create_async_engine(sql_alchemy_url, echo=True)
+    def __init__(self, sync_sqlalchemy_url: str, async_sqlalchemy_url: str):
+        self.engine = create_async_engine(async_sqlalchemy_url, echo=True)
+        self.sync_engine = create_engine(sync_sqlalchemy_url, echo=True)
         self.session_maker = sessionmaker(
             self.engine, class_=AsyncSession, expire_on_commit=False
         )  # type: ignore[call-overload]
+
+    def do_migrations(self):
+        """Migrate the database to the required revision.
+        From: https://alembic.sqlalchemy.org/en/latest/cookbook.html#programmatic-api-use-connection-sharing-with-asyncio
+        """
+        with self.sync_engine.begin() as conn:
+            cfg = config.Config("alembic.ini")
+            cfg.attributes["connection"] = conn
+            command.upgrade(cfg, "head")
 
     async def get_resource_pools(
         self, id: Optional[int] = None, name: Optional[str] = None
