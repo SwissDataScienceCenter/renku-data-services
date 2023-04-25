@@ -39,9 +39,9 @@ class DB:
                 selectinload(schemas.ResourcePoolORM.classes), selectinload(schemas.ResourcePoolORM.quota)
             )
             if id is not None:
-                stmt = stmt.where(schemas.ResourcePoolORM.id == id)  # type: ignore[arg-type]
+                stmt = stmt.where(schemas.ResourcePoolORM.id == id)
             if name is not None:
-                stmt = stmt.where(schemas.ResourcePoolORM.name == name)  # type: ignore[arg-type]
+                stmt = stmt.where(schemas.ResourcePoolORM.name == name)
             res = await session.execute(stmt)
             orms = res.scalars().all()
             return [orm.dump() for orm in orms]
@@ -59,7 +59,7 @@ class DB:
         async with self.session_maker() as session:
             res = await session.execute(
                 select(schemas.QuotaORM).where(
-                    schemas.QuotaORM.resource_pool_id == resource_pool_id  # type: ignore[arg-type]
+                    schemas.QuotaORM.resource_pool_id == resource_pool_id
                 )
             )
             orm: schemas.QuotaORM = res.scalars().first()
@@ -74,7 +74,7 @@ class DB:
         async with self.session_maker() as session:
             stmt = select(schemas.ResourceClassORM)
             if id is not None:
-                stmt = stmt.where(schemas.ResourceClassORM.id == id)  # type: ignore[arg-type]
+                stmt = stmt.where(schemas.ResourceClassORM.id == id)
             if resource_pool_id is not None:
                 stmt = stmt.where(schemas.ResourceClassORM.resource_pool_id == resource_pool_id)
             if name is not None:
@@ -96,7 +96,7 @@ class DB:
                 if resource_pool_id is not None:
                     stmt = (
                         select(schemas.ResourcePoolORM)
-                        .where(schemas.ResourcePoolORM.id == resource_pool_id)  # type: ignore[arg-type]
+                        .where(schemas.ResourcePoolORM.id == resource_pool_id)
                         .options(selectinload(schemas.ResourcePoolORM.users))
                     )
                     if username is not None or keycloak_id is not None:
@@ -161,7 +161,7 @@ class DB:
             async with session.begin():
                 stmt = (
                     update(schemas.QuotaORM)
-                    .where(schemas.QuotaORM.resource_pool_id == resource_pool_id)  # type: ignore[arg-type]
+                    .where(schemas.QuotaORM.resource_pool_id == resource_pool_id)
                     .values(**kwargs)
                     .returning(schemas.QuotaORM)
                 )
@@ -178,7 +178,7 @@ class DB:
             async with session.begin():
                 stmt = (
                     select(schemas.ResourcePoolORM)
-                    .where(schemas.ResourcePoolORM.id == id)  # type: ignore[arg-type]
+                    .where(schemas.ResourcePoolORM.id == id)
                     .options(selectinload(schemas.ResourcePoolORM.classes), selectinload(schemas.ResourcePoolORM.quota))
                 )
                 res = await session.execute(stmt)
@@ -224,7 +224,7 @@ class DB:
         """Delete a resource pool from the database."""
         async with self.session_maker() as session:
             async with session.begin():
-                stmt = delete(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == id)  # type: ignore[arg-type]
+                stmt = delete(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == id)
                 await session.execute(stmt)
         return None
 
@@ -263,7 +263,7 @@ class DB:
                     raise errors.MissingResourceError(message=f"The user with keycloak id {keycloak_id} does not exist")
                 stmt_rp = (
                     select(schemas.ResourcePoolORM)
-                    .where(schemas.ResourcePoolORM.id.in_(resource_pool_ids))  # type: ignore[union-attr]
+                    .where(schemas.ResourcePoolORM.id.in_(resource_pool_ids))
                     .options(selectinload(schemas.ResourcePoolORM.quota), selectinload(schemas.ResourcePoolORM.classes))
                 )
                 res = await session.execute(stmt_rp)
@@ -287,7 +287,7 @@ class DB:
             async with session.begin():
                 stmt = (
                     select(schemas.ResourcePoolORM)
-                    .where(schemas.ResourcePoolORM.id == resource_pool_id)  # type: ignore[arg-type]
+                    .where(schemas.ResourcePoolORM.id == resource_pool_id)
                     .options(
                         selectinload(schemas.ResourcePoolORM.users),
                         selectinload(schemas.ResourcePoolORM.classes),
@@ -322,7 +322,7 @@ class DB:
             async with session.begin():
                 stmt = (
                     delete(schemas.ResourceClassORM)
-                    .where(schemas.ResourceClassORM.id == resource_class_id)  # type: ignore[arg-type]
+                    .where(schemas.ResourceClassORM.id == resource_class_id)
                     .where(schemas.ResourceClassORM.resource_pool_id == resource_pool_id)
                 )
                 await session.execute(stmt)
@@ -332,7 +332,7 @@ class DB:
         async with self.session_maker() as session:
             async with session.begin():
                 sub = (
-                    select(schemas.UserORM.id)  # type: ignore[call-overload]
+                    select(schemas.UserORM.id)
                     .join(schemas.ResourcePoolORM, schemas.UserORM.resource_pools)
                     .where(schemas.UserORM.keycloak_id == keycloak_id)
                     .where(schemas.ResourcePoolORM.id == resource_pool_id)
@@ -348,7 +348,7 @@ class DB:
             async with session.begin():
                 stmt = (
                     select(schemas.ResourceClassORM)
-                    .where(schemas.ResourceClassORM.id == resource_class_id)  # type: ignore[arg-type]
+                    .where(schemas.ResourceClassORM.id == resource_class_id)
                     .where(schemas.ResourceClassORM.resource_pool_id == resource_pool_id)
                 )
                 res = await session.execute(stmt)
