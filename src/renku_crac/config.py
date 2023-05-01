@@ -1,7 +1,7 @@
 """Configurations."""
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from yaml import safe_load
 
@@ -17,7 +17,7 @@ class Config:
     user_repo: UserRepository
     rp_repo: ResourcePoolRepository
     spec_file: str = "src/api.spec.yaml"
-    spec: Optional[Dict[str, Any]] = field(init=False, default=None)
+    spec: Dict[str, Any] = field(init=False, default_factory=dict)
     user_store: models.UserStore = DummyUserStore()
     version: str = "0.0.1"
 

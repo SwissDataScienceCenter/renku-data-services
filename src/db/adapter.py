@@ -162,43 +162,6 @@ class ResourcePoolRepository:
                 await session.execute(stmt)
         return None
 
-    async def update_resource_pool_users(
-        self, resource_pool_id: int, users: List[models.User], append: bool = True
-    ) -> models.ResourcePool:
-        """Update the users that have access to a specific resource pool."""
-        async with self.session_maker() as session:
-            async with session.begin():
-                stmt = (
-                    select(schemas.ResourcePoolORM)
-                    .where(schemas.ResourcePoolORM.id == resource_pool_id)
-                    .options(
-                        selectinload(schemas.ResourcePoolORM.users),
-                        selectinload(schemas.ResourcePoolORM.classes),
-                        selectinload(schemas.ResourcePoolORM.quota),
-                    )
-                )
-                res = await session.execute(stmt)
-                rp: Optional[schemas.ResourcePoolORM] = res.scalars().first()
-                if rp is None:
-                    raise errors.MissingResourceError(
-                        message=f"The resource pool with id {resource_pool_id} does not exist"
-                    )
-                user_ids_to_add_req = [user.keycloak_id for user in users]
-                stmt_usr = select(schemas.UserORM).where(schemas.UserORM.keycloak_id.in_(user_ids_to_add_req))
-                res = await session.execute(stmt_usr)
-                users_to_add_exist = res.scalars().all()
-                user_ids_to_add_exist = [i.keycloak_id for i in users_to_add_exist]
-                users_to_add_missing = [
-                    schemas.UserORM(keycloak_id=i.keycloak_id, username=i.username)
-                    for i in users
-                    if i.keycloak_id not in user_ids_to_add_exist
-                ]
-                if append:
-                    rp.users.extend(users_to_add_exist + users_to_add_missing)
-                else:
-                    rp.users = users_to_add_exist + users_to_add_missing
-                return rp.dump()
-
     async def delete_resource_class(self, resource_pool_id: int, resource_class_id: int):
         """Delete a specific resource class."""
         async with self.session_maker() as session:
@@ -208,19 +171,6 @@ class ResourcePoolRepository:
                     .where(schemas.ResourceClassORM.id == resource_class_id)
                     .where(schemas.ResourceClassORM.resource_pool_id == resource_pool_id)
                 )
-                await session.execute(stmt)
-
-    async def delete_resource_pool_user(self, resource_pool_id: int, keycloak_id: str):
-        """Remove a user from a specific resource pool."""
-        async with self.session_maker() as session:
-            async with session.begin():
-                sub = (
-                    select(schemas.UserORM.id)
-                    .join(schemas.ResourcePoolORM, schemas.UserORM.resource_pools)
-                    .where(schemas.UserORM.keycloak_id == keycloak_id)
-                    .where(schemas.ResourcePoolORM.id == resource_pool_id)
-                )
-                stmt = delete(schemas.resource_pools_users).where(schemas.resource_pools_users.c.user_id.in_(sub))
                 await session.execute(stmt)
 
     async def update_resource_class(
@@ -379,3 +329,53 @@ class UserRepository:
                 if cls is None:
                     raise errors.MissingResourceError(message=f"The user with keycloak id {keycloak_id} does not exist")
                 return cls.dump()
+
+    async def delete_resource_pool_user(self, resource_pool_id: int, keycloak_id: str):
+        """Remove a user from a specific resource pool."""
+        async with self.session_maker() as session:
+            async with session.begin():
+                sub = (
+                    select(schemas.UserORM.id)
+                    .join(schemas.ResourcePoolORM, schemas.UserORM.resource_pools)
+                    .where(schemas.UserORM.keycloak_id == keycloak_id)
+                    .where(schemas.ResourcePoolORM.id == resource_pool_id)
+                )
+                stmt = delete(schemas.resource_pools_users).where(schemas.resource_pools_users.c.user_id.in_(sub))
+                await session.execute(stmt)
+
+    async def update_resource_pool_users(
+        self, resource_pool_id: int, users: List[models.User], append: bool = True
+    ) -> models.ResourcePool:
+        """Update the users that have access to a specific resource pool."""
+        async with self.session_maker() as session:
+            async with session.begin():
+                stmt = (
+                    select(schemas.ResourcePoolORM)
+                    .where(schemas.ResourcePoolORM.id == resource_pool_id)
+                    .options(
+                        selectinload(schemas.ResourcePoolORM.users),
+                        selectinload(schemas.ResourcePoolORM.classes),
+                        selectinload(schemas.ResourcePoolORM.quota),
+                    )
+                )
+                res = await session.execute(stmt)
+                rp: Optional[schemas.ResourcePoolORM] = res.scalars().first()
+                if rp is None:
+                    raise errors.MissingResourceError(
+                        message=f"The resource pool with id {resource_pool_id} does not exist"
+                    )
+                user_ids_to_add_req = [user.keycloak_id for user in users]
+                stmt_usr = select(schemas.UserORM).where(schemas.UserORM.keycloak_id.in_(user_ids_to_add_req))
+                res = await session.execute(stmt_usr)
+                users_to_add_exist = res.scalars().all()
+                user_ids_to_add_exist = [i.keycloak_id for i in users_to_add_exist]
+                users_to_add_missing = [
+                    schemas.UserORM(keycloak_id=i.keycloak_id, username=i.username)
+                    for i in users
+                    if i.keycloak_id not in user_ids_to_add_exist
+                ]
+                if append:
+                    rp.users.extend(users_to_add_exist + users_to_add_missing)
+                else:
+                    rp.users = users_to_add_exist + users_to_add_missing
+                return rp.dump()
