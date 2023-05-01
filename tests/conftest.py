@@ -6,12 +6,15 @@ import pytest
 
 
 @pytest.fixture
-def sqlite_file_url(tmp_path: Path):
+def sqlite_file_url_async(tmp_path: Path):
     db = tmp_path / "sqlite.db"
     db.touch()
-    yield f"sqlite+aiosqlite://{db.absolute().resolve()}"
+    yield f"sqlite+aiosqlite:///{db.absolute().resolve()}"
     db.unlink(missing_ok=True)
 
 @pytest.fixture
-def sqlite_memory_url():
-    yield f"sqlite+aiosqlite://"
+def sqlite_file_url_sync(tmp_path: Path):
+    db = tmp_path / "sqlite.db"
+    db.touch()
+    yield f"sqlite:///{db.absolute().resolve()}"
+    db.unlink(missing_ok=True)

@@ -30,8 +30,8 @@ class Config:
         """Create a config from environment variables."""
 
         prefix = ""
-        async_sqlalchemy_url = os.environ.get(f"{prefix}SYNC_SQLALCHEMY_URL", "sqlite+aiosqlite:///data_services.db")
-        sync_sqlalchemy_url = os.environ.get(f"{prefix}ASYNC_SQLALCHEMY_URL", "sqlite:///data_services.db")
+        async_sqlalchemy_url = os.environ.get(f"{prefix}ASYNC_SQLALCHEMY_URL", "sqlite+aiosqlite:///data_services.db")
+        sync_sqlalchemy_url = os.environ.get(f"{prefix}SYNC_SQLALCHEMY_URL", "sqlite:///data_services.db")
         version = os.environ.get(f"{prefix}VERSION", "0.0.1")
         db = DB(sync_sqlalchemy_url, async_sqlalchemy_url)
         return cls(db, version=version)

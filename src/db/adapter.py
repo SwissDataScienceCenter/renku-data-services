@@ -224,8 +224,12 @@ class DB:
         """Delete a resource pool from the database."""
         async with self.session_maker() as session:
             async with session.begin():
-                stmt = delete(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == id)
-                await session.execute(stmt)
+                stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == id)
+                res = await session.execute(stmt)
+                rp = res.scalars().first()
+                if rp is None:
+                    return None
+                await session.delete(rp)
         return None
 
     async def get_user_resource_pools(

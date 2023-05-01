@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Optional, Protocol, Set
 
 
-@dataclass(eq=False)
+@dataclass(frozen=True, eq=True)
 class ResourceClass:
     """Resource class model."""
 
@@ -27,7 +27,7 @@ class ResourceClass:
         )
 
 
-@dataclass
+@dataclass(frozen=True, eq=True)
 class Quota:
     """Quota model."""
 
@@ -61,7 +61,7 @@ class UserStore(Protocol):
         ...
 
 
-@dataclass
+@dataclass(frozen=True, eq=True)
 class User:
     """User model."""
 
@@ -79,7 +79,7 @@ class User:
         )
 
 
-@dataclass
+@dataclass(frozen=True, eq=True)
 class ResourcePool:
     """Resource pool model."""
 
