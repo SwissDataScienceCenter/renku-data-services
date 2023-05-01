@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional
 from yaml import safe_load
 
 from src import models
-from src.db.adapter import DB
+from src.db.adapter import ResourcePoolRepository, UserRepository
 from src.users.dummy import DummyUserStore
 
 
@@ -14,7 +14,8 @@ from src.users.dummy import DummyUserStore
 class Config:
     """Configuration for the CRAC service."""
 
-    db: DB
+    user_repo: UserRepository
+    rp_repo: ResourcePoolRepository
     spec_file: str = "src/api.spec.yaml"
     spec: Optional[Dict[str, Any]] = field(init=False, default=None)
     user_store: models.UserStore = DummyUserStore()
@@ -34,5 +35,6 @@ class Config:
         if not sql_url:
             sql_url = sql_url_default
         version = os.environ.get(f"{prefix}VERSION", "0.0.1")
-        db = DB(sql_url)
-        return cls(db, version=version)
+        user_repo = UserRepository(sql_url)
+        rp_repo = ResourcePoolRepository(sql_url)
+        return cls(user_repo=user_repo, rp_repo=rp_repo, version=version)

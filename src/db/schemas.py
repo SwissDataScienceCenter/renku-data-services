@@ -17,8 +17,8 @@ class BaseORM(MappedAsDataclass, DeclarativeBase):
 resource_pools_users = Table(
     "resource_pools_users",
     BaseORM.metadata,
-    Column("user_id", ForeignKey("users.id"), primary_key=True),
-    Column("resource_pool_id", ForeignKey("resource_pools.id"), primary_key=True),
+    Column("user_id", ForeignKey("users.id"), primary_key=True, index=True),
+    Column("resource_pool_id", ForeignKey("resource_pools.id"), primary_key=True, index=True),
 )
 
 
@@ -56,6 +56,7 @@ class QuotaORM(BaseORM):
         ForeignKey("resource_pools.id"),
         unique=True,
         default=None,
+        index=True,
     )
     resource_pool: Mapped[Optional["ResourcePoolORM"]] = relationship(back_populates="quota", default=None)
 
@@ -85,7 +86,7 @@ class ResourceClassORM(BaseORM):
     memory: Mapped[int] = mapped_column(BigInteger)
     storage: Mapped[int] = mapped_column(BigInteger)
     gpu: Mapped[int] = mapped_column(BigInteger, default=0)
-    resource_pool_id: Mapped[Optional[int]] = mapped_column(ForeignKey("resource_pools.id"), default=None)
+    resource_pool_id: Mapped[Optional[int]] = mapped_column(ForeignKey("resource_pools.id"), default=None, index=True)
     resource_pool: Mapped[Optional["ResourcePoolORM"]] = relationship(back_populates="classes", default=None)
     id: Mapped[int] = mapped_column(primary_key=True, default=None, init=False)
 

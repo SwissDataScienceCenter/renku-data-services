@@ -10,8 +10,8 @@ from src.db import schemas
 from src.models import errors
 
 
-class DB:
-    """The adapter used for database access with SQLAlchemy."""
+class ResourcePoolRepository:
+    """The adapter used for accessing resource pools with SQLAlchemy."""
 
     def __init__(self, sql_alchemy_url: str):
         self.engine = create_async_engine(sql_alchemy_url, echo=True)
@@ -71,61 +71,6 @@ class DB:
             res = await session.execute(stmt)
             orms = res.scalars().all()
             return [orm.dump() for orm in orms]
-
-    async def get_users(
-        self,
-        *,
-        keycloak_id: Optional[str] = None,
-        username: Optional[str] = None,
-        resource_pool_id: Optional[int] = None,
-    ) -> List[models.User]:
-        """Get users from the database."""
-        async with self.session_maker() as session:
-            async with session.begin():
-                if resource_pool_id is not None:
-                    stmt = (
-                        select(schemas.ResourcePoolORM)
-                        .where(schemas.ResourcePoolORM.id == resource_pool_id)
-                        .options(selectinload(schemas.ResourcePoolORM.users))
-                    )
-                    if username is not None or keycloak_id is not None:
-                        stmt.join(schemas.ResourcePoolORM.users)
-                    if keycloak_id is not None:
-                        stmt = stmt.where(schemas.UserORM.keycloak_id == keycloak_id)
-                    if username is not None:
-                        stmt = stmt.where(schemas.UserORM.username == username)
-                    res = await session.execute(stmt)
-                    rp = res.scalars().first()
-                    if rp is None:
-                        raise errors.MissingResourceError(
-                            message=f"Resource pool with id {resource_pool_id} does not exist"
-                        )
-                    return [user.dump() for user in rp.users]
-                else:
-                    stmt = select(schemas.UserORM)
-                    if keycloak_id is not None:
-                        stmt = stmt.where(schemas.UserORM.keycloak_id == keycloak_id)
-                    if username is not None:
-                        stmt = stmt.where(schemas.UserORM.username == username)
-                    res = await session.execute(stmt)
-                    orms = res.scalars().all()
-                    return [orm.dump() for orm in orms]
-
-    async def insert_user(self, user: models.User) -> models.User:
-        """Inser a user in the database."""
-        orm = schemas.UserORM.load(user)
-        async with self.session_maker() as session:
-            async with session.begin():
-                session.add(orm)
-        return orm.dump()
-
-    async def delete_user(self, id: str):
-        """Remove a user from the database."""
-        async with self.session_maker() as session:
-            async with session.begin():
-                stmt = delete(schemas.UserORM).where(schemas.UserORM.keycloak_id == id)
-                await session.execute(stmt)
-        return None
 
     async def insert_resource_class(
         self, resource_class: models.ResourceClass, *, resource_pool_id: Optional[int] = None
@@ -217,57 +162,6 @@ class DB:
                 await session.execute(stmt)
         return None
 
-    async def get_user_resource_pools(
-        self, keycloak_id: str, resource_pool_name: Optional[str] = None
-    ) -> List[models.ResourcePool]:
-        """Get resource pools that a specific user has access to."""
-        async with self.session_maker() as session:
-            async with session.begin():
-                stmt = (
-                    select(schemas.ResourcePoolORM)
-                    .join_from(schemas.UserORM, schemas.UserORM.resource_pools)
-                    .where(schemas.UserORM.keycloak_id == keycloak_id)
-                    .options(selectinload(schemas.ResourcePoolORM.quota), selectinload(schemas.ResourcePoolORM.classes))
-                )
-                if resource_pool_name is not None:
-                    stmt = stmt.where(schemas.ResourcePoolORM.name == resource_pool_name)
-                res = await session.execute(stmt)
-                rps: List[schemas.ResourcePoolORM] = res.scalars().all()
-                return [rp.dump() for rp in rps]
-
-    async def update_user_resource_pools(
-        self, keycloak_id: str, resource_pool_ids: List[int], append: bool = True
-    ) -> List[models.ResourcePool]:
-        """Update the resource pools that a specific user has access to."""
-        async with self.session_maker() as session:
-            async with session.begin():
-                stmt = (
-                    select(schemas.UserORM)
-                    .where(schemas.UserORM.keycloak_id == keycloak_id)
-                    .options(selectinload(schemas.UserORM.resource_pools))
-                )
-                res = await session.execute(stmt)
-                user: Optional[schemas.UserORM] = res.scalars().first()
-                if user is None:
-                    raise errors.MissingResourceError(message=f"The user with keycloak id {keycloak_id} does not exist")
-                stmt_rp = (
-                    select(schemas.ResourcePoolORM)
-                    .where(schemas.ResourcePoolORM.id.in_(resource_pool_ids))
-                    .options(selectinload(schemas.ResourcePoolORM.quota), selectinload(schemas.ResourcePoolORM.classes))
-                )
-                res = await session.execute(stmt_rp)
-                rps_to_add = res.scalars().all()
-                if len(rps_to_add) != len(resource_pool_ids):
-                    missing_rps = set(resource_pool_ids).difference(set([i.id for i in rps_to_add]))
-                    raise errors.MissingResourceError(
-                        message=f"The resource pools with ids: {missing_rps} do not exist."
-                    )
-                if append:
-                    user.resource_pools.extend(rps_to_add)
-                else:
-                    user.resource_pools = rps_to_add
-                return [rp.dump() for rp in rps_to_add]
-
     async def update_resource_pool_users(
         self, resource_pool_id: int, users: List[models.User], append: bool = True
     ) -> models.ResourcePool:
@@ -353,6 +247,122 @@ class DB:
                 for k, v in kwargs.items():
                     setattr(cls, k, v)
                 return cls.dump()
+
+
+class UserRepository:
+    """The adapter used for accessing users with SQLAlchemy."""
+
+    def __init__(self, sql_alchemy_url: str):
+        self.engine = create_async_engine(sql_alchemy_url, echo=True)
+        self.session_maker = sessionmaker(
+            self.engine, class_=AsyncSession, expire_on_commit=False
+        )  # type: ignore[call-overload]
+
+    async def get_users(
+        self,
+        *,
+        keycloak_id: Optional[str] = None,
+        username: Optional[str] = None,
+        resource_pool_id: Optional[int] = None,
+    ) -> List[models.User]:
+        """Get users from the database."""
+        async with self.session_maker() as session:
+            async with session.begin():
+                if resource_pool_id is not None:
+                    stmt = (
+                        select(schemas.ResourcePoolORM)
+                        .where(schemas.ResourcePoolORM.id == resource_pool_id)
+                        .options(selectinload(schemas.ResourcePoolORM.users))
+                    )
+                    if username is not None or keycloak_id is not None:
+                        stmt.join(schemas.ResourcePoolORM.users)
+                    if keycloak_id is not None:
+                        stmt = stmt.where(schemas.UserORM.keycloak_id == keycloak_id)
+                    if username is not None:
+                        stmt = stmt.where(schemas.UserORM.username == username)
+                    res = await session.execute(stmt)
+                    rp = res.scalars().first()
+                    if rp is None:
+                        raise errors.MissingResourceError(
+                            message=f"Resource pool with id {resource_pool_id} does not exist"
+                        )
+                    return [user.dump() for user in rp.users]
+                else:
+                    stmt = select(schemas.UserORM)
+                    if keycloak_id is not None:
+                        stmt = stmt.where(schemas.UserORM.keycloak_id == keycloak_id)
+                    if username is not None:
+                        stmt = stmt.where(schemas.UserORM.username == username)
+                    res = await session.execute(stmt)
+                    orms = res.scalars().all()
+                    return [orm.dump() for orm in orms]
+
+    async def insert_user(self, user: models.User) -> models.User:
+        """Inser a user in the database."""
+        orm = schemas.UserORM.load(user)
+        async with self.session_maker() as session:
+            async with session.begin():
+                session.add(orm)
+        return orm.dump()
+
+    async def delete_user(self, id: str):
+        """Remove a user from the database."""
+        async with self.session_maker() as session:
+            async with session.begin():
+                stmt = delete(schemas.UserORM).where(schemas.UserORM.keycloak_id == id)
+                await session.execute(stmt)
+        return None
+
+    async def get_user_resource_pools(
+        self, keycloak_id: str, resource_pool_name: Optional[str] = None
+    ) -> List[models.ResourcePool]:
+        """Get resource pools that a specific user has access to."""
+        async with self.session_maker() as session:
+            async with session.begin():
+                stmt = (
+                    select(schemas.ResourcePoolORM)
+                    .join_from(schemas.UserORM, schemas.UserORM.resource_pools)
+                    .where(schemas.UserORM.keycloak_id == keycloak_id)
+                    .options(selectinload(schemas.ResourcePoolORM.quota), selectinload(schemas.ResourcePoolORM.classes))
+                )
+                if resource_pool_name is not None:
+                    stmt = stmt.where(schemas.ResourcePoolORM.name == resource_pool_name)
+                res = await session.execute(stmt)
+                rps: List[schemas.ResourcePoolORM] = res.scalars().all()
+                return [rp.dump() for rp in rps]
+
+    async def update_user_resource_pools(
+        self, keycloak_id: str, resource_pool_ids: List[int], append: bool = True
+    ) -> List[models.ResourcePool]:
+        """Update the resource pools that a specific user has access to."""
+        async with self.session_maker() as session:
+            async with session.begin():
+                stmt = (
+                    select(schemas.UserORM)
+                    .where(schemas.UserORM.keycloak_id == keycloak_id)
+                    .options(selectinload(schemas.UserORM.resource_pools))
+                )
+                res = await session.execute(stmt)
+                user: Optional[schemas.UserORM] = res.scalars().first()
+                if user is None:
+                    raise errors.MissingResourceError(message=f"The user with keycloak id {keycloak_id} does not exist")
+                stmt_rp = (
+                    select(schemas.ResourcePoolORM)
+                    .where(schemas.ResourcePoolORM.id.in_(resource_pool_ids))
+                    .options(selectinload(schemas.ResourcePoolORM.quota), selectinload(schemas.ResourcePoolORM.classes))
+                )
+                res = await session.execute(stmt_rp)
+                rps_to_add = res.scalars().all()
+                if len(rps_to_add) != len(resource_pool_ids):
+                    missing_rps = set(resource_pool_ids).difference(set([i.id for i in rps_to_add]))
+                    raise errors.MissingResourceError(
+                        message=f"The resource pools with ids: {missing_rps} do not exist."
+                    )
+                if append:
+                    user.resource_pools.extend(rps_to_add)
+                else:
+                    user.resource_pools = rps_to_add
+                return [rp.dump() for rp in rps_to_add]
 
     async def update_user(self, keycloak_id: int, username: str) -> models.User:
         """Update a specific user."""
