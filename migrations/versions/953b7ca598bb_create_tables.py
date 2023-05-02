@@ -1,8 +1,8 @@
 """Create tables
 
-Revision ID: b877fc8fb058
+Revision ID: 953b7ca598bb
 Revises:
-Create Date: 2023-05-01 20:21:28.717374
+Create Date: 2023-05-02 12:56:53.473311
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = "b877fc8fb058"
+revision = "953b7ca598bb"
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -28,12 +28,10 @@ def upgrade() -> None:
     op.create_table(
         "users",
         sa.Column("keycloak_id", sa.String(length=50), nullable=False),
-        sa.Column("username", sa.String(), nullable=False),
         sa.Column("id", sa.Integer(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_users_keycloak_id"), "users", ["keycloak_id"], unique=True)
-    op.create_index(op.f("ix_users_username"), "users", ["username"], unique=True)
     op.create_table(
         "quotas",
         sa.Column("cpu", sa.Float(), nullable=False),
@@ -99,7 +97,6 @@ def downgrade() -> None:
     op.drop_table("resource_classes")
     op.drop_index(op.f("ix_quotas_resource_pool_id"), table_name="quotas")
     op.drop_table("quotas")
-    op.drop_index(op.f("ix_users_username"), table_name="users")
     op.drop_index(op.f("ix_users_keycloak_id"), table_name="users")
     op.drop_table("users")
     op.drop_index(op.f("ix_resource_pools_name"), table_name="resource_pools")
