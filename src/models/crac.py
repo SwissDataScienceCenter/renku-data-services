@@ -66,7 +66,6 @@ class User:
     """User model."""
 
     keycloak_id: str
-    username: str
     id: Optional[int] = None
 
     @classmethod
@@ -74,7 +73,6 @@ class User:
         """Create the model from a plain dictionary."""
         return cls(
             keycloak_id=data["keycloak_id"],
-            username=data["username"],
             id=data["id"] if "id" in data else None,
         )
 

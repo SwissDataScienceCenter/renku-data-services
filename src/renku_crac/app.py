@@ -1,8 +1,8 @@
 """Compute resource access control (CRAC) app."""
+import asyncio
 from dataclasses import dataclass
-from typing import Any, Dict, cast
+from typing import Any, Dict
 
-from pydantic import EmailStr
 from sanic import HTTPResponse, Request, Sanic, json
 from sanic.views import HTTPMethodView
 from sanic_ext import validate
@@ -77,12 +77,12 @@ class ResourcePoolUsersView(HTTPMethodView):
 
     repo: UserRepository
 
-    async def get(self, request: Request, resource_pool_id: int):
+    async def get(self, _: Request, resource_pool_id: int):
         """Get all users of a specific resource pool."""
-        res = await self.repo.get_users(resource_pool_id=resource_pool_id, username=request.args.get("username"))
+        res = await self.repo.get_users(resource_pool_id=resource_pool_id)
         return json(
             [
-                apispec.UserWithId(id=r.keycloak_id, username=cast(EmailStr, r.username)).dict(exclude_none=True)
+                apispec.UserWithId(id=r.keycloak_id).dict(exclude_none=True)
                 for r in res
             ]
         )
@@ -98,7 +98,7 @@ class ResourcePoolUsersView(HTTPMethodView):
         return await self._put_post(resource_pool_id=resource_pool_id, body=body, post=False)
 
     async def _put_post(self, resource_pool_id: int, body: apispec.UsersWithId, post: bool = True):
-        users = [models.User(keycloak_id=user.id, username=user.username) for user in body.__root__]
+        users = [models.User(keycloak_id=user.id) for user in body.__root__]
         rp = await self.repo.update_resource_pool_users(resource_pool_id=resource_pool_id, users=users, append=post)
         return json(apispec.ResourcePoolWithId.from_orm(rp).dict(exclude_none=True))
 
@@ -117,7 +117,7 @@ class ResourcePoolUserView(HTTPMethodView):
                 message=f"The user with id {user_id} or resource pool with id {resource_pool_id} cannot be found."
             )
         return json(
-            apispec.UserWithId(id=res[0].keycloak_id, username=cast(EmailStr, res[0].username)).dict(exclude_none=True)
+            apispec.UserWithId(id=res[0].keycloak_id).dict(exclude_none=True)
         )
 
     async def delete(self, _: Request, resource_pool_id: int, user_id: str):
@@ -232,38 +232,37 @@ class UsersView(HTTPMethodView):
     @validate(json=apispec.UserWithId)
     async def post(self, _: Request, body: apispec.UserWithId):
         """Add a new user. The user has to exist in Keycloak."""
-        users = await self.repo.get_users(keycloak_id=body.id)
-        if len(users) == 1:
-            # The user already exists in the crac db
-            user = users[0]
-            if user.username != body.username:
-                # The username in keycloak is different, so update the user to have the username from keycloak
-                user = await self.repo.update_user(keycloak_id=cast(int, user.id), username=body.username)
+        users_db, user_kc = await asyncio.gather(
+            self.repo.get_users(keycloak_id=body.id),
+            self.user_store.get_user_by_id(body.id),
+        )
+        user_db = users_db[0] if len(users_db) >= 1 else None
+        # The user does not exist in keycloak, delete it form the crac database and fail.
+        if user_kc is None:
+            await self.repo.delete_user(body.id)
+            raise errors.MissingResourceError(message=f"User with id {body.id} cannot be found in keycloak.")
+        # The user exists in keycloak, fail if the requestd id does not match what is in keycloak.
+        if body.id != user_kc.keycloak_id:
+            raise errors.ValidationError(message="The provided user ID does not match the ID from keycloak.")
+        # The user exists in the db and the request body matches what is the in the db, simply return the user.
+        if user_db is not None and user_db.keycloak_id == body.id:
             return json(
-                apispec.UserWithId(id=user.keycloak_id, username=cast(EmailStr, user.username)).dict(exclude_none=True),
+                apispec.UserWithId(id=user_db.keycloak_id).dict(exclude_none=True),
                 200,
             )
-        user_kc = await self.user_store.get_user_by_id(cast(str, body.id))
-        if user_kc is None:
-            raise errors.MissingResourceError(message=f"User with id {body.id} cannot be found in keycloak.")
-        if user_kc.username != body.username:
-            raise errors.ValidationError(
-                message=f"The provided username {body.username} does not "
-                f"match the keycloak useranme {user_kc.username}."
-            )
-        # The user exists in keycloak, so we can add it in our database
-        user = await self.repo.insert_user(user_kc)
+        # The user does not exist in the db, add it.
+        user = await self.repo.insert_user(models.User(keycloak_id=body.id))
         return json(
-            apispec.UserWithId(id=user.keycloak_id, username=cast(EmailStr, user.username)).dict(exclude_none=True),
+            apispec.UserWithId(id=user.keycloak_id).dict(exclude_none=True),
             201,
         )
 
-    async def get(self, request: Request):
+    async def get(self, _: Request):
         """Get all users. Please note that this is a subset of the users from Keycloak."""
-        res = await self.repo.get_users(username=request.args.get("username"))
+        res = await self.repo.get_users()
         return json(
             [
-                apispec.UserWithId(id=r.keycloak_id, username=cast(EmailStr, r.username)).dict(exclude_none=True)
+                apispec.UserWithId(id=r.keycloak_id).dict(exclude_none=True)
                 for r in res
             ]
         )

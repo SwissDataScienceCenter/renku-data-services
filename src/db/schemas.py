@@ -23,11 +23,10 @@ resource_pools_users = Table(
 
 
 class UserORM(BaseORM):
-    """Keycloak user ID and username (usually the same as the email)."""
+    """Stores the Keycloak user ID."""
 
     __tablename__ = "users"
     keycloak_id: Mapped[str] = mapped_column(String(50), unique=True, index=True)
-    username: Mapped[str] = mapped_column(String(), unique=True, index=True)
     resource_pools: Mapped[List["ResourcePoolORM"]] = relationship(
         secondary=resource_pools_users, back_populates="users", default_factory=list
     )
@@ -36,11 +35,11 @@ class UserORM(BaseORM):
     @classmethod
     def load(cls, user: models.User):
         """Create an ORM object from a user model."""
-        return cls(keycloak_id=user.keycloak_id, username=user.username)
+        return cls(keycloak_id=user.keycloak_id)
 
     def dump(self) -> models.User:
         """Create a user model from the ORM object."""
-        return models.User(id=self.id, keycloak_id=self.keycloak_id, username=self.username)
+        return models.User(id=self.id, keycloak_id=self.keycloak_id)
 
 
 class QuotaORM(BaseORM):
