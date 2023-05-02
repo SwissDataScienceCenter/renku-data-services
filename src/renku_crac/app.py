@@ -82,15 +82,15 @@ class ResourcePoolUsersView(HTTPMethodView):
         res = await self.repo.get_users(resource_pool_id=resource_pool_id)
         return json([apispec.UserWithId(id=r.keycloak_id).dict(exclude_none=True) for r in res])
 
-    @validate(json=apispec.UsersWithId)
-    async def post(self, _: Request, resource_pool_id: int, body: apispec.UsersWithId):
+    async def post(self, request: Request, resource_pool_id: int):
         """Add users to a specific resource pool."""
-        return await self._put_post(resource_pool_id=resource_pool_id, body=body, post=True)
+        users = apispec.UsersWithId.parse_obj(request.json)  # validation
+        return await self._put_post(resource_pool_id=resource_pool_id, body=users, post=True)
 
-    @validate(json=apispec.UsersWithId)
-    async def put(self, _: Request, resource_pool_id: int, body: apispec.UsersWithId):
+    async def put(self, request: Request, resource_pool_id: int):
         """Set the users for a specific resource pool."""
-        return await self._put_post(resource_pool_id=resource_pool_id, body=body, post=False)
+        users = apispec.UsersWithId.parse_obj(request.json)  # validation
+        return await self._put_post(resource_pool_id=resource_pool_id, body=users, post=False)
 
     async def _put_post(self, resource_pool_id: int, body: apispec.UsersWithId, post: bool = True):
         users = [models.User(keycloak_id=user.id) for user in body.__root__]
@@ -275,15 +275,15 @@ class UserResourcePoolsView(HTTPMethodView):
         rps = await self.repo.get_user_resource_pools(keycloak_id=user_id)
         return json([apispec.ResourcePoolWithId.from_orm(rp).dict(exclude_none=True) for rp in rps])
 
-    @validate(json=apispec.IntegerIds)
-    async def post(self, _: Request, user_id: str, body: apispec.IntegerIds):
+    async def post(self, request: Request, user_id: str):
         """Give a specific user access to a specific resource pool."""
-        return await self._post_put(user_id=user_id, post=True, resource_pool_ids=body)
+        ids = apispec.IntegerIds.parse_obj(request.json)  # validation
+        return await self._post_put(user_id=user_id, post=True, resource_pool_ids=ids)
 
-    @validate(json=apispec.IntegerIds)
-    async def put(self, _: Request, user_id: str, body: apispec.IntegerIds):
+    async def put(self, request: Request, user_id: str):
         """Set the list of resource pools that a specific user has access to."""
-        return await self._post_put(user_id=user_id, post=False, resource_pool_ids=body)
+        ids = apispec.IntegerIds.parse_obj(request.json)  # validation
+        return await self._post_put(user_id=user_id, post=False, resource_pool_ids=ids)
 
     async def _post_put(self, user_id: str, resource_pool_ids: apispec.IntegerIds, post: bool = True):
         rps = await self.repo.update_user_resource_pools(
