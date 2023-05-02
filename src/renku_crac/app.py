@@ -7,12 +7,12 @@ from sanic import HTTPResponse, Request, Sanic, json
 from sanic.views import HTTPMethodView
 from sanic_ext import validate
 
-from src import models
-from src.db.adapter import ResourcePoolRepository, UserRepository
-from src.models import errors
-from src.renku_crac.config import Config
-from src.renku_crac.error_handler import CustomErrorHandler
-from src.schemas import apispec
+import models
+from db.adapter import ResourcePoolRepository, UserRepository
+from models import errors
+from renku_crac.config import Config
+from renku_crac.error_handler import CustomErrorHandler
+from schemas import apispec
 
 
 @dataclass
