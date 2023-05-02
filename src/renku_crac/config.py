@@ -5,9 +5,9 @@ from typing import Any, Dict
 
 from yaml import safe_load
 
-from src import models
-from src.db.adapter import ResourcePoolRepository, UserRepository
-from src.users.dummy import DummyUserStore
+import models
+from db.adapter import ResourcePoolRepository, UserRepository
+from users.dummy import DummyUserStore
 
 
 @dataclass

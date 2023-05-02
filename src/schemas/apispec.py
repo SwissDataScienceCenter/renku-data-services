@@ -8,7 +8,7 @@ from typing import List, Optional
 
 from pydantic import EmailStr, Extra, Field
 
-from src.schemas.base import BaseAPISpec
+from schemas.base import BaseAPISpec
 
 
 class Version(BaseAPISpec):

@@ -5,9 +5,9 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import selectinload, sessionmaker
 
-from src import models
-from src.db import schemas
-from src.models import errors
+import models
+from db import schemas
+from models import errors
 
 
 class ResourcePoolRepository:

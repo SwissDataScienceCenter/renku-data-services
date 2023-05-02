@@ -10,8 +10,8 @@ from sanic.log import logger
 from sanic_ext.exceptions import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.models import errors
-from src.schemas import apispec
+from models import errors
+from schemas import apispec
 
 
 class CustomErrorHandler(ErrorHandler):

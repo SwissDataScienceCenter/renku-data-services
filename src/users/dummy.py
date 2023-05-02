@@ -3,7 +3,7 @@ from asyncio import Lock
 from typing import Dict, Optional
 from uuid import uuid4
 
-from src import models
+import models
 
 
 class DummyUserStore:
