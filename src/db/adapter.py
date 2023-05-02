@@ -5,9 +5,9 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import selectinload, sessionmaker
 
-from src import models
-from src.db import schemas
-from src.models import errors
+import models
+from db import schemas
+from models import errors
 
 
 class ResourcePoolRepository:
@@ -47,9 +47,7 @@ class ResourcePoolRepository:
         """Get a quota for a specific resource pool."""
         async with self.session_maker() as session:
             res = await session.execute(
-                select(schemas.QuotaORM).where(
-                    schemas.QuotaORM.resource_pool_id == resource_pool_id
-                )
+                select(schemas.QuotaORM).where(schemas.QuotaORM.resource_pool_id == resource_pool_id)
             )
             orm: schemas.QuotaORM = res.scalars().first()
             if not orm:

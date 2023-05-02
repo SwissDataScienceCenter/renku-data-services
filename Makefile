@@ -1,7 +1,7 @@
 .PHONY: schemas tests style_checks pre_commit_checks migrations schemathesis
 
 schemas:
-	poetry run datamodel-codegen --input src/api.spec.yaml --input-file-type openapi --output src/schemas/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --base-class src.schemas.base.BaseAPISpec
+	poetry run datamodel-codegen --input src/api.spec.yaml --input-file-type openapi --output src/schemas/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --base-class schemas.base.BaseAPISpec
 
 style_checks:
 	poetry check

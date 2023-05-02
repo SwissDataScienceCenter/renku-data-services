@@ -7,12 +7,12 @@ from sanic import HTTPResponse, Request, Sanic, json
 from sanic.views import HTTPMethodView
 from sanic_ext import validate
 
-from src import models
-from src.db.adapter import ResourcePoolRepository, UserRepository
-from src.models import errors
-from src.renku_crac.config import Config
-from src.renku_crac.error_handler import CustomErrorHandler
-from src.schemas import apispec
+import models
+from db.adapter import ResourcePoolRepository, UserRepository
+from models import errors
+from renku_crac.config import Config
+from renku_crac.error_handler import CustomErrorHandler
+from schemas import apispec
 
 
 @dataclass
@@ -80,12 +80,7 @@ class ResourcePoolUsersView(HTTPMethodView):
     async def get(self, _: Request, resource_pool_id: int):
         """Get all users of a specific resource pool."""
         res = await self.repo.get_users(resource_pool_id=resource_pool_id)
-        return json(
-            [
-                apispec.UserWithId(id=r.keycloak_id).dict(exclude_none=True)
-                for r in res
-            ]
-        )
+        return json([apispec.UserWithId(id=r.keycloak_id).dict(exclude_none=True) for r in res])
 
     @validate(json=apispec.UsersWithId)
     async def post(self, _: Request, resource_pool_id: int, body: apispec.UsersWithId):
@@ -116,9 +111,7 @@ class ResourcePoolUserView(HTTPMethodView):
             raise errors.MissingResourceError(
                 message=f"The user with id {user_id} or resource pool with id {resource_pool_id} cannot be found."
             )
-        return json(
-            apispec.UserWithId(id=res[0].keycloak_id).dict(exclude_none=True)
-        )
+        return json(apispec.UserWithId(id=res[0].keycloak_id).dict(exclude_none=True))
 
     async def delete(self, _: Request, resource_pool_id: int, user_id: str):
         """Delete a specific user of a specific resource pool."""
@@ -260,12 +253,7 @@ class UsersView(HTTPMethodView):
     async def get(self, _: Request):
         """Get all users. Please note that this is a subset of the users from Keycloak."""
         res = await self.repo.get_users()
-        return json(
-            [
-                apispec.UserWithId(id=r.keycloak_id).dict(exclude_none=True)
-                for r in res
-            ]
-        )
+        return json([apispec.UserWithId(id=r.keycloak_id).dict(exclude_none=True) for r in res])
 
 
 @dataclass

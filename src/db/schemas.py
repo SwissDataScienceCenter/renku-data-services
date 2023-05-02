@@ -5,7 +5,7 @@ from sqlalchemy import BigInteger, Column, Integer, String, Table
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
 
-from src import models
+import models
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
