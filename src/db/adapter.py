@@ -88,13 +88,21 @@ class ResourcePoolRepository(_Base):
         self, resource_class: models.ResourceClass, *, resource_pool_id: Optional[int] = None
     ) -> models.ResourceClass:
         """Insert a resource class in the database."""
-        orm = schemas.ResourceClassORM.load(resource_class)
-        if resource_pool_id is not None:
-            orm.resource_pool_id = resource_pool_id
+        cls = schemas.ResourceClassORM.load(resource_class)
         async with self.session_maker() as session:
             async with session.begin():
-                session.add(orm)
-        return orm.dump()
+                if resource_pool_id is not None:
+                    stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == resource_pool_id)
+                    res = await session.execute(stmt)
+                    rp = res.scalars().first()
+                    if rp is None:
+                        raise errors.MissingResourceError(
+                            message=f"Resource pool with id {resource_pool_id} does not exist."
+                        )
+                    cls.resource_pool = rp
+                    cls.resource_pool_id = rp.id
+                session.add(cls)
+        return cls.dump()
 
     async def update_quota(self, resource_pool_id: int, **kwargs) -> models.Quota:
         """Update an existing quota in the database."""
@@ -170,8 +178,12 @@ class ResourcePoolRepository(_Base):
         """Delete a resource pool from the database."""
         async with self.session_maker() as session:
             async with session.begin():
-                stmt = delete(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == id)
-                await session.execute(stmt)
+                stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == id)
+                res = await session.execute(stmt)
+                rp = res.scalars().first()
+                if rp is None:
+                    return None
+                await session.delete(rp)
         return None
 
     async def delete_resource_class(self, resource_pool_id: int, resource_class_id: int):
@@ -179,11 +191,15 @@ class ResourcePoolRepository(_Base):
         async with self.session_maker() as session:
             async with session.begin():
                 stmt = (
-                    delete(schemas.ResourceClassORM)
+                    select(schemas.ResourceClassORM)
                     .where(schemas.ResourceClassORM.id == resource_class_id)
                     .where(schemas.ResourceClassORM.resource_pool_id == resource_pool_id)
                 )
-                await session.execute(stmt)
+                res = await session.execute(stmt)
+                cls = res.scalars().first()
+                if cls is None:
+                    return None
+                await session.delete(cls)
 
     async def update_resource_class(
         self, resource_pool_id: int, resource_class_id: int, **kwargs
@@ -259,8 +275,12 @@ class UserRepository(_Base):
         """Remove a user from the database."""
         async with self.session_maker() as session:
             async with session.begin():
-                stmt = delete(schemas.UserORM).where(schemas.UserORM.keycloak_id == id)
-                await session.execute(stmt)
+                stmt = select(schemas.UserORM).where(schemas.UserORM.keycloak_id == id)
+                res = await session.execute(stmt)
+                user = res.scalars().first()
+                if user is None:
+                    return None
+                await session.delete(user)
         return None
 
     async def get_user_resource_pools(

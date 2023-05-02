@@ -17,8 +17,8 @@ class BaseORM(MappedAsDataclass, DeclarativeBase):
 resource_pools_users = Table(
     "resource_pools_users",
     BaseORM.metadata,
-    Column("user_id", ForeignKey("users.id"), primary_key=True, index=True),
-    Column("resource_pool_id", ForeignKey("resource_pools.id"), primary_key=True, index=True),
+    Column("user_id", ForeignKey("users.id", ondelete="CASCADE"), primary_key=True, index=True),
+    Column("resource_pool_id", ForeignKey("resource_pools.id", ondelete="CASCADE"), primary_key=True, index=True),
 )
 
 
@@ -28,7 +28,10 @@ class UserORM(BaseORM):
     __tablename__ = "users"
     keycloak_id: Mapped[str] = mapped_column(String(50), unique=True, index=True)
     resource_pools: Mapped[List["ResourcePoolORM"]] = relationship(
-        secondary=resource_pools_users, back_populates="users", default_factory=list
+        secondary=resource_pools_users,
+        back_populates="users",
+        default_factory=list,
+        cascade="save-update, merge, delete",
     )
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
 
@@ -52,7 +55,7 @@ class QuotaORM(BaseORM):
     gpu: Mapped[int] = mapped_column(BigInteger, default=0)
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
     resource_pool_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("resource_pools.id"),
+        ForeignKey("resource_pools.id", ondelete="CASCADE"),
         unique=True,
         default=None,
         index=True,
@@ -85,7 +88,9 @@ class ResourceClassORM(BaseORM):
     memory: Mapped[int] = mapped_column(BigInteger)
     storage: Mapped[int] = mapped_column(BigInteger)
     gpu: Mapped[int] = mapped_column(BigInteger, default=0)
-    resource_pool_id: Mapped[Optional[int]] = mapped_column(ForeignKey("resource_pools.id"), default=None, index=True)
+    resource_pool_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("resource_pools.id", ondelete="CASCADE"), default=None, index=True
+    )
     resource_pool: Mapped[Optional["ResourcePoolORM"]] = relationship(back_populates="classes", default=None)
     id: Mapped[int] = mapped_column(primary_key=True, default=None, init=False)
 
@@ -117,11 +122,19 @@ class ResourcePoolORM(BaseORM):
 
     __tablename__ = "resource_pools"
     name: Mapped[str] = mapped_column(String(40), index=True)
-    quota: Mapped[Optional["QuotaORM"]] = relationship(back_populates="resource_pool", default=None)
+    quota: Mapped[Optional["QuotaORM"]] = relationship(
+        back_populates="resource_pool",
+        default=None,
+        cascade="save-update, merge, delete",
+    )
     users: Mapped[List["UserORM"]] = relationship(
         secondary=resource_pools_users, back_populates="resource_pools", default_factory=list
     )
-    classes: Mapped[List["ResourceClassORM"]] = relationship(back_populates="resource_pool", default_factory=list)
+    classes: Mapped[List["ResourceClassORM"]] = relationship(
+        back_populates="resource_pool",
+        default_factory=list,
+        cascade="save-update, merge, delete",
+    )
     id: Mapped[int] = mapped_column("id", Integer, primary_key=True, default=None, init=False)
 
     @classmethod

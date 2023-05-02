@@ -133,12 +133,8 @@ class ClassesView(HTTPMethodView):
     @validate(json=apispec.ResourceClass)
     async def post(self, _: Request, body: apispec.ResourceClass, resource_pool_id: int):
         """Add a class to a specific resource pool."""
-        rps = await self.repo.get_resource_pools(id=resource_pool_id)
-        if len(rps) < 1:
-            raise errors.MissingResourceError(message=f"The resource pool with id {resource_pool_id} cannot be found.")
-        rp = rps[0]
         cls = models.ResourceClass.from_dict(body.dict())
-        res = await self.repo.insert_resource_class(cls, resource_pool_id=rp.id)
+        res = await self.repo.insert_resource_class(cls, resource_pool_id=resource_pool_id)
         return json(apispec.ResourceClassWithId.from_orm(res).dict(exclude_none=True), 201)
 
 
@@ -333,11 +329,13 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
     """Register all handlers on the application."""
     app.add_route(ResourcePoolsView.as_view(config.rp_repo), "/api/data/resource_pools")
     app.add_route(ResourcePoolView.as_view(config.rp_repo), "/api/data/resource_pools/<resource_pool_id>")
-    app.add_route(ResourcePoolUsersView.as_view(config.user_repo), "/api/data/resource_pools/users")
-    app.add_route(ResourcePoolUserView.as_view(config.user_repo), "/api/data/resource_pools/users/<user_id>")
-    app.add_route(ClassesView.as_view(config.rp_repo), "/api/data/resource_pools/classes")
-    app.add_route(ClassView.as_view(config.rp_repo), "/api/data/resource_pools/classes/<class_id>")
-    app.add_route(QuotaView.as_view(config.rp_repo), "/api/data/resource_pools/quota")
+    app.add_route(ResourcePoolUsersView.as_view(config.user_repo), "/api/data/resource_pools/<resource_pool_id>/users")
+    app.add_route(
+        ResourcePoolUserView.as_view(config.user_repo), "/api/data/resource_pools/<resource_pool_id>/users/<user_id>"
+    )
+    app.add_route(ClassesView.as_view(config.rp_repo), "/api/data/resource_pools/<resource_pool_id>/classes")
+    app.add_route(ClassView.as_view(config.rp_repo), "/api/data/resource_pools/<resource_pool_id>/classes/<class_id>")
+    app.add_route(QuotaView.as_view(config.rp_repo), "/api/data/resource_pools/<resource_pool_id>/quota")
     app.add_route(UsersView.as_view(config.user_repo, config.user_store), "/api/data/users")
     app.add_route(UserView.as_view(config.user_repo), "/api/data/users/<user_id>")
     app.add_route(UserResourcePoolsView.as_view(config.user_repo), "/api/data/users/<user_id>/resource_pools")

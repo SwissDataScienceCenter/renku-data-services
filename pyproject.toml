@@ -75,7 +75,7 @@ exclude = [
 ]
 
 [tool.pytest.ini_options]
-addopts = "--black --cov --cov-report=term-missing -v"
+addopts = "--black --cov src/ --cov-report=term-missing -v"
 doctest_optionflags = "ALLOW_UNICODE"
 testpaths = ["src", "tests"]
 markers = [
