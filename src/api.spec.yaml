@@ -17,7 +17,7 @@ paths:
           description: Filter for resource pools based on the provided name as a prefix. Omitting this parameter returns all resource pools.
           name: name
           schema:
-            type: string
+            $ref: "#/components/schemas/Name"
           required: false
       responses:
         "200":
@@ -26,6 +26,8 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ResourcePoolsWithId"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - resource_pools
     post:
@@ -43,6 +45,8 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ResourcePoolWithId"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - resource_pools
   /resource_pools/{resource_pool_id}:
@@ -67,6 +71,8 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - resource_pools
     put:
@@ -82,7 +88,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ResourcePool"
+              $ref: "#/components/schemas/ResourcePoolPut"
       responses:
         "200":
           description: The resource pool definition
@@ -96,6 +102,8 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - resource_pools
     patch:
@@ -125,6 +133,8 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - resource_pools
     delete:
@@ -138,6 +148,8 @@ paths:
       responses:
         "204":
           description: The resource pool was removed or did not exist in the first place
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - resource_pools
   /resource_pools/{resource_pool_id}/users:
@@ -149,12 +161,6 @@ paths:
           required: true
           schema:
             type: string
-        - in: query
-          description: Filter for users based on the provided username as a prefix. Omitting this parameter returns all users that have access in the resource pool.
-          name: username
-          schema:
-            type: string
-          required: false
       responses:
         "200":
           description: The list of users
@@ -168,6 +174,8 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - resource_pools
     post:
@@ -184,12 +192,10 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/UsersPatch"
+              $ref: "#/components/schemas/UsersWithId"
             example:
-              - id: 123-user-id
-              - username: user@email.com
               - id: 543-user-id
-                email: user543@email.com
+              - id: 123-some-user
       responses:
         "201":
           description: The list of users was updated
@@ -199,17 +205,16 @@ paths:
                 $ref: "#/components/schemas/UsersWithId"
               example:
                 - id: 123-user-id
-                  email: 123-user@email.com
                 - id: user-id
-                  email: user@email.com
                 - id: 456-user-id
-                  email: user@email.com
         "404":
           description: The resource pool does not exist
           content:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - resource_pools
     put:
@@ -240,9 +245,11 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - resource_pools
-  /resource_pools/{resource_pool_id}/users/{userId}:
+  /resource_pools/{resource_pool_id}/users/{user_id}:
     get:
       summary: Check if a specific user belongs to a specific resource pool
       parameters:
@@ -252,7 +259,7 @@ paths:
           schema:
             type: string
         - in: path
-          name: userId
+          name: user_id
           required: true
           schema:
             type: string
@@ -269,6 +276,8 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - resource_pools
     delete:
@@ -280,13 +289,15 @@ paths:
           schema:
             type: string
         - in: path
-          name: userId
+          name: user_id
           required: true
           schema:
             type: string
       responses:
         "204":
           description: The user was removed or it was not part of the pool
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - resource_pools
   /resource_pools/{resource_pool_id}/classes:
@@ -302,7 +313,7 @@ paths:
           description: Filter for resource classes based on the provided name as a prefix. Omitting this parameter returns all classes.
           name: name
           schema:
-            type: string
+            $ref: "#/components/schemas/Name"
           required: false
       responses:
         "200":
@@ -317,6 +328,8 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - classes
     post:
@@ -346,6 +359,8 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - classes
   /resource_pools/{resource_pool_id}/classes/{class_id}:
@@ -375,6 +390,8 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - classes
     put:
@@ -409,6 +426,8 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - classes
     patch:
@@ -443,6 +462,8 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - classes
     delete:
@@ -461,6 +482,8 @@ paths:
       responses:
         "204":
           description: The resource class was removed or did not exist in the first place
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - classes
   /resource_pools/{resource_pool_id}/quota:
@@ -478,13 +501,15 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/Quota"
+                $ref: "#/components/schemas/Resources"
         "404":
           description: The resource pool or user does not exist
           content:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - quota
     put:
@@ -500,20 +525,22 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Quota"
+              $ref: "#/components/schemas/Resources"
       responses:
         "200":
           description: The user belongs to the resource pool
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/Quota"
+                $ref: "#/components/schemas/Resources"
         "404":
           description: The resource pool or user does not exist
           content:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - quota
     patch:
@@ -529,32 +556,45 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/QuotaPatch"
+              $ref: "#/components/schemas/ResourcesPatch"
       responses:
         "200":
           description: The user belongs to the resource pool
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/Quota"
+                $ref: "#/components/schemas/Resources"
         "404":
           description: The resource pool or user does not exist
           content:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - quota
   /users:
+    get:
+      summary: List all users
+      responses:
+        "200":
+          description: The list of users in the service (this is a subset of what is in Keycloak)
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/UsersWithId"
+      tags:
+        - users
     post:
       summary: Add a user
       requestBody:
-        description: User email or id
+        description: User id
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/UserPatch"
+              $ref: "#/components/schemas/UserWithId"
       responses:
         "200":
           description: The user already exists
@@ -574,6 +614,8 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - users
   /users/{user_id}:
@@ -588,6 +630,8 @@ paths:
       responses:
         "204":
           description: The user was removed or it never existed
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - users
   /users/{user_id}/resource_pools:
@@ -599,6 +643,12 @@ paths:
           required: true
           schema:
             type: string
+        - in: query
+          description: Filter for resource pools based on the provided name as a prefix. Omitting this parameter returns all resource pools.
+          name: name
+          schema:
+            $ref: "#/components/schemas/Name"
+          required: false
       responses:
         "200":
           description: The resource pools that the user has access to
@@ -612,6 +662,8 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - users
     post:
@@ -642,6 +694,8 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - users
     put:
@@ -672,13 +726,15 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - users
   /error:
     get:
-      summary: Get a sample error response with status code 500
+      summary: Get a sample error response with status code 422
       responses:
-        "500":
+        "422":
           description: The error
           content:
             "application/json":
@@ -698,29 +754,74 @@ paths:
 components:
   schemas:
     ResourceClass:
-      allOf:
-        - $ref: "#/components/schemas/ResourceClassPatch"
-        - required: ["cpu", "memory", "gpu", "storage", "name"]
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/Name"
+        cpu:
+          $ref: "#/components/schemas/Cpu"
+        memory:
+          $ref: "#/components/schemas/Memory"
+        gpu:
+          $ref: "#/components/schemas/Gpu"
+        storage:
+          $ref: "#/components/schemas/Storage"
+      required: ["cpu", "memory", "gpu", "storage", "name"]
     ResourceClassPatch:
-      allOf:
-        - $ref: "#/components/schemas/ResourcesPatch"
-        - type: object
-          properties:
-            name:
-              $ref: "#/components/schemas/Name"
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/Name"
+        cpu:
+          $ref: "#/components/schemas/Cpu"
+        memory:
+          $ref: "#/components/schemas/Memory"
+        gpu:
+          $ref: "#/components/schemas/Gpu"
+        storage:
+          $ref: "#/components/schemas/Storage"
+    ResourceClassPatchWithId:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/Name"
+        cpu:
+          $ref: "#/components/schemas/Cpu"
+        memory:
+          $ref: "#/components/schemas/Memory"
+        gpu:
+          $ref: "#/components/schemas/Gpu"
+        storage:
+          $ref: "#/components/schemas/Storage"
+        id:
+          $ref: "#/components/schemas/IntegerId"
+      required: ["id"]
     ResourceClassWithId:
-      allOf:
-        - $ref: "#/components/schemas/ResourceClass"
-        - type: object
-          properties:
-            id:
-              $ref: "#/components/schemas/IntegerId"
-          required: ["id"]
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/Name"
+        cpu:
+          $ref: "#/components/schemas/Cpu"
+        memory:
+          $ref: "#/components/schemas/Memory"
+        gpu:
+          $ref: "#/components/schemas/Gpu"
+        storage:
+          $ref: "#/components/schemas/Storage"
+        id:
+          $ref: "#/components/schemas/IntegerId"
+      required: ["cpu", "memory", "gpu", "storage", "name", "id"]
     ResourceClasses:
       type: array
       items:
         $ref: "#/components/schemas/ResourceClass"
-      minLength: 1
+      minItems: 1
+      uniqueItems: true
     ResourceClassesWithId:
       type: array
       items:
@@ -731,25 +832,51 @@ components:
               id:
                 $ref: "#/components/schemas/IntegerId"
             required: ["id"]
-      minLength: 1
+      uniqueItems: true
+    ResourceClassesPatchWithId:
+      type: array
+      items:
+        $ref: "#/components/schemas/ResourceClassPatchWithId"
+      minItems: 1
+      uniqueItems: true
     ResourcePool:
-      allOf:
-        - $ref: "#/components/schemas/ResourcePoolPatch"
-        - required: ["quota", "classes", "name"]
-    ResourcePoolPatch:
       type: object
+      additionalProperties: false
       properties:
         quota:
-          $ref: "#/components/schemas/Quota"
+          $ref: "#/components/schemas/Resources"
         classes:
           $ref: "#/components/schemas/ResourceClasses"
         name:
           $ref: "#/components/schemas/Name"
-    ResourcePoolWithId:
+      required: ["quota", "classes", "name"]
+    ResourcePoolPatch:
       type: object
+      additionalProperties: false
       properties:
         quota:
-          $ref: "#/components/schemas/Quota"
+          $ref: "#/components/schemas/ResourcesPatchWithId"
+        classes:
+          $ref: "#/components/schemas/ResourceClassesPatchWithId"
+        name:
+          $ref: "#/components/schemas/Name"
+    ResourcePoolPut:
+      type: object
+      additionalProperties: false
+      properties:
+        quota:
+          $ref: "#/components/schemas/Resources"
+        classes:
+          $ref: "#/components/schemas/ResourceClassesWithId"
+        name:
+          $ref: "#/components/schemas/Name"
+      required: ["quota", "classes", "name"]
+    ResourcePoolWithId:
+      type: object
+      additionalProperties: false
+      properties:
+        quota:
+          $ref: "#/components/schemas/Resources"
         classes:
           type: array
           items:
@@ -763,35 +890,21 @@ components:
       type: array
       items:
         $ref: "#/components/schemas/ResourcePoolWithId"
-    Quota:
-      $ref: "#/components/schemas/Resources"
-    QuotaPatch:
-      $ref: "#/components/schemas/ResourcesPatch"
     UserWithId:
-      allOf:
-        - $ref: "#/components/schemas/UserPatch"
-        - required: ["id", "username"]
-    UserPatch:
       type: object
+      additionalProperties: false
       properties:
         id:
           $ref: "#/components/schemas/UserId"
-        username:
-          $ref: "#/components/schemas/Username"
-    UsersPatch:
-      type: array
-      items:
-        $ref: "#/components/schemas/UserPatch"
+      required: ["id"]
     UsersWithId:
       type: array
       items:
         $ref: "#/components/schemas/UserWithId"
+      uniqueItems: true
     Resources:
-      allOf:
-        - $ref: "#/components/schemas/ResourcesPatch"
-        - required: ["cpu", "memory", "gpu", "storage"]
-    ResourcesPatch:
       type: object
+      additionalProperties: false
       properties:
         cpu:
           $ref: "#/components/schemas/Cpu"
@@ -801,6 +914,28 @@ components:
           $ref: "#/components/schemas/Gpu"
         storage:
           $ref: "#/components/schemas/Storage"
+      required: ["cpu", "memory", "gpu", "storage"]
+    ResourcesPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        cpu:
+          $ref: "#/components/schemas/Cpu"
+        memory:
+          $ref: "#/components/schemas/Memory"
+        gpu:
+          $ref: "#/components/schemas/Gpu"
+        storage:
+          $ref: "#/components/schemas/Storage"
+    ResourcesPatchWithId:
+      allOf:
+        - $ref: "#/components/schemas/ResourcesPatch"
+        - additionalProperties: false
+        - type: object
+          properties:
+            id:
+              $ref: "#/components/schemas/IntegerId"
+          required: ["id"]
     Version:
       type: object
       properties:
@@ -808,7 +943,8 @@ components:
           type: string
       required: ["version"]
     Cpu:
-      type: integer
+      type: number
+      format: float
       description: Number of cpu cores
       example: 10
       exclusiveMinimum: true
@@ -834,21 +970,20 @@ components:
       type: string
       description: Keycloak user ID
       example: 123-keycloak-user-id-456
-      minLength: 5
-    Username:
-      type: string
-      description: The Keycloak username - usually the same as the email associated to the user
-      example: 123user@email.com
+      pattern: "^[A-Za-z0-9-]+$"
       minLength: 5
     IntegerId:
       type: integer
       description: An integer ID used to identify different resources
       minimum: 0
+      example: 1
     IntegerIds:
       type: array
       items:
         $ref: "#/components/schemas/IntegerId"
-      minLength: 1
+      minItems: 1
+      uniqueItems: true
+      example: [1, 3, 5]
     Name:
       type: string
       description: A name for a specific resource
@@ -873,3 +1008,10 @@ components:
               example: "Something went wrong - please try again later"
           required: ["code", "message"]
       required: ["error"]
+  responses:
+    Error:
+      description: The schema for all 4xx and 5xx responses
+      content:
+        "application/json":
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

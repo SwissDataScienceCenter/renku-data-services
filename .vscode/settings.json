@@ -11,11 +11,7 @@
     "-l",
     "120",
     "-t",
-    "py36",
-    "-t",
-    "py37",
-    "-t",
-    "py38",
+    "py311",
     "--include",
     "\\.pyi?$",
   ],
@@ -23,4 +19,9 @@
     "src/**",
     "tests/**"
   ],
+  "python.linting.mypyEnabled": true,
+  "python.linting.mypyArgs": [
+    "--config-file",
+    "pyproject.toml",
+  ]
 }

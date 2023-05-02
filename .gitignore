@@ -48,6 +48,7 @@ htmlcov/
 nosetests.xml
 coverage.xml
 *,cover
+.hypothesis
 
 # PyBuilder
 target/
@@ -57,3 +58,9 @@ target/
 
 # snyk
 .dccache
+
+# sqlite databases
+*.db
+
+# Mac
+.DS_Store
