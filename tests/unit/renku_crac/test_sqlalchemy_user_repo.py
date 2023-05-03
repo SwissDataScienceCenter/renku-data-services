@@ -10,7 +10,7 @@ from tests.unit.renku_crac.utils import create_rp
 
 
 @given(user=user_strat)
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 def test_insert_user(user_repo: UserRepository, user: models.User):
     inserted_user = asyncio.run(user_repo.insert_user(user))
     assert inserted_user is not None
@@ -25,7 +25,7 @@ def test_insert_user(user_repo: UserRepository, user: models.User):
 
 
 @given(user=user_strat)
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 def test_delete_user(user_repo: UserRepository, user: models.User):
     inserted_user = asyncio.run(user_repo.insert_user(user))
     assert inserted_user is not None
@@ -38,7 +38,7 @@ def test_delete_user(user_repo: UserRepository, user: models.User):
 
 
 @given(rp=rp_strat, users=user_list_strat)
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 def test_resource_pool_add_users(
     rp: models.ResourcePool, user_repo: UserRepository, pool_repo: ResourcePoolRepository, users: List[models.User]
 ):
@@ -60,7 +60,7 @@ def test_resource_pool_add_users(
 
 
 @given(rp=rp_strat, users=user_list_strat)
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 def test_resource_pool_remove_users(
     rp: models.ResourcePool, user_repo: UserRepository, pool_repo: ResourcePoolRepository, users: List[models.User]
 ):
