@@ -3,11 +3,19 @@ from dataclasses import asdict
 
 import pytest
 from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 
 import models
 from db.adapter import ResourcePoolRepository
 from models import errors
-from tests.unit.renku_crac.hypothesis import quota_strat, rc_strat, rp_strat, rp_strat_w_classes
+from tests.unit.renku_crac.hypothesis import (
+    a_name,
+    quota_strat,
+    rc_strat,
+    rc_update_reqs_dict,
+    rp_strat,
+    rp_strat_w_classes,
+)
 from tests.unit.renku_crac.utils import create_rp, remove_id_from_rp
 
 
@@ -17,12 +25,11 @@ def test_resource_pool_insert_get(rp: models.ResourcePool, pool_repo: ResourcePo
     create_rp(rp, pool_repo)
 
 
-@given(rp=rp_strat)
+@given(rp=rp_strat, new_name=a_name)
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-def test_resource_pool_update_name(rp: models.ResourcePool, pool_repo: ResourcePoolRepository):
+def test_resource_pool_update_name(rp: models.ResourcePool, pool_repo: ResourcePoolRepository, new_name: str):
     inserted_rp = create_rp(rp, pool_repo)
     assert inserted_rp.id is not None
-    new_name = "very_new_name_123456"
     updated_rp = asyncio.run(pool_repo.update_resource_pool(id=inserted_rp.id, name=new_name))
     assert updated_rp.id == inserted_rp.id
     assert updated_rp.name == new_name
@@ -52,22 +59,22 @@ def test_resource_pool_update_quota(
     assert retrieved_rps[0] == updated_rp
 
 
-@given(rp=rp_strat_w_classes)
+@given(rp=rp_strat_w_classes, data=st.data())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-def test_resource_pool_update_classes(rp: models.ResourcePool, pool_repo: ResourcePoolRepository):
+def test_resource_pool_update_classes(rp: models.ResourcePool, pool_repo: ResourcePoolRepository, data):
     inserted_rp = create_rp(rp, pool_repo)
     assert inserted_rp.id is not None
-    new_classes = [asdict(cls) for cls in inserted_rp.classes]
-    for i in range(len(new_classes)):
-        new_classes[i]["cpu"] = 999
-    updated_rp = asyncio.run(pool_repo.update_resource_pool(id=inserted_rp.id, classes=new_classes))
+    old_classes = [asdict(cls) for cls in list(inserted_rp.classes)]
+    new_classes_dicts = [{**cls, **data.draw(rc_update_reqs_dict)} for cls in old_classes]
+    new_classes_models = set([models.ResourceClass(**cls) for cls in new_classes_dicts])
+    updated_rp = asyncio.run(pool_repo.update_resource_pool(id=inserted_rp.id, classes=new_classes_dicts))
     assert updated_rp.id == inserted_rp.id
     assert len(updated_rp.classes) == len(inserted_rp.classes)
-    assert all([cls.cpu == 999 for cls in updated_rp.classes])
-    assert {cls.id for cls in updated_rp.classes} == {cls.id for cls in inserted_rp.classes}
+    assert updated_rp.classes == new_classes_models
     retrieved_rps = asyncio.run(pool_repo.get_resource_pools(id=inserted_rp.id))
     assert len(retrieved_rps) == 1
     assert retrieved_rps[0] == updated_rp
+    assert retrieved_rps[0].classes == updated_rp.classes
 
 
 @given(rp=rp_strat_w_classes)

@@ -10,7 +10,6 @@ from renku_crac.config import Config as CracConfig
 # access to the values within the .ini file in use.
 config = context.config
 crac_config = CracConfig.from_env()
-# config.set_section_option("alembic", "sqlalchemy.url", crac_config.db.sql_alchemy_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
