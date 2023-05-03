@@ -349,7 +349,7 @@ class UserRepository(_Base):
 
     async def update_resource_pool_users(
         self, resource_pool_id: int, users: List[models.User], append: bool = True
-    ) -> models.ResourcePool:
+    ) -> List[models.User]:
         """Update the users that have access to a specific resource pool."""
         async with self.session_maker() as session:
             async with session.begin():
@@ -382,4 +382,4 @@ class UserRepository(_Base):
                     rp.users.extend(users_to_add_exist + users_to_add_missing)
                 else:
                     rp.users = users_to_add_exist + users_to_add_missing
-                return rp.dump()
+                return [usr.dump() for usr in rp.users]

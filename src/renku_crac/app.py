@@ -93,9 +93,14 @@ class ResourcePoolUsersView(HTTPMethodView):
         return await self._put_post(resource_pool_id=resource_pool_id, body=users, post=False)
 
     async def _put_post(self, resource_pool_id: int, body: apispec.UsersWithId, post: bool = True):
-        users = [models.User(keycloak_id=user.id) for user in body.__root__]
-        rp = await self.repo.update_resource_pool_users(resource_pool_id=resource_pool_id, users=users, append=post)
-        return json(apispec.ResourcePoolWithId.from_orm(rp).dict(exclude_none=True))
+        users_to_add = [models.User(keycloak_id=user.id) for user in body.__root__]
+        updated_users = await self.repo.update_resource_pool_users(
+            resource_pool_id=resource_pool_id, users=users_to_add, append=post
+        )
+        return json(
+            [apispec.UserWithId(id=r.keycloak_id).dict(exclude_none=True) for r in updated_users],
+            status=201 if post else 200,
+        )
 
 
 @dataclass
