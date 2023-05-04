@@ -75,7 +75,7 @@ exclude = [
 ]
 
 [tool.pytest.ini_options]
-addopts = "--black --cov src/ --cov-report=term-missing -v"
+addopts = "--black --cov src/ --cov-report=term-missing --cov-report lcov -v"
 doctest_optionflags = "ALLOW_UNICODE"
 testpaths = ["src", "tests"]
 markers = [
@@ -109,3 +109,9 @@ module = [
     "asyncpg.*",
 ]
 ignore_missing_imports = true
+
+[tool.coverage.run]
+source = [ "src/" ]
+
+[tool.coverage.lcov]
+output = "coverage.lcov"

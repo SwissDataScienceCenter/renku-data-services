@@ -49,6 +49,8 @@ nosetests.xml
 coverage.xml
 *,cover
 .hypothesis
+coverage.lcov
+.tmp.pid
 
 # PyBuilder
 target/
