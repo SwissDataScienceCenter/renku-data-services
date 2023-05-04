@@ -13,12 +13,6 @@ class _DummyUser:
     username: str
 
 
-@dataclass
-class _DummyUser:
-    id: str
-    username: str
-
-
 class DummyUserStore:
     """A dummy adapter for keycloak. By default it will create and return users that do not exist."""
 
