@@ -1,4 +1,4 @@
-.PHONY: schemas tests style_checks pre_commit_checks migrations schemathesis
+.PHONY: schemas tests style_checks pre_commit_checks schemathesis
 
 schemas:
 	poetry run datamodel-codegen --input src/api.spec.yaml --input-file-type openapi --output src/schemas/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --base-class schemas.base.BaseAPISpec
@@ -16,9 +16,6 @@ tests:
 
 pre_commit_checks:
 	poetry run pre-commit run --all-files
-
-migrations:
-	poetry run alembic upgrade head
 
 schemathesis:
 	poetry run st run http://localhost:8000/api/data/spec.json --validate-schema True --checks all --hypothesis-max-examples 20 --data-generation-method all --show-errors-tracebacks --hypothesis-suppress-health-check data_too_large --max-response-time 100 -v

@@ -1,7 +1,8 @@
 """Adapter based on SQLAlchemy."""
 from typing import List, Optional
 
-from sqlalchemy import delete, select, update
+from alembic import command, config
+from sqlalchemy import create_engine, delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import selectinload, sessionmaker
 
@@ -10,14 +11,27 @@ from db import schemas
 from models import errors
 
 
-class ResourcePoolRepository:
-    """The adapter used for accessing resource pools with SQLAlchemy."""
-
-    def __init__(self, sql_alchemy_url: str):
-        self.engine = create_async_engine(sql_alchemy_url, echo=True)
+class _Base:
+    def __init__(self, sync_sqlalchemy_url: str, async_sqlalchemy_url: str, debug: bool = False):
+        self.engine = create_async_engine(async_sqlalchemy_url, echo=debug)
+        self.sync_engine = create_engine(sync_sqlalchemy_url, echo=debug)
         self.session_maker = sessionmaker(
             self.engine, class_=AsyncSession, expire_on_commit=False
         )  # type: ignore[call-overload]
+
+    def do_migrations(self):
+        """Migrate the database to the required revision.
+
+        From: https://alembic.sqlalchemy.org/en/latest/cookbook.html#programmatic-api-use-connection-sharing-with-asyncio  # noqa: E501
+        """
+        with self.sync_engine.begin() as conn:
+            cfg = config.Config("alembic.ini")
+            cfg.attributes["connection"] = conn
+            command.upgrade(cfg, "head")
+
+
+class ResourcePoolRepository(_Base):
+    """The adapter used for accessing resource pools with SQLAlchemy."""
 
     async def get_resource_pools(
         self, id: Optional[int] = None, name: Optional[str] = None
@@ -74,13 +88,21 @@ class ResourcePoolRepository:
         self, resource_class: models.ResourceClass, *, resource_pool_id: Optional[int] = None
     ) -> models.ResourceClass:
         """Insert a resource class in the database."""
-        orm = schemas.ResourceClassORM.load(resource_class)
-        if resource_pool_id is not None:
-            orm.resource_pool_id = resource_pool_id
+        cls = schemas.ResourceClassORM.load(resource_class)
         async with self.session_maker() as session:
             async with session.begin():
-                session.add(orm)
-        return orm.dump()
+                if resource_pool_id is not None:
+                    stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == resource_pool_id)
+                    res = await session.execute(stmt)
+                    rp = res.scalars().first()
+                    if rp is None:
+                        raise errors.MissingResourceError(
+                            message=f"Resource pool with id {resource_pool_id} does not exist."
+                        )
+                    cls.resource_pool = rp
+                    cls.resource_pool_id = rp.id
+                session.add(cls)
+        return cls.dump()
 
     async def update_quota(self, resource_pool_id: int, **kwargs) -> models.Quota:
         """Update an existing quota in the database."""
@@ -156,20 +178,26 @@ class ResourcePoolRepository:
         """Delete a resource pool from the database."""
         async with self.session_maker() as session:
             async with session.begin():
-                stmt = delete(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == id)
-                await session.execute(stmt)
-        return None
+                stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == id)
+                res = await session.execute(stmt)
+                rp = res.scalars().first()
+                if rp is not None:
+                    await session.delete(rp)
 
     async def delete_resource_class(self, resource_pool_id: int, resource_class_id: int):
         """Delete a specific resource class."""
         async with self.session_maker() as session:
             async with session.begin():
                 stmt = (
-                    delete(schemas.ResourceClassORM)
+                    select(schemas.ResourceClassORM)
                     .where(schemas.ResourceClassORM.id == resource_class_id)
                     .where(schemas.ResourceClassORM.resource_pool_id == resource_pool_id)
                 )
-                await session.execute(stmt)
+                res = await session.execute(stmt)
+                cls = res.scalars().first()
+                if cls is None:
+                    return None
+                await session.delete(cls)
 
     async def update_resource_class(
         self, resource_pool_id: int, resource_class_id: int, **kwargs
@@ -197,14 +225,8 @@ class ResourcePoolRepository:
                 return cls.dump()
 
 
-class UserRepository:
+class UserRepository(_Base):
     """The adapter used for accessing users with SQLAlchemy."""
-
-    def __init__(self, sql_alchemy_url: str):
-        self.engine = create_async_engine(sql_alchemy_url, echo=True)
-        self.session_maker = sessionmaker(
-            self.engine, class_=AsyncSession, expire_on_commit=False
-        )  # type: ignore[call-overload]
 
     async def get_users(
         self,
@@ -251,8 +273,12 @@ class UserRepository:
         """Remove a user from the database."""
         async with self.session_maker() as session:
             async with session.begin():
-                stmt = delete(schemas.UserORM).where(schemas.UserORM.keycloak_id == id)
-                await session.execute(stmt)
+                stmt = select(schemas.UserORM).where(schemas.UserORM.keycloak_id == id)
+                res = await session.execute(stmt)
+                user = res.scalars().first()
+                if user is None:
+                    return None
+                await session.delete(user)
         return None
 
     async def get_user_resource_pools(

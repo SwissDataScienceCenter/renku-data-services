@@ -82,15 +82,15 @@ class ResourcePoolUsersView(HTTPMethodView):
         res = await self.repo.get_users(resource_pool_id=resource_pool_id)
         return json([apispec.UserWithId(id=r.keycloak_id).dict(exclude_none=True) for r in res])
 
-    @validate(json=apispec.UsersWithId)
-    async def post(self, _: Request, resource_pool_id: int, body: apispec.UsersWithId):
+    async def post(self, request: Request, resource_pool_id: int):
         """Add users to a specific resource pool."""
-        return await self._put_post(resource_pool_id=resource_pool_id, body=body, post=True)
+        users = apispec.UsersWithId.parse_obj(request.json)  # validation
+        return await self._put_post(resource_pool_id=resource_pool_id, body=users, post=True)
 
-    @validate(json=apispec.UsersWithId)
-    async def put(self, _: Request, resource_pool_id: int, body: apispec.UsersWithId):
+    async def put(self, request: Request, resource_pool_id: int):
         """Set the users for a specific resource pool."""
-        return await self._put_post(resource_pool_id=resource_pool_id, body=body, post=False)
+        users = apispec.UsersWithId.parse_obj(request.json)  # validation
+        return await self._put_post(resource_pool_id=resource_pool_id, body=users, post=False)
 
     async def _put_post(self, resource_pool_id: int, body: apispec.UsersWithId, post: bool = True):
         users = [models.User(keycloak_id=user.id) for user in body.__root__]
@@ -133,12 +133,8 @@ class ClassesView(HTTPMethodView):
     @validate(json=apispec.ResourceClass)
     async def post(self, _: Request, body: apispec.ResourceClass, resource_pool_id: int):
         """Add a class to a specific resource pool."""
-        rps = await self.repo.get_resource_pools(id=resource_pool_id)
-        if len(rps) < 1:
-            raise errors.MissingResourceError(message=f"The resource pool with id {resource_pool_id} cannot be found.")
-        rp = rps[0]
         cls = models.ResourceClass.from_dict(body.dict())
-        res = await self.repo.insert_resource_class(cls, resource_pool_id=rp.id)
+        res = await self.repo.insert_resource_class(cls, resource_pool_id=resource_pool_id)
         return json(apispec.ResourceClassWithId.from_orm(res).dict(exclude_none=True), 201)
 
 
@@ -279,15 +275,15 @@ class UserResourcePoolsView(HTTPMethodView):
         rps = await self.repo.get_user_resource_pools(keycloak_id=user_id)
         return json([apispec.ResourcePoolWithId.from_orm(rp).dict(exclude_none=True) for rp in rps])
 
-    @validate(json=apispec.IntegerIds)
-    async def post(self, _: Request, user_id: str, body: apispec.IntegerIds):
+    async def post(self, request: Request, user_id: str):
         """Give a specific user access to a specific resource pool."""
-        return await self._post_put(user_id=user_id, post=True, resource_pool_ids=body)
+        ids = apispec.IntegerIds.parse_obj(request.json)  # validation
+        return await self._post_put(user_id=user_id, post=True, resource_pool_ids=ids)
 
-    @validate(json=apispec.IntegerIds)
-    async def put(self, _: Request, user_id: str, body: apispec.IntegerIds):
+    async def put(self, request: Request, user_id: str):
         """Set the list of resource pools that a specific user has access to."""
-        return await self._post_put(user_id=user_id, post=False, resource_pool_ids=body)
+        ids = apispec.IntegerIds.parse_obj(request.json)  # validation
+        return await self._post_put(user_id=user_id, post=False, resource_pool_ids=ids)
 
     async def _post_put(self, user_id: str, resource_pool_ids: apispec.IntegerIds, post: bool = True):
         rps = await self.repo.update_user_resource_pools(
@@ -333,11 +329,13 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
     """Register all handlers on the application."""
     app.add_route(ResourcePoolsView.as_view(config.rp_repo), "/api/data/resource_pools")
     app.add_route(ResourcePoolView.as_view(config.rp_repo), "/api/data/resource_pools/<resource_pool_id>")
-    app.add_route(ResourcePoolUsersView.as_view(config.user_repo), "/api/data/resource_pools/users")
-    app.add_route(ResourcePoolUserView.as_view(config.user_repo), "/api/data/resource_pools/users/<user_id>")
-    app.add_route(ClassesView.as_view(config.rp_repo), "/api/data/resource_pools/classes")
-    app.add_route(ClassView.as_view(config.rp_repo), "/api/data/resource_pools/classes/<class_id>")
-    app.add_route(QuotaView.as_view(config.rp_repo), "/api/data/resource_pools/quota")
+    app.add_route(ResourcePoolUsersView.as_view(config.user_repo), "/api/data/resource_pools/<resource_pool_id>/users")
+    app.add_route(
+        ResourcePoolUserView.as_view(config.user_repo), "/api/data/resource_pools/<resource_pool_id>/users/<user_id>"
+    )
+    app.add_route(ClassesView.as_view(config.rp_repo), "/api/data/resource_pools/<resource_pool_id>/classes")
+    app.add_route(ClassView.as_view(config.rp_repo), "/api/data/resource_pools/<resource_pool_id>/classes/<class_id>")
+    app.add_route(QuotaView.as_view(config.rp_repo), "/api/data/resource_pools/<resource_pool_id>/quota")
     app.add_route(UsersView.as_view(config.user_repo, config.user_store), "/api/data/users")
     app.add_route(UserView.as_view(config.user_repo), "/api/data/users/<user_id>")
     app.add_route(UserResourcePoolsView.as_view(config.user_repo), "/api/data/users/<user_id>/resource_pools")

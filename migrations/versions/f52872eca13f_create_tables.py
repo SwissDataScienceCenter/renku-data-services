@@ -1,8 +1,8 @@
 """Create tables
 
-Revision ID: 953b7ca598bb
+Revision ID: f52872eca13f
 Revises:
-Create Date: 2023-05-02 12:56:53.473311
+Create Date: 2023-05-02 23:35:56.698082
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = "953b7ca598bb"
+revision = "f52872eca13f"
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -40,10 +40,7 @@ def upgrade() -> None:
         sa.Column("gpu", sa.BigInteger(), nullable=False),
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("resource_pool_id", sa.Integer(), nullable=True),
-        sa.ForeignKeyConstraint(
-            ["resource_pool_id"],
-            ["resource_pools.id"],
-        ),
+        sa.ForeignKeyConstraint(["resource_pool_id"], ["resource_pools.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_quotas_resource_pool_id"), "quotas", ["resource_pool_id"], unique=True)
@@ -56,10 +53,7 @@ def upgrade() -> None:
         sa.Column("gpu", sa.BigInteger(), nullable=False),
         sa.Column("resource_pool_id", sa.Integer(), nullable=True),
         sa.Column("id", sa.Integer(), nullable=False),
-        sa.ForeignKeyConstraint(
-            ["resource_pool_id"],
-            ["resource_pools.id"],
-        ),
+        sa.ForeignKeyConstraint(["resource_pool_id"], ["resource_pools.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_resource_classes_name"), "resource_classes", ["name"], unique=False)
@@ -70,14 +64,8 @@ def upgrade() -> None:
         "resource_pools_users",
         sa.Column("user_id", sa.Integer(), nullable=False),
         sa.Column("resource_pool_id", sa.Integer(), nullable=False),
-        sa.ForeignKeyConstraint(
-            ["resource_pool_id"],
-            ["resource_pools.id"],
-        ),
-        sa.ForeignKeyConstraint(
-            ["user_id"],
-            ["users.id"],
-        ),
+        sa.ForeignKeyConstraint(["resource_pool_id"], ["resource_pools.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("user_id", "resource_pool_id"),
     )
     op.create_index(
