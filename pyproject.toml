@@ -109,3 +109,9 @@ module = [
     "asyncpg.*",
 ]
 ignore_missing_imports = true
+
+[tool.coverage.run]
+source = [ "src/" ]
+
+[tool.coverage.lcov]
+output = "coverage.lcov"

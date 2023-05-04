@@ -1,5 +1,6 @@
 """The entrypoint for the CRAC application."""
 import argparse
+from os import environ
 
 from sanic import Sanic
 from sanic.worker.loader import AppLoader
@@ -12,6 +13,12 @@ def create_app() -> Sanic:
     """Create a Sanic application."""
     config = Config.from_env()
     app = Sanic(config.app_name)
+    if "COVERAGE_RUN" in environ:
+        app.config.TOUCHUP = False
+        # NOTE: in single process mode where we usually run schemathesis to get coverage the db migrations
+        # specified below with the main_process_start decorator do not run.
+        config.rp_repo.do_migrations()
+        config.user_repo.do_migrations()
     app = register_all_handlers(app, config)
 
     @app.main_process_start

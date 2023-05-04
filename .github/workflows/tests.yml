@@ -33,9 +33,3 @@ jobs:
         with:
           path-to-lcov: coverage.lcov
         continue-on-error: true
-      - name: Run server in background
-        run: |
-          poetry run python src/renku_crac/main.py --fast &
-          sleep 10
-      - name: Schemathesis tests
-        run: make schemathesis
