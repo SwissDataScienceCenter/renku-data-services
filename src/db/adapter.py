@@ -12,9 +12,9 @@ from models import errors
 
 
 class _Base:
-    def __init__(self, sync_sqlalchemy_url: str, async_sqlalchemy_url: str):
-        self.engine = create_async_engine(async_sqlalchemy_url, echo=True)
-        self.sync_engine = create_engine(sync_sqlalchemy_url, echo=True)
+    def __init__(self, sync_sqlalchemy_url: str, async_sqlalchemy_url: str, debug: bool = False):
+        self.engine = create_async_engine(async_sqlalchemy_url, echo=debug)
+        self.sync_engine = create_engine(sync_sqlalchemy_url, echo=debug)
         self.session_maker = sessionmaker(
             self.engine, class_=AsyncSession, expire_on_commit=False
         )  # type: ignore[call-overload]
@@ -181,10 +181,8 @@ class ResourcePoolRepository(_Base):
                 stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == id)
                 res = await session.execute(stmt)
                 rp = res.scalars().first()
-                if rp is None:
-                    return None
-                await session.delete(rp)
-        return None
+                if rp is not None:
+                    await session.delete(rp)
 
     async def delete_resource_class(self, resource_pool_id: int, resource_class_id: int):
         """Delete a specific resource class."""
