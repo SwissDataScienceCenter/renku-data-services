@@ -4,63 +4,82 @@ from dataclasses import dataclass
 from typing import Any, Dict
 
 from sanic import HTTPResponse, Request, Sanic, json
-from sanic.views import HTTPMethodView
 from sanic_ext import validate
 
 import models
 from db.adapter import ResourcePoolRepository, UserRepository
 from models import errors
+from renku_crac.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_crac.config import Config
 from renku_crac.error_handler import CustomErrorHandler
 from schemas import apispec
 
 
-@dataclass
-class ResourcePoolsView(HTTPMethodView):
-    """Handlers for creating a resource pool and listing all resource pools."""
+@dataclass(kw_only=True)
+class ResourcePoolsBP(CustomBlueprint):
+    """Handlers for manipulating resource pools."""
 
     repo: ResourcePoolRepository
 
-    async def get(self, _: Request):
+    def get_all(self) -> BlueprintFactoryResponse:
         """List all resource pools."""
-        res = await self.repo.get_resource_pools()
-        return json([apispec.ResourcePoolWithId.from_orm(r).dict(exclude_none=True) for r in res])
 
-    @validate(json=apispec.ResourcePool)
-    async def post(self, _: Request, body: apispec.ResourcePool):
+        async def _get_all(_: Request):
+            res = await self.repo.get_resource_pools()
+            return json([apispec.ResourcePoolWithId.from_orm(r).dict(exclude_none=True) for r in res])
+
+        return "/resource_pools", ["GET"], _get_all
+
+    def post(self) -> BlueprintFactoryResponse:
         """Add a new resource pool."""
-        rp = models.ResourcePool.from_dict(body.dict())
-        res = await self.repo.insert_resource_pool(rp)
-        return json(apispec.ResourcePoolWithId.from_orm(res).dict(exclude_none=True), 201)
 
+        @validate(json=apispec.ResourcePool)
+        async def _post(_: Request, body: apispec.ResourcePool):
+            rp = models.ResourcePool.from_dict(body.dict())
+            res = await self.repo.insert_resource_pool(rp)
+            return json(apispec.ResourcePoolWithId.from_orm(res).dict(exclude_none=True), 201)
 
-@dataclass
-class ResourcePoolView(HTTPMethodView):
-    """Handlers for dealing with individual resource pools."""
+        return "/resource_pools", ["POST"], _post
 
-    repo: ResourcePoolRepository
-
-    async def get(self, request: Request, resource_pool_id: int):
+    def get_one(self) -> BlueprintFactoryResponse:
         """Get a specific resource pool."""
-        res = await self.repo.get_resource_pools(resource_pool_id, name=request.args.get("name"))
-        if len(res) < 1:
-            raise errors.MissingResourceError(message=f"The resource pool with id {resource_pool_id} cannot be found.")
-        return json(apispec.ResourcePoolWithId.from_orm(res[0]).dict(exclude_none=True))
 
-    async def delete(self, _: Request, resource_pool_id: int):
+        async def _get_one(request: Request, resource_pool_id: int):
+            res = await self.repo.get_resource_pools(resource_pool_id, name=request.args.get("name"))
+            if len(res) < 1:
+                raise errors.MissingResourceError(
+                    message=f"The resource pool with id {resource_pool_id} cannot be found."
+                )
+            return json(apispec.ResourcePoolWithId.from_orm(res[0]).dict(exclude_none=True))
+
+        return "/resource_pools/<resource_pool_id>", ["GET"], _get_one
+
+    def delete(self) -> BlueprintFactoryResponse:
         """Delete a specific resource pool."""
-        await self.repo.delete_resource_pool(id=resource_pool_id)
-        return HTTPResponse(status=204)
 
-    @validate(json=apispec.ResourcePoolPut)
-    async def put(self, _: Request, resource_pool_id: int, body: apispec.ResourcePoolPut):
+        async def _delete(_: Request, resource_pool_id: int):
+            await self.repo.delete_resource_pool(id=resource_pool_id)
+            return HTTPResponse(status=204)
+
+        return "/resource_pools/<resource_pool_id>", ["DELETE"], _delete
+
+    def put(self) -> BlueprintFactoryResponse:
         """Update all fields of a specific resource pool."""
-        return await self._put_patch_resource_pool(resource_pool_id=resource_pool_id, body=body)
 
-    @validate(json=apispec.ResourcePoolPatch)
-    async def patch(self, _: Request, resource_pool_id: int, body: apispec.ResourcePoolPatch):
+        @validate(json=apispec.ResourcePoolPut)
+        async def _put(_: Request, resource_pool_id: int, body: apispec.ResourcePoolPut):
+            return await self._put_patch_resource_pool(resource_pool_id=resource_pool_id, body=body)
+
+        return "/resource_pools/<resource_pool_id>", ["PUT"], _put
+
+    def patch(self) -> BlueprintFactoryResponse:
         """Partially update a specific resource pool."""
-        return await self._put_patch_resource_pool(resource_pool_id=resource_pool_id, body=body)
+
+        @validate(json=apispec.ResourcePoolPatch)
+        async def _patch(_: Request, resource_pool_id: int, body: apispec.ResourcePoolPatch):
+            return await self._put_patch_resource_pool(resource_pool_id=resource_pool_id, body=body)
+
+        return "/resource_pools/<resource_pool_id>", ["PATCH"], _patch
 
     async def _put_patch_resource_pool(
         self, resource_pool_id: int, body: apispec.ResourcePoolPut | apispec.ResourcePoolPatch
@@ -71,26 +90,38 @@ class ResourcePoolView(HTTPMethodView):
         return json(apispec.ResourcePoolWithId.from_orm(res).dict(exclude_none=True))
 
 
-@dataclass
-class ResourcePoolUsersView(HTTPMethodView):
+@dataclass(kw_only=True)
+class ResourcePoolUsersBP(CustomBlueprint):
     """Handlers for dealing with the users of individual resource pools."""
 
     repo: UserRepository
 
-    async def get(self, _: Request, resource_pool_id: int):
+    def get_all(self) -> BlueprintFactoryResponse:
         """Get all users of a specific resource pool."""
-        res = await self.repo.get_users(resource_pool_id=resource_pool_id)
-        return json([apispec.UserWithId(id=r.keycloak_id).dict(exclude_none=True) for r in res])
 
-    async def post(self, request: Request, resource_pool_id: int):
+        async def _get_all(_: Request, resource_pool_id: int):
+            res = await self.repo.get_users(resource_pool_id=resource_pool_id)
+            return json([apispec.UserWithId(id=r.keycloak_id).dict(exclude_none=True) for r in res])
+
+        return "/resource_pools/<resource_pool_id>/users", ["GET"], _get_all
+
+    def post(self) -> BlueprintFactoryResponse:
         """Add users to a specific resource pool."""
-        users = apispec.UsersWithId.parse_obj(request.json)  # validation
-        return await self._put_post(resource_pool_id=resource_pool_id, body=users, post=True)
 
-    async def put(self, request: Request, resource_pool_id: int):
+        async def _post(request: Request, resource_pool_id: int):
+            users = apispec.UsersWithId.parse_obj(request.json)  # validation
+            return await self._put_post(resource_pool_id=resource_pool_id, body=users, post=True)
+
+        return "/resource_pools/<resource_pool_id>/users", ["POST"], _post
+
+    def put(self) -> BlueprintFactoryResponse:
         """Set the users for a specific resource pool."""
-        users = apispec.UsersWithId.parse_obj(request.json)  # validation
-        return await self._put_post(resource_pool_id=resource_pool_id, body=users, post=False)
+
+        async def _put(request: Request, resource_pool_id: int):
+            users = apispec.UsersWithId.parse_obj(request.json)  # validation
+            return await self._put_post(resource_pool_id=resource_pool_id, body=users, post=False)
+
+        return "/resource_pools/<resource_pool_id>/users", ["PUT"], _put
 
     async def _put_post(self, resource_pool_id: int, body: apispec.UsersWithId, post: bool = True):
         users_to_add = [models.User(keycloak_id=user.id) for user in body.__root__]
@@ -102,76 +133,94 @@ class ResourcePoolUsersView(HTTPMethodView):
             status=201 if post else 200,
         )
 
-
-@dataclass
-class ResourcePoolUserView(HTTPMethodView):
-    """Handlers for dealing with an individual user of an individual resource pool."""
-
-    repo: UserRepository
-
-    async def get(self, _: Request, resource_pool_id: int, user_id: str):
+    def get(self) -> BlueprintFactoryResponse:
         """Get a specific user of a specific resource pool."""
-        res = await self.repo.get_users(keycloak_id=user_id, resource_pool_id=resource_pool_id)
-        if len(res) < 1:
-            raise errors.MissingResourceError(
-                message=f"The user with id {user_id} or resource pool with id {resource_pool_id} cannot be found."
-            )
-        return json(apispec.UserWithId(id=res[0].keycloak_id).dict(exclude_none=True))
 
-    async def delete(self, _: Request, resource_pool_id: int, user_id: str):
+        async def _get(_: Request, resource_pool_id: int, user_id: str):
+            res = await self.repo.get_users(keycloak_id=user_id, resource_pool_id=resource_pool_id)
+            if len(res) < 1:
+                raise errors.MissingResourceError(
+                    message=f"The user with id {user_id} or resource pool with id {resource_pool_id} cannot be found."
+                )
+            return json(apispec.UserWithId(id=res[0].keycloak_id).dict(exclude_none=True))
+
+        return "/resource_pools/<resource_pool_id>/users/<user_id>", ["GET"], _get
+
+    def delete(self) -> BlueprintFactoryResponse:
         """Delete a specific user of a specific resource pool."""
-        await self.repo.delete_resource_pool_user(resource_pool_id=resource_pool_id, keycloak_id=user_id)
-        return HTTPResponse(status=204)
+
+        async def _delete(_: Request, resource_pool_id: int, user_id: str):
+            await self.repo.delete_resource_pool_user(resource_pool_id=resource_pool_id, keycloak_id=user_id)
+            return HTTPResponse(status=204)
+
+        return "/resource_pools/<resource_pool_id>/users/<user_id>", ["DELETE"], _delete
 
 
-@dataclass
-class ClassesView(HTTPMethodView):
+@dataclass(kw_only=True)
+class ClassesBP(CustomBlueprint):
     """Handlers for dealing with resource classes of an individual resource pool."""
 
     repo: ResourcePoolRepository
 
-    async def get(self, request: Request, resource_pool_id: int):
+    def get_all(self) -> BlueprintFactoryResponse:
         """Get the classes of a specific resource pool."""
-        res = await self.repo.get_classes(resource_pool_id=resource_pool_id, name=request.args.get("name"))
-        return json([apispec.ResourceClassWithId.from_orm(r).dict(exclude_none=True) for r in res])
 
-    @validate(json=apispec.ResourceClass)
-    async def post(self, _: Request, body: apispec.ResourceClass, resource_pool_id: int):
+        async def _get_all(request: Request, resource_pool_id: int):
+            res = await self.repo.get_classes(resource_pool_id=resource_pool_id, name=request.args.get("name"))
+            return json([apispec.ResourceClassWithId.from_orm(r).dict(exclude_none=True) for r in res])
+
+        return "/resource_pools/<resource_pool_id>/classes", ["GET"], _get_all
+
+    def post(self) -> BlueprintFactoryResponse:
         """Add a class to a specific resource pool."""
-        cls = models.ResourceClass.from_dict(body.dict())
-        res = await self.repo.insert_resource_class(cls, resource_pool_id=resource_pool_id)
-        return json(apispec.ResourceClassWithId.from_orm(res).dict(exclude_none=True), 201)
 
+        @validate(json=apispec.ResourceClass)
+        async def _post(_: Request, body: apispec.ResourceClass, resource_pool_id: int):
+            cls = models.ResourceClass.from_dict(body.dict())
+            res = await self.repo.insert_resource_class(cls, resource_pool_id=resource_pool_id)
+            return json(apispec.ResourceClassWithId.from_orm(res).dict(exclude_none=True), 201)
 
-@dataclass
-class ClassView(HTTPMethodView):
-    """Handlers for dealing with a specific resource class of an individual resource pool."""
+        return "/resource_pools/<resource_pool_id>/classes", ["POST"], _post
 
-    repo: ResourcePoolRepository
-
-    async def get(self, _: Request, resource_pool_id: int, class_id: int):
+    def get(self) -> BlueprintFactoryResponse:
         """Get a specific class of a specific resource pool."""
-        res = await self.repo.get_classes(resource_pool_id=resource_pool_id, id=class_id)
-        if len(res) < 1:
-            raise errors.MissingResourceError(
-                message=f"The class with id {class_id} or resource pool with id {resource_pool_id} cannot be found."
-            )
-        return json(apispec.ResourceClassWithId.from_orm(res[0]).dict(exclude_none=True))
 
-    async def delete(self, _: Request, resource_pool_id: int, class_id: int):
+        async def _get(_: Request, resource_pool_id: int, class_id: int):
+            res = await self.repo.get_classes(resource_pool_id=resource_pool_id, id=class_id)
+            if len(res) < 1:
+                raise errors.MissingResourceError(
+                    message=f"The class with id {class_id} or resource pool with id {resource_pool_id} cannot be found."
+                )
+            return json(apispec.ResourceClassWithId.from_orm(res[0]).dict(exclude_none=True))
+
+        return "/resource_pools/<resource_pool_id>/classes/<class_id>", ["GET"], _get
+
+    def delete(self) -> BlueprintFactoryResponse:
         """Delete a specific class from a specific resource pool."""
-        await self.repo.delete_resource_class(resource_pool_id=resource_pool_id, resource_class_id=class_id)
-        return HTTPResponse(status=204)
 
-    @validate(json=apispec.ResourceClass)
-    async def put(self, _: Request, body: apispec.ResourceClass, resource_pool_id: int, class_id: int):
+        async def _delete(_: Request, resource_pool_id: int, class_id: int):
+            await self.repo.delete_resource_class(resource_pool_id=resource_pool_id, resource_class_id=class_id)
+            return HTTPResponse(status=204)
+
+        return "/resource_pools/<resource_pool_id>/classes/<class_id>", ["DELETE"], _delete
+
+    def put(self) -> BlueprintFactoryResponse:
         """Update all fields of a specific resource class for a specific resource pool."""
-        return await self._put_patch(resource_pool_id, class_id, body)
 
-    @validate(json=apispec.ResourceClassPatch)
-    async def patch(self, _: Request, body: apispec.ResourceClassPatch, resource_pool_id: int, class_id: int):
+        @validate(json=apispec.ResourceClass)
+        async def _put(_: Request, body: apispec.ResourceClass, resource_pool_id: int, class_id: int):
+            return await self._put_patch(resource_pool_id, class_id, body)
+
+        return "/resource_pools/<resource_pool_id>/classes/<class_id>", ["PUT"], _put
+
+    def patch(self) -> BlueprintFactoryResponse:
         """Partially update a specific resource class for a specific resource pool."""
-        return await self._put_patch(resource_pool_id, class_id, body)
+
+        @validate(json=apispec.ResourceClassPatch)
+        async def _patch(_: Request, body: apispec.ResourceClassPatch, resource_pool_id: int, class_id: int):
+            return await self._put_patch(resource_pool_id, class_id, body)
+
+        return "/resource_pools/<resource_pool_id>/classes/<class_id>", ["PATCH"], _patch
 
     async def _put_patch(
         self, resource_pool_id: int, class_id: int, body: apispec.ResourceClassPatch | apispec.ResourceClass
@@ -182,30 +231,42 @@ class ClassView(HTTPMethodView):
         return json(apispec.ResourceClassWithId.from_orm(cls).dict(exclude_none=True))
 
 
-@dataclass
-class QuotaView(HTTPMethodView):
+@dataclass(kw_only=True)
+class QuotaBP(CustomBlueprint):
     """Handlers for dealing with a quota."""
 
     repo: ResourcePoolRepository
 
-    async def get(self, _: Request, resource_pool_id: int):
+    def get(self) -> BlueprintFactoryResponse:
         """Get the quota for a specific resource pool."""
-        res = await self.repo.get_quota(resource_pool_id=resource_pool_id)
-        if res is None:
-            raise errors.MissingResourceError(
-                message=f"The quota for the resource pool with ID {resource_pool_id} cannot be found."
-            )
-        return json(apispec.Resources.from_orm(res).dict(exclude_none=True))
 
-    @validate(json=apispec.Resources)
-    async def put(self, _: Request, resource_pool_id: int, body: apispec.Resources):
+        async def _get(_: Request, resource_pool_id: int):
+            res = await self.repo.get_quota(resource_pool_id=resource_pool_id)
+            if res is None:
+                raise errors.MissingResourceError(
+                    message=f"The quota for the resource pool with ID {resource_pool_id} cannot be found."
+                )
+            return json(apispec.Resources.from_orm(res).dict(exclude_none=True))
+
+        return "/resource_pools/<resource_pool_id>/quota", ["GET"], _get
+
+    def put(self) -> BlueprintFactoryResponse:
         """Update all fields of a the quota of a specific resource pool."""
-        return await self._put_patch(resource_pool_id, body)
 
-    @validate(json=apispec.ResourcesPatch)
-    async def patch(self, _: Request, resource_pool_id: int, body: apispec.ResourcesPatch):
+        @validate(json=apispec.Resources)
+        async def _put(_: Request, resource_pool_id: int, body: apispec.Resources):
+            return await self._put_patch(resource_pool_id, body)
+
+        return "/resource_pools/<resource_pool_id>/quota", ["PUT"], _put
+
+    def patch(self) -> BlueprintFactoryResponse:
         """Partially update the quota of a specific resource pool."""
-        return await self._put_patch(resource_pool_id, body)
+
+        @validate(json=apispec.ResourcesPatch)
+        async def _patch(_: Request, resource_pool_id: int, body: apispec.ResourcesPatch):
+            return await self._put_patch(resource_pool_id, body)
+
+        return "/resource_pools/<resource_pool_id>/quota", ["PATCH"], _patch
 
     async def _put_patch(self, resource_pool_id: int, body: apispec.ResourcesPatch | apispec.Resources):
         res = await self.repo.update_quota(resource_pool_id=resource_pool_id, **body.dict(exclude_none=True))
@@ -216,79 +277,96 @@ class QuotaView(HTTPMethodView):
         return json(apispec.Resources.from_orm(res).dict(exclude_none=True))
 
 
-@dataclass
-class UsersView(HTTPMethodView):
+@dataclass(kw_only=True)
+class UsersBP(CustomBlueprint):
     """Handlers for creating and listing users."""
 
     repo: UserRepository
     user_store: models.UserStore
 
-    @validate(json=apispec.UserWithId)
-    async def post(self, _: Request, body: apispec.UserWithId):
+    def post(self) -> BlueprintFactoryResponse:
         """Add a new user. The user has to exist in Keycloak."""
-        users_db, user_kc = await asyncio.gather(
-            self.repo.get_users(keycloak_id=body.id),
-            self.user_store.get_user_by_id(body.id),
-        )
-        user_db = users_db[0] if len(users_db) >= 1 else None
-        # The user does not exist in keycloak, delete it form the crac database and fail.
-        if user_kc is None:
-            await self.repo.delete_user(body.id)
-            raise errors.MissingResourceError(message=f"User with id {body.id} cannot be found in keycloak.")
-        # The user exists in keycloak, fail if the requestd id does not match what is in keycloak.
-        if body.id != user_kc.keycloak_id:
-            raise errors.ValidationError(message="The provided user ID does not match the ID from keycloak.")
-        # The user exists in the db and the request body matches what is the in the db, simply return the user.
-        if user_db is not None and user_db.keycloak_id == body.id:
-            return json(
-                apispec.UserWithId(id=user_db.keycloak_id).dict(exclude_none=True),
-                200,
+
+        @validate(json=apispec.UserWithId)
+        async def _post(_: Request, body: apispec.UserWithId):
+            users_db, user_kc = await asyncio.gather(
+                self.repo.get_users(keycloak_id=body.id),
+                self.user_store.get_user_by_id(body.id),
             )
-        # The user does not exist in the db, add it.
-        user = await self.repo.insert_user(models.User(keycloak_id=body.id))
-        return json(
-            apispec.UserWithId(id=user.keycloak_id).dict(exclude_none=True),
-            201,
-        )
+            user_db = users_db[0] if len(users_db) >= 1 else None
+            # The user does not exist in keycloak, delete it form the crac database and fail.
+            if user_kc is None:
+                await self.repo.delete_user(body.id)
+                raise errors.MissingResourceError(message=f"User with id {body.id} cannot be found in keycloak.")
+            # The user exists in keycloak, fail if the requestd id does not match what is in keycloak.
+            if body.id != user_kc.keycloak_id:
+                raise errors.ValidationError(message="The provided user ID does not match the ID from keycloak.")
+            # The user exists in the db and the request body matches what is the in the db, simply return the user.
+            if user_db is not None and user_db.keycloak_id == body.id:
+                return json(
+                    apispec.UserWithId(id=user_db.keycloak_id).dict(exclude_none=True),
+                    200,
+                )
+            # The user does not exist in the db, add it.
+            user = await self.repo.insert_user(models.User(keycloak_id=body.id))
+            return json(
+                apispec.UserWithId(id=user.keycloak_id).dict(exclude_none=True),
+                201,
+            )
 
-    async def get(self, _: Request):
+        return "/users", ["POST"], _post
+
+    def get_all(self) -> BlueprintFactoryResponse:
         """Get all users. Please note that this is a subset of the users from Keycloak."""
-        res = await self.repo.get_users()
-        return json([apispec.UserWithId(id=r.keycloak_id).dict(exclude_none=True) for r in res])
 
+        async def _get_all(_: Request):
+            res = await self.repo.get_users()
+            return json([apispec.UserWithId(id=r.keycloak_id).dict(exclude_none=True) for r in res])
 
-@dataclass
-class UserView(HTTPMethodView):
-    """Handler for dealing with a specific user."""
+        return "/users", ["GET"], _get_all
 
-    repo: UserRepository
-
-    async def delete(self, _: Request, user_id: str):
+    def delete(self) -> BlueprintFactoryResponse:
         """Delete a specific user, removing them from any resource pool they had access to."""
-        await self.repo.delete_user(user_id)
-        return HTTPResponse(status=204)
+
+        async def _delete(_: Request, user_id: str):
+            await self.repo.delete_user(user_id)
+            return HTTPResponse(status=204)
+
+        return "/users/<user_id>", ["DELETE"], _delete
 
 
-@dataclass
-class UserResourcePoolsView(HTTPMethodView):
+@dataclass(kw_only=True)
+class UserResourcePoolsBP(CustomBlueprint):
     """Handlers for dealing wiht the resource pools of a specific user."""
 
     repo: UserRepository
 
-    async def get(self, _: Request, user_id: str):
+    def get(self) -> BlueprintFactoryResponse:
         """Get all resource pools that a specific user has access to."""
-        rps = await self.repo.get_user_resource_pools(keycloak_id=user_id)
-        return json([apispec.ResourcePoolWithId.from_orm(rp).dict(exclude_none=True) for rp in rps])
 
-    async def post(self, request: Request, user_id: str):
+        async def _get(_: Request, user_id: str):
+            rps = await self.repo.get_user_resource_pools(keycloak_id=user_id)
+            return json([apispec.ResourcePoolWithId.from_orm(rp).dict(exclude_none=True) for rp in rps])
+
+        return "/users/<user_id>/resource_pools", ["GET"], _get
+
+    def post(self) -> BlueprintFactoryResponse:
         """Give a specific user access to a specific resource pool."""
-        ids = apispec.IntegerIds.parse_obj(request.json)  # validation
-        return await self._post_put(user_id=user_id, post=True, resource_pool_ids=ids)
 
-    async def put(self, request: Request, user_id: str):
+        async def _post(request: Request, user_id: str):
+            ids = apispec.IntegerIds.parse_obj(request.json)  # validation
+            return await self._post_put(user_id=user_id, post=True, resource_pool_ids=ids)
+
+        return "/users/<user_id>/resource_pools", ["POST"], _post
+
+    def put(self) -> BlueprintFactoryResponse:
         """Set the list of resource pools that a specific user has access to."""
-        ids = apispec.IntegerIds.parse_obj(request.json)  # validation
-        return await self._post_put(user_id=user_id, post=False, resource_pool_ids=ids)
+
+        async def _put(request: Request, user_id: str):
+            ids = apispec.IntegerIds.parse_obj(request.json)  # validation
+            return await self._post_put(user_id=user_id, post=False, resource_pool_ids=ids)
+
+        return "/users/<user_id>/resource_pools", ["PUT"], _put
 
     async def _post_put(self, user_id: str, resource_pool_ids: apispec.IntegerIds, post: bool = True):
         rps = await self.repo.update_user_resource_pools(
@@ -297,54 +375,59 @@ class UserResourcePoolsView(HTTPMethodView):
         return json([apispec.ResourcePoolWithId.from_orm(rp).dict(exclude_none=True) for rp in rps])
 
 
-@dataclass
-class GeneralViews:
+@dataclass(kw_only=True)
+class MiscBP(CustomBlueprint):
     """Server contains all handlers for CRAC and the configuration."""
 
     apispec: Dict[str, Any]
     version: str
 
-    def _get_apispec(self):
-        async def handler(_: Request):
+    def get_apispec(self) -> BlueprintFactoryResponse:
+        """Servers the OpenAPI specification."""
+
+        async def _get_apispec(_: Request):
             return json(self.apispec)
 
-        return handler
+        return "/spec.json", ["GET"], _get_apispec
 
-    def _get_error(self):
-        async def handler(_: Request):
+    def get_error(self) -> BlueprintFactoryResponse:
+        """Returns a sample error response."""
+
+        async def _get_error(_: Request):
             raise errors.ValidationError(message="Sample validation error")
 
-        return handler
+        return "/error", ["GET"], _get_error
 
-    def _get_version(self):
-        async def handler(_: Request):
+    def get_version(self) -> BlueprintFactoryResponse:
+        """Returns the version."""
+
+        async def _get_version(_: Request):
             return json({"version": self.version})
 
-        return handler
-
-    def register_handlers(self, app: Sanic) -> Sanic:
-        """Register generic handlers on the provided application."""
-        _ = app.get("/api/data/spec.json", name="api_spec")(self._get_apispec())
-        _ = app.get("/api/data/error", name="error")(self._get_error())
-        _ = app.get("/api/data/version", name="version")(self._get_version())
-        return app
+        return "/version", ["GET"], _get_version
 
 
 def register_all_handlers(app: Sanic, config: Config) -> Sanic:
     """Register all handlers on the application."""
-    app.add_route(ResourcePoolsView.as_view(config.rp_repo), "/api/data/resource_pools")
-    app.add_route(ResourcePoolView.as_view(config.rp_repo), "/api/data/resource_pools/<resource_pool_id>")
-    app.add_route(ResourcePoolUsersView.as_view(config.user_repo), "/api/data/resource_pools/<resource_pool_id>/users")
-    app.add_route(
-        ResourcePoolUserView.as_view(config.user_repo), "/api/data/resource_pools/<resource_pool_id>/users/<user_id>"
+    url_prefix = "/api/data"
+    resource_pools = ResourcePoolsBP(name="resource_pools", url_prefix=url_prefix, repo=config.rp_repo)
+    classes = ClassesBP(name="classes", url_prefix=url_prefix, repo=config.rp_repo)
+    quota = QuotaBP(name="quota", url_prefix=url_prefix, repo=config.rp_repo)
+    resource_pools_users = ResourcePoolUsersBP(name="resource_pool_users", url_prefix=url_prefix, repo=config.user_repo)
+    users = UsersBP(name="users", url_prefix=url_prefix, repo=config.user_repo, user_store=config.user_store)
+    user_resource_pools = UserResourcePoolsBP(name="user_resource_pools", url_prefix=url_prefix, repo=config.user_repo)
+    misc = MiscBP(name="misc", url_prefix=url_prefix, apispec=config.spec, version=config.version)
+    app.blueprint(
+        [
+            resource_pools.blueprint(),
+            classes.blueprint(),
+            quota.blueprint(),
+            resource_pools_users.blueprint(),
+            users.blueprint(),
+            user_resource_pools.blueprint(),
+            misc.blueprint(),
+        ]
     )
-    app.add_route(ClassesView.as_view(config.rp_repo), "/api/data/resource_pools/<resource_pool_id>/classes")
-    app.add_route(ClassView.as_view(config.rp_repo), "/api/data/resource_pools/<resource_pool_id>/classes/<class_id>")
-    app.add_route(QuotaView.as_view(config.rp_repo), "/api/data/resource_pools/<resource_pool_id>/quota")
-    app.add_route(UsersView.as_view(config.user_repo, config.user_store), "/api/data/users")
-    app.add_route(UserView.as_view(config.user_repo), "/api/data/users/<user_id>")
-    app.add_route(UserResourcePoolsView.as_view(config.user_repo), "/api/data/users/<user_id>/resource_pools")
-    app = GeneralViews(config.spec, config.version).register_handlers(app)
     app.error_handler = CustomErrorHandler()
     app.config.OAS = False
     app.config.OAS_UI_REDOC = False
