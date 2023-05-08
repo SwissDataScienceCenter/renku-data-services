@@ -1,5 +1,5 @@
 """Domain models for the application."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Protocol, Set
 
 
@@ -52,12 +52,16 @@ class Quota:
 class UserStore(Protocol):
     """The interface through which Keycloak or a similar application can be accessed."""
 
-    async def get_user_by_id(self, id: str) -> Optional["User"]:
+    async def get_user_by_id(self, id: str, access_token: str) -> Optional["User"]:
         """Get a user by their unique Keycloak user ID."""
         ...
 
-    async def get_user_by_username(self, username: str) -> Optional["User"]:
-        """Get a user by their username - usually this is the email in Keycloak."""
+
+class Authenticator(Protocol):
+    """Interface for authenticating users."""
+
+    async def authenticate(self, access_token: str) -> "APIUser":
+        """Validates the user credentials (i.e. we can say that the user is a valid Renku user)."""
         ...
 
 
@@ -95,3 +99,17 @@ class ResourcePool:
             quota=Quota(**data["quota"]) if "quota" in data else None,
             id=data["id"] if "id" in data else None,
         )
+
+
+@dataclass
+class APIUser:
+    """The model for a user of the API, used for authentication."""
+
+    is_admin: bool = False
+    id: Optional[str] = None
+    access_token: Optional[str] = field(repr=False, default=None)
+
+    @property
+    def is_authenticated(self):
+        """Indicates whether the user has sucessfully logged in."""
+        return self.id is not None

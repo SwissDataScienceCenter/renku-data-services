@@ -135,6 +135,7 @@ class ResourcePoolORM(BaseORM):
         default_factory=list,
         cascade="save-update, merge, delete",
     )
+    default: Mapped[bool] = mapped_column(default=False, index=True)
     id: Mapped[int] = mapped_column("id", Integer, primary_key=True, default=None, init=False)
 
     @classmethod

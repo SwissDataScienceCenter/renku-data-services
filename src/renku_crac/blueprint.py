@@ -1,3 +1,4 @@
+"""Custom blueprint wrapper for Sanic."""
 from dataclasses import dataclass, field
 from inspect import getmembers, ismethod
 from typing import Callable, List, Optional, Tuple, cast
@@ -8,11 +9,14 @@ from sanic.models.handler_types import RequestMiddlewareType, ResponseMiddleware
 
 @dataclass(kw_only=True)
 class CustomBlueprint:
-    """A wrapper around Sanic blueprint. It will take all "public" methods (i.e. whose names do not start with "_")
+    """A wrapper around Sanic blueprint.
+
+    It will take all "public" methods (i.e. whose names do not start with "_")
     and register them to a Sanic blueprint. The idea is that any real blueprint inherits this and defines
     additional public methods all of which return Sanic route handlers. See the BlueprintFactory type for the
     signature that the methods are supposed to have. The return value should return a tuple of the url for the route
-    (i.e. "/api"), the list of methods (i.e. GET, POST, PATCH) and the handler itself."""
+    (i.e. "/api"), the list of methods (i.e. GET, POST, PATCH) and the handler itself.
+    """
 
     name: str
     url_prefix: Optional[str] = None
@@ -33,6 +37,7 @@ class CustomBlueprint:
         for res_mw in self.response_middlewares:
             bp.middleware("response")(res_mw)
         return bp
+
 
 BlueprintFactoryResponse = Tuple[str, List[str], RouteHandler]
 BlueprintFactory = Callable[..., BlueprintFactoryResponse]
