@@ -12,7 +12,7 @@ style_checks:
 	poetry run pydocstyle -v
 
 tests:
-	@rm -f .tmp.pid coverage.lcov data_services.db
+	@rm -f .tmp.pid coverage.lcov .coverage data_services.db
 	-poetry run pytest
 	DUMMY_STORES=true poetry run coverage run -a -m sanic --debug --single-process renku_crac.main:create_app --factory & echo $$! > .tmp.pid
 	@sleep 10
@@ -20,7 +20,8 @@ tests:
 	cat .tmp.pid | xargs kill
 	@rm -f .tmp.pid
 	@echo "===========================================FINAL COMBINED COVERAGE FOR ALL TESTS==========================================="
-	poetry run coverage report
+	poetry run coverage report --show-missing
+	poetry run coverage lcov -o coverage.lcov
 
 pre_commit_checks:
 	poetry run pre-commit run --all-files
