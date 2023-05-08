@@ -40,7 +40,7 @@ class ResourcePoolsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         @validate(json=apispec.ResourcePool)
-        async def _post(_: Request, body: apispec.ResourcePool, user=models.APIUser):
+        async def _post(_: Request, body: apispec.ResourcePool, user: models.APIUser):
             rp = models.ResourcePool.from_dict(body.dict())
             res = await self.rp_repo.insert_resource_pool(api_user=user, resource_pool=rp)
             return json(apispec.ResourcePoolWithId.from_orm(res).dict(exclude_none=True), 201)
@@ -255,9 +255,9 @@ class ClassesBP(CustomBlueprint):
         @only_admins
         @validate(json=apispec.ResourceClass)
         async def _put(
-            _: Request, body: apispec.ResourceClass, resource_pool_id: int, class_id: int, api_user: models.APIUser
+            _: Request, body: apispec.ResourceClass, resource_pool_id: int, class_id: int, user: models.APIUser
         ):
-            return await self._put_patch(api_user, resource_pool_id, class_id, body)
+            return await self._put_patch(user, resource_pool_id, class_id, body)
 
         return "/resource_pools/<resource_pool_id>/classes/<class_id>", ["PUT"], _put
 
@@ -268,9 +268,9 @@ class ClassesBP(CustomBlueprint):
         @only_admins
         @validate(json=apispec.ResourceClassPatch)
         async def _patch(
-            _: Request, body: apispec.ResourceClassPatch, resource_pool_id: int, class_id: int, api_user: models.APIUser
+            _: Request, body: apispec.ResourceClassPatch, resource_pool_id: int, class_id: int, user: models.APIUser
         ):
-            return await self._put_patch(api_user, resource_pool_id, class_id, body)
+            return await self._put_patch(user, resource_pool_id, class_id, body)
 
         return "/resource_pools/<resource_pool_id>/classes/<class_id>", ["PATCH"], _patch
 
@@ -301,8 +301,8 @@ class QuotaBP(CustomBlueprint):
         """Get the quota for a specific resource pool."""
 
         @authenticate(self.authenticator)
-        async def _get(_: Request, resource_pool_id: int, api_user: models.APIUser):
-            res = await self.repo.get_quota(resource_pool_id=resource_pool_id, api_user=api_user)
+        async def _get(_: Request, resource_pool_id: int, user: models.APIUser):
+            res = await self.repo.get_quota(resource_pool_id=resource_pool_id, api_user=user)
             if res is None:
                 raise errors.MissingResourceError(
                     message=f"The quota for the resource pool with ID {resource_pool_id} cannot be found."
@@ -317,8 +317,8 @@ class QuotaBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         @validate(json=apispec.Resources)
-        async def _put(_: Request, resource_pool_id: int, body: apispec.Resources, api_user: models.APIUser):
-            return await self._put_patch(resource_pool_id, body, api_user=api_user)
+        async def _put(_: Request, resource_pool_id: int, body: apispec.Resources, user: models.APIUser):
+            return await self._put_patch(resource_pool_id, body, api_user=user)
 
         return "/resource_pools/<resource_pool_id>/quota", ["PUT"], _put
 
@@ -328,8 +328,8 @@ class QuotaBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         @validate(json=apispec.ResourcesPatch)
-        async def _patch(_: Request, resource_pool_id: int, body: apispec.ResourcesPatch, api_user: models.APIUser):
-            return await self._put_patch(resource_pool_id, body, api_user=api_user)
+        async def _patch(_: Request, resource_pool_id: int, body: apispec.ResourcesPatch, user: models.APIUser):
+            return await self._put_patch(resource_pool_id, body, api_user=user)
 
         return "/resource_pools/<resource_pool_id>/quota", ["PATCH"], _patch
 
@@ -425,7 +425,7 @@ class UserResourcePoolsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        async def _get(_: Request, user_id: str, user=models.APIUser):
+        async def _get(_: Request, user_id: str, user: models.APIUser):
             rps = await self.repo.get_user_resource_pools(keycloak_id=user_id, api_user=user)
             return json([apispec.ResourcePoolWithId.from_orm(rp).dict(exclude_none=True) for rp in rps])
 
@@ -436,7 +436,7 @@ class UserResourcePoolsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        async def _post(request: Request, user_id: str, user=models.APIUser):
+        async def _post(request: Request, user_id: str, user: models.APIUser):
             ids = apispec.IntegerIds.parse_obj(request.json)  # validation
             return await self._post_put(user_id=user_id, post=True, resource_pool_ids=ids, api_user=user)
 
@@ -447,14 +447,14 @@ class UserResourcePoolsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        async def _put(request: Request, user_id: str, user=models.APIUser):
+        async def _put(request: Request, user_id: str, user: models.APIUser):
             ids = apispec.IntegerIds.parse_obj(request.json)  # validation
             return await self._post_put(user_id=user_id, post=False, resource_pool_ids=ids, api_user=user)
 
         return "/users/<user_id>/resource_pools", ["PUT"], _put
 
     async def _post_put(
-        self, user_id: str, resource_pool_ids: apispec.IntegerIds, post: bool = True, api_user=models.APIUser
+        self, user_id: str, resource_pool_ids: apispec.IntegerIds, api_user: models.APIUser, post: bool = True
     ):
         rps = await self.repo.update_user_resource_pools(
             keycloak_id=user_id, resource_pool_ids=resource_pool_ids.__root__, append=post, api_user=api_user
@@ -532,10 +532,6 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         ]
     )
 
-    def extractUserFromCtx(request: Request) -> models.APIUser:
-        return request.ctx.user
-
-    app.ext.add_dependency(models.APIUser, extractUserFromCtx)
     app.error_handler = CustomErrorHandler()
     app.config.OAS = False
     app.config.OAS_UI_REDOC = False

@@ -13,10 +13,10 @@ style_checks:
 
 tests:
 	@rm -f .tmp.pid coverage.lcov data_services.db
-	poetry run pytest
-	poetry run coverage run -a -m sanic --debug --single-process renku_crac.main:create_app --factory & echo $$! > .tmp.pid
+	-poetry run pytest
+	DUMMY_STORES=true poetry run coverage run -a -m sanic --debug --single-process renku_crac.main:create_app --factory & echo $$! > .tmp.pid
 	@sleep 10
-	-poetry run st run http://localhost:8000/api/data/spec.json --validate-schema True --checks all --hypothesis-max-examples 20 --data-generation-method all --show-errors-tracebacks --hypothesis-suppress-health-check data_too_large --max-response-time 100 -v
+	-poetry run st run http://localhost:8000/api/data/spec.json --validate-schema True --checks all --hypothesis-max-examples 20 --data-generation-method all --show-errors-tracebacks --hypothesis-suppress-health-check data_too_large --max-response-time 100 -v --header "Authorization: bearer some-random-key-123456"
 	cat .tmp.pid | xargs kill
 	@rm -f .tmp.pid
 	@echo "===========================================FINAL COMBINED COVERAGE FOR ALL TESTS==========================================="

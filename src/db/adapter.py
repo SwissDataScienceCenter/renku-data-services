@@ -93,7 +93,7 @@ def _get_select_for_quota(
         case True, True:
             # The user is logged in and is an admin, they can see any quota
             if resource_pool_id is not None:
-                output = output.join(schemas.ResourcePoolORM, schemas.ResourceClassORM.resource_pool).where(
+                output = output.join(schemas.ResourcePoolORM, schemas.QuotaORM.resource_pool).where(
                     schemas.ResourcePoolORM.id == resource_pool_id
                 )
         case _:

@@ -31,8 +31,8 @@ def remove_id_from_user(user: models.User) -> models.User:
     return models.User(**kwargs)
 
 
-def create_rp(rp: models.ResourcePool, repo: ResourcePoolRepository) -> models.ResourcePool:
-    inserted_rp = asyncio.run(repo.insert_resource_pool(rp))
+def create_rp(rp: models.ResourcePool, repo: ResourcePoolRepository, api_user: models.APIUser) -> models.ResourcePool:
+    inserted_rp = asyncio.run(repo.insert_resource_pool(api_user, rp))
     assert inserted_rp is not None
     assert inserted_rp.id is not None
     assert inserted_rp.quota is not None
@@ -40,7 +40,7 @@ def create_rp(rp: models.ResourcePool, repo: ResourcePoolRepository) -> models.R
     assert all([rc.id is not None for rc in inserted_rp.classes])
     inserted_rp_no_ids = remove_id_from_rp(inserted_rp)
     assert rp == inserted_rp_no_ids
-    retrieved_rps = asyncio.run(repo.get_resource_pools(inserted_rp.id))
+    retrieved_rps = asyncio.run(repo.get_resource_pools(api_user, inserted_rp.id))
     assert len(retrieved_rps) == 1
     assert inserted_rp == retrieved_rps[0]
     return inserted_rp

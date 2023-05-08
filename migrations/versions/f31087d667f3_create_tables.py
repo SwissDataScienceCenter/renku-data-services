@@ -1,8 +1,8 @@
 """Create tables
 
-Revision ID: f52872eca13f
+Revision ID: f31087d667f3
 Revises:
-Create Date: 2023-05-02 23:35:56.698082
+Create Date: 2023-05-09 00:13:12.542679
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = "f52872eca13f"
+revision = "f31087d667f3"
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -21,9 +21,11 @@ def upgrade() -> None:
     op.create_table(
         "resource_pools",
         sa.Column("name", sa.String(length=40), nullable=False),
+        sa.Column("default", sa.Boolean(), nullable=False),
         sa.Column("id", sa.Integer(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
+    op.create_index(op.f("ix_resource_pools_default"), "resource_pools", ["default"], unique=False)
     op.create_index(op.f("ix_resource_pools_name"), "resource_pools", ["name"], unique=False)
     op.create_table(
         "users",
@@ -88,5 +90,6 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_users_keycloak_id"), table_name="users")
     op.drop_table("users")
     op.drop_index(op.f("ix_resource_pools_name"), table_name="resource_pools")
+    op.drop_index(op.f("ix_resource_pools_default"), table_name="resource_pools")
     op.drop_table("resource_pools")
     # ### end Alembic commands ###

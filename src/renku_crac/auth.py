@@ -1,6 +1,5 @@
 """Authentication decorators for Sanic."""
 from functools import wraps
-from typing import cast
 
 from sanic import Request
 
@@ -21,8 +20,7 @@ def authenticate(authneticator: Authenticator):
             if token is not None and len(token) >= 8:
                 user = await authneticator.authenticate(token[7:])
 
-            request.ctx.user = user
-            response = await f(request, *args, **kwargs)
+            response = await f(request, *args, **kwargs, user=user)
             return response
 
         return decorated_function
@@ -34,13 +32,12 @@ def only_admins(f):
     """Decorator for a Sanic handler that errors out if the user is not an admin."""
 
     @wraps(f)
-    async def decorated_function(request: Request, *args, **kwargs):
-        user = getattr(request.ctx, "user", None)
-        if user is None or cast(APIUser, user).access_token is None or not cast(APIUser, request.ctx.user).is_admin:
+    async def decorated_function(request: Request, user: APIUser, *args, **kwargs):
+        if user is None or not user.is_admin:
             raise errors.Unauthorized()
 
         # the user is authenticated and is an admin
-        response = await f(request, *args, **kwargs)
+        response = await f(request, *args, **kwargs, user=user)
         return response
 
     return decorated_function
