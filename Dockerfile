@@ -3,13 +3,13 @@ RUN groupadd --gid 1000 renku && \
     adduser --gid 1000 --uid 1000 renku
 USER 1000:1000
 WORKDIR /app
-COPY . .
-RUN python3 -m pip install --user pipx && \ 
+RUN python3 -m pip install --user pipx && \
     python3 -m pipx ensurepath && \
     /home/renku/.local/bin/pipx install poetry && \
     /home/renku/.local/bin/pipx install virtualenv && \
-    /home/renku/.local/bin/poetry build --format wheel && \
-    /home/renku/.local/bin/virtualenv env && \
+    /home/renku/.local/bin/virtualenv env
+COPY . .
+RUN /home/renku/.local/bin/poetry build --format wheel && \
     env/bin/pip install dist/*whl
 
 FROM python:3.11-slim-bullseye
