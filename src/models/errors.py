@@ -36,3 +36,12 @@ class ValidationError(BaseError):
     code: int = 1422
     message: str = "The provided input is invalid"
     status_code: int = 422
+
+
+@dataclass
+class Unauthorized(BaseError):
+    """Raised when the user does not have the required credentials."""
+
+    code: int = 1401
+    message: str = "The supplied credentials are missing or invalid."
+    status_code: int = 401

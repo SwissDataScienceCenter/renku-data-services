@@ -1,0 +1,12 @@
+__pycache__
+.github
+.hypothesis
+.mypy_cache
+.vscode
+.pytest_cache
+dist
+.DS_Store
+.coverage
+.git
+.venv
+data_services.db

@@ -1,10 +1,11 @@
 """Adapter based on SQLAlchemy."""
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from alembic import command, config
-from sqlalchemy import create_engine, delete, select, update
+from sqlalchemy import create_engine, delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import selectinload, sessionmaker
+from sqlalchemy.sql import Select
 
 import models
 from db import schemas
@@ -30,64 +31,178 @@ class _Base:
             command.upgrade(cfg, "head")
 
 
+def _get_resource_pool_select_stmt(
+    api_user: models.APIUser,
+    keycloak_id: Optional[str] = None,
+    resource_pool_name: Optional[str] = None,
+    resource_pool_id: Optional[int] = None,
+) -> Select[Tuple[schemas.ResourcePoolORM]]:
+    """Generates a query to list resource pools based on different criteria and whether the user is logged in or not."""
+    stmt = select(schemas.ResourcePoolORM).options(
+        selectinload(schemas.ResourcePoolORM.quota), selectinload(schemas.ResourcePoolORM.classes)
+    )
+    output = stmt
+    match (api_user.is_authenticated, api_user.is_admin):
+        case True, False:
+            # The user is logged in but not an admin, they can see resource pools they have been granted access to
+            # or resource pools that are marked as default.
+            if keycloak_id is not None and api_user.id != keycloak_id:
+                raise errors.ValidationError(
+                    message="Your user ID should match the user ID for which you are querying resource pools."
+                )
+            output = output.join_from(schemas.UserORM, schemas.UserORM.resource_pools).where(
+                or_(schemas.UserORM.keycloak_id == api_user.id, schemas.ResourcePoolORM.default == True)  # noqa: E712
+            )
+        case True, True:
+            # The user is logged in and is an admin, they can see all resource pools
+            if keycloak_id is not None:
+                output = output.join_from(schemas.UserORM, schemas.UserORM.resource_pools).where(
+                    schemas.UserORM.keycloak_id == keycloak_id
+                )
+        case _:
+            # The user is not logged in, they can see only the default resource pools
+            output = output.where(schemas.ResourcePoolORM.default == True)  # noqa: E712
+    if resource_pool_name is not None:
+        output = output.where(schemas.ResourcePoolORM.name == resource_pool_name)
+    if resource_pool_id is not None:
+        output = output.where(schemas.ResourcePoolORM.id == resource_pool_id)
+    return output
+
+
+def _get_select_for_quota(
+    api_user: models.APIUser, resource_pool_id: Optional[int] = None
+) -> Select[Tuple[schemas.QuotaORM]]:
+    """Adjust the select statement for quota based on whether the user is logged in or not."""
+    output = select(schemas.QuotaORM)
+    match (api_user.is_authenticated, api_user.is_admin):
+        case True, False:
+            # The user is logged in but is not an admin, they can see only a quota from a resource pool they have
+            # been granted access to or from default resource pools.
+            output = (
+                output.join(schemas.ResourcePoolORM, schemas.QuotaORM.resource_pool)
+                .join(schemas.UserORM, schemas.ResourcePoolORM.users)
+                .where(
+                    or_(
+                        schemas.UserORM.keycloak_id == api_user.id,
+                        schemas.ResourcePoolORM.default == True,  # noqa: E712
+                    )
+                )
+            )
+            if resource_pool_id is not None:
+                output = output.where(schemas.ResourcePoolORM.id == resource_pool_id)
+        case True, True:
+            # The user is logged in and is an admin, they can see any quota
+            if resource_pool_id is not None:
+                output = output.join(schemas.ResourcePoolORM, schemas.QuotaORM.resource_pool).where(
+                    schemas.ResourcePoolORM.id == resource_pool_id
+                )
+        case _:
+            # The user is not an admin, they can see the quota of only the default resource pool
+            output = output.join(schemas.ResourcePoolORM, schemas.QuotaORM.resource_pool).where(
+                schemas.ResourcePoolORM.default == True  # noqa: E712
+            )
+            if resource_pool_id is not None:
+                output = output.where(schemas.ResourcePoolORM.id == resource_pool_id)
+    return output
+
+
+def _get_select_for_classes(
+    api_user: models.APIUser,
+    resource_pool_id: Optional[int] = None,
+    resource_class_id: Optional[int] = None,
+    resource_class_name: Optional[str] = None,
+) -> Select[Tuple[schemas.ResourceClassORM]]:
+    """Adjust the select statement for classes based on whether the user is logged in or not."""
+    output = select(schemas.ResourceClassORM)
+    match (api_user.is_authenticated, api_user.is_admin):
+        case True, False:
+            # The user is logged in but is not an admin (they have access to resource pools
+            # they have access to and to default resource pools)
+            output = (
+                output.join(schemas.ResourcePoolORM, schemas.ResourceClassORM.resource_pool)
+                .join(schemas.UserORM, schemas.ResourcePoolORM.users)
+                .where(schemas.UserORM.keycloak_id == api_user.id)
+            )
+            if resource_pool_id is not None:
+                output = output.where(schemas.ResourcePoolORM.id == resource_pool_id)
+        case True, True:
+            # The user is logged in and is an admin (they have access to everything)
+            if resource_pool_id is not None:
+                output = output.join(schemas.ResourcePoolORM, schemas.ResourceClassORM.resource_pool).where(
+                    schemas.ResourcePoolORM.id == resource_pool_id
+                )
+        case _:
+            # The user is not logged in at all (they have access only to classes frmo default resource pools)
+            output = output.join(schemas.ResourcePoolORM, schemas.ResourceClassORM.resource_pool).where(
+                schemas.ResourcePoolORM.default == True  # noqa: E712
+            )
+            if resource_pool_id is not None:
+                output = output.where(schemas.ResourcePoolORM.id == resource_pool_id)
+    if resource_class_id is not None:
+        output = output.where(schemas.ResourceClassORM.id == resource_class_id)
+    if resource_class_name is not None:
+        output = output.where(schemas.ResourceClassORM.name == resource_class_name)
+    return output
+
+
 class ResourcePoolRepository(_Base):
     """The adapter used for accessing resource pools with SQLAlchemy."""
 
     async def get_resource_pools(
-        self, id: Optional[int] = None, name: Optional[str] = None
+        self, api_user: models.APIUser, id: Optional[int] = None, name: Optional[str] = None
     ) -> List[models.ResourcePool]:
         """Get resource pools from database."""
         async with self.session_maker() as session:
-            stmt = select(schemas.ResourcePoolORM).options(
-                selectinload(schemas.ResourcePoolORM.classes), selectinload(schemas.ResourcePoolORM.quota)
-            )
-            if id is not None:
-                stmt = stmt.where(schemas.ResourcePoolORM.id == id)
-            if name is not None:
-                stmt = stmt.where(schemas.ResourcePoolORM.name == name)
+            stmt = _get_resource_pool_select_stmt(api_user=api_user, resource_pool_id=id, resource_pool_name=name)
             res = await session.execute(stmt)
             orms = res.scalars().all()
             return [orm.dump() for orm in orms]
 
-    async def insert_resource_pool(self, resource_pool: models.ResourcePool) -> models.ResourcePool:
+    async def insert_resource_pool(
+        self, api_user: models.APIUser, resource_pool: models.ResourcePool
+    ) -> models.ResourcePool:
         """Insert resource pool into database."""
+        if not api_user.is_admin:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
         orm = schemas.ResourcePoolORM.load(resource_pool)
         async with self.session_maker() as session:
             async with session.begin():
                 session.add(orm)
         return orm.dump()
 
-    async def get_quota(self, resource_pool_id: int) -> Optional[models.Quota]:
+    async def get_quota(self, api_user: models.APIUser, resource_pool_id: int) -> Optional[models.Quota]:
         """Get a quota for a specific resource pool."""
+
         async with self.session_maker() as session:
-            res = await session.execute(
-                select(schemas.QuotaORM).where(schemas.QuotaORM.resource_pool_id == resource_pool_id)
-            )
+            stmt = _get_select_for_quota(api_user=api_user, resource_pool_id=resource_pool_id)
+            res = await session.execute(stmt)
             orm: schemas.QuotaORM = res.scalars().first()
             if not orm:
                 return None
             return orm.dump()
 
     async def get_classes(
-        self, id: Optional[int] = None, name: Optional[str] = None, resource_pool_id: Optional[int] = None
+        self,
+        api_user: models.APIUser,
+        id: Optional[int] = None,
+        name: Optional[str] = None,
+        resource_pool_id: Optional[int] = None,
     ) -> List[models.ResourceClass]:
         """Get classes from the database."""
         async with self.session_maker() as session:
-            stmt = select(schemas.ResourceClassORM)
-            if id is not None:
-                stmt = stmt.where(schemas.ResourceClassORM.id == id)
-            if resource_pool_id is not None:
-                stmt = stmt.where(schemas.ResourceClassORM.resource_pool_id == resource_pool_id)
-            if name is not None:
-                stmt = stmt.where(schemas.ResourceClassORM.name == name)
+            stmt = _get_select_for_classes(
+                api_user=api_user, resource_pool_id=resource_pool_id, resource_class_id=id, resource_class_name=name
+            )
             res = await session.execute(stmt)
             orms = res.scalars().all()
             return [orm.dump() for orm in orms]
 
     async def insert_resource_class(
-        self, resource_class: models.ResourceClass, *, resource_pool_id: Optional[int] = None
+        self, api_user: models.APIUser, resource_class: models.ResourceClass, *, resource_pool_id: Optional[int] = None
     ) -> models.ResourceClass:
         """Insert a resource class in the database."""
+        if not api_user.is_admin:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
         cls = schemas.ResourceClassORM.load(resource_class)
         async with self.session_maker() as session:
             async with session.begin():
@@ -104,10 +219,12 @@ class ResourcePoolRepository(_Base):
                 session.add(cls)
         return cls.dump()
 
-    async def update_quota(self, resource_pool_id: int, **kwargs) -> models.Quota:
+    async def update_quota(self, api_user: models.APIUser, resource_pool_id: int, **kwargs) -> models.Quota:
         """Update an existing quota in the database."""
+        if not api_user.is_admin:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
         if len(kwargs) == 0:
-            quota = await self.get_quota(resource_pool_id=resource_pool_id)
+            quota = await self.get_quota(api_user=api_user, resource_pool_id=resource_pool_id)
             if quota is None:
                 raise errors.MissingResourceError(message=f"Resource pool with id {resource_pool_id} cannot be found")
             return quota
@@ -125,8 +242,10 @@ class ResourcePoolRepository(_Base):
             raise errors.MissingResourceError(message=f"Resource pool with id {resource_pool_id} cannot be found")
         return orm.dump()
 
-    async def update_resource_pool(self, id: int, **kwargs) -> models.ResourcePool:
+    async def update_resource_pool(self, api_user: models.APIUser, id: int, **kwargs) -> models.ResourcePool:
         """Update an existing resource pool in the database."""
+        if not api_user.is_admin:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
         rp: Optional[schemas.ResourcePoolORM] = None
         async with self.session_maker() as session:
             async with session.begin():
@@ -174,8 +293,10 @@ class ResourcePoolRepository(_Base):
 
                 return rp.dump()
 
-    async def delete_resource_pool(self, id: int):
+    async def delete_resource_pool(self, api_user: models.APIUser, id: int):
         """Delete a resource pool from the database."""
+        if not api_user.is_admin:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
         async with self.session_maker() as session:
             async with session.begin():
                 stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == id)
@@ -184,8 +305,10 @@ class ResourcePoolRepository(_Base):
                 if rp is not None:
                     await session.delete(rp)
 
-    async def delete_resource_class(self, resource_pool_id: int, resource_class_id: int):
+    async def delete_resource_class(self, api_user: models.APIUser, resource_pool_id: int, resource_class_id: int):
         """Delete a specific resource class."""
+        if not api_user.is_admin:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
         async with self.session_maker() as session:
             async with session.begin():
                 stmt = (
@@ -200,9 +323,11 @@ class ResourcePoolRepository(_Base):
                 await session.delete(cls)
 
     async def update_resource_class(
-        self, resource_pool_id: int, resource_class_id: int, **kwargs
+        self, api_user: models.APIUser, resource_pool_id: int, resource_class_id: int, **kwargs
     ) -> models.ResourceClass:
         """Update a specific resource class."""
+        if not api_user.is_admin:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
         async with self.session_maker() as session:
             async with session.begin():
                 stmt = (
@@ -231,10 +356,13 @@ class UserRepository(_Base):
     async def get_users(
         self,
         *,
+        api_user: models.APIUser,
         keycloak_id: Optional[str] = None,
         resource_pool_id: Optional[int] = None,
     ) -> List[models.User]:
         """Get users from the database."""
+        if not api_user.is_admin and api_user.id != keycloak_id:
+            raise errors.Unauthorized(message="Users can only request information about themselves.")
         async with self.session_maker() as session:
             async with session.begin():
                 if resource_pool_id is not None:
@@ -261,16 +389,20 @@ class UserRepository(_Base):
                     orms = res.scalars().all()
                     return [orm.dump() for orm in orms]
 
-    async def insert_user(self, user: models.User) -> models.User:
+    async def insert_user(self, api_user: models.APIUser, user: models.User) -> models.User:
         """Inser a user in the database."""
+        if not api_user.is_admin:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
         orm = schemas.UserORM.load(user)
         async with self.session_maker() as session:
             async with session.begin():
                 session.add(orm)
         return orm.dump()
 
-    async def delete_user(self, id: str):
+    async def delete_user(self, api_user: models.APIUser, id: str):
         """Remove a user from the database."""
+        if not api_user.is_admin:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
         async with self.session_maker() as session:
             async with session.begin():
                 stmt = select(schemas.UserORM).where(schemas.UserORM.keycloak_id == id)
@@ -282,27 +414,31 @@ class UserRepository(_Base):
         return None
 
     async def get_user_resource_pools(
-        self, keycloak_id: str, resource_pool_name: Optional[str] = None
+        self,
+        api_user: models.APIUser,
+        keycloak_id: str,
+        resource_pool_id: Optional[int] = None,
+        resource_pool_name: Optional[str] = None,
     ) -> List[models.ResourcePool]:
         """Get resource pools that a specific user has access to."""
         async with self.session_maker() as session:
             async with session.begin():
-                stmt = (
-                    select(schemas.ResourcePoolORM)
-                    .join_from(schemas.UserORM, schemas.UserORM.resource_pools)
-                    .where(schemas.UserORM.keycloak_id == keycloak_id)
-                    .options(selectinload(schemas.ResourcePoolORM.quota), selectinload(schemas.ResourcePoolORM.classes))
+                stmt = _get_resource_pool_select_stmt(
+                    api_user=api_user,
+                    keycloak_id=keycloak_id,
+                    resource_pool_id=resource_pool_id,
+                    resource_pool_name=resource_pool_name,
                 )
-                if resource_pool_name is not None:
-                    stmt = stmt.where(schemas.ResourcePoolORM.name == resource_pool_name)
                 res = await session.execute(stmt)
                 rps: List[schemas.ResourcePoolORM] = res.scalars().all()
                 return [rp.dump() for rp in rps]
 
     async def update_user_resource_pools(
-        self, keycloak_id: str, resource_pool_ids: List[int], append: bool = True
+        self, api_user: models.APIUser, keycloak_id: str, resource_pool_ids: List[int], append: bool = True
     ) -> List[models.ResourcePool]:
         """Update the resource pools that a specific user has access to."""
+        if not api_user.is_admin:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
         async with self.session_maker() as session:
             async with session.begin():
                 stmt = (
@@ -332,8 +468,10 @@ class UserRepository(_Base):
                     user.resource_pools = rps_to_add
                 return [rp.dump() for rp in rps_to_add]
 
-    async def delete_resource_pool_user(self, resource_pool_id: int, keycloak_id: str):
+    async def delete_resource_pool_user(self, api_user: models.APIUser, resource_pool_id: int, keycloak_id: str):
         """Remove a user from a specific resource pool."""
+        if not api_user.is_admin:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
         async with self.session_maker() as session:
             async with session.begin():
                 sub = (
@@ -346,9 +484,11 @@ class UserRepository(_Base):
                 await session.execute(stmt)
 
     async def update_resource_pool_users(
-        self, resource_pool_id: int, users: List[models.User], append: bool = True
+        self, api_user: models.APIUser, resource_pool_id: int, users: List[models.User], append: bool = True
     ) -> List[models.User]:
         """Update the users that have access to a specific resource pool."""
+        if not api_user.is_admin:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
         async with self.session_maker() as session:
             async with session.begin():
                 stmt = (

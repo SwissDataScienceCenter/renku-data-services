@@ -21,6 +21,9 @@ datamodel-code-generator = "^0.17.2"
 sqlalchemy = {extras = ["asyncio"], version = "^2.0.9"}
 alembic = "^1.10.3"
 asyncpg = "^0.27.0"
+pyjwt = {extras = ["crypto"], version = "^2.6.0"}
+tenacity = "^8.2.2"
+httpx = "<0.24"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.7.5"
@@ -75,7 +78,7 @@ exclude = [
 ]
 
 [tool.pytest.ini_options]
-addopts = "--black --cov src/ --cov-report=term-missing --cov-report lcov -v"
+addopts = "--black --cov src/ --cov-report=term-missing -v"
 doctest_optionflags = "ALLOW_UNICODE"
 testpaths = ["src", "tests"]
 markers = [
@@ -112,6 +115,3 @@ ignore_missing_imports = true
 
 [tool.coverage.run]
 source = [ "src/" ]
-
-[tool.coverage.lcov]
-output = "coverage.lcov"
