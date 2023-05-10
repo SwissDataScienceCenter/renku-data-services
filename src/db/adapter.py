@@ -150,6 +150,8 @@ class ResourcePoolRepository(_Base):
         self, api_user: models.APIUser, resource_pool: models.ResourcePool
     ) -> models.ResourcePool:
         """Insert resource pool into database."""
+        if not api_user.is_admin:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
         orm = schemas.ResourcePoolORM.load(resource_pool)
         async with self.session_maker() as session:
             async with session.begin():
@@ -201,6 +203,8 @@ class ResourcePoolRepository(_Base):
         self, api_user: models.APIUser, resource_class: models.ResourceClass, *, resource_pool_id: Optional[int] = None
     ) -> models.ResourceClass:
         """Insert a resource class in the database."""
+        if not api_user.is_admin:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
         cls = schemas.ResourceClassORM.load(resource_class)
         async with self.session_maker() as session:
             async with session.begin():
@@ -220,6 +224,8 @@ class ResourcePoolRepository(_Base):
     @_only_admins
     async def update_quota(self, api_user: models.APIUser, resource_pool_id: int, **kwargs) -> models.Quota:
         """Update an existing quota in the database."""
+        if not api_user.is_admin:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
         if len(kwargs) == 0:
             quota = await self.get_quota(api_user=api_user, resource_pool_id=resource_pool_id)
             if quota is None:
@@ -242,6 +248,8 @@ class ResourcePoolRepository(_Base):
     @_only_admins
     async def update_resource_pool(self, api_user: models.APIUser, id: int, **kwargs) -> models.ResourcePool:
         """Update an existing resource pool in the database."""
+        if not api_user.is_admin:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
         rp: Optional[schemas.ResourcePoolORM] = None
         async with self.session_maker() as session:
             async with session.begin():
@@ -292,6 +300,8 @@ class ResourcePoolRepository(_Base):
     @_only_admins
     async def delete_resource_pool(self, api_user: models.APIUser, id: int):
         """Delete a resource pool from the database."""
+        if not api_user.is_admin:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
         async with self.session_maker() as session:
             async with session.begin():
                 stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == id)
@@ -303,6 +313,8 @@ class ResourcePoolRepository(_Base):
     @_only_admins
     async def delete_resource_class(self, api_user: models.APIUser, resource_pool_id: int, resource_class_id: int):
         """Delete a specific resource class."""
+        if not api_user.is_admin:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
         async with self.session_maker() as session:
             async with session.begin():
                 stmt = (
@@ -321,6 +333,8 @@ class ResourcePoolRepository(_Base):
         self, api_user: models.APIUser, resource_pool_id: int, resource_class_id: int, **kwargs
     ) -> models.ResourceClass:
         """Update a specific resource class."""
+        if not api_user.is_admin:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
         async with self.session_maker() as session:
             async with session.begin():
                 stmt = (
@@ -355,6 +369,8 @@ class UserRepository(_Base):
         resource_pool_id: Optional[int] = None,
     ) -> List[models.User]:
         """Get users from the database."""
+        if not api_user.is_admin and api_user.id != keycloak_id:
+            raise errors.Unauthorized(message="Users can only request information about themselves.")
         async with self.session_maker() as session:
             async with session.begin():
                 if resource_pool_id is not None:
@@ -384,6 +400,8 @@ class UserRepository(_Base):
     @_only_admins
     async def insert_user(self, api_user: models.APIUser, user: models.User) -> models.User:
         """Inser a user in the database."""
+        if not api_user.is_admin:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
         orm = schemas.UserORM.load(user)
         async with self.session_maker() as session:
             async with session.begin():
@@ -393,6 +411,8 @@ class UserRepository(_Base):
     @_only_admins
     async def delete_user(self, api_user: models.APIUser, id: str):
         """Remove a user from the database."""
+        if not api_user.is_admin:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
         async with self.session_maker() as session:
             async with session.begin():
                 stmt = select(schemas.UserORM).where(schemas.UserORM.keycloak_id == id)
@@ -431,6 +451,8 @@ class UserRepository(_Base):
         self, api_user: models.APIUser, keycloak_id: str, resource_pool_ids: List[int], append: bool = True
     ) -> List[models.ResourcePool]:
         """Update the resource pools that a specific user has access to."""
+        if not api_user.is_admin:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
         async with self.session_maker() as session:
             async with session.begin():
                 stmt = (
@@ -463,6 +485,8 @@ class UserRepository(_Base):
     @_only_admins
     async def delete_resource_pool_user(self, api_user: models.APIUser, resource_pool_id: int, keycloak_id: str):
         """Remove a user from a specific resource pool."""
+        if not api_user.is_admin:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
         async with self.session_maker() as session:
             async with session.begin():
                 sub = (
@@ -479,6 +503,8 @@ class UserRepository(_Base):
         self, api_user: models.APIUser, resource_pool_id: int, users: List[models.User], append: bool = True
     ) -> List[models.User]:
         """Update the users that have access to a specific resource pool."""
+        if not api_user.is_admin:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
         async with self.session_maker() as session:
             async with session.begin():
                 stmt = (
