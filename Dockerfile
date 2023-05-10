@@ -9,8 +9,9 @@ RUN python3 -m pip install --user pipx && \
     /home/renku/.local/bin/pipx install virtualenv && \
     /home/renku/.local/bin/virtualenv env
 COPY . .
-RUN /home/renku/.local/bin/poetry build --format wheel && \
-    env/bin/pip install dist/*whl
+RUN /home/renku/.local/bin/poetry export -o requirements.txt && \
+    env/bin/pip install -r requirements.txt
+RUN env/bin/pip install .
 
 FROM python:3.11-slim-bullseye
 RUN apt-get update && apt-get install -y \
