@@ -6,7 +6,7 @@ from sanic import Request
 from models import APIUser, Authenticator, errors
 
 
-def authenticate(authneticator: Authenticator):
+def authenticate(authenticator: Authenticator):
     """Decorator for a Sanic handler that adds the APIUser model to the context.
 
     The APIUser is present for admins, non-admins and users who are not logged in.
@@ -18,7 +18,7 @@ def authenticate(authneticator: Authenticator):
             token = request.headers.get("Authorization")
             user = APIUser()
             if token is not None and len(token) >= 8:
-                user = await authneticator.authenticate(token[7:])
+                user = await authenticator.authenticate(token[7:])
 
             response = await f(request, *args, **kwargs, user=user)
             return response
@@ -33,8 +33,10 @@ def only_admins(f):
 
     @wraps(f)
     async def decorated_function(request: Request, user: APIUser, *args, **kwargs):
-        if user is None or not user.is_admin:
-            raise errors.Unauthorized()
+        if user is None or user.access_token is None:
+            raise errors.Unauthorized(message="Please provide valid access credentials in the Authorization header.")
+        if not user.is_admin:
+            raise errors.Unauthorized(message="You do not have the reuqired permissions for this operation.")
 
         # the user is authenticated and is an admin
         response = await f(request, *args, **kwargs, user=user)

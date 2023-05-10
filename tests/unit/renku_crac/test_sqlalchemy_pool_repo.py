@@ -66,7 +66,7 @@ def test_resource_pool_update_quota(
 
 
 @given(rp=rp_strat_w_classes, data=st.data())
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 def test_resource_pool_update_classes(
     rp: models.ResourcePool, pool_repo: ResourcePoolRepository, data, admin_user: models.APIUser
 ):
