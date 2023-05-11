@@ -33,7 +33,7 @@ class DummyUserStore:
 
 @dataclass
 class DummyAuthenticator:
-    """Dummy authenticator that mimics pretends to call Keycloak, not suitable for production."""
+    """Dummy authenticator that pretends to call Keycloak, not suitable for production."""
 
     logged_in: bool = True
     admin: bool = False

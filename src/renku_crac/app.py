@@ -361,13 +361,11 @@ class UsersBP(CustomBlueprint):
         @only_admins
         @validate(json=apispec.UserWithId)
         async def _post(request: Request, body: apispec.UserWithId, user: models.APIUser):
-            if user.access_token is None:
-                raise errors.Unauthorized()
             users_db, user_kc = await asyncio.gather(
                 self.repo.get_users(keycloak_id=body.id, api_user=user),
-                self.user_store.get_user_by_id(body.id, user.access_token),
+                self.user_store.get_user_by_id(body.id, user.access_token),  # type: ignore[arg-type]
             )
-            user_db = users_db[0] if len(users_db) >= 1 else None
+            user_db = next(iter(users_db), None)
             # The user does not exist in keycloak, delete it form the crac database and fail.
             if user_kc is None:
                 await self.repo.delete_user(id=body.id, api_user=user)
