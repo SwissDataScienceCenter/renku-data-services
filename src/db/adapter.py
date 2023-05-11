@@ -193,7 +193,6 @@ class ResourcePoolRepository(_Base):
                 stmt = stmt.where(schemas.ResourceClassORM.name == name)
             # NOTE: The line below ensures that the right users can access the right resources, do not remove.
             stmt = _classes_user_access_control(api_user, stmt)
-            stmt = stmt
             res = await session.execute(stmt)
             orms = res.scalars().all()
             return [orm.dump() for orm in orms]
