@@ -1,6 +1,7 @@
 """Configurations."""
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict
 
 import httpx
@@ -20,7 +21,7 @@ from users.keycloak import KcUserStore
 def _oidc_discovery(url: str, realm: str) -> Dict[str, Any]:
     url = f"{url}/realms/{realm}/.well-known/openid-configuration"
     res = httpx.get(url)
-    if res == 200:
+    if res.status_code == 200:
         return res.json()
     raise errors.ConfigurationError(message=f"Cannot successfully do OIDC discovery with url {url}.")
 
@@ -33,13 +34,13 @@ class Config:
     rp_repo: ResourcePoolRepository
     user_store: models.UserStore
     authenticator: models.Authenticator
-    spec_file: str = "src/api.spec.yaml"
     spec: Dict[str, Any] = field(init=False, default_factory=dict)
     version: str = "0.0.1"
     app_name: str = "renku_crac"
 
     def __post_init__(self):
-        with open(self.spec_file, "r") as f:
+        spec_file = Path(__file__).resolve().parent / "api.spec.yaml"
+        with open(spec_file, "r") as f:
             self.spec = safe_load(f)
 
     @classmethod
@@ -62,13 +63,21 @@ class Config:
             user_always_exists = os.environ.get("DUMMY_USERSTORE_USER_ALWAYS_EXISTS", "true").lower() == "true"
             user_store = DummyUserStore(user_always_exists=user_always_exists)
         else:
-            async_sqlalchemy_url = os.environ.get(f"{prefix}ASYNC_SQLALCHEMY_URL", "")
-            sync_sqlalchemy_url = os.environ.get(f"{prefix}SYNC_SQLALCHEMY_URL", "")
-            if async_sqlalchemy_url == "" or sync_sqlalchemy_url == "":
-                raise errors.ConfigurationError(message="The sqlalchemy url has to be specified.")
+            pg_host = os.environ.get("DB_HOST", "localhost")
+            pg_user = os.environ.get("DB_USER", "renku")
+            pg_port = os.environ.get("DB_PORT", "5432")
+            db_name = os.environ.get("DB_NAME", "renku")
+            pg_password = os.environ.get("DB_PASSWORD")
+            if pg_password is None:
+                raise errors.ConfigurationError(
+                    message="Please provide a database password in the 'DB_PASSWORD' environment variable."
+                )
+            async_sqlalchemy_url = f"postgresql+asyncpg://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{db_name}"
+            sync_sqlalchemy_url = f"postgresql+psycopg2://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{db_name}"
             keycloak_url = os.environ.get(f"{prefix}KEYCLOAK_URL")
             if keycloak_url is None:
                 raise errors.ConfigurationError(message="The Keycloak URL has to be specified.")
+            keycloak_url = keycloak_url.rstrip("/")
             keycloak_realm = os.environ.get(f"{prefix}KEYCLOAK_REALM", "Renku")
             oidc_disc_data = _oidc_discovery(keycloak_url, keycloak_realm)
             jwks_url = oidc_disc_data.get("jwks_uri")

@@ -24,6 +24,7 @@ asyncpg = "^0.27.0"
 pyjwt = {extras = ["crypto"], version = "^2.6.0"}
 tenacity = "^8.2.2"
 httpx = "<0.24"
+psycopg2-binary = "^2.9.6"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.7.5"

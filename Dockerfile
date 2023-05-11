@@ -8,9 +8,10 @@ RUN python3 -m pip install --user pipx && \
     /home/renku/.local/bin/pipx install poetry && \
     /home/renku/.local/bin/pipx install virtualenv && \
     /home/renku/.local/bin/virtualenv env
-COPY . .
+COPY poetry.lock pyproject.toml ./
 RUN /home/renku/.local/bin/poetry export -o requirements.txt && \
     env/bin/pip install -r requirements.txt
+COPY . .
 RUN env/bin/pip install .
 
 FROM python:3.11-slim-bullseye
