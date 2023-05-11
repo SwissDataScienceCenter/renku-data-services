@@ -6,6 +6,7 @@ grows it is worth looking into separating this functionality into separate class
 it all in one place.
 """
 from functools import wraps
+from pathlib import Path
 from typing import List, Optional, Tuple
 
 from alembic import command, config
@@ -33,7 +34,8 @@ class _Base:
         From: https://alembic.sqlalchemy.org/en/latest/cookbook.html#programmatic-api-use-connection-sharing-with-asyncio  # noqa: E501
         """
         with self.sync_engine.begin() as conn:
-            cfg = config.Config("alembic.ini")
+            alembic_ini_path = Path(__file__).resolve().parent / "alembic.ini"
+            cfg = config.Config(alembic_ini_path)
             cfg.attributes["connection"] = conn
             command.upgrade(cfg, "head")
 
