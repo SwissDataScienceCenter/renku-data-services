@@ -1,15 +1,15 @@
 """Create tables
 
-Revision ID: 8dbddea9901a
+Revision ID: 55bd462d0af9
 Revises:
-Create Date: 2023-05-14 12:51:53.573185
+Create Date: 2023-05-15 13:31:02.026370
 
 """
 import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision = "8dbddea9901a"
+revision = "55bd462d0af9"
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -53,6 +53,7 @@ def upgrade() -> None:
         sa.Column("cpu", sa.Float(), nullable=False),
         sa.Column("memory", sa.BigInteger(), nullable=False),
         sa.Column("max_storage", sa.BigInteger(), nullable=False),
+        sa.Column("default_storage", sa.BigInteger(), nullable=False),
         sa.Column("default", sa.Boolean(), nullable=False),
         sa.Column("gpu", sa.BigInteger(), nullable=False),
         sa.Column("resource_pool_id", sa.Integer(), nullable=True),

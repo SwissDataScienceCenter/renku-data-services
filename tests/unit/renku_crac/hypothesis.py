@@ -15,7 +15,7 @@ SQL_BIGINT_MAX = 9_223_372_036_854_775_807
 # NOTE: A quota always has to have resource that are greater than a class
 a_rc_cpu = st.floats(min_value=0.0, max_value=10)
 a_rc_gpu = st.integers(min_value=0, max_value=100)
-a_rc_storage = st.integers(min_value=0, max_value=1000)
+a_rc_storage = st.integers(min_value=1, max_value=1000)
 a_rc_memory = st.integers(min_value=0, max_value=32)
 a_quota_cpu = st.floats(min_value=50, max_value=100)
 a_quota_gpu = st.integers(min_value=200, max_value=1000)
@@ -72,6 +72,12 @@ user_list_strat = st.lists(user_strat, max_size=5, min_size=1)
 
 rc_update_reqs_dict = st.dictionaries(
     keys=st.sampled_from(["cpu", "gpu", "memory", "max_storage"]),
+    values=st.integers(min_value=1, max_value=5),
+    min_size=1,
+).map(make_cpu_float)
+
+quota_update_reqs_dict = st.dictionaries(
+    keys=st.sampled_from(["cpu", "gpu", "memory", "storage"]),
     values=st.integers(min_value=1, max_value=5),
     min_size=1,
 ).map(make_cpu_float)

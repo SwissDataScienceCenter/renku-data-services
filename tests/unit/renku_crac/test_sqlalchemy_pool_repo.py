@@ -8,7 +8,14 @@ from hypothesis import strategies as st
 import models
 from db.adapter import ResourcePoolRepository
 from models import errors
-from tests.unit.renku_crac.hypothesis import a_name, quota_strat, rc_non_default_strat, rc_update_reqs_dict, rp_strat
+from tests.unit.renku_crac.hypothesis import (
+    a_name,
+    quota_strat,
+    quota_update_reqs_dict,
+    rc_non_default_strat,
+    rc_update_reqs_dict,
+    rp_strat,
+)
 from tests.unit.renku_crac.utils import create_rp, remove_id_from_rp
 
 
@@ -180,7 +187,8 @@ def test_resource_class_update(
     rc_to_update = default_rcs[0]
     assert rc_to_update.id is not None
     new_rc_dict = asdict(rc_to_update)
-    new_rc_dict.update(**rc_update)
+    for k, v in rc_update.items():
+        new_rc_dict[k] += v
     new_rc_dict.pop("id")
     updated_rc = asyncio.run(
         pool_repo.update_resource_class(
@@ -207,14 +215,18 @@ def test_get_quota(rp: models.ResourcePool, pool_repo: ResourcePoolRepository, a
     assert retrieved_quota == inserted_rp.quota
 
 
-@given(rp=rp_strat())
+@given(rp=rp_strat(), quota_update=quota_update_reqs_dict)
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-def test_quota_update(rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: models.APIUser):
+def test_quota_update(
+    rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: models.APIUser, quota_update: dict
+):
     inserted_rp = create_rp(rp, pool_repo, api_user=admin_user)
     assert inserted_rp.id is not None
     old_quota = inserted_rp.quota
-    new_quota = models.Quota(9999999, 9999999, 9999999, 9999999)
-    new_quota_dict = asdict(new_quota)
+    assert old_quota is not None
+    new_quota_dict = asdict(old_quota)
+    for k, v in quota_update.items():
+        new_quota_dict[k] += v
     new_quota_dict.pop("id")
     updated_quota = asyncio.run(
         pool_repo.update_quota(resource_pool_id=inserted_rp.id, api_user=admin_user, **new_quota_dict)

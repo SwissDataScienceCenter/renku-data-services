@@ -51,6 +51,11 @@ class ResourceClass(ResourcesCompareMixin):
     gpu: int
     id: Optional[int] = None
     default: bool = False
+    default_storage: int = 1
+
+    def __post_init__(self):
+        if self.default_storage > self.max_storage:
+            raise ValidationError(message="The default storage cannot be larger than the max allowable storage.")
 
     @classmethod
     def from_dict(cls, data: dict) -> "ResourceClass":
@@ -63,6 +68,7 @@ class ResourceClass(ResourcesCompareMixin):
             name=data["name"],
             id=data["id"] if "id" in data else None,
             default=data["default"] if "default" in data else False,
+            default_storage=data["default_storage"] if "default" in data else 1,
         )
 
     def is_quota_valid(self, quota: "Quota") -> bool:

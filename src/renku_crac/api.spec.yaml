@@ -767,9 +767,11 @@ components:
           $ref: "#/components/schemas/Gpu"
         max_storage:
           $ref: "#/components/schemas/Storage"
+        default_storage:
+          $ref: "#/components/schemas/Storage"
         default:
           $ref: "#/components/schemas/DefaultFlag"
-      required: ["cpu", "memory", "gpu", "max_storage", "name", "default"]
+      required: ["cpu", "memory", "gpu", "max_storage", "name", "default", "default_storage"]
       example:
         name: "resource class"
         cpu: 1.5
@@ -791,6 +793,8 @@ components:
           $ref: "#/components/schemas/Gpu"
         max_storage:
           $ref: "#/components/schemas/Storage"
+        default_storage:
+          $ref: "#/components/schemas/Storage"
         default:
           $ref: "#/components/schemas/DefaultFlag"
       example:
@@ -809,6 +813,8 @@ components:
         gpu:
           $ref: "#/components/schemas/Gpu"
         max_storage:
+          $ref: "#/components/schemas/Storage"
+        default_storage:
           $ref: "#/components/schemas/Storage"
         id:
           $ref: "#/components/schemas/IntegerId"
@@ -832,11 +838,13 @@ components:
           $ref: "#/components/schemas/Gpu"
         max_storage:
           $ref: "#/components/schemas/Storage"
+        default_storage:
+          $ref: "#/components/schemas/Storage"
         id:
           $ref: "#/components/schemas/IntegerId"
         default:
           $ref: "#/components/schemas/DefaultFlag"
-      required: ["cpu", "memory", "gpu", "max_storage", "name", "id", "default"]
+      required: ["cpu", "memory", "gpu", "max_storage", "name", "id", "default", "default_storage"]
       example:
         name: "resource class"
         cpu: 1.5

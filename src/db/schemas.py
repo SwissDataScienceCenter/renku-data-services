@@ -87,6 +87,7 @@ class ResourceClassORM(BaseORM):
     cpu: Mapped[float] = mapped_column()
     memory: Mapped[int] = mapped_column(BigInteger)
     max_storage: Mapped[int] = mapped_column(BigInteger)
+    default_storage: Mapped[int] = mapped_column(BigInteger)
     default: Mapped[bool] = mapped_column(default=False)
     gpu: Mapped[int] = mapped_column(BigInteger, default=0)
     resource_pool_id: Mapped[Optional[int]] = mapped_column(
@@ -105,6 +106,7 @@ class ResourceClassORM(BaseORM):
             max_storage=resource_class.max_storage,
             gpu=resource_class.gpu,
             default=resource_class.default,
+            default_storage=resource_class.default_storage,
         )
 
     def dump(self) -> models.ResourceClass:
@@ -117,6 +119,7 @@ class ResourceClassORM(BaseORM):
             max_storage=self.max_storage,
             gpu=self.gpu,
             default=self.default,
+            default_storage=self.default_storage,
         )
 
 
