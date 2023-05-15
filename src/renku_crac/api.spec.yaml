@@ -765,15 +765,18 @@ components:
           $ref: "#/components/schemas/Memory"
         gpu:
           $ref: "#/components/schemas/Gpu"
-        storage:
+        max_storage:
           $ref: "#/components/schemas/Storage"
-      required: ["cpu", "memory", "gpu", "storage", "name"]
+        default:
+          $ref: "#/components/schemas/DefaultFlag"
+      required: ["cpu", "memory", "gpu", "max_storage", "name", "default"]
       example:
         name: "resource class"
         cpu: 1.5
         memory: 2
         gpu: 0
-        storage: 100
+        max_storage: 100
+        default: false
     ResourceClassPatch:
       type: object
       additionalProperties: false
@@ -786,8 +789,10 @@ components:
           $ref: "#/components/schemas/Memory"
         gpu:
           $ref: "#/components/schemas/Gpu"
-        storage:
+        max_storage:
           $ref: "#/components/schemas/Storage"
+        default:
+          $ref: "#/components/schemas/DefaultFlag"
       example:
         name: "resource class"
         cpu: 1.5
@@ -803,14 +808,16 @@ components:
           $ref: "#/components/schemas/Memory"
         gpu:
           $ref: "#/components/schemas/Gpu"
-        storage:
+        max_storage:
           $ref: "#/components/schemas/Storage"
         id:
           $ref: "#/components/schemas/IntegerId"
+        default:
+          $ref: "#/components/schemas/DefaultFlag"
       required: ["id"]
       example:
         id: 1
-        storage: 1200
+        max_storage: 50
     ResourceClassWithId:
       type: object
       additionalProperties: false
@@ -823,18 +830,21 @@ components:
           $ref: "#/components/schemas/Memory"
         gpu:
           $ref: "#/components/schemas/Gpu"
-        storage:
+        max_storage:
           $ref: "#/components/schemas/Storage"
         id:
           $ref: "#/components/schemas/IntegerId"
-      required: ["cpu", "memory", "gpu", "storage", "name", "id"]
+        default:
+          $ref: "#/components/schemas/DefaultFlag"
+      required: ["cpu", "memory", "gpu", "max_storage", "name", "id", "default"]
       example:
         name: "resource class"
         cpu: 1.5
         memory: 2
         gpu: 0
-        storage: 100
+        max_storage: 100
         id: 1
+        default: true
     ResourceClasses:
       type: array
       items:
@@ -857,14 +867,16 @@ components:
           cpu: 1.5
           memory: 2
           gpu: 0
-          storage: 100
+          max_storage: 100
           id: 1
+          default: true
         - name: "resource class 2"
           cpu: 4.5
           memory: 10
           gpu: 2
-          storage: 10000
+          max_storage: 10000
           id: 2
+          default: false
     ResourceClassesPatchWithId:
       type: array
       items:
@@ -875,7 +887,7 @@ components:
         - name: "resource class 1"
           id: 1
         - cpu: 4.5
-          storage: 10000
+          max_storage: 10000
           id: 2
     ResourcePool:
       type: object
@@ -887,24 +899,30 @@ components:
           $ref: "#/components/schemas/ResourceClasses"
         name:
           $ref: "#/components/schemas/Name"
-      required: ["quota", "classes", "name"]
+        public:
+          $ref: "#/components/schemas/PublicFlag"
+        default:
+          $ref: "#/components/schemas/DefaultFlag"
+      required: ["quota", "classes", "name", "public", "default"]
       example:
         quota:
           cpu: 50
           memory: 250
           storage: 15456
           gpu: 10
+        public: true
+        default: true
         classes:
           - name: "resource class 1"
             cpu: 1.5
             memory: 2
             gpu: 0
-            storage: 100
+            max_storage: 100
           - name: "resource class 2"
             cpu: 4.5
             memory: 10
             gpu: 2
-            storage: 10000
+            max_storage: 10
         name: "resource pool name"
     ResourcePoolPatch:
       type: object
@@ -916,6 +934,10 @@ components:
           $ref: "#/components/schemas/ResourceClassesPatchWithId"
         name:
           $ref: "#/components/schemas/Name"
+        public:
+          $ref: "#/components/schemas/PublicFlag"
+        default:
+          $ref: "#/components/schemas/DefaultFlag"
       example:
         quota:
           cpu: 50
@@ -923,7 +945,7 @@ components:
         classes:
           - name: "resource class 2"
             cpu: 4.5
-            storage: 10000
+            max_storage: 10000
         name: "resource pool name"
     ResourcePoolPut:
       type: object
@@ -935,25 +957,31 @@ components:
           $ref: "#/components/schemas/ResourceClassesWithId"
         name:
           $ref: "#/components/schemas/Name"
-      required: ["quota", "classes", "name"]
+        public:
+          $ref: "#/components/schemas/PublicFlag"
+        default:
+          $ref: "#/components/schemas/DefaultFlag"
+      required: ["quota", "classes", "name", "public", "default"]
       example:
         quota:
           cpu: 50
           memory: 250
           storage: 15456
           gpu: 10
+        public: true
+        default: false
         classes:
           - name: "resource class 1"
             cpu: 1.5
             memory: 2
             gpu: 0
-            storage: 100
+            max_storage: 100
             id: 1
           - name: "resource class 2"
             cpu: 4.5
             memory: 10
             gpu: 2
-            storage: 10000
+            max_storage: 10000
             id: 2
         name: "resource pool name"
     ResourcePoolWithId:
@@ -970,25 +998,31 @@ components:
           $ref: "#/components/schemas/Name"
         id:
           $ref: "#/components/schemas/IntegerId"
-      required: ["quota", "classes", "name", "id"]
+        public:
+          $ref: "#/components/schemas/PublicFlag"
+        default:
+          $ref: "#/components/schemas/DefaultFlag"
+      required: ["quota", "classes", "name", "id", "public", "default"]
       example:
         quota:
           cpu: 50
           memory: 250
           storage: 15456
           gpu: 10
+        public: false
+        default: false
         classes:
           - name: "resource class 1"
             cpu: 1.5
             memory: 2
             gpu: 0
-            storage: 100
+            max_storage: 100
             id: 1
           - name: "resource class 2"
             cpu: 4.5
             memory: 10
             gpu: 2
-            storage: 10000
+            max_storage: 10000
             id: 2
         name: "resource pool name"
         id: 1
@@ -1042,19 +1076,6 @@ components:
       example:
         gpu: 0
         storage: 100
-    ResourcesPatchWithId:
-      allOf:
-        - $ref: "#/components/schemas/ResourcesPatch"
-        - additionalProperties: false
-        - type: object
-          properties:
-            id:
-              $ref: "#/components/schemas/IntegerId"
-          required: ["id"]
-      example:
-        gpu: 0
-        storage: 100
-        id: 1
     Version:
       type: object
       properties:
@@ -1070,8 +1091,8 @@ components:
       minimum: 0
     Memory:
       type: integer
-      description: Number of bytes
-      example: 2000000000000
+      description: Number of gigabytes of memory
+      example: 4
       exclusiveMinimum: true
       minimum: 0
     Gpu:
@@ -1081,8 +1102,8 @@ components:
       minimum: 0
     Storage:
       type: integer
-      description: Number of bytes
-      example: 9000000000000000000000
+      description: Number of gigabytes of storage
+      example: 100
       exclusiveMinimum: true
       minimum: 0
     UserId:
@@ -1108,6 +1129,16 @@ components:
       description: A name for a specific resource
       minLength: 5
       example: "the name of a resource"
+    DefaultFlag:
+      type: boolean
+      description: A default selection for resource classes or resource pools
+      default: false
+      example: false
+    PublicFlag:
+      type: boolean
+      description: A resource pool whose classes can be accessed by anyone
+      default: false
+      example: false
     ErrorResponse:
       type: object
       properties:

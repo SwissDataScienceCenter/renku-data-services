@@ -19,12 +19,14 @@ def create_app() -> Sanic:
         # specified below with the main_process_start decorator do not run.
         config.rp_repo.do_migrations()
         config.user_repo.do_migrations()
+        config.rp_repo.initialize(config.default_resource_pool)
     app = register_all_handlers(app, config)
 
     @app.main_process_start
     async def do_migrations(*_):
         config.rp_repo.do_migrations()
         config.user_repo.do_migrations()
+        config.rp_repo.initialize(config.default_resource_pool)
 
     return app
 

@@ -2,7 +2,7 @@
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import httpx
 from jwt import PyJWKClient
@@ -26,6 +26,34 @@ def _oidc_discovery(url: str, realm: str) -> Dict[str, Any]:
     raise errors.ConfigurationError(message=f"Cannot successfully do OIDC discovery with url {url}.")
 
 
+default_resource_pool = models.ResourcePool(
+    name="default",
+    classes=set(
+        [
+            models.ResourceClass(
+                name="small",
+                cpu=0.5,
+                memory=1,
+                max_storage=20,
+                gpu=0,
+                default=True,
+            ),
+            models.ResourceClass(
+                name="large",
+                cpu=1.0,
+                memory=2,
+                max_storage=20,
+                gpu=0,
+                default=False,
+            ),
+        ]
+    ),
+    quota=None,
+    public=True,
+    default=True,
+)
+
+
 @dataclass
 class Config:
     """Configuration for the CRAC service."""
@@ -37,11 +65,16 @@ class Config:
     spec: Dict[str, Any] = field(init=False, default_factory=dict)
     version: str = "0.0.1"
     app_name: str = "renku_crac"
+    default_resource_pool_file: Optional[str] = None
+    default_resource_pool: models.ResourcePool = default_resource_pool
 
     def __post_init__(self):
         spec_file = Path(__file__).resolve().parent / "api.spec.yaml"
         with open(spec_file, "r") as f:
             self.spec = safe_load(f)
+        if self.default_resource_pool_file is not None:
+            with open(self.default_resource_pool_file, "r") as f:
+                self.default_resource_pool = models.ResourcePool.from_dict(safe_load(f))
 
     @classmethod
     def from_env(cls):

@@ -86,7 +86,8 @@ class ResourceClassORM(BaseORM):
     name: Mapped[str] = mapped_column("name", String(40), index=True)
     cpu: Mapped[float] = mapped_column()
     memory: Mapped[int] = mapped_column(BigInteger)
-    storage: Mapped[int] = mapped_column(BigInteger)
+    max_storage: Mapped[int] = mapped_column(BigInteger)
+    default: Mapped[bool] = mapped_column(default=False)
     gpu: Mapped[int] = mapped_column(BigInteger, default=0)
     resource_pool_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("resource_pools.id", ondelete="CASCADE"), default=None, index=True
@@ -101,8 +102,9 @@ class ResourceClassORM(BaseORM):
             name=resource_class.name,
             cpu=resource_class.cpu,
             memory=resource_class.memory,
-            storage=resource_class.storage,
+            max_storage=resource_class.max_storage,
             gpu=resource_class.gpu,
+            default=resource_class.default,
         )
 
     def dump(self) -> models.ResourceClass:
@@ -112,8 +114,9 @@ class ResourceClassORM(BaseORM):
             name=self.name,
             cpu=self.cpu,
             memory=self.memory,
-            storage=self.storage,
+            max_storage=self.max_storage,
             gpu=self.gpu,
+            default=self.default,
         )
 
 
@@ -136,6 +139,7 @@ class ResourcePoolORM(BaseORM):
         cascade="save-update, merge, delete",
     )
     default: Mapped[bool] = mapped_column(default=False, index=True)
+    public: Mapped[bool] = mapped_column(default=False, index=True)
     id: Mapped[int] = mapped_column("id", Integer, primary_key=True, default=None, init=False)
 
     @classmethod
@@ -145,6 +149,8 @@ class ResourcePoolORM(BaseORM):
             name=resource_pool.name,
             quota=QuotaORM.load(resource_pool.quota),
             classes=[ResourceClassORM.load(resource_class) for resource_class in resource_pool.classes],
+            public=resource_pool.public,
+            default=resource_pool.default,
         )
 
     def dump(self) -> models.ResourcePool:
@@ -156,4 +162,6 @@ class ResourcePoolORM(BaseORM):
             name=self.name,
             quota=None if not quota else quota.dump(),
             classes={resource_class.dump() for resource_class in classes},
+            public=self.public,
+            default=self.default,
         )

@@ -37,7 +37,7 @@ def test_delete_user(user_repo: UserRepository, user: models.User, admin_user: m
     assert len(retrieved_users) == 0
 
 
-@given(rp=rp_strat, users=user_list_strat)
+@given(rp=rp_strat(), users=user_list_strat)
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 def test_resource_pool_add_users(
     rp: models.ResourcePool,
@@ -67,7 +67,7 @@ def test_resource_pool_add_users(
         asyncio.run(user_repo.delete_user(id=user.keycloak_id, api_user=admin_user))
 
 
-@given(rp=rp_strat, users=user_list_strat)
+@given(rp=rp_strat(), users=user_list_strat)
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 def test_resource_pool_remove_users(
     rp: models.ResourcePool,
