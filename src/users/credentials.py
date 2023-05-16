@@ -24,7 +24,11 @@ class KeycloakAuthenticator:
     def _validate(self, token: str) -> Dict[str, Any]:
         sk = self.jwks.get_signing_key_from_jwt(token)
         return jwt.decode(
-            token, key=sk.key, algorithms=self.algorithms, audience=["renku", "renku-ui", "renku-cli"], verify=True
+            token,
+            key=sk.key,
+            algorithms=self.algorithms,
+            audience=["renku", "renku-ui", "renku-cli", "swagger"],
+            verify=True,
         )
 
     async def authenticate(self, access_token: str) -> models.APIUser:

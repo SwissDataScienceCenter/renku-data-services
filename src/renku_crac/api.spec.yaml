@@ -8,6 +8,7 @@ info:
   version: v1
 servers:
   - url: /api/data
+  - url: /ui-server/api/data
 paths:
   /resource_pools:
     get:
@@ -1173,3 +1174,10 @@ components:
         "application/json":
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+  securitySchemes:
+    oidc:
+      type: openIdConnect
+      openIdConnectUrl: /auth/realms/Renku/.well-known/openid-configuration
+security:
+  - oidc:
+      - openid
