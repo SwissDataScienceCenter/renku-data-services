@@ -911,7 +911,7 @@ components:
           $ref: "#/components/schemas/PublicFlag"
         default:
           $ref: "#/components/schemas/DefaultFlag"
-      required: ["quota", "classes", "name", "public", "default"]
+      required: ["classes", "name", "public", "default"]
       example:
         quota:
           cpu: 50
@@ -969,7 +969,7 @@ components:
           $ref: "#/components/schemas/PublicFlag"
         default:
           $ref: "#/components/schemas/DefaultFlag"
-      required: ["quota", "classes", "name", "public", "default"]
+      required: ["classes", "name", "public", "default"]
       example:
         quota:
           cpu: 50
@@ -1010,7 +1010,7 @@ components:
           $ref: "#/components/schemas/PublicFlag"
         default:
           $ref: "#/components/schemas/DefaultFlag"
-      required: ["quota", "classes", "name", "id", "public", "default"]
+      required: ["classes", "name", "id", "public", "default"]
       example:
         quota:
           cpu: 50
