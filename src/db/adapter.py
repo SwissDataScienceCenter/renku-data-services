@@ -14,6 +14,7 @@ from sqlalchemy import create_engine, delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 from sqlalchemy.sql import Select
+from sqlalchemy.sql.expression import true
 
 import models
 from db import schemas
@@ -55,18 +56,18 @@ def _resource_pool_access_control(
                 raise errors.ValidationError(
                     message="Your user ID should match the user ID for which you are querying resource pools."
                 )
-            output = output.join_from(schemas.UserORM, schemas.UserORM.resource_pools).where(
-                or_(schemas.UserORM.keycloak_id == api_user.id, schemas.ResourcePoolORM.public == True)  # noqa: E712
+            output = output.join(schemas.UserORM, schemas.ResourcePoolORM.users, isouter=True).where(
+                or_(schemas.UserORM.keycloak_id == api_user.id, schemas.ResourcePoolORM.public == true())
             )
         case True, True:
             # The user is logged in and is an admin, they can see all resource pools
             if keycloak_id is not None:
-                output = output.join_from(schemas.UserORM, schemas.UserORM.resource_pools).where(
+                output = output.join(schemas.UserORM, schemas.ResourcePoolORM.users, isouter=True).where(
                     schemas.UserORM.keycloak_id == keycloak_id
                 )
         case _:
             # The user is not logged in, they can see only the default resource pools
-            output = output.where(schemas.ResourcePoolORM.public == True)  # noqa: E712
+            output = output.where(schemas.ResourcePoolORM.public == true())
     return output
 
 
@@ -79,15 +80,15 @@ def _classes_user_access_control(
     if api_user.is_authenticated and not api_user.is_admin:
         # The user is logged in but is not an admin (they have access to resource pools
         # they have access to and to default resource pools)
-        output = output.join(schemas.UserORM, schemas.ResourcePoolORM.users).where(
+        output = output.join(schemas.UserORM, schemas.ResourcePoolORM.users, isouter=True).where(
             or_(
                 schemas.UserORM.keycloak_id == api_user.id,
-                schemas.ResourcePoolORM.public == True,  # noqa: E712
+                schemas.ResourcePoolORM.public == true(),
             )
         )
     elif not api_user.is_authenticated:
-        output = output.join(schemas.UserORM, schemas.ResourcePoolORM.users).where(
-            schemas.ResourcePoolORM.public == True,  # noqa: E712
+        output = output.join(schemas.UserORM, schemas.ResourcePoolORM.users, isouter=True).where(
+            schemas.ResourcePoolORM.public == true(),
         )
     return output
 
@@ -100,15 +101,15 @@ def _quota_user_access_control(
     if api_user.is_authenticated and not api_user.is_admin:
         # The user is logged in but is not an admin, they can see only a quota from a resource pool they have
         # been granted access to or from default resource pools.
-        output = output.join(schemas.UserORM, schemas.ResourcePoolORM.users).where(
+        output = output.join(schemas.UserORM, schemas.ResourcePoolORM.users, isouter=True).where(
             or_(
                 schemas.UserORM.keycloak_id == api_user.id,
-                schemas.ResourcePoolORM.public == True,  # noqa: E712
+                schemas.ResourcePoolORM.public == true(),
             )
         )
     elif not api_user.is_authenticated:
-        output = output.join(schemas.UserORM, schemas.ResourcePoolORM.users).where(
-            schemas.ResourcePoolORM.public == True,  # noqa: E712
+        output = output.join(schemas.UserORM, schemas.ResourcePoolORM.users, isouter=True).where(
+            schemas.ResourcePoolORM.public == true(),
         )
     return output
 
@@ -149,7 +150,7 @@ class ResourcePoolRepository(_Base):
         )  # type: ignore[call-overload]
         with session_maker() as session:
             with session.begin():
-                stmt = select(schemas.ResourcePoolORM.default == True)  # noqa: E712
+                stmt = select(schemas.ResourcePoolORM.default == true())
                 res = session.execute(stmt)
                 default_rp = res.scalars().first()
                 if default_rp is None:
@@ -183,7 +184,7 @@ class ResourcePoolRepository(_Base):
         async with self.session_maker() as session:
             async with session.begin():
                 if orm.default:
-                    stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.default == True)  # noqa: E712
+                    stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.default == true())
                     res = await session.execute(stmt)
                     default_rps = res.scalars().all()
                     if len(default_rps) >= 1:
@@ -218,7 +219,7 @@ class ResourcePoolRepository(_Base):
         """Get classes from the database."""
         async with self.session_maker() as session:
             stmt = select(schemas.ResourceClassORM).join(
-                schemas.ResourcePoolORM, schemas.ResourceClassORM.resource_pool
+                schemas.ResourcePoolORM, schemas.ResourceClassORM.resource_pool, isouter=True
             )
             if resource_pool_id is not None:
                 stmt = stmt.where(schemas.ResourcePoolORM.id == resource_pool_id)

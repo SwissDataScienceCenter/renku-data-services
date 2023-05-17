@@ -6,17 +6,19 @@ from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 import models
-from db.adapter import ResourcePoolRepository
+from db.adapter import ResourcePoolRepository, UserRepository
 from models import errors
 from tests.unit.renku_crac.hypothesis import (
     a_name,
+    private_rp_strat,
+    public_rp_strat,
     quota_strat,
     quota_update_reqs_dict,
     rc_non_default_strat,
     rc_update_reqs_dict,
     rp_strat,
 )
-from tests.unit.renku_crac.utils import create_rp, remove_id_from_rp
+from tests.unit.renku_crac.utils import create_rp, remove_id_from_rp, remove_id_from_user
 
 
 @given(rp=rp_strat())
@@ -249,7 +251,8 @@ def test_lookup_rp_by_name(rp: models.ResourcePool, pool_repo: ResourcePoolRepos
 
 
 @given(rc=rc_non_default_strat())
-def insert_class_in_nonexisting_rp(
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+def test_insert_class_in_nonexisting_rp(
     pool_repo: ResourcePoolRepository, rc: models.ResourceClass, admin_user: models.APIUser
 ):
     with pytest.raises(errors.MissingResourceError):
@@ -257,8 +260,41 @@ def insert_class_in_nonexisting_rp(
 
 
 @given(quota=quota_strat)
-def update_quota_in_nonexisting_rp(pool_repo: ResourcePoolRepository, quota: models.Quota, admin_user: models.APIUser):
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+def test_update_quota_in_nonexisting_rp(
+    pool_repo: ResourcePoolRepository, quota: models.Quota, admin_user: models.APIUser
+):
     with pytest.raises(errors.MissingResourceError):
         quota_dict = asdict(quota)
         quota_dict.pop("id")
         asyncio.run(pool_repo.update_quota(resource_pool_id=99999, api_user=admin_user, **quota_dict))
+
+
+@given(public_rp=public_rp_strat, private_rp=private_rp_strat)
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+def test_resource_pools_access_control(
+    public_rp: models.ResourcePool,
+    private_rp: models.ResourcePool,
+    admin_user: models.APIUser,
+    loggedin_user: models.APIUser,
+    pool_repo: ResourcePoolRepository,
+    user_repo: UserRepository,
+):
+    inserted_public_rp = create_rp(public_rp, pool_repo, admin_user)
+    assert inserted_public_rp.id is not None
+    inserted_private_rp = create_rp(private_rp, pool_repo, admin_user)
+    assert inserted_public_rp.id is not None
+    admin_rps = asyncio.run(pool_repo.get_resource_pools(admin_user))
+    loggedin_user_rps = asyncio.run(pool_repo.get_resource_pools(loggedin_user))
+    assert inserted_public_rp in loggedin_user_rps
+    assert inserted_public_rp in admin_rps
+    assert inserted_private_rp not in loggedin_user_rps
+    assert inserted_private_rp in admin_rps
+    assert loggedin_user.id is not None
+    user_to_add = models.User(loggedin_user.id)
+    updated_users = asyncio.run(
+        user_repo.update_resource_pool_users(admin_user, inserted_private_rp.id, [user_to_add], append=True)
+    )
+    assert user_to_add in [remove_id_from_user(user) for user in updated_users]
+    loggedin_user_rps = asyncio.run(pool_repo.get_resource_pools(loggedin_user))
+    assert inserted_private_rp in loggedin_user_rps
