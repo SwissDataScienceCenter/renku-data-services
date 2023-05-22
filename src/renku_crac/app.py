@@ -242,9 +242,7 @@ class ClassesBP(CustomBlueprint):
         async def _get(_: Request, resource_pool_id: int, class_id: int, user: models.APIUser):
             res = await self.repo.get_classes(api_user=user, id=class_id)
             if len(res) < 1:
-                raise errors.MissingResourceError(
-                    message=f"The class with id {class_id} cannot be found."
-                )
+                raise errors.MissingResourceError(message=f"The class with id {class_id} cannot be found.")
             return json(apispec.ResourceClassWithId.from_orm(res[0]).dict(exclude_none=True))
 
         return "/classes/<class_id>", ["GET"], _get
