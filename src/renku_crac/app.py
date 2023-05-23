@@ -239,7 +239,7 @@ class ClassesBP(CustomBlueprint):
         """Get a specific class."""
 
         @authenticate(self.authenticator)
-        async def _get_no_pool(_: Request, resource_pool_id: int, class_id: int, user: models.APIUser):
+        async def _get_no_pool(_: Request, class_id: int, user: models.APIUser):
             res = await self.repo.get_classes(api_user=user, id=class_id)
             if len(res) < 1:
                 raise errors.MissingResourceError(message=f"The class with id {class_id} cannot be found.")
