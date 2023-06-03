@@ -18,9 +18,9 @@ def remove_id_from_rc(rc: models.ResourceClass) -> models.ResourceClass:
 
 
 def remove_id_from_rp(rp: models.ResourcePool) -> models.ResourcePool:
-    quota = None
-    if rp.quota is not None:
-        quota = remove_id_from_quota(rp.quota)
+    quota = rp.quota
+    if isinstance(quota, models.Quota):
+        quota = remove_id_from_quota(quota)
     classes = set([remove_id_from_rc(rc) for rc in rp.classes])
     return models.ResourcePool(
         name=rp.name, id=None, quota=quota, classes=classes, default=rp.default, public=rp.public
@@ -38,7 +38,6 @@ def create_rp(rp: models.ResourcePool, repo: ResourcePoolRepository, api_user: m
     assert inserted_rp is not None
     assert inserted_rp.id is not None
     assert inserted_rp.quota is not None
-    assert inserted_rp.quota.id is not None
     assert all([rc.id is not None for rc in inserted_rp.classes])
     inserted_rp_no_ids = remove_id_from_rp(inserted_rp)
     assert rp == inserted_rp_no_ids, f"resource pools do not match {rp} != {inserted_rp_no_ids}"

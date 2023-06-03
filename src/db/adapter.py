@@ -93,27 +93,6 @@ def _classes_user_access_control(
     return output
 
 
-def _quota_user_access_control(
-    api_user: models.APIUser, stmt: Select[Tuple[schemas.QuotaORM]]
-) -> Select[Tuple[schemas.QuotaORM]]:
-    """Adjust the select statement for a quota based on whether the user is logged in or not."""
-    output = stmt
-    if api_user.is_authenticated and not api_user.is_admin:
-        # The user is logged in but is not an admin, they can see only a quota from a resource pool they have
-        # been granted access to or from default resource pools.
-        output = output.join(schemas.UserORM, schemas.ResourcePoolORM.users, isouter=True).where(
-            or_(
-                schemas.UserORM.keycloak_id == api_user.id,
-                schemas.ResourcePoolORM.public == true(),
-            )
-        )
-    elif not api_user.is_authenticated:
-        output = output.join(schemas.UserORM, schemas.ResourcePoolORM.users, isouter=True).where(
-            schemas.ResourcePoolORM.public == true(),
-        )
-    return output
-
-
 def _only_admins(f):
     """Decorator that errors out if the user is not an admin.
 
@@ -162,9 +141,7 @@ class ResourcePoolRepository(_Base):
     ) -> List[models.ResourcePool]:
         """Get resource pools from database."""
         async with self.session_maker() as session:
-            stmt = select(schemas.ResourcePoolORM).options(
-                selectinload(schemas.ResourcePoolORM.quota), selectinload(schemas.ResourcePoolORM.classes)
-            )
+            stmt = select(schemas.ResourcePoolORM).options(selectinload(schemas.ResourcePoolORM.classes))
             if name is not None:
                 stmt = stmt.where(schemas.ResourcePoolORM.name == name)
             if id is not None:
@@ -193,21 +170,6 @@ class ResourcePoolRepository(_Base):
                         )
                 session.add(orm)
         return orm.dump()
-
-    async def get_quota(self, api_user: models.APIUser, resource_pool_id: int) -> Optional[models.Quota]:
-        """Get a quota for a specific resource pool."""
-
-        async with self.session_maker() as session:
-            stmt = select(schemas.QuotaORM).join(schemas.ResourcePoolORM, schemas.QuotaORM.resource_pool)
-            # NOTE: The line below ensures that the right users can access the right resources, do not remove.
-            stmt = _quota_user_access_control(api_user, stmt)
-            if resource_pool_id is not None:
-                stmt = stmt.where(schemas.ResourcePoolORM.id == resource_pool_id)
-            res = await session.execute(stmt)
-            orm: Optional[schemas.QuotaORM] = res.scalars().first()
-            if not orm:
-                return None
-            return orm.dump()
 
     async def get_classes(
         self,
@@ -260,28 +222,6 @@ class ResourcePoolRepository(_Base):
         return cls.dump()
 
     @_only_admins
-    async def update_quota(self, api_user: models.APIUser, resource_pool_id: int, **kwargs) -> models.Quota:
-        """Update an existing quota in the database."""
-        if len(kwargs) == 0:
-            quota = await self.get_quota(api_user=api_user, resource_pool_id=resource_pool_id)
-            if quota is None:
-                raise errors.MissingResourceError(message=f"Resource pool with id {resource_pool_id} cannot be found")
-            return quota
-        async with self.session_maker() as session:
-            async with session.begin():
-                stmt = (
-                    update(schemas.QuotaORM)
-                    .where(schemas.QuotaORM.resource_pool_id == resource_pool_id)
-                    .values(**kwargs)
-                    .returning(schemas.QuotaORM)
-                )
-                res = await session.execute(stmt)
-                orm = res.scalars().first()
-        if orm is None:
-            raise errors.MissingResourceError(message=f"Resource pool with id {resource_pool_id} cannot be found")
-        return orm.dump()
-
-    @_only_admins
     async def update_resource_pool(self, api_user: models.APIUser, id: int, **kwargs) -> models.ResourcePool:
         """Update an existing resource pool in the database."""
         rp: Optional[schemas.ResourcePoolORM] = None
@@ -290,7 +230,7 @@ class ResourcePoolRepository(_Base):
                 stmt = (
                     select(schemas.ResourcePoolORM)
                     .where(schemas.ResourcePoolORM.id == id)
-                    .options(selectinload(schemas.ResourcePoolORM.classes), selectinload(schemas.ResourcePoolORM.quota))
+                    .options(selectinload(schemas.ResourcePoolORM.classes))
                 )
                 res = await session.execute(stmt)
                 rp = res.scalars().first()
@@ -302,11 +242,8 @@ class ResourcePoolRepository(_Base):
                 rp.dump().update(**kwargs)
                 for key, val in kwargs.items():
                     match key:
-                        case "name" | "public" | "default":
+                        case "name" | "public" | "default" | "quota":
                             setattr(rp, key, val)
-                        case "quota":
-                            for qkey, qval in kwargs["quota"].items():
-                                setattr(rp.quota, qkey, qval)
                         case "classes":
                             for cls in val:
                                 class_id = cls.pop("id")
@@ -334,7 +271,7 @@ class ResourcePoolRepository(_Base):
                 return rp.dump()
 
     @_only_admins
-    async def delete_resource_pool(self, api_user: models.APIUser, id: int):
+    async def delete_resource_pool(self, api_user: models.APIUser, id: int) -> Optional[models.ResourcePool]:
         """Delete a resource pool from the database."""
         async with self.session_maker() as session:
             async with session.begin():
@@ -345,6 +282,8 @@ class ResourcePoolRepository(_Base):
                     if rp.default:
                         raise errors.ValidationError(message="The default resource pool cannot be deleted.")
                     await session.delete(rp)
+                    return rp.dump()
+                return None
 
     @_only_admins
     async def delete_resource_class(self, api_user: models.APIUser, resource_pool_id: int, resource_class_id: int):
@@ -462,9 +401,7 @@ class UserRepository(_Base):
         """Get resource pools that a specific user has access to."""
         async with self.session_maker() as session:
             async with session.begin():
-                stmt = select(schemas.ResourcePoolORM).options(
-                    selectinload(schemas.ResourcePoolORM.quota), selectinload(schemas.ResourcePoolORM.classes)
-                )
+                stmt = select(schemas.ResourcePoolORM).options(selectinload(schemas.ResourcePoolORM.classes))
                 if resource_pool_name is not None:
                     stmt = stmt.where(schemas.ResourcePoolORM.name == resource_pool_name)
                 if resource_pool_id is not None:
@@ -494,7 +431,7 @@ class UserRepository(_Base):
                 stmt_rp = (
                     select(schemas.ResourcePoolORM)
                     .where(schemas.ResourcePoolORM.id.in_(resource_pool_ids))
-                    .options(selectinload(schemas.ResourcePoolORM.quota), selectinload(schemas.ResourcePoolORM.classes))
+                    .options(selectinload(schemas.ResourcePoolORM.classes))
                 )
                 res = await session.execute(stmt_rp)
                 rps_to_add = res.scalars().all()
@@ -536,7 +473,6 @@ class UserRepository(_Base):
                     .options(
                         selectinload(schemas.ResourcePoolORM.users),
                         selectinload(schemas.ResourcePoolORM.classes),
-                        selectinload(schemas.ResourcePoolORM.quota),
                     )
                 )
                 res = await session.execute(stmt)

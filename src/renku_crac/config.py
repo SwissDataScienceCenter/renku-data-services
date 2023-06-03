@@ -11,6 +11,8 @@ from yaml import safe_load
 
 import models
 from db.adapter import ResourcePoolRepository, UserRepository
+from k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
+from k8s.quota import QuotaRepository
 from models import errors
 from users.credentials import KeycloakAuthenticator
 from users.dummy import DummyAuthenticator, DummyUserStore
@@ -62,6 +64,7 @@ class Config:
     rp_repo: ResourcePoolRepository
     user_store: models.UserStore
     authenticator: models.Authenticator
+    quota_repo: QuotaRepository
     spec: Dict[str, Any] = field(init=False, default_factory=dict)
     version: str = "0.0.1"
     app_name: str = "renku_crac"
@@ -95,6 +98,7 @@ class Config:
             authenticator = DummyAuthenticator(admin=True)
             user_always_exists = os.environ.get("DUMMY_USERSTORE_USER_ALWAYS_EXISTS", "true").lower() == "true"
             user_store = DummyUserStore(user_always_exists=user_always_exists)
+            quota_repo = QuotaRepository(DummyCoreClient({}), DummySchedulingClient({}))
         else:
             pg_host = os.environ.get("DB_HOST", "localhost")
             pg_user = os.environ.get("DB_USER", "renku")
@@ -125,11 +129,17 @@ class Config:
             jwks = PyJWKClient(jwks_url)
             authenticator = KeycloakAuthenticator(jwks=jwks, algorithms=algorithms_lst)
             user_store = KcUserStore(keycloak_url=keycloak_url, realm=keycloak_realm)
+            quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient())
 
         user_repo = UserRepository(sync_sqlalchemy_url=sync_sqlalchemy_url, async_sqlalchemy_url=async_sqlalchemy_url)
         rp_repo = ResourcePoolRepository(
             sync_sqlalchemy_url=sync_sqlalchemy_url, async_sqlalchemy_url=async_sqlalchemy_url
         )
         return cls(
-            user_repo=user_repo, rp_repo=rp_repo, version=version, authenticator=authenticator, user_store=user_store
+            user_repo=user_repo,
+            rp_repo=rp_repo,
+            version=version,
+            authenticator=authenticator,
+            user_store=user_store,
+            quota_repo=quota_repo,
         )

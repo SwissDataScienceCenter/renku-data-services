@@ -2,6 +2,8 @@ from sanic import Sanic
 from sanic_testing.testing import SanicTestClient
 
 from db.adapter import ResourcePoolRepository, UserRepository
+from k8s.clients import DummyCoreClient, DummySchedulingClient
+from k8s.quota import QuotaRepository
 from renku_crac.config import Config
 from renku_crac.main import register_all_handlers
 from users.dummy import DummyAuthenticator, DummyUserStore
@@ -13,6 +15,7 @@ def test_smoke(pool_repo: ResourcePoolRepository, user_repo: UserRepository):
         user_repo=user_repo,
         user_store=DummyUserStore(),
         authenticator=DummyAuthenticator(admin=True),
+        quota_repo=QuotaRepository(DummyCoreClient({}), DummySchedulingClient({})),
     )
     app = Sanic(config.app_name)
     app = register_all_handlers(app, config)

@@ -528,7 +528,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/Resources"
+                $ref: "#/components/schemas/Quota"
         "404":
           description: The resource pool or user does not exist
           content:
@@ -552,14 +552,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Resources"
+              $ref: "#/components/schemas/Quota"
       responses:
         "200":
           description: The user belongs to the resource pool
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/Resources"
+                $ref: "#/components/schemas/Quota"
         "404":
           description: The resource pool or user does not exist
           content:
@@ -583,14 +583,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ResourcesPatch"
+              $ref: "#/components/schemas/QuotaPatch"
       responses:
         "200":
           description: The user belongs to the resource pool
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/Resources"
+                $ref: "#/components/schemas/Quota"
         "404":
           description: The resource pool or user does not exist
           content:
@@ -929,7 +929,7 @@ components:
       additionalProperties: false
       properties:
         quota:
-          $ref: "#/components/schemas/Resources"
+          $ref: "#/components/schemas/Quota"
         classes:
           $ref: "#/components/schemas/ResourceClasses"
         name:
@@ -943,7 +943,6 @@ components:
         quota:
           cpu: 50
           memory: 250
-          storage: 15456
           gpu: 10
         public: true
         default: true
@@ -964,7 +963,7 @@ components:
       additionalProperties: false
       properties:
         quota:
-          $ref: "#/components/schemas/ResourcesPatch"
+          $ref: "#/components/schemas/QuotaPatch"
         classes:
           $ref: "#/components/schemas/ResourceClassesPatchWithId"
         name:
@@ -987,7 +986,7 @@ components:
       additionalProperties: false
       properties:
         quota:
-          $ref: "#/components/schemas/Resources"
+          $ref: "#/components/schemas/Quota"
         classes:
           $ref: "#/components/schemas/ResourceClassesWithId"
         name:
@@ -1001,7 +1000,6 @@ components:
         quota:
           cpu: 50
           memory: 250
-          storage: 15456
           gpu: 10
         public: true
         default: false
@@ -1024,7 +1022,7 @@ components:
       additionalProperties: false
       properties:
         quota:
-          $ref: "#/components/schemas/Resources"
+          $ref: "#/components/schemas/Quota"
         classes:
           type: array
           items:
@@ -1042,7 +1040,6 @@ components:
         quota:
           cpu: 50
           memory: 250
-          storage: 15456
           gpu: 10
         public: false
         default: false
@@ -1078,7 +1075,7 @@ components:
       items:
         $ref: "#/components/schemas/UserWithId"
       uniqueItems: true
-    Resources:
+    Quota:
       type: object
       additionalProperties: false
       properties:
@@ -1088,15 +1085,12 @@ components:
           $ref: "#/components/schemas/Memory"
         gpu:
           $ref: "#/components/schemas/Gpu"
-        storage:
-          $ref: "#/components/schemas/Storage"
-      required: ["cpu", "memory", "gpu", "storage"]
+      required: ["cpu", "memory", "gpu"]
       example:
         cpu: 1.0
         memory: 4
         gpu: 0
-        storage: 100
-    ResourcesPatch:
+    QuotaPatch:
       type: object
       additionalProperties: false
       properties:
@@ -1106,11 +1100,9 @@ components:
           $ref: "#/components/schemas/Memory"
         gpu:
           $ref: "#/components/schemas/Gpu"
-        storage:
-          $ref: "#/components/schemas/Storage"
       example:
         gpu: 0
-        storage: 100
+        cpu: 100
     Version:
       type: object
       properties:

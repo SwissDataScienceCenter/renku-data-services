@@ -1,2 +1,3 @@
 """Domain models and exceptions."""
-from models.crac import APIUser, Authenticator, Quota, ResourceClass, ResourcePool, User, UserStore  # noqa: F401
+# flake8: noqa
+from models.crac import APIUser, Authenticator, GpuKind, Quota, ResourceClass, ResourcePool, User, UserStore

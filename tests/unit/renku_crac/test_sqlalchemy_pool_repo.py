@@ -10,15 +10,14 @@ from db.adapter import ResourcePoolRepository, UserRepository
 from models import errors
 from tests.unit.renku_crac.hypothesis import (
     a_name,
+    a_uuid_string,
     private_rp_strat,
     public_rp_strat,
-    quota_strat,
-    quota_update_reqs_dict,
     rc_non_default_strat,
     rc_update_reqs_dict,
     rp_strat,
 )
-from tests.unit.renku_crac.utils import create_rp, remove_id_from_rp, remove_id_from_user
+from tests.unit.renku_crac.utils import create_rp, remove_id_from_user
 
 
 @given(rp=rp_strat())
@@ -44,24 +43,19 @@ def test_resource_pool_update_name(
     assert retrieved_rps[0] == updated_rp
 
 
-@given(rp=rp_strat(), new_quota=quota_strat)
+@given(rp=rp_strat(), new_quota_id=a_uuid_string)
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 def test_resource_pool_update_quota(
-    rp: models.ResourcePool, pool_repo: ResourcePoolRepository, new_quota: models.Quota, admin_user: models.APIUser
+    rp: models.ResourcePool, pool_repo: ResourcePoolRepository, new_quota_id: str, admin_user: models.APIUser
 ):
     inserted_rp = create_rp(rp, pool_repo, api_user=admin_user)
     assert inserted_rp.id is not None
     assert inserted_rp.quota is not None
-    new_quota_dict = asdict(new_quota)
-    new_quota_dict.pop("id")
-    updated_rp = asyncio.run(
-        pool_repo.update_resource_pool(id=inserted_rp.id, quota=new_quota_dict, api_user=admin_user)
-    )
+    updated_rp = asyncio.run(pool_repo.update_resource_pool(id=inserted_rp.id, quota=new_quota_id, api_user=admin_user))
     assert updated_rp.id == inserted_rp.id
     assert updated_rp.quota is not None
-    updated_rp_no_ids = remove_id_from_rp(updated_rp)
-    assert inserted_rp.quota.id == updated_rp.quota.id
-    assert updated_rp_no_ids.quota == new_quota
+    assert inserted_rp.quota != updated_rp.quota
+    assert updated_rp.quota == new_quota_id
     retrieved_rps = asyncio.run(pool_repo.get_resource_pools(id=inserted_rp.id, api_user=admin_user))
     assert len(retrieved_rps) == 1
     assert retrieved_rps[0] == updated_rp
@@ -209,39 +203,6 @@ def test_resource_class_update(
 
 @given(rp=rp_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-def test_get_quota(rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: models.APIUser):
-    inserted_rp = create_rp(rp, pool_repo, api_user=admin_user)
-    assert inserted_rp.id is not None
-    retrieved_quota = asyncio.run(pool_repo.get_quota(resource_pool_id=inserted_rp.id, api_user=admin_user))
-    assert retrieved_quota is not None
-    assert retrieved_quota == inserted_rp.quota
-
-
-@given(rp=rp_strat(), quota_update=quota_update_reqs_dict)
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-def test_quota_update(
-    rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: models.APIUser, quota_update: dict
-):
-    inserted_rp = create_rp(rp, pool_repo, api_user=admin_user)
-    assert inserted_rp.id is not None
-    old_quota = inserted_rp.quota
-    assert old_quota is not None
-    new_quota_dict = asdict(old_quota)
-    for k, v in quota_update.items():
-        new_quota_dict[k] += v
-    new_quota_dict.pop("id")
-    updated_quota = asyncio.run(
-        pool_repo.update_quota(resource_pool_id=inserted_rp.id, api_user=admin_user, **new_quota_dict)
-    )
-    retrieved_rps = asyncio.run(pool_repo.get_resource_pools(id=inserted_rp.id, api_user=admin_user))
-    assert len(retrieved_rps) == 1
-    retrieved_rp = retrieved_rps[0]
-    assert updated_quota != old_quota
-    assert retrieved_rp.quota == updated_quota
-
-
-@given(rp=rp_strat())
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 def test_lookup_rp_by_name(rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: models.APIUser):
     inserted_rp = create_rp(rp, pool_repo, api_user=admin_user)
     assert inserted_rp.id is not None
@@ -259,15 +220,13 @@ def test_insert_class_in_nonexisting_rp(
         asyncio.run(pool_repo.insert_resource_class(resource_class=rc, resource_pool_id=99999, api_user=admin_user))
 
 
-@given(quota=quota_strat)
+@given(new_quota_id=a_uuid_string)
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 def test_update_quota_in_nonexisting_rp(
-    pool_repo: ResourcePoolRepository, quota: models.Quota, admin_user: models.APIUser
+    pool_repo: ResourcePoolRepository, new_quota_id: str, admin_user: models.APIUser
 ):
     with pytest.raises(errors.MissingResourceError):
-        quota_dict = asdict(quota)
-        quota_dict.pop("id")
-        asyncio.run(pool_repo.update_quota(resource_pool_id=99999, api_user=admin_user, **quota_dict))
+        asyncio.run(pool_repo.update_resource_pool(id=99999, api_user=admin_user, quota=new_quota_id))
 
 
 @given(public_rp=public_rp_strat, private_rp=private_rp_strat)
