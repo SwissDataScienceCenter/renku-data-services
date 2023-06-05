@@ -524,13 +524,13 @@ paths:
             type: string
       responses:
         "200":
-          description: The user belongs to the resource pool
+          description: The resource quota for the resource pool
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/Quota"
+                $ref: "#/components/schemas/QuotaWithId"
         "404":
-          description: The resource pool or user does not exist
+          description: The resource pool does not exist
           content:
             "application/json":
               schema:
@@ -552,16 +552,16 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Quota"
+              $ref: "#/components/schemas/QuotaWithId"
       responses:
         "200":
-          description: The user belongs to the resource pool
+          description: The quota has been updated
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/Quota"
+                $ref: "#/components/schemas/QuotaWithId"
         "404":
-          description: The resource pool or user does not exist
+          description: The resource pool does not exist
           content:
             "application/json":
               schema:
@@ -586,13 +586,13 @@ paths:
               $ref: "#/components/schemas/QuotaPatch"
       responses:
         "200":
-          description: The user belongs to the resource pool
+          description: The quota has been updated
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/Quota"
+                $ref: "#/components/schemas/QuotaWithId"
         "404":
-          description: The resource pool or user does not exist
+          description: The resource pool does not exist
           content:
             "application/json":
               schema:
@@ -986,7 +986,7 @@ components:
       additionalProperties: false
       properties:
         quota:
-          $ref: "#/components/schemas/Quota"
+          $ref: "#/components/schemas/QuotaWithId"
         classes:
           $ref: "#/components/schemas/ResourceClassesWithId"
         name:
@@ -1001,6 +1001,7 @@ components:
           cpu: 50
           memory: 250
           gpu: 10
+          id: 518c7d27-b5db-4aee-855f-f4638aded2d4
         public: true
         default: false
         classes:
@@ -1022,7 +1023,7 @@ components:
       additionalProperties: false
       properties:
         quota:
-          $ref: "#/components/schemas/Quota"
+          $ref: "#/components/schemas/QuotaWithId"
         classes:
           type: array
           items:
@@ -1041,6 +1042,7 @@ components:
           cpu: 50
           memory: 250
           gpu: 10
+          id: 518c7d27-b5db-4aee-855f-f4638aded2d4
         public: false
         default: false
         classes:
@@ -1103,6 +1105,24 @@ components:
       example:
         gpu: 0
         cpu: 100
+    QuotaWithId:
+      type: object
+      additionalProperties: false
+      properties:
+        cpu:
+          $ref: "#/components/schemas/Cpu"
+        memory:
+          $ref: "#/components/schemas/Memory"
+        gpu:
+          $ref: "#/components/schemas/Gpu"
+        id:
+          $ref: "#/components/schemas/Name"
+      example:
+        gpu: 0
+        cpu: 100
+        memory: 1000
+        id: 518c7d27-b5db-4aee-855f-f4638aded2d4
+      required: ["cpu", "memory", "gpu", "id"]
     Version:
       type: object
       properties:

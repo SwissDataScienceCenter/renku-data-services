@@ -386,7 +386,7 @@ class QuotaBP(CustomBlueprint):
                     f"for the resource pool with ID {resource_pool_id}."
                 )
             quota = quotas[0]
-            return json(apispec.Quota.from_orm(quota).dict(exclude_none=True))
+            return json(apispec.QuotaWithId.from_orm(quota).dict(exclude_none=True))
 
         return "/resource_pools/<resource_pool_id>/quota", ["GET"], _get
 
@@ -396,7 +396,7 @@ class QuotaBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         @validate(json=apispec.Quota)
-        async def _put(_: Request, resource_pool_id: int, body: apispec.Quota, user: models.APIUser):
+        async def _put(_: Request, resource_pool_id: int, body: apispec.QuotaWithId, user: models.APIUser):
             return await self._put_patch(resource_pool_id, body, api_user=user)
 
         return "/resource_pools/<resource_pool_id>/quota", ["PUT"], _put
@@ -413,7 +413,7 @@ class QuotaBP(CustomBlueprint):
         return "/resource_pools/<resource_pool_id>/quota", ["PATCH"], _patch
 
     async def _put_patch(
-        self, resource_pool_id: int, body: apispec.QuotaPatch | apispec.Quota, api_user: models.APIUser
+        self, resource_pool_id: int, body: apispec.QuotaPatch | apispec.QuotaWithId, api_user: models.APIUser
     ):
         rps = await self.rp_repo.get_resource_pools(api_user=api_user, id=resource_pool_id)
         if len(rps) < 1:
@@ -433,7 +433,7 @@ class QuotaBP(CustomBlueprint):
         old_quota = quotas[0]
         new_quota = models.Quota.from_dict({**asdict(old_quota, **body.dict(exclude_none=True))})
         await self.quota_repo.update_quota(new_quota)
-        return json(apispec.Quota.from_orm(new_quota).dict(exclude_none=True))
+        return json(apispec.QuotaWithId.from_orm(new_quota).dict(exclude_none=True))
 
 
 @dataclass(kw_only=True)

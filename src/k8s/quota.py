@@ -49,9 +49,6 @@ class QuotaRepository:
                     "requests.cpu": quota.cpu,
                     "requests.memory": str(quota.memory * 1_000_000_000),
                     f"requests.{quota.gpu_kind}/gpu": quota.gpu,
-                    "limits.cpu": quota.cpu,
-                    "limits.memory": str(quota.memory * 1_000_000_000),
-                    f"limits.{quota.gpu_kind}/gpu": quota.gpu,
                 },
                 scope_selector=client.V1ScopeSelector(
                     match_expressions=[{"operator": "In", "scopeName": "PriorityClass", "values": [quota.id]}]
