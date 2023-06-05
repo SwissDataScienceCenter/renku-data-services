@@ -12,19 +12,19 @@ from tests.unit.renku_crac.hypothesis import quota_strat
 def test_dummy_core_client():
     core_client = DummyCoreClient({})
     quotas = core_client.list_namespaced_resource_quota("default")
-    assert len(quotas) == 0
+    assert len(quotas.items) == 0
     assert len(core_client.quotas) == 0
     quota_name = "test"
     quota = client.V1ResourceQuota(
         metadata={"name": quota_name}, spec=client.V1ResourceQuotaSpec(hard={"requests.cpu": 1})
     )
-    core_client.create_namespaced_resource_quota(quota, "default")
+    core_client.create_namespaced_resource_quota("default", quota)
     quotas = core_client.list_namespaced_resource_quota("default")
-    assert len(quotas) == 1
+    assert len(quotas.items) == 1
     assert len(core_client.quotas) == 1
     core_client.delete_namespaced_resource_quota(quota_name, "default")
     quotas = core_client.list_namespaced_resource_quota("default")
-    assert len(quotas) == 0
+    assert len(quotas.items) == 0
     assert len(core_client.quotas) == 0
 
 

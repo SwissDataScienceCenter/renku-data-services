@@ -71,7 +71,7 @@ class ResourceClass(ResourcesCompareMixin):
 
     def is_quota_valid(self, quota: "Quota") -> bool:
         """Determine if a quota is compatible with the resource class."""
-        return quota > self
+        return quota >= self
 
 
 class GpuKind(StrEnum):

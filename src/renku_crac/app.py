@@ -91,7 +91,7 @@ class ResourcePoolsBP(CustomBlueprint):
             quotas = [i for i in quotas if i.id == rp.quota]
             if len(quotas) >= 1:
                 quota = quotas[0]
-            rp = rp.set_quota(quota)
+                rp = rp.set_quota(quota)
             return json(apispec.ResourcePoolWithId.from_orm(rp).dict(exclude_none=True))
 
         return "/resource_pools/<resource_pool_id>", ["GET"], _get_one

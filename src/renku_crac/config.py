@@ -14,6 +14,7 @@ from db.adapter import ResourcePoolRepository, UserRepository
 from k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
 from k8s.quota import QuotaRepository
 from models import errors
+from renku_crac.server_options import ServerOptions, ServerOptionsDefaults, generate_default_resource_pool
 from users.credentials import KeycloakAuthenticator
 from users.dummy import DummyAuthenticator, DummyUserStore
 from users.keycloak import KcUserStore
@@ -70,6 +71,8 @@ class Config:
     app_name: str = "renku_crac"
     default_resource_pool_file: Optional[str] = None
     default_resource_pool: models.ResourcePool = default_resource_pool
+    server_options_file: Optional[str] = None
+    server_defaults_file: Optional[str] = None
 
     def __post_init__(self):
         spec_file = Path(__file__).resolve().parent / "api.spec.yaml"
@@ -78,6 +81,12 @@ class Config:
         if self.default_resource_pool_file is not None:
             with open(self.default_resource_pool_file, "r") as f:
                 self.default_resource_pool = models.ResourcePool.from_dict(safe_load(f))
+        if self.server_defaults_file is not None and self.server_options_file is not None:
+            with open(self.server_options_file, "r") as f:
+                options = ServerOptions.parse_obj(safe_load(f))
+            with open(self.server_defaults_file, "r") as f:
+                defaults = ServerOptionsDefaults.parse_obj(safe_load(f))
+            self.default_resource_pool = generate_default_resource_pool(options, defaults)
 
     @classmethod
     def from_env(cls):
@@ -89,6 +98,9 @@ class Config:
         version = os.environ.get(f"{prefix}VERSION", "0.0.1")
         keycloak_url = None
         keycloak_realm = "Renku"
+        server_options_file = os.environ.get("SERVER_OPTIONS")
+        server_defaults_file = os.environ.get("SERVER_DEFAULTS")
+        k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
             async_sqlalchemy_url = os.environ.get(
@@ -98,7 +110,7 @@ class Config:
             authenticator = DummyAuthenticator(admin=True)
             user_always_exists = os.environ.get("DUMMY_USERSTORE_USER_ALWAYS_EXISTS", "true").lower() == "true"
             user_store = DummyUserStore(user_always_exists=user_always_exists)
-            quota_repo = QuotaRepository(DummyCoreClient({}), DummySchedulingClient({}))
+            quota_repo = QuotaRepository(DummyCoreClient({}), DummySchedulingClient({}), namespace=k8s_namespace)
         else:
             pg_host = os.environ.get("DB_HOST", "localhost")
             pg_user = os.environ.get("DB_USER", "renku")
@@ -129,7 +141,7 @@ class Config:
             jwks = PyJWKClient(jwks_url)
             authenticator = KeycloakAuthenticator(jwks=jwks, algorithms=algorithms_lst)
             user_store = KcUserStore(keycloak_url=keycloak_url, realm=keycloak_realm)
-            quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient())
+            quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
 
         user_repo = UserRepository(sync_sqlalchemy_url=sync_sqlalchemy_url, async_sqlalchemy_url=async_sqlalchemy_url)
         rp_repo = ResourcePoolRepository(
@@ -142,4 +154,6 @@ class Config:
             authenticator=authenticator,
             user_store=user_store,
             quota_repo=quota_repo,
+            server_defaults_file=server_defaults_file,
+            server_options_file=server_options_file,
         )

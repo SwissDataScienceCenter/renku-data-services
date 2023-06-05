@@ -32,9 +32,9 @@ class K8sCoreClient(K8sCoreClientInterface):
         """List resource quotas."""
         return self.client.list_namespaced_resource_quota(namespace, **kwargs)
 
-    def create_namespaced_resource_quota(self, body: Any, namespace: Any, **kwargs: Any) -> Any:
+    def create_namespaced_resource_quota(self, namespace: Any, body: Any, **kwargs: Any) -> Any:
         """Create a resource quota."""
-        return self.client.create_namespaced_resource_quota(body, namespace, **kwargs)
+        return self.client.create_namespaced_resource_quota(namespace, body, **kwargs)
 
     def delete_namespaced_resource_quota(self, name: Any, namespace: Any, **kwargs: Any) -> Any:
         """Delete a resource quota."""
@@ -88,9 +88,9 @@ class DummyCoreClient(K8sCoreClientInterface):
     def list_namespaced_resource_quota(self, namespace: Any, **kwargs: Any) -> Any:
         """List resource quotas."""
         with self._lock:
-            return list(self.quotas.values())
+            return client.V1ResourceQuotaList(items=list(self.quotas.values()))
 
-    def create_namespaced_resource_quota(self, body: Any, namespace: Any, **kwargs: Any) -> Any:
+    def create_namespaced_resource_quota(self, namespace: Any, body: Any, **kwargs: Any) -> Any:
         """Create a resource quota."""
         with self._lock:
             if isinstance(body.metadata, dict):

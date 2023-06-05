@@ -17,7 +17,7 @@ class K8sCoreClientInterface(ABC):
         ...
 
     @abstractmethod
-    def create_namespaced_resource_quota(self, body: Any, namespace: Any, **kwargs: Any) -> Any:
+    def create_namespaced_resource_quota(self, namespace: Any, body: Any, **kwargs: Any) -> Any:
         """Create a resource quota."""
         ...
 

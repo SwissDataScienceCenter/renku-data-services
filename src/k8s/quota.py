@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 from kubernetes import client
+from pydantic import ByteSize
 
 import models
 from k8s.client_interfaces import K8sCoreClientInterface, K8sSchedudlingClientInterface
@@ -27,9 +28,12 @@ class QuotaRepository:
             if key in manifest.spec.hard:
                 gpu = int(manifest.spec.hard.get(key))
                 gpu_kind = igpu_kind
+        memory_raw = manifest.spec.hard.get("requests.memory")
+        if memory_raw[-1] == "i":
+            memory_raw += "b"
         return models.Quota(
-            cpu=manifest.spec.hard.get("requests.cpu"),
-            memory=manifest.spec.hard.get("requests.memory"),
+            cpu=float(manifest.spec.hard.get("requests.cpu")),
+            memory=round(ByteSize.validate(memory_raw).to("G")),
             gpu=gpu,
             gpu_kind=gpu_kind,
             id=manifest.metadata.name,
@@ -43,10 +47,10 @@ class QuotaRepository:
             spec=client.V1ResourceQuotaSpec(
                 hard={
                     "requests.cpu": quota.cpu,
-                    "requests.memory": quota.memory,
+                    "requests.memory": str(quota.memory * 1_000_000_000),
                     f"requests.{quota.gpu_kind}/gpu": quota.gpu,
                     "limits.cpu": quota.cpu,
-                    "limits.memory": quota.memory,
+                    "limits.memory": str(quota.memory * 1_000_000_000),
                     f"limits.{quota.gpu_kind}/gpu": quota.gpu,
                 },
                 scope_selector=client.V1ScopeSelector(
@@ -74,7 +78,7 @@ class QuotaRepository:
         quotas = self.core_client.list_namespaced_resource_quota(
             namespace=self.namespace, label_selector=f"{self._label_name}={self._label_value}"
         )
-        return [self._quota_from_manifest(q) for q in quotas]
+        return [self._quota_from_manifest(q) for q in quotas.items]
 
     def create_quota(self, quota: models.Quota):
         """Create a resource quota and priority class."""
@@ -99,12 +103,12 @@ class QuotaRepository:
                 uid=pc.metadata.uid,
             )
         ]
-        self.core_client.create_namespaced_resource_quota(quota_manifest, namespace=self.namespace)
+        self.core_client.create_namespaced_resource_quota(self.namespace, quota_manifest)
 
     def delete_quota(self, name: str):
         """Delete a resource quota and priority class."""
         self.scheduling_client.delete_priority_class(
-            name=name, namespace=self.namespace, body=client.V1DeleteOptions(propagation_policy="Foreground")
+            name=name, body=client.V1DeleteOptions(propagation_policy="Foreground")
         )
         try:
             self.core_client.delete_namespaced_resource_quota(name=name, namespace=self.namespace)
