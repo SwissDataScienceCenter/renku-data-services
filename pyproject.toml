@@ -6,7 +6,7 @@ authors = ["Swiss Data Science Center <contact@datascience.ch>"]
 readme = "README.md"
 license = "Apache License 2.0"
 packages = [
-    {include = "renku_crac", from = "src"},
+    {include = "renku_crc", from = "src"},
     {include = "models", from = "src"},
     {include = "db", from = "src"},
     {include = "schemas", from = "src"},
@@ -105,7 +105,7 @@ check_untyped_defs = true
 [[tool.mypy.overrides]]
 module = [
     "schemas.apispec",
-    "renku_crac.error_handler",
+    "renku_crc.error_handler",
 ]
 ignore_errors = true
 

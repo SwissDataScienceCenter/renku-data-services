@@ -6,7 +6,7 @@ from kubernetes import client
 import models
 from k8s.clients import DummyCoreClient, DummySchedulingClient
 from k8s.quota import QuotaRepository
-from tests.unit.renku_crac.hypothesis import quota_strat
+from tests.unit.renku_crc.hypothesis import quota_strat
 
 
 def test_dummy_core_client():

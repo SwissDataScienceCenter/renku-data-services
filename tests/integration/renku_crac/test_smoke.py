@@ -4,8 +4,8 @@ from sanic_testing.testing import SanicTestClient
 from db.adapter import ResourcePoolRepository, UserRepository
 from k8s.clients import DummyCoreClient, DummySchedulingClient
 from k8s.quota import QuotaRepository
-from renku_crac.config import Config
-from renku_crac.main import register_all_handlers
+from renku_crc.config import Config
+from renku_crc.main import register_all_handlers
 from users.dummy import DummyAuthenticator, DummyUserStore
 
 

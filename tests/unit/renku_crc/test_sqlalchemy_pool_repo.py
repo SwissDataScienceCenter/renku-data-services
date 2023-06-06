@@ -8,7 +8,7 @@ from hypothesis import strategies as st
 import models
 from db.adapter import ResourcePoolRepository, UserRepository
 from models import errors
-from tests.unit.renku_crac.hypothesis import (
+from tests.unit.renku_crc.hypothesis import (
     a_name,
     a_uuid_string,
     private_rp_strat,
@@ -17,7 +17,7 @@ from tests.unit.renku_crac.hypothesis import (
     rc_update_reqs_dict,
     rp_strat,
 )
-from tests.unit.renku_crac.utils import create_rp, remove_id_from_user
+from tests.unit.renku_crc.utils import create_rp, remove_id_from_user
 
 
 @given(rp=rp_strat())

@@ -1,4 +1,4 @@
-"""Compute resource access control (CRAC) app."""
+"""Compute resource control (CRC) app."""
 import asyncio
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, List
@@ -10,10 +10,10 @@ import models
 from db.adapter import ResourcePoolRepository, UserRepository
 from k8s.quota import QuotaRepository
 from models import errors
-from renku_crac.auth import authenticate, only_admins
-from renku_crac.blueprint import BlueprintFactoryResponse, CustomBlueprint
-from renku_crac.config import Config
-from renku_crac.error_handler import CustomErrorHandler
+from renku_crc.auth import authenticate, only_admins
+from renku_crc.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_crc.config import Config
+from renku_crc.error_handler import CustomErrorHandler
 from schemas import apispec
 
 
@@ -456,7 +456,7 @@ class UsersBP(CustomBlueprint):
                 self.user_store.get_user_by_id(body.id, user.access_token),  # type: ignore[arg-type]
             )
             user_db = next(iter(users_db), None)
-            # The user does not exist in keycloak, delete it form the crac database and fail.
+            # The user does not exist in keycloak, delete it form the crc database and fail.
             if user_kc is None:
                 await self.repo.delete_user(id=body.id, api_user=user)
                 raise errors.MissingResourceError(message=f"User with id {body.id} cannot be found in keycloak.")
@@ -552,7 +552,7 @@ class UserResourcePoolsBP(CustomBlueprint):
 
 @dataclass(kw_only=True)
 class MiscBP(CustomBlueprint):
-    """Server contains all handlers for CRAC and the configuration."""
+    """Server contains all handlers for CRC and the configuration."""
 
     apispec: Dict[str, Any]
     version: str

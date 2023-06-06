@@ -5,8 +5,8 @@ from hypothesis import HealthCheck, given, settings
 
 import models
 from db.adapter import ResourcePoolRepository, UserRepository
-from tests.unit.renku_crac.hypothesis import rp_list_strat, rp_strat, user_list_strat, user_strat
-from tests.unit.renku_crac.utils import create_rp
+from tests.unit.renku_crc.hypothesis import rp_list_strat, rp_strat, user_list_strat, user_strat
+from tests.unit.renku_crc.utils import create_rp
 
 
 @given(user=user_strat)

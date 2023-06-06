@@ -24,4 +24,4 @@ USER 1000:1000
 WORKDIR /app
 COPY --from=builder /app/env ./env
 ENTRYPOINT ["tini", "-g", "--"]
-CMD ["env/bin/python", "-m", "renku_crac.main", "--fast"]
+CMD ["env/bin/python", "-m", "renku_crc.main", "--fast"]

@@ -14,7 +14,7 @@ from db.adapter import ResourcePoolRepository, UserRepository
 from k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
 from k8s.quota import QuotaRepository
 from models import errors
-from renku_crac.server_options import ServerOptions, ServerOptionsDefaults, generate_default_resource_pool
+from renku_crc.server_options import ServerOptions, ServerOptionsDefaults, generate_default_resource_pool
 from users.credentials import KeycloakAuthenticator
 from users.dummy import DummyAuthenticator, DummyUserStore
 from users.keycloak import KcUserStore
@@ -59,7 +59,7 @@ default_resource_pool = models.ResourcePool(
 
 @dataclass
 class Config:
-    """Configuration for the CRAC service."""
+    """Configuration for the CRC service."""
 
     user_repo: UserRepository
     rp_repo: ResourcePoolRepository
@@ -68,7 +68,7 @@ class Config:
     quota_repo: QuotaRepository
     spec: Dict[str, Any] = field(init=False, default_factory=dict)
     version: str = "0.0.1"
-    app_name: str = "renku_crac"
+    app_name: str = "renku_crc"
     default_resource_pool_file: Optional[str] = None
     default_resource_pool: models.ResourcePool = default_resource_pool
     server_options_file: Optional[str] = None

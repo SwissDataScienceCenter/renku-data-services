@@ -3,7 +3,7 @@ from io import StringIO
 from yaml import safe_load
 
 import models
-from renku_crac.server_options import ServerOptions, ServerOptionsDefaults, generate_default_resource_pool
+from renku_crc.server_options import ServerOptions, ServerOptionsDefaults, generate_default_resource_pool
 
 server_options_yaml = """
 defaultUrl:

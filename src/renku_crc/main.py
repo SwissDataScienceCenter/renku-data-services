@@ -1,12 +1,12 @@
-"""The entrypoint for the CRAC application."""
+"""The entrypoint for the CRC application."""
 import argparse
 from os import environ
 
 from sanic import Sanic
 from sanic.worker.loader import AppLoader
 
-from renku_crac.app import register_all_handlers
-from renku_crac.config import Config
+from renku_crc.app import register_all_handlers
+from renku_crc.config import Config
 
 
 def create_app() -> Sanic:

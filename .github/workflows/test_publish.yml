@@ -50,7 +50,7 @@ jobs:
         with:
           # list of Docker images to use as base name for tags
           images: |
-            renku/renku-crac
+            renku/renku-crc
           # generate Docker tags based on the following events/attributes
           tags: |
             type=ref,event=branch
@@ -75,5 +75,5 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=renku/renku-crac:buildcache
-          cache-to: type=registry,ref=renku/renku-crac:buildcache,mode=max
+          cache-from: type=registry,ref=renku/renku-crc:buildcache
+          cache-to: type=registry,ref=renku/renku-crc:buildcache,mode=max
