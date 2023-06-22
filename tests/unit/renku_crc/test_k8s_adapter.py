@@ -56,6 +56,11 @@ def test_get_insert_quota(quota: models.Quota):
     assert len(scheduling_client.pcs) == 1
     assert scheduling_client.pcs[quota.id].metadata.name == quota.id
     assert quotas[0] == quota
+    specific_quota_list = quota_repo.get_quotas(quota.id)
+    assert len(specific_quota_list) == 1
+    specific_quota = specific_quota_list[0]
+    assert specific_quota is not None
+    assert specific_quota in quotas
 
 
 @given(quota=quota_strat)
