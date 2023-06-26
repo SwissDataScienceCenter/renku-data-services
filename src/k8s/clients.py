@@ -11,7 +11,7 @@ from kubernetes.config.incluster_config import SERVICE_CERT_FILENAME, SERVICE_TO
 from k8s.client_interfaces import K8sCoreClientInterface, K8sSchedudlingClientInterface
 
 
-class K8sCoreClient(K8sCoreClientInterface):
+class K8sCoreClient(K8sCoreClientInterface):  # pragma:nocover
     """Real k8s core API client that exposes the required functions."""
 
     def __init__(self):
@@ -45,7 +45,7 @@ class K8sCoreClient(K8sCoreClientInterface):
         return self.client.delete_namespaced_resource_quota(name, namespace, body, **kwargs)
 
 
-class K8sSchedulingClient(K8sSchedudlingClientInterface):
+class K8sSchedulingClient(K8sSchedudlingClientInterface):  # pragma:nocover
     """Real k8s scheduling API client that exposes the required functions."""
 
     def __init__(self):
