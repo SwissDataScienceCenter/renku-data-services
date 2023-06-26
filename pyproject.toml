@@ -27,6 +27,7 @@ tenacity = "^8.2.2"
 httpx = "<0.24"
 psycopg2-binary = "^2.9.6"
 kubernetes = "^26.1.0"
+prometheus-client = "^0.17.0"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.7.5"

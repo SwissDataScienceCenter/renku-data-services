@@ -1,13 +1,17 @@
 """The entrypoint for the CRC application."""
 import argparse
-from os import environ
+from os import environ, getpid
+
+from prometheus_client import generate_latest, multiprocess, CollectorRegistry
 
 from sanic import Sanic
+from sanic.response import HTTPResponse
 from sanic.worker.loader import AppLoader
 
 from renku_crc.app import register_all_handlers
 from renku_crc.config import Config
 
+environ["prometheus_multiproc_dir"] = "/tmp/prometheus_multiproc_dir"
 
 def create_app() -> Sanic:
     """Create a Sanic application."""
@@ -27,6 +31,17 @@ def create_app() -> Sanic:
         config.rp_repo.do_migrations()
         config.user_repo.do_migrations()
         config.rp_repo.initialize(config.default_resource_pool)
+
+    @app.route('/metrics')
+    async def get_metrics(request):
+        registry = CollectorRegistry()
+        multiprocess.MultiProcessCollector(registry)
+        metrics = generate_latest(registry)
+        return HTTPResponse(metrics, headers={"Content-Type": "text/plain; version=0.0.4; charset=utf-8"})
+
+    @app.before_server_stop
+    async def cleanup_metrics(app, _):
+        multiprocess.mark_process_dead(getpid())
 
     return app
 

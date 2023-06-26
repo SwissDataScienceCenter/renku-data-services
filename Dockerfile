@@ -29,5 +29,6 @@ RUN apt-get update && apt-get install -y \
 USER 1000:1000
 WORKDIR /app
 COPY --from=builder /app/env ./env
+RUN mkdir -p /tmp/prometheus_multiproc_dir
 ENTRYPOINT ["tini", "-g", "--"]
 CMD ["env/bin/python", "-m", "renku_crc.main", "--fast"]
