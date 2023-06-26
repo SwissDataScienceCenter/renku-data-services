@@ -15,3 +15,8 @@ A set of services that handle reading and writing data from Postgres about compu
 1. Write code
 2. Run tests: `make tests`
 3. Style checks: `make style_checks`
+
+### Developing with the container image
+
+The container image can be built to be used as a local development service:
+`docker build . --build-arg DEV_BUILD=true`
