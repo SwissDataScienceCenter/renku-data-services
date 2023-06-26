@@ -1,6 +1,6 @@
 """Different implementations of k8s clients."""
 from copy import deepcopy
-from threading import Lock
+from multiprocessing import Lock
 from typing import Any, Dict
 from uuid import uuid4
 

@@ -119,3 +119,4 @@ ignore_missing_imports = true
 
 [tool.coverage.run]
 source = [ "src/" ]
+omit = [ "src/db/migrations/*" ]

@@ -396,7 +396,7 @@ class QuotaBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        @validate(json=apispec.Quota)
+        @validate(json=apispec.QuotaWithId)
         async def _put(_: Request, resource_pool_id: int, body: apispec.QuotaWithId, user: models.APIUser):
             return await self._put_patch(resource_pool_id, body, api_user=user)
 
@@ -432,8 +432,8 @@ class QuotaBP(CustomBlueprint):
                 message=f"Cannot find the quota with name {rp.quota} for the resource pool with ID {resource_pool_id}."
             )
         old_quota = quotas[0]
-        new_quota = models.Quota.from_dict({**asdict(old_quota, **body.dict(exclude_none=True))})
-        await self.quota_repo.update_quota(new_quota)
+        new_quota = models.Quota.from_dict({**asdict(old_quota), **body.dict(exclude_none=True)})
+        self.quota_repo.update_quota(new_quota)
         return json(apispec.QuotaWithId.from_orm(new_quota).dict(exclude_none=True))
 
 

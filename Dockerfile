@@ -1,4 +1,6 @@
 FROM python:3.11-bullseye as builder
+ARG DEV_BUILD=false
+
 RUN groupadd --gid 1000 renku && \
     adduser --gid 1000 --uid 1000 renku
 USER 1000:1000
@@ -9,8 +11,12 @@ RUN python3 -m pip install --user pipx && \
     /home/renku/.local/bin/pipx install virtualenv && \
     /home/renku/.local/bin/virtualenv env
 COPY poetry.lock pyproject.toml ./
-RUN /home/renku/.local/bin/poetry export -o requirements.txt && \
-    env/bin/pip install -r requirements.txt
+RUN if $DEV_BUILD ; then \
+    /home/renku/.local/bin/poetry export -o requirements.txt --with dev; \
+  else \
+    /home/renku/.local/bin/poetry export -o requirements.txt; \
+  fi
+RUN env/bin/pip install -r requirements.txt
 COPY . .
 RUN env/bin/pip install .
 
