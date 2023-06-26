@@ -889,13 +889,7 @@ components:
     ResourceClassesWithId:
       type: array
       items:
-        allOf:
-          - $ref: "#/components/schemas/ResourceClass"
-          - type: object
-            properties:
-              id:
-                $ref: "#/components/schemas/IntegerId"
-            required: ["id"]
+        $ref: "#/components/schemas/ResourceClassWithId"
       uniqueItems: true
       example:
         - name: "resource class 1"

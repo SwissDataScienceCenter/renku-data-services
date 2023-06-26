@@ -28,6 +28,7 @@ class QuotaRepository:
             if key in manifest.spec.hard:
                 gpu = int(manifest.spec.hard.get(key))
                 gpu_kind = igpu_kind
+                break
         memory_raw = manifest.spec.hard.get("requests.memory")
         if memory_raw[-1] == "i":
             memory_raw += "b"

@@ -1,10 +1,34 @@
 """Domain models for the application."""
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
-from typing import Callable, Optional, Protocol, Set, Union
+from typing import Callable, Optional, Protocol, Set
 from uuid import uuid4
 
 from models.errors import ValidationError
+
+
+class ResourcesProtocol(Protocol):
+    """Used to represent resource values present in a resource class or quota."""
+
+    @property
+    def cpu(self) -> float:
+        """Cpu in fractional cores."""
+        ...
+
+    @property
+    def gpu(self) -> int:
+        """Number of GPUs."""
+        ...
+
+    @property
+    def memory(self) -> int:
+        """Memory in gigabytes."""
+        ...
+
+    @property
+    def max_storage(self) -> Optional[int]:
+        """Maximum allowable storeage in gigabytes."""
+        ...
 
 
 class ResourcesCompareMixin:
@@ -12,7 +36,7 @@ class ResourcesCompareMixin:
 
     def __compare(
         self,
-        other: Union["Quota", "ResourceClass"],
+        other: ResourcesProtocol,
         compare_func: Callable[[int | float, int | float], bool],
     ) -> bool:
         results = [
@@ -25,20 +49,20 @@ class ResourcesCompareMixin:
         results.append(compare_func(self_storage, other_storage))
         return all(results)
 
-    def __ge__(self, other: Union["Quota", "ResourceClass"]):
+    def __ge__(self, other: ResourcesProtocol):
         return self.__compare(other, lambda x, y: x >= y)
 
-    def __gt__(self, other: Union["Quota", "ResourceClass"]):
+    def __gt__(self, other: ResourcesProtocol):
         return self.__compare(other, lambda x, y: x > y)
 
-    def __lt__(self, other: Union["Quota", "ResourceClass"]):
+    def __lt__(self, other: ResourcesProtocol):
         return self.__compare(other, lambda x, y: x < y)
 
-    def __le__(self, other: Union["Quota", "ResourceClass"]):
+    def __le__(self, other: ResourcesProtocol):
         return self.__compare(other, lambda x, y: x <= y)
 
 
-@dataclass(frozen=True, eq=True)
+@dataclass(frozen=True, eq=True, kw_only=True)
 class ResourceClass(ResourcesCompareMixin):
     """Resource class model."""
 
@@ -58,16 +82,7 @@ class ResourceClass(ResourcesCompareMixin):
     @classmethod
     def from_dict(cls, data: dict) -> "ResourceClass":
         """Create the model from a plain dictionary."""
-        return cls(
-            cpu=data["cpu"],
-            memory=data["memory"],
-            max_storage=data["max_storage"],
-            gpu=data["gpu"],
-            name=data["name"],
-            id=data["id"] if "id" in data else None,
-            default=data["default"] if "default" in data else False,
-            default_storage=data["default_storage"] if "default" in data else 1,
-        )
+        return cls(**data)
 
     def is_quota_valid(self, quota: "Quota") -> bool:
         """Determine if a quota is compatible with the resource class."""
@@ -81,7 +96,7 @@ class GpuKind(StrEnum):
     AMD = "amd.com"
 
 
-@dataclass(frozen=True, eq=True)
+@dataclass(frozen=True, eq=True, kw_only=True)
 class Quota(ResourcesCompareMixin):
     """Quota model."""
 
@@ -125,7 +140,7 @@ class Authenticator(Protocol):
         ...
 
 
-@dataclass(frozen=True, eq=True)
+@dataclass(frozen=True, eq=True, kw_only=True)
 class User:
     """User model."""
 
@@ -135,13 +150,10 @@ class User:
     @classmethod
     def from_dict(cls, data: dict) -> "User":
         """Create the model from a plain dictionary."""
-        return cls(
-            keycloak_id=data["keycloak_id"],
-            id=data["id"] if "id" in data else None,
-        )
+        return cls(**data)
 
 
-@dataclass(frozen=True, eq=True)
+@dataclass(frozen=True, eq=True, kw_only=True)
 class ResourcePool:
     """Resource pool model."""
 
@@ -160,7 +172,7 @@ class ResourcePool:
             raise ValidationError(message="A default resource pool cannot have a quota.")
         default_classes = []
         for cls in list(self.classes):
-            if isinstance(self.quota, Quota) and not self.quota.is_resource_class_valid(cls):
+            if isinstance(self.quota, Quota) and not self.quota.is_resource_class_compatible(cls):
                 raise ValidationError(
                     message=f"The resource class with name {cls.name} is not compatible with the quota."
                 )
@@ -172,7 +184,7 @@ class ResourcePool:
     def set_quota(self, val: Optional[Quota | str]) -> "ResourcePool":
         """Set the quota for a resource pool."""
         for cls in list(self.classes):
-            if isinstance(val, Quota) and not val.is_resource_class_valid(cls):
+            if isinstance(val, Quota) and not val.is_resource_class_compatible(cls):
                 raise ValidationError(
                     message=f"The resource class with name {cls.name} is not compatiable with the quota."
                 )

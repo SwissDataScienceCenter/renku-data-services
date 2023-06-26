@@ -250,7 +250,7 @@ def test_resource_pools_access_control(
     assert inserted_private_rp not in loggedin_user_rps
     assert inserted_private_rp in admin_rps
     assert loggedin_user.id is not None
-    user_to_add = models.User(loggedin_user.id)
+    user_to_add = models.User(keycloak_id=loggedin_user.id)
     updated_users = asyncio.run(
         user_repo.update_resource_pool_users(admin_user, inserted_private_rp.id, [user_to_add], append=True)
     )
