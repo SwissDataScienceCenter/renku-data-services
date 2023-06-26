@@ -257,3 +257,35 @@ def test_resource_pools_access_control(
     assert user_to_add in [remove_id_from_user(user) for user in updated_users]
     loggedin_user_rps = asyncio.run(pool_repo.get_resource_pools(loggedin_user))
     assert inserted_private_rp in loggedin_user_rps
+
+
+@given(rp1=rp_strat(), rp2=rp_strat())
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+def test_classes_filtering_new(
+    rp1: models.ResourcePool, rp2: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: models.APIUser
+):
+    inserted_rp1 = create_rp(rp1, pool_repo, api_user=admin_user)
+    inserted_rp2 = create_rp(rp2, pool_repo, api_user=admin_user)
+    assert inserted_rp1.id is not None
+    assert inserted_rp2.id is not None
+    all_rps = asyncio.run(pool_repo.get_resource_pools(admin_user))
+    assert len(all_rps) == 2
+    assert len(all_rps[0].classes) + len(all_rps[1].classes) == len(inserted_rp1.classes) + len(inserted_rp2.classes)
+    cpu_filter = 1
+    memory_filter = 4
+    filtered_resource_pools = asyncio.run(
+        pool_repo.filter_resource_pools(admin_user, cpu=cpu_filter, memory=memory_filter)
+    )
+    assert len(filtered_resource_pools) == 2
+    assert len(filtered_resource_pools[0].classes) + len(filtered_resource_pools[1].classes) == len(
+        inserted_rp1.classes
+    ) + len(inserted_rp2.classes)
+    expected_matches = [
+        cls for cls in inserted_rp1.classes if cls.cpu >= cpu_filter and cls.memory >= memory_filter
+    ] + [cls for cls in inserted_rp2.classes if cls.cpu >= cpu_filter and cls.memory >= memory_filter]
+    assert len(expected_matches) == len(
+        [i for i in filtered_resource_pools[0].classes if i.matching]
+        + [i for i in filtered_resource_pools[1].classes if i.matching]
+    )
+    asyncio.run(pool_repo.delete_resource_pool(admin_user, inserted_rp1.id))
+    asyncio.run(pool_repo.delete_resource_pool(admin_user, inserted_rp2.id))

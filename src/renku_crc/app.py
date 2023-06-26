@@ -14,7 +14,7 @@ from renku_crc.auth import authenticate, only_admins
 from renku_crc.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_crc.config import Config
 from renku_crc.error_handler import CustomErrorHandler
-from schemas import apispec
+from schemas import apispec, query_parameters
 
 
 @dataclass(kw_only=True)
@@ -30,12 +30,13 @@ class ResourcePoolsBP(CustomBlueprint):
         """List all resource pools."""
 
         @authenticate(self.authenticator)
-        async def _get_all(_: Request, user: models.APIUser):
+        async def _get_all(request: Request, user: models.APIUser):
+            res_filter = query_parameters.ResourceClassesFilter.parse_obj(dict(request.query_args))
             pool = asyncio.get_running_loop()
             rps: List[models.ResourcePool]
             quotas: List[models.Quota]
             rps, quotas = await asyncio.gather(
-                self.rp_repo.get_resource_pools(api_user=user),
+                self.rp_repo.filter_resource_pools(api_user=user, **res_filter.dict()),
                 pool.run_in_executor(None, self.quota_repo.get_quotas),
             )
             quotas_dict = {quota.id: quota for quota in quotas}
@@ -48,7 +49,7 @@ class ResourcePoolsBP(CustomBlueprint):
                 else:
                     rps_w_quota.append(rp)
 
-            return json([apispec.ResourcePoolWithId.from_orm(r).dict(exclude_none=True) for r in rps_w_quota])
+            return json([apispec.ResourcePoolWithIdFiltered.from_orm(r).dict(exclude_none=True) for r in rps_w_quota])
 
         return "/resource_pools", ["GET"], _get_all
 

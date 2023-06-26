@@ -50,6 +50,7 @@ class ResourceClass(ResourcesCompareMixin):
     id: Optional[int] = None
     default: bool = False
     default_storage: int = 1
+    matching: Optional[bool] = None
 
     def __post_init__(self):
         if self.default_storage > self.max_storage:
@@ -67,6 +68,7 @@ class ResourceClass(ResourcesCompareMixin):
             id=data["id"] if "id" in data else None,
             default=data["default"] if "default" in data else False,
             default_storage=data["default_storage"] if "default" in data else 1,
+            matching=data.get("matching"),
         )
 
     def is_quota_valid(self, quota: "Quota") -> bool:
