@@ -59,3 +59,8 @@ def pool_repo(sqlite_file_url_sync, sqlite_file_url_async, monkeypatch):
 @pytest.fixture
 def admin_user() -> models.APIUser:
     return models.APIUser(is_admin=True, id="some-random-id-123456", access_token="some-access-token")  # nosec B106
+
+
+@pytest.fixture
+def loggedin_user() -> models.APIUser:
+    return models.APIUser(is_admin=False, id="some-random-id-123456", access_token="some-access-token")  # nosec B106

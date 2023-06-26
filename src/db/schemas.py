@@ -45,40 +45,6 @@ class UserORM(BaseORM):
         return models.User(id=self.id, keycloak_id=self.keycloak_id)
 
 
-class QuotaORM(BaseORM):
-    """Quota for resource usage."""
-
-    __tablename__ = "quotas"
-    cpu: Mapped[float] = mapped_column()
-    memory: Mapped[int] = mapped_column(BigInteger)
-    storage: Mapped[int] = mapped_column(BigInteger)
-    gpu: Mapped[int] = mapped_column(BigInteger, default=0)
-    id: Mapped[int] = mapped_column(primary_key=True, init=False)
-    resource_pool_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("resource_pools.id", ondelete="CASCADE"),
-        unique=True,
-        default=None,
-        index=True,
-    )
-    resource_pool: Mapped[Optional["ResourcePoolORM"]] = relationship(back_populates="quota", default=None)
-
-    @classmethod
-    def load(cls, quota: Optional[models.Quota]):
-        """Create an ORM object from a quota model."""
-        if quota is None:
-            return None
-        return cls(
-            cpu=quota.cpu,
-            memory=quota.memory,
-            storage=quota.storage,
-            gpu=quota.gpu,
-        )
-
-    def dump(self) -> models.Quota:
-        """Create a quota model from the ORM object."""
-        return models.Quota(id=self.id, cpu=self.cpu, memory=self.memory, storage=self.storage, gpu=self.gpu)
-
-
 class ResourceClassORM(BaseORM):
     """Resource class specifies a set of resources that can be used in a session."""
 
@@ -86,7 +52,9 @@ class ResourceClassORM(BaseORM):
     name: Mapped[str] = mapped_column("name", String(40), index=True)
     cpu: Mapped[float] = mapped_column()
     memory: Mapped[int] = mapped_column(BigInteger)
-    storage: Mapped[int] = mapped_column(BigInteger)
+    max_storage: Mapped[int] = mapped_column(BigInteger)
+    default_storage: Mapped[int] = mapped_column(BigInteger)
+    default: Mapped[bool] = mapped_column(default=False)
     gpu: Mapped[int] = mapped_column(BigInteger, default=0)
     resource_pool_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("resource_pools.id", ondelete="CASCADE"), default=None, index=True
@@ -101,8 +69,10 @@ class ResourceClassORM(BaseORM):
             name=resource_class.name,
             cpu=resource_class.cpu,
             memory=resource_class.memory,
-            storage=resource_class.storage,
+            max_storage=resource_class.max_storage,
             gpu=resource_class.gpu,
+            default=resource_class.default,
+            default_storage=resource_class.default_storage,
         )
 
     def dump(self) -> models.ResourceClass:
@@ -112,8 +82,10 @@ class ResourceClassORM(BaseORM):
             name=self.name,
             cpu=self.cpu,
             memory=self.memory,
-            storage=self.storage,
+            max_storage=self.max_storage,
             gpu=self.gpu,
+            default=self.default,
+            default_storage=self.default_storage,
         )
 
 
@@ -122,11 +94,7 @@ class ResourcePoolORM(BaseORM):
 
     __tablename__ = "resource_pools"
     name: Mapped[str] = mapped_column(String(40), index=True)
-    quota: Mapped[Optional["QuotaORM"]] = relationship(
-        back_populates="resource_pool",
-        default=None,
-        cascade="save-update, merge, delete",
-    )
+    quota: Mapped[Optional[str]] = mapped_column(String(63), index=True, default=None)
     users: Mapped[List["UserORM"]] = relationship(
         secondary=resource_pools_users, back_populates="resource_pools", default_factory=list
     )
@@ -136,24 +104,33 @@ class ResourcePoolORM(BaseORM):
         cascade="save-update, merge, delete",
     )
     default: Mapped[bool] = mapped_column(default=False, index=True)
+    public: Mapped[bool] = mapped_column(default=False, index=True)
     id: Mapped[int] = mapped_column("id", Integer, primary_key=True, default=None, init=False)
 
     @classmethod
     def load(cls, resource_pool: models.ResourcePool):
         """Create an ORM object from the resource pool model."""
+        quota = None
+        if isinstance(resource_pool.quota, str):
+            quota = resource_pool.quota
+        elif isinstance(resource_pool.quota, models.Quota):
+            quota = resource_pool.quota.id
         return cls(
             name=resource_pool.name,
-            quota=QuotaORM.load(resource_pool.quota),
+            quota=quota,  # type: ignore[arg-type]
             classes=[ResourceClassORM.load(resource_class) for resource_class in resource_pool.classes],
+            public=resource_pool.public,
+            default=resource_pool.default,
         )
 
     def dump(self) -> models.ResourcePool:
         """Create a resource pool model from the ORM object."""
-        quota: Optional[QuotaORM] = self.quota
         classes: List[ResourceClassORM] = self.classes
         return models.ResourcePool(
             id=self.id,
             name=self.name,
-            quota=None if not quota else quota.dump(),
+            quota=self.quota,
             classes={resource_class.dump() for resource_class in classes},
+            public=self.public,
+            default=self.default,
         )

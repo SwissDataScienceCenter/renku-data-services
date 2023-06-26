@@ -25,6 +25,7 @@ class CustomErrorHandler(ErrorHandler):
     def default(self, request: Request, exception: Exception) -> HTTPResponse:
         """Overrides the default error handler."""
         formatted_exception = errors.BaseError()
+        logger.exception("An unknown or unhandled exception occurred", exc_info=exception)
         match exception:
             case errors.BaseError():
                 formatted_exception = exception

@@ -4,12 +4,12 @@ from logging.config import fileConfig
 from alembic import context
 
 from db.schemas import BaseORM
-from renku_crac.config import Config as CracConfig
+from renku_crc.config import Config as CrcConfig
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
-crac_config = CracConfig.from_env()
+crc_config = CrcConfig.from_env()
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -36,7 +36,7 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    with crac_config.db.sync_engine.connect() as connection:
+    with crc_config.db.sync_engine.connect() as connection:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
@@ -56,7 +56,7 @@ def run_migrations_online() -> None:
 
     """
 
-    with crac_config.user_repo.sync_engine.connect() as connection:
+    with crc_config.user_repo.sync_engine.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
