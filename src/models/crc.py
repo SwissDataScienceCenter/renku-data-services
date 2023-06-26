@@ -98,7 +98,7 @@ class Quota(ResourcesCompareMixin):
             data["gpu_kind"] = data["gpu_kind"] if isinstance(data["gpu_kind"], GpuKind) else GpuKind[data["gpu_kind"]]
         return cls(**data)
 
-    def is_resource_class_valid(self, rc: "ResourceClass") -> bool:
+    def is_resource_class_compatible(self, rc: "ResourceClass") -> bool:
         """Determine if a resource class is compatible with the quota."""
         return rc <= self
 
@@ -162,7 +162,7 @@ class ResourcePool:
         for cls in list(self.classes):
             if isinstance(self.quota, Quota) and not self.quota.is_resource_class_valid(cls):
                 raise ValidationError(
-                    message=f"The resource class with name {cls.name} is not compatiable with the quota."
+                    message=f"The resource class with name {cls.name} is not compatible with the quota."
                 )
             if cls.default:
                 default_classes.append(cls)

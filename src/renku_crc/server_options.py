@@ -88,33 +88,19 @@ class ServerOptions(BaseModel):
 
     def find_largest_attribute(self) -> str:
         """Find the attribute with the largest number of choices."""
-        max_elems = 0
-        largest_list = ""
-        for k, v in self.dict().items():
-            options = v.get("options", [])
-            if k == "disk_request":
-                continue
-            if len(options) > max_elems:
-                max_elems = len(options)
-                largest_list = k
-        return largest_list
+       options = ((k, v.get("options", [])) for k,v in self.dict().items() if k != "disk_request")
+       largest_list = max(options, key=lambda t: len(t[1]))[0]
+       return largest_list
 
 
-class _ClassNameIter:
-    def __init__(self):
-        self._vals = ["small", "medium", "large"]
-        self._current_ind = 0
-
-    def __iter__(self):
-        self._current_ind = 0
-        return self
-
-    def __next__(self):
-        curr_ind = self._current_ind
-        self._current_ind += 1
-        if curr_ind >= len(self._vals):
-            return ("x" * (curr_ind - len(self._vals) + 1)) + self._vals[-1]
-        return self._vals[curr_ind]
+def _get_classname():
+    yield "small"
+    yield "medium"
+    yield "large"
+    count = 1
+    while True:
+        yield "x"*count + "large"
+        count += 1
 
 
 def generate_default_resource_pool(
@@ -130,7 +116,7 @@ def generate_default_resource_pool(
     }
     class_names = _ClassNameIter()
     largest_attribute_options = getattr(getattr(server_options, largest_attribute), "options")
-    max_storage = round(sorted(server_options.disk_request.options)[-1] / 1_000_000_000)
+    max_storage = round(max(server_options.disk_request.options) / 1_000_000_000)
     for ival, val in sorted(enumerate(largest_attribute_options)):
         cls = {}
         for old_name, new_name in options_xref.items():
