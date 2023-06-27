@@ -7,13 +7,13 @@ it all in one place.
 """
 from functools import wraps
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple, cast
+from typing import List, Optional, Tuple
 
 from alembic import command, config
 from sqlalchemy import create_engine, delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import Session, selectinload, sessionmaker
-from sqlalchemy.sql import Select, and_
+from sqlalchemy.sql import Select
 from sqlalchemy.sql.expression import true
 
 import models

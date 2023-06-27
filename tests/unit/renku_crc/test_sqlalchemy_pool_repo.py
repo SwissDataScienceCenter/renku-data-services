@@ -261,7 +261,7 @@ def test_resource_pools_access_control(
 
 @given(rp1=rp_strat(), rp2=rp_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-def test_classes_filtering_new(
+def test_classes_filtering(
     rp1: models.ResourcePool, rp2: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: models.APIUser
 ):
     inserted_rp1 = create_rp(rp1, pool_repo, api_user=admin_user)
