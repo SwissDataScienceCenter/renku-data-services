@@ -54,28 +54,16 @@ lfs_auto_fetch: false
 
 expected_rp = models.ResourcePool(
     name="default",
-    classes=set(
-        [
-            models.ResourceClass(
-                name="default", cpu=0.5, memory=1, max_storage=10, gpu=0, default=True, default_storage=1
-            ),
-            models.ResourceClass(
-                name="small", cpu=0.5, memory=1, max_storage=10, gpu=0, default=False, default_storage=1
-            ),
-            models.ResourceClass(
-                name="medium", cpu=1.0, memory=2, max_storage=10, gpu=1, default=False, default_storage=1
-            ),
-            models.ResourceClass(
-                name="large", cpu=2.0, memory=4, max_storage=10, gpu=1, default=False, default_storage=1
-            ),
-            models.ResourceClass(
-                name="xlarge", cpu=3.0, memory=4, max_storage=10, gpu=1, default=False, default_storage=1
-            ),
-            models.ResourceClass(
-                name="xxlarge", cpu=4.0, memory=4, max_storage=10, gpu=1, default=False, default_storage=1
-            ),
-        ]
-    ),
+    classes=[
+        models.ResourceClass(name="small", cpu=0.5, memory=1, max_storage=10, gpu=0, default=False, default_storage=1),
+        models.ResourceClass(name="medium", cpu=1.0, memory=2, max_storage=10, gpu=1, default=False, default_storage=1),
+        models.ResourceClass(name="large", cpu=2.0, memory=4, max_storage=10, gpu=1, default=False, default_storage=1),
+        models.ResourceClass(name="xlarge", cpu=3.0, memory=4, max_storage=10, gpu=1, default=False, default_storage=1),
+        models.ResourceClass(
+            name="xxlarge", cpu=4.0, memory=4, max_storage=10, gpu=1, default=False, default_storage=1
+        ),
+        models.ResourceClass(name="default", cpu=0.5, memory=1, max_storage=10, gpu=0, default=True, default_storage=1),
+    ],
     default=True,
     public=True,
 )

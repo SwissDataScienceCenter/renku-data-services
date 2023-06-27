@@ -130,7 +130,7 @@ class ResourcePoolORM(BaseORM):
             id=self.id,
             name=self.name,
             quota=self.quota,
-            classes={resource_class.dump() for resource_class in classes},
+            classes=[resource_class.dump() for resource_class in classes],
             public=self.public,
             default=self.default,
         )

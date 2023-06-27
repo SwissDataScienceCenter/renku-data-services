@@ -7,7 +7,7 @@ it all in one place.
 """
 from functools import wraps
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple, cast
+from typing import Dict, List, Optional, Tuple, cast
 
 from alembic import command, config
 from sqlalchemy import create_engine, delete, or_, select, update
@@ -179,7 +179,7 @@ class ResourcePoolRepository(_Base):
             stmt = _classes_user_access_control(api_user, stmt)
             res = await session.execute(stmt)
             orms = cast(List[Tuple[schemas.ResourceClassORM, bool]], res.all())
-            rcs: Dict[int, Set[models.ResourceClass]] = {}
+            rcs: Dict[int, List[models.ResourceClass]] = {}
             rps: Dict[int, schemas.ResourcePoolORM] = {}
             output: List[models.ResourcePool] = []
             for res_class, matching in orms:
@@ -198,12 +198,12 @@ class ResourcePoolRepository(_Base):
                     matching=matching,
                 )
                 if res_class.resource_pool_id not in rcs:
-                    rcs[res_class.resource_pool_id] = set([rc_matching])
+                    rcs[res_class.resource_pool_id] = [rc_matching]
                 else:
-                    rcs[res_class.resource_pool_id].add(rc_matching)
+                    rcs[res_class.resource_pool_id].append(rc_matching)
                 if res_class.resource_pool_id not in rps:
                     rps[res_class.resource_pool_id] = res_class.resource_pool
-            for rp_id, rp in rps.items():
+            for rp_id, rp in sorted(rps.items(), key=lambda x: x[0]):
                 output.append(
                     models.ResourcePool(
                         name=rp.name,
