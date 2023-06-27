@@ -6,11 +6,12 @@ authors = ["Swiss Data Science Center <contact@datascience.ch>"]
 readme = "README.md"
 license = "Apache License 2.0"
 packages = [
-    {include = "renku_crac", from = "src"},
+    {include = "renku_crc", from = "src"},
     {include = "models", from = "src"},
     {include = "db", from = "src"},
     {include = "schemas", from = "src"},
     {include = "users", from = "src"},
+    {include = "k8s", from = "src"},
 ]
 
 [tool.poetry.dependencies]
@@ -24,6 +25,8 @@ asyncpg = "^0.27.0"
 pyjwt = {extras = ["crypto"], version = "^2.6.0"}
 tenacity = "^8.2.2"
 httpx = "<0.24"
+psycopg2-binary = "^2.9.6"
+kubernetes = "^26.1.0"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.7.5"
@@ -102,7 +105,7 @@ check_untyped_defs = true
 [[tool.mypy.overrides]]
 module = [
     "schemas.apispec",
-    "renku_crac.error_handler",
+    "renku_crc.error_handler",
 ]
 ignore_errors = true
 
@@ -110,8 +113,10 @@ ignore_errors = true
 module = [
     "sanic_testing.*",
     "asyncpg.*",
+    "kubernetes.*",
 ]
 ignore_missing_imports = true
 
 [tool.coverage.run]
 source = [ "src/" ]
+omit = [ "src/db/migrations/*" ]

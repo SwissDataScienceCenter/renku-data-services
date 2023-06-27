@@ -1,16 +1,15 @@
 """Create tables
 
-Revision ID: f31087d667f3
+Revision ID: 6ae6b56e72e4
 Revises:
-Create Date: 2023-05-09 00:13:12.542679
+Create Date: 2023-06-03 20:33:42.404459
 
 """
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 # revision identifiers, used by Alembic.
-revision = "f31087d667f3"
+revision = "6ae6b56e72e4"
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -21,12 +20,16 @@ def upgrade() -> None:
     op.create_table(
         "resource_pools",
         sa.Column("name", sa.String(length=40), nullable=False),
+        sa.Column("quota", sa.String(length=63), nullable=True),
         sa.Column("default", sa.Boolean(), nullable=False),
+        sa.Column("public", sa.Boolean(), nullable=False),
         sa.Column("id", sa.Integer(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_resource_pools_default"), "resource_pools", ["default"], unique=False)
     op.create_index(op.f("ix_resource_pools_name"), "resource_pools", ["name"], unique=False)
+    op.create_index(op.f("ix_resource_pools_public"), "resource_pools", ["public"], unique=False)
+    op.create_index(op.f("ix_resource_pools_quota"), "resource_pools", ["quota"], unique=False)
     op.create_table(
         "users",
         sa.Column("keycloak_id", sa.String(length=50), nullable=False),
@@ -35,23 +38,13 @@ def upgrade() -> None:
     )
     op.create_index(op.f("ix_users_keycloak_id"), "users", ["keycloak_id"], unique=True)
     op.create_table(
-        "quotas",
-        sa.Column("cpu", sa.Float(), nullable=False),
-        sa.Column("memory", sa.BigInteger(), nullable=False),
-        sa.Column("storage", sa.BigInteger(), nullable=False),
-        sa.Column("gpu", sa.BigInteger(), nullable=False),
-        sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("resource_pool_id", sa.Integer(), nullable=True),
-        sa.ForeignKeyConstraint(["resource_pool_id"], ["resource_pools.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index(op.f("ix_quotas_resource_pool_id"), "quotas", ["resource_pool_id"], unique=True)
-    op.create_table(
         "resource_classes",
         sa.Column("name", sa.String(length=40), nullable=False),
         sa.Column("cpu", sa.Float(), nullable=False),
         sa.Column("memory", sa.BigInteger(), nullable=False),
-        sa.Column("storage", sa.BigInteger(), nullable=False),
+        sa.Column("max_storage", sa.BigInteger(), nullable=False),
+        sa.Column("default_storage", sa.BigInteger(), nullable=False),
+        sa.Column("default", sa.Boolean(), nullable=False),
         sa.Column("gpu", sa.BigInteger(), nullable=False),
         sa.Column("resource_pool_id", sa.Integer(), nullable=True),
         sa.Column("id", sa.Integer(), nullable=False),
@@ -85,10 +78,10 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_resource_classes_resource_pool_id"), table_name="resource_classes")
     op.drop_index(op.f("ix_resource_classes_name"), table_name="resource_classes")
     op.drop_table("resource_classes")
-    op.drop_index(op.f("ix_quotas_resource_pool_id"), table_name="quotas")
-    op.drop_table("quotas")
     op.drop_index(op.f("ix_users_keycloak_id"), table_name="users")
     op.drop_table("users")
+    op.drop_index(op.f("ix_resource_pools_quota"), table_name="resource_pools")
+    op.drop_index(op.f("ix_resource_pools_public"), table_name="resource_pools")
     op.drop_index(op.f("ix_resource_pools_name"), table_name="resource_pools")
     op.drop_index(op.f("ix_resource_pools_default"), table_name="resource_pools")
     op.drop_table("resource_pools")
