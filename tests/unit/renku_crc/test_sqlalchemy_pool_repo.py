@@ -70,7 +70,7 @@ def test_resource_pool_update_classes(
     assert inserted_rp.id is not None
     old_classes = [asdict(cls) for cls in list(inserted_rp.classes)]
     new_classes_dicts = [{**cls, **data.draw(rc_update_reqs_dict)} for cls in old_classes]
-    new_classes_models = set([models.ResourceClass(**cls) for cls in new_classes_dicts])
+    new_classes_models = [models.ResourceClass(**cls) for cls in new_classes_dicts]
     updated_rp = asyncio.run(
         pool_repo.update_resource_pool(id=inserted_rp.id, classes=new_classes_dicts, api_user=admin_user)
     )
@@ -89,7 +89,7 @@ def test_get_classes(rp: models.ResourcePool, pool_repo: ResourcePoolRepository,
     inserted_rp = create_rp(rp, pool_repo, api_user=admin_user)
     assert inserted_rp.id is not None
     retrieved_classes = asyncio.run(pool_repo.get_classes(resource_pool_id=inserted_rp.id, api_user=admin_user))
-    assert set(retrieved_classes) == inserted_rp.classes
+    assert retrieved_classes == inserted_rp.classes
 
 
 @given(rp=rp_strat())
@@ -141,7 +141,7 @@ def test_resource_class_create(
     assert len(retrieved_rps) == 1
     retrieved_rp = retrieved_rps[0]
     assert len(retrieved_rp.classes) >= 1
-    assert retrieved_rp.classes.issuperset(
+    assert set(retrieved_rp.classes).issuperset(
         {inserted_class}
     ), f"class {inserted_class} should be in {retrieved_rp.classes}"
 
@@ -164,7 +164,7 @@ def test_resource_class_delete(rp: models.ResourcePool, pool_repo: ResourcePoolR
     retrieved_rps = asyncio.run(pool_repo.get_resource_pools(id=inserted_rp.id, api_user=admin_user))
     assert len(retrieved_rps) == 1
     retrieved_rp = retrieved_rps[0]
-    assert not retrieved_rp.classes.issuperset(
+    assert not set(retrieved_rp.classes).issuperset(
         {removed_cls}
     ), f"class {removed_cls} should not be in {retrieved_rp.classes}"
 
@@ -195,8 +195,8 @@ def test_resource_class_update(
     assert len(retrieved_rps) == 1
     retrieved_rp = retrieved_rps[0]
     assert updated_rc.id == rc_to_update.id
-    assert retrieved_rp.classes.issuperset({updated_rc}), f"class {updated_rc} should be in {retrieved_rp.classes}"
-    assert not retrieved_rp.classes.issuperset(
+    assert set(retrieved_rp.classes).issuperset({updated_rc}), f"class {updated_rc} should be in {retrieved_rp.classes}"
+    assert not set(retrieved_rp.classes).issuperset(
         {rc_to_update}
     ), f"class {rc_to_update} should not be in {retrieved_rp.classes}"
 
@@ -257,3 +257,35 @@ def test_resource_pools_access_control(
     assert user_to_add in [remove_id_from_user(user) for user in updated_users]
     loggedin_user_rps = asyncio.run(pool_repo.get_resource_pools(loggedin_user))
     assert inserted_private_rp in loggedin_user_rps
+
+
+@given(rp1=rp_strat(), rp2=rp_strat())
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+def test_classes_filtering(
+    rp1: models.ResourcePool, rp2: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: models.APIUser
+):
+    inserted_rp1 = create_rp(rp1, pool_repo, api_user=admin_user)
+    inserted_rp2 = create_rp(rp2, pool_repo, api_user=admin_user)
+    assert inserted_rp1.id is not None
+    assert inserted_rp2.id is not None
+    all_rps = asyncio.run(pool_repo.get_resource_pools(admin_user))
+    assert len(all_rps) == 2
+    assert len(all_rps[0].classes) + len(all_rps[1].classes) == len(inserted_rp1.classes) + len(inserted_rp2.classes)
+    cpu_filter = 1
+    memory_filter = 4
+    filtered_resource_pools = asyncio.run(
+        pool_repo.filter_resource_pools(admin_user, cpu=cpu_filter, memory=memory_filter)
+    )
+    assert len(filtered_resource_pools) == 2
+    assert len(filtered_resource_pools[0].classes) + len(filtered_resource_pools[1].classes) == len(
+        inserted_rp1.classes
+    ) + len(inserted_rp2.classes)
+    expected_matches = [
+        cls for cls in inserted_rp1.classes if cls.cpu >= cpu_filter and cls.memory >= memory_filter
+    ] + [cls for cls in inserted_rp2.classes if cls.cpu >= cpu_filter and cls.memory >= memory_filter]
+    assert len(expected_matches) == len(
+        [i for i in filtered_resource_pools[0].classes if i.matching]
+        + [i for i in filtered_resource_pools[1].classes if i.matching]
+    )
+    asyncio.run(pool_repo.delete_resource_pool(admin_user, inserted_rp1.id))
+    asyncio.run(pool_repo.delete_resource_pool(admin_user, inserted_rp2.id))

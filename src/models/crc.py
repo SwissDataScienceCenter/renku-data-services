@@ -1,7 +1,7 @@
 """Domain models for the application."""
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
-from typing import Callable, Optional, Protocol, Set
+from typing import Callable, List, Optional, Protocol
 from uuid import uuid4
 
 from models.errors import ValidationError
@@ -74,6 +74,7 @@ class ResourceClass(ResourcesCompareMixin):
     id: Optional[int] = None
     default: bool = False
     default_storage: int = 1
+    matching: Optional[bool] = None
 
     def __post_init__(self):
         if self.default_storage > self.max_storage:
@@ -158,7 +159,7 @@ class ResourcePool:
     """Resource pool model."""
 
     name: str
-    classes: Set["ResourceClass"]
+    classes: List["ResourceClass"]
     quota: Optional[Quota | str] = None
     id: Optional[int] = None
     default: bool = False
@@ -204,11 +205,11 @@ class ResourcePool:
             quota = Quota.from_dict(data["quota"])
         elif "quota" in data and (isinstance(data["quota"], Quota) or isinstance(data["quota"], str)):
             quota = data["quota"]
-        classes = set()
+        classes = []
         if "classes" in data and isinstance(data["classes"], set):
-            classes = {ResourceClass.from_dict(c) if isinstance(c, dict) else c for c in list(data["classes"])}
+            classes = [ResourceClass.from_dict(c) if isinstance(c, dict) else c for c in list(data["classes"])]
         elif "classes" in data and isinstance(data["classes"], list):
-            classes = {ResourceClass.from_dict(c) if isinstance(c, dict) else c for c in data["classes"]}
+            classes = [ResourceClass.from_dict(c) if isinstance(c, dict) else c for c in data["classes"]]
         return cls(
             name=data["name"],
             id=data["id"] if "id" in data else None,

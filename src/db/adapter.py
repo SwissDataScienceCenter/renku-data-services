@@ -7,13 +7,13 @@ it all in one place.
 """
 from functools import wraps
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, cast
 
 from alembic import command, config
 from sqlalchemy import create_engine, delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import Session, selectinload, sessionmaker
-from sqlalchemy.sql import Select
+from sqlalchemy.sql import Select, and_
 from sqlalchemy.sql.expression import true
 
 import models
@@ -152,6 +152,70 @@ class ResourcePoolRepository(_Base):
             orms = res.scalars().all()
             return [orm.dump() for orm in orms]
 
+    async def filter_resource_pools(
+        self,
+        api_user: models.APIUser,
+        cpu: float = 0,
+        memory: int = 0,
+        max_storage: int = 0,
+        gpu: int = 0,
+    ) -> List[models.ResourcePool]:
+        """Get resource pools from database with indication of which resource class matches the specified crtieria."""
+        async with self.session_maker() as session:
+            criteria = and_(
+                schemas.ResourceClassORM.cpu >= cpu,
+                schemas.ResourceClassORM.gpu >= gpu,
+                schemas.ResourceClassORM.memory >= memory,
+                schemas.ResourceClassORM.max_storage >= max_storage,
+            )
+            stmt = (
+                select(schemas.ResourceClassORM)
+                .add_columns(criteria.label("matching"))
+                .order_by(schemas.ResourceClassORM.resource_pool_id, schemas.ResourceClassORM.name)
+                .join(schemas.ResourcePoolORM, schemas.ResourceClassORM.resource_pool)
+                .options(selectinload(schemas.ResourceClassORM.resource_pool))
+            )
+            # NOTE: The line below ensures that the right users can access the right resources, do not remove.
+            stmt = _classes_user_access_control(api_user, stmt)
+            res = await session.execute(stmt)
+            orms = cast(List[Tuple[schemas.ResourceClassORM, bool]], res.all())
+            rcs: Dict[int, List[models.ResourceClass]] = {}
+            rps: Dict[int, schemas.ResourcePoolORM] = {}
+            output: List[models.ResourcePool] = []
+            for res_class, matching in orms:
+                if res_class.resource_pool_id is None or res_class.resource_pool is None:
+                    continue
+                rc_data = res_class.dump()
+                rc_matching = models.ResourceClass(
+                    name=rc_data.name,
+                    cpu=rc_data.cpu,
+                    memory=rc_data.memory,
+                    max_storage=rc_data.max_storage,
+                    gpu=rc_data.gpu,
+                    id=rc_data.id,
+                    default=res_class.default,
+                    default_storage=res_class.default_storage,
+                    matching=matching,
+                )
+                if res_class.resource_pool_id not in rcs:
+                    rcs[res_class.resource_pool_id] = [rc_matching]
+                else:
+                    rcs[res_class.resource_pool_id].append(rc_matching)
+                if res_class.resource_pool_id not in rps:
+                    rps[res_class.resource_pool_id] = res_class.resource_pool
+            for rp_id, rp in sorted(rps.items(), key=lambda x: x[0]):
+                output.append(
+                    models.ResourcePool(
+                        name=rp.name,
+                        classes=rcs[rp_id],
+                        quota=rp.quota,
+                        id=rp.id,
+                        default=rp.default,
+                        public=rp.public,
+                    )
+                )
+            return output
+
     @_only_admins
     async def insert_resource_pool(
         self, api_user: models.APIUser, resource_pool: models.ResourcePool
@@ -247,6 +311,7 @@ class ResourcePoolRepository(_Base):
                         case "classes":
                             for cls in val:
                                 class_id = cls.pop("id")
+                                cls.pop("matching", None)
                                 if len(cls) == 0:
                                     raise errors.ValidationError(
                                         message="More fields than the id of the class "

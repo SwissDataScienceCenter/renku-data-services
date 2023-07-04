@@ -31,26 +31,24 @@ def _oidc_discovery(url: str, realm: str) -> Dict[str, Any]:
 
 default_resource_pool = models.ResourcePool(
     name="default",
-    classes=set(
-        [
-            models.ResourceClass(
-                name="small",
-                cpu=0.5,
-                memory=1,
-                max_storage=20,
-                gpu=0,
-                default=True,
-            ),
-            models.ResourceClass(
-                name="large",
-                cpu=1.0,
-                memory=2,
-                max_storage=20,
-                gpu=0,
-                default=False,
-            ),
-        ]
-    ),
+    classes=[
+        models.ResourceClass(
+            name="small",
+            cpu=0.5,
+            memory=1,
+            max_storage=20,
+            gpu=0,
+            default=True,
+        ),
+        models.ResourceClass(
+            name="large",
+            cpu=1.0,
+            memory=2,
+            max_storage=20,
+            gpu=0,
+            default=False,
+        ),
+    ],
     quota=None,
     public=True,
     default=True,

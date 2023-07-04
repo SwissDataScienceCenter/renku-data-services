@@ -4,7 +4,7 @@ The purpose of this is to be able to create resource
 pools and classes based on the old server options until the admin UI interface
 is added.
 """
-from typing import Any, List, Set
+from typing import Any, List
 
 from pydantic import BaseModel, ByteSize, Extra, Field, validator
 
@@ -107,7 +107,7 @@ def generate_default_resource_pool(
     server_options: ServerOptions, defaults: ServerOptionsDefaults
 ) -> models.ResourcePool:
     """Generate a resource pool from the notebook service style server options."""
-    clses: Set[models.ResourceClass] = set()
+    clses: List[models.ResourceClass] = []
     largest_attribute = server_options.find_largest_attribute()
     options_xref = {
         "cpu_request": "cpu",
@@ -133,8 +133,8 @@ def generate_default_resource_pool(
         cls["name"] = next(class_names)
         cls["max_storage"] = max_storage
         cls["default_storage"] = round(defaults.disk_request / 1_000_000_000)
-        clses.add(models.ResourceClass.from_dict(cls))
-    clses.add(
+        clses.append(models.ResourceClass.from_dict(cls))
+    clses.append(
         models.ResourceClass(
             cpu=defaults.cpu_request,
             memory=round(defaults.mem_request / 1_000_000_000),

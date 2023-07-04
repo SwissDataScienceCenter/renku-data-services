@@ -21,7 +21,7 @@ def remove_id_from_rp(rp: models.ResourcePool) -> models.ResourcePool:
     quota = rp.quota
     if isinstance(quota, models.Quota):
         quota = remove_id_from_quota(quota)
-    classes = set([remove_id_from_rc(rc) for rc in rp.classes])
+    classes = [remove_id_from_rc(rc) for rc in rp.classes]
     return models.ResourcePool(
         name=rp.name, id=None, quota=quota, classes=classes, default=rp.default, public=rp.public
     )
