@@ -78,6 +78,23 @@ def session_node_selector():
     ]
 
 
+def priority_class(server: "UserServer"):
+    if server.server_options.priority_class is None:
+        return []
+    return [
+        {
+            "type": "application/json-patch+json",
+            "patch": [
+                {
+                    "op": "add",
+                    "path": "/statefulset/spec/template/spec/priorityClassName",
+                    "value": server.server_options.priority_class,
+                }
+            ],
+        }
+    ]
+
+
 def test(server: "UserServer"):
     """RFC 6901 patches support test statements that will cause the whole patch
     to fail if the test statements are not correct. This is used to ensure that the

@@ -76,3 +76,14 @@ class OverriddenEnvironmentVariableError(UserInputError):
 
     message: str
     code: int = UserInputError.code + 4
+
+
+@dataclass
+class InvalidComputeResourceError(UserInputError):
+    """Raised when invalid server options are requested or when the user has not access
+    to a resource class."""
+
+    message: str = (
+        "The specified server options or resources are invalid or cannot be accessed."
+    )
+    code: int = UserInputError.code + 5

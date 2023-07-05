@@ -346,8 +346,17 @@ class LaunchNotebookResponseWithoutS3(Schema):
                 unschedulable_msg = get_unschedulable_message(
                     server.manifest.get("status", {}).get("mainPod", {})
                 )
+                event_based_messages = []
+                events = server.manifest.get("status", {}).get("events", {})
+                for component in sorted(events.keys()):
+                    message = events.get(component, {}).get("message")
+                    if message is None:
+                        continue
+                    event_based_messages.append(message)
                 if unschedulable_msg:
                     output["message"] = unschedulable_msg
+                elif len(event_based_messages) > 0:
+                    output["message"] = event_based_messages[0]
                 else:
                     output["message"] = get_failed_message(failed_container_statuses)
             output["details"] = get_status_breakdown(server)

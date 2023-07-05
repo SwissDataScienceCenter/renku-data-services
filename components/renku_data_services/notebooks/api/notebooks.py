@@ -16,29 +16,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Notebooks service API."""
-from flask import Blueprint, current_app, make_response, jsonify
+from flask import Blueprint, current_app, jsonify, make_response
 from marshmallow import fields, validate
 from webargs.flaskparser import use_args
 
-from renku_notebooks.util.check_image import (
-    get_docker_token,
-    image_exists,
-    parse_image_name,
-)
-
 from ..config import config
+from ..errors.user import ImageParseError, MissingResourceError, UserInputError
+from ..util.check_image import get_docker_token, image_exists, parse_image_name
+from ..util.kubernetes_ import make_server_name
 from .auth import authenticated
+from .classes.crc import CRCValidator, DummyCRCValidator
 from .classes.server import UserServer
 from .classes.server_manifest import UserServerManifest
 from .classes.storage import AutosaveBranch
-from ..errors.user import ImageParseError, MissingResourceError, UserInputError
 from .schemas.autosave import AutosavesList
 from .schemas.config_server_options import ServerOptionsEndpointResponse
 from .schemas.logs import ServerLogs
+from .schemas.server_options import ServerOptions
 from .schemas.servers_get import NotebookResponse, ServersGetRequest, ServersGetResponse
 from .schemas.servers_post import LaunchNotebookRequest
 from .schemas.version import VersionResponse
-from ..util.kubernetes_ import make_server_name
 
 bp = Blueprint("notebooks_blueprint", __name__, url_prefix=config.service_prefix)
 
@@ -168,9 +165,13 @@ def launch_notebook(
     commit_sha,
     notebook,
     image,
-    server_options,
+    resource_class_id,
+    storage,
     environment_variables,
+    default_url,
+    lfs_auto_fetch,
     cloudstorage=None,
+    server_options=None,
 ):
     """
     Launch a Jupyter server.
@@ -201,12 +202,65 @@ def launch_notebook(
       tags:
         - servers
     """
+    crc_validator = CRCValidator(config.crc_url)
+    if config.dummy_stores:
+        crc_validator = DummyCRCValidator()
     server_name = make_server_name(
         user.safe_username, namespace, project, branch, commit_sha
     )
     server = config.k8s.client.get_server(server_name, user.safe_username)
     if server:
         return NotebookResponse().dump(UserServerManifest(server)), 200
+
+    parsed_server_options = None
+    if resource_class_id is not None:
+        # A resource class ID was passed in, validate with CRC servuce
+        parsed_server_options = crc_validator.validate_class_storage(
+            user, resource_class_id, storage
+        )
+    elif server_options is not None:
+        # The old style API was used, try to find a matching class from the CRC service
+        requested_server_options = ServerOptions(
+            memory=server_options["mem_request"],
+            storage=server_options["disk_request"],
+            cpu=server_options["cpu_request"],
+            gpu=server_options["gpu_request"],
+            lfs_auto_fetch=server_options["lfs_auto_fetch"],
+            default_url=server_options["defaultUrl"],
+        )
+        parsed_server_options = crc_validator.find_acceptable_class(
+            user, requested_server_options
+        )
+        if parsed_server_options is None:
+            raise UserInputError(
+                message="Cannot find suitable server options based on your request and "
+                "the available resource classes.",
+                detail="You are receiving this error because you are using the old API for "
+                "selecting resources. Updating to the new API which includes specifying only "
+                "a specific resource class ID and storage is preferred and more convenient.",
+            )
+    else:
+        # No resource class ID specified or old-style server options, use defaults from CRC
+        default_resource_class = crc_validator.get_default_class()
+        max_storage_gb = default_resource_class.get("max_storage", 0)
+        if storage is not None and storage > max_storage_gb:
+            raise UserInputError(
+                "The requested storage amount is higher than the "
+                f"allowable maximum for the default resource class of {max_storage_gb}GB."
+            )
+        if storage is None:
+            storage = default_resource_class.get("default_storage")
+        parsed_server_options = ServerOptions.from_resource_class(
+            default_resource_class
+        )
+        # Storage in request is in GB
+        parsed_server_options.set_storage(storage, gigabytes=True)
+
+    if default_url is not None:
+        parsed_server_options.default_url = default_url
+
+    if lfs_auto_fetch is not None:
+        parsed_server_options.lfs_auto_fetch = lfs_auto_fetch
 
     server = UserServer(
         user,
@@ -216,7 +270,7 @@ def launch_notebook(
         commit_sha,
         notebook,
         image,
-        server_options,
+        parsed_server_options,
         environment_variables,
         cloudstorage or [],
         config.k8s.client,

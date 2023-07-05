@@ -64,10 +64,7 @@ class UserServerManifest:
                     for env in patch.get("value", {}).get("env", []):
                         if env.get("name") == "GIT_CLONE_LFS_AUTO_FETCH":
                             server_options["lfs_auto_fetch"] = env.get("value") == "1"
-        return {
-            **config.server_options.defaults,
-            **server_options,
-        }
+        return server_options
 
     @property
     def annotations(self) -> Dict[str, str]:

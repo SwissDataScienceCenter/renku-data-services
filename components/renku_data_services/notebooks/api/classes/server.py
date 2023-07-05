@@ -21,6 +21,7 @@ from ...errors.programming import ConfigurationError, DuplicateEnvironmentVariab
 from ...errors.user import MissingResourceError
 from .k8s_client import K8sClient
 from .cloud_storage import ICloudStorageRequest
+from ..schemas.server_options import ServerOptions
 from .user import RegisteredUser, User
 from ...util.check_image import (
     get_docker_token,
@@ -43,7 +44,7 @@ class UserServer:
         commit_sha: str,
         notebook: Optional[str],  # TODO: Is this value actually needed?
         image: Optional[str],
-        server_options: Dict[str, Any],
+        server_options: ServerOptions,
         environment_variables: Dict[str, str],
         cloudstorage: List[ICloudStorageRequest],
         k8s_client: K8sClient,
@@ -221,40 +222,22 @@ class UserServer:
         return output
 
     def _get_session_k8s_resources(self):
-        cpu_request = float(self.server_options["cpu_request"])
-        mem = self.server_options["mem_request"]
-        gpu_req = self.server_options.get("gpu_request", {})
-        gpu = {"nvidia.com/gpu": str(gpu_req)} if gpu_req else None
+        cpu_request = float(self.server_options.cpu)
+        mem = self.server_options.memory
+        gpu_req = self.server_options.gpu
+        gpu = {"nvidia.com/gpu": str(gpu_req)} if gpu_req > 0 else None
         resources = {
             "requests": {"memory": mem, "cpu": cpu_request},
             "limits": {"memory": mem},
         }
         if config.sessions.enforce_cpu_limits == "lax":
-            if "cpu_request" in config.server_options.ui_choices:
-                resources["limits"]["cpu"] = max(
-                    config.server_options.ui_choices["cpu_request"]["options"]
-                )
-            else:
-                resources["limits"]["cpu"] = cpu_request
+            lax_cpu_limit_allowance_factor = 3
+            resources["limits"]["cpu"] = lax_cpu_limit_allowance_factor * cpu_request
         elif config.sessions.enforce_cpu_limits == "strict":
             resources["limits"]["cpu"] = cpu_request
         if gpu:
             resources["requests"] = {**resources["requests"], **gpu}
             resources["limits"] = {**resources["limits"], **gpu}
-        if "ephemeral-storage" in self.server_options.keys():
-            ephemeral_storage = (
-                self.server_options["ephemeral-storage"]
-                if config.sessions.storage.pvs_enabled
-                else self.server_options["disk_request"]
-            )
-            resources["requests"] = {
-                **resources["requests"],
-                "ephemeral-storage": ephemeral_storage,
-            }
-            resources["limits"] = {
-                **resources["limits"],
-                "ephemeral-storage": ephemeral_storage,
-            }
         return resources
 
     def _get_session_manifest(self):
@@ -266,6 +249,7 @@ class UserServer:
                 general_patches.session_affinity(),
                 general_patches.session_node_selector(),
                 general_patches.termination_grace_period(),
+                general_patches.priority_class(self),
                 jupyter_server_patches.args(),
                 jupyter_server_patches.env(self),
                 jupyter_server_patches.image_pull_secret(self),
@@ -290,7 +274,7 @@ class UserServer:
         # Storage
         if config.sessions.storage.pvs_enabled:
             storage = {
-                "size": self.server_options["disk_request"],
+                "size": self.server_options.storage,
                 "pvc": {
                     "enabled": True,
                     "storageClassName": config.sessions.storage.pvs_storage_class,
@@ -299,7 +283,7 @@ class UserServer:
             }
         else:
             storage = {
-                "size": self.server_options["disk_request"]
+                "size": self.server_options.storage
                 if config.sessions.storage.use_empty_dir_size_limit
                 else "",
                 "pvc": {
@@ -348,7 +332,7 @@ class UserServer:
                     ),
                 },
                 "jupyterServer": {
-                    "defaultUrl": self.server_options["defaultUrl"],
+                    "defaultUrl": self.server_options.default_url,
                     "image": self.verified_image,
                     "rootDir": self.image_workdir.rstrip("/")
                     + f"/work/{self.gl_project.path}/",

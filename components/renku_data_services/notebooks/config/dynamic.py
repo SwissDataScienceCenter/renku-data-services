@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Callable, Optional, Union, List, Dict, Any, Text
+from typing import Callable, Dict, Optional, Union, List, Any, Text
 import yaml
 
 from ..api.schemas.config_server_options import (
@@ -67,7 +67,7 @@ class _GitProxyConfig:
     port: Union[Text, int] = 8080
     health_port: Union[Text, int] = 8081
     image: Text = "renku/git-https-proxy:latest"
-    sentry: _SentryConfig = _SentryConfig(enabled=False)
+    sentry: _SentryConfig = field(default_factory=lambda: _SentryConfig(enabled=False))
     renku_client_id: Text = "renku"
 
     def __post_init__(self):
@@ -80,7 +80,7 @@ class _GitRpcServerConfig:
     host: Text = "0.0.0.0"
     port: Union[Text, int] = 4000
     image: Text = "renku/git-rpc-server:latest"
-    sentry: _SentryConfig = _SentryConfig(enabled=False)
+    sentry: _SentryConfig = field(default_factory=lambda: _SentryConfig(enabled=False))
 
     def __post_init__(self):
         self.port = _parse_value_as_numeric(self.port, int)
@@ -89,7 +89,7 @@ class _GitRpcServerConfig:
 @dataclass
 class _GitCloneConfig:
     image: Text = "renku/git-clone:latest"
-    sentry: _SentryConfig = _SentryConfig(enabled=False)
+    sentry: _SentryConfig = field(default_factory=lambda: _SentryConfig(enabled=False))
 
 
 @dataclass

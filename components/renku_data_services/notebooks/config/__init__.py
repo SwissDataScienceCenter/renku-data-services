@@ -32,12 +32,15 @@ class _NotebooksConfig:
     service_prefix: str = "/notebooks"
     version: str = "0.0.0"
     keycloak_realm: str = "Renku"
+    crc_url: str = "http://renku-crc"
+    dummy_stores: Union[Text, bool] = False
 
     def __post_init__(self):
         self.anonymous_sessions_enabled = _parse_str_as_bool(
             self.anonymous_sessions_enabled
         )
         self.ssh_enabled = _parse_str_as_bool(self.ssh_enabled)
+        self.dummy_stores = _parse_str_as_bool(self.dummy_stores)
         self.session_get_endpoint_annotations = _ServersGetEndpointAnnotations()
         if not self.k8s.enabled:
             return
@@ -203,6 +206,7 @@ ssh_enabled = false
 service_prefix = /notebooks
 version = 0.0.0
 keycloak_realm = Renku
+crc_url = http://renku-crc
 """
 
 config = get_config(default_config)

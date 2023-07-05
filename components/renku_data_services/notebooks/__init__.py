@@ -131,7 +131,7 @@ def register_swagger(app):
             "without getting authorized at all."
         },
         security=[{"oauth2-swagger": ["openid"]}],
-        servers=[{"url": "/api"}],
+        servers=[{"url": "/api"}, {"url": "/ui-server/api"}],
     )
     # Register schemas
     spec.components.schema("LaunchNotebookRequest", schema=LaunchNotebookRequest)

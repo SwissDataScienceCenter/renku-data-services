@@ -105,7 +105,7 @@ class ByteSizeField(fields.Field):
             num = float(num)
         except ValueError as error:
             raise ValidationError(f"Cannot convert {num} to float.") from error
-        return num * bytes_conversion_factor
+        return round(num * bytes_conversion_factor)
 
 
 class GpuField(fields.Field):
