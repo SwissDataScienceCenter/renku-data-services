@@ -6,12 +6,14 @@ authors = ["Swiss Data Science Center <contact@datascience.ch>"]
 readme = "README.md"
 license = "Apache License 2.0"
 packages = [
-    {include = "renku_crc", from = "src"},
-    {include = "models", from = "src"},
-    {include = "db", from = "src"},
-    {include = "schemas", from = "src"},
-    {include = "users", from = "src"},
-    {include = "k8s", from = "src"},
+    {include = "renku_data_services/crc_api",from = "bases"},
+    {include = "renku_data_services/storage_api",from = "bases"},
+    {include = "renku_data_services/users",from = "components"},
+    {include = "renku_data_services/models",from = "components"},
+    {include = "renku_data_services/crc_schemas",from = "components"},
+    {include = "renku_data_services/k8s",from = "components"},
+    {include = "renku_data_services/db",from = "components"},
+    {include = "renku_data_services/storage_schemas",from = "components"},
 ]
 
 [tool.poetry.dependencies]
@@ -57,7 +59,7 @@ include = '\.pyi?$'
 [tool.pydocstyle]
 add_ignore = ["D105", "D107", "D202", "D401"]
 match = '^(?!test_|apispec).*\.py'
-match_dir = '^(?!^tests$|^migrations$|\..*).*'
+match_dir = '^(?!^test$|^migrations$|\..*).*'
 
 [tool.bandit]
 skips = ["B101", "B603", "B607", "B404"]
@@ -68,7 +70,7 @@ include_trailing_comma = true
 force_grid_wrap = 0
 use_parentheses = true
 line_length = 120
-src_paths = ["src", "tests"]
+src_paths = ["bases", "components", "test"]
 skip_glob = ["migrations/*"]
 
 [tool.flake8]
@@ -76,14 +78,14 @@ max-line-length = 120
 show-source = true
 ignore = ["E121", "E126", "E203", "E226", "E231", "W503", "W504", "E121", "E126", "E203", "E226", "E231", "W503", "W504", "E121", "E126", "E203", "E226", "E231", "W503", "W504"]
 exclude = [
-    "migrations/versions",
-    "src/schemas/apispec.py"
+    "components/renku_data_services/db/migrations/versions",
+    "components/crc_schemas/apispec.py"
 ]
 
 [tool.pytest.ini_options]
-addopts = "--black --cov src/ --cov-report=term-missing -v"
+addopts = "--black --cov components/ --cov bases/ --cov-report=term-missing -v"
 doctest_optionflags = "ALLOW_UNICODE"
-testpaths = ["src", "tests"]
+testpaths = ["bases", "components", "test"]
 markers = [
     "integration: mark a test as a integration.",
 ]
@@ -94,7 +96,11 @@ filterwarnings = [
 
 [tool.mypy]
 python_version = "3.11"
-files = "src/**/*.py"
+mypy_path = ["components", "bases"]
+files = ["bases/**/*.py", "components/**/*.py"]
+namespace_packages = true
+explicit_package_bases = true
+
 pretty = true
 show_column_numbers = true
 show_error_codes = true
@@ -104,8 +110,8 @@ check_untyped_defs = true
 
 [[tool.mypy.overrides]]
 module = [
-    "schemas.apispec",
-    "renku_crc.error_handler",
+    "renku_data_services.crc_schemas.apispec",
+    "renku_data_services.crc_api.error_handler",
 ]
 ignore_errors = true
 
@@ -118,5 +124,5 @@ module = [
 ignore_missing_imports = true
 
 [tool.coverage.run]
-source = [ "src/" ]
-omit = [ "src/db/migrations/*" ]
+source = [ "bases/", "components/" ]
+omit = [ "components/renku_data_services/db/migrations/*" ]

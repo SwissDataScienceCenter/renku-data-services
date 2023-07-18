@@ -1,0 +1,35 @@
+[tool.poetry]
+name = "renku_crc"
+version = "0.1.0"
+description = ""
+authors = ['Swiss Data Science Center <contact@datascience.ch>']
+license = "Apache License 2.0"
+
+packages = [
+    { include = "renku_data_services/crc_api", from = "../../bases"},
+    { include = "renku_data_services/db", from = "../../components"},
+    { include = "renku_data_services/crc_schemas", from = "../../components"},
+    { include = "renku_data_services/k8s", from = "../../components"},
+    { include = "renku_data_services/models", from = "../../components"},
+    { include = "renku_data_services/users", from = "../../components"},
+]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+sanic = {extras = ["ext"], version = "^23.3.0"}
+pydantic = "^1.10.7"
+datamodel-code-generator = "^0.17.2"
+sqlalchemy = {extras = ["asyncio"], version = "^2.0.9"}
+alembic = "^1.10.3"
+asyncpg = "^0.27.0"
+pyjwt = {extras = ["crypto"], version = "^2.6.0"}
+tenacity = "^8.2.2"
+httpx = "<0.24"
+psycopg2-binary = "^2.9.6"
+kubernetes = "^26.1.0"
+
+[tool.poetry.group.dev.dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

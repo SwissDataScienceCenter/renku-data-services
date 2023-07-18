@@ -21,8 +21,12 @@ jobs:
         with:
           python-version: "3.11"
           cache: "poetry"
+      - name: Install polylith
+        run: |
+          poetry self add poetry-multiproject-plugin
+          poetry self add poetry-polylith-plugin
       - name: Install dependencies
-        run: poetry install
+        run: poetry install --with dev
       - name: Pre-commit and style checks
         run: make pre_commit_checks
       - name: Test with pytest
@@ -71,6 +75,7 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: .
+          file: ./projects/renku_crc/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
