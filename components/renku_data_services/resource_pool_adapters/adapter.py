@@ -6,13 +6,11 @@ grows it is worth looking into separating this functionality into separate class
 it all in one place.
 """
 from functools import wraps
-from pathlib import Path
 from typing import Dict, List, Optional, Tuple, cast
 
 import renku_data_services.models.crc as models
-from alembic import command, config
-from renku_data_services.db import schemas
-from renku_data_services.models import errors
+from renku_data_services.resource_pool_adapters import schemas
+from renku_data_services import errors
 from sqlalchemy import create_engine, delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import Session, selectinload, sessionmaker
@@ -27,17 +25,6 @@ class _Base:
         self.session_maker = sessionmaker(
             self.engine, class_=AsyncSession, expire_on_commit=False
         )  # type: ignore[call-overload]
-
-    def do_migrations(self):
-        """Migrate the database to the required revision.
-
-        From: https://alembic.sqlalchemy.org/en/latest/cookbook.html#programmatic-api-use-connection-sharing-with-asyncio  # noqa: E501
-        """
-        with self.sync_engine.begin() as conn:
-            alembic_ini_path = Path(__file__).resolve().parent / "alembic.ini"
-            cfg = config.Config(alembic_ini_path)
-            cfg.attributes["connection"] = conn
-            command.upgrade(cfg, "head")
 
 
 def _resource_pool_access_control(

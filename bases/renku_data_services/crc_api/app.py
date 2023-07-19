@@ -5,9 +5,9 @@ from typing import Any, Dict, List
 
 import renku_data_services.models.crc as models
 from renku_data_services.crc_schemas import apispec, query_parameters
-from renku_data_services.db.adapter import ResourcePoolRepository, UserRepository
+from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
 from renku_data_services.k8s.quota import QuotaRepository
-from renku_data_services.models import errors
+from renku_data_services import errors
 from sanic import HTTPResponse, Request, Sanic, json
 from sanic_ext import validate
 

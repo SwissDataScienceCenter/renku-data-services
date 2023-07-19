@@ -2,7 +2,7 @@ import asyncio
 from dataclasses import asdict
 
 import renku_data_services.models.crc as models
-from renku_data_services.db.adapter import ResourcePoolRepository
+from renku_data_services.resource_pool_adapters import ResourcePoolRepository
 
 
 def remove_id_from_quota(quota: models.Quota) -> models.Quota:

@@ -1,7 +1,7 @@
 """Authentication decorators for Sanic."""
 from functools import wraps
 
-from renku_data_services.models import errors
+from renku_data_services import errors
 from renku_data_services.models.crc import APIUser, Authenticator
 from sanic import Request
 

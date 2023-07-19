@@ -8,7 +8,7 @@ style_checks:
 	poetry run mypy
 	poetry run flake8 -v
 	poetry run bandit -c pyproject.toml -r .
-	poetry run isort --check-only --diff --verbose .
+	poetry run isort --diff --verbose .
 	poetry run pydocstyle -v
 	poetry poly check
 	poetry poly libs

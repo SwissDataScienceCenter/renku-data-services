@@ -3,7 +3,7 @@ from typing import Any, Awaitable, Callable, Dict
 
 import pytest
 from renku_data_services.crc_schemas import apispec
-from renku_data_services.models import errors
+from renku_data_services import errors
 from sanic import Request, Sanic, SanicException
 from sanic.models.handler_types import RouteHandler
 from sanic_ext.exceptions import ValidationError as SanicValidationError

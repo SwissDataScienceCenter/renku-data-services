@@ -6,7 +6,7 @@ import renku_data_services.models.crc as models
 from kubernetes import client
 from pydantic import ByteSize
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface, K8sSchedudlingClientInterface
-from renku_data_services.models import errors
+from renku_data_services import errors
 
 
 @dataclass

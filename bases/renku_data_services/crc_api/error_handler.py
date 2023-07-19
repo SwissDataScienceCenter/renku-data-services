@@ -5,7 +5,7 @@ from asyncpg import exceptions as postgres_exceptions
 from pydantic import ValidationError as PydanticValidationError
 from pydantic.error_wrappers import ValidationError as PydanticWrappersValidationError
 from renku_data_services.crc_schemas import apispec
-from renku_data_services.models import errors
+from renku_data_services import errors
 from sanic import HTTPResponse, Request, SanicException, json
 from sanic.handlers import ErrorHandler
 from sanic.log import logger

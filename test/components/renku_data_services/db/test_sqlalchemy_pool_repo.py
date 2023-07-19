@@ -15,8 +15,8 @@ import pytest
 import renku_data_services.models.crc as models
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
-from renku_data_services.db.adapter import ResourcePoolRepository, UserRepository
-from renku_data_services.models import errors
+from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
+from renku_data_services import errors
 
 
 @given(rp=rp_strat())

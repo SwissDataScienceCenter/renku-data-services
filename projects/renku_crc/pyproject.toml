@@ -7,11 +7,13 @@ license = "Apache License 2.0"
 
 packages = [
     { include = "renku_data_services/crc_api", from = "../../bases"},
-    { include = "renku_data_services/db", from = "../../components"},
+    { include = "renku_data_services/migrations", from = "../../components"},
     { include = "renku_data_services/crc_schemas", from = "../../components"},
     { include = "renku_data_services/k8s", from = "../../components"},
+    { include = "renku_data_services/resource_pool_adapters", from = "../../components"},
     { include = "renku_data_services/models", from = "../../components"},
     { include = "renku_data_services/users", from = "../../components"},
+    { include = "renku_data_services/errors", from = "../../components"},
 ]
 
 [tool.poetry.dependencies]

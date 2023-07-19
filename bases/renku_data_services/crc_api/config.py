@@ -7,10 +7,10 @@ from typing import Any, Dict, Optional
 import httpx
 import renku_data_services.models.crc as models
 from jwt import PyJWKClient
-from renku_data_services.db.adapter import ResourcePoolRepository, UserRepository
+from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
-from renku_data_services.models import errors
+from renku_data_services import errors
 from renku_data_services.users.credentials import KeycloakAuthenticator
 from renku_data_services.users.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.users.keycloak import KcUserStore

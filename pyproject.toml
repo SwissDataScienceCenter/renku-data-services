@@ -12,8 +12,10 @@ packages = [
     {include = "renku_data_services/models",from = "components"},
     {include = "renku_data_services/crc_schemas",from = "components"},
     {include = "renku_data_services/k8s",from = "components"},
-    {include = "renku_data_services/db",from = "components"},
+    {include = "renku_data_services/migrations",from = "components"},
     {include = "renku_data_services/storage_schemas",from = "components"},
+    {include = "renku_data_services/errors",from = "components"},
+    {include = "renku_data_services/resource_pool_adapters",from = "components"},
 ]
 
 [tool.poetry.dependencies]
@@ -78,7 +80,7 @@ max-line-length = 120
 show-source = true
 ignore = ["E121", "E126", "E203", "E226", "E231", "W503", "W504", "E121", "E126", "E203", "E226", "E231", "W503", "W504", "E121", "E126", "E203", "E226", "E231", "W503", "W504"]
 exclude = [
-    "components/renku_data_services/db/migrations/versions",
+    "components/renku_data_services/migrations/resource_pools/migrations/versions",
     "components/crc_schemas/apispec.py"
 ]
 
@@ -125,4 +127,4 @@ ignore_missing_imports = true
 
 [tool.coverage.run]
 source = [ "bases/", "components/" ]
-omit = [ "components/renku_data_services/db/migrations/*" ]
+omit = [ "components/renku_data_services/migrations/resource_pools/*" ]

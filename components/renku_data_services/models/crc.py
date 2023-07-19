@@ -4,7 +4,7 @@ from enum import StrEnum
 from typing import Callable, List, Optional, Protocol
 from uuid import uuid4
 
-from renku_data_services.models.errors import ValidationError
+from renku_data_services.errors import ValidationError
 
 
 class ResourcesProtocol(Protocol):

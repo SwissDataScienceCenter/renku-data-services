@@ -5,7 +5,7 @@ from typing import Any, Dict, List
 import jwt
 import renku_data_services.models.crc as models
 from jwt import PyJWKClient
-from renku_data_services.models import errors
+from renku_data_services import errors
 
 
 @dataclass
