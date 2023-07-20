@@ -1,7 +1,7 @@
 import asyncio
 from dataclasses import asdict
 
-import renku_data_services.models.crc as models
+import renku_data_services.resource_pool_models as models
 from renku_data_services.resource_pool_adapters import ResourcePoolRepository
 
 

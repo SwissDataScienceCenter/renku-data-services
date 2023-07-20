@@ -5,7 +5,7 @@ import operator
 from pathlib import Path, PurePosixPath
 
 import pytest
-import renku_data_services.models.crc as models
+import renku_data_services.resource_pool_models as models
 from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
 from renku_data_services.migrations.core import run_migrations_for_app
 

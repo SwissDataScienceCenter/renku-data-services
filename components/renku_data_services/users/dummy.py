@@ -3,7 +3,7 @@ from asyncio import Lock
 from dataclasses import dataclass
 from typing import Dict, Optional
 
-import renku_data_services.models.crc as models
+import renku_data_services.resource_pool_models as models
 
 
 @dataclass

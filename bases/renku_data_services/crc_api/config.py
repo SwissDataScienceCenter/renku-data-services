@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import httpx
-import renku_data_services.models.crc as models
+import renku_data_services.resource_pool_models as models
 from jwt import PyJWKClient
 from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient

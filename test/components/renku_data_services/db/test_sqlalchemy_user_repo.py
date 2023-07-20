@@ -3,7 +3,7 @@ from test.components.renku_data_services.models.hypothesis import rp_list_strat,
 from test.utils import create_rp
 from typing import List
 
-import renku_data_services.models.crc as models
+import renku_data_services.resource_pool_models as models
 from hypothesis import HealthCheck, given, settings
 from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
 

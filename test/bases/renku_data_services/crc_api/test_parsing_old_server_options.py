@@ -1,6 +1,6 @@
 from io import StringIO
 
-import renku_data_services.models.crc as models
+import renku_data_services.resource_pool_models as models
 from yaml import safe_load
 
 from renku_data_services.crc_api.server_options import (

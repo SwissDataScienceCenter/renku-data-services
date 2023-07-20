@@ -3,7 +3,7 @@ import asyncio
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, List
 
-import renku_data_services.models.crc as models
+import renku_data_services.resource_pool_models as models
 from renku_data_services.crc_schemas import apispec, query_parameters
 from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
 from renku_data_services.k8s.quota import QuotaRepository

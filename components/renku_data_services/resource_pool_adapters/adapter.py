@@ -8,7 +8,7 @@ it all in one place.
 from functools import wraps
 from typing import Dict, List, Optional, Tuple, cast
 
-import renku_data_services.models.crc as models
+import renku_data_services.resource_pool_models as models
 from renku_data_services.resource_pool_adapters import schemas
 from renku_data_services import errors
 from sqlalchemy import create_engine, delete, or_, select, update

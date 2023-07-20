@@ -1,6 +1,6 @@
 from typing import Dict
 
-import renku_data_services.models.crc as models
+import renku_data_services.resource_pool_models as models
 from hypothesis import strategies as st
 
 

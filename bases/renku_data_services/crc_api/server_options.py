@@ -6,7 +6,7 @@ is added.
 """
 from typing import Any, List
 
-import renku_data_services.models.crc as models
+import renku_data_services.resource_pool_models as models
 from pydantic import BaseModel, ByteSize, Extra, Field, validator
 
 

@@ -1,7 +1,7 @@
 from dataclasses import asdict
 from test.components.renku_data_services.models.hypothesis import quota_strat
 
-import renku_data_services.models.crc as models
+import renku_data_services.resource_pool_models as models
 from hypothesis import given
 from kubernetes import client
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient

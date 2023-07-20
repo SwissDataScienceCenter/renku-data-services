@@ -2,7 +2,7 @@
 from functools import wraps
 
 from renku_data_services import errors
-from renku_data_services.models.crc import APIUser, Authenticator
+from renku_data_services.resource_pool_models import APIUser, Authenticator
 from sanic import Request
 
 

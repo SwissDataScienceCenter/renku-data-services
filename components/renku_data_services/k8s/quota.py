@@ -2,7 +2,7 @@
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-import renku_data_services.models.crc as models
+import renku_data_services.resource_pool_models as models
 from kubernetes import client
 from pydantic import ByteSize
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface, K8sSchedudlingClientInterface
