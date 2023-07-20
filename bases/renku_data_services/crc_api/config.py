@@ -23,6 +23,8 @@ from renku_data_services.crc_api.server_options import (
     generate_default_resource_pool,
 )
 
+import renku_data_services.crc_schemas
+
 
 @retry(stop=(stop_after_attempt(20) | stop_after_delay(300)), wait=wait_fixed(2), reraise=True)
 def _oidc_discovery(url: str, realm: str) -> Dict[str, Any]:
@@ -77,7 +79,7 @@ class Config:
     server_defaults_file: Optional[str] = None
 
     def __post_init__(self):
-        spec_file = Path(__file__).resolve().parent / "api.spec.yaml"
+        spec_file = Path(renku_data_services.crc_schemas.__file__).resolve().parent / "api.spec.yaml"
         with open(spec_file, "r") as f:
             self.spec = safe_load(f)
         if self.default_resource_pool_file is not None:
