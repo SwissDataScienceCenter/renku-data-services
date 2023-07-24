@@ -1,5 +1,5 @@
 """Domain models for the application."""
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from enum import StrEnum
 from typing import Callable, List, Optional, Protocol
 from uuid import uuid4
@@ -133,14 +133,6 @@ class UserStore(Protocol):
         ...
 
 
-class Authenticator(Protocol):
-    """Interface for authenticating users."""
-
-    async def authenticate(self, access_token: str) -> "APIUser":
-        """Validates the user credentials (i.e. we can say that the user is a valid Renku user)."""
-        ...
-
-
 @dataclass(frozen=True, eq=True, kw_only=True)
 class User:
     """User model."""
@@ -218,17 +210,3 @@ class ResourcePool:
             default=data["default"] if "default" in data else False,
             public=data["public"] if "public" in data else False,
         )
-
-
-@dataclass
-class APIUser:
-    """The model for a user of the API, used for authentication."""
-
-    is_admin: bool = False
-    id: Optional[str] = None
-    access_token: Optional[str] = field(repr=False, default=None)
-
-    @property
-    def is_authenticated(self):
-        """Indicates whether the user has sucessfully logged in."""
-        return self.id is not None

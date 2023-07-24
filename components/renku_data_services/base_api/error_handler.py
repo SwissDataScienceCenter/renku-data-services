@@ -4,7 +4,7 @@ from sqlite3 import Error as SqliteError
 from asyncpg import exceptions as postgres_exceptions
 from pydantic import ValidationError as PydanticValidationError
 from pydantic.error_wrappers import ValidationError as PydanticWrappersValidationError
-from renku_data_services.crc_schemas import apispec
+from renku_data_services.crc_schemas import apispec  # TODO: This should be injected from teh respective schema to keep this generic
 from renku_data_services import errors
 from sanic import HTTPResponse, Request, SanicException, json
 from sanic.handlers import ErrorHandler

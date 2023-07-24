@@ -3,6 +3,7 @@ import asyncio
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, List
 
+import renku_data_services.base_models as base_models
 import renku_data_services.resource_pool_models as models
 from renku_data_services.crc_schemas import apispec, query_parameters
 from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
@@ -12,9 +13,9 @@ from sanic import HTTPResponse, Request, Sanic, json
 from sanic_ext import validate
 
 from renku_data_services.crc_api.auth import authenticate, only_admins
-from renku_data_services.crc_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_api.blueprint import CustomBlueprint, BlueprintFactoryResponse
 from renku_data_services.crc_api.config import Config
-from renku_data_services.crc_api.error_handler import CustomErrorHandler
+from renku_data_services.base_api.error_handler import CustomErrorHandler
 
 
 @dataclass(kw_only=True)
@@ -23,14 +24,14 @@ class ResourcePoolsBP(CustomBlueprint):
 
     rp_repo: ResourcePoolRepository
     user_repo: UserRepository
-    authenticator: models.Authenticator
+    authenticator: base_models.Authenticator
     quota_repo: QuotaRepository
 
     def get_all(self) -> BlueprintFactoryResponse:
         """List all resource pools."""
 
         @authenticate(self.authenticator)
-        async def _get_all(request: Request, user: models.APIUser):
+        async def _get_all(request: Request, user: base_models.APIUser):
             res_filter = query_parameters.ResourceClassesFilter.parse_obj(dict(request.query_args))
             pool = asyncio.get_running_loop()
             rps: List[models.ResourcePool]
@@ -59,7 +60,7 @@ class ResourcePoolsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         @validate(json=apispec.ResourcePool)
-        async def _post(_: Request, body: apispec.ResourcePool, user: models.APIUser):
+        async def _post(_: Request, body: apispec.ResourcePool, user: base_models.APIUser):
             rp = models.ResourcePool.from_dict(body.dict())
             if not isinstance(rp.quota, models.Quota):
                 raise errors.ValidationError(message="The quota in the resource pool is malformed.")
@@ -76,7 +77,7 @@ class ResourcePoolsBP(CustomBlueprint):
         """Get a specific resource pool."""
 
         @authenticate(self.authenticator)
-        async def _get_one(request: Request, resource_pool_id: int, user: models.APIUser):
+        async def _get_one(request: Request, resource_pool_id: int, user: base_models.APIUser):
             pool = asyncio.get_running_loop()
             rps: List[models.ResourcePool]
             quotas: List[models.Quota]
@@ -102,7 +103,7 @@ class ResourcePoolsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        async def _delete(_: Request, resource_pool_id: int, user: models.APIUser):
+        async def _delete(_: Request, resource_pool_id: int, user: base_models.APIUser):
             rp = await self.rp_repo.delete_resource_pool(api_user=user, id=resource_pool_id)
             if rp is not None and isinstance(rp.quota, str):
                 self.quota_repo.delete_quota(rp.quota)
@@ -116,7 +117,7 @@ class ResourcePoolsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         @validate(json=apispec.ResourcePoolPut)
-        async def _put(_: Request, resource_pool_id: int, body: apispec.ResourcePoolPut, user: models.APIUser):
+        async def _put(_: Request, resource_pool_id: int, body: apispec.ResourcePoolPut, user: base_models.APIUser):
             return await self._put_patch_resource_pool(api_user=user, resource_pool_id=resource_pool_id, body=body)
 
         return "/resource_pools/<resource_pool_id>", ["PUT"], _put
@@ -127,7 +128,7 @@ class ResourcePoolsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         @validate(json=apispec.ResourcePoolPatch)
-        async def _patch(_: Request, resource_pool_id: int, body: apispec.ResourcePoolPatch, user: models.APIUser):
+        async def _patch(_: Request, resource_pool_id: int, body: apispec.ResourcePoolPatch, user: base_models.APIUser):
             return await self._put_patch_resource_pool(api_user=user, resource_pool_id=resource_pool_id, body=body)
 
         return "/resource_pools/<resource_pool_id>", ["PATCH"], _patch
@@ -165,14 +166,14 @@ class ResourcePoolUsersBP(CustomBlueprint):
     """Handlers for dealing with the users of individual resource pools."""
 
     repo: UserRepository
-    authenticator: models.Authenticator
+    authenticator: base_models.Authenticator
 
     def get_all(self) -> BlueprintFactoryResponse:
         """Get all users of a specific resource pool."""
 
         @authenticate(self.authenticator)
         @only_admins
-        async def _get_all(_: Request, resource_pool_id: int, user: models.APIUser):
+        async def _get_all(_: Request, resource_pool_id: int, user: base_models.APIUser):
             res = await self.repo.get_users(api_user=user, resource_pool_id=resource_pool_id)
             return json([apispec.UserWithId(id=r.keycloak_id).dict(exclude_none=True) for r in res])
 
@@ -183,7 +184,7 @@ class ResourcePoolUsersBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        async def _post(request: Request, resource_pool_id: int, user: models.APIUser):
+        async def _post(request: Request, resource_pool_id: int, user: base_models.APIUser):
             users = apispec.UsersWithId.parse_obj(request.json)  # validation
             return await self._put_post(api_user=user, resource_pool_id=resource_pool_id, body=users, post=True)
 
@@ -194,14 +195,14 @@ class ResourcePoolUsersBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        async def _put(request: Request, resource_pool_id: int, user: models.APIUser):
+        async def _put(request: Request, resource_pool_id: int, user: base_models.APIUser):
             users = apispec.UsersWithId.parse_obj(request.json)  # validation
             return await self._put_post(api_user=user, resource_pool_id=resource_pool_id, body=users, post=False)
 
         return "/resource_pools/<resource_pool_id>/users", ["PUT"], _put
 
     async def _put_post(
-        self, api_user: models.APIUser, resource_pool_id: int, body: apispec.UsersWithId, post: bool = True
+        self, api_user: base_models.APIUser, resource_pool_id: int, body: apispec.UsersWithId, post: bool = True
     ):
         users_to_add = [models.User(keycloak_id=user.id) for user in body.__root__]
         updated_users = await self.repo.update_resource_pool_users(
@@ -216,7 +217,7 @@ class ResourcePoolUsersBP(CustomBlueprint):
         """Get a specific user of a specific resource pool."""
 
         @authenticate(self.authenticator)
-        async def _get(_: Request, resource_pool_id: int, user_id: str, user: models.APIUser):
+        async def _get(_: Request, resource_pool_id: int, user_id: str, user: base_models.APIUser):
             res = await self.repo.get_users(keycloak_id=user_id, resource_pool_id=resource_pool_id, api_user=user)
             if len(res) < 1:
                 raise errors.MissingResourceError(
@@ -231,7 +232,7 @@ class ResourcePoolUsersBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        async def _delete(_: Request, resource_pool_id: int, user_id: str, user: models.APIUser):
+        async def _delete(_: Request, resource_pool_id: int, user_id: str, user: modbase_modelsels.APIUser):
             await self.repo.delete_resource_pool_user(
                 resource_pool_id=resource_pool_id, keycloak_id=user_id, api_user=user
             )
@@ -245,13 +246,13 @@ class ClassesBP(CustomBlueprint):
     """Handlers for dealing with resource classes of an individual resource pool."""
 
     repo: ResourcePoolRepository
-    authenticator: models.Authenticator
+    authenticator: base_models.Authenticator
 
     def get_all(self) -> BlueprintFactoryResponse:
         """Get the classes of a specific resource pool."""
 
         @authenticate(self.authenticator)
-        async def _get_all(request: Request, resource_pool_id: int, user: models.APIUser):
+        async def _get_all(request: Request, resource_pool_id: int, user: base_models.APIUser):
             res = await self.repo.get_classes(
                 api_user=user, resource_pool_id=resource_pool_id, name=request.args.get("name")
             )
@@ -265,7 +266,7 @@ class ClassesBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         @validate(json=apispec.ResourceClass)
-        async def _post(_: Request, body: apispec.ResourceClass, resource_pool_id: int, user: models.APIUser):
+        async def _post(_: Request, body: apispec.ResourceClass, resource_pool_id: int, user: base_models.APIUser):
             cls = models.ResourceClass.from_dict(body.dict())
             res = await self.repo.insert_resource_class(
                 api_user=user, resource_class=cls, resource_pool_id=resource_pool_id
@@ -278,7 +279,7 @@ class ClassesBP(CustomBlueprint):
         """Get a specific class of a specific resource pool."""
 
         @authenticate(self.authenticator)
-        async def _get(_: Request, resource_pool_id: int, class_id: int, user: models.APIUser):
+        async def _get(_: Request, resource_pool_id: int, class_id: int, user: base_models.APIUser):
             res = await self.repo.get_classes(api_user=user, resource_pool_id=resource_pool_id, id=class_id)
             if len(res) < 1:
                 raise errors.MissingResourceError(
@@ -292,7 +293,7 @@ class ClassesBP(CustomBlueprint):
         """Get a specific class."""
 
         @authenticate(self.authenticator)
-        async def _get_no_pool(_: Request, class_id: int, user: models.APIUser):
+        async def _get_no_pool(_: Request, class_id: int, user: base_models.APIUser):
             res = await self.repo.get_classes(api_user=user, id=class_id)
             if len(res) < 1:
                 raise errors.MissingResourceError(message=f"The class with id {class_id} cannot be found.")
@@ -305,7 +306,7 @@ class ClassesBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        async def _delete(_: Request, resource_pool_id: int, class_id: int, user: models.APIUser):
+        async def _delete(_: Request, resource_pool_id: int, class_id: int, user: base_models.APIUser):
             await self.repo.delete_resource_class(
                 api_user=user, resource_pool_id=resource_pool_id, resource_class_id=class_id
             )
@@ -320,7 +321,7 @@ class ClassesBP(CustomBlueprint):
         @only_admins
         @validate(json=apispec.ResourceClass)
         async def _put(
-            _: Request, body: apispec.ResourceClass, resource_pool_id: int, class_id: int, user: models.APIUser
+            _: Request, body: apispec.ResourceClass, resource_pool_id: int, class_id: int, user: base_models.APIUser
         ):
             return await self._put_patch(user, resource_pool_id, class_id, body)
 
@@ -333,7 +334,7 @@ class ClassesBP(CustomBlueprint):
         @only_admins
         @validate(json=apispec.ResourceClassPatch)
         async def _patch(
-            _: Request, body: apispec.ResourceClassPatch, resource_pool_id: int, class_id: int, user: models.APIUser
+            _: Request, body: apispec.ResourceClassPatch, resource_pool_id: int, class_id: int, user: base_models.APIUser
         ):
             return await self._put_patch(user, resource_pool_id, class_id, body)
 
@@ -341,7 +342,7 @@ class ClassesBP(CustomBlueprint):
 
     async def _put_patch(
         self,
-        api_user: models.APIUser,
+        api_user: base_models.APIUser,
         resource_pool_id: int,
         class_id: int,
         body: apispec.ResourceClassPatch | apispec.ResourceClass,
@@ -361,13 +362,13 @@ class QuotaBP(CustomBlueprint):
 
     rp_repo: ResourcePoolRepository
     quota_repo: QuotaRepository
-    authenticator: models.Authenticator
+    authenticator: base_models.Authenticator
 
     def get(self) -> BlueprintFactoryResponse:
         """Get the quota for a specific resource pool."""
 
         @authenticate(self.authenticator)
-        async def _get(_: Request, resource_pool_id: int, user: models.APIUser):
+        async def _get(_: Request, resource_pool_id: int, user: base_models.APIUser):
             rps = await self.rp_repo.get_resource_pools(api_user=user, id=resource_pool_id)
             if len(rps) < 1:
                 raise errors.MissingResourceError(
@@ -397,7 +398,7 @@ class QuotaBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         @validate(json=apispec.QuotaWithId)
-        async def _put(_: Request, resource_pool_id: int, body: apispec.QuotaWithId, user: models.APIUser):
+        async def _put(_: Request, resource_pool_id: int, body: apispec.QuotaWithId, user: base_models.APIUser):
             return await self._put_patch(resource_pool_id, body, api_user=user)
 
         return "/resource_pools/<resource_pool_id>/quota", ["PUT"], _put
@@ -408,13 +409,13 @@ class QuotaBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         @validate(json=apispec.QuotaPatch)
-        async def _patch(_: Request, resource_pool_id: int, body: apispec.QuotaPatch, user: models.APIUser):
+        async def _patch(_: Request, resource_pool_id: int, body: apispec.QuotaPatch, user: base_models.APIUser):
             return await self._put_patch(resource_pool_id, body, api_user=user)
 
         return "/resource_pools/<resource_pool_id>/quota", ["PATCH"], _patch
 
     async def _put_patch(
-        self, resource_pool_id: int, body: apispec.QuotaPatch | apispec.QuotaWithId, api_user: models.APIUser
+        self, resource_pool_id: int, body: apispec.QuotaPatch | apispec.QuotaWithId, api_user: base_models.APIUser
     ):
         rps = await self.rp_repo.get_resource_pools(api_user=api_user, id=resource_pool_id)
         if len(rps) < 1:
@@ -443,7 +444,7 @@ class UsersBP(CustomBlueprint):
 
     repo: UserRepository
     user_store: models.UserStore
-    authenticator: models.Authenticator
+    authenticator: base_models.Authenticator
 
     def post(self) -> BlueprintFactoryResponse:
         """Add a new user. The user has to exist in Keycloak."""
@@ -451,7 +452,7 @@ class UsersBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         @validate(json=apispec.UserWithId)
-        async def _post(request: Request, body: apispec.UserWithId, user: models.APIUser):
+        async def _post(request: Request, body: apispec.UserWithId, user: base_models.APIUser):
             users_db, user_kc = await asyncio.gather(
                 self.repo.get_users(keycloak_id=body.id, api_user=user),
                 self.user_store.get_user_by_id(body.id, user.access_token),  # type: ignore[arg-type]
@@ -484,7 +485,7 @@ class UsersBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        async def _get_all(_: Request, user: models.APIUser):
+        async def _get_all(_: Request, user: base_models.APIUser):
             res = await self.repo.get_users(api_user=user)
             return json([apispec.UserWithId(id=r.keycloak_id).dict(exclude_none=True) for r in res])
 
@@ -495,7 +496,7 @@ class UsersBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        async def _delete(_: Request, user_id: str, user: models.APIUser):
+        async def _delete(_: Request, user_id: str, user: base_models.APIUser):
             await self.repo.delete_user(id=user_id, api_user=user)
             return HTTPResponse(status=204)
 
@@ -507,14 +508,14 @@ class UserResourcePoolsBP(CustomBlueprint):
     """Handlers for dealing wiht the resource pools of a specific user."""
 
     repo: UserRepository
-    authenticator: models.Authenticator
+    authenticator: base_models.Authenticator
 
     def get(self) -> BlueprintFactoryResponse:
         """Get all resource pools that a specific user has access to."""
 
         @authenticate(self.authenticator)
         @only_admins
-        async def _get(_: Request, user_id: str, user: models.APIUser):
+        async def _get(_: Request, user_id: str, user: base_models.APIUser):
             rps = await self.repo.get_user_resource_pools(keycloak_id=user_id, api_user=user)
             return json([apispec.ResourcePoolWithId.from_orm(rp).dict(exclude_none=True) for rp in rps])
 
@@ -525,7 +526,7 @@ class UserResourcePoolsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        async def _post(request: Request, user_id: str, user: models.APIUser):
+        async def _post(request: Request, user_id: str, user: base_models.APIUser):
             ids = apispec.IntegerIds.parse_obj(request.json)  # validation
             return await self._post_put(user_id=user_id, post=True, resource_pool_ids=ids, api_user=user)
 
@@ -536,14 +537,14 @@ class UserResourcePoolsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        async def _put(request: Request, user_id: str, user: models.APIUser):
+        async def _put(request: Request, user_id: str, user: base_models.APIUser):
             ids = apispec.IntegerIds.parse_obj(request.json)  # validation
             return await self._post_put(user_id=user_id, post=False, resource_pool_ids=ids, api_user=user)
 
         return "/users/<user_id>/resource_pools", ["PUT"], _put
 
     async def _post_put(
-        self, user_id: str, resource_pool_ids: apispec.IntegerIds, api_user: models.APIUser, post: bool = True
+        self, user_id: str, resource_pool_ids: apispec.IntegerIds, api_user: base_models.APIUser, post: bool = True
     ):
         rps = await self.repo.update_user_resource_pools(
             keycloak_id=user_id, resource_pool_ids=resource_pool_ids.__root__, append=post, api_user=api_user

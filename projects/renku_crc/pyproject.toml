@@ -14,6 +14,8 @@ packages = [
     { include = "renku_data_services/resource_pool_models", from = "../../components"},
     { include = "renku_data_services/users", from = "../../components"},
     { include = "renku_data_services/errors", from = "../../components"},
+    {include = "renku_data_services/base_models",from = "../../components"},
+    {include = "renku_data_services/base_api",from = "../../components"},
 ]
 
 [tool.poetry.dependencies]
