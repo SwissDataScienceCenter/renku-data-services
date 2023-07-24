@@ -10,7 +10,95 @@ servers:
   - url: /api/storage
   - url: /ui-server/api/storage
 paths:
+  /storage/{storage_id}:
+    parameters:
+      - in: path
+        name: storage_id
+        required: true
+        schema:
+          type: string
+          format: ulid
+        description: the id of the storage
+    get:
+      summary: get cloud storage details
+      responses:
+        "200":
+          description: Found the cloud storage
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/CloudStorageWithId"
+        default:
+          $ref: '#/components/responses/Error'
+
+    put:
+      summary: update a cloud storage entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/CloudStorage"
+                - $ref: "#/components/schemas/CloudStorageUrl"
+      responses:
+        "201":
+          description: The cloud storage entry was created
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/CloudStorageWithId"
+        default:
+          $ref: '#/components/responses/Error'
+    patch:
+      summary: partially update a cloud storage entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/CloudStorage"
+      responses:
+        "201":
+          description: The cloud storage entry was created
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/CloudStorageWithId"
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      summary: remove a cloud storage definition
+      responses:
+        "204":
+          description: The rcloud storage was removed or did not exist in the first place
+        default:
+          $ref: '#/components/responses/Error'
   /storage:
+    get:
+      summary: get cloud storage for a project or by id
+      parameters:
+        - in: query
+          name: git_url
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: the storage configurations for the project
+          content:
+            "application/json":
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CloudStorageWithId"
+        "404":
+          description: Storage was not found
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     post:
       summary: create a new cloud storage for a project
       requestBody:
@@ -27,7 +115,21 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/CloudStorage"
+                $ref: "#/components/schemas/CloudStorageWithId"
+        default:
+          $ref: '#/components/responses/Error'
+
+
+  /storage_schema:
+    get:
+      summary: Returns the rclone schema definition, which can be used to create interactive settings editors
+      responses:
+        "200":
+          description: The cloud storage schema definition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RCloneSchema"
 components:
   schemas:
     CloudStorageUrl:
@@ -48,8 +150,102 @@ components:
       properties:
         git_url:
           type: string
-        type:
+          description: Git url of repository
+        storage_type:
           type: string
+          description: same as rclone prefix
+        configuration:
+          type: object
+          description: Dictionary of rclone key:value pairs (based on schema from '/storage_schema')
+          additionalProperties:
+            type: string
+      required:
+        - git_url
+        - storage_type
+        - configuration
+    CloudStorageWithId:
+      allOf:
+        - $ref: "#/components/schemas/CloudStorage"
+        - type: object
+          required:
+            - storage_id
+          properties:
+            storage_id:
+              type: string
+              format: ulid
+              description: the ID of the storage
+    RCloneSchema:
+      type: array
+      items:
+        $ref: "#/components/schemas/RCloneEntry"
+    RCloneEntry:
+      type: object
+      properties:
+        name:
+          type: string
+          description: name of the provider
+        description:
+          type: string
+          description: description of the provider
+        prefix:
+          type: string
+          description: slug name of the provider
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/RCloneOption"
+    RCloneOption:
+      type: object
+      properties:
+        name:
+          type: string
+          description: name of the option
+        help:
+          type: string
+          description: help text for the option
+        provider:
+          type: string
+          description: The cloud provider the option is for (See 'provider' option)
+        default:
+          oneOf:
+            - type: number
+            - type: string
+            - type: boolean
+            - type: object
+          description: default value for the option
+        default_str:
+          type: string
+          description: string representation of the default value
+        examples:
+          type: array
+          items:
+            type: object
+            properties:
+              value:
+                type: string
+                description: a potential value for the option (think enum)
+              help:
+                type: string
+                description: help text for the value
+        required:
+          type: boolean
+          description: whether the option is required or not
+        ispassword:
+          type: boolean
+          description: whether the field is a password (use **** for fields)
+        sensitive:
+          type: boolean
+          description: whether the value is sensitive (not stored in the service)
+        advanced:
+          type: boolean
+          description: whether this is an advanced config option (probably don't show these to users)
+        exclusive:
+          type: boolean
+          description: if true, only values from 'examples' can be used
+        datatype:
+          type: string
+          description: data type of option value.
+          enum: ["int", "bool", "string", "Time"]
     ErrorResponse:
       type: object
       properties:

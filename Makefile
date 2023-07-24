@@ -2,6 +2,7 @@
 
 schemas:
 	poetry run datamodel-codegen --input components/renku_data_services/crc_schemas/api.spec.yaml --input-file-type openapi --output components/renku_data_services/crc_schemas/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --base-class renku_data_services.crc_schemas.base.BaseAPISpec
+	poetry run datamodel-codegen --input components/renku_data_services/storage_schemas/api.spec.yaml --input-file-type openapi --output components/renku_data_services/storage_schemas/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --base-class renku_data_services.storage_schemas.base.BaseAPISpec
 
 style_checks:
 	poetry check
