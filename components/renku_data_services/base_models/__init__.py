@@ -1,2 +1,2 @@
-"""Common models for all services"""
+"""Common models for all services."""
 from renku_data_services.base_models.core import *  # noqa: F401, F403

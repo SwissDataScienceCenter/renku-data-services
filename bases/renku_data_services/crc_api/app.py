@@ -5,17 +5,17 @@ from typing import Any, Dict, List
 
 import renku_data_services.base_models as base_models
 import renku_data_services.resource_pool_models as models
+from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_api.error_handler import CustomErrorHandler
 from renku_data_services.crc_schemas import apispec, query_parameters
-from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
 from renku_data_services.k8s.quota import QuotaRepository
-from renku_data_services import errors
+from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
 from sanic import HTTPResponse, Request, Sanic, json
 from sanic_ext import validate
 
+from renku_data_services import errors
 from renku_data_services.crc_api.auth import authenticate, only_admins
-from renku_data_services.base_api.blueprint import CustomBlueprint, BlueprintFactoryResponse
 from renku_data_services.crc_api.config import Config
-from renku_data_services.base_api.error_handler import CustomErrorHandler
 
 
 @dataclass(kw_only=True)
@@ -134,7 +134,10 @@ class ResourcePoolsBP(CustomBlueprint):
         return "/resource_pools/<resource_pool_id>", ["PATCH"], _patch
 
     async def _put_patch_resource_pool(
-        self, api_user: models.APIUser, resource_pool_id: int, body: apispec.ResourcePoolPut | apispec.ResourcePoolPatch
+        self,
+        api_user: base_models.APIUser,
+        resource_pool_id: int,
+        body: apispec.ResourcePoolPut | apispec.ResourcePoolPatch,
     ):
         body_dict = body.dict(exclude_none=True)
         quota_req = body_dict.pop("quota", None)
@@ -204,7 +207,7 @@ class ResourcePoolUsersBP(CustomBlueprint):
     async def _put_post(
         self, api_user: base_models.APIUser, resource_pool_id: int, body: apispec.UsersWithId, post: bool = True
     ):
-        users_to_add = [models.User(keycloak_id=user.id) for user in body.__root__]
+        users_to_add = [base_models.User(keycloak_id=user.id) for user in body.__root__]
         updated_users = await self.repo.update_resource_pool_users(
             api_user=api_user, resource_pool_id=resource_pool_id, users=users_to_add, append=post
         )
@@ -232,7 +235,7 @@ class ResourcePoolUsersBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        async def _delete(_: Request, resource_pool_id: int, user_id: str, user: modbase_modelsels.APIUser):
+        async def _delete(_: Request, resource_pool_id: int, user_id: str, user: base_models.APIUser):
             await self.repo.delete_resource_pool_user(
                 resource_pool_id=resource_pool_id, keycloak_id=user_id, api_user=user
             )
@@ -334,7 +337,11 @@ class ClassesBP(CustomBlueprint):
         @only_admins
         @validate(json=apispec.ResourceClassPatch)
         async def _patch(
-            _: Request, body: apispec.ResourceClassPatch, resource_pool_id: int, class_id: int, user: base_models.APIUser
+            _: Request,
+            body: apispec.ResourceClassPatch,
+            resource_pool_id: int,
+            class_id: int,
+            user: base_models.APIUser,
         ):
             return await self._put_patch(user, resource_pool_id, class_id, body)
 
@@ -443,7 +450,7 @@ class UsersBP(CustomBlueprint):
     """Handlers for creating and listing users."""
 
     repo: UserRepository
-    user_store: models.UserStore
+    user_store: base_models.UserStore
     authenticator: base_models.Authenticator
 
     def post(self) -> BlueprintFactoryResponse:
@@ -472,7 +479,7 @@ class UsersBP(CustomBlueprint):
                     200,
                 )
             # The user does not exist in the db, add it.
-            kc_user = await self.repo.insert_user(api_user=user, user=models.User(keycloak_id=body.id))
+            kc_user = await self.repo.insert_user(api_user=user, user=base_models.User(keycloak_id=body.id))
             return json(
                 apispec.UserWithId(id=kc_user.keycloak_id).dict(exclude_none=True),
                 201,
@@ -629,7 +636,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         ]
     )
 
-    app.error_handler = CustomErrorHandler()
+    app.error_handler = CustomErrorHandler(apispec)
     app.config.OAS = False
     app.config.OAS_UI_REDOC = False
     app.config.OAS_UI_SWAGGER = False

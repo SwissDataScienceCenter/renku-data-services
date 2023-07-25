@@ -1,5 +1,6 @@
 from typing import Dict
 
+import renku_data_services.base_models as base_models
 import renku_data_services.resource_pool_models as models
 from hypothesis import strategies as st
 
@@ -67,7 +68,7 @@ def rp_strat(draw):
 public_rp_strat = rp_strat().filter(lambda x: x.public)
 private_rp_strat = rp_strat().filter(lambda x: not x.public)
 rp_list_strat = st.lists(rp_strat(), min_size=1, max_size=5)
-user_strat = st.builds(models.User, keycloak_id=a_uuid_string)
+user_strat = st.builds(base_models.User, keycloak_id=a_uuid_string)
 user_list_strat = st.lists(user_strat, max_size=5, min_size=1)
 
 

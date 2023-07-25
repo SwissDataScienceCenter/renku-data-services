@@ -2,11 +2,13 @@
 from dataclasses import dataclass
 
 import renku_data_services.base_models as base_models
-from sanic import Sanic
-from renku_data_services.base_api.blueprint import  CustomBlueprint
-from renku_data_services.storage_api.config import Config
+from renku_data_services.base_api.blueprint import CustomBlueprint
 from renku_data_services.base_api.error_handler import CustomErrorHandler
 from renku_data_services.storage_adapters import StorageRepository
+from renku_data_services.storage_schemas import apispec
+from sanic import Sanic
+
+from renku_data_services.storage_api.config import Config
 
 
 @dataclass(kw_only=True)
@@ -15,8 +17,6 @@ class StorageBP(CustomBlueprint):
 
     storage_repo: StorageRepository
     authenticator: base_models.Authenticator
-
-
 
 
 def register_all_handlers(app: Sanic, config: Config) -> Sanic:
@@ -35,7 +35,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         ]
     )
 
-    app.error_handler = CustomErrorHandler()
+    app.error_handler = CustomErrorHandler(apispec)
     app.config.OAS = False
     app.config.OAS_UI_REDOC = False
     app.config.OAS_UI_SWAGGER = False

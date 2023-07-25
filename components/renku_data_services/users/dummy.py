@@ -3,7 +3,7 @@ from asyncio import Lock
 from dataclasses import dataclass
 from typing import Dict, Optional
 
-import renku_data_services.resource_pool_models as models
+import renku_data_services.base_models as base_models
 
 
 @dataclass
@@ -20,7 +20,7 @@ class DummyUserStore:
         self._lock = Lock()
         self.user_always_exists = user_always_exists
 
-    async def get_user_by_id(self, id: str, access_token: str) -> Optional[models.User]:
+    async def get_user_by_id(self, id: str, access_token: str) -> Optional[base_models.User]:
         """Get a user by their unique id."""
         async with self._lock:
             user = self._users.get(id)
@@ -28,7 +28,7 @@ class DummyUserStore:
                 username = f"{id}@email.com"
                 user = _DummyUser(id=id, username=username)
                 self._users[id] = user
-            return models.User(keycloak_id=id)
+            return base_models.User(keycloak_id=id)
 
 
 @dataclass
@@ -38,7 +38,7 @@ class DummyAuthenticator:
     logged_in: bool = True
     admin: bool = False
 
-    async def authenticate(self, access_token: str) -> models.APIUser:
+    async def authenticate(self, access_token: str) -> base_models.APIUser:
         """Indicates whether the user has sucessfully logged in."""
 
-        return models.APIUser(is_admin=self.admin, id="some-id", access_token=access_token)
+        return base_models.APIUser(is_admin=self.admin, id="some-id", access_token=access_token)

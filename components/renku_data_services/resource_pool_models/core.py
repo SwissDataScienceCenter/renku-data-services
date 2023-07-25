@@ -125,27 +125,6 @@ class Quota(ResourcesCompareMixin):
         return self.from_dict({**asdict(self), "id": str(uuid4())})
 
 
-class UserStore(Protocol):
-    """The interface through which Keycloak or a similar application can be accessed."""
-
-    async def get_user_by_id(self, id: str, access_token: str) -> Optional["User"]:
-        """Get a user by their unique Keycloak user ID."""
-        ...
-
-
-@dataclass(frozen=True, eq=True, kw_only=True)
-class User:
-    """User model."""
-
-    keycloak_id: str
-    id: Optional[int] = None
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "User":
-        """Create the model from a plain dictionary."""
-        return cls(**data)
-
-
 @dataclass(frozen=True, eq=True, kw_only=True)
 class ResourcePool:
     """Resource pool model."""

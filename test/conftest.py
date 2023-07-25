@@ -5,9 +5,9 @@ import operator
 from pathlib import Path, PurePosixPath
 
 import pytest
-import renku_data_services.resource_pool_models as models
-from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
+import renku_data_services.base_models as base_models
 from renku_data_services.migrations.core import run_migrations_for_app
+from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
 
 
 @pytest.fixture
@@ -120,13 +120,17 @@ def pool_repo(sqlite_file_url_sync, sqlite_file_url_async, monkeypatch):
 
 
 @pytest.fixture
-def admin_user() -> models.APIUser:
-    return models.APIUser(is_admin=True, id="some-random-id-123456", access_token="some-access-token")  # nosec B106
+def admin_user() -> base_models.APIUser:
+    return base_models.APIUser(
+        is_admin=True, id="some-random-id-123456", access_token="some-access-token"
+    )  # nosec B106
 
 
 @pytest.fixture
-def loggedin_user() -> models.APIUser:
-    return models.APIUser(is_admin=False, id="some-random-id-123456", access_token="some-access-token")  # nosec B106
+def loggedin_user() -> base_models.APIUser:
+    return base_models.APIUser(
+        is_admin=False, id="some-random-id-123456", access_token="some-access-token"
+    )  # nosec B106
 
 
 def only(iterable, default=None, too_long=None):

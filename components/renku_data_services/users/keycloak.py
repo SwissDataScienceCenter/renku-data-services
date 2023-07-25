@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Dict, Optional, cast
 
 import httpx
-import renku_data_services.resource_pool_models as models
+import renku_data_services.base_models as base_models
 
 
 @dataclass
@@ -16,11 +16,11 @@ class KcUserStore:
     def __post_init__(self):
         self.keycloak_url = self.keycloak_url.rstrip("/")
 
-    async def get_user_by_id(self, id: str, access_token: str) -> Optional[models.User]:
+    async def get_user_by_id(self, id: str, access_token: str) -> Optional[base_models.User]:
         """Get a user by their unique id."""
         url = f"{self.keycloak_url}/admin/realms/{self.realm}/users/{id}"
         async with httpx.AsyncClient() as client:
             res = await client.get(url=url, headers={"Authorization": f"bearer {access_token}"})
         if res.status_code == 200 and cast(Dict, res.json()).get("id") == id:
-            return models.User(keycloak_id=id)
+            return base_models.User(keycloak_id=id)
         return None

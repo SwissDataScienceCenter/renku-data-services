@@ -1,6 +1,6 @@
-from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
+from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
 from renku_data_services.users.dummy import DummyAuthenticator, DummyUserStore
 from sanic import Sanic
 from sanic_testing.testing import SanicTestClient

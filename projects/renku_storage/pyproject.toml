@@ -9,7 +9,6 @@ packages = [
     { include = "renku_data_services/storage_api", from = "../../bases"},
     { include = "renku_data_services/migrations", from = "../../components"},
     { include = "renku_data_services/storage_schemas", from = "../../components"},
-    { include = "renku_data_services/k8s", from = "../../components"},
     { include = "renku_data_services/storage_adapters", from = "../../components"},
     { include = "renku_data_services/users", from = "../../components"},
     { include = "renku_data_services/errors", from = "../../components"},
@@ -19,6 +18,17 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.11"
+sanic = {extras = ["ext"], version = "^23.3.0"}
+pydantic = "^1.10.7"
+datamodel-code-generator = "^0.17.2"
+sqlalchemy = {extras = ["asyncio"], version = "^2.0.9"}
+alembic = "^1.10.3"
+asyncpg = "^0.27.0"
+pyjwt = {extras = ["crypto"], version = "^2.6.0"}
+tenacity = "^8.2.2"
+httpx = "<0.24"
+psycopg2-binary = "^2.9.6"
+kubernetes = "^26.1.0"
 
 [tool.poetry.group.dev.dependencies]
 

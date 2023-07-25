@@ -1,6 +1,7 @@
 import asyncio
 from dataclasses import asdict
 
+import renku_data_services.base_models as base_models
 import renku_data_services.resource_pool_models as models
 from renku_data_services.resource_pool_adapters import ResourcePoolRepository
 
@@ -27,13 +28,15 @@ def remove_id_from_rp(rp: models.ResourcePool) -> models.ResourcePool:
     )
 
 
-def remove_id_from_user(user: models.User) -> models.User:
+def remove_id_from_user(user: base_models.User) -> base_models.User:
     kwargs = asdict(user)
     kwargs["id"] = None
-    return models.User(**kwargs)
+    return base_models.User(**kwargs)
 
 
-def create_rp(rp: models.ResourcePool, repo: ResourcePoolRepository, api_user: models.APIUser) -> models.ResourcePool:
+def create_rp(
+    rp: models.ResourcePool, repo: ResourcePoolRepository, api_user: base_models.APIUser
+) -> models.ResourcePool:
     inserted_rp = asyncio.run(repo.insert_resource_pool(api_user, rp))
     assert inserted_rp is not None
     assert inserted_rp.id is not None

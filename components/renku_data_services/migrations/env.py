@@ -1,12 +1,11 @@
+"""Custom migrations env file to support modular migrations."""
 from logging.config import fileConfig
 from typing import cast
-from alembic.config import Config
-
-from sqlalchemy import MetaData
 
 from alembic import context
-
+from alembic.config import Config
 from renku_data_services.migrations.core import DataRepository
+from sqlalchemy import MetaData
 
 
 def run_migrations_offline(target_metadata, config: Config) -> None:

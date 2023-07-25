@@ -19,6 +19,7 @@ packages = [
     {include = "renku_data_services/base_models",from = "components"},
     {include = "renku_data_services/storage_adapters",from = "components"},
     {include = "renku_data_services/base_api",from = "components"},
+    {include = "renku_data_services/crc_migrations",from = "components"},
 ]
 
 [tool.poetry.dependencies]
@@ -64,7 +65,7 @@ include = '\.pyi?$'
 [tool.pydocstyle]
 add_ignore = ["D105", "D107", "D202", "D401"]
 match = '^(?!test_|apispec).*\.py'
-match_dir = '^(?!^test$|^migrations$|\..*).*'
+match_dir = '^(?!^test$|^crc_migrations$|\..*).*'
 
 [tool.bandit]
 skips = ["B101", "B603", "B607", "B404"]
