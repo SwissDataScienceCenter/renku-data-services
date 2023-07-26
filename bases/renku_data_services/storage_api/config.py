@@ -41,6 +41,11 @@ class Config:
         with open(spec_file, "r") as f:
             self.spec = safe_load(f)
 
+    @property
+    def repo(self):
+        """Used by alembic to find repo."""
+        return self.storage_repo
+
     @classmethod
     def from_env(cls):
         """Create a config from environment variables."""
@@ -53,9 +58,9 @@ class Config:
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
             async_sqlalchemy_url = os.environ.get(
-                f"{prefix}ASYNC_SQLALCHEMY_URL", "sqlite+aiosqlite:///data_services.db"
+                f"{prefix}ASYNC_SQLALCHEMY_URL", "sqlite+aiosqlite:///storage_service.db"
             )
-            sync_sqlalchemy_url = os.environ.get(f"{prefix}SYNC_SQLALCHEMY_URL", "sqlite:///data_services.db")
+            sync_sqlalchemy_url = os.environ.get(f"{prefix}SYNC_SQLALCHEMY_URL", "sqlite:///storage_service.db")
             authenticator = DummyAuthenticator(admin=True)
         else:
             pg_host = os.environ.get("DB_HOST", "localhost")

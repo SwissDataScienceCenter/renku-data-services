@@ -1,4 +1,4 @@
-"""SQLAlchemy schemas for the database."""
+"""SQLAlchemy schemas for the CRC database."""
 from typing import List, Optional
 
 import renku_data_services.base_models as base_models

@@ -19,13 +19,13 @@ def create_app() -> Sanic:
         app.config.TOUCHUP = False
         # NOTE: in single process mode where we usually run schemathesis to get coverage the db migrations
         # specified below with the main_process_start decorator do not run.
-        run_migrations_for_app("storage", config.storage_repo)
+        run_migrations_for_app("storage", config.repo)
     app = register_all_handlers(app, config)
 
     @app.main_process_start
     async def do_migrations(*_):
         logger.info("running migrations")
-        run_migrations_for_app("storage", config.storage_repo)
+        run_migrations_for_app("storage", config.repo)
 
     return app
 

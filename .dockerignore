@@ -9,4 +9,4 @@ dist
 .coverage
 .git
 .venv
-data_services.db
+crc_services.db

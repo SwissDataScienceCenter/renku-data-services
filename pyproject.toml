@@ -20,6 +20,8 @@ packages = [
     {include = "renku_data_services/storage_adapters",from = "components"},
     {include = "renku_data_services/base_api",from = "components"},
     {include = "renku_data_services/crc_migrations",from = "components"},
+    {include = "renku_data_services/storage_models",from = "components"},
+    {include = "renku_data_services/storage_migrations",from = "components"},
 ]
 
 [tool.poetry.dependencies]
@@ -35,6 +37,7 @@ tenacity = "^8.2.2"
 httpx = "<0.24"
 psycopg2-binary = "^2.9.6"
 kubernetes = "^26.1.0"
+python-ulid = "^1.1.0"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.7.5"

@@ -1,6 +1,8 @@
 """Adapters for storage database classes."""
 
-from sqlalchemy import create_engine
+import renku_data_services.storage_models as models
+from renku_data_services.storage_adapters import schemas
+from sqlalchemy import create_engine, select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -19,4 +21,18 @@ class _Base:
 class StorageRepository(_Base):
     """Repository for cloud storage."""
 
-    pass  # TODO: implement
+    async def get_storage(
+        self, api_user, id: str | None = None, git_url: str | None = None
+    ) -> list[models.CloudStorage]:
+        """Get a storage from the database."""
+        async with self.session_maker() as session:
+            stmt = select(schemas.CloudStorageORM)
+
+            if git_url is not None:
+                stmt = stmt.where(schemas.CloudStorageORM.git_url == git_url)
+            if id is not None:
+                stmt = stmt.where(schemas.CloudStorageORM.storage_id == id)
+
+            res = await session.execute(stmt)
+            orms = res.scalars().all()
+            return [orm.dump() for orm in orms]
