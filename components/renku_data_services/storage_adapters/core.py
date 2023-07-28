@@ -21,9 +21,7 @@ class _Base:
 class StorageRepository(_Base):
     """Repository for cloud storage."""
 
-    async def get_storage(
-        self, api_user, id: str | None = None, git_url: str | None = None
-    ) -> list[models.CloudStorage]:
+    async def get_storage(self, id: str | None = None, git_url: str | None = None) -> list[models.CloudStorage]:
         """Get a storage from the database."""
         async with self.session_maker() as session:
             stmt = select(schemas.CloudStorageORM)
@@ -36,3 +34,11 @@ class StorageRepository(_Base):
             res = await session.execute(stmt)
             orms = res.scalars().all()
             return [orm.dump() for orm in orms]
+
+    async def insert_storage(self, storage: models.CloudStorage) -> models.CloudStorage:
+        """Insert a new cloud storage entry."""
+        orm = schemas.CloudStorageORM.load(storage)
+        async with self.session_maker() as session:
+            async with session.begin():
+                session.add(orm)
+        return orm.dump()

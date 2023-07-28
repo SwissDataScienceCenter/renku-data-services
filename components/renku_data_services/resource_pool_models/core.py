@@ -183,9 +183,9 @@ class ResourcePool:
             classes = [ResourceClass.from_dict(c) if isinstance(c, dict) else c for c in data["classes"]]
         return cls(
             name=data["name"],
-            id=data["id"] if "id" in data else None,
+            id=data.get("id"),
             classes=classes,
             quota=quota,
-            default=data["default"] if "default" in data else False,
-            public=data["public"] if "public" in data else False,
+            default=data.get("default", False),
+            public=data.get("public", False),
         )

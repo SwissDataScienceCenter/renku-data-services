@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 
 import renku_data_services.base_models as base_models
+import renku_data_services.storage_models as models
 from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.error_handler import CustomErrorHandler
@@ -10,6 +11,8 @@ from renku_data_services.storage_schemas import apispec, query_parameters
 from sanic import Request, Sanic, json
 
 from renku_data_services.storage_api.config import Config
+
+from renku_data_services.storage_schemas.core import RCloneValidator
 
 
 @dataclass(kw_only=True)
@@ -25,10 +28,33 @@ class StorageBP(CustomBlueprint):
         @authenticate(self.authenticator)
         async def _get(request: Request, user: base_models.APIUser):
             res_filter = query_parameters.RepositoryFilter.parse_obj(dict(request.query_args))
+            storage: list[models.CloudStorage]
+            storage = await self.storage_repo.get_storage(**res_filter.dict())
 
-            return json("")
+            return json([apispec.CloudStorageWithId.from_orm(s).dict(exclude_none=True) for s in storage])
 
         return "/storage", ["GET"], _get
+
+    def post(self) -> BlueprintFactoryResponse:
+        """Create a new cloud storage entry."""
+
+        @authenticate(self.authenticator)
+        async def _post(request: Request, user: base_models.APIUser, validator: RCloneValidator):
+            storage: models.CloudStorage
+
+            if "storage_url" in request.json:
+                url_body = apispec.CloudStorageUrl(**request.json)
+                storage = models.CloudStorage.from_url(storage_url=url_body.storage_url, git_url=url_body.git_url)
+            else:
+                body = apispec.CloudStorage(**request.json)
+                storage = models.CloudStorage.from_dict(body.dict())
+
+            validator.validate(storage.storage_type, storage.configuration)
+
+            res = await self.storage_repo.insert_storage(storage=storage)
+            return json(apispec.CloudStorageWithId.from_orm(res).dict(exclude_none=True), 201)
+
+        return "/storage", ["POST"], _post
 
 
 def register_all_handlers(app: Sanic, config: Config) -> Sanic:

@@ -16,8 +16,7 @@ paths:
         name: storage_id
         required: true
         schema:
-          type: string
-          format: ulid
+          $ref: "#/components/schemas/UlidId"
         description: the id of the storage
     get:
       summary: get cloud storage details
@@ -83,7 +82,7 @@ paths:
           name: git_url
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/GitUrl"
       responses:
         "200":
           description: the storage configurations for the project
@@ -136,7 +135,7 @@ components:
       type: object
       properties:
         git_url:
-          type: string
+          $ref: "#/components/schemas/GitUrl"
         storage_url:
           type: string
       required:
@@ -149,8 +148,7 @@ components:
       type: object
       properties:
         git_url:
-          type: string
-          description: Git url of repository
+          $ref: "#/components/schemas/GitUrl"
         storage_type:
           type: string
           description: same as rclone prefix
@@ -171,9 +169,7 @@ components:
             - storage_id
           properties:
             storage_id:
-              type: string
-              format: ulid
-              description: the ID of the storage
+              $ref: "#/components/schemas/UlidId"
     RCloneSchema:
       type: array
       items:
@@ -246,6 +242,18 @@ components:
           type: string
           description: data type of option value.
           enum: ["int", "bool", "string", "Time"]
+    UlidId:
+      description: ULID identifier of an object
+      type: string
+      minLength: 26
+      maxLength: 26
+      pattern: "^[A-Z0-9]+$"
+      format: ulid
+    GitUrl:
+      description: URL of a git repository
+      type: string
+      pattern: "^http(s)?://[^@/]+/.*\\.git"
+      format: git_url
     ErrorResponse:
       type: object
       properties:
