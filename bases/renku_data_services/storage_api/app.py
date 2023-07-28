@@ -8,11 +8,10 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_api.error_handler import CustomErrorHandler
 from renku_data_services.storage_adapters import StorageRepository
 from renku_data_services.storage_schemas import apispec, query_parameters
+from renku_data_services.storage_schemas.core import RCloneValidator
 from sanic import Request, Sanic, json
 
 from renku_data_services.storage_api.config import Config
-
-from renku_data_services.storage_schemas.core import RCloneValidator
 
 
 @dataclass(kw_only=True)
@@ -57,6 +56,19 @@ class StorageBP(CustomBlueprint):
         return "/storage", ["POST"], _post
 
 
+@dataclass(kw_only=True)
+class StorageSchemaBP(CustomBlueprint):
+    """Handler for getting RClone storage schema."""
+
+    def get(self) -> BlueprintFactoryResponse:
+        """Get cloud storage for a repository."""
+
+        async def _get(_: Request, validator: RCloneValidator):
+            return json(validator.asdict())
+
+        return "/storage_schema", ["GET"], _get
+
+
 def register_all_handlers(app: Sanic, config: Config) -> Sanic:
     """Register all handlers on the application."""
     url_prefix = "/api/storage"
@@ -66,10 +78,12 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         storage_repo=config.storage_repo,
         authenticator=config.authenticator,
     )
+    storage_schema = StorageSchemaBP(name="storage_schema", url_prefix=url_prefix)
 
     app.blueprint(
         [
             storage.blueprint(),
+            storage_schema.blueprint(),
         ]
     )
 

@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import Any, cast
 
 from pydantic import BaseModel, Field, ValidationError
-from renku_data_services import errors
-
 from sanic.log import logger
+
+from renku_data_services import errors
 
 
 class RCloneValidator:
@@ -40,6 +40,10 @@ class RCloneValidator:
             raise errors.ValidationError(message=f"RClone provider '{storage_type}' does not exist.")
 
         provider.validate_config(configuration)
+
+    def asdict(self) -> list[dict[str, Any]]:
+        """Return Schema as dict."""
+        return [provider.dict() for provider in self.providers.values()]
 
 
 class RCloneTriState(BaseModel):
@@ -82,17 +86,13 @@ class RCloneOption(BaseModel):
         """Validate an RClone option."""
         if self.sensitive or self.is_password:
             raise errors.ValidationError(message=f"Field '{self.name}' is sensitive and should not be set.")
-        match (self.type):
+        match self.type:
             case "int" | "Duration" | "SizeSuffix" | "MultiEncoder":
                 if not isinstance(value, int):
-                    raise errors.ValidationError(
-                        message=f"Value '{value}' for field '{self.name}' is not of type int"
-                    )
+                    raise errors.ValidationError(message=f"Value '{value}' for field '{self.name}' is not of type int")
             case "bool":
                 if not isinstance(value, bool):
-                    raise errors.ValidationError(
-                        message=f"Value '{value}' for field '{self.name}' is not of type bool"
-                    )
+                    raise errors.ValidationError(message=f"Value '{value}' for field '{self.name}' is not of type bool")
             case "Tristate":
                 if not isinstance(value, dict):
                     raise errors.ValidationError(
