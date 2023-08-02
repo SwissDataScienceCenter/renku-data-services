@@ -9,7 +9,7 @@ from typing import Any
 class CloudStorage:
     """Cloud Storage model."""
 
-    git_url: str
+    project_id: str
     storage_type: str
     configuration: dict[str, Any]
 
@@ -19,13 +19,13 @@ class CloudStorage:
     def from_dict(cls, data: dict) -> "CloudStorage":
         """Create the model from a plain dictionary."""
         return cls(
-            git_url=data["git_url"],
+            project_id=data["project_id"],
             storage_id=data.get("storage_id"),
             configuration=data["configuration"],
             storage_type=data["configuration"].get("type"),
         )
 
     @classmethod
-    def from_url(cls, storage_url: str, git_url: str) -> "CloudStorage":
+    def from_url(cls, storage_url: str, project_id: str) -> "CloudStorage":
         """Get Cloud Storage/rclone config from a storage URL."""
         raise NotImplementedError()

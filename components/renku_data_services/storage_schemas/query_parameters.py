@@ -12,4 +12,4 @@ class RepositoryFilter(BaseAPISpec):
 
         extra = Extra.ignore
 
-    git_url: str = Field()
+    project_id: str = Field()

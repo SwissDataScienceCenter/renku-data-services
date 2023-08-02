@@ -66,13 +66,15 @@ class ErrorResponse(BaseAPISpec):
     error: Error
 
 
-class CloudStorageUrl(BaseAPISpec):
-    git_url: str = Field(..., description="URL of a git repository", regex="^http(s)?://[^@/]+/.*\\.git")
+class GitRequest(BaseAPISpec):
+    project_id: str = Field(..., description="Project id of a gitlab project", example="namespace/project")
+
+
+class CloudStorageUrl(GitRequest):
     storage_url: str
 
 
-class CloudStorage(BaseAPISpec):
-    git_url: str = Field(..., description="URL of a git repository", regex="^http(s)?://[^@/]+/.*\\.git")
+class CloudStorage(GitRequest):
     storage_type: Optional[str] = Field(
         None,
         description="same as rclone prefix/ rclone config type. Ignored in requests, but returned in responses for convenience.",

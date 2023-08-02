@@ -32,6 +32,8 @@ httpx = "<0.24"
 psycopg2-binary = "^2.9.6"
 kubernetes = "^26.1.0"
 python-ulid = "^1.1.0"
+python-gitlab = "^3.15.0"
+urllib3 = "^1.26.16"
 
 [tool.poetry.group.dev.dependencies]
 

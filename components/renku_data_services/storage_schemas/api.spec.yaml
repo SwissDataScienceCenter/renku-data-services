@@ -131,36 +131,43 @@ paths:
                 $ref: "#/components/schemas/RCloneSchema"
 components:
   schemas:
-    CloudStorageUrl:
+    GitRequest:
       type: object
       properties:
-        git_url:
-          $ref: "#/components/schemas/GitUrl"
-        storage_url:
-          type: string
+        project_id:
+          $ref: "#/components/schemas/GitlabProjectId"
       required:
-        - git_url
-        - storage_url
+        - project_id
       example:
-        git_url: https://renkulab.io/gitlab/rok.roskar/test
-        storage_url: s3://giab
+        project_id: 123456
+    CloudStorageUrl:
+      allOf:
+        - $ref: "#/components/schemas/GitRequest"
+        - type: object
+          properties:
+            storage_url:
+              type: string
+          required:
+            - storage_url
+          example:
+            storage_url: s3://giab
     CloudStorage:
-      type: object
-      properties:
-        git_url:
-          $ref: "#/components/schemas/GitUrl"
-        storage_type:
-          type: string
-          description: same as rclone prefix/ rclone config type. Ignored in requests, but returned in responses for convenience.
-          readOnly: true
-        configuration:
-          type: object
-          description: Dictionary of rclone key:value pairs (based on schema from '/storage_schema')
-          additionalProperties:
-            type: string
-      required:
-        - git_url
-        - configuration
+      allOf:
+        - $ref: "#/components/schemas/GitRequest"
+        - type: object
+          properties:
+            storage_type:
+              type: string
+              description: same as rclone prefix/ rclone config type. Ignored in requests, but returned in responses for convenience.
+              readOnly: true
+            configuration:
+              type: object
+              description: Dictionary of rclone key:value pairs (based on schema from '/storage_schema')
+              additionalProperties:
+                type: string
+          required:
+            - storage_type
+            - configuration
     CloudStorageWithId:
       allOf:
         - $ref: "#/components/schemas/CloudStorage"
@@ -258,11 +265,10 @@ components:
       maxLength: 26
       pattern: "^[A-Z0-9]+$"
       format: ulid
-    GitUrl:
-      description: URL of a git repository
+    GitlabProjectId:
+      description: Project id of a gitlab project
       type: string
-      pattern: "^http(s)?://[^@/]+/.*\\.git"
-      format: git_url
+      example: namespace/project
     ErrorResponse:
       type: object
       properties:

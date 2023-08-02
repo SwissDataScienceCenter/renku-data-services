@@ -22,7 +22,7 @@ class CloudStorageORM(BaseORM):
 
     __tablename__ = "cloud_storage"
 
-    git_url: Mapped[str] = mapped_column("git_url", String(), index=True)
+    project_id: Mapped[str] = mapped_column("project_id", String(), index=True)
     storage_type: Mapped[str] = mapped_column("storage_type", String(20))
     configuration: Mapped[dict[str, Any]] = mapped_column("configuration", JSONVariant)
 
@@ -33,12 +33,14 @@ class CloudStorageORM(BaseORM):
     @classmethod
     def load(cls, storage: models.CloudStorage):
         """Create CloudStorageORM from the cloud storage model."""
-        return cls(git_url=storage.git_url, storage_type=storage.storage_type, configuration=storage.configuration)
+        return cls(
+            project_id=storage.project_id, storage_type=storage.storage_type, configuration=storage.configuration
+        )
 
     def dump(self):
         """Create a cloud storage model from the ORM object."""
         return models.CloudStorage(
-            git_url=self.git_url,
+            project_id=self.project_id,
             storage_type=self.storage_type,
             configuration=self.configuration,
             storage_id=self.storage_id,

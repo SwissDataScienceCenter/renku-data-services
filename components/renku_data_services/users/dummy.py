@@ -3,6 +3,8 @@ from asyncio import Lock
 from dataclasses import dataclass
 from typing import Dict, Optional
 
+from sanic import Request
+
 import renku_data_services.base_models as base_models
 
 
@@ -38,7 +40,7 @@ class DummyAuthenticator:
     logged_in: bool = True
     admin: bool = False
 
-    async def authenticate(self, access_token: str) -> base_models.APIUser:
+    async def authenticate(self, access_token: str, request: Request | None) -> base_models.APIUser:
         """Indicates whether the user has sucessfully logged in."""
 
         return base_models.APIUser(is_admin=self.admin, id="some-id", access_token=access_token)
