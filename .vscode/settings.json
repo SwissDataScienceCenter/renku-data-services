@@ -23,5 +23,9 @@
   "python.linting.mypyArgs": [
     "--config-file",
     "pyproject.toml",
+  ],
+  "python.analysis.extraPaths": [
+    "bases",
+    "components"
   ]
 }

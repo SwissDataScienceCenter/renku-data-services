@@ -1,0 +1,12 @@
+[tool.polylith]
+namespace = "renku_data_services"
+git_tag_pattern = "v*"
+
+[tool.polylith.structure]
+theme = "loose"
+
+[tool.polylith.resources]
+brick_docs_enabled = true
+
+[tool.polylith.test]
+enabled = true
