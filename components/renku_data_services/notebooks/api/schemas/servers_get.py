@@ -314,7 +314,7 @@ class LaunchNotebookResponseWithoutS3(Schema):
                             else config.sessions.containers.registered
                         )
                     }
-            for (container, desc) in init_container_name_desc_xref.items():
+            for container, desc in init_container_name_desc_xref.items():
                 if container in init_container_summary:
                     output.append(
                         {
@@ -322,7 +322,7 @@ class LaunchNotebookResponseWithoutS3(Schema):
                             "status": init_container_summary[container],
                         }
                     )
-            for (container, desc) in container_name_desc_xref.items():
+            for container, desc in container_name_desc_xref.items():
                 if container in container_summary:
                     output.append(
                         {

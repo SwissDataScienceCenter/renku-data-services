@@ -24,7 +24,8 @@ class MissingResourceError(UserInputError):
     """Raised when any type of resource (either in k8s or outside of the cluster) does not
     exist but it is expected that it does exist. This is also raised when the user
     is trying to access resources that they do not have access to and an API that was called
-    by the notebook service is responding simply with a 404 because the resource is private."""
+    by the notebook service is responding simply with a 404 because the resource is private.
+    """
 
     message: str
     code: int = UserInputError.code + 404
@@ -47,7 +48,8 @@ class AuthenticationError(UserInputError):
 @dataclass
 class DuplicateS3BucketNamesError(UserInputError):
     """Raised when two or more buckets that are mounted in a session have duplicate names. This
-    is not allowed because the bucket names are used as the mount points in the session."""
+    is not allowed because the bucket names are used as the mount points in the session.
+    """
 
     message: str = "The names of all mounted S3 buckets should be unique."
     code: int = UserInputError.code + 1

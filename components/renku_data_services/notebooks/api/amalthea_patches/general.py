@@ -98,7 +98,8 @@ def priority_class(server: "UserServer"):
 def test(server: "UserServer"):
     """RFC 6901 patches support test statements that will cause the whole patch
     to fail if the test statements are not correct. This is used to ensure that the
-    order of containers in the amalthea manifests is what the notebook service expects."""
+    order of containers in the amalthea manifests is what the notebook service expects.
+    """
     patches = []
     # NOTE: Only the first 1 or 2 containers come "included" from Amalthea, the rest are patched in
     # This tests checks whether the expected number and order is received from Amalthea and

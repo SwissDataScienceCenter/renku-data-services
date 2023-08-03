@@ -28,7 +28,7 @@ def get_docker_token(hostname, image, tag, user):
         # the request status code and header are not what is expected
         return None, None
     www_auth = parse_www_authenticate_header(auth_req.headers["Www-Authenticate"])
-    params = dict(www_auth.items())
+    params = {**www_auth.parameters}
     realm = params.pop("realm")
     # try to get a public docker token
     token_req = requests.get(realm, params=params)

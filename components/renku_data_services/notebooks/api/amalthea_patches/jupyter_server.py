@@ -165,7 +165,8 @@ def rstudio_env_variables(server: "UserServer") -> List[Dict[str, Any]]:
     """Makes sure environment variables propagate for R and Rstudio.
     Since we cannot be certain that R/Rstudio is or isn't used we inject this every time
     the user has custom environment variables. These will not break jupyterlab.
-    See: https://rviews.rstudio.com/2017/04/19/r-for-enterprise-understanding-r-s-startup/"""
+    See: https://rviews.rstudio.com/2017/04/19/r-for-enterprise-understanding-r-s-startup/
+    """
     if not server.environment_variables:
         return []
     secret_name = f"{server.server_name}-renviron"
