@@ -1,6 +1,6 @@
 import re
 from collections import OrderedDict
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Dict, Union
 
@@ -51,6 +51,11 @@ class ServerStatusDetail(Schema):
     )
 
 
+class ServerStatusWarning(Schema):
+    message = fields.String(required=True)
+    critical = fields.Boolean(load_default=False, dump_default=False)
+
+
 class ServerStatus(Schema):
     state = fields.String(
         required=True,
@@ -66,6 +71,7 @@ class ServerStatus(Schema):
         required=True,
         validate=validate.Range(min=0, min_inclusive=True),
     )
+    warnings = fields.List(fields.Nested(ServerStatusWarning))
 
 
 class ResourceRequests(Schema):
@@ -332,7 +338,7 @@ class LaunchNotebookResponseWithoutS3(Schema):
                     )
             return output
 
-        def get_status(server: UserServerManifest):
+        def get_status(server: UserServerManifest, started: datetime):
             """Get the status of the jupyterserver."""
             state = server.manifest.get("status", {}).get(
                 "state", ServerStatusEnum.Starting.value
@@ -370,6 +376,60 @@ class LaunchNotebookResponseWithoutS3(Schema):
                     if step["status"] in [StepStatusEnum.ready.value]
                 ]
             )
+
+            output["warnings"] = []
+
+            if server.using_default_image:
+                output["warnings"].append(
+                    {"message": "Server was started using the default image."}
+                )
+
+            idle_seconds = int(server.manifest.get("status", {}).get("idleSeconds", 0))
+            idle_threshold = (
+                server.manifest.get("spec", {})
+                .get("culling", {})
+                .get("idleSecondsTheshold", 0)
+            )
+            remaining_idle_time = idle_threshold - idle_seconds
+
+            if (
+                idle_threshold > 0
+                and remaining_idle_time
+                < config.sessions.termination_warning_duration_seconds
+            ):
+                output["warnings"].append(
+                    {
+                        "message": (
+                            "Server is idle and will be terminated in "
+                            f"{max(remaining_idle_time, 0)} seconds."
+                        ),
+                        "critical": True,
+                    }
+                )
+
+            max_age_threshold = (
+                server.manifest.get("spec", {})
+                .get("culling", {})
+                .get("maxAgeSecondsThreshold", 0)
+            )
+            age = (datetime.now(timezone.utc) - started).total_seconds()
+            remaining_session_time = max_age_threshold - age
+
+            if (
+                max_age_threshold > 0
+                and remaining_session_time
+                < config.sessions.termination_warning_duration_seconds
+            ):
+                output["warnings"].append(
+                    {
+                        "message": (
+                            "Server is reaching the maximum session age and will be terminated in "
+                            f"{max(remaining_session_time, 0)} seconds."
+                        ),
+                        "critical": True,
+                    }
+                )
+
             return output
 
         def get_resource_requests(server: UserServerManifest):
@@ -416,6 +476,10 @@ class LaunchNotebookResponseWithoutS3(Schema):
                 formatted_output["storage"] = usage["disk"]["usedBytes"]
             return formatted_output
 
+        started = datetime.fromisoformat(
+            re.sub(r"Z$", "+00:00", server.manifest["metadata"]["creationTimestamp"])
+        )
+
         output = {
             "annotations": config.session_get_endpoint_annotations.sanitize_dict(
                 {
@@ -428,12 +492,8 @@ class LaunchNotebookResponseWithoutS3(Schema):
             "state": {
                 "pod_name": server.manifest["status"].get("mainPod", {}).get("name")
             },
-            "started": datetime.fromisoformat(
-                re.sub(
-                    r"Z$", "+00:00", server.manifest["metadata"]["creationTimestamp"]
-                )
-            ),
-            "status": get_status(server),
+            "started": started,
+            "status": get_status(server, started),
             "url": server.url,
             "resources": {
                 "requests": get_resource_requests(server),

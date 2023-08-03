@@ -203,6 +203,7 @@ class _SessionConfig:
     enforce_cpu_limits: Union[Text, bool] = False
     autosave_minimum_lfs_file_size_bytes: Union[int, Text] = 1000000
     termination_grace_period_seconds: Union[int, Text] = 600
+    termination_warning_duration_seconds: int = 12 * 60 * 60
     image_default_workdir: Text = "/home/jovyan"
     node_selector: Text = "{}"
     affinity: Text = "{}"
