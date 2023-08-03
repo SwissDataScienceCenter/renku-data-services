@@ -5,16 +5,16 @@ from pathlib import Path
 from typing import Any, Dict
 
 import httpx
-import renku_data_services.base_models as base_models
-import renku_data_services.storage_schemas
 from jwt import PyJWKClient
-from renku_data_services.storage_adapters import StorageRepository
-from renku_data_services.users.credentials import KeycloakAuthenticator
-from renku_data_services.users.dummy import DummyAuthenticator
 from tenacity import retry, stop_after_attempt, stop_after_delay, wait_fixed
 from yaml import safe_load
 
+import renku_data_services.base_models as base_models
+import renku_data_services.storage_schemas
 from renku_data_services import errors
+from renku_data_services.storage_adapters import StorageRepository
+from renku_data_services.users.credentials import KeycloakAuthenticator
+from renku_data_services.users.dummy import DummyAuthenticator
 
 
 @retry(stop=(stop_after_attempt(20) | stop_after_delay(300)), wait=wait_fixed(2), reraise=True)

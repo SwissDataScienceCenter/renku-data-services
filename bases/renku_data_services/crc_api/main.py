@@ -2,13 +2,13 @@
 import argparse
 from os import environ
 
-from renku_data_services.migrations.core import run_migrations_for_app
 from sanic import Sanic
 from sanic.log import logger
 from sanic.worker.loader import AppLoader
 
 from renku_data_services.crc_api.app import register_all_handlers
 from renku_data_services.crc_api.config import Config
+from renku_data_services.migrations.core import run_migrations_for_app
 
 
 def create_app() -> Sanic:

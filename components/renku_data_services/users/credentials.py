@@ -3,9 +3,9 @@ from dataclasses import dataclass
 from typing import Any, Dict, List
 
 import jwt
-import renku_data_services.base_models as base_models
 from jwt import PyJWKClient
 
+import renku_data_services.base_models as base_models
 from renku_data_services import errors
 
 

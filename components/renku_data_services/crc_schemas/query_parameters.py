@@ -1,5 +1,6 @@
 """Data models for query parameters used in requests."""
 from pydantic import Extra, Field
+
 from renku_data_services.crc_schemas.base import BaseAPISpec
 
 

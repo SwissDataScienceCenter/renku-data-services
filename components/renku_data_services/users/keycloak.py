@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Dict, Optional, cast
 
 import httpx
+
 import renku_data_services.base_models as base_models
 
 

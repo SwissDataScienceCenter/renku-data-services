@@ -12,13 +12,13 @@ from test.components.renku_data_services.models.hypothesis import (
 from test.utils import create_rp, remove_id_from_user
 
 import pytest
-import renku_data_services.base_models as base_models
-import renku_data_services.resource_pool_models as models
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
-from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
 
+import renku_data_services.base_models as base_models
+import renku_data_services.resource_pool_models as models
 from renku_data_services import errors
+from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
 
 
 @given(rp=rp_strat())

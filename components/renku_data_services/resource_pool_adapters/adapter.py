@@ -8,16 +8,16 @@ it all in one place.
 from functools import wraps
 from typing import Dict, List, Optional, Tuple, cast
 
-import renku_data_services.base_models as base_models
-import renku_data_services.resource_pool_models as models
-from renku_data_services.resource_pool_adapters import schemas
 from sqlalchemy import create_engine, delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 from sqlalchemy.sql import Select, and_
 from sqlalchemy.sql.expression import true
 
+import renku_data_services.base_models as base_models
+import renku_data_services.resource_pool_models as models
 from renku_data_services import errors
+from renku_data_services.resource_pool_adapters import schemas
 
 
 class _Base:

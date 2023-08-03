@@ -1,11 +1,12 @@
 """SQLAlchemy schemas for the cloud storage database."""
 from typing import Any
 
-import renku_data_services.storage_models as models
 from sqlalchemy import JSON, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 from ulid import ULID
+
+import renku_data_services.storage_models as models
 
 JSONVariant = JSON().with_variant(JSONB(), "postgresql")
 

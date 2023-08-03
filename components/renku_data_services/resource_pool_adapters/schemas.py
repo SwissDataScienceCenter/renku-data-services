@@ -1,11 +1,12 @@
 """SQLAlchemy schemas for the CRC database."""
 from typing import List, Optional
 
-import renku_data_services.base_models as base_models
-import renku_data_services.resource_pool_models as models
 from sqlalchemy import BigInteger, Column, Integer, String, Table
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
+
+import renku_data_services.base_models as base_models
+import renku_data_services.resource_pool_models as models
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):

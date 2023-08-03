@@ -5,8 +5,9 @@ from typing import cast
 
 from alembic import context
 from alembic.config import Config
-from renku_data_services.migrations.core import DataRepository
 from sqlalchemy import MetaData
+
+from renku_data_services.migrations.core import DataRepository
 
 
 def run_migrations_offline(target_metadata, config: Config) -> None:

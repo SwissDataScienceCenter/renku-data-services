@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from pydantic import Extra, Field
+
 from renku_data_services.crc_schemas.base import BaseAPISpec
 
 

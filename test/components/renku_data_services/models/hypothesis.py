@@ -1,8 +1,9 @@
 from typing import Dict
 
+from hypothesis import strategies as st
+
 import renku_data_services.base_models as base_models
 import renku_data_services.resource_pool_models as models
-from hypothesis import strategies as st
 
 
 def make_cpu_float(data) -> Dict[str, int | float]:

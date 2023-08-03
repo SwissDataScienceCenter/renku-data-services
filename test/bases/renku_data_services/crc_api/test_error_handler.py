@@ -2,8 +2,6 @@ import inspect
 from typing import Any, Awaitable, Callable, Dict
 
 import pytest
-from renku_data_services.base_api.error_handler import CustomErrorHandler
-from renku_data_services.crc_schemas import apispec
 from sanic import Request, Sanic, SanicException
 from sanic.models.handler_types import RouteHandler
 from sanic_ext.exceptions import ValidationError as SanicValidationError
@@ -11,6 +9,8 @@ from sanic_testing.testing import SanicTestClient
 from sqlalchemy.exc import SQLAlchemyError
 
 from renku_data_services import errors
+from renku_data_services.base_api.error_handler import CustomErrorHandler
+from renku_data_services.crc_schemas import apispec
 
 
 def _trigger_error(err: Exception | Callable | Awaitable) -> RouteHandler:

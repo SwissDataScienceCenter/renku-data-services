@@ -80,6 +80,7 @@ force_grid_wrap = 0
 use_parentheses = true
 line_length = 120
 src_paths = ["bases", "components", "test"]
+known_first_party = ["renku_data_services"]
 skip_glob = ["migrations/*"]
 
 [tool.flake8]

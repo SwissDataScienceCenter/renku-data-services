@@ -1,17 +1,17 @@
 """Cloud storage app."""
 from dataclasses import dataclass
 
+from sanic import Request, Sanic, json
+
 import renku_data_services.base_models as base_models
 import renku_data_services.storage_models as models
 from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.error_handler import CustomErrorHandler
 from renku_data_services.storage_adapters import StorageRepository
+from renku_data_services.storage_api.config import Config
 from renku_data_services.storage_schemas import apispec, query_parameters
 from renku_data_services.storage_schemas.core import RCloneValidator
-from sanic import Request, Sanic, json
-
-from renku_data_services.storage_api.config import Config
 
 
 @dataclass(kw_only=True)

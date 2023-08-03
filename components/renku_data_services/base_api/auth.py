@@ -1,10 +1,10 @@
 """Authentication decorators for Sanic."""
 from functools import wraps
 
-from renku_data_services.base_models import APIUser, Authenticator
 from sanic import Request
 
 from renku_data_services import errors
+from renku_data_services.base_models import APIUser, Authenticator
 
 
 def authenticate(authenticator: Authenticator):

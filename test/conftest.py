@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+
 import renku_data_services.base_models as base_models
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository

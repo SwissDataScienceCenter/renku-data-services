@@ -1,10 +1,11 @@
 """Adapters for storage database classes."""
 
-import renku_data_services.storage_models as models
-from renku_data_services.storage_adapters import schemas
 from sqlalchemy import create_engine, select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+
+import renku_data_services.storage_models as models
+from renku_data_services.storage_adapters import schemas
 
 
 class _Base:
