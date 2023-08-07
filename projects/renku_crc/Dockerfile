@@ -16,7 +16,7 @@ COPY --chown=1000:1000 . .
 RUN if $DEV_BUILD ; then \
     /home/renku/.local/bin/poetry export -o requirements.txt --with dev; \
     env/bin/pip install -r requirements.txt; \
-  fi
+    fi
 RUN /home/renku/.local/bin/poetry build-project -f wheel -C projects/renku_crc
 RUN env/bin/pip --no-cache-dir install projects/renku_crc/dist/*.whl
 
@@ -30,4 +30,4 @@ USER 1000:1000
 WORKDIR /app
 COPY --from=builder /app/env ./env
 ENTRYPOINT ["tini", "-g", "--"]
-CMD ["env/bin/python", "-m", "renku_data_services.crc_api.main", "--fast"]
+CMD ["tini", "-g", "--", "env/bin/python", "-m", "renku_data_services.crc_api.main", "--fast"]

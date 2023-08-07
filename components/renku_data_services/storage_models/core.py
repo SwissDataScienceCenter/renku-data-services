@@ -22,7 +22,7 @@ class CloudStorage:
             git_url=data["git_url"],
             storage_id=data.get("storage_id"),
             configuration=data["configuration"],
-            storage_type=data.get("storage_type", data["configuration"].get("type")),
+            storage_type=data["configuration"].get("type"),
         )
 
     @classmethod

@@ -30,4 +30,4 @@ USER 1000:1000
 WORKDIR /app
 COPY --from=builder /app/env ./env
 ENTRYPOINT ["tini", "-g", "--"]
-CMD ["env/bin/python", "-m", "renku_data_services.storage_api.main", "--fast"]
+CMD ["tini", "-g", "--", "env/bin/python", "-m", "renku_data_services.storage_api.main", "--fast"]

@@ -89,7 +89,8 @@ show-source = true
 ignore = ["E121", "E126", "E203", "E226", "E231", "W503", "W504", "E121", "E126", "E203", "E226", "E231", "W503", "W504", "E121", "E126", "E203", "E226", "E231", "W503", "W504"]
 exclude = [
     "components/renku_data_services/migrations/resource_pools/migrations/versions",
-    "components/crc_schemas/apispec.py"
+    "components/renku_data_services/crc_schemas/apispec.py",
+    "components/renku_data_services/storage_schemas/apispec.py"
 ]
 
 [tool.pytest.ini_options]

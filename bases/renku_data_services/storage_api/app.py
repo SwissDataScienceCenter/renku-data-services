@@ -48,7 +48,7 @@ class StorageBP(CustomBlueprint):
                 body = apispec.CloudStorage(**request.json)
                 storage = models.CloudStorage.from_dict(body.dict())
 
-            validator.validate(storage.storage_type, storage.configuration)
+            validator.validate(storage.configuration)
 
             res = await self.storage_repo.insert_storage(storage=storage)
             return json(apispec.CloudStorageWithId.from_orm(res).dict(exclude_none=True), 201)

@@ -1,1 +1,0 @@
-# storage_models component
