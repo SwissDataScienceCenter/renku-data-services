@@ -12,17 +12,19 @@ from test.components.renku_data_services.models.hypothesis import (
 from test.utils import create_rp, remove_id_from_user
 
 import pytest
-import renku_data_services.resource_pool_models as models
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
-from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
+
+import renku_data_services.base_models as base_models
+import renku_data_services.resource_pool_models as models
 from renku_data_services import errors
+from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
 
 
 @given(rp=rp_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 def test_resource_pool_insert_get(
-    rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: models.APIUser
+    rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser
 ):
     create_rp(rp, pool_repo, admin_user)
 
@@ -30,7 +32,7 @@ def test_resource_pool_insert_get(
 @given(rp=rp_strat(), new_name=a_name)
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 def test_resource_pool_update_name(
-    rp: models.ResourcePool, pool_repo: ResourcePoolRepository, new_name: str, admin_user: models.APIUser
+    rp: models.ResourcePool, pool_repo: ResourcePoolRepository, new_name: str, admin_user: base_models.APIUser
 ):
     inserted_rp = create_rp(rp, pool_repo, api_user=admin_user)
     assert inserted_rp.id is not None
@@ -45,7 +47,7 @@ def test_resource_pool_update_name(
 @given(rp=rp_strat(), new_quota_id=a_uuid_string)
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 def test_resource_pool_update_quota(
-    rp: models.ResourcePool, pool_repo: ResourcePoolRepository, new_quota_id: str, admin_user: models.APIUser
+    rp: models.ResourcePool, pool_repo: ResourcePoolRepository, new_quota_id: str, admin_user: base_models.APIUser
 ):
     inserted_rp = create_rp(rp, pool_repo, api_user=admin_user)
     assert inserted_rp.id is not None
@@ -63,7 +65,7 @@ def test_resource_pool_update_quota(
 @given(rp=rp_strat(), data=st.data())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 def test_resource_pool_update_classes(
-    rp: models.ResourcePool, pool_repo: ResourcePoolRepository, data, admin_user: models.APIUser
+    rp: models.ResourcePool, pool_repo: ResourcePoolRepository, data, admin_user: base_models.APIUser
 ):
     inserted_rp = create_rp(rp, pool_repo, api_user=admin_user)
     assert inserted_rp.id is not None
@@ -84,7 +86,7 @@ def test_resource_pool_update_classes(
 
 @given(rp=rp_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-def test_get_classes(rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: models.APIUser):
+def test_get_classes(rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser):
     inserted_rp = create_rp(rp, pool_repo, api_user=admin_user)
     assert inserted_rp.id is not None
     retrieved_classes = asyncio.run(pool_repo.get_classes(resource_pool_id=inserted_rp.id, api_user=admin_user))
@@ -93,7 +95,7 @@ def test_get_classes(rp: models.ResourcePool, pool_repo: ResourcePoolRepository,
 
 @given(rp=rp_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-def test_get_class_by_id(rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: models.APIUser):
+def test_get_class_by_id(rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser):
     inserted_rp = create_rp(rp, pool_repo, api_user=admin_user)
     assert inserted_rp.id is not None
     a_class = inserted_rp.classes.copy().pop()
@@ -105,7 +107,7 @@ def test_get_class_by_id(rp: models.ResourcePool, pool_repo: ResourcePoolReposit
 
 @given(rp=rp_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-def test_get_class_by_name(rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: models.APIUser):
+def test_get_class_by_name(rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser):
     inserted_rp = create_rp(rp, pool_repo, api_user=admin_user)
     assert inserted_rp.id is not None
     a_class = inserted_rp.classes.copy().pop()
@@ -117,7 +119,9 @@ def test_get_class_by_name(rp: models.ResourcePool, pool_repo: ResourcePoolRepos
 
 @given(rp=rp_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-def test_resource_pool_delete(rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: models.APIUser):
+def test_resource_pool_delete(
+    rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser
+):
     inserted_rp = create_rp(rp, pool_repo, api_user=admin_user)
     assert inserted_rp.id is not None
     asyncio.run(pool_repo.delete_resource_pool(id=inserted_rp.id, api_user=admin_user))
@@ -128,7 +132,10 @@ def test_resource_pool_delete(rp: models.ResourcePool, pool_repo: ResourcePoolRe
 @given(rc=rc_non_default_strat(), rp=rp_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 def test_resource_class_create(
-    rc: models.ResourceClass, rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: models.APIUser
+    rc: models.ResourceClass,
+    rp: models.ResourcePool,
+    pool_repo: ResourcePoolRepository,
+    admin_user: base_models.APIUser,
 ):
     inserted_rp = create_rp(rp, pool_repo, api_user=admin_user)
     assert inserted_rp.id is not None
@@ -147,7 +154,9 @@ def test_resource_class_create(
 
 @given(rp=rp_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-def test_resource_class_delete(rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: models.APIUser):
+def test_resource_class_delete(
+    rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser
+):
     inserted_rp = create_rp(rp, pool_repo, api_user=admin_user)
     assert inserted_rp.id is not None
     assert len(inserted_rp.classes) > 0
@@ -171,7 +180,7 @@ def test_resource_class_delete(rp: models.ResourcePool, pool_repo: ResourcePoolR
 @given(rp=rp_strat(), rc_update=rc_update_reqs_dict)
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 def test_resource_class_update(
-    rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: models.APIUser, rc_update: dict
+    rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser, rc_update: dict
 ):
     inserted_rp = asyncio.run(pool_repo.insert_resource_pool(resource_pool=rp, api_user=admin_user))
     assert inserted_rp is not None
@@ -202,7 +211,7 @@ def test_resource_class_update(
 
 @given(rp=rp_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-def test_lookup_rp_by_name(rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: models.APIUser):
+def test_lookup_rp_by_name(rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser):
     inserted_rp = create_rp(rp, pool_repo, api_user=admin_user)
     assert inserted_rp.id is not None
     retrieved_rps = asyncio.run(pool_repo.get_resource_pools(name=inserted_rp.name, api_user=admin_user))
@@ -213,7 +222,7 @@ def test_lookup_rp_by_name(rp: models.ResourcePool, pool_repo: ResourcePoolRepos
 @given(rc=rc_non_default_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 def test_insert_class_in_nonexisting_rp(
-    pool_repo: ResourcePoolRepository, rc: models.ResourceClass, admin_user: models.APIUser
+    pool_repo: ResourcePoolRepository, rc: models.ResourceClass, admin_user: base_models.APIUser
 ):
     with pytest.raises(errors.MissingResourceError):
         asyncio.run(pool_repo.insert_resource_class(resource_class=rc, resource_pool_id=99999, api_user=admin_user))
@@ -222,7 +231,7 @@ def test_insert_class_in_nonexisting_rp(
 @given(new_quota_id=a_uuid_string)
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 def test_update_quota_in_nonexisting_rp(
-    pool_repo: ResourcePoolRepository, new_quota_id: str, admin_user: models.APIUser
+    pool_repo: ResourcePoolRepository, new_quota_id: str, admin_user: base_models.APIUser
 ):
     with pytest.raises(errors.MissingResourceError):
         asyncio.run(pool_repo.update_resource_pool(id=99999, api_user=admin_user, quota=new_quota_id))
@@ -233,8 +242,8 @@ def test_update_quota_in_nonexisting_rp(
 def test_resource_pools_access_control(
     public_rp: models.ResourcePool,
     private_rp: models.ResourcePool,
-    admin_user: models.APIUser,
-    loggedin_user: models.APIUser,
+    admin_user: base_models.APIUser,
+    loggedin_user: base_models.APIUser,
     pool_repo: ResourcePoolRepository,
     user_repo: UserRepository,
 ):
@@ -249,7 +258,7 @@ def test_resource_pools_access_control(
     assert inserted_private_rp not in loggedin_user_rps
     assert inserted_private_rp in admin_rps
     assert loggedin_user.id is not None
-    user_to_add = models.User(keycloak_id=loggedin_user.id)
+    user_to_add = base_models.User(keycloak_id=loggedin_user.id)
     updated_users = asyncio.run(
         user_repo.update_resource_pool_users(admin_user, inserted_private_rp.id, [user_to_add], append=True)
     )
@@ -261,7 +270,10 @@ def test_resource_pools_access_control(
 @given(rp1=rp_strat(), rp2=rp_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 def test_classes_filtering(
-    rp1: models.ResourcePool, rp2: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: models.APIUser
+    rp1: models.ResourcePool,
+    rp2: models.ResourcePool,
+    pool_repo: ResourcePoolRepository,
+    admin_user: base_models.APIUser,
 ):
     inserted_rp1 = create_rp(rp1, pool_repo, api_user=admin_user)
     inserted_rp2 = create_rp(rp2, pool_repo, api_user=admin_user)

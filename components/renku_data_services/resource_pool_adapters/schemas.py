@@ -1,10 +1,12 @@
-"""SQLAlchemy schemas for the database."""
+"""SQLAlchemy schemas for the CRC database."""
 from typing import List, Optional
 
-import renku_data_services.resource_pool_models as models
 from sqlalchemy import BigInteger, Column, Integer, String, Table
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
+
+import renku_data_services.base_models as base_models
+import renku_data_services.resource_pool_models as models
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
@@ -35,13 +37,13 @@ class UserORM(BaseORM):
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
 
     @classmethod
-    def load(cls, user: models.User):
+    def load(cls, user: base_models.User):
         """Create an ORM object from a user model."""
         return cls(keycloak_id=user.keycloak_id)
 
-    def dump(self) -> models.User:
+    def dump(self) -> base_models.User:
         """Create a user model from the ORM object."""
-        return models.User(id=self.id, keycloak_id=self.keycloak_id)
+        return base_models.User(id=self.id, keycloak_id=self.keycloak_id)
 
 
 class ResourceClassORM(BaseORM):

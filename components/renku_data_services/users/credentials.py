@@ -3,8 +3,9 @@ from dataclasses import dataclass
 from typing import Any, Dict, List
 
 import jwt
-import renku_data_services.resource_pool_models as models
 from jwt import PyJWKClient
+
+import renku_data_services.base_models as base_models
 from renku_data_services import errors
 
 
@@ -30,8 +31,8 @@ class KeycloakAuthenticator:
             verify=True,
         )
 
-    async def authenticate(self, access_token: str) -> models.APIUser:
+    async def authenticate(self, access_token: str) -> base_models.APIUser:
         """Checks the validity of the access token."""
         parsed = self._validate(access_token)
         is_admin = self.admin_role in parsed.get("realm_access", {}).get("roles", [])
-        return models.APIUser(is_admin, parsed.get("sub"), access_token=access_token)
+        return base_models.APIUser(is_admin, parsed.get("sub"), access_token=access_token)

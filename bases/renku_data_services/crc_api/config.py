@@ -5,25 +5,25 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import httpx
-import renku_data_services.resource_pool_models as models
 from jwt import PyJWKClient
-from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
-from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
-from renku_data_services.k8s.quota import QuotaRepository
-from renku_data_services import errors
-from renku_data_services.users.credentials import KeycloakAuthenticator
-from renku_data_services.users.dummy import DummyAuthenticator, DummyUserStore
-from renku_data_services.users.keycloak import KcUserStore
 from tenacity import retry, stop_after_attempt, stop_after_delay, wait_fixed
 from yaml import safe_load
 
+import renku_data_services.base_models as base_models
+import renku_data_services.crc_schemas
+import renku_data_services.resource_pool_models as models
+from renku_data_services import errors
 from renku_data_services.crc_api.server_options import (
     ServerOptions,
     ServerOptionsDefaults,
     generate_default_resource_pool,
 )
-
-import renku_data_services.crc_schemas
+from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
+from renku_data_services.k8s.quota import QuotaRepository
+from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
+from renku_data_services.users.credentials import KeycloakAuthenticator
+from renku_data_services.users.dummy import DummyAuthenticator, DummyUserStore
+from renku_data_services.users.keycloak import KcUserStore
 
 
 @retry(stop=(stop_after_attempt(20) | stop_after_delay(300)), wait=wait_fixed(2), reraise=True)
@@ -67,8 +67,8 @@ class Config:
 
     user_repo: UserRepository
     rp_repo: ResourcePoolRepository
-    user_store: models.UserStore
-    authenticator: models.Authenticator
+    user_store: base_models.UserStore
+    authenticator: base_models.Authenticator
     quota_repo: QuotaRepository
     spec: Dict[str, Any] = field(init=False, default_factory=dict)
     version: str = "0.0.1"
@@ -97,8 +97,8 @@ class Config:
         """Create a config from environment variables."""
 
         prefix = ""
-        user_store: models.UserStore
-        authenticator: models.Authenticator
+        user_store: base_models.UserStore
+        authenticator: base_models.Authenticator
         version = os.environ.get(f"{prefix}VERSION", "0.0.1")
         keycloak_url = None
         keycloak_realm = "Renku"
@@ -107,10 +107,8 @@ class Config:
         k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
-            async_sqlalchemy_url = os.environ.get(
-                f"{prefix}ASYNC_SQLALCHEMY_URL", "sqlite+aiosqlite:///data_services.db"
-            )
-            sync_sqlalchemy_url = os.environ.get(f"{prefix}SYNC_SQLALCHEMY_URL", "sqlite:///data_services.db")
+            async_sqlalchemy_url = os.environ.get(f"{prefix}ASYNC_SQLALCHEMY_URL", "sqlite+aiosqlite:///crc_service.db")
+            sync_sqlalchemy_url = os.environ.get(f"{prefix}SYNC_SQLALCHEMY_URL", "sqlite:///crc_service.db")
             authenticator = DummyAuthenticator(admin=True)
             user_always_exists = os.environ.get("DUMMY_USERSTORE_USER_ALWAYS_EXISTS", "true").lower() == "true"
             user_store = DummyUserStore(user_always_exists=user_always_exists)

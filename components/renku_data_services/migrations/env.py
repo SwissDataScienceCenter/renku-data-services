@@ -1,10 +1,11 @@
+"""Custom migrations env file to support modular migrations."""
+import importlib
 from logging.config import fileConfig
 from typing import cast
-from alembic.config import Config
-
-from sqlalchemy import MetaData
 
 from alembic import context
+from alembic.config import Config
+from sqlalchemy import MetaData
 
 from renku_data_services.migrations.core import DataRepository
 
@@ -52,6 +53,17 @@ def run_migrations(metadata: MetaData):
     # this is the Alembic Config object, which provides
     # access to the values within the .ini file in use.
     config = context.config
+
+    if not config.attributes.get("repo"):
+        config_class = config.get_section_option(config.config_ini_section, "config_class")
+
+        if config_class is None:
+            raise ValueError("Must set 'config_class' in alembic.ini section for app.")
+
+        config_module = importlib.import_module(config_class)
+
+        custom_config = config_module.Config.from_env()
+        config.attributes["repo"] = custom_config.repo
 
     # Interpret the config file for Python logging.
     # This line sets up loggers basically.

@@ -2,15 +2,15 @@ import inspect
 from typing import Any, Awaitable, Callable, Dict
 
 import pytest
-from renku_data_services.crc_schemas import apispec
-from renku_data_services import errors
 from sanic import Request, Sanic, SanicException
 from sanic.models.handler_types import RouteHandler
 from sanic_ext.exceptions import ValidationError as SanicValidationError
 from sanic_testing.testing import SanicTestClient
 from sqlalchemy.exc import SQLAlchemyError
 
-from renku_data_services.crc_api.error_handler import CustomErrorHandler
+from renku_data_services import errors
+from renku_data_services.base_api.error_handler import CustomErrorHandler
+from renku_data_services.crc_schemas import apispec
 
 
 def _trigger_error(err: Exception | Callable | Awaitable) -> RouteHandler:
@@ -105,7 +105,7 @@ def _generate_pydantic_error():
 )
 def test_error_handler(err: Exception | Callable, expected_response: Dict[str, Any], expected_status_code: int):
     app = Sanic("test-error-handler")
-    app.error_handler = CustomErrorHandler()
+    app.error_handler = CustomErrorHandler(apispec)
     app.get("/")(_trigger_error(err))  # type: ignore[unused-coroutine]
     test_client = SanicTestClient(app)
     _, res = test_client.get("/")

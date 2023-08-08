@@ -37,3 +37,12 @@ The container image can be built to be used as a local development service (for 
 
 It can then be ran as daemon: `docker run -d -e DUMMY_STORES=true --name
 renku-crc renku-crc`
+
+
+## Migrations
+to create migrations locally, run alembic like
+`DUMMY_STORES=true alembic -c components/renku_data_services/migrations/alembic.ini --name=<app> revision --message="<message>" --head=head --autogenerate`
+where `app` is the name of the app from the `alembic.ini` file (e.g. `storage` or `resource_pools`)
+
+To run migrations locally, run
+`DUMMY_STORES=true alembic -c components/renku_data_services/migrations/alembic.ini --name=<app> upgrade head`

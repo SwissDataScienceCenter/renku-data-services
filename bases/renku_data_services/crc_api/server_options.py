@@ -6,8 +6,9 @@ is added.
 """
 from typing import Any, List
 
-import renku_data_services.resource_pool_models as models
 from pydantic import BaseModel, ByteSize, Extra, Field, validator
+
+import renku_data_services.resource_pool_models as models
 
 
 def _check_greater_than_zero(cls: Any, v: int | float) -> int | float:

@@ -3,14 +3,16 @@ from test.components.renku_data_services.models.hypothesis import rp_list_strat,
 from test.utils import create_rp
 from typing import List
 
-import renku_data_services.resource_pool_models as models
 from hypothesis import HealthCheck, given, settings
+
+import renku_data_services.base_models as base_models
+import renku_data_services.resource_pool_models as models
 from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
 
 
 @given(user=user_strat)
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
-def test_insert_user(user_repo: UserRepository, user: models.User, admin_user: models.APIUser):
+def test_insert_user(user_repo: UserRepository, user: base_models.User, admin_user: base_models.APIUser):
     inserted_user = asyncio.run(user_repo.insert_user(user=user, api_user=admin_user))
     assert inserted_user is not None
     assert inserted_user.keycloak_id is not None
@@ -25,7 +27,7 @@ def test_insert_user(user_repo: UserRepository, user: models.User, admin_user: m
 
 @given(user=user_strat)
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
-def test_delete_user(user_repo: UserRepository, user: models.User, admin_user: models.APIUser):
+def test_delete_user(user_repo: UserRepository, user: base_models.User, admin_user: base_models.APIUser):
     inserted_user = asyncio.run(user_repo.insert_user(user=user, api_user=admin_user))
     assert inserted_user is not None
     assert inserted_user.keycloak_id is not None
@@ -42,8 +44,8 @@ def test_resource_pool_add_users(
     rp: models.ResourcePool,
     user_repo: UserRepository,
     pool_repo: ResourcePoolRepository,
-    users: List[models.User],
-    admin_user: models.APIUser,
+    users: List[base_models.User],
+    admin_user: base_models.APIUser,
 ):
     inserted_rp = create_rp(rp, pool_repo, api_user=admin_user)
     assert inserted_rp.id is not None
@@ -72,8 +74,8 @@ def test_resource_pool_remove_users(
     rp: models.ResourcePool,
     user_repo: UserRepository,
     pool_repo: ResourcePoolRepository,
-    users: List[models.User],
-    admin_user: models.APIUser,
+    users: List[base_models.User],
+    admin_user: base_models.APIUser,
 ):
     inserted_rp = create_rp(rp, pool_repo, api_user=admin_user)
     assert inserted_rp.id is not None
@@ -102,8 +104,8 @@ def test_get_update_user_resource_pools(
     rps: List[models.ResourcePool],
     user_repo: UserRepository,
     pool_repo: ResourcePoolRepository,
-    user: models.User,
-    admin_user: models.APIUser,
+    user: base_models.User,
+    admin_user: base_models.APIUser,
 ):
     inserted_rps = [create_rp(rp, pool_repo, api_user=admin_user) for rp in rps]
     assert len(inserted_rps) == len(rps)

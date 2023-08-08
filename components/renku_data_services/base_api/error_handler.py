@@ -1,20 +1,66 @@
 """The error handler for the application."""
+
 from sqlite3 import Error as SqliteError
+from typing import AbstractSet, Any, Dict, Mapping, Optional, Protocol, TypeVar, Union
 
 from asyncpg import exceptions as postgres_exceptions
 from pydantic import ValidationError as PydanticValidationError
 from pydantic.error_wrappers import ValidationError as PydanticWrappersValidationError
-from renku_data_services.crc_schemas import apispec
-from renku_data_services import errors
 from sanic import HTTPResponse, Request, SanicException, json
+from sanic.errorpages import BaseRenderer, TextRenderer
 from sanic.handlers import ErrorHandler
 from sanic.log import logger
 from sanic_ext.exceptions import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
+from renku_data_services import errors
+
+
+class BaseError(Protocol):
+    """Protocol for the error type of an apispec module."""
+
+    code: int
+    message: str
+    detail: Optional[str]
+
+
+class BaseErrorResponse(Protocol):
+    """Porotocol for the error response class of an apispec module."""
+
+    error: BaseError
+
+    def dict(
+        self,
+        *,
+        include: Optional[Union[AbstractSet[Union[int, str]], Mapping[Union[int, str], Any]]] = None,
+        exclude: Optional[Union[AbstractSet[Union[int, str]], Mapping[Union[int, str], Any]]] = None,
+        by_alias: bool = False,
+        skip_defaults: Optional[bool] = None,
+        exclude_unset: bool = False,
+        exclude_defaults: bool = False,
+        exclude_none: bool = False,
+    ) -> Dict[str, Any]:
+        """Turn the response to dict."""
+        ...
+
+
+BError = TypeVar("BError", bound=BaseError)
+BErrorResponse = TypeVar("BErrorResponse", bound=BaseErrorResponse)
+
+
+class ApiSpec(Protocol[BErrorResponse, BError]):
+    """Protocol for an apispec with error data."""
+
+    ErrorResponse: BErrorResponse
+    Error: BError
+
 
 class CustomErrorHandler(ErrorHandler):
     """Central error handling."""
+
+    def __init__(self, api_spec: ApiSpec, base: type[BaseRenderer] = TextRenderer):
+        self.api_spec = api_spec
+        super().__init__(base)
 
     def _log_unhandled_exception(self, exception: Exception):
         if self.debug:
@@ -74,8 +120,8 @@ class CustomErrorHandler(ErrorHandler):
             case _:
                 self._log_unhandled_exception(exception)
         return json(
-            apispec.ErrorResponse(
-                error=apispec.Error(
+            self.api_spec.ErrorResponse(
+                error=self.api_spec.Error(
                     code=formatted_exception.code,
                     message=formatted_exception.message,
                     detail=formatted_exception.detail,

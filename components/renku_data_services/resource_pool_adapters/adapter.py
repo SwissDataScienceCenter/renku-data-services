@@ -8,14 +8,16 @@ it all in one place.
 from functools import wraps
 from typing import Dict, List, Optional, Tuple, cast
 
-import renku_data_services.resource_pool_models as models
-from renku_data_services.resource_pool_adapters import schemas
-from renku_data_services import errors
 from sqlalchemy import create_engine, delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 from sqlalchemy.sql import Select, and_
 from sqlalchemy.sql.expression import true
+
+import renku_data_services.base_models as base_models
+import renku_data_services.resource_pool_models as models
+from renku_data_services import errors
+from renku_data_services.resource_pool_adapters import schemas
 
 
 class _Base:
@@ -28,7 +30,7 @@ class _Base:
 
 
 def _resource_pool_access_control(
-    api_user: models.APIUser,
+    api_user: base_models.APIUser,
     stmt: Select[Tuple[schemas.ResourcePoolORM]],
     keycloak_id: Optional[str] = None,
 ) -> Select[Tuple[schemas.ResourcePoolORM]]:
@@ -58,7 +60,7 @@ def _resource_pool_access_control(
 
 
 def _classes_user_access_control(
-    api_user: models.APIUser,
+    api_user: base_models.APIUser,
     stmt: Select[Tuple[schemas.ResourceClassORM]],
 ) -> Select[Tuple[schemas.ResourceClassORM]]:
     """Adjust the select statement for classes based on whether the user is logged in or not."""
@@ -123,7 +125,7 @@ class ResourcePoolRepository(_Base):
                     session.add(orm)
 
     async def get_resource_pools(
-        self, api_user: models.APIUser, id: Optional[int] = None, name: Optional[str] = None
+        self, api_user: base_models.APIUser, id: Optional[int] = None, name: Optional[str] = None
     ) -> List[models.ResourcePool]:
         """Get resource pools from database."""
         async with self.session_maker() as session:
@@ -140,7 +142,7 @@ class ResourcePoolRepository(_Base):
 
     async def filter_resource_pools(
         self,
-        api_user: models.APIUser,
+        api_user: base_models.APIUser,
         cpu: float = 0,
         memory: int = 0,
         max_storage: int = 0,
@@ -204,7 +206,7 @@ class ResourcePoolRepository(_Base):
 
     @_only_admins
     async def insert_resource_pool(
-        self, api_user: models.APIUser, resource_pool: models.ResourcePool
+        self, api_user: base_models.APIUser, resource_pool: models.ResourcePool
     ) -> models.ResourcePool:
         """Insert resource pool into database."""
         orm = schemas.ResourcePoolORM.load(resource_pool)
@@ -223,7 +225,7 @@ class ResourcePoolRepository(_Base):
 
     async def get_classes(
         self,
-        api_user: models.APIUser,
+        api_user: base_models.APIUser,
         id: Optional[int] = None,
         name: Optional[str] = None,
         resource_pool_id: Optional[int] = None,
@@ -247,7 +249,11 @@ class ResourcePoolRepository(_Base):
 
     @_only_admins
     async def insert_resource_class(
-        self, api_user: models.APIUser, resource_class: models.ResourceClass, *, resource_pool_id: Optional[int] = None
+        self,
+        api_user: base_models.APIUser,
+        resource_class: models.ResourceClass,
+        *,
+        resource_pool_id: Optional[int] = None,
     ) -> models.ResourceClass:
         """Insert a resource class in the database."""
         cls = schemas.ResourceClassORM.load(resource_class)
@@ -272,7 +278,7 @@ class ResourcePoolRepository(_Base):
         return cls.dump()
 
     @_only_admins
-    async def update_resource_pool(self, api_user: models.APIUser, id: int, **kwargs) -> models.ResourcePool:
+    async def update_resource_pool(self, api_user: base_models.APIUser, id: int, **kwargs) -> models.ResourcePool:
         """Update an existing resource pool in the database."""
         rp: Optional[schemas.ResourcePoolORM] = None
         async with self.session_maker() as session:
@@ -322,7 +328,7 @@ class ResourcePoolRepository(_Base):
                 return rp.dump()
 
     @_only_admins
-    async def delete_resource_pool(self, api_user: models.APIUser, id: int) -> Optional[models.ResourcePool]:
+    async def delete_resource_pool(self, api_user: base_models.APIUser, id: int) -> Optional[models.ResourcePool]:
         """Delete a resource pool from the database."""
         async with self.session_maker() as session:
             async with session.begin():
@@ -337,7 +343,7 @@ class ResourcePoolRepository(_Base):
                 return None
 
     @_only_admins
-    async def delete_resource_class(self, api_user: models.APIUser, resource_pool_id: int, resource_class_id: int):
+    async def delete_resource_class(self, api_user: base_models.APIUser, resource_pool_id: int, resource_class_id: int):
         """Delete a specific resource class."""
         async with self.session_maker() as session:
             async with session.begin():
@@ -355,7 +361,7 @@ class ResourcePoolRepository(_Base):
 
     @_only_admins
     async def update_resource_class(
-        self, api_user: models.APIUser, resource_pool_id: int, resource_class_id: int, **kwargs
+        self, api_user: base_models.APIUser, resource_pool_id: int, resource_class_id: int, **kwargs
     ) -> models.ResourceClass:
         """Update a specific resource class."""
         async with self.session_maker() as session:
@@ -389,10 +395,10 @@ class UserRepository(_Base):
     async def get_users(
         self,
         *,
-        api_user: models.APIUser,
+        api_user: base_models.APIUser,
         keycloak_id: Optional[str] = None,
         resource_pool_id: Optional[int] = None,
-    ) -> List[models.User]:
+    ) -> List[base_models.User]:
         """Get users from the database."""
         async with self.session_maker() as session:
             async with session.begin():
@@ -421,7 +427,7 @@ class UserRepository(_Base):
                     return [orm.dump() for orm in orms]
 
     @_only_admins
-    async def insert_user(self, api_user: models.APIUser, user: models.User) -> models.User:
+    async def insert_user(self, api_user: base_models.APIUser, user: base_models.User) -> base_models.User:
         """Inser a user in the database."""
         orm = schemas.UserORM.load(user)
         async with self.session_maker() as session:
@@ -430,7 +436,7 @@ class UserRepository(_Base):
         return orm.dump()
 
     @_only_admins
-    async def delete_user(self, api_user: models.APIUser, id: str):
+    async def delete_user(self, api_user: base_models.APIUser, id: str):
         """Remove a user from the database."""
         async with self.session_maker() as session:
             async with session.begin():
@@ -444,7 +450,7 @@ class UserRepository(_Base):
 
     async def get_user_resource_pools(
         self,
-        api_user: models.APIUser,
+        api_user: base_models.APIUser,
         keycloak_id: str,
         resource_pool_id: Optional[int] = None,
         resource_pool_name: Optional[str] = None,
@@ -465,7 +471,7 @@ class UserRepository(_Base):
 
     @_only_admins
     async def update_user_resource_pools(
-        self, api_user: models.APIUser, keycloak_id: str, resource_pool_ids: List[int], append: bool = True
+        self, api_user: base_models.APIUser, keycloak_id: str, resource_pool_ids: List[int], append: bool = True
     ) -> List[models.ResourcePool]:
         """Update the resource pools that a specific user has access to."""
         async with self.session_maker() as session:
@@ -498,7 +504,7 @@ class UserRepository(_Base):
                 return [rp.dump() for rp in rps_to_add]
 
     @_only_admins
-    async def delete_resource_pool_user(self, api_user: models.APIUser, resource_pool_id: int, keycloak_id: str):
+    async def delete_resource_pool_user(self, api_user: base_models.APIUser, resource_pool_id: int, keycloak_id: str):
         """Remove a user from a specific resource pool."""
         async with self.session_maker() as session:
             async with session.begin():
@@ -513,8 +519,8 @@ class UserRepository(_Base):
 
     @_only_admins
     async def update_resource_pool_users(
-        self, api_user: models.APIUser, resource_pool_id: int, users: List[models.User], append: bool = True
-    ) -> List[models.User]:
+        self, api_user: base_models.APIUser, resource_pool_id: int, users: List[base_models.User], append: bool = True
+    ) -> List[base_models.User]:
         """Update the users that have access to a specific resource pool."""
         async with self.session_maker() as session:
             async with session.begin():
