@@ -44,7 +44,9 @@ class StorageBP(CustomBlueprint):
 
             if "storage_url" in request.json:
                 url_body = apispec.CloudStorageUrl(**request.json)
-                storage = models.CloudStorage.from_url(storage_url=url_body.storage_url, project_id=url_body.project_id)
+                storage = models.CloudStorage.from_url(
+                    storage_url=url_body.storage_url, project_id=url_body.project_id, target_path=url_body.target_path
+                )
             else:
                 body = apispec.CloudStorage(**request.json)
                 storage = models.CloudStorage.from_dict(body.dict())

@@ -25,6 +25,8 @@ class CloudStorageORM(BaseORM):
     project_id: Mapped[str] = mapped_column("project_id", String(), index=True)
     storage_type: Mapped[str] = mapped_column("storage_type", String(20))
     configuration: Mapped[dict[str, Any]] = mapped_column("configuration", JSONVariant)
+    source_path: Mapped[str] = mapped_column("source_path", String())
+    target_path: Mapped[str] = mapped_column("target_path", String())
 
     storage_id: Mapped[str] = mapped_column(
         "storage_id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False
@@ -34,7 +36,11 @@ class CloudStorageORM(BaseORM):
     def load(cls, storage: models.CloudStorage):
         """Create CloudStorageORM from the cloud storage model."""
         return cls(
-            project_id=storage.project_id, storage_type=storage.storage_type, configuration=storage.configuration
+            project_id=storage.project_id,
+            storage_type=storage.storage_type,
+            configuration=storage.configuration,
+            source_path=storage.source_path,
+            target_path=storage.target_path,
         )
 
     def dump(self):
@@ -43,5 +49,7 @@ class CloudStorageORM(BaseORM):
             project_id=self.project_id,
             storage_type=self.storage_type,
             configuration=self.configuration,
+            source_path=self.source_path,
+            target_path=self.target_path,
             storage_id=self.storage_id,
         )

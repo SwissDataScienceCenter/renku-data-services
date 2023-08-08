@@ -147,8 +147,13 @@ components:
           properties:
             storage_url:
               type: string
+            target_path:
+              type: string
+              description: the target path relative to the repository where the storage should be mounted
+              example: my/project/folder
           required:
             - storage_url
+            - target_path
           example:
             storage_url: s3://giab
     CloudStorage:
@@ -165,9 +170,18 @@ components:
               description: Dictionary of rclone key:value pairs (based on schema from '/storage_schema')
               additionalProperties:
                 type: string
+            source_path:
+              type: string
+              description: the source path to mount, usually starts with bucket/container name
+              example: bucket/my/storage/folder/
+            target_path:
+              type: string
+              description: the target path relative to the repository where the storage should be mounted
+              example: my/project/folder
           required:
-            - storage_type
             - configuration
+            - source_path
+            - target_path
     CloudStorageWithId:
       allOf:
         - $ref: "#/components/schemas/CloudStorage"
