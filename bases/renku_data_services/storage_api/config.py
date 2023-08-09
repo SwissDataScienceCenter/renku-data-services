@@ -4,8 +4,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict
 
-import httpx
-from tenacity import retry, stop_after_attempt, stop_after_delay, wait_fixed
 from yaml import safe_load
 
 import renku_data_services.base_models as base_models
@@ -14,15 +12,6 @@ from renku_data_services import errors
 from renku_data_services.storage_adapters import StorageRepository
 from renku_data_services.users.dummy import DummyAuthenticator
 from renku_data_services.users.gitlab import GitlabAuthenticator
-
-
-@retry(stop=(stop_after_attempt(20) | stop_after_delay(300)), wait=wait_fixed(2), reraise=True)
-def _oidc_discovery(url: str, realm: str) -> Dict[str, Any]:
-    url = f"{url}/realms/{realm}/.well-known/openid-configuration"
-    res = httpx.get(url)
-    if res.status_code == 200:
-        return res.json()
-    raise errors.ConfigurationError(message=f"Cannot successfully do OIDC discovery with url {url}.")
 
 
 @dataclass
