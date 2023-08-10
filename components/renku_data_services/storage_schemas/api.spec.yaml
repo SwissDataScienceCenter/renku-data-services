@@ -57,7 +57,7 @@ paths:
           application/json:
             schema:
               oneOf:
-                - $ref: "#/components/schemas/CloudStorage"
+                - $ref: "#/components/schemas/CloudStoragePatch"
       responses:
         "201":
           description: The cloud storage entry was created
@@ -79,10 +79,10 @@ paths:
       summary: get cloud storage for a project or by id
       parameters:
         - in: query
-          name: git_url
+          name: project_id
           required: true
           schema:
-            $ref: "#/components/schemas/GitUrl"
+            $ref: "#/components/schemas/GitlabProjectId"
       responses:
         "200":
           description: the storage configurations for the project
@@ -182,6 +182,28 @@ components:
             - configuration
             - source_path
             - target_path
+    CloudStoragePatch:
+      type: object
+      properties:
+        project_id:
+          $ref: "#/components/schemas/GitlabProjectId"
+        storage_type:
+          type: string
+          description: same as rclone prefix/ rclone config type. Ignored in requests, but returned in responses for convenience.
+          readOnly: true
+        configuration:
+          type: object
+          description: Dictionary of rclone key:value pairs (based on schema from '/storage_schema')
+          additionalProperties:
+            type: string
+        source_path:
+          type: string
+          description: the source path to mount, usually starts with bucket/container name
+          example: bucket/my/storage/folder/
+        target_path:
+          type: string
+          description: the target path relative to the repository where the storage should be mounted
+          example: my/project/folder
     CloudStorageWithId:
       allOf:
         - $ref: "#/components/schemas/CloudStorage"
@@ -280,9 +302,10 @@ components:
       pattern: "^[A-Z0-9]+$"
       format: ulid
     GitlabProjectId:
-      description: Project id of a gitlab project
+      description: Project id of a gitlab project (only int project id allowed, encoded as string for future-proofing)
       type: string
-      example: namespace/project
+      pattern: "^[0-9]+$"
+      example: "123456"
     ErrorResponse:
       type: object
       properties:

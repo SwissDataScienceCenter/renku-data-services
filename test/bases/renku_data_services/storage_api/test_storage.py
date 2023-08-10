@@ -12,7 +12,7 @@ from renku_data_services.storage_schemas.core import RCloneValidator
 from renku_data_services.users.dummy import DummyAuthenticator
 
 _valid_storage: dict[str, Any] = {
-    "project_id": "namespace/project",
+    "project_id": "123456",
     "configuration": {
         "type": "s3",
         "provider": "AWS",
@@ -47,7 +47,7 @@ def storage_test_client(storage_repo: StorageRepository) -> SanicTestClient:
         (_valid_storage, 201, "s3"),
         (
             {
-                "project_id": "namespace/project",
+                "project_id": "123456",
                 "source_path": "bucket/myfolder",
                 "target_path": "my/target",
                 "storage_url": "s3://s3.us-east-2.amazonaws.com/mybucket/myfolder",
@@ -57,7 +57,7 @@ def storage_test_client(storage_repo: StorageRepository) -> SanicTestClient:
         ),
         (
             {
-                "project_id": "namespace/project",
+                "project_id": "123456",
                 "source_path": "bucket/myfolder",
                 "target_path": "my/target",
                 "storage_url": "s3://giab/",
@@ -67,7 +67,7 @@ def storage_test_client(storage_repo: StorageRepository) -> SanicTestClient:
         ),
         (
             {
-                "project_id": "namespace/project",
+                "project_id": "123456",
                 "source_path": "bucket/myfolder",
                 "target_path": "my/target",
                 "storage_url": "s3://mybucket.s3.us-east-2.amazonaws.com/myfolder",
@@ -77,7 +77,7 @@ def storage_test_client(storage_repo: StorageRepository) -> SanicTestClient:
         ),
         (
             {
-                "project_id": "namespace/project",
+                "project_id": "123456",
                 "target_path": "my/target",
                 "storage_url": "https://my.provider.com/mybucket/myfolder",
             },
@@ -86,7 +86,7 @@ def storage_test_client(storage_repo: StorageRepository) -> SanicTestClient:
         ),
         (
             {
-                "project_id": "namespace/project",
+                "project_id": "123456",
                 "target_path": "my/target",
                 "storage_url": "azure://mycontainer/myfolder",
             },
@@ -95,7 +95,7 @@ def storage_test_client(storage_repo: StorageRepository) -> SanicTestClient:
         ),
         (
             {
-                "project_id": "namespace/project",
+                "project_id": "123456",
                 "target_path": "my/target",
                 "storage_url": "az://myaccount.dfs.core.windows.net/myfolder",
             },
@@ -104,7 +104,7 @@ def storage_test_client(storage_repo: StorageRepository) -> SanicTestClient:
         ),
         (
             {
-                "project_id": "namespace/project",
+                "project_id": "123456",
                 "source_path": "bucket/myfolder",
                 "target_path": "my/target",
                 "storage_url": "az://myaccount.blob.core.windows.net/myfolder",
@@ -114,7 +114,7 @@ def storage_test_client(storage_repo: StorageRepository) -> SanicTestClient:
         ),
         (
             {
-                "project_id": "namespace/project",
+                "project_id": "123456",
                 "configuration": {
                     "type": "s3",
                     "provider": "AWS",
@@ -128,7 +128,7 @@ def storage_test_client(storage_repo: StorageRepository) -> SanicTestClient:
         ),
         (
             {
-                "project_id": "namespace/project",
+                "project_id": "123456",
                 "configuration": {
                     "provider": "AWS",
                     "region": None,
@@ -142,7 +142,7 @@ def storage_test_client(storage_repo: StorageRepository) -> SanicTestClient:
         ),
         (
             {
-                "project_id": "namespace/project",
+                "project_id": "123456",
                 "storage_type": "s3",
                 "configuration": {
                     "provider": "AWS",
@@ -155,7 +155,7 @@ def storage_test_client(storage_repo: StorageRepository) -> SanicTestClient:
         ),
         (
             {
-                "project_id": "namespace/project",
+                "project_id": "123456",
                 "storage_type": "s3",
                 "configuration": {
                     "provider": "AWS",
@@ -202,3 +202,78 @@ def test_get_storage(storage_test_client, valid_storage_payload):
     assert res.json[0]["project_id"] == project_id
     assert res.json[0]["storage_type"] == "s3"
     assert res.json[0]["configuration"]["provider"] == "AWS"
+
+
+def test_storage_deletion(storage_test_client, valid_storage_payload):
+    _, res = storage_test_client.post(
+        "/api/storage/storage",
+        headers={"Authorization": "bearer test"},
+        data=json.dumps(valid_storage_payload),
+    )
+    assert res.status_code == 201
+    assert res.json["storage_type"] == "s3"
+    storage_id = res.json["storage_id"]
+
+    _, res = storage_test_client.delete(
+        f"/api/storage/storage/{storage_id}",
+        headers={"Authorization": "bearer test"},
+    )
+    assert res.status_code == 204
+
+    _, res = storage_test_client.get(
+        f"/api/storage/storage/{storage_id}",
+        headers={"Authorization": "bearer test"},
+    )
+
+    assert res.status_code == 404
+
+
+def test_storage_put(storage_test_client, valid_storage_payload):
+    _, res = storage_test_client.post(
+        "/api/storage/storage",
+        headers={"Authorization": "bearer test"},
+        data=json.dumps(valid_storage_payload),
+    )
+    assert res.status_code == 201
+    assert res.json["storage_type"] == "s3"
+    storage_id = res.json["storage_id"]
+
+    _, res = storage_test_client.put(
+        f"/api/storage/storage/{storage_id}",
+        headers={"Authorization": "bearer test"},
+        data=json.dumps(
+            {
+                "project_id": valid_storage_payload["project_id"],
+                "configuration": {"type": "azureblob"},
+                "source_path": "bucket/myfolder",
+                "target_path": "my/target",
+            }
+        ),
+    )
+    assert res.status_code == 200
+    assert res.json["storage_type"] == "azureblob"
+
+
+def test_storage_patch(storage_test_client, valid_storage_payload):
+    _, res = storage_test_client.post(
+        "/api/storage/storage",
+        headers={"Authorization": "bearer test"},
+        data=json.dumps(valid_storage_payload),
+    )
+    assert res.status_code == 201
+    assert res.json["storage_type"] == "s3"
+    storage_id = res.json["storage_id"]
+
+    _, res = storage_test_client.patch(
+        f"/api/storage/storage/{storage_id}",
+        headers={"Authorization": "bearer test"},
+        data=json.dumps(
+            {
+                "configuration": {"type": "azureblob"},
+                "source_path": "bucket/myotherfolder",
+            }
+        ),
+    )
+    assert res.status_code == 200
+    assert res.json["storage_type"] == "azureblob"
+    assert res.json["source_path"] == "bucket/myotherfolder"

@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 import renku_data_services.storage_models as models
+from renku_data_services import errors
 from renku_data_services.storage_adapters import schemas
 
 
@@ -36,6 +37,18 @@ class StorageRepository(_Base):
             orms = res.scalars().all()
             return [orm.dump() for orm in orms]
 
+    async def get_storage_by_id(self, storage_id: str) -> models.CloudStorage:
+        """Get a single storage by id."""
+        async with self.session_maker() as session:
+            res = await session.execute(
+                select(schemas.CloudStorageORM).where(schemas.CloudStorageORM.storage_id == storage_id)
+            )
+            storage = res.one_or_none()
+
+            if storage is None:
+                raise errors.MissingResourceError(message=f"The storage with id '{storage_id}' cannot be found")
+            return storage[0].dump()
+
     async def insert_storage(self, storage: models.CloudStorage) -> models.CloudStorage:
         """Insert a new cloud storage entry."""
         orm = schemas.CloudStorageORM.load(storage)
@@ -43,3 +56,38 @@ class StorageRepository(_Base):
             async with session.begin():
                 session.add(orm)
         return orm.dump()
+
+    async def update_storage(self, storage_id: str, **kwargs) -> models.CloudStorage:
+        """Update a cloud storage entry."""
+        async with self.session_maker() as session:
+            async with session.begin():
+                res = await session.execute(
+                    select(schemas.CloudStorageORM).where(schemas.CloudStorageORM.storage_id == storage_id)
+                )
+                storage = res.one_or_none()
+
+                if storage is None:
+                    raise errors.MissingResourceError(message=f"The storage with id '{storage_id}' cannot be found")
+                storage = storage[0]
+
+                for key, value in kwargs.items():
+                    setattr(storage, key, value)
+
+                if "configuration" in kwargs and "type" in kwargs["configuration"]:
+                    storage.storage_type = kwargs["configuration"]["type"]
+
+        return storage.dump()
+
+    async def delete_storage(self, storage_id: str) -> None:
+        """Delete a cloud storage entry."""
+        async with self.session_maker() as session:
+            async with session.begin():
+                res = await session.execute(
+                    select(schemas.CloudStorageORM).where(schemas.CloudStorageORM.storage_id == storage_id)
+                )
+                storage = res.one_or_none()
+
+                if storage is None:
+                    return
+
+                await session.delete(storage[0])
