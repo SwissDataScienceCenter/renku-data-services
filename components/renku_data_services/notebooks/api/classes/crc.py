@@ -117,8 +117,12 @@ class CRCValidator:
             params = {
                 "cpu": server_options.cpu,
                 "gpu": server_options.gpu,
-                "memory": server_options.memory,
-                "max_storage": server_options.storage,
+                "memory": server_options.memory
+                if server_options.gigabytes
+                else round(server_options.memory / 1_000_000_000),
+                "max_storage": server_options.storage
+                if server_options.gigabytes
+                else round(server_options.storage / 1_000_000_000),
             }
         res = requests.get(
             self.crc_url + "/resource_pools", headers=headers, params=params

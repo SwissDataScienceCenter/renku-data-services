@@ -22,6 +22,7 @@ from webargs.flaskparser import use_args
 
 from ..config import config
 from ..errors.user import ImageParseError, MissingResourceError, UserInputError
+from ..errors.programming import ProgrammingError
 from ..util.check_image import get_docker_token, image_exists, parse_image_name
 from ..util.kubernetes_ import make_server_name
 from .auth import authenticated
@@ -219,15 +220,23 @@ def launch_notebook(
             user, resource_class_id, storage
         )
     elif server_options is not None:
+        if isinstance(server_options, dict):
+            requested_server_options = ServerOptions(
+                memory=server_options["mem_request"],
+                storage=server_options["disk_request"],
+                cpu=server_options["cpu_request"],
+                gpu=server_options["gpu_request"],
+                lfs_auto_fetch=server_options["lfs_auto_fetch"],
+                default_url=server_options["defaultUrl"],
+            )
+        elif isinstance(server_options, ServerOptions):
+            requested_server_options = server_options
+        else:
+            raise ProgrammingError(
+                message="Got an unexpected type of server options when "
+                f"launching sessions: {type(server_options)}"
+            )
         # The old style API was used, try to find a matching class from the CRC service
-        requested_server_options = ServerOptions(
-            memory=server_options["mem_request"],
-            storage=server_options["disk_request"],
-            cpu=server_options["cpu_request"],
-            gpu=server_options["gpu_request"],
-            lfs_auto_fetch=server_options["lfs_auto_fetch"],
-            default_url=server_options["defaultUrl"],
-        )
         parsed_server_options = crc_validator.find_acceptable_class(
             user, requested_server_options
         )

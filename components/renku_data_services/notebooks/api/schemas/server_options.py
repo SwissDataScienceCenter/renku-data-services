@@ -71,7 +71,7 @@ class ServerOptions:
         other_storage = 0 if other.storage is None else other.storage
         return ServerOptions(
             cpu=self.cpu - other.cpu,
-            memoory=self.memory - other.memory,
+            memory=self.memory - other.memory,
             gpu=self.gpu - other.gpu,
             storage=self_storage - other_storage,
         )
