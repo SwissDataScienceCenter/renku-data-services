@@ -2,28 +2,30 @@ import asyncio
 from dataclasses import asdict
 
 import renku_data_services.base_models as base_models
-import renku_data_services.resource_pool_models as models
+import renku_data_services.resource_pool_models as rp_models
+import renku_data_services.storage_models as storage_models
 from renku_data_services.resource_pool_adapters import ResourcePoolRepository
+from renku_data_services.storage_adapters import StorageRepository
 
 
-def remove_id_from_quota(quota: models.Quota) -> models.Quota:
+def remove_id_from_quota(quota: rp_models.Quota) -> rp_models.Quota:
     kwargs = asdict(quota)
     kwargs["id"] = None
-    return models.Quota(**kwargs)
+    return rp_models.Quota(**kwargs)
 
 
-def remove_id_from_rc(rc: models.ResourceClass) -> models.ResourceClass:
+def remove_id_from_rc(rc: rp_models.ResourceClass) -> rp_models.ResourceClass:
     kwargs = asdict(rc)
     kwargs["id"] = None
-    return models.ResourceClass(**kwargs)
+    return rp_models.ResourceClass(**kwargs)
 
 
-def remove_id_from_rp(rp: models.ResourcePool) -> models.ResourcePool:
+def remove_id_from_rp(rp: rp_models.ResourcePool) -> rp_models.ResourcePool:
     quota = rp.quota
-    if isinstance(quota, models.Quota):
+    if isinstance(quota, rp_models.Quota):
         quota = remove_id_from_quota(quota)
     classes = [remove_id_from_rc(rc) for rc in rp.classes]
-    return models.ResourcePool(
+    return rp_models.ResourcePool(
         name=rp.name, id=None, quota=quota, classes=classes, default=rp.default, public=rp.public
     )
 
@@ -35,8 +37,8 @@ def remove_id_from_user(user: base_models.User) -> base_models.User:
 
 
 def create_rp(
-    rp: models.ResourcePool, repo: ResourcePoolRepository, api_user: base_models.APIUser
-) -> models.ResourcePool:
+    rp: rp_models.ResourcePool, repo: ResourcePoolRepository, api_user: base_models.APIUser
+) -> rp_models.ResourcePool:
     inserted_rp = asyncio.run(repo.insert_resource_pool(api_user, rp))
     assert inserted_rp is not None
     assert inserted_rp.id is not None
@@ -48,3 +50,13 @@ def create_rp(
     assert len(retrieved_rps) == 1
     assert inserted_rp == retrieved_rps[0]
     return inserted_rp
+
+
+def create_storage(storage: storage_models.CloudStorage, repo: StorageRepository):
+    inserted_storage = asyncio.run(repo.insert_storage(storage))
+    assert inserted_storage is not None
+    assert inserted_storage.storage_id is not None
+    retrieved_storage = asyncio.run(repo.get_storage_by_id(inserted_storage.storage_id))
+    assert retrieved_storage is not None
+    assert inserted_storage == retrieved_storage
+    return inserted_storage

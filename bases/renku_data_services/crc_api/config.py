@@ -92,6 +92,11 @@ class Config:
                 defaults = ServerOptionsDefaults.parse_obj(safe_load(f))
             self.default_resource_pool = generate_default_resource_pool(options, defaults)
 
+    @property
+    def repo(self):
+        """Used by alembic to find repo."""
+        return self.rp_repo
+
     @classmethod
     def from_env(cls):
         """Create a config from environment variables."""

@@ -48,6 +48,20 @@ def storage_test_client(storage_repo: StorageRepository) -> SanicTestClient:
         (
             {
                 "project_id": "123456",
+                "configuration": {
+                    "type": "s3",
+                    "provider": "AWS",
+                    "region": "us-east-1",
+                },
+                "source_path": "bucket/myfolder",
+                "target_path": "my/target",
+            },
+            201,
+            "s3",
+        ),
+        (
+            {
+                "project_id": "123456",
                 "source_path": "bucket/myfolder",
                 "target_path": "my/target",
                 "storage_url": "s3://s3.us-east-2.amazonaws.com/mybucket/myfolder",
@@ -179,6 +193,7 @@ def test_storage_creation(
     )
     assert res
     assert res.status_code == expected_status_code
+    assert res.json
     if res.status_code < 300:
         assert res.json["storage_type"] == expected_storage_type
 
