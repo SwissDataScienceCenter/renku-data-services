@@ -3,7 +3,7 @@ from typing import Any
 
 import pytest
 from sanic import Sanic
-from sanic_testing.testing import SanicTestClient
+from sanic_testing.testing import SanicASGITestClient
 
 from renku_data_services.storage_adapters import StorageRepository
 from renku_data_services.storage_api.app import register_all_handlers
@@ -29,7 +29,7 @@ def valid_storage_payload() -> dict[str, Any]:
 
 
 @pytest.fixture
-def storage_test_client(storage_repo: StorageRepository) -> SanicTestClient:
+def storage_test_client(storage_repo: StorageRepository) -> SanicASGITestClient:
     config = Config(
         storage_repo=storage_repo,
         authenticator=DummyAuthenticator(admin=True),
@@ -38,7 +38,7 @@ def storage_test_client(storage_repo: StorageRepository) -> SanicTestClient:
     app = Sanic(config.app_name)
     app = register_all_handlers(app, config)
     app.ext.add_dependency(RCloneValidator)
-    return SanicTestClient(app)
+    return SanicASGITestClient(app)
 
 
 @pytest.mark.parametrize(
@@ -62,7 +62,6 @@ def storage_test_client(storage_repo: StorageRepository) -> SanicTestClient:
         (
             {
                 "project_id": "123456",
-                "source_path": "bucket/myfolder",
                 "target_path": "my/target",
                 "storage_url": "s3://s3.us-east-2.amazonaws.com/mybucket/myfolder",
             },
@@ -72,7 +71,6 @@ def storage_test_client(storage_repo: StorageRepository) -> SanicTestClient:
         (
             {
                 "project_id": "123456",
-                "source_path": "bucket/myfolder",
                 "target_path": "my/target",
                 "storage_url": "s3://giab/",
             },
@@ -82,7 +80,6 @@ def storage_test_client(storage_repo: StorageRepository) -> SanicTestClient:
         (
             {
                 "project_id": "123456",
-                "source_path": "bucket/myfolder",
                 "target_path": "my/target",
                 "storage_url": "s3://mybucket.s3.us-east-2.amazonaws.com/myfolder",
             },
@@ -183,10 +180,14 @@ def storage_test_client(storage_repo: StorageRepository) -> SanicTestClient:
         ),
     ],
 )
-def test_storage_creation(
-    storage_test_client: SanicTestClient, payload: dict[str, Any], expected_status_code: int, expected_storage_type: str
+@pytest.mark.asyncio
+async def test_storage_creation(
+    storage_test_client: SanicASGITestClient,
+    payload: dict[str, Any],
+    expected_status_code: int,
+    expected_storage_type: str,
 ):
-    _, res = storage_test_client.post(
+    _, res = await storage_test_client.post(
         "/api/storage/storage",
         headers={"Authorization": "bearer test"},
         data=json.dumps(payload),
@@ -198,8 +199,9 @@ def test_storage_creation(
         assert res.json["storage_type"] == expected_storage_type
 
 
-def test_get_storage(storage_test_client, valid_storage_payload):
-    _, res = storage_test_client.post(
+@pytest.mark.asyncio
+async def test_get_storage(storage_test_client, valid_storage_payload):
+    _, res = await storage_test_client.post(
         "/api/storage/storage",
         headers={"Authorization": "bearer test"},
         data=json.dumps(valid_storage_payload),
@@ -208,7 +210,7 @@ def test_get_storage(storage_test_client, valid_storage_payload):
     assert res.json["storage_type"] == "s3"
 
     project_id = res.json["project_id"]
-    _, res = storage_test_client.get(
+    _, res = await storage_test_client.get(
         f"/api/storage/storage?project_id={project_id}",
         headers={"Authorization": "bearer test"},
     )
@@ -219,8 +221,9 @@ def test_get_storage(storage_test_client, valid_storage_payload):
     assert res.json[0]["configuration"]["provider"] == "AWS"
 
 
-def test_storage_deletion(storage_test_client, valid_storage_payload):
-    _, res = storage_test_client.post(
+@pytest.mark.asyncio
+async def test_storage_deletion(storage_test_client, valid_storage_payload):
+    _, res = await storage_test_client.post(
         "/api/storage/storage",
         headers={"Authorization": "bearer test"},
         data=json.dumps(valid_storage_payload),
@@ -229,13 +232,13 @@ def test_storage_deletion(storage_test_client, valid_storage_payload):
     assert res.json["storage_type"] == "s3"
     storage_id = res.json["storage_id"]
 
-    _, res = storage_test_client.delete(
+    _, res = await storage_test_client.delete(
         f"/api/storage/storage/{storage_id}",
         headers={"Authorization": "bearer test"},
     )
     assert res.status_code == 204
 
-    _, res = storage_test_client.get(
+    _, res = await storage_test_client.get(
         f"/api/storage/storage/{storage_id}",
         headers={"Authorization": "bearer test"},
     )
@@ -243,8 +246,9 @@ def test_storage_deletion(storage_test_client, valid_storage_payload):
     assert res.status_code == 404
 
 
-def test_storage_put(storage_test_client, valid_storage_payload):
-    _, res = storage_test_client.post(
+@pytest.mark.asyncio
+async def test_storage_put(storage_test_client, valid_storage_payload):
+    _, res = await storage_test_client.post(
         "/api/storage/storage",
         headers={"Authorization": "bearer test"},
         data=json.dumps(valid_storage_payload),
@@ -253,7 +257,7 @@ def test_storage_put(storage_test_client, valid_storage_payload):
     assert res.json["storage_type"] == "s3"
     storage_id = res.json["storage_id"]
 
-    _, res = storage_test_client.put(
+    _, res = await storage_test_client.put(
         f"/api/storage/storage/{storage_id}",
         headers={"Authorization": "bearer test"},
         data=json.dumps(
@@ -269,8 +273,9 @@ def test_storage_put(storage_test_client, valid_storage_payload):
     assert res.json["storage_type"] == "azureblob"
 
 
-def test_storage_patch(storage_test_client, valid_storage_payload):
-    _, res = storage_test_client.post(
+@pytest.mark.asyncio
+async def test_storage_patch(storage_test_client, valid_storage_payload):
+    _, res = await storage_test_client.post(
         "/api/storage/storage",
         headers={"Authorization": "bearer test"},
         data=json.dumps(valid_storage_payload),
@@ -279,7 +284,7 @@ def test_storage_patch(storage_test_client, valid_storage_payload):
     assert res.json["storage_type"] == "s3"
     storage_id = res.json["storage_id"]
 
-    _, res = storage_test_client.patch(
+    _, res = await storage_test_client.patch(
         f"/api/storage/storage/{storage_id}",
         headers={"Authorization": "bearer test"},
         data=json.dumps(

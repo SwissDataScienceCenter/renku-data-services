@@ -1,18 +1,20 @@
 """SQLAlchemy schemas for the CRC database."""
 from typing import List, Optional
 
-from sqlalchemy import BigInteger, Column, Integer, String, Table
+from sqlalchemy import BigInteger, Column, Integer, MetaData, String, Table
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
 
 import renku_data_services.base_models as base_models
 import renku_data_services.resource_pool_models as models
 
+metadata_obj = MetaData(schema="resource_pools")  # Has to match alembic ini section name
+
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
     """Base class for all ORM classes."""
 
-    pass
+    metadata = metadata_obj
 
 
 resource_pools_users = Table(

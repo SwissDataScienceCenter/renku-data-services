@@ -6,8 +6,19 @@ from typing import cast
 from alembic import context
 from alembic.config import Config
 from sqlalchemy import MetaData
+from sqlalchemy.schema import CreateSchema
 
 from renku_data_services.migrations.core import DataRepository
+
+
+def include_object_factory(schema: str):
+    def _include_object(object, name, type_, reflected, compare_to):
+        if type_ == "table" and object.schema != schema:
+            return False
+        else:
+            return True
+
+    return _include_object
 
 
 def run_migrations_offline(target_metadata, config: Config) -> None:
@@ -42,7 +53,15 @@ def run_migrations_online(target_metadata, config: Config) -> None:
 
     """
     with cast(DataRepository, config.attributes.get("repo")).sync_engine.begin() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            version_table_schema=target_metadata.schema,
+            include_schemas=True,
+            include_object=include_object_factory(target_metadata.schema),
+        )
+
+        connection.execute(CreateSchema(target_metadata.schema, if_not_exists=True))
 
         with context.begin_transaction():
             context.run_migrations()

@@ -1,24 +1,74 @@
 """Models for cloud storage."""
 
-from dataclasses import dataclass
+from collections.abc import MutableMapping
 from typing import Any
 from urllib.parse import ParseResult, urlparse
 
+from pydantic import BaseModel, Field, PrivateAttr, model_serializer, model_validator
+
 from renku_data_services import errors
+from renku_data_services.storage_schemas.core import RCloneValidator
 
 
-@dataclass(frozen=True, eq=True, kw_only=True)
-class CloudStorage:
+class RCloneConfig(BaseModel, MutableMapping):
+    """Class for RClone configuration that is valid."""
+
+    config: dict[str, Any] = Field(exclude=True)
+
+    _validator: RCloneValidator = PrivateAttr(default=RCloneValidator())
+
+    @model_validator(mode="before")
+    def check_if_from_dict(cls, data: Any) -> Any:
+        if isinstance(data, dict) and {"config"} != data.keys():
+            data = {"config": data}
+        return data
+
+    @model_validator(mode="after")
+    def check_rclone_schema(self) -> "RCloneConfig":
+        """Validate that the reclone config is valid."""
+        self._validator.validate(self.config)
+        return self
+
+    @model_serializer
+    def serialize_model(self) -> dict[str, Any]:
+        return self.config
+
+    def __len__(self):
+        return len(self.config)
+
+    def __getitem__(self, k):
+        return self.config[k]
+
+    def __setitem__(self, key, value):
+        self.config[key] = value
+        self._validator.validate(self.config)
+
+    def __delitem__(self, key):
+        del self.config[key]
+        self._validator.validate(self.config)
+
+    def __iter__(self):
+        return iter(self.config)
+
+
+class CloudStorage(BaseModel):
     """Cloud Storage model."""
 
-    project_id: str
-    storage_type: str
-    configuration: dict[str, Any]
+    project_id: str = Field(pattern=r"^\d+$")
+    storage_type: str = Field(pattern=r"^[a-z0-9]+$")
+    configuration: RCloneConfig
 
-    storage_id: str | None = None
+    storage_id: str | None = Field(default=None)
 
-    source_path: str
-    target_path: str
+    source_path: str = Field(pattern=r"^((\w+/)*?\w+)$")
+    """Path inside the cloud storage.
+
+    Note: Since rclone itself doesn't really know about buckets/containers (they're not in the schema),
+    bucket/container/etc. has to be the first part of source path.
+    """
+
+    target_path: str = Field(pattern=r"^(\w+/)*?\w+$")
+    """Path inside the target repository to mouhnt/clone data to."""
 
     @classmethod
     def from_dict(cls, data: dict) -> "CloudStorage":
@@ -41,7 +91,7 @@ class CloudStorage:
         return cls(
             project_id=data["project_id"],
             storage_id=data.get("storage_id"),
-            configuration=data["configuration"],
+            configuration=RCloneConfig(config=data["configuration"]),
             storage_type=data["configuration"]["type"],
             source_path=data["source_path"],
             target_path=data["target_path"],
@@ -98,18 +148,19 @@ class CloudStorage:
             match storage_url.hostname.split(".", 4):
                 case ["s3", region, "amazonaws", "com"]:
                     configuration["region"] = region
-                case [bucket, "s3", region, "amazonaws.com"]:
+                case [bucket, "s3", region, "amazonaws", "com"]:
                     configuration["region"] = region
                     source_path = f"{bucket}{storage_url.path}"
                 case _:
-                    pass
+                    # URL like 's3://giab/' where the bucket is the
+                    source_path = f"{storage_url.hostname}/{source_path}" if source_path else storage_url.hostname
         else:
             configuration["endpoint"] = storage_url.netloc
 
         return cls(
             project_id=project_id,
             storage_type="s3",
-            configuration=configuration,
+            configuration=RCloneConfig(config=configuration),
             source_path=source_path,
             target_path=target_path,
         )
@@ -141,7 +192,7 @@ class CloudStorage:
         return cls(
             project_id=project_id,
             storage_type="azureblob",
-            configuration=configuration,
+            configuration=RCloneConfig(config=configuration),
             source_path=source_path,
             target_path=target_path,
         )

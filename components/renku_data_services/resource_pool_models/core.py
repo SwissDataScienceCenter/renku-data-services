@@ -77,6 +77,10 @@ class ResourceClass(ResourcesCompareMixin):
     matching: Optional[bool] = None
 
     def __post_init__(self):
+        if "\x00" in self.name:
+            raise ValidationError(message="'\x00' is not allowed in 'name' field.")
+        if len(self.name) > 40:
+            raise ValidationError(message="'name' cannot be longer than 40 characters.")
         if self.default_storage > self.max_storage:
             raise ValidationError(message="The default storage cannot be larger than the max allowable storage.")
 
@@ -138,6 +142,12 @@ class ResourcePool:
 
     def __post_init__(self):
         """Validate the resource pool after initialization."""
+        if "\x00" in self.name:
+            raise ValidationError(message="'\x00' is not allowed in 'name' field.")
+        if len(self.name) > 40:
+            raise ValidationError(message="'name' cannot be longer than 40 characters.")
+        if isinstance(self.quota, str) and "\x00" in self.quota:
+            raise ValidationError(message="'\x00' is not allowed in 'quota' field.")
         if self.default and not self.public:
             raise ValidationError(message="The default resource pool has to be public.")
         if self.default and self.quota is not None:
@@ -152,6 +162,11 @@ class ResourcePool:
                 default_classes.append(cls)
         if len(default_classes) != 1:
             raise ValidationError(message="One default class is required in each resource pool.")
+
+        # We need to sort classes to make '__eq__' reliable
+        object.__setattr__(
+            self, "classes", sorted(self.classes, key=lambda x: (x.default, x.cpu, x.memory, x.default_storage, x.name))
+        )
 
     def set_quota(self, val: Optional[Quota | str]) -> "ResourcePool":
         """Set the quota for a resource pool."""

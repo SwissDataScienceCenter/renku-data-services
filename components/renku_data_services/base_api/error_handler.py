@@ -109,7 +109,7 @@ class CustomErrorHandler(ErrorHandler):
             case SQLAlchemyError():
                 message = ", ".join([str(i) for i in exception.args])
                 formatted_exception = errors.BaseError(message=f"Database error occurred: {message}")
-            case PydanticWrappersValidationError():
+            case PydanticWrappersValidationError() | PydanticValidationError():  # type: ignore[misc]
                 parts = [".".join(str(i) for i in field["loc"]) + ": " + field["msg"] for field in exception.errors()]
                 message = f"There are errors in the following fields, {', '.join(parts)}"
                 formatted_exception = errors.ValidationError(message=message)
@@ -126,6 +126,6 @@ class CustomErrorHandler(ErrorHandler):
                     message=formatted_exception.message,
                     detail=formatted_exception.detail,
                 )
-            ).dict(exclude_none=True),
+            ).model_dump(exclude_none=True),
             status=formatted_exception.status_code,
         )

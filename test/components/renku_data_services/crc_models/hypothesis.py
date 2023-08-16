@@ -1,9 +1,11 @@
 from typing import Dict
 
+from hypothesis import assume
 from hypothesis import strategies as st
 
 import renku_data_services.base_models as base_models
 import renku_data_services.resource_pool_models as models
+from renku_data_services import errors
 
 
 def make_cpu_float(data) -> Dict[str, int | float]:
@@ -30,26 +32,32 @@ a_bool = st.booleans()
 
 @st.composite
 def rc_non_default_strat(draw):
-    return models.ResourceClass(
-        name=draw(a_name),
-        cpu=draw(a_rc_cpu),
-        gpu=draw(a_rc_gpu),
-        max_storage=draw(a_rc_storage),
-        memory=draw(a_rc_memory),
-        default=False,
-    )
+    try:
+        return models.ResourceClass(
+            name=draw(a_name),
+            cpu=draw(a_rc_cpu),
+            gpu=draw(a_rc_gpu),
+            max_storage=draw(a_rc_storage),
+            memory=draw(a_rc_memory),
+            default=False,
+        )
+    except errors.ValidationError:
+        assume(False)
 
 
 @st.composite
 def rc_default_strat(draw):
-    return models.ResourceClass(
-        name=draw(a_name),
-        cpu=draw(a_rc_cpu),
-        gpu=draw(a_rc_gpu),
-        max_storage=draw(a_rc_storage),
-        memory=draw(a_rc_memory),
-        default=True,
-    )
+    try:
+        return models.ResourceClass(
+            name=draw(a_name),
+            cpu=draw(a_rc_cpu),
+            gpu=draw(a_rc_gpu),
+            max_storage=draw(a_rc_storage),
+            memory=draw(a_rc_memory),
+            default=True,
+        )
+    except errors.ValidationError:
+        assume(False)
 
 
 quota_strat = st.builds(models.Quota, cpu=a_quota_cpu, gpu=a_quota_gpu, memory=a_quota_memory)
@@ -63,7 +71,10 @@ def rp_strat(draw):
     default = False
     public = draw(a_bool)
     name = draw(a_name)
-    return models.ResourcePool(name=name, classes=classes, quota=quota, default=default, public=public)
+    try:
+        return models.ResourcePool(name=name, classes=classes, quota=quota, default=default, public=public)
+    except errors.ValidationError:
+        assume(False)
 
 
 public_rp_strat = rp_strat().filter(lambda x: x.public)

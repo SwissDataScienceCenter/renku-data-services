@@ -76,7 +76,9 @@ class StorageRepository(_Base):
                 if "configuration" in kwargs and "type" in kwargs["configuration"]:
                     storage.storage_type = kwargs["configuration"]["type"]
 
-        return storage.dump()
+                result = storage.dump()  # triggers validation before the transaction saves data
+
+        return result
 
     async def delete_storage(self, storage_id: str) -> None:
         """Delete a cloud storage entry."""

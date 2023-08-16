@@ -87,9 +87,9 @@ class Config:
                 self.default_resource_pool = models.ResourcePool.from_dict(safe_load(f))
         if self.server_defaults_file is not None and self.server_options_file is not None:
             with open(self.server_options_file, "r") as f:
-                options = ServerOptions.parse_obj(safe_load(f))
+                options = ServerOptions.model_validate(safe_load(f))
             with open(self.server_defaults_file, "r") as f:
-                defaults = ServerOptionsDefaults.parse_obj(safe_load(f))
+                defaults = ServerOptionsDefaults.model_validate(safe_load(f))
             self.default_resource_pool = generate_default_resource_pool(options, defaults)
 
     @property
@@ -112,24 +112,12 @@ class Config:
         k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
-            async_sqlalchemy_url = os.environ.get(f"{prefix}ASYNC_SQLALCHEMY_URL", "sqlite+aiosqlite:///crc_service.db")
-            sync_sqlalchemy_url = os.environ.get(f"{prefix}SYNC_SQLALCHEMY_URL", "sqlite:///crc_service.db")
             authenticator = DummyAuthenticator(admin=True)
+            quota_repo = QuotaRepository(DummyCoreClient({}), DummySchedulingClient({}), namespace=k8s_namespace)
             user_always_exists = os.environ.get("DUMMY_USERSTORE_USER_ALWAYS_EXISTS", "true").lower() == "true"
             user_store = DummyUserStore(user_always_exists=user_always_exists)
-            quota_repo = QuotaRepository(DummyCoreClient({}), DummySchedulingClient({}), namespace=k8s_namespace)
         else:
-            pg_host = os.environ.get("DB_HOST", "localhost")
-            pg_user = os.environ.get("DB_USER", "renku")
-            pg_port = os.environ.get("DB_PORT", "5432")
-            db_name = os.environ.get("DB_NAME", "renku")
-            pg_password = os.environ.get("DB_PASSWORD")
-            if pg_password is None:
-                raise errors.ConfigurationError(
-                    message="Please provide a database password in the 'DB_PASSWORD' environment variable."
-                )
-            async_sqlalchemy_url = f"postgresql+asyncpg://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{db_name}"
-            sync_sqlalchemy_url = f"postgresql+psycopg2://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{db_name}"
+            quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
             keycloak_url = os.environ.get(f"{prefix}KEYCLOAK_URL")
             if keycloak_url is None:
                 raise errors.ConfigurationError(message="The Keycloak URL has to be specified.")
@@ -148,7 +136,18 @@ class Config:
             jwks = PyJWKClient(jwks_url)
             authenticator = KeycloakAuthenticator(jwks=jwks, algorithms=algorithms_lst)
             user_store = KcUserStore(keycloak_url=keycloak_url, realm=keycloak_realm)
-            quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
+
+        pg_host = os.environ.get("DB_HOST", "localhost")
+        pg_user = os.environ.get("DB_USER", "renku")
+        pg_port = os.environ.get("DB_PORT", "5432")
+        db_name = os.environ.get("DB_NAME", "renku")
+        pg_password = os.environ.get("DB_PASSWORD")
+        if pg_password is None:
+            raise errors.ConfigurationError(
+                message="Please provide a database password in the 'DB_PASSWORD' environment variable."
+            )
+        async_sqlalchemy_url = f"postgresql+asyncpg://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{db_name}"
+        sync_sqlalchemy_url = f"postgresql+psycopg://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{db_name}"
 
         user_repo = UserRepository(sync_sqlalchemy_url=sync_sqlalchemy_url, async_sqlalchemy_url=async_sqlalchemy_url)
         rp_repo = ResourcePoolRepository(
