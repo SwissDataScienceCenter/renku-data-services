@@ -19,7 +19,7 @@ class GitlabAuthenticator:
 
     gitlab_url: str
 
-    async def authenticate(self, access_token: str, request: Request | None) -> base_models.APIUser:
+    async def authenticate(self, access_token: str, request: Request | None = None) -> base_models.APIUser:
         """Checks the validity of the access token."""
 
         project_id: str | None = None

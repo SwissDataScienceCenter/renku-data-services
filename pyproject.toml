@@ -56,6 +56,8 @@ sanic-testing = "^23.3.0"
 aiosqlite = "^0.18.0"
 types-pyyaml = "^6.0.12.9"
 schemathesis = "^3.19.0"
+# pinned because not all libraries have caught up with urllib3 v2
+urllib3 = "^1.26.16"
 
 [build-system]
 requires = ["poetry-core"]
