@@ -8,7 +8,9 @@ from sanic import Request
 class Authenticator(Protocol):
     """Interface for authenticating users."""
 
-    async def authenticate(self, access_token: str, request: Request | None = None) -> "APIUser":
+    token_field: str
+
+    async def authenticate(self, access_token: str, request: Request) -> "APIUser":
         """Validates the user credentials (i.e. we can say that the user is a valid Renku user)."""
         ...
 

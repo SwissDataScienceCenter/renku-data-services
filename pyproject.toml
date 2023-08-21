@@ -8,6 +8,7 @@ license = "Apache License 2.0"
 packages = [
     {include = "renku_data_services/crc_api",from = "bases"},
     {include = "renku_data_services/storage_api",from = "bases"},
+    {include = "renku_data_services/data_api",from = "bases"},
     {include = "renku_data_services/users",from = "components"},
     {include = "renku_data_services/resource_pool_models",from = "components"},
     {include = "renku_data_services/crc_schemas",from = "components"},
@@ -22,6 +23,9 @@ packages = [
     {include = "renku_data_services/crc_migrations",from = "components"},
     {include = "renku_data_services/storage_models",from = "components"},
     {include = "renku_data_services/storage_migrations",from = "components"},
+    {include = "renku_data_services/storage_blueprints",from = "components"},
+    {include = "renku_data_services/base_blueprints",from = "components"},
+    {include = "renku_data_services/crc_blueprints",from = "components"},
 ]
 
 [tool.poetry.dependencies]
@@ -41,6 +45,7 @@ python-gitlab = "^3.15.0"
 psycopg = {version = "^3.1.10", extras = ["binary"]}
 # urllib3 v2 has some breaking changes that libraries haven't caught up yet (08.2023)
 urllib3 = "^1.26.16"
+deepmerge = "^1.1.0"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.7.5"
@@ -139,6 +144,7 @@ module = [
     "sanic_testing.*",
     "asyncpg.*",
     "kubernetes.*",
+    "deepmerge.*",
 ]
 ignore_missing_imports = true
 

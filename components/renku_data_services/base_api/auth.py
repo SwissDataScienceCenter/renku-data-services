@@ -16,7 +16,7 @@ def authenticate(authenticator: Authenticator):
     def decorator(f):
         @wraps(f)
         async def decorated_function(request: Request, *args, **kwargs):
-            token = request.headers.get("Authorization")
+            token = request.headers.get(authenticator.token_field)
             user = APIUser()
             if token is not None and len(token) >= 8:
                 user = await authenticator.authenticate(token[7:], request)

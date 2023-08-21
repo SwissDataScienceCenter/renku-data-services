@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import httpx
+from deepmerge import always_merger
 from jwt import PyJWKClient
 from tenacity import retry, stop_after_attempt, stop_after_delay, wait_fixed
 from yaml import safe_load
@@ -12,6 +13,7 @@ from yaml import safe_load
 import renku_data_services.base_models as base_models
 import renku_data_services.crc_schemas
 import renku_data_services.resource_pool_models as models
+import renku_data_services.storage_schemas
 from renku_data_services import errors
 from renku_data_services.crc_api.server_options import (
     ServerOptions,
@@ -21,6 +23,7 @@ from renku_data_services.crc_api.server_options import (
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
+from renku_data_services.storage_adapters import StorageRepository
 from renku_data_services.users.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.users.keycloak import KcUserStore, KeycloakAuthenticator
 
@@ -62,10 +65,11 @@ default_resource_pool = models.ResourcePool(
 
 @dataclass
 class Config:
-    """Configuration for the CRC service."""
+    """Configuration for the Data service."""
 
     user_repo: UserRepository
     rp_repo: ResourcePoolRepository
+    storage_repo: StorageRepository
     user_store: base_models.UserStore
     authenticator: base_models.Authenticator
     quota_repo: QuotaRepository
@@ -80,7 +84,14 @@ class Config:
     def __post_init__(self):
         spec_file = Path(renku_data_services.crc_schemas.__file__).resolve().parent / "api.spec.yaml"
         with open(spec_file, "r") as f:
-            self.spec = safe_load(f)
+            crc_spec = safe_load(f)
+
+        spec_file = Path(renku_data_services.storage_schemas.__file__).resolve().parent / "api.spec.yaml"
+        with open(spec_file, "r") as f:
+            storage_spec = safe_load(f)
+
+        self.spec = always_merger(crc_spec, storage_spec)
+
         if self.default_resource_pool_file is not None:
             with open(self.default_resource_pool_file, "r") as f:
                 self.default_resource_pool = models.ResourcePool.from_dict(safe_load(f))
@@ -152,9 +163,13 @@ class Config:
         rp_repo = ResourcePoolRepository(
             sync_sqlalchemy_url=sync_sqlalchemy_url, async_sqlalchemy_url=async_sqlalchemy_url
         )
+        storage_repo = StorageRepository(
+            sync_sqlalchemy_url=sync_sqlalchemy_url, async_sqlalchemy_url=async_sqlalchemy_url
+        )
         return cls(
             user_repo=user_repo,
             rp_repo=rp_repo,
+            storage_repo=storage_repo,
             version=version,
             authenticator=authenticator,
             user_store=user_store,
