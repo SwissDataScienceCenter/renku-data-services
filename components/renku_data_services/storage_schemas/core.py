@@ -125,7 +125,12 @@ class RCloneOption(BaseModel):
     type: str = Field(alias="Type")
 
     def matches_provider(self, provider: str | None) -> bool:
-        """Check if this option applies for a provider."""
+        """Check if this option applies for a provider.
+
+        Note:
+            The field can contain multiple providers separated by comma and can be preceded by a '!'
+            which flips the matching logic.
+        """
         if self.provider is None or self.provider == "":
             return True
 

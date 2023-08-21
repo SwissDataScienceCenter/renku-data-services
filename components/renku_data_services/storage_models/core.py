@@ -49,7 +49,18 @@ class CloudStorage:
 
     @classmethod
     def from_url(cls, storage_url: str, project_id: str, target_path: str) -> "CloudStorage":
-        """Get Cloud Storage/rclone config from a storage URL."""
+        """Get Cloud Storage/rclone config from a storage URL.
+
+        Example:
+            Supported URLs are:
+            - s3://s3.<region>.amazonaws.com/<bucket>/<path>
+            - s3://<bucket>.s3.<region>.amazonaws.com/<path>
+            - s3://bucket/
+            - http(s)://<endpoint>/<bucket>/<path>
+            - (azure|az)://<account>.dfs.core.windows.net/<container>/<path>
+            - (azure|az)://<account>.blob.core.windows.net/<container>/<path>
+            - (azure|az)://<container>/<path>
+        """
         parsed_url = urlparse(storage_url)
 
         if parsed_url.scheme is None:
@@ -67,7 +78,15 @@ class CloudStorage:
 
     @classmethod
     def from_s3_url(cls, storage_url: ParseResult, project_id: str, target_path: str) -> "CloudStorage":
-        """Get Cloud storage from an S3 URL."""
+        """Get Cloud storage from an S3 URL.
+
+        Example:
+            Supported URLs are:
+            - s3://s3.<region>.amazonaws.com/<bucket>/<path>
+            - s3://<bucket>.s3.<region>.amazonaws.com/<path>
+            - s3://bucket/
+            - https://<endpoint>/<bucket>/<path>
+        """
 
         if storage_url.hostname is None:
             raise errors.ValidationError(message="Storage URL must contain a host")
@@ -97,7 +116,14 @@ class CloudStorage:
 
     @classmethod
     def from_azure_url(cls, storage_url: ParseResult, project_id: str, target_path: str) -> "CloudStorage":
-        """Get Cloud storage from an Azure URL."""
+        """Get Cloud storage from an Azure URL.
+
+        Example:
+            Supported URLs are:
+            - (azure|az)://<account>.dfs.core.windows.net/<container>/<path>
+            - (azure|az)://<account>.blob.core.windows.net/<container>/<path>
+            - (azure|az)://<container>/<path>
+        """
         if storage_url.hostname is None:
             raise errors.ValidationError(message="Storage URL must contain a host")
 
