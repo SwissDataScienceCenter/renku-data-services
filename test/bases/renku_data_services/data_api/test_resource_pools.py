@@ -1,16 +1,17 @@
 import json
-from test.bases.renku_data_services.crc_api.utils import create_rp
+from test.bases.renku_data_services.data_api.utils import create_rp
 from typing import Any, Dict
 
 import pytest
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 
-from renku_data_services.crc_api.app import register_all_handlers
-from renku_data_services.crc_api.config import Config
+from renku_data_services.data_api.app import register_all_handlers
+from renku_data_services.data_api.config import Config
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
+from renku_data_services.storage_adapters import StorageRepository
 from renku_data_services.users.dummy import DummyAuthenticator, DummyUserStore
 
 _valid_resource_pool_payload: Dict[str, Any] = {
@@ -38,11 +39,14 @@ def valid_resource_pool_payload() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def test_client(pool_repo: ResourcePoolRepository, user_repo: UserRepository) -> SanicASGITestClient:
+def test_client(
+    pool_repo: ResourcePoolRepository, user_repo: UserRepository, storage_repo: StorageRepository
+) -> SanicASGITestClient:
     config = Config(
         rp_repo=pool_repo,
         user_repo=user_repo,
         user_store=DummyUserStore(),
+        storage_repo=storage_repo,
         authenticator=DummyAuthenticator(admin=True),
         quota_repo=QuotaRepository(DummyCoreClient({}), DummySchedulingClient({})),
     )

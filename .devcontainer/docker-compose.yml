@@ -4,7 +4,7 @@ services:
   data_service:
     build:
       context: ..
-      dockerfile: projects/renku_data/Dockerfile
+      dockerfile: projects/renku_data_service/Dockerfile
       args:
         - USER_UID=${USER_UID:-1000}
         - USER_GID=${USER_GID:-1000}

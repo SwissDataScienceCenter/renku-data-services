@@ -1,4 +1,7 @@
-from renku_data_services.storage_api.config import Config
+from unittest.mock import MagicMock
+
+import renku_data_services.data_api.config as conf
+from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient
 from renku_data_services.users.dummy import DummyAuthenticator
 
 
@@ -6,11 +9,13 @@ def test_config_dummy(monkeypatch):
     monkeypatch.setenv("DUMMY_STORES", "true")
     monkeypatch.setenv("VERSION", "9.9.9")
 
-    config = Config.from_env()
+    config = conf.Config.from_env()
 
     assert config.authenticator is not None
     assert isinstance(config.authenticator, DummyAuthenticator)
     assert config.storage_repo is not None
+    assert config.rp_repo is not None
+    assert config.user_repo is not None
     assert config.version == "9.9.9"
 
 
@@ -23,9 +28,17 @@ def test_config_no_dummy(monkeypatch):
     monkeypatch.setenv("DB_NAME", "storage_db")
     monkeypatch.setenv("DB_PASSWORD", "123456")
     monkeypatch.setenv("GITLAB_URL", "localhost")
+    monkeypatch.setenv("KEYCLOAK_URL", "localhost")
+    monkeypatch.setenv("KEYCLOAK_TOKEN_SIGNATURE_ALGS", "test")
+    monkeypatch.setattr(conf, "_oidc_discovery", lambda _, __: {"jwks_uri": "localhost"})
+    monkeypatch.setattr(conf, "PyJWKClient", lambda _: MagicMock())
+    monkeypatch.setattr(conf, "K8sCoreClient", lambda: DummyCoreClient({}))
+    monkeypatch.setattr(conf, "K8sSchedulingClient", lambda: DummySchedulingClient({}))
 
-    config = Config.from_env()
+    config = conf.Config.from_env()
 
     assert config.authenticator is not None
     assert config.storage_repo is not None
+    assert config.rp_repo is not None
+    assert config.user_repo is not None
     assert config.version == "9.9.9"

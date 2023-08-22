@@ -1,4 +1,4 @@
-"""Compute resource control (CRC) app."""
+"""Data service app."""
 from sanic import Sanic
 
 from renku_data_services.base_api.error_handler import CustomErrorHandler

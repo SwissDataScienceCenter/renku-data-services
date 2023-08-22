@@ -6,8 +6,6 @@ authors = ["Swiss Data Science Center <contact@datascience.ch>"]
 readme = "README.md"
 license = "Apache License 2.0"
 packages = [
-    {include = "renku_data_services/crc_api",from = "bases"},
-    {include = "renku_data_services/storage_api",from = "bases"},
     {include = "renku_data_services/data_api",from = "bases"},
     {include = "renku_data_services/users",from = "components"},
     {include = "renku_data_services/resource_pool_models",from = "components"},
@@ -135,7 +133,7 @@ check_untyped_defs = true
 [[tool.mypy.overrides]]
 module = [
     "renku_data_services.crc_schemas.apispec",
-    "renku_data_services.crc_api.error_handler",
+    "renku_data_services.data_api.error_handler",
 ]
 ignore_errors = true
 

@@ -19,8 +19,8 @@ RUN if $DEV_BUILD ; then \
     /home/renku/.local/bin/poetry export -o requirements.txt --with dev; \
     env/bin/pip install -r requirements.txt; \
   fi
-RUN /home/renku/.local/bin/poetry build-project -f wheel -C projects/renku_data
-RUN env/bin/pip --no-cache-dir install projects/renku_data/dist/*.whl
+RUN /home/renku/.local/bin/poetry build-project -f wheel -C projects/renku_data_service
+RUN env/bin/pip --no-cache-dir install projects/renku_data_service/dist/*.whl
 
 FROM python:3.11-slim-bullseye
 ARG USER_UID=1000

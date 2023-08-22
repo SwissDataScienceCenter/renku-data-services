@@ -5,11 +5,14 @@ import pytest
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 
+from renku_data_services.data_api.app import register_all_handlers
+from renku_data_services.data_api.config import Config
+from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient
+from renku_data_services.k8s.quota import QuotaRepository
+from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
 from renku_data_services.storage_adapters import StorageRepository
-from renku_data_services.storage_api.app import register_all_handlers
-from renku_data_services.storage_api.config import Config
 from renku_data_services.storage_schemas.core import RCloneValidator
-from renku_data_services.users.dummy import DummyAuthenticator
+from renku_data_services.users.dummy import DummyAuthenticator, DummyUserStore
 
 _valid_storage: dict[str, Any] = {
     "project_id": "123456",
@@ -29,10 +32,16 @@ def valid_storage_payload() -> dict[str, Any]:
 
 
 @pytest.fixture
-def storage_test_client(storage_repo: StorageRepository) -> SanicASGITestClient:
+def storage_test_client(
+    storage_repo: StorageRepository, pool_repo: ResourcePoolRepository, user_repo: UserRepository
+) -> SanicASGITestClient:
     config = Config(
+        user_repo=user_repo,
+        rp_repo=pool_repo,
         storage_repo=storage_repo,
+        user_store=DummyUserStore(),
         authenticator=DummyAuthenticator(admin=True),
+        quota_repo=QuotaRepository(DummyCoreClient({}), DummySchedulingClient({})),
     )
 
     app = Sanic(config.app_name)
@@ -188,7 +197,7 @@ async def test_storage_creation(
     expected_storage_type: str,
 ):
     _, res = await storage_test_client.post(
-        "/api/storage/storage",
+        "/api/data/storage",
         headers={"Authorization": "bearer test"},
         data=json.dumps(payload),
     )
@@ -202,7 +211,7 @@ async def test_storage_creation(
 @pytest.mark.asyncio
 async def test_get_storage(storage_test_client, valid_storage_payload):
     _, res = await storage_test_client.post(
-        "/api/storage/storage",
+        "/api/data/storage",
         headers={"Authorization": "bearer test"},
         data=json.dumps(valid_storage_payload),
     )
@@ -211,7 +220,7 @@ async def test_get_storage(storage_test_client, valid_storage_payload):
 
     project_id = res.json["project_id"]
     _, res = await storage_test_client.get(
-        f"/api/storage/storage?project_id={project_id}",
+        f"/api/data/storage?project_id={project_id}",
         headers={"Authorization": "bearer test"},
     )
     assert res.status_code == 200
@@ -224,7 +233,7 @@ async def test_get_storage(storage_test_client, valid_storage_payload):
 @pytest.mark.asyncio
 async def test_storage_deletion(storage_test_client, valid_storage_payload):
     _, res = await storage_test_client.post(
-        "/api/storage/storage",
+        "/api/data/storage",
         headers={"Authorization": "bearer test"},
         data=json.dumps(valid_storage_payload),
     )
@@ -233,13 +242,13 @@ async def test_storage_deletion(storage_test_client, valid_storage_payload):
     storage_id = res.json["storage_id"]
 
     _, res = await storage_test_client.delete(
-        f"/api/storage/storage/{storage_id}",
+        f"/api/data/storage/{storage_id}",
         headers={"Authorization": "bearer test"},
     )
     assert res.status_code == 204
 
     _, res = await storage_test_client.get(
-        f"/api/storage/storage/{storage_id}",
+        f"/api/data/storage/{storage_id}",
         headers={"Authorization": "bearer test"},
     )
 
@@ -249,7 +258,7 @@ async def test_storage_deletion(storage_test_client, valid_storage_payload):
 @pytest.mark.asyncio
 async def test_storage_put(storage_test_client, valid_storage_payload):
     _, res = await storage_test_client.post(
-        "/api/storage/storage",
+        "/api/data/storage",
         headers={"Authorization": "bearer test"},
         data=json.dumps(valid_storage_payload),
     )
@@ -258,7 +267,7 @@ async def test_storage_put(storage_test_client, valid_storage_payload):
     storage_id = res.json["storage_id"]
 
     _, res = await storage_test_client.put(
-        f"/api/storage/storage/{storage_id}",
+        f"/api/data/storage/{storage_id}",
         headers={"Authorization": "bearer test"},
         data=json.dumps(
             {
@@ -276,7 +285,7 @@ async def test_storage_put(storage_test_client, valid_storage_payload):
 @pytest.mark.asyncio
 async def test_storage_patch(storage_test_client, valid_storage_payload):
     _, res = await storage_test_client.post(
-        "/api/storage/storage",
+        "/api/data/storage",
         headers={"Authorization": "bearer test"},
         data=json.dumps(valid_storage_payload),
     )
@@ -285,7 +294,7 @@ async def test_storage_patch(storage_test_client, valid_storage_payload):
     storage_id = res.json["storage_id"]
 
     _, res = await storage_test_client.patch(
-        f"/api/storage/storage/{storage_id}",
+        f"/api/data/storage/{storage_id}",
         headers={"Authorization": "bearer test"},
         data=json.dumps(
             {

@@ -15,7 +15,7 @@ import renku_data_services.crc_schemas
 import renku_data_services.resource_pool_models as models
 import renku_data_services.storage_schemas
 from renku_data_services import errors
-from renku_data_services.crc_api.server_options import (
+from renku_data_services.data_api.server_options import (
     ServerOptions,
     ServerOptionsDefaults,
     generate_default_resource_pool,
@@ -90,7 +90,7 @@ class Config:
         with open(spec_file, "r") as f:
             storage_spec = safe_load(f)
 
-        self.spec = always_merger(crc_spec, storage_spec)
+        self.spec = always_merger.merge(crc_spec, storage_spec)
 
         if self.default_resource_pool_file is not None:
             with open(self.default_resource_pool_file, "r") as f:
