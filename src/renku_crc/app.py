@@ -1,7 +1,7 @@
 """Compute resource control (CRC) app."""
 import asyncio
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 from sanic import HTTPResponse, Request, Sanic, json
 from sanic_ext import validate
@@ -32,23 +32,8 @@ class ResourcePoolsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         async def _get_all(request: Request, user: models.APIUser):
             res_filter = query_parameters.ResourceClassesFilter.parse_obj(dict(request.query_args))
-            pool = asyncio.get_running_loop()
-            rps: List[models.ResourcePool]
-            quotas: List[models.Quota]
-            rps, quotas = await asyncio.gather(
-                self.rp_repo.filter_resource_pools(api_user=user, **res_filter.dict()),
-                pool.run_in_executor(None, self.quota_repo.get_quotas),
-            )
-            quotas_dict = {quota.id: quota for quota in quotas}
-            rps_w_quota: List[models.ResourcePool] = []
-            for rp in rps:
-                quota = quotas_dict.get(rp.quota) if isinstance(rp.quota, str) else None
-                if quota is not None:
-                    rp_w_quota = rp.set_quota(quota)
-                    rps_w_quota.append(rp_w_quota)
-                else:
-                    rps_w_quota.append(rp)
-
+            rps = await self.rp_repo.filter_resource_pools(api_user=user, **res_filter.dict())
+            rps_w_quota = [self.quota_repo.hydrate_resource_pool_quota(rp) for rp in rps]
             return json([apispec.ResourcePoolWithIdFiltered.from_orm(r).dict(exclude_none=True) for r in rps_w_quota])
 
         return "/resource_pools", ["GET"], _get_all
@@ -77,22 +62,16 @@ class ResourcePoolsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _get_one(request: Request, resource_pool_id: int, user: models.APIUser):
-            pool = asyncio.get_running_loop()
             rps: List[models.ResourcePool]
-            quotas: List[models.Quota]
-            rps, quotas = await asyncio.gather(
-                self.rp_repo.get_resource_pools(api_user=user, id=resource_pool_id, name=request.args.get("name")),
-                pool.run_in_executor(None, self.quota_repo.get_quotas),
+            rps = await self.rp_repo.get_resource_pools(
+                api_user=user, id=resource_pool_id, name=request.args.get("name")
             )
             if len(rps) < 1:
                 raise errors.MissingResourceError(
                     message=f"The resource pool with id {resource_pool_id} cannot be found."
                 )
             rp = rps[0]
-            quotas = [i for i in quotas if i.id == rp.quota]
-            if len(quotas) >= 1:
-                quota = quotas[0]
-                rp = rp.set_quota(quota)
+            rp = self.quota_repo.hydrate_resource_pool_quota(rp)
             return json(apispec.ResourcePoolWithId.from_orm(rp).dict(exclude_none=True))
 
         return "/resource_pools/<resource_pool_id>", ["GET"], _get_one
@@ -137,19 +116,33 @@ class ResourcePoolsBP(CustomBlueprint):
     ):
         body_dict = body.dict(exclude_none=True)
         quota_req = body_dict.pop("quota", None)
-        if quota_req is not None:
-            rps = await self.rp_repo.get_resource_pools(api_user, resource_pool_id)
-            if len(rps) == 0:
-                raise errors.ValidationError(message=f"The resource pool with ID {resource_pool_id} does not exist.")
-            rp = rps[0]
-            if isinstance(rp.quota, str):
-                quota_req["id"] = rp.quota
-            quota_model = models.Quota.from_dict(quota_req)
-            if quota_model.id is None:
-                quota_model = quota_model.generate_id()
-            self.quota_repo.update_quota(quota_model)
-            if rp.quota is None:
-                body_dict["quota"] = quota_model.id
+        rps = await self.rp_repo.get_resource_pools(api_user, resource_pool_id)
+        if len(rps) == 0:
+            raise errors.ValidationError(message=f"The resource pool with ID {resource_pool_id} does not exist.")
+        rp = rps[0]
+        rp = self.quota_repo.hydrate_resource_pool_quota(rp)
+        match rp.quota, quota_req:
+            case _, None:
+                # No quota is specified in request
+                pass
+            case _, dict(quota_req) if not quota_req:
+                # No quota is specified in request
+                pass
+            case models.Quota(id=None), {}:
+                # The quota does not exist, create it
+                quota_req["id"] = None  # ensure that the id is None to make a new Quota
+                quota_req_model = models.Quota.from_dict(quota_req).generate_id()
+                self.quota_repo.create_quota(quota_req_model)
+                rp.set_quota(quota_req_model)
+            case models.Quota(id=_), {}:
+                # The quota exists already, update it
+                if quota_req.get("id") is not None:
+                    raise errors.ValidationError(message="Cannot update the ID of an existing quota.")
+                if not isinstance(rp.quota, models.Quota):
+                    raise errors.BaseError(message=f"Expected quota but got {type(rp.quota)}")
+                new_quota = models.Quota.from_dict({**asdict(rp.quota), **quota_req})
+                self.quota_repo.update_quota(new_quota)
+                rp.set_quota(new_quota)
         res = await self.rp_repo.update_resource_pool(
             api_user=api_user,
             id=resource_pool_id,
@@ -374,20 +367,12 @@ class QuotaBP(CustomBlueprint):
                     message=f"The resource pool with ID {resource_pool_id} cannot be found."
                 )
             rp = rps[0]
+            rp = self.quota_repo.hydrate_resource_pool_quota(rp)
             if rp.quota is None:
                 raise errors.MissingResourceError(
                     message=f"The resource pool with ID {resource_pool_id} does not have a quota."
                 )
-            if not isinstance(rp.quota, str):
-                raise errors.ValidationError(message="The quota in the resource pool should be a string.")
-            quotas = self.quota_repo.get_quotas(name=rp.quota)
-            if len(quotas) < 1:
-                raise errors.MissingResourceError(
-                    message=f"Cannot find the quota with name {rp.quota} "
-                    f"for the resource pool with ID {resource_pool_id}."
-                )
-            quota = quotas[0]
-            return json(apispec.QuotaWithId.from_orm(quota).dict(exclude_none=True))
+            return json(apispec.QuotaWithId.from_orm(rp.quota).dict(exclude_none=True))
 
         return "/resource_pools/<resource_pool_id>/quota", ["GET"], _get
 
@@ -420,18 +405,13 @@ class QuotaBP(CustomBlueprint):
         if len(rps) < 1:
             raise errors.MissingResourceError(message=f"Cannot find the resource pool with ID {resource_pool_id}.")
         rp = rps[0]
+        rp = self.quota_repo.hydrate_resource_pool_quota(rp)
         if rp.quota is None:
             raise errors.MissingResourceError(
                 message=f"The resource pool with ID {resource_pool_id} does not have a quota."
             )
-        if not isinstance(rp.quota, str):
-            raise errors.ValidationError(message="The quota in the resource pool should be a string.")
-        quotas = self.quota_repo.get_quotas(name=rp.quota)
-        if len(quotas) < 1:
-            raise errors.MissingResourceError(
-                message=f"Cannot find the quota with name {rp.quota} for the resource pool with ID {resource_pool_id}."
-            )
-        old_quota = quotas[0]
+        old_quota = rp.quota
+        old_quota = cast(models.Quota, old_quota)
         new_quota = models.Quota.from_dict({**asdict(old_quota), **body.dict(exclude_none=True)})
         self.quota_repo.update_quota(new_quota)
         return json(apispec.QuotaWithId.from_orm(new_quota).dict(exclude_none=True))
@@ -507,6 +487,7 @@ class UserResourcePoolsBP(CustomBlueprint):
     """Handlers for dealing wiht the resource pools of a specific user."""
 
     repo: UserRepository
+    quota_repo: QuotaRepository
     authenticator: models.Authenticator
 
     def get(self) -> BlueprintFactoryResponse:
@@ -516,6 +497,7 @@ class UserResourcePoolsBP(CustomBlueprint):
         @only_admins
         async def _get(_: Request, user_id: str, user: models.APIUser):
             rps = await self.repo.get_user_resource_pools(keycloak_id=user_id, api_user=user)
+            rps = [self.quota_repo.hydrate_resource_pool_quota(rp) for rp in rps]
             return json([apispec.ResourcePoolWithId.from_orm(rp).dict(exclude_none=True) for rp in rps])
 
         return "/users/<user_id>/resource_pools", ["GET"], _get
@@ -548,6 +530,7 @@ class UserResourcePoolsBP(CustomBlueprint):
         rps = await self.repo.update_user_resource_pools(
             keycloak_id=user_id, resource_pool_ids=resource_pool_ids.__root__, append=post, api_user=api_user
         )
+        rps = [self.quota_repo.hydrate_resource_pool_quota(rp) for rp in rps]
         return json([apispec.ResourcePoolWithId.from_orm(rp).dict(exclude_none=True) for rp in rps])
 
 
@@ -613,7 +596,11 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         authenticator=config.authenticator,
     )
     user_resource_pools = UserResourcePoolsBP(
-        name="user_resource_pools", url_prefix=url_prefix, repo=config.user_repo, authenticator=config.authenticator
+        name="user_resource_pools",
+        url_prefix=url_prefix,
+        repo=config.user_repo,
+        authenticator=config.authenticator,
+        quota_repo=config.quota_repo,
     )
     misc = MiscBP(name="misc", url_prefix=url_prefix, apispec=config.spec, version=config.version)
     app.blueprint(
