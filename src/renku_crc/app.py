@@ -150,6 +150,7 @@ class ResourcePoolsBP(CustomBlueprint):
         )
         if res is None:
             raise errors.MissingResourceError(message=f"The resource pool with ID {resource_pool_id} cannot be found.")
+        res = self.quota_repo.hydrate_resource_pool_quota(res)
         return json(apispec.ResourcePoolWithId.from_orm(res).dict(exclude_none=True))
 
 
