@@ -32,6 +32,9 @@ tenacity = "^8.2.2"
 httpx = "<0.24"
 psycopg2-binary = "^2.9.6"
 kubernetes = "^26.1.0"
+# pinned because not all libraries have caught up with urllib3 v2
+urllib3 = "^1.26.16"
+python-gitlab = "^3.15.0"
 
 [tool.poetry.group.dev.dependencies]
 

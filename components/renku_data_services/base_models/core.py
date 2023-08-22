@@ -2,11 +2,13 @@
 from dataclasses import dataclass, field
 from typing import Optional, Protocol
 
+from sanic import Request
+
 
 class Authenticator(Protocol):
     """Interface for authenticating users."""
 
-    async def authenticate(self, access_token: str) -> "APIUser":
+    async def authenticate(self, access_token: str, request: Request | None = None) -> "APIUser":
         """Validates the user credentials (i.e. we can say that the user is a valid Renku user)."""
         ...
 

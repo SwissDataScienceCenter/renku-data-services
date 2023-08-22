@@ -19,7 +19,7 @@ def authenticate(authenticator: Authenticator):
             token = request.headers.get("Authorization")
             user = APIUser()
             if token is not None and len(token) >= 8:
-                user = await authenticator.authenticate(token[7:])
+                user = await authenticator.authenticate(token[7:], request)
 
             response = await f(request, *args, **kwargs, user=user)
             return response

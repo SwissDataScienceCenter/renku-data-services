@@ -22,13 +22,13 @@ class _Base:
 class StorageRepository(_Base):
     """Repository for cloud storage."""
 
-    async def get_storage(self, id: str | None = None, git_url: str | None = None) -> list[models.CloudStorage]:
+    async def get_storage(self, id: str | None = None, project_id: str | None = None) -> list[models.CloudStorage]:
         """Get a storage from the database."""
         async with self.session_maker() as session:
             stmt = select(schemas.CloudStorageORM)
 
-            if git_url is not None:
-                stmt = stmt.where(schemas.CloudStorageORM.git_url == git_url)
+            if project_id is not None:
+                stmt = stmt.where(schemas.CloudStorageORM.project_id == project_id)
             if id is not None:
                 stmt = stmt.where(schemas.CloudStorageORM.storage_id == id)
 

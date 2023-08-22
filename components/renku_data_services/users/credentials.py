@@ -4,6 +4,7 @@ from typing import Any, Dict, List
 
 import jwt
 from jwt import PyJWKClient
+from sanic import Request
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
@@ -31,7 +32,7 @@ class KeycloakAuthenticator:
             verify=True,
         )
 
-    async def authenticate(self, access_token: str) -> base_models.APIUser:
+    async def authenticate(self, access_token: str, request: Request | None = None) -> base_models.APIUser:
         """Checks the validity of the access token."""
         parsed = self._validate(access_token)
         is_admin = self.admin_role in parsed.get("realm_access", {}).get("roles", [])

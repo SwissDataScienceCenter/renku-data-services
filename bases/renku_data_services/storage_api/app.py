@@ -5,7 +5,7 @@ from sanic import Request, Sanic, json
 
 import renku_data_services.base_models as base_models
 import renku_data_services.storage_models as models
-from renku_data_services.base_api.auth import authenticate
+from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.error_handler import CustomErrorHandler
 from renku_data_services.storage_adapters import StorageRepository
@@ -38,12 +38,13 @@ class StorageBP(CustomBlueprint):
         """Create a new cloud storage entry."""
 
         @authenticate(self.authenticator)
-        async def _post(request: Request, user: base_models.APIUser, validator: RCloneValidator):
+        @only_admins
+        async def _post(request: Request, validator: RCloneValidator, user: base_models.APIUser):
             storage: models.CloudStorage
 
             if "storage_url" in request.json:
                 url_body = apispec.CloudStorageUrl(**request.json)
-                storage = models.CloudStorage.from_url(storage_url=url_body.storage_url, git_url=url_body.git_url)
+                storage = models.CloudStorage.from_url(storage_url=url_body.storage_url, project_id=url_body.project_id)
             else:
                 body = apispec.CloudStorage(**request.json)
                 storage = models.CloudStorage.from_dict(body.dict())
