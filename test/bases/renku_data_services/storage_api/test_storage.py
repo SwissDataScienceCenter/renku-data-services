@@ -13,11 +13,13 @@ from renku_data_services.users.dummy import DummyAuthenticator
 
 _valid_storage: dict[str, Any] = {
     "project_id": "namespace/project",
-    "storage_type": "s3",
     "configuration": {
+        "type": "s3",
         "provider": "AWS",
         "region": "us-east-1",
     },
+    "source_path": "bucket/myfolder",
+    "target_path": "my/target",
 }
 
 
@@ -40,31 +42,136 @@ def storage_test_client(storage_repo: StorageRepository) -> SanicTestClient:
 
 
 @pytest.mark.parametrize(
-    "payload,expected_status_code",
+    "payload,expected_status_code,expected_storage_type",
     [
-        (_valid_storage, 201),
+        (_valid_storage, 201, "s3"),
+        (
+            {
+                "project_id": "namespace/project",
+                "source_path": "bucket/myfolder",
+                "target_path": "my/target",
+                "storage_url": "s3://s3.us-east-2.amazonaws.com/mybucket/myfolder",
+            },
+            201,
+            "s3",
+        ),
+        (
+            {
+                "project_id": "namespace/project",
+                "source_path": "bucket/myfolder",
+                "target_path": "my/target",
+                "storage_url": "s3://giab/",
+            },
+            201,
+            "s3",
+        ),
+        (
+            {
+                "project_id": "namespace/project",
+                "source_path": "bucket/myfolder",
+                "target_path": "my/target",
+                "storage_url": "s3://mybucket.s3.us-east-2.amazonaws.com/myfolder",
+            },
+            201,
+            "s3",
+        ),
+        (
+            {
+                "project_id": "namespace/project",
+                "target_path": "my/target",
+                "storage_url": "https://my.provider.com/mybucket/myfolder",
+            },
+            201,
+            "s3",
+        ),
+        (
+            {
+                "project_id": "namespace/project",
+                "target_path": "my/target",
+                "storage_url": "azure://mycontainer/myfolder",
+            },
+            201,
+            "azureblob",
+        ),
+        (
+            {
+                "project_id": "namespace/project",
+                "target_path": "my/target",
+                "storage_url": "az://myaccount.dfs.core.windows.net/myfolder",
+            },
+            201,
+            "azureblob",
+        ),
+        (
+            {
+                "project_id": "namespace/project",
+                "source_path": "bucket/myfolder",
+                "target_path": "my/target",
+                "storage_url": "az://myaccount.blob.core.windows.net/myfolder",
+            },
+            201,
+            "azureblob",
+        ),
+        (
+            {
+                "project_id": "namespace/project",
+                "configuration": {
+                    "type": "s3",
+                    "provider": "AWS",
+                    "secret_access_key": "1234567",
+                },
+                "source_path": "bucket/myfolder",
+                "target_path": "my/target",
+            },
+            422,
+            "",
+        ),
+        (
+            {
+                "project_id": "namespace/project",
+                "configuration": {
+                    "provider": "AWS",
+                    "region": None,
+                    "type": "s3",
+                },
+                "source_path": "bucket/myfolder",
+                "target_path": "my/target",
+            },
+            422,
+            "",
+        ),
         (
             {
                 "project_id": "namespace/project",
                 "storage_type": "s3",
                 "configuration": {
                     "provider": "AWS",
-                    "secret_access_key": "1234567",
+                    "region": "us-east-1",
+                    "type": "s3",
                 },
             },
             422,
+            "",
         ),
         (
             {
                 "project_id": "namespace/project",
                 "storage_type": "s3",
-                "configuration": {"provider": "AWS", "region": None},
+                "configuration": {
+                    "provider": "AWS",
+                    "region": "us-east-1",
+                },
+                "source_path": "bucket/myfolder",
+                "target_path": "my/target",
             },
             422,
+            "",
         ),
     ],
 )
-def test_storage_creation(storage_test_client: SanicTestClient, payload: dict[str, Any], expected_status_code: int):
+def test_storage_creation(
+    storage_test_client: SanicTestClient, payload: dict[str, Any], expected_status_code: int, expected_storage_type: str
+):
     _, res = storage_test_client.post(
         "/api/storage/storage",
         headers={"Authorization": "bearer test"},
@@ -72,6 +179,8 @@ def test_storage_creation(storage_test_client: SanicTestClient, payload: dict[st
     )
     assert res
     assert res.status_code == expected_status_code
+    if res.status_code < 300:
+        assert res.json["storage_type"] == expected_storage_type
 
 
 def test_get_storage(storage_test_client, valid_storage_payload):

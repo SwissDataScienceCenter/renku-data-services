@@ -1,8 +1,8 @@
 """Create tables
 
-Revision ID: f800cd939e93
+Revision ID: 11442ab2f8eb
 Revises:
-Create Date: 2023-08-02 15:38:19.919772
+Create Date: 2023-08-08 11:26:46.418814
 
 """
 import sqlalchemy as sa
@@ -10,7 +10,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision = "f800cd939e93"
+revision = "11442ab2f8eb"
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -27,6 +27,8 @@ def upgrade() -> None:
             sa.JSON().with_variant(postgresql.JSONB(astext_type=sa.Text()), "postgresql"),
             nullable=False,
         ),
+        sa.Column("source_path", sa.String(), nullable=False),
+        sa.Column("target_path", sa.String(), nullable=False),
         sa.Column("storage_id", sa.String(length=26), nullable=False),
         sa.PrimaryKeyConstraint("storage_id"),
     )

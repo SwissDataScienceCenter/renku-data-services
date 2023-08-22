@@ -23,18 +23,34 @@ class CloudStorageORM(BaseORM):
     __tablename__ = "cloud_storage"
 
     project_id: Mapped[str] = mapped_column("project_id", String(), index=True)
+    """Id of the project."""
+
     storage_type: Mapped[str] = mapped_column("storage_type", String(20))
+    """Type of storage (e.g. s3), read-only based on 'configuration'."""
+
     configuration: Mapped[dict[str, Any]] = mapped_column("configuration", JSONVariant)
+    """RClone configuration dict."""
+
+    source_path: Mapped[str] = mapped_column("source_path", String())
+    """Source path to mount from (e.g. bucket/folder for s3)."""
+
+    target_path: Mapped[str] = mapped_column("target_path", String())
+    """Target folder in the repository to mount to."""
 
     storage_id: Mapped[str] = mapped_column(
         "storage_id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False
     )
+    """Id of this storage."""
 
     @classmethod
     def load(cls, storage: models.CloudStorage):
         """Create CloudStorageORM from the cloud storage model."""
         return cls(
-            project_id=storage.project_id, storage_type=storage.storage_type, configuration=storage.configuration
+            project_id=storage.project_id,
+            storage_type=storage.storage_type,
+            configuration=storage.configuration,
+            source_path=storage.source_path,
+            target_path=storage.target_path,
         )
 
     def dump(self):
@@ -43,5 +59,7 @@ class CloudStorageORM(BaseORM):
             project_id=self.project_id,
             storage_type=self.storage_type,
             configuration=self.configuration,
+            source_path=self.source_path,
+            target_path=self.target_path,
             storage_id=self.storage_id,
         )
