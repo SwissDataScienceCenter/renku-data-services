@@ -26,6 +26,7 @@ from renku_data_services.resource_pool_adapters import ResourcePoolRepository, U
 from renku_data_services.storage_adapters import StorageRepository
 from renku_data_services.users.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.users.keycloak import KcUserStore, KeycloakAuthenticator
+from renku_data_services.migrations.core import DataRepository
 
 
 @retry(stop=(stop_after_attempt(20) | stop_after_delay(300)), wait=wait_fixed(2), reraise=True)
@@ -103,8 +104,14 @@ class Config:
             self.default_resource_pool = generate_default_resource_pool(options, defaults)
 
     @property
-    def repo(self):
-        """Used by alembic to find repo."""
+    def repo(self) -> DataRepository:
+        """Used by alembic to find the data repository.
+
+        Note:
+            Since alembic doesn't know about different config types for different services,
+            it uses this property to get some DB repository that it uses for database connections
+            for migrations. This property should just expose an underlying repository appropriate for this config.
+        """
         return self.rp_repo
 
     @classmethod
