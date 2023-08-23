@@ -22,11 +22,11 @@ from renku_data_services.data_api.server_options import (
 )
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
+from renku_data_services.migrations.core import DataRepository
 from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
 from renku_data_services.storage_adapters import StorageRepository
 from renku_data_services.users.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.users.keycloak import KcUserStore, KeycloakAuthenticator
-from renku_data_services.migrations.core import DataRepository
 
 
 @retry(stop=(stop_after_attempt(20) | stop_after_delay(300)), wait=wait_fixed(2), reraise=True)
