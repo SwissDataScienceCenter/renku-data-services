@@ -75,5 +75,5 @@ async def test_storage_delete(storage: dict[str, Any], storage_repo: StorageRepo
         await storage_repo.delete_storage(storage_id=inserted_storage.storage_id)
         storages = await storage_repo.get_storage(project_id=inserted_storage.project_id)
         assert len(storages) == 0
-    except ValidationError:
+    except (ValidationError, errors.ValidationError):
         pass
