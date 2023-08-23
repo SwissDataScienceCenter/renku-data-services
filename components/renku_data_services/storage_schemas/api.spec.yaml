@@ -26,7 +26,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/CloudStorageWithId"
+                $ref: "#/components/schemas/CloudStorageGet"
         default:
           $ref: '#/components/responses/Error'
 
@@ -46,7 +46,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/CloudStorageWithId"
+                $ref: "#/components/schemas/CloudStorageGet"
         default:
           $ref: '#/components/responses/Error'
     patch:
@@ -64,7 +64,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/CloudStorageWithId"
+                $ref: "#/components/schemas/CloudStorageGet"
         default:
           $ref: '#/components/responses/Error'
     delete:
@@ -91,7 +91,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/CloudStorageWithId"
+                  $ref: "#/components/schemas/CloudStorageGet"
         "404":
           description: Storage was not found
           content:
@@ -116,7 +116,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/CloudStorageWithId"
+                $ref: "#/components/schemas/CloudStorageGet"
         default:
           $ref: '#/components/responses/Error'
 
@@ -153,6 +153,10 @@ components:
               type: string
               description: the target path relative to the repository where the storage should be mounted
               example: my/project/folder
+            private:
+              type: boolean
+              description: Whether this storage is private (i.e. requires credentials) or not
+              default: false
           required:
             - storage_url
             - target_path
@@ -180,6 +184,10 @@ components:
               type: string
               description: the target path relative to the repository where the storage should be mounted
               example: my/project/folder
+            private:
+              type: boolean
+              description: Whether this storage is private (i.e. requires credentials) or not
+              default: false
           required:
             - configuration
             - source_path
@@ -215,6 +223,18 @@ components:
           properties:
             storage_id:
               $ref: "#/components/schemas/UlidId"
+    CloudStorageGet:
+      type: object
+      description: Get response for a cloud storage. Contains storage and information about fields that are required if the storage is private.
+      properties:
+        storage:
+          $ref: "#/components/schemas/CloudStorageWithId"
+        sensitive_fields:
+          type: array
+          items:
+            $ref: "#/components/schemas/RCloneOption"
+      required:
+        - storage
     RCloneSchema:
       description: List of RClone schemas for different storage types
       type: array
