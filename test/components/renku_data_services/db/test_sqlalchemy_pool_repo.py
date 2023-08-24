@@ -27,10 +27,14 @@ from renku_data_services.resource_pool_adapters import ResourcePoolRepository, U
 async def test_resource_pool_insert_get(
     rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser
 ):
+    inserted_rp = None
     try:
-        await create_rp(rp, pool_repo, admin_user)
+        inserted_rp = await create_rp(rp, pool_repo, admin_user)
     except (ValidationError, errors.ValidationError):
         pass
+    finally:
+        if inserted_rp is not None:
+            await pool_repo.delete_resource_pool(admin_user, inserted_rp.id)
 
 
 @given(rp=rp_strat(), new_name=a_name)
@@ -39,6 +43,7 @@ async def test_resource_pool_insert_get(
 async def test_resource_pool_update_name(
     rp: models.ResourcePool, pool_repo: ResourcePoolRepository, new_name: str, admin_user: base_models.APIUser
 ):
+    inserted_rp = None
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
@@ -50,6 +55,9 @@ async def test_resource_pool_update_name(
         assert retrieved_rps[0] == updated_rp
     except (ValidationError, errors.ValidationError):
         pass
+    finally:
+        if inserted_rp is not None:
+            await pool_repo.delete_resource_pool(admin_user, inserted_rp.id)
 
 
 @given(rp=rp_strat(), new_quota_id=a_uuid_string)
@@ -80,6 +88,7 @@ async def test_resource_pool_update_quota(
 async def test_resource_pool_update_classes(
     rp: models.ResourcePool, pool_repo: ResourcePoolRepository, data, admin_user: base_models.APIUser
 ):
+    inserted_rp = None
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
@@ -103,12 +112,16 @@ async def test_resource_pool_update_classes(
         assert retrieved_rps[0].classes == updated_rp.classes
     except (ValidationError, errors.ValidationError):
         pass
+    finally:
+        if inserted_rp is not None:
+            await pool_repo.delete_resource_pool(admin_user, inserted_rp.id)
 
 
 @given(rp=rp_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 @pytest.mark.asyncio
 async def test_get_classes(rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser):
+    inserted_rp = None
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
@@ -116,6 +129,9 @@ async def test_get_classes(rp: models.ResourcePool, pool_repo: ResourcePoolRepos
         assert all(c in inserted_rp.classes for c in retrieved_classes)
     except (ValidationError, errors.ValidationError):
         pass
+    finally:
+        if inserted_rp is not None:
+            await pool_repo.delete_resource_pool(admin_user, inserted_rp.id)
 
 
 @given(rp=rp_strat())
@@ -124,6 +140,7 @@ async def test_get_classes(rp: models.ResourcePool, pool_repo: ResourcePoolRepos
 async def test_get_class_by_id(
     rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser
 ):
+    inserted_rp = None
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
@@ -134,6 +151,9 @@ async def test_get_class_by_id(
         assert retrieved_classes[0] == a_class
     except (ValidationError, errors.ValidationError):
         pass
+    finally:
+        if inserted_rp is not None:
+            await pool_repo.delete_resource_pool(admin_user, inserted_rp.id)
 
 
 @given(rp=rp_strat())
@@ -142,6 +162,7 @@ async def test_get_class_by_id(
 async def test_get_class_by_name(
     rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser
 ):
+    inserted_rp = None
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
@@ -152,6 +173,9 @@ async def test_get_class_by_name(
         assert any([a_class == cls for cls in retrieved_classes])
     except (ValidationError, errors.ValidationError):
         pass
+    finally:
+        if inserted_rp is not None:
+            await pool_repo.delete_resource_pool(admin_user, inserted_rp.id)
 
 
 @given(rp=rp_strat())
@@ -179,6 +203,7 @@ async def test_resource_class_create(
     pool_repo: ResourcePoolRepository,
     admin_user: base_models.APIUser,
 ):
+    inserted_rp = None
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
@@ -196,6 +221,9 @@ async def test_resource_class_create(
         ), f"class {inserted_class} should be in {retrieved_rp.classes}"
     except (ValidationError, errors.ValidationError):
         pass
+    finally:
+        if inserted_rp is not None:
+            await pool_repo.delete_resource_pool(admin_user, inserted_rp.id)
 
 
 @given(rp=rp_strat())
@@ -204,6 +232,7 @@ async def test_resource_class_create(
 async def test_resource_class_delete(
     rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser
 ):
+    inserted_rp = None
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
@@ -224,6 +253,9 @@ async def test_resource_class_delete(
         ), f"class {removed_cls} should not be in {retrieved_rp.classes}"
     except (ValidationError, errors.ValidationError):
         pass
+    finally:
+        if inserted_rp is not None:
+            await pool_repo.delete_resource_pool(admin_user, inserted_rp.id)
 
 
 @given(rp=rp_strat(), rc_update=rc_update_reqs_dict)
@@ -232,6 +264,7 @@ async def test_resource_class_delete(
 async def test_resource_class_update(
     rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser, rc_update: dict
 ):
+    inserted_rp = None
     try:
         inserted_rp = await pool_repo.insert_resource_pool(resource_pool=rp, api_user=admin_user)
         assert inserted_rp is not None
@@ -261,6 +294,9 @@ async def test_resource_class_update(
         ), f"class {rc_to_update} should not be in {retrieved_rp.classes}"
     except (ValidationError, errors.ValidationError):
         pass
+    finally:
+        if inserted_rp is not None:
+            await pool_repo.delete_resource_pool(admin_user, inserted_rp.id)
 
 
 @given(rp=rp_strat())
@@ -269,6 +305,7 @@ async def test_resource_class_update(
 async def test_lookup_rp_by_name(
     rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser
 ):
+    inserted_rp = None
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
@@ -277,6 +314,9 @@ async def test_lookup_rp_by_name(
         assert any([rp == inserted_rp for rp in retrieved_rps])
     except (ValidationError, errors.ValidationError):
         pass
+    finally:
+        if inserted_rp is not None:
+            await pool_repo.delete_resource_pool(admin_user, inserted_rp.id)
 
 
 @given(rc=rc_non_default_strat())
@@ -310,6 +350,8 @@ async def test_resource_pools_access_control(
     pool_repo: ResourcePoolRepository,
     user_repo: UserRepository,
 ):
+    inserted_public_rp = None
+    inserted_private_rp = None
     try:
         inserted_public_rp = await create_rp(public_rp, pool_repo, admin_user)
         assert inserted_public_rp.id is not None
@@ -332,6 +374,11 @@ async def test_resource_pools_access_control(
         assert inserted_private_rp in loggedin_user_rps
     except (ValidationError, errors.ValidationError):
         pass
+    finally:
+        if inserted_public_rp is not None:
+            await pool_repo.delete_resource_pool(admin_user, inserted_public_rp.id)
+        if inserted_private_rp is not None:
+            await pool_repo.delete_resource_pool(admin_user, inserted_private_rp.id)
 
 
 @given(rp1=rp_strat(), rp2=rp_strat())
