@@ -5,7 +5,6 @@ from typing import AbstractSet, Any, Dict, Mapping, Optional, Protocol, TypeVar,
 
 from asyncpg import exceptions as postgres_exceptions
 from pydantic import ValidationError as PydanticValidationError
-from pydantic.error_wrappers import ValidationError as PydanticWrappersValidationError
 from sanic import HTTPResponse, Request, SanicException, json
 from sanic.errorpages import BaseRenderer, TextRenderer
 from sanic.handlers import ErrorHandler
@@ -109,7 +108,7 @@ class CustomErrorHandler(ErrorHandler):
             case SQLAlchemyError():
                 message = ", ".join([str(i) for i in exception.args])
                 formatted_exception = errors.BaseError(message=f"Database error occurred: {message}")
-            case PydanticWrappersValidationError() | PydanticValidationError():  # type: ignore[misc]
+            case PydanticValidationError():
                 parts = [".".join(str(i) for i in field["loc"]) + ": " + field["msg"] for field in exception.errors()]
                 message = f"There are errors in the following fields, {', '.join(parts)}"
                 formatted_exception = errors.ValidationError(message=message)
