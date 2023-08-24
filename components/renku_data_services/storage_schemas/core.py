@@ -3,7 +3,7 @@
 
 import json
 from pathlib import Path
-from typing import Any, Generator, Union, cast, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Generator, Union, cast
 
 from pydantic import BaseModel, Field, ValidationError
 from sanic.log import logger
