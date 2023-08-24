@@ -12,6 +12,8 @@ from renku_data_services.migrations.core import DataRepository
 
 
 def include_object_factory(schema: str):
+    """Filter only objects for the current database schema to be included."""
+
     def _include_object(object, name, type_, reflected, compare_to):
         if type_ == "table" and object.schema != schema:
             return False
