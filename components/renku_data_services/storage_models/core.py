@@ -19,6 +19,7 @@ class RCloneConfig(BaseModel, MutableMapping):
 
     @model_validator(mode="before")
     def check_if_from_dict(cls, data: Any) -> Any:
+        """Check if the class was created from a plain dict or an already wrapped dict."""
         if isinstance(data, dict) and {"config"} != data.keys():
             data = {"config": data}
         return data
@@ -31,6 +32,7 @@ class RCloneConfig(BaseModel, MutableMapping):
 
     @model_serializer
     def serialize_model(self) -> dict[str, Any]:
+        """Serialize model by returning contained dict."""
         return self.config
 
     def __len__(self):
