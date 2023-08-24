@@ -56,6 +56,9 @@ class KeycloakAuthenticator:
 
     async def authenticate(self, access_token: str, request: Request) -> base_models.APIUser:
         """Checks the validity of the access token."""
+        if self.token_field != "Authorization":  # nosec: B105
+            access_token = str(request.headers.get(self.token_field))
+
         parsed = self._validate(access_token)
         is_admin = self.admin_role in parsed.get("realm_access", {}).get("roles", [])
         return base_models.APIUser(is_admin=is_admin, id=parsed.get("sub"), access_token=access_token)

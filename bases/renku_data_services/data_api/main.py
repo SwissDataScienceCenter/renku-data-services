@@ -9,6 +9,7 @@ from sanic.worker.loader import AppLoader
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.data_api.config import Config
 from renku_data_services.migrations.core import run_migrations_for_app
+from renku_data_services.storage_schemas.core import RCloneValidator
 
 
 def create_app() -> Sanic:
@@ -31,6 +32,7 @@ def create_app() -> Sanic:
         run_migrations_for_app("storage", config.rp_repo)
         config.rp_repo.initialize(config.default_resource_pool)
 
+    app.ext.add_dependency(RCloneValidator)
     return app
 
 
