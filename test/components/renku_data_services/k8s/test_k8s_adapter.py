@@ -82,18 +82,22 @@ def test_delete_quota(quota: models.Quota):
 
 @given(old_quota=quota_strat, new_quota=quota_strat)
 def test_update_quota(old_quota: models.Quota, new_quota: models.Quota):
-    core_client = DummyCoreClient({})
-    scheduling_client = DummySchedulingClient({})
-    quota_repo = QuotaRepository(core_client, scheduling_client)
-    old_quota = old_quota.generate_id()
-    assert old_quota.id is not None
-    quota_repo.create_quota(old_quota)
-    quotas = quota_repo.get_quotas()
-    assert len(scheduling_client.pcs) == 1
-    assert len(quotas) == 1
-    new_quota = models.Quota.from_dict({**asdict(new_quota), "id": old_quota.id})
-    quota_repo.update_quota(new_quota)
-    quotas = quota_repo.get_quotas()
-    assert len(quotas) == 1
-    assert len(scheduling_client.pcs) == 1
-    assert quotas[0] == new_quota
+    try:
+        core_client = DummyCoreClient({})
+        scheduling_client = DummySchedulingClient({})
+        quota_repo = QuotaRepository(core_client, scheduling_client)
+        old_quota = old_quota.generate_id()
+        assert old_quota.id is not None
+        quota_repo.create_quota(old_quota)
+        quotas = quota_repo.get_quotas()
+        assert len(scheduling_client.pcs) == 1
+        assert len(quotas) == 1
+        new_quota = models.Quota.from_dict({**asdict(new_quota), "id": old_quota.id})
+        quota_repo.update_quota(new_quota)
+        quotas = quota_repo.get_quotas()
+        assert len(quotas) == 1
+        assert len(scheduling_client.pcs) == 1
+        assert quotas[0] == new_quota
+    finally:
+        if old_quota is not None:
+            quota_repo.delete_quota(old_quota.id)
