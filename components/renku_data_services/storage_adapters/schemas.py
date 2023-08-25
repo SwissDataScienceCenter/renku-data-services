@@ -1,7 +1,7 @@
 """SQLAlchemy schemas for the cloud storage database."""
 from typing import Any
 
-from sqlalchemy import JSON, String
+from sqlalchemy import JSON, MetaData, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 from ulid import ULID
@@ -10,11 +10,13 @@ import renku_data_services.storage_models as models
 
 JSONVariant = JSON().with_variant(JSONB(), "postgresql")
 
+metadata_obj = MetaData(schema="storage")  # Has to match alembic ini section name
+
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
     """Base class for all ORM classes."""
 
-    pass
+    metadata = metadata_obj
 
 
 class CloudStorageORM(BaseORM):
@@ -48,7 +50,7 @@ class CloudStorageORM(BaseORM):
         return cls(
             project_id=storage.project_id,
             storage_type=storage.storage_type,
-            configuration=storage.configuration,
+            configuration=storage.configuration.model_dump(),
             source_path=storage.source_path,
             target_path=storage.target_path,
         )
@@ -58,7 +60,7 @@ class CloudStorageORM(BaseORM):
         return models.CloudStorage(
             project_id=self.project_id,
             storage_type=self.storage_type,
-            configuration=self.configuration,
+            configuration=models.RCloneConfig(config=self.configuration),
             source_path=self.source_path,
             target_path=self.target_path,
             storage_id=self.storage_id,

@@ -1,8 +1,6 @@
 from hypothesis import strategies as st
 from hypothesis.provisional import urls
 
-import renku_data_services.storage_models as models
-
 a_project_id = st.integers(min_value=1, max_value=99999999).map(lambda x: str(x))
 a_path = st.lists(
     st.text(alphabet=st.characters(blacklist_categories=("C", "Zl", "Zp"), blacklist_characters=["/"]), min_size=1),
@@ -36,10 +34,11 @@ def storage_strat(draw):
     source_path = draw(a_path)
     target_path = draw(a_path)
     configuration = draw(st.one_of(s3_configuration(), azure_configuration()))
-    return models.CloudStorage(
-        project_id=project_id,
-        storage_type=configuration["type"],
-        source_path=source_path,
-        target_path=target_path,
-        configuration=configuration,
-    )
+
+    return {
+        "project_id": project_id,
+        "storage_type": configuration["type"],
+        "source_path": source_path,
+        "target_path": target_path,
+        "configuration": configuration,
+    }

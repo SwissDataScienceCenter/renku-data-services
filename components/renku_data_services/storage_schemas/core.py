@@ -25,7 +25,7 @@ class RCloneValidator:
 
         for provider_config in spec:
             try:
-                provider_schema = RCloneProviderSchema.parse_obj(provider_config)
+                provider_schema = RCloneProviderSchema.model_validate(provider_config)
                 self.providers[provider_schema.prefix] = provider_schema
             except ValidationError:
                 logger.error("Couldn't load RClone config: %s", provider_config)
@@ -81,7 +81,7 @@ class RCloneValidator:
 
     def asdict(self) -> list[dict[str, Any]]:
         """Return Schema as dict."""
-        return [provider.dict() for provider in self.providers.values()]
+        return [provider.model_dump() for provider in self.providers.values()]
 
 
 class RCloneTriState(BaseModel):
@@ -111,7 +111,7 @@ class RCloneOption(BaseModel):
     provider: str = Field(alias="Provider")
     default: str | int | bool | list[str] | RCloneTriState | None = Field(alias="Default")
     value: str | int | bool | RCloneTriState | None = Field(alias="Value")
-    examples: list[RCloneExample] | None
+    examples: list[RCloneExample] | None = Field(default=None)
     short_opt: str = Field(alias="ShortOpt")
     hide: int = Field(alias="Hide")
     required: bool = Field(alias="Required")
@@ -220,13 +220,14 @@ class RCloneProviderSchema(BaseModel):
             raise errors.ValidationError(message=f"The following fields are required but missing:\n{missing_str}")
 
         for key in keys:
-            option: RCloneOption | None = None
+            value = configuration[key]
 
-            if provider is not None:
-                option = next((o for o in self.options if o.name == key and o.provider == provider), None)
+            if isinstance(value, str):
+                # validate strings for Postgresql compatibility
+                if "\x00" in value:
+                    raise errors.ValidationError(message=f"Null byte found in value '{value}' for key '{key}'")
 
-            if option is None:
-                option = next((o for o in self.options if o.name == key and o.provider == ""), None)
+            option: RCloneOption | None = self.get_option_for_provider(key, provider)
 
             if option is None:
                 logger.info(f"Couldn't find option '{key}' for storage '{self.name}' and provider '{provider}'")
@@ -234,4 +235,4 @@ class RCloneProviderSchema(BaseModel):
                 # We can't actually validate those, so we just continue
                 continue
 
-            option.validate_config(configuration[key], provider=provider)
+            option.validate_config(value, provider=provider)

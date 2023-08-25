@@ -4,7 +4,7 @@ from typing import Any, Dict
 
 import pytest
 from sanic import Sanic
-from sanic_testing.testing import SanicTestClient
+from sanic_testing.testing import SanicASGITestClient
 
 from renku_data_services.crc_api.app import register_all_handlers
 from renku_data_services.crc_api.config import Config
@@ -38,7 +38,7 @@ def valid_resource_pool_payload() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def test_client(pool_repo: ResourcePoolRepository, user_repo: UserRepository) -> SanicTestClient:
+def test_client(pool_repo: ResourcePoolRepository, user_repo: UserRepository) -> SanicASGITestClient:
     config = Config(
         rp_repo=pool_repo,
         user_repo=user_repo,
@@ -49,7 +49,7 @@ def test_client(pool_repo: ResourcePoolRepository, user_repo: UserRepository) ->
 
     app = Sanic(config.app_name)
     app = register_all_handlers(app, config)
-    return SanicTestClient(app)
+    return SanicASGITestClient(app)
 
 
 @pytest.mark.parametrize(
@@ -81,25 +81,27 @@ def test_client(pool_repo: ResourcePoolRepository, user_repo: UserRepository) ->
         ),
     ],
 )
-def test_resource_pool_creation(
-    test_client: SanicTestClient,
+@pytest.mark.asyncio
+async def test_resource_pool_creation(
+    test_client: SanicASGITestClient,
     payload: Dict[str, Any],
     expected_status_code: int,
 ):
-    _, res = create_rp(payload, test_client)
+    _, res = await create_rp(payload, test_client)
     assert res.status_code == expected_status_code
 
 
-def test_get_single_pool_quota(test_client: SanicTestClient, valid_resource_pool_payload: Dict[str, Any]):
-    _, res = create_rp(valid_resource_pool_payload, test_client)
+@pytest.mark.asyncio
+async def test_get_single_pool_quota(test_client: SanicASGITestClient, valid_resource_pool_payload: Dict[str, Any]):
+    _, res = await create_rp(valid_resource_pool_payload, test_client)
     assert res.status_code == 201
-    _, res = test_client.get(
+    _, res = await test_client.get(
         "/api/data/resource_pools/1",
         headers={"Authorization": "bearer test"},
     )
     assert res.status_code == 200
     assert res.json.get("name") == "test-name"
-    _, res = test_client.get(
+    _, res = await test_client.get(
         "/api/data/resource_pools/1/quota",
         headers={"Authorization": "bearer test"},
     )
@@ -110,51 +112,55 @@ def test_get_single_pool_quota(test_client: SanicTestClient, valid_resource_pool
     assert res.json.get("id") is not None
 
 
-def test_patch_quota(test_client: SanicTestClient, valid_resource_pool_payload: Dict[str, Any]):
-    _, res = create_rp(valid_resource_pool_payload, test_client)
+@pytest.mark.asyncio
+async def test_patch_quota(test_client: SanicASGITestClient, valid_resource_pool_payload: Dict[str, Any]):
+    _, res = await create_rp(valid_resource_pool_payload, test_client)
     assert res.status_code == 201
-    _, res = test_client.patch(
+    _, res = await test_client.patch(
         "/api/data/resource_pools/1/quota", headers={"Authorization": "bearer test"}, data=json.dumps({"cpu": 1000})
     )
     assert res.status_code == 200
     assert res.json.get("cpu") == 1000
 
 
-def test_put_quota(test_client: SanicTestClient, valid_resource_pool_payload: Dict[str, Any]):
-    _, res = create_rp(valid_resource_pool_payload, test_client)
+@pytest.mark.asyncio
+async def test_put_quota(test_client: SanicASGITestClient, valid_resource_pool_payload: Dict[str, Any]):
+    _, res = await create_rp(valid_resource_pool_payload, test_client)
     assert res.status_code == 201
-    _, res = test_client.get(
+    _, res = await test_client.get(
         "/api/data/resource_pools/1/quota",
         headers={"Authorization": "bearer test"},
     )
     assert res.status_code == 200
     quota = res.json
     quota = {**quota, "cpu": 1000, "memory": 1000, "gpu": 1000}
-    _, res = test_client.put(
+    _, res = await test_client.put(
         "/api/data/resource_pools/1/quota", headers={"Authorization": "bearer test"}, data=json.dumps(quota)
     )
     assert res.status_code == 200
     assert res.json == quota
 
 
-def test_patch_resource_class(test_client: SanicTestClient, valid_resource_pool_payload: Dict[str, Any]):
-    _, res = create_rp(valid_resource_pool_payload, test_client)
+@pytest.mark.asyncio
+async def test_patch_resource_class(test_client: SanicASGITestClient, valid_resource_pool_payload: Dict[str, Any]):
+    _, res = await create_rp(valid_resource_pool_payload, test_client)
     assert res.status_code == 201
-    _, res = test_client.patch(
+    _, res = await test_client.patch(
         "/api/data/resource_pools/1/classes/1", headers={"Authorization": "bearer test"}, data=json.dumps({"cpu": 5.0})
     )
     assert res.status_code == 200
     assert res.json.get("cpu") == 5.0
 
 
-def test_put_resource_class(test_client: SanicTestClient, valid_resource_pool_payload: Dict[str, Any]):
-    _, res = create_rp(valid_resource_pool_payload, test_client)
+@pytest.mark.asyncio
+async def test_put_resource_class(test_client: SanicASGITestClient, valid_resource_pool_payload: Dict[str, Any]):
+    _, res = await create_rp(valid_resource_pool_payload, test_client)
     assert res.status_code == 201
     assert len(res.json.get("classes", [])) == 1
     res_cls_payload = {**res.json.get("classes", [])[0], "cpu": 5.0}
     res_cls_expected_response = {**res.json.get("classes", [])[0], "cpu": 5.0}
     res_cls_payload.pop("id", None)
-    _, res = test_client.put(
+    _, res = await test_client.put(
         "/api/data/resource_pools/1/classes/1",
         headers={"Authorization": "bearer test"},
         data=json.dumps(res_cls_payload),

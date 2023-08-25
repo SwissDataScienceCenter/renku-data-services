@@ -1,76 +1,92 @@
 """Fixtures for testing."""
 
-from pathlib import Path
+import os
 
 import pytest
+from pytest_postgresql import factories
 
 import renku_data_services.base_models as base_models
+from renku_data_services.crc_api.config import Config as CrcConfig
 from renku_data_services.migrations.core import run_migrations_for_app
-from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
-from renku_data_services.storage_adapters import StorageRepository
+from renku_data_services.storage_api.config import Config as StorageConfig
+
+
+def init_db(**kwargs):
+    """Run database migrations so they don't need to run on every test."""
+    dummy_stores = os.environ.get("DUMMY_STORES")
+    name = os.environ.get("DB_NAME")
+    user = os.environ.get("DB_USER")
+    pw = os.environ.get("DB_PASSWORD")
+    host = os.environ.get("DB_HOST")
+    port = os.environ.get("DB_PORT")
+
+    os.environ["DUMMY_STORES"] = "true"
+    os.environ["DB_NAME"] = kwargs["dbname"]
+    os.environ["DB_USER"] = kwargs["user"]
+    os.environ["DB_PASSWORD"] = kwargs["password"]
+    os.environ["DB_HOST"] = kwargs["host"]
+    os.environ["DB_PORT"] = str(kwargs["port"])
+
+    config = StorageConfig.from_env()
+    run_migrations_for_app("storage", config.storage_repo)
+
+    config = CrcConfig.from_env()
+    run_migrations_for_app("resource_pools", config.rp_repo)
+
+    if dummy_stores:
+        os.environ["DUMMY_STORES"] = dummy_stores
+    else:
+        del os.environ["DUMMY_STORES"]
+    if name:
+        os.environ["DB_NAME"] = name
+    else:
+        del os.environ["DB_NAME"]
+    if user:
+        os.environ["DB_USER"] = user
+    else:
+        del os.environ["DB_USER"]
+    if pw:
+        os.environ["DB_PASSWORD"] = pw
+    else:
+        del os.environ["DB_PASSWORD"]
+    if host:
+        os.environ["DB_HOST"] = host
+    else:
+        del os.environ["DB_HOST"]
+    if port:
+        os.environ["DB_PORT"] = port
+    else:
+        del os.environ["DB_PORT"]
+
+
+postgresql_in_docker = factories.postgresql_noproc(load=[init_db])
+postgresql = factories.postgresql("postgresql_in_docker")
 
 
 @pytest.fixture
-def sqlite_file_url_async(tmp_path: Path):
-    db = tmp_path / "sqlite.db"
-    db.touch()
-    yield f"sqlite+aiosqlite:///{db.absolute().resolve()}"
-    db.unlink(missing_ok=True)
-
-
-@pytest.fixture
-def sqlite_file_url_sync(tmp_path: Path):
-    db = tmp_path / "sqlite.db"
-    db.touch()
-    yield f"sqlite:///{db.absolute().resolve()}"
-    db.unlink(missing_ok=True)
-
-
-@pytest.fixture
-def user_repo(sqlite_file_url_sync, sqlite_file_url_async, monkeypatch):
-    db = UserRepository(sqlite_file_url_sync, sqlite_file_url_async)
-    monkeypatch.setenv("ASYNC_SQLALCHEMY_URL", sqlite_file_url_async)
-    monkeypatch.setenv("SYNC_SQLALCHEMY_URL", sqlite_file_url_sync)
+def user_repo(postgresql, monkeypatch):
     monkeypatch.setenv("DUMMY_STORES", "true")
-    run_migrations_for_app("resource_pools", db)
-    monkeypatch.delenv("ASYNC_SQLALCHEMY_URL")
-    monkeypatch.delenv("SYNC_SQLALCHEMY_URL")
-    monkeypatch.delenv("DUMMY_STORES")
-    yield db
-    monkeypatch.delenv("ASYNC_SQLALCHEMY_URL", raising=False)
-    monkeypatch.delenv("SYNC_SQLALCHEMY_URL", raising=False)
+    monkeypatch.setenv("DB_NAME", postgresql.info.dbname)
+    config = CrcConfig.from_env()
+    yield config.user_repo
     monkeypatch.delenv("DUMMY_STORES", raising=False)
 
 
 @pytest.fixture
-def pool_repo(sqlite_file_url_sync, sqlite_file_url_async, monkeypatch):
-    db = ResourcePoolRepository(sqlite_file_url_sync, sqlite_file_url_async)
-    monkeypatch.setenv("ASYNC_SQLALCHEMY_URL", sqlite_file_url_async)
-    monkeypatch.setenv("SYNC_SQLALCHEMY_URL", sqlite_file_url_sync)
+def pool_repo(postgresql, monkeypatch):
     monkeypatch.setenv("DUMMY_STORES", "true")
-    run_migrations_for_app("resource_pools", db)
-    monkeypatch.delenv("ASYNC_SQLALCHEMY_URL")
-    monkeypatch.delenv("SYNC_SQLALCHEMY_URL")
-    monkeypatch.delenv("DUMMY_STORES")
-    yield db
-    monkeypatch.delenv("ASYNC_SQLALCHEMY_URL", raising=False)
-    monkeypatch.delenv("SYNC_SQLALCHEMY_URL", raising=False)
+    monkeypatch.setenv("DB_NAME", postgresql.info.dbname)
+    config = CrcConfig.from_env()
+    yield config.rp_repo
     monkeypatch.delenv("DUMMY_STORES", raising=False)
 
 
 @pytest.fixture
-def storage_repo(sqlite_file_url_sync, sqlite_file_url_async, monkeypatch):
-    db = StorageRepository(sqlite_file_url_sync, sqlite_file_url_async)
-    monkeypatch.setenv("ASYNC_SQLALCHEMY_URL", sqlite_file_url_async)
-    monkeypatch.setenv("SYNC_SQLALCHEMY_URL", sqlite_file_url_sync)
+def storage_repo(postgresql, monkeypatch):
     monkeypatch.setenv("DUMMY_STORES", "true")
-    run_migrations_for_app("storage", db)
-    monkeypatch.delenv("ASYNC_SQLALCHEMY_URL")
-    monkeypatch.delenv("SYNC_SQLALCHEMY_URL")
-    monkeypatch.delenv("DUMMY_STORES")
-    yield db
-    monkeypatch.delenv("ASYNC_SQLALCHEMY_URL", raising=False)
-    monkeypatch.delenv("SYNC_SQLALCHEMY_URL", raising=False)
+    monkeypatch.setenv("DB_NAME", postgresql.info.dbname)
+    config = StorageConfig.from_env()
+    yield config.storage_repo
     monkeypatch.delenv("DUMMY_STORES", raising=False)
 
 

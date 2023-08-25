@@ -34,7 +34,7 @@ class QuotaRepository:
             memory_raw += "b"
         return models.Quota(
             cpu=float(manifest.spec.hard.get("requests.cpu")),
-            memory=round(ByteSize.validate(memory_raw).to("G")),
+            memory=round(ByteSize(memory_raw).to("G")),
             gpu=gpu,
             gpu_kind=gpu_kind,
             id=manifest.metadata.name,

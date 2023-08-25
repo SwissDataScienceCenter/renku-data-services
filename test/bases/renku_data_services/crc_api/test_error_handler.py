@@ -26,7 +26,7 @@ def _trigger_error(err: Exception | Callable | Awaitable) -> RouteHandler:
 
 
 def _generate_pydantic_error():
-    apispec.QuotaPatch.validate({"cpu": -1.0})
+    apispec.QuotaPatch.model_validate({"cpu": -1.0})
 
 
 @pytest.mark.parametrize(
@@ -34,14 +34,14 @@ def _generate_pydantic_error():
     [
         (
             errors.ValidationError(message="Test validation error"),
-            apispec.ErrorResponse(error=apispec.Error(code=1422, message="Test validation error", detail=None)).dict(
-                exclude_none=True
-            ),
+            apispec.ErrorResponse(
+                error=apispec.Error(code=1422, message="Test validation error", detail=None)
+            ).model_dump(exclude_none=True),
             422,
         ),
         (
             Exception(),
-            apispec.ErrorResponse(error=apispec.Error.from_orm(errors.BaseError())).dict(exclude_none=True),
+            apispec.ErrorResponse(error=apispec.Error.model_validate(errors.BaseError())).model_dump(exclude_none=True),
             500,
         ),
         (
@@ -55,7 +55,7 @@ def _generate_pydantic_error():
                     message="The validation failed because the provided input has the wrong type",
                     detail=None,
                 )
-            ).dict(exclude_none=True),
+            ).model_dump(exclude_none=True),
             422,
         ),
         (
@@ -63,10 +63,10 @@ def _generate_pydantic_error():
             apispec.ErrorResponse(
                 error=apispec.Error(
                     code=1422,
-                    message="There are errors in the following fields, cpu: ensure this value is greater than 0.0",
+                    message="There are errors in the following fields, cpu: Input should be greater than 0",
                     detail=None,
                 )
-            ).dict(exclude_none=True),
+            ).model_dump(exclude_none=True),
             422,
         ),
         (
@@ -74,7 +74,7 @@ def _generate_pydantic_error():
                 message="test_message",
                 extra={"exception": Exception()},
             ),
-            apispec.ErrorResponse(error=apispec.Error.from_orm(errors.BaseError())).dict(exclude_none=True),
+            apispec.ErrorResponse(error=apispec.Error.model_validate(errors.BaseError())).model_dump(exclude_none=True),
             500,
         ),
         (
@@ -87,7 +87,7 @@ def _generate_pydantic_error():
                     message="test_message",
                     detail=None,
                 )
-            ).dict(exclude_none=True),
+            ).model_dump(exclude_none=True),
             500,
         ),
         (
@@ -98,7 +98,7 @@ def _generate_pydantic_error():
                     message="Database error occurred: some, error",
                     detail=None,
                 )
-            ).dict(exclude_none=True),
+            ).model_dump(exclude_none=True),
             500,
         ),
     ],

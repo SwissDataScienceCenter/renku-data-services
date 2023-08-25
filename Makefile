@@ -1,8 +1,8 @@
 .PHONY: schemas tests style_checks pre_commit_checks
 
 schemas:
-	poetry run datamodel-codegen --input components/renku_data_services/crc_schemas/api.spec.yaml --input-file-type openapi --output components/renku_data_services/crc_schemas/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --base-class renku_data_services.crc_schemas.base.BaseAPISpec
-	poetry run datamodel-codegen --input components/renku_data_services/storage_schemas/api.spec.yaml --input-file-type openapi --output components/renku_data_services/storage_schemas/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --base-class renku_data_services.storage_schemas.base.BaseAPISpec
+	poetry run datamodel-codegen --input components/renku_data_services/crc_schemas/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/crc_schemas/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --base-class renku_data_services.crc_schemas.base.BaseAPISpec
+	poetry run datamodel-codegen --input components/renku_data_services/storage_schemas/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/storage_schemas/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --base-class renku_data_services.storage_schemas.base.BaseAPISpec
 
 style_checks:
 	poetry check
@@ -30,8 +30,8 @@ tests:
 	cat .tmp.pid | xargs kill
 	@rm -f .tmp.pid
 	@echo "===========================================TEST DOWNGRADE==========================================="
-	DUMMY_STORES=true poetry run coverage run -m alembic -c components/renku_data_services/migrations/alembic.ini --name=storage downgrade base
-	DUMMY_STORES=true poetry run coverage run -m alembic -c components/renku_data_services/migrations/alembic.ini --name=resource_pools downgrade base
+	DUMMY_STORES=true poetry run coverage run -a -m alembic -c components/renku_data_services/migrations/alembic.ini --name=storage downgrade base
+	DUMMY_STORES=true poetry run coverage run -a -m alembic -c components/renku_data_services/migrations/alembic.ini --name=resource_pools downgrade base
 	@echo "===========================================FINAL COMBINED COVERAGE FOR ALL TESTS==========================================="
 	poetry run coverage report --show-missing
 	poetry run coverage lcov -o coverage.lcov

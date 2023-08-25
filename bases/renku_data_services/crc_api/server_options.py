@@ -88,7 +88,7 @@ class ServerOptions(BaseModel):
 
     def find_largest_attribute(self) -> str:
         """Find the attribute with the largest number of choices."""
-        options = ((k, v.get("options", [])) for k, v in self.dict().items() if k != "disk_request")
+        options = ((k, v.get("options", [])) for k, v in self.model_dump().items() if k != "disk_request")
         largest_list = max(options, key=lambda t: len(t[1]))[0]
         return largest_list
 

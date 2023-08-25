@@ -27,18 +27,20 @@ packages = [
 [tool.poetry.dependencies]
 python = "^3.11"
 sanic = {extras = ["ext"], version = "^23.3.0"}
-pydantic = "^1.10.7"
-datamodel-code-generator = "^0.17.2"
+pydantic = "^2.1.1"
+datamodel-code-generator = "^0.21.4"
 sqlalchemy = {extras = ["asyncio"], version = "^2.0.9"}
 alembic = "^1.10.3"
 asyncpg = "^0.27.0"
 pyjwt = {extras = ["crypto"], version = "^2.6.0"}
 tenacity = "^8.2.2"
 httpx = "<0.24"
-psycopg2-binary = "^2.9.6"
 kubernetes = "^26.1.0"
 python-ulid = "^1.1.0"
 python-gitlab = "^3.15.0"
+psycopg = {version = "^3.1.10", extras = ["binary"]}
+# urllib3 v2 has some breaking changes that libraries haven't caught up yet (08.2023)
+urllib3 = "^1.26.16"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.7.5"
@@ -56,8 +58,8 @@ sanic-testing = "^23.3.0"
 aiosqlite = "^0.18.0"
 types-pyyaml = "^6.0.12.9"
 schemathesis = "^3.19.0"
-# pinned because not all libraries have caught up with urllib3 v2
-urllib3 = "^1.26.16"
+pytest-asyncio = "^0.21.1"
+pytest-postgresql = "^5.0.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -107,6 +109,9 @@ filterwarnings = [
     "ignore:<class 'pytest_black.BlackItem'> is not using a cooperative constructor:pytest.PytestDeprecationWarning",
     "ignore:distutils Version classes are deprecated. Use packaging.version instead:DeprecationWarning"
 ]
+postgresql_host = "db"
+postgresql_user = "renku"
+postgresql_password = "renku"
 
 [tool.mypy]
 python_version = "3.11"

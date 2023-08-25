@@ -9,3 +9,4 @@ class BaseAPISpec(BaseModel):
         """Enables orm mode for pydantic."""
 
         orm_mode = True
+        from_attributes = True

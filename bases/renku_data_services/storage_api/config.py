@@ -43,27 +43,23 @@ class Config:
         version = os.environ.get(f"{prefix}VERSION", "0.0.1")
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
-            async_sqlalchemy_url = os.environ.get(
-                f"{prefix}ASYNC_SQLALCHEMY_URL", "sqlite+aiosqlite:///storage_service.db"
-            )
-            sync_sqlalchemy_url = os.environ.get(f"{prefix}SYNC_SQLALCHEMY_URL", "sqlite:///storage_service.db")
             authenticator = DummyAuthenticator(admin=True)
         else:
-            pg_host = os.environ.get("DB_HOST", "localhost")
-            pg_user = os.environ.get("DB_USER", "renku")
-            pg_port = os.environ.get("DB_PORT", "5432")
-            db_name = os.environ.get("DB_NAME", "renku")
-            pg_password = os.environ.get("DB_PASSWORD")
-            if pg_password is None:
-                raise errors.ConfigurationError(
-                    message="Please provide a database password in the 'DB_PASSWORD' environment variable."
-                )
-            async_sqlalchemy_url = f"postgresql+asyncpg://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{db_name}"
-            sync_sqlalchemy_url = f"postgresql+psycopg2://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{db_name}"
             gitlab_url = os.environ.get(f"{prefix}GITLAB_URL")
             if gitlab_url is None:
                 raise errors.ConfigurationError(message="Please provide the gitlab instance URL")
             authenticator = GitlabAuthenticator(gitlab_url=gitlab_url)
+        pg_host = os.environ.get("DB_HOST", "localhost")
+        pg_user = os.environ.get("DB_USER", "renku")
+        pg_port = os.environ.get("DB_PORT", "5432")
+        db_name = os.environ.get("DB_NAME", "renku")
+        pg_password = os.environ.get("DB_PASSWORD")
+        if pg_password is None:
+            raise errors.ConfigurationError(
+                message="Please provide a database password in the 'DB_PASSWORD' environment variable."
+            )
+        async_sqlalchemy_url = f"postgresql+asyncpg://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{db_name}"
+        sync_sqlalchemy_url = f"postgresql+psycopg://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{db_name}"
 
         storage_repo = StorageRepository(
             sync_sqlalchemy_url=sync_sqlalchemy_url, async_sqlalchemy_url=async_sqlalchemy_url
