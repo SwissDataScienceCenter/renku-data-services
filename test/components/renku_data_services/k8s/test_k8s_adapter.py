@@ -1,5 +1,5 @@
 from dataclasses import asdict
-from test.components.renku_data_services.models.hypothesis import quota_strat
+from test.components.renku_data_services.crc_models.hypothesis import quota_strat
 
 from hypothesis import given
 from kubernetes import client

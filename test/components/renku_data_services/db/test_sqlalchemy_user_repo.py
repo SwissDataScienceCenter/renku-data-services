@@ -1,5 +1,10 @@
 import asyncio
-from test.components.renku_data_services.models.hypothesis import rp_list_strat, rp_strat, user_list_strat, user_strat
+from test.components.renku_data_services.crc_models.hypothesis import (
+    rp_list_strat,
+    rp_strat,
+    user_list_strat,
+    user_strat,
+)
 from test.utils import create_rp
 from typing import List
 

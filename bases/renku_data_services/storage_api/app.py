@@ -1,11 +1,13 @@
 """Cloud storage app."""
 from dataclasses import asdict, dataclass
+from typing import Any
 
 from sanic import Request, Sanic, json
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
 import renku_data_services.storage_models as models
+from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.error_handler import CustomErrorHandler
@@ -76,6 +78,10 @@ class StorageBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         async def _put(request: Request, storage_id: str, validator: RCloneValidator, user: base_models.User):
+            if not request.json:
+                raise errors.ValidationError(message="The request body is empty. Please provide a valid JSON object.")
+            if not isinstance(request.json, dict):
+                raise errors.ValidationError(message="The request body is not a valid JSON object.")
             if "storage_url" in request.json:
                 url_body = apispec.CloudStorageUrl(**request.json)
                 new_storage = models.CloudStorage.from_url(
@@ -144,6 +150,38 @@ class StorageSchemaBP(CustomBlueprint):
         return "/storage_schema", ["GET"], _get
 
 
+@dataclass(kw_only=True)
+class MiscBP(CustomBlueprint):
+    """Server contains all handlers for CRC and the configuration."""
+
+    apispec: dict[str, Any]
+    version: str
+
+    def get_apispec(self) -> BlueprintFactoryResponse:
+        """Servers the OpenAPI specification."""
+
+        async def _get_apispec(_: Request):
+            return json(self.apispec)
+
+        return "/spec.json", ["GET"], _get_apispec
+
+    def get_error(self) -> BlueprintFactoryResponse:
+        """Returns a sample error response."""
+
+        async def _get_error(_: Request):
+            raise errors.ValidationError(message="Sample validation error")
+
+        return "/error", ["GET"], _get_error
+
+    def get_version(self) -> BlueprintFactoryResponse:
+        """Returns the version."""
+
+        async def _get_version(_: Request):
+            return json({"version": self.version})
+
+        return "/version", ["GET"], _get_version
+
+
 def register_all_handlers(app: Sanic, config: Config) -> Sanic:
     """Register all handlers on the application."""
     url_prefix = "/api/storage"
@@ -154,13 +192,9 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         authenticator=config.authenticator,
     )
     storage_schema = StorageSchemaBP(name="storage_schema", url_prefix=url_prefix)
+    misc = MiscBP(name="misc", url_prefix=url_prefix, apispec=config.spec, version=config.version)
 
-    app.blueprint(
-        [
-            storage.blueprint(),
-            storage_schema.blueprint(),
-        ]
-    )
+    app.blueprint([storage.blueprint(), storage_schema.blueprint(), misc.blueprint()])
 
     app.error_handler = CustomErrorHandler(apispec)
     app.config.OAS = False

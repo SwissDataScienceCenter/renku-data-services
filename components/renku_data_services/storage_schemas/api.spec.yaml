@@ -98,6 +98,8 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
     post:
       summary: create a new cloud storage for a project
       requestBody:

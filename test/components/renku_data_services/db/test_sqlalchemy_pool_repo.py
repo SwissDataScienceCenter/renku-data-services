@@ -1,6 +1,6 @@
 import asyncio
 from dataclasses import asdict
-from test.components.renku_data_services.models.hypothesis import (
+from test.components.renku_data_services.crc_models.hypothesis import (
     a_name,
     a_uuid_string,
     private_rp_strat,
