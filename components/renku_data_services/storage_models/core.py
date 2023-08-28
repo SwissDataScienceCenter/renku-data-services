@@ -57,6 +57,7 @@ class CloudStorage(BaseModel):
     """Cloud Storage model."""
 
     project_id: str = Field(pattern=r"^\d+$")
+    name: str = Field(min_length=3)
     storage_type: str = Field(pattern=r"^[a-z0-9]+$")
     configuration: RCloneConfig
     private: bool = Field(default=False)
@@ -94,6 +95,7 @@ class CloudStorage(BaseModel):
         return cls(
             project_id=data["project_id"],
             storage_id=data.get("storage_id"),
+            name=data["name"],
             configuration=RCloneConfig(config=data["configuration"]),
             storage_type=data["configuration"]["type"],
             source_path=data["source_path"],
@@ -102,7 +104,7 @@ class CloudStorage(BaseModel):
         )
 
     @classmethod
-    def from_url(cls, storage_url: str, private: bool, project_id: str, target_path: str) -> "CloudStorage":
+    def from_url(cls, storage_url: str, name: str, private: bool, project_id: str, target_path: str) -> "CloudStorage":
         """Get Cloud Storage/rclone config from a storage URL.
 
         Example:
@@ -122,16 +124,18 @@ class CloudStorage(BaseModel):
 
         match parsed_url.scheme:
             case "s3":
-                return CloudStorage.from_s3_url(parsed_url, project_id, private, target_path)
+                return CloudStorage.from_s3_url(parsed_url, project_id, name, private, target_path)
             case "azure" | "az":
-                return CloudStorage.from_azure_url(parsed_url, project_id, private, target_path)
+                return CloudStorage.from_azure_url(parsed_url, project_id, name, private, target_path)
             case "http" | "https":
-                return CloudStorage._from_ambiguous_url(parsed_url, project_id, private, target_path)
+                return CloudStorage._from_ambiguous_url(parsed_url, project_id, name, private, target_path)
             case _:
                 raise errors.ValidationError(message=f"Scheme '{parsed_url.scheme}' is not supported.")
 
     @classmethod
-    def from_s3_url(cls, storage_url: ParseResult, project_id: str, private: bool, target_path: str) -> "CloudStorage":
+    def from_s3_url(
+        cls, storage_url: ParseResult, project_id: str, name: str, private: bool, target_path: str
+    ) -> "CloudStorage":
         """Get Cloud storage from an S3 URL.
 
         Example:
@@ -163,6 +167,7 @@ class CloudStorage(BaseModel):
 
         return cls(
             project_id=project_id,
+            name=name,
             storage_type="s3",
             configuration=RCloneConfig(config=configuration),
             source_path=source_path,
@@ -172,7 +177,7 @@ class CloudStorage(BaseModel):
 
     @classmethod
     def from_azure_url(
-        cls, storage_url: ParseResult, project_id: str, private: bool, target_path: str
+        cls, storage_url: ParseResult, project_id: str, name: str, private: bool, target_path: str
     ) -> "CloudStorage":
         """Get Cloud storage from an Azure URL.
 
@@ -198,6 +203,7 @@ class CloudStorage(BaseModel):
                 source_path = f"{storage_url.hostname}{storage_url.path}"
         return cls(
             project_id=project_id,
+            name=name,
             storage_type="azureblob",
             configuration=RCloneConfig(config=configuration),
             source_path=source_path,
@@ -207,14 +213,14 @@ class CloudStorage(BaseModel):
 
     @classmethod
     def _from_ambiguous_url(
-        cls, storage_url: ParseResult, project_id: str, private: bool, target_path: str
+        cls, storage_url: ParseResult, project_id: str, name: str, private: bool, target_path: str
     ) -> "CloudStorage":
         """Get cloud storage from an ambiguous storage url."""
         if storage_url.hostname is None:
             raise errors.ValidationError(message="Storage URL must contain a host")
 
         if storage_url.hostname.endswith(".windows.net"):
-            return CloudStorage.from_azure_url(storage_url, project_id, private, target_path)
+            return CloudStorage.from_azure_url(storage_url, project_id, name, private, target_path)
 
         # default to S3 for unknown URLs, since these are way more common
-        return CloudStorage.from_s3_url(storage_url, project_id, private, target_path)
+        return CloudStorage.from_s3_url(storage_url, project_id, name, private, target_path)

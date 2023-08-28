@@ -7,6 +7,9 @@ a_path = st.lists(
     min_size=1,
     max_size=64,
 ).map(lambda x: "/".join(x))
+a_storage_name = st.text(
+    alphabet=st.characters(whitelist_categories=("Lu", "Ll", "Nd"), whitelist_characters=("-", "_")), min_size=3
+)
 
 
 @st.composite
@@ -31,12 +34,14 @@ def azure_configuration(draw):
 @st.composite
 def storage_strat(draw):
     project_id = draw(a_project_id)
+    storage_name = draw(a_storage_name)
     source_path = draw(a_path)
     target_path = draw(a_path)
     configuration = draw(st.one_of(s3_configuration(), azure_configuration()))
 
     return {
         "project_id": project_id,
+        "name": storage_name,
         "storage_type": configuration["type"],
         "source_path": source_path,
         "target_path": target_path,
