@@ -81,4 +81,6 @@ class GitlabAuthenticator:
             # Developer, Maintainer and Owner
             is_admin = True
 
-        return base_models.APIUser(is_admin, str(user_id), access_token)
+        return base_models.GitlabAPIUser(
+            is_admin=is_admin, id=str(user_id), access_token=access_token, project_id=project_id
+        )

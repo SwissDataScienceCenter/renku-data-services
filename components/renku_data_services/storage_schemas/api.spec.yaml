@@ -149,6 +149,8 @@ components:
           properties:
             storage_url:
               type: string
+            name:
+              $ref: "#/components/schemas/GitlabProjectId"
             target_path:
               type: string
               description: the target path relative to the repository where the storage should be mounted
@@ -158,6 +160,7 @@ components:
               description: Whether this storage is private (i.e. requires credentials) or not
               default: false
           required:
+            - name
             - storage_url
             - target_path
           example:
@@ -171,6 +174,8 @@ components:
               type: string
               description: same as rclone prefix/ rclone config type. Ignored in requests, but returned in responses for convenience.
               readOnly: true
+            name:
+              $ref: "#/components/schemas/GitlabProjectId"
             configuration:
               type: object
               description: Dictionary of rclone key:value pairs (based on schema from '/storage_schema')
@@ -189,6 +194,7 @@ components:
               description: Whether this storage is private (i.e. requires credentials) or not
               default: false
           required:
+            - name
             - configuration
             - source_path
             - target_path
@@ -328,6 +334,11 @@ components:
       type: string
       pattern: "^[0-9]+$"
       example: "123456"
+    StorageName:
+      description: Name of the storage
+      type: string
+      minLength: 3
+      pattern: "^[a-zA-Z0-9_-]+$"
     ErrorResponse:
       type: object
       properties:
