@@ -3,7 +3,7 @@
 {
 	"name": "Python 3 & PostgreSQL",
 	"dockerComposeFile": "docker-compose.yml",
-	"service": "storage",
+	"service": "data_service",
 	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
 	// Features to add to the dev container. More info: https://containers.dev/features.
 	"features": {

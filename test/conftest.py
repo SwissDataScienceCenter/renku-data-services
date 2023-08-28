@@ -6,9 +6,8 @@ import pytest
 from pytest_postgresql import factories
 
 import renku_data_services.base_models as base_models
-from renku_data_services.crc_api.config import Config as CrcConfig
+from renku_data_services.data_api.config import Config as DataConfig
 from renku_data_services.migrations.core import run_migrations_for_app
-from renku_data_services.storage_api.config import Config as StorageConfig
 
 
 def init_db(**kwargs):
@@ -27,10 +26,8 @@ def init_db(**kwargs):
     os.environ["DB_HOST"] = kwargs["host"]
     os.environ["DB_PORT"] = str(kwargs["port"])
 
-    config = StorageConfig.from_env()
+    config = DataConfig.from_env()
     run_migrations_for_app("storage", config.storage_repo)
-
-    config = CrcConfig.from_env()
     run_migrations_for_app("resource_pools", config.rp_repo)
 
     if dummy_stores:
@@ -67,7 +64,7 @@ postgresql = factories.postgresql("postgresql_in_docker")
 def user_repo(postgresql, monkeypatch):
     monkeypatch.setenv("DUMMY_STORES", "true")
     monkeypatch.setenv("DB_NAME", postgresql.info.dbname)
-    config = CrcConfig.from_env()
+    config = DataConfig.from_env()
     yield config.user_repo
     monkeypatch.delenv("DUMMY_STORES", raising=False)
 
@@ -76,7 +73,7 @@ def user_repo(postgresql, monkeypatch):
 def pool_repo(postgresql, monkeypatch):
     monkeypatch.setenv("DUMMY_STORES", "true")
     monkeypatch.setenv("DB_NAME", postgresql.info.dbname)
-    config = CrcConfig.from_env()
+    config = DataConfig.from_env()
     yield config.rp_repo
     monkeypatch.delenv("DUMMY_STORES", raising=False)
 
@@ -85,7 +82,7 @@ def pool_repo(postgresql, monkeypatch):
 def storage_repo(postgresql, monkeypatch):
     monkeypatch.setenv("DUMMY_STORES", "true")
     monkeypatch.setenv("DB_NAME", postgresql.info.dbname)
-    config = StorageConfig.from_env()
+    config = DataConfig.from_env()
     yield config.storage_repo
     monkeypatch.delenv("DUMMY_STORES", raising=False)
 

@@ -7,8 +7,8 @@ info:
     have the same format as the schema called ErrorResponse.
   version: v1
 servers:
-  - url: /api/storage
-  - url: /ui-server/api/storage
+  - url: /api/data
+  - url: /ui-server/api/data
 paths:
   /storage/{storage_id}:
     parameters:

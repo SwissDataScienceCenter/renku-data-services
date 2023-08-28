@@ -17,16 +17,10 @@ style_checks:
 tests:
 	@rm -f .tmp.pid coverage.lcov .coverage data_services.db
 	poetry run pytest
-	@echo "===========================================CRC API==========================================="
-	DUMMY_STORES=true poetry run coverage run -a -m sanic --debug --single-process renku_data_services.crc_api.main:create_app --factory & echo $$! > .tmp.pid
+	@echo "===========================================DATA API==========================================="
+	DUMMY_STORES=true poetry run coverage run -a -m sanic --debug --single-process renku_data_services.data_api.main:create_app --factory & echo $$! > .tmp.pid
 	@sleep 10
 	-poetry run st run http://localhost:8000/api/data/spec.json --validate-schema True --checks all --hypothesis-max-examples 20 --data-generation-method all --show-errors-tracebacks --hypothesis-suppress-health-check data_too_large --max-response-time 100 -v --header "Authorization: bearer some-random-key-123456"
-	cat .tmp.pid | xargs kill
-	@rm -f .tmp.pid
-	@echo "===========================================STORAGE API==========================================="
-	DUMMY_STORES=true poetry run coverage run -a -m sanic --debug --single-process renku_data_services.storage_api.main:create_app --factory & echo $$! > .tmp.pid
-	@sleep 10
-	-poetry run st run http://localhost:8000/api/storage/spec.json --validate-schema True --checks all --hypothesis-max-examples 20 --data-generation-method all --show-errors-tracebacks --hypothesis-suppress-health-check data_too_large --max-response-time 100 -v --header "Authorization: bearer some-random-key-123456"
 	cat .tmp.pid | xargs kill
 	@rm -f .tmp.pid
 	@echo "===========================================TEST DOWNGRADE==========================================="

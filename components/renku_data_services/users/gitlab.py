@@ -19,18 +19,19 @@ class GitlabAuthenticator:
 
     gitlab_url: str
 
-    async def authenticate(self, access_token: str, request: Request | None = None) -> base_models.APIUser:
+    token_field: str = "Gitlab-Access-Token"
+
+    async def authenticate(self, access_token: str, request: Request) -> base_models.APIUser:
         """Checks the validity of the access token."""
 
         project_id: str | None = None
 
-        if request is not None:
-            if "project_id" in request.json:
-                project_id = request.json["project_id"]
-            elif project_id in request.query_args:
-                project_id = request.query_args["project_id"]
-            elif "project_id" in request.args:
-                project_id = request.args["project_id"]
+        if "project_id" in request.json:
+            project_id = request.json["project_id"]
+        elif project_id in request.query_args:
+            project_id = request.query_args["project_id"]
+        elif "project_id" in request.args:
+            project_id = request.args["project_id"]
 
         if project_id is not None:
             result = await self._auth_with_repo(access_token, project_id)

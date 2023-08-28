@@ -1,9 +1,9 @@
 """Compute resource control (CRC) app."""
 import asyncio
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, List
+from typing import List
 
-from sanic import HTTPResponse, Request, Sanic, json
+from sanic import HTTPResponse, Request, json
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
@@ -11,8 +11,6 @@ import renku_data_services.resource_pool_models as models
 from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
-from renku_data_services.base_api.error_handler import CustomErrorHandler
-from renku_data_services.crc_api.config import Config
 from renku_data_services.crc_schemas import apispec, query_parameters
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
@@ -562,88 +560,3 @@ class UserResourcePoolsBP(CustomBlueprint):
             keycloak_id=user_id, resource_pool_ids=resource_pool_ids.root, append=post, api_user=api_user
         )
         return json([apispec.ResourcePoolWithId.model_validate(rp).model_dump(exclude_none=True) for rp in rps])
-
-
-@dataclass(kw_only=True)
-class MiscBP(CustomBlueprint):
-    """Server contains all handlers for CRC and the configuration."""
-
-    apispec: Dict[str, Any]
-    version: str
-
-    def get_apispec(self) -> BlueprintFactoryResponse:
-        """Servers the OpenAPI specification."""
-
-        async def _get_apispec(_: Request):
-            return json(self.apispec)
-
-        return "/spec.json", ["GET"], _get_apispec
-
-    def get_error(self) -> BlueprintFactoryResponse:
-        """Returns a sample error response."""
-
-        async def _get_error(_: Request):
-            raise errors.ValidationError(message="Sample validation error")
-
-        return "/error", ["GET"], _get_error
-
-    def get_version(self) -> BlueprintFactoryResponse:
-        """Returns the version."""
-
-        async def _get_version(_: Request):
-            return json({"version": self.version})
-
-        return "/version", ["GET"], _get_version
-
-
-def register_all_handlers(app: Sanic, config: Config) -> Sanic:
-    """Register all handlers on the application."""
-    url_prefix = "/api/data"
-    resource_pools = ResourcePoolsBP(
-        name="resource_pools",
-        url_prefix=url_prefix,
-        rp_repo=config.rp_repo,
-        authenticator=config.authenticator,
-        user_repo=config.user_repo,
-        quota_repo=config.quota_repo,
-    )
-    classes = ClassesBP(name="classes", url_prefix=url_prefix, repo=config.rp_repo, authenticator=config.authenticator)
-    quota = QuotaBP(
-        name="quota",
-        url_prefix=url_prefix,
-        rp_repo=config.rp_repo,
-        authenticator=config.authenticator,
-        quota_repo=config.quota_repo,
-    )
-    resource_pools_users = ResourcePoolUsersBP(
-        name="resource_pool_users", url_prefix=url_prefix, repo=config.user_repo, authenticator=config.authenticator
-    )
-    users = UsersBP(
-        name="users",
-        url_prefix=url_prefix,
-        repo=config.user_repo,
-        user_store=config.user_store,
-        authenticator=config.authenticator,
-    )
-    user_resource_pools = UserResourcePoolsBP(
-        name="user_resource_pools", url_prefix=url_prefix, repo=config.user_repo, authenticator=config.authenticator
-    )
-    misc = MiscBP(name="misc", url_prefix=url_prefix, apispec=config.spec, version=config.version)
-    app.blueprint(
-        [
-            resource_pools.blueprint(),
-            classes.blueprint(),
-            quota.blueprint(),
-            resource_pools_users.blueprint(),
-            users.blueprint(),
-            user_resource_pools.blueprint(),
-            misc.blueprint(),
-        ]
-    )
-
-    app.error_handler = CustomErrorHandler(apispec)
-    app.config.OAS = False
-    app.config.OAS_UI_REDOC = False
-    app.config.OAS_UI_SWAGGER = False
-    app.config.OAS_AUTODOC = False
-    return app

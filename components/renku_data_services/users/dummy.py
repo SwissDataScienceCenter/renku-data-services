@@ -40,7 +40,9 @@ class DummyAuthenticator:
     logged_in: bool = True
     admin: bool = False
 
-    async def authenticate(self, access_token: str, request: Request | None = None) -> base_models.APIUser:
+    token_field: str = "Authorization"
+
+    async def authenticate(self, access_token: str, request: Request) -> base_models.APIUser:
         """Indicates whether the user has sucessfully logged in."""
 
         return base_models.APIUser(is_admin=self.admin, id="some-id", access_token=access_token)

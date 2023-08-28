@@ -1,4 +1,4 @@
-"""The entrypoint for the CRC application."""
+"""The entrypoint for the data service application."""
 import argparse
 from os import environ
 
@@ -6,8 +6,8 @@ from sanic import Sanic
 from sanic.log import logger
 from sanic.worker.loader import AppLoader
 
-from renku_data_services.crc_api.app import register_all_handlers
-from renku_data_services.crc_api.config import Config
+from renku_data_services.data_api.app import register_all_handlers
+from renku_data_services.data_api.config import Config
 from renku_data_services.migrations.core import run_migrations_for_app
 
 
@@ -20,6 +20,7 @@ def create_app() -> Sanic:
         # NOTE: in single process mode where we usually run schemathesis to get coverage the db migrations
         # specified below with the main_process_start decorator do not run.
         run_migrations_for_app("resource_pools", config.rp_repo)
+        run_migrations_for_app("storage", config.rp_repo)
         config.rp_repo.initialize(config.default_resource_pool)
     app = register_all_handlers(app, config)
 
@@ -27,6 +28,7 @@ def create_app() -> Sanic:
     async def do_migrations(*_):
         logger.info("running migrations")
         run_migrations_for_app("resource_pools", config.rp_repo)
+        run_migrations_for_app("storage", config.rp_repo)
         config.rp_repo.initialize(config.default_resource_pool)
 
     return app
