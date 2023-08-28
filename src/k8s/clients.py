@@ -42,7 +42,7 @@ class K8sCoreClient(K8sCoreClientInterface):  # pragma:nocover
 
     def patch_namespaced_resource_quota(self, name: Any, namespace: Any, body: Any, **kwargs: Any) -> Any:
         """Update a resource quota."""
-        return self.client.delete_namespaced_resource_quota(name, namespace, body, **kwargs)
+        return self.client.patch_namespaced_resource_quota(name, namespace, body, **kwargs)
 
 
 class K8sSchedulingClient(K8sSchedudlingClientInterface):  # pragma:nocover

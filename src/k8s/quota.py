@@ -121,3 +121,18 @@ class QuotaRepository:
         """Update a specific resource quota."""
         quota_manifest = self._quota_to_manifest(quota)
         self.core_client.patch_namespaced_resource_quota(name=quota.id, namespace=self.namespace, body=quota_manifest)
+
+    def hydrate_resource_pool_quota(self, resource_pool: models.ResourcePool) -> models.ResourcePool:
+        """Replace the resource pool quota ID with a quota model."""
+
+        if resource_pool.quota is None or isinstance(resource_pool.quota, models.Quota):
+            return resource_pool
+        if isinstance(resource_pool.quota, str):
+            quota = self._get_quota(resource_pool.quota)
+            return resource_pool.set_quota(quota)
+        else:
+            raise errors.BaseError(
+                message=f"Cannot find a quota for the resource pool with id {resource_pool.id}.",
+                detail="The quota field in the resource pool is expected to be either a string or "
+                f"`models.Quota` but we got {type(resource_pool.quota)}",
+            )
