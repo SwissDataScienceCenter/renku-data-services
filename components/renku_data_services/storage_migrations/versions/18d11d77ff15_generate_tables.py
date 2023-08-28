@@ -1,16 +1,16 @@
-"""create_tables
+"""generate tables
 
-Revision ID: 10e6b7f37bad
+Revision ID: 18d11d77ff15
 Revises:
-Create Date: 2023-08-17 15:12:03.550786
+Create Date: 2023-08-28 08:41:20.783950
 
 """
-import sqlalchemy as sa
 from alembic import op
+import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision = "10e6b7f37bad"
+revision = "18d11d77ff15"
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -29,6 +29,8 @@ def upgrade() -> None:
         ),
         sa.Column("source_path", sa.String(), nullable=False),
         sa.Column("target_path", sa.String(), nullable=False),
+        sa.Column("name", sa.String(), nullable=False),
+        sa.Column("private", sa.Boolean(), nullable=False),
         sa.Column("storage_id", sa.String(length=26), nullable=False),
         sa.PrimaryKeyConstraint("storage_id"),
         schema="storage",

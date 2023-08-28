@@ -15,7 +15,7 @@ class Authenticator(Protocol):
         ...
 
 
-@dataclass
+@dataclass(kw_only=True)
 class APIUser:
     """The model for a user of the API, used for authentication."""
 
@@ -27,6 +27,13 @@ class APIUser:
     def is_authenticated(self):
         """Indicates whether the user has sucessfully logged in."""
         return self.id is not None
+
+
+@dataclass(kw_only=True)
+class GitlabAPIUser(APIUser):
+    """The model for a user of the API for Gitlab authenticated requests."""
+
+    project_id: str
 
 
 class UserStore(Protocol):
