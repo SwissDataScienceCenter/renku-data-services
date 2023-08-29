@@ -155,16 +155,15 @@ def storage_test_client(
                 "source_path": "bucket/myfolder",
                 "target_path": "my/target",
             },
-            422,
-            "",
+            201,
+            "s3",
         ),
         (
             {
                 "project_id": "123456",
                 "name": "mystorage",
                 "configuration": {
-                    "provider": "AWS",
-                    "region": None,  # missing region
+                    "provider": "Petabox",
                     "type": "s3",
                 },
                 "source_path": "bucket/myfolder",
@@ -341,7 +340,7 @@ async def test_get_storage_private(storage_test_client, valid_storage_payload):
     assert len(res.json) == 1
     result = res.json[0]
     assert "sensitive_fields" in result
-    assert len(result["sensitive_fields"]) == 2
+    assert len(result["sensitive_fields"]) == 3
     assert any(f["name"] == "access_key_id" for f in result["sensitive_fields"])
     storage = result["storage"]
     assert storage["project_id"] == project_id
@@ -468,7 +467,7 @@ async def test_storage_patch(storage_test_client, valid_storage_payload):
         headers={"Authorization": "bearer test"},
         data=json.dumps(
             {
-                "configuration": {"type": "azureblob"},
+                "configuration": {"type": "azureblob", "region": None},
                 "source_path": "bucket/myotherfolder",
             }
         ),
@@ -476,10 +475,11 @@ async def test_storage_patch(storage_test_client, valid_storage_payload):
     assert res.status_code == 200
     assert res.json["storage_type"] == "azureblob"
     assert res.json["source_path"] == "bucket/myotherfolder"
+    assert "region" not in res.json["configuration"]
 
 
 @pytest.mark.asyncio
-async def test_storage_patch_unauthroized(storage_test_client, valid_storage_payload):
+async def test_storage_patch_unauthorized(storage_test_client, valid_storage_payload):
     storage_test_client, gl_auth = storage_test_client
     _, res = await storage_test_client.post(
         "/api/data/storage",
