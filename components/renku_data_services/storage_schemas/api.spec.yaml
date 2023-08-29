@@ -150,7 +150,7 @@ components:
             storage_url:
               type: string
             name:
-              $ref: "#/components/schemas/GitlabProjectId"
+              $ref: "#/components/schemas/StorageName"
             target_path:
               type: string
               description: the target path relative to the repository where the storage should be mounted
@@ -175,7 +175,7 @@ components:
               description: same as rclone prefix/ rclone config type. Ignored in requests, but returned in responses for convenience.
               readOnly: true
             name:
-              $ref: "#/components/schemas/GitlabProjectId"
+              $ref: "#/components/schemas/StorageName"
             configuration:
               type: object
               description: Dictionary of rclone key:value pairs (based on schema from '/storage_schema')
