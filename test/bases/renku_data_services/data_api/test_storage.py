@@ -51,7 +51,7 @@ def storage_test_client(
     app = register_all_handlers(app, config)
     validator = RCloneValidator()
     app.ext.dependency(validator)
-    return SanicASGITestClient(app)
+    return SanicASGITestClient(app), gitlab_auth
 
 
 @pytest.mark.parametrize(
@@ -254,6 +254,25 @@ async def test_storage_creation(
         assert res.json["storage_type"] == expected_storage_type
         assert res.json["name"] == payload["name"]
         assert res.json["target_path"] == payload["target_path"]
+
+
+@pytest.mark.asyncio
+async def test_create_storage_duplicate_name(storage_test_client, valid_storage_payload):
+    storage_test_client, _ = storage_test_client
+    _, res = await storage_test_client.post(
+        "/api/data/storage",
+        headers={"Authorization": "bearer test"},
+        data=json.dumps(valid_storage_payload),
+    )
+    assert res.status_code == 201
+    assert res.json["storage_type"] == "s3"
+
+    _, res = await storage_test_client.post(
+        "/api/data/storage",
+        headers={"Authorization": "bearer test"},
+        data=json.dumps(valid_storage_payload),
+    )
+    assert res.status_code == 422
 
 
 @pytest.mark.asyncio

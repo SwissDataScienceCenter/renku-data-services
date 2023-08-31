@@ -4,6 +4,7 @@ from typing import Any
 from sqlalchemy import JSON, Boolean, MetaData, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
+from sqlalchemy.schema import UniqueConstraint
 from ulid import ULID
 
 import renku_data_services.storage_models as models
@@ -49,6 +50,14 @@ class CloudStorageORM(BaseORM):
         "storage_id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False
     )
     """Id of this storage."""
+
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "name",
+            name="_unique_name_uc",
+        ),
+    )
 
     @classmethod
     def load(cls, storage: models.CloudStorage):
