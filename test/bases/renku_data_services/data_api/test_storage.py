@@ -292,6 +292,25 @@ async def test_create_storage_duplicate_name(storage_test_client, valid_storage_
 
 
 @pytest.mark.asyncio
+async def test_create_storage_duplicate_name(storage_test_client, valid_storage_payload):
+    storage_test_client, _ = storage_test_client
+    _, res = await storage_test_client.post(
+        "/api/data/storage",
+        headers={"Authorization": "bearer test"},
+        data=json.dumps(valid_storage_payload),
+    )
+    assert res.status_code == 201
+    assert res.json["storage_type"] == "s3"
+
+    _, res = await storage_test_client.post(
+        "/api/data/storage",
+        headers={"Authorization": "bearer test"},
+        data=json.dumps(valid_storage_payload),
+    )
+    assert res.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_get_storage(storage_test_client, valid_storage_payload):
     storage_test_client, _ = storage_test_client
     _, res = await storage_test_client.post(
