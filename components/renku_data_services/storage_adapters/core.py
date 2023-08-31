@@ -25,7 +25,11 @@ class StorageRepository(_Base):
     """Repository for cloud storage."""
 
     async def get_storage(
-        self, user: base_models.GitlabAPIUser, id: str | None = None, project_id: str | None = None
+        self,
+        user: base_models.GitlabAPIUser,
+        id: str | None = None,
+        project_id: str | None = None,
+        name: str | None = None,
     ) -> list[models.CloudStorage]:
         """Get a storage from the database."""
         async with self.session_maker() as session:
@@ -38,6 +42,8 @@ class StorageRepository(_Base):
             if id is not None:
                 stmt = stmt.where(schemas.CloudStorageORM.storage_id == id)
 
+            if name is not None:
+                stmt = stmt.where(schemas.CloudStorageORM.name == name)
             res = await session.execute(stmt)
             orms = res.scalars().all()
             return [orm.dump() for orm in orms if orm.project_id == user.project_id]
@@ -62,6 +68,11 @@ class StorageRepository(_Base):
         """Insert a new cloud storage entry."""
         if storage.project_id != user.project_id:
             raise errors.Unauthorized(message="User does not have access to this project")
+        existing_storage = await self.get_storage(user, project_id=storage.project_id, name=storage.name)
+        if existing_storage:
+            raise errors.ValidationError(
+                message=f"A storage with name {storage.name} already exists for project {storage.project_id}"
+            )
         orm = schemas.CloudStorageORM.load(storage)
         async with self.session_maker() as session:
             async with session.begin():
@@ -84,6 +95,14 @@ class StorageRepository(_Base):
                 if "project_id" in kwargs and kwargs["project_id"] != storage[0].project_id:
                     raise errors.ValidationError(message="Cannot change project id of existing storage.")
                 storage = storage[0]
+                name = kwargs.get("name", storage.name)
+                if storage.name != name:
+                    existing_storage = await self.get_storage(user, project_id=storage.project_id, name=name)
+                    if existing_storage:
+                        raise errors.ValidationError(
+                            message=f"A storage with name {storage.name} already exists for project "
+                            f"{storage.project_id}"
+                        )
 
                 for key, value in kwargs.items():
                     setattr(storage, key, value)
