@@ -174,3 +174,16 @@ class StorageSchemaBP(CustomBlueprint):
             return json(validator.asdict())
 
         return "/storage_schema", ["GET"], _get
+
+    def validate(self) -> BlueprintFactoryResponse:
+        """Validate an RClone config."""
+
+        async def _validate(request: Request, validator: RCloneValidator):
+            if not request.json:
+                raise errors.ValidationError(message="The request body is empty. Please provide a valid JSON object.")
+            if not isinstance(request.json, dict):
+                raise errors.ValidationError(message="The request body is not a valid JSON object.")
+            validator.validate(request.json, keep_sensitive=True)
+            return json(None, 204)
+
+        return "/storage_schema/validate", ["POST"], _validate

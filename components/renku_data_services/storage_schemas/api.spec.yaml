@@ -133,6 +133,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RCloneSchema"
+  /storage_schema/validate:
+    post:
+      summary: Validate an RClone config using the schema
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RCloneConfig"
+      responses:
+        "204":
+          description: The configuration is valid
+        default:
+          $ref: '#/components/responses/Error'
 components:
   schemas:
     GitRequest:
@@ -144,6 +158,16 @@ components:
         - project_id
       example:
         project_id: 123456
+    RCloneConfig:
+      type: object
+      description: Dictionary of rclone key:value pairs (based on schema from '/storage_schema')
+      additionalProperties:
+        oneOf:
+        - type: number
+        - type: string
+        - type: boolean
+        - type: object
+        - type: 'null'
     CloudStorageUrl:
       allOf:
         - $ref: "#/components/schemas/GitRequest"
@@ -179,15 +203,7 @@ components:
             name:
               $ref: "#/components/schemas/StorageName"
             configuration:
-              type: object
-              description: Dictionary of rclone key:value pairs (based on schema from '/storage_schema')
-              additionalProperties:
-                oneOf:
-                - type: number
-                - type: string
-                - type: boolean
-                - type: object
-                - type: 'null'
+              $ref: "#/components/schemas/RCloneConfig"
             source_path:
               type: string
               description: the source path to mount, usually starts with bucket/container name
@@ -215,15 +231,7 @@ components:
           description: same as rclone prefix/ rclone config type. Ignored in requests, but returned in responses for convenience.
           readOnly: true
         configuration:
-          type: object
-          description: Dictionary of rclone key:value pairs (based on schema from '/storage_schema')
-          additionalProperties:
-            oneOf:
-            - type: number
-            - type: string
-            - type: boolean
-            - type: object
-            - type: 'null'
+          $ref: "#/components/schemas/RCloneConfig"
         source_path:
           type: string
           description: the source path to mount, usually starts with bucket/container name
