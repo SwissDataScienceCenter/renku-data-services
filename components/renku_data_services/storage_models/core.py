@@ -58,14 +58,14 @@ class CloudStorage(BaseModel):
 
     storage_id: str | None = Field(default=None)
 
-    source_path: str = Field(pattern=r"^(([\w\-]+/)*?\w+)$")
+    source_path: str = Field(min_length=1)
     """Path inside the cloud storage.
 
     Note: Since rclone itself doesn't really know about buckets/containers (they're not in the schema),
     bucket/container/etc. has to be the first part of source path.
     """
 
-    target_path: str = Field(pattern=r"^([\w\-]+/)*?\w+$")
+    target_path: str = Field(min_length=1)
     """Path inside the target repository to mouhnt/clone data to."""
 
     @classmethod
