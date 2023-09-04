@@ -154,6 +154,23 @@ def storage_test_client(
                 },
                 "source_path": "bucket/myfolder",
                 "target_path": "my/target",
+                "private": False,
+            },
+            422,
+            "",
+        ),
+        (
+            {
+                "project_id": "123456",
+                "name": "mystorage",
+                "configuration": {
+                    "type": "s3",
+                    "provider": "AWS",
+                    "secret_access_key": "1234567",  # passing in secret
+                },
+                "source_path": "bucket/myfolder",
+                "target_path": "my/target",
+                "private": True,
             },
             201,
             "s3",
@@ -224,8 +241,8 @@ def storage_test_client(
                     "provider": "AWS",
                     "region": "us-east-1",
                 },
-                "source_path": "bucket/myfolder",
-                "target_path": "my/target",
+                "source_path": "bucket/my-folder",
+                "target_path": "my/my-target",
             },
             422,
             "",
@@ -415,11 +432,49 @@ async def test_storage_put(storage_test_client, valid_storage_payload):
                 "configuration": {"type": "azureblob"},
                 "source_path": "bucket/myfolder",
                 "target_path": "my/target",
+                "private": True,
             }
         ),
     )
     assert res.status_code == 200
     assert res.json["storage_type"] == "azureblob"
+    assert res.json["private"]
+
+
+@pytest.mark.asyncio
+async def test_storage_patch_make_public(storage_test_client):
+    payload = {
+        "project_id": "123456",
+        "name": "mystorage",
+        "configuration": {"type": "s3", "provider": "AWS", "region": "us-east-1", "access_key_id": "my-secret"},
+        "source_path": "bucket/myfolder",
+        "target_path": "my/target",
+        "private": "true",
+    }
+    storage_test_client, _ = storage_test_client
+    _, res = await storage_test_client.post(
+        "/api/data/storage",
+        headers={"Authorization": "bearer test"},
+        data=json.dumps(payload),
+    )
+    assert res.status_code == 201
+    assert res.json["storage_type"] == "s3"
+    assert res.json["private"]
+    assert "access_key_id" in res.json["configuration"]
+    storage_id = res.json["storage_id"]
+
+    _, res = await storage_test_client.patch(
+        f"/api/data/storage/{storage_id}",
+        headers={"Authorization": "bearer test"},
+        data=json.dumps(
+            {
+                "private": False,
+            }
+        ),
+    )
+    assert res.status_code == 200
+    assert not res.json["private"]
+    assert "access_key_id" not in res.json["configuration"]
 
 
 @pytest.mark.asyncio

@@ -87,7 +87,7 @@ class StorageBP(CustomBlueprint):
                 body = apispec.CloudStorage(**request.json)
                 storage = models.CloudStorage.from_dict(body.model_dump())
 
-            validator.validate(storage.configuration.model_dump())
+            validator.validate(storage.configuration.model_dump(), private=storage.private)
 
             res = await self.storage_repo.insert_storage(storage=storage, user=user)
             return json(apispec.CloudStorageWithId.model_validate(res).model_dump(exclude_none=True), 201)
@@ -117,7 +117,7 @@ class StorageBP(CustomBlueprint):
                 body = apispec.CloudStorage(**request.json)
                 new_storage = models.CloudStorage.from_dict(body.model_dump())
 
-            validator.validate(new_storage.configuration.model_dump())
+            validator.validate(new_storage.configuration.model_dump(), private=new_storage.private)
             body_dict = new_storage.model_dump()
             del body_dict["storage_id"]
             res = await self.storage_repo.update_storage(storage_id=storage_id, user=user, **body_dict)
@@ -138,11 +138,19 @@ class StorageBP(CustomBlueprint):
             validator: RCloneValidator,
             user: base_models.GitlabAPIUser,
         ):
+            existing_storage = await self.storage_repo.get_storage_by_id(storage_id, user=user)
+            if not body.private and existing_storage.private:
+                # remove sensitive option if storage is turned public
+                config = existing_storage.configuration.model_copy()
+                validator.remove_sensitive_options_from_config(config)
+                body.configuration = {**config, **(body.configuration or {})}
+
             if body.configuration is not None:
                 # we need to apply the patch to the existing storage to properly validate it
-                existing_storage = await self.storage_repo.get_storage_by_id(storage_id, user=user)
                 body.configuration = {**existing_storage.configuration, **body.configuration}
-                validator.validate(body.configuration)
+                validator.validate(
+                    body.configuration, private=body.private if body.private is not None else existing_storage.private
+                )
 
             body_dict = body.model_dump(exclude_none=True)
 
@@ -183,7 +191,7 @@ class StorageSchemaBP(CustomBlueprint):
                 raise errors.ValidationError(message="The request body is empty. Please provide a valid JSON object.")
             if not isinstance(request.json, dict):
                 raise errors.ValidationError(message="The request body is not a valid JSON object.")
-            validator.validate(request.json, keep_sensitive=True)
+            validator.validate(request.json, private=True, keep_sensitive=True)
             return json(None, 204)
 
         return "/storage_schema/validate", ["POST"], _validate
