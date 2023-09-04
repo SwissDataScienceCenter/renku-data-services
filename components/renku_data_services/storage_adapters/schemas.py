@@ -78,7 +78,7 @@ class CloudStorageORM(BaseORM):
             project_id=self.project_id,
             name=self.name,
             storage_type=self.storage_type,
-            configuration=models.RCloneConfig(config=self.configuration),
+            configuration=models.RCloneConfig(config=self.configuration, private=self.private),
             source_path=self.source_path,
             target_path=self.target_path,
             storage_id=self.storage_id,

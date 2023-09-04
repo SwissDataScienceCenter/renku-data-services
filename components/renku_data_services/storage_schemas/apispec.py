@@ -133,6 +133,9 @@ class CloudStoragePatch(BaseAPISpec):
         description="the target path relative to the repository where the storage should be mounted",
         example="my/project/folder",
     )
+    private: Optional[bool] = Field(
+        None, description="Whether this storage is private (i.e. requires credentials) or not"
+    )
 
 
 class CloudStorageWithId(CloudStorage):
