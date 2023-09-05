@@ -452,6 +452,8 @@ class UserServer:
             f"{prefix}commit-sha": self.commit_sha,
             f"{prefix}gitlabProjectId": None,
             f"{prefix}safe-username": self._user.safe_username,
+            f"{prefix}quota": self.server_options.priority_class,
+            f"{prefix}userId": self._user.id,
         }
         if self.gl_project is not None:
             labels[f"{prefix}gitlabProjectId"] = str(self.gl_project.id)
