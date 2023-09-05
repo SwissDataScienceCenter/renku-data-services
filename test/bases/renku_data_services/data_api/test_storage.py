@@ -266,9 +266,9 @@ async def test_storage_creation(
     assert res.status_code == expected_status_code
     assert res.json
     if res.status_code < 300:
-        assert res.json["storage_type"] == expected_storage_type
-        assert res.json["name"] == payload["name"]
-        assert res.json["target_path"] == payload["target_path"]
+        assert res.json["storage"]["storage_type"] == expected_storage_type
+        assert res.json["storage"]["name"] == payload["name"]
+        assert res.json["storage"]["target_path"] == payload["target_path"]
 
 
 @pytest.mark.asyncio
@@ -280,7 +280,7 @@ async def test_create_storage_duplicate_name(storage_test_client, valid_storage_
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201
-    assert res.json["storage_type"] == "s3"
+    assert res.json["storage"]["storage_type"] == "s3"
 
     _, res = await storage_test_client.post(
         "/api/data/storage",
@@ -299,9 +299,9 @@ async def test_get_storage(storage_test_client, valid_storage_payload):
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201
-    assert res.json["storage_type"] == "s3"
+    assert res.json["storage"]["storage_type"] == "s3"
 
-    project_id = res.json["project_id"]
+    project_id = res.json["storage"]["project_id"]
     _, res = await storage_test_client.get(
         f"/api/data/storage?project_id={project_id}",
         headers={"Authorization": "bearer test"},
@@ -324,9 +324,9 @@ async def test_get_storage_unauthorized(storage_test_client, valid_storage_paylo
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201
-    assert res.json["storage_type"] == "s3"
+    assert res.json["storage"]["storage_type"] == "s3"
 
-    project_id = res.json["project_id"]
+    project_id = res.json["storage"]["project_id"]
     gl_auth.project_id = "9999999"
     _, res = await storage_test_client.get(
         f"/api/data/storage?project_id={project_id}",
@@ -346,9 +346,9 @@ async def test_get_storage_private(storage_test_client, valid_storage_payload):
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201
-    assert res.json["storage_type"] == "s3"
+    assert res.json["storage"]["storage_type"] == "s3"
 
-    project_id = res.json["project_id"]
+    project_id = res.json["storage"]["project_id"]
     _, res = await storage_test_client.get(
         f"/api/data/storage?project_id={project_id}",
         headers={"Authorization": "bearer test"},
@@ -374,8 +374,8 @@ async def test_storage_deletion(storage_test_client, valid_storage_payload):
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201
-    assert res.json["storage_type"] == "s3"
-    storage_id = res.json["storage_id"]
+    assert res.json["storage"]["storage_type"] == "s3"
+    storage_id = res.json["storage"]["storage_id"]
 
     _, res = await storage_test_client.delete(
         f"/api/data/storage/{storage_id}",
@@ -400,8 +400,8 @@ async def test_storage_deletion_unauthorized(storage_test_client, valid_storage_
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201
-    assert res.json["storage_type"] == "s3"
-    storage_id = res.json["storage_id"]
+    assert res.json["storage"]["storage_type"] == "s3"
+    storage_id = res.json["storage"]["storage_id"]
     gl_auth.project_id = "999999"
     _, res = await storage_test_client.delete(
         f"/api/data/storage/{storage_id}",
@@ -419,8 +419,8 @@ async def test_storage_put(storage_test_client, valid_storage_payload):
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201
-    assert res.json["storage_type"] == "s3"
-    storage_id = res.json["storage_id"]
+    assert res.json["storage"]["storage_type"] == "s3"
+    storage_id = res.json["storage"]["storage_id"]
 
     _, res = await storage_test_client.put(
         f"/api/data/storage/{storage_id}",
@@ -437,8 +437,8 @@ async def test_storage_put(storage_test_client, valid_storage_payload):
         ),
     )
     assert res.status_code == 200
-    assert res.json["storage_type"] == "azureblob"
-    assert res.json["private"]
+    assert res.json["storage"]["storage_type"] == "azureblob"
+    assert res.json["storage"]["private"]
 
 
 @pytest.mark.asyncio
@@ -458,10 +458,10 @@ async def test_storage_patch_make_public(storage_test_client):
         data=json.dumps(payload),
     )
     assert res.status_code == 201
-    assert res.json["storage_type"] == "s3"
-    assert res.json["private"]
-    assert "access_key_id" in res.json["configuration"]
-    storage_id = res.json["storage_id"]
+    assert res.json["storage"]["storage_type"] == "s3"
+    assert res.json["storage"]["private"]
+    assert "access_key_id" in res.json["storage"]["configuration"]
+    storage_id = res.json["storage"]["storage_id"]
 
     _, res = await storage_test_client.patch(
         f"/api/data/storage/{storage_id}",
@@ -473,8 +473,8 @@ async def test_storage_patch_make_public(storage_test_client):
         ),
     )
     assert res.status_code == 200
-    assert not res.json["private"]
-    assert "access_key_id" not in res.json["configuration"]
+    assert not res.json["storage"]["private"]
+    assert "access_key_id" not in res.json["storage"]["configuration"]
 
 
 @pytest.mark.asyncio
@@ -486,8 +486,8 @@ async def test_storage_put_unauthorized(storage_test_client, valid_storage_paylo
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201
-    assert res.json["storage_type"] == "s3"
-    storage_id = res.json["storage_id"]
+    assert res.json["storage"]["storage_type"] == "s3"
+    storage_id = res.json["storage"]["storage_id"]
     gl_auth.project_id = "999999"
     _, res = await storage_test_client.put(
         f"/api/data/storage/{storage_id}",
@@ -514,8 +514,8 @@ async def test_storage_patch(storage_test_client, valid_storage_payload):
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201
-    assert res.json["storage_type"] == "s3"
-    storage_id = res.json["storage_id"]
+    assert res.json["storage"]["storage_type"] == "s3"
+    storage_id = res.json["storage"]["storage_id"]
 
     _, res = await storage_test_client.patch(
         f"/api/data/storage/{storage_id}",
@@ -528,9 +528,9 @@ async def test_storage_patch(storage_test_client, valid_storage_payload):
         ),
     )
     assert res.status_code == 200
-    assert res.json["storage_type"] == "azureblob"
-    assert res.json["source_path"] == "bucket/myotherfolder"
-    assert "region" not in res.json["configuration"]
+    assert res.json["storage"]["storage_type"] == "azureblob"
+    assert res.json["storage"]["source_path"] == "bucket/myotherfolder"
+    assert "region" not in res.json["storage"]["configuration"]
 
 
 @pytest.mark.asyncio
@@ -542,8 +542,8 @@ async def test_storage_patch_unauthorized(storage_test_client, valid_storage_pay
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201
-    assert res.json["storage_type"] == "s3"
-    storage_id = res.json["storage_id"]
+    assert res.json["storage"]["storage_type"] == "s3"
+    storage_id = res.json["storage"]["storage_id"]
     gl_auth.project_id = "999999"
     _, res = await storage_test_client.patch(
         f"/api/data/storage/{storage_id}",
