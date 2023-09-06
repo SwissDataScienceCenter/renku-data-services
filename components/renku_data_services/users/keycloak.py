@@ -6,7 +6,6 @@ import httpx
 import jwt
 from jwt import PyJWKClient
 from sanic import Request
-from sanic.log import logger
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
@@ -60,7 +59,6 @@ class KeycloakAuthenticator:
         if self.token_field != "Authorization":  # nosec: B105
             access_token = str(request.headers.get(self.token_field))
 
-        logger.info(access_token)
         parsed = self._validate(access_token)
         is_admin = self.admin_role in parsed.get("realm_access", {}).get("roles", [])
         return base_models.APIUser(is_admin=is_admin, id=parsed.get("sub"), access_token=access_token)
