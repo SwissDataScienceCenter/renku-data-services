@@ -8,7 +8,6 @@ Create Date: 2023-08-31 09:53:55.488210
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision = "0044b54a89b9"
 down_revision = "95ce5418d4d9"
@@ -18,16 +17,10 @@ depends_on = None
 
 def upgrade() -> None:
     connection = op.get_bind()
-    result = connection.execute(
-        sa.sql.text(
-            """SELECT EXISTS (
-                   SELECT FROM information_schema.tables
-                   WHERE  table_schema = 'public'
-                   AND    table_name   = 'resource_pools'
-            );"""
-        )
-    )
-    if not result.one()[0]:
+    inspector = sa.inspect(connection)
+    tables = inspector.get_table_names()
+
+    if "resource_pools" not in tables:
         return
 
     statement = sa.sql.text(
@@ -68,26 +61,39 @@ def upgrade() -> None:
         op.f("ix_resource_pools_resource_pools_users_user_id"),
         table_name="resource_pools_users",
         schema="public",
+        if_exists=True,
     )
     op.drop_index(
         op.f("ix_resource_pools_resource_pools_users_resource_pool_id"),
         table_name="resource_pools_users",
         schema="public",
+        if_exists=True,
     )
     op.drop_table("resource_pools_users", schema="public")
     op.drop_index(
         op.f("ix_resource_pools_resource_classes_resource_pool_id"),
         table_name="resource_classes",
         schema="public",
+        if_exists=True,
     )
-    op.drop_index(op.f("ix_resource_pools_resource_classes_name"), table_name="resource_classes", schema="public")
+    op.drop_index(
+        op.f("ix_resource_pools_resource_classes_name"), table_name="resource_classes", schema="public", if_exists=True
+    )
     op.drop_table("resource_classes", schema="public")
-    op.drop_index(op.f("ix_resource_pools_users_keycloak_id"), table_name="users", schema="public")
+    op.drop_index(op.f("ix_resource_pools_users_keycloak_id"), table_name="users", schema="public", if_exists=True)
     op.drop_table("users", schema="public")
-    op.drop_index(op.f("ix_resource_pools_resource_pools_quota"), table_name="resource_pools", schema="public")
-    op.drop_index(op.f("ix_resource_pools_resource_pools_public"), table_name="resource_pools", schema="public")
-    op.drop_index(op.f("ix_resource_pools_resource_pools_name"), table_name="resource_pools", schema="public")
-    op.drop_index(op.f("ix_resource_pools_resource_pools_default"), table_name="resource_pools", schema="public")
+    op.drop_index(
+        op.f("ix_resource_pools_resource_pools_quota"), table_name="resource_pools", schema="public", if_exists=True
+    )
+    op.drop_index(
+        op.f("ix_resource_pools_resource_pools_public"), table_name="resource_pools", schema="public", if_exists=True
+    )
+    op.drop_index(
+        op.f("ix_resource_pools_resource_pools_name"), table_name="resource_pools", schema="public", if_exists=True
+    )
+    op.drop_index(
+        op.f("ix_resource_pools_resource_pools_default"), table_name="resource_pools", schema="public", if_exists=True
+    )
     op.drop_table("resource_pools", schema="public")
 
 
