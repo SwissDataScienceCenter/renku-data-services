@@ -178,7 +178,7 @@ components:
               $ref: "#/components/schemas/StorageName"
             configuration:
               type: object
-              description: Dictionary of rclone key:value pairs (based on schema from '/storage_schema')
+              description: Dictionary of rclone key:value pairs (based on schema from '/storage_schema'). Sensitive values are replaced with <sensitive> tokens
               additionalProperties:
                 oneOf:
                 - type: number
