@@ -32,7 +32,11 @@ def create_app() -> Sanic:
         run_migrations_for_app("storage", config.rp_repo)
         config.rp_repo.initialize(config.default_resource_pool)
 
-    app.ext.add_dependency(RCloneValidator)
+    @app.before_server_start
+    async def setup_rclone_calidator(app, _):
+        validator = RCloneValidator()
+        app.ext.dependency(validator)
+
     return app
 
 

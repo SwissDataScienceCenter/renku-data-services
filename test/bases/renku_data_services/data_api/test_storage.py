@@ -47,7 +47,8 @@ def storage_test_client(
 
     app = Sanic(config.app_name)
     app = register_all_handlers(app, config)
-    app.ext.add_dependency(RCloneValidator)
+    validator = RCloneValidator()
+    app.ext.dependency(validator)
     return SanicASGITestClient(app)
 
 
