@@ -17,7 +17,7 @@ def remove_id_from_quota(quota: rp_models.Quota) -> rp_models.Quota:
 def remove_id_from_rc(rc: rp_models.ResourceClass) -> rp_models.ResourceClass:
     kwargs = asdict(rc)
     kwargs["id"] = None
-    return rp_models.ResourceClass(**kwargs)
+    return rp_models.ResourceClass.from_dict(kwargs)
 
 
 def remove_id_from_rp(rp: rp_models.ResourcePool) -> rp_models.ResourcePool:

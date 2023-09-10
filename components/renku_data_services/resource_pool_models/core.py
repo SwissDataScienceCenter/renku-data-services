@@ -88,8 +88,8 @@ class ResourceClass(ResourcesCompareMixin):
     default: bool = False
     default_storage: int = 1
     matching: Optional[bool] = None
-    node_affinities: List[NodeAffinity] = field(default_factory=set)
-    tolerations: List[str] = field(default_factory=set)
+    node_affinities: List[NodeAffinity] = field(default_factory=list)
+    tolerations: List[str] = field(default_factory=list)
 
     def __post_init__(self):
         if "\x00" in self.name:
@@ -102,13 +102,16 @@ class ResourceClass(ResourcesCompareMixin):
         object.__setattr__(
             self, "node_affinities", sorted(self.node_affinities, key=lambda x: (x.key, x.required_during_scheduling))
         )
-        object.__setattr__(self, "tolerations", sorted(self.node_affinities))
+        object.__setattr__(self, "tolerations", sorted(self.tolerations))
 
     @classmethod
     def from_dict(cls, data: dict) -> "ResourceClass":
         """Create the model from a plain dictionary."""
         if data.get("node_affinities"):
-            data["node_affinities"] = [NodeAffinity.from_dict(affinity) for affinity in data.get("node_affinities", [])]
+            data["node_affinities"] = [
+                NodeAffinity.from_dict(affinity) if isinstance(affinity, dict) else affinity
+                for affinity in data.get("node_affinities", [])
+            ]
         if isinstance(data.get("tolerations"), list):
             data["tolerations"] = [toleration for toleration in data["tolerations"]]
         return cls(**data)

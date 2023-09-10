@@ -158,8 +158,10 @@ class TolerationORM(BaseORM):
 
     __tablename__ = "tolerations"
     key: Mapped[str] = mapped_column(String(63))
-    resource_class_id: Mapped[int] = mapped_column(ForeignKey("resource_classes.id"))
-    resource_class: Mapped["ResourceClassORM"] = relationship(back_populates="tolerations")
+    resource_class: Mapped[Optional["ResourceClassORM"]] = relationship(back_populates="tolerations", default=None)
+    resource_class_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("resource_classes.id"), default=None, index=True
+    )
     id: Mapped[int] = mapped_column("id", Integer, primary_key=True, default=None, init=False)
 
 
@@ -168,8 +170,10 @@ class NodeAffintyORM(BaseORM):
 
     __tablename__ = "node_affinities"
     key: Mapped[str] = mapped_column(String(63))
-    resource_class_id: Mapped[int] = mapped_column(ForeignKey("resource_classes.id"))
-    resource_class: Mapped["ResourceClassORM"] = relationship(back_populates="node_affinities")
+    resource_class: Mapped[Optional["ResourceClassORM"]] = relationship(back_populates="node_affinities", default=None)
+    resource_class_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("resource_classes.id"), default=None, index=True
+    )
     required_during_scheduling: Mapped[bool] = mapped_column(default=False)
     id: Mapped[int] = mapped_column("id", Integer, primary_key=True, default=None, init=False)
 

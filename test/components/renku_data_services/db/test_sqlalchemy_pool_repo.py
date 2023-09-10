@@ -53,7 +53,7 @@ async def test_resource_pool_update_name(
 
 
 @given(rp=rp_strat(), new_quota_id=a_uuid_string)
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_pool_update_quota(
     rp: models.ResourcePool, pool_repo: ResourcePoolRepository, new_quota_id: str, admin_user: base_models.APIUser
@@ -85,7 +85,7 @@ async def test_resource_pool_update_classes(
         assert inserted_rp.id is not None
         old_classes = [asdict(cls) for cls in list(inserted_rp.classes)]
         new_classes_dicts = [{**cls, **data.draw(rc_update_reqs_dict)} for cls in old_classes]
-        new_classes_models = [models.ResourceClass(**cls) for cls in new_classes_dicts]
+        new_classes_models = [models.ResourceClass.from_dict(cls) for cls in new_classes_dicts]
         new_classes_models = sorted(
             new_classes_models, key=lambda x: (x.default, x.cpu, x.memory, x.default_storage, x.name)
         )
