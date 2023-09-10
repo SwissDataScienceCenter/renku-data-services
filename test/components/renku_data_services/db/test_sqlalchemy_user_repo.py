@@ -142,12 +142,12 @@ async def test_get_update_user_resource_pools(
         try:
             if inserted_user:
                 await user_repo.delete_user(id=inserted_user.keycloak_id, api_user=admin_user)
-        except:  # noqa: E722
+        except:  # noqa: E722 # nosec: B110
             pass
         if inserted_rps:
             for rp in inserted_rps:
                 if rp.id is not None:
                     try:
                         await pool_repo.delete_resource_pool(id=rp.id, api_user=admin_user)
-                    except:  # noqa: E722
+                    except:  # noqa: E722 # nosec: B112
                         continue

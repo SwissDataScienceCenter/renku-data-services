@@ -101,8 +101,8 @@ class ResourceClassORM(BaseORM):
             gpu=self.gpu,
             default=self.default,
             default_storage=self.default_storage,
-            node_affinities=tuple([affinity.dump() for affinity in self.node_affinities]),
-            tolerations=tuple([toleration.key for toleration in self.tolerations]),
+            node_affinities=[affinity.dump() for affinity in self.node_affinities],
+            tolerations=[toleration.key for toleration in self.tolerations],
         )
 
 
