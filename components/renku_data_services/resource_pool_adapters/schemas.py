@@ -64,6 +64,16 @@ class ResourceClassORM(BaseORM):
     )
     resource_pool: Mapped[Optional["ResourcePoolORM"]] = relationship(back_populates="classes", default=None)
     id: Mapped[int] = mapped_column(primary_key=True, default=None, init=False)
+    tolerations: Mapped[List["TolerationORM"]] = relationship(
+        back_populates="resource_class",
+        default_factory=list,
+        cascade="save-update, merge, delete",
+    )
+    node_affinities: Mapped[List["NodeAffintyORM"]] = relationship(
+        back_populates="resource_class",
+        default_factory=list,
+        cascade="save-update, merge, delete",
+    )
 
     @classmethod
     def load(cls, resource_class: models.ResourceClass):
@@ -76,6 +86,8 @@ class ResourceClassORM(BaseORM):
             gpu=resource_class.gpu,
             default=resource_class.default,
             default_storage=resource_class.default_storage,
+            node_affinities=[NodeAffintyORM.load(affinity) for affinity in resource_class.node_affinities],
+            tolerations=[TolerationORM(key=toleration) for toleration in resource_class.tolerations],
         )
 
     def dump(self) -> models.ResourceClass:
@@ -89,6 +101,8 @@ class ResourceClassORM(BaseORM):
             gpu=self.gpu,
             default=self.default,
             default_storage=self.default_storage,
+            node_affinities=tuple([affinity.dump() for affinity in self.node_affinities]),
+            tolerations=tuple([toleration.key for toleration in self.tolerations]),
         )
 
 
@@ -136,4 +150,40 @@ class ResourcePoolORM(BaseORM):
             classes=[resource_class.dump() for resource_class in classes],
             public=self.public,
             default=self.default,
+        )
+
+
+class TolerationORM(BaseORM):
+    """The key for a K8s toleration used to schedule loads on tainted nodes."""
+
+    __tablename__ = "tolerations"
+    key: Mapped[str] = mapped_column(String(63))
+    resource_class_id: Mapped[int] = mapped_column(ForeignKey("resource_classes.id"))
+    resource_class: Mapped["ResourceClassORM"] = relationship(back_populates="tolerations")
+    id: Mapped[int] = mapped_column("id", Integer, primary_key=True, default=None, init=False)
+
+
+class NodeAffintyORM(BaseORM):
+    """The key for a K8s node label used to schedule loads specific nodes."""
+
+    __tablename__ = "node_affinities"
+    key: Mapped[str] = mapped_column(String(63))
+    resource_class_id: Mapped[int] = mapped_column(ForeignKey("resource_classes.id"))
+    resource_class: Mapped["ResourceClassORM"] = relationship(back_populates="node_affinities")
+    required_during_scheduling: Mapped[bool] = mapped_column(default=False)
+    id: Mapped[int] = mapped_column("id", Integer, primary_key=True, default=None, init=False)
+
+    @classmethod
+    def load(cls, affinity: models.NodeAffinity):
+        """Create an ORM object from the node affinity model."""
+        return cls(
+            key=affinity.key,
+            required_during_scheduling=affinity.required_during_scheduling,
+        )
+
+    def dump(self) -> models.NodeAffinity:
+        """Create a node affinity model from the ORM object."""
+        return models.NodeAffinity(
+            key=self.key,
+            required_during_scheduling=self.required_during_scheduling,
         )

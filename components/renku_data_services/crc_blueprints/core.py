@@ -64,7 +64,7 @@ class ResourcePoolsBP(CustomBlueprint):
         @only_admins
         @validate(json=apispec.ResourcePool)
         async def _post(_: Request, body: apispec.ResourcePool, user: base_models.APIUser):
-            rp = models.ResourcePool.from_dict(body.model_dump())
+            rp = models.ResourcePool.from_dict(body.model_dump(exclude_none=True))
             if not isinstance(rp.quota, models.Quota):
                 raise errors.ValidationError(message="The quota in the resource pool is malformed.")
             quota_with_id = rp.quota.generate_id()
