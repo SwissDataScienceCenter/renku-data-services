@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 import renku_data_services.storage_models as models
+import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.storage_adapters import schemas
 
@@ -23,21 +24,31 @@ class _Base:
 class StorageRepository(_Base):
     """Repository for cloud storage."""
 
-    async def get_storage(self, id: str | None = None, project_id: str | None = None) -> list[models.CloudStorage]:
+    async def get_storage(
+        self,
+        user: base_models.GitlabAPIUser,
+        id: str | None = None,
+        project_id: str | None = None,
+        name: str | None = None,
+    ) -> list[models.CloudStorage]:
         """Get a storage from the database."""
         async with self.session_maker() as session:
             stmt = select(schemas.CloudStorageORM)
 
             if project_id is not None:
+                if project_id != user.project_id:
+                    raise errors.Unauthorized(message="User does not have access to this project")
                 stmt = stmt.where(schemas.CloudStorageORM.project_id == project_id)
             if id is not None:
                 stmt = stmt.where(schemas.CloudStorageORM.storage_id == id)
 
+            if name is not None:
+                stmt = stmt.where(schemas.CloudStorageORM.name == name)
             res = await session.execute(stmt)
             orms = res.scalars().all()
-            return [orm.dump() for orm in orms]
+            return [orm.dump() for orm in orms if orm.project_id == user.project_id]
 
-    async def get_storage_by_id(self, storage_id: str) -> models.CloudStorage:
+    async def get_storage_by_id(self, storage_id: str, user: base_models.GitlabAPIUser) -> models.CloudStorage:
         """Get a single storage by id."""
         async with self.session_maker() as session:
             res = await session.execute(
@@ -47,17 +58,28 @@ class StorageRepository(_Base):
 
             if storage is None:
                 raise errors.MissingResourceError(message=f"The storage with id '{storage_id}' cannot be found")
+            if storage[0].project_id != user.project_id:
+                raise errors.Unauthorized(message="User does not have access to this project")
             return storage[0].dump()
 
-    async def insert_storage(self, storage: models.CloudStorage) -> models.CloudStorage:
+    async def insert_storage(
+        self, storage: models.CloudStorage, user: base_models.GitlabAPIUser
+    ) -> models.CloudStorage:
         """Insert a new cloud storage entry."""
+        if storage.project_id != user.project_id:
+            raise errors.Unauthorized(message="User does not have access to this project")
+        existing_storage = await self.get_storage(user, project_id=storage.project_id, name=storage.name)
+        if existing_storage:
+            raise errors.ValidationError(
+                message=f"A storage with name {storage.name} already exists for project {storage.project_id}"
+            )
         orm = schemas.CloudStorageORM.load(storage)
         async with self.session_maker() as session:
             async with session.begin():
                 session.add(orm)
         return orm.dump()
 
-    async def update_storage(self, storage_id: str, **kwargs) -> models.CloudStorage:
+    async def update_storage(self, storage_id: str, user: base_models.GitlabAPIUser, **kwargs) -> models.CloudStorage:
         """Update a cloud storage entry."""
         async with self.session_maker() as session:
             async with session.begin():
@@ -68,7 +90,19 @@ class StorageRepository(_Base):
 
                 if storage is None:
                     raise errors.MissingResourceError(message=f"The storage with id '{storage_id}' cannot be found")
+                if storage[0].project_id != user.project_id:
+                    raise errors.Unauthorized(message="User does not have access to this project")
+                if "project_id" in kwargs and kwargs["project_id"] != storage[0].project_id:
+                    raise errors.ValidationError(message="Cannot change project id of existing storage.")
                 storage = storage[0]
+                name = kwargs.get("name", storage.name)
+                if storage.name != name:
+                    existing_storage = await self.get_storage(user, project_id=storage.project_id, name=name)
+                    if existing_storage:
+                        raise errors.ValidationError(
+                            message=f"A storage with name {storage.name} already exists for project "
+                            f"{storage.project_id}"
+                        )
 
                 for key, value in kwargs.items():
                     setattr(storage, key, value)
@@ -80,7 +114,7 @@ class StorageRepository(_Base):
 
         return result
 
-    async def delete_storage(self, storage_id: str) -> None:
+    async def delete_storage(self, storage_id: str, user: base_models.GitlabAPIUser) -> None:
         """Delete a cloud storage entry."""
         async with self.session_maker() as session:
             async with session.begin():
@@ -91,5 +125,7 @@ class StorageRepository(_Base):
 
                 if storage is None:
                     return
+                if storage[0].project_id != user.project_id:
+                    raise errors.Unauthorized(message="User does not have access to this project")
 
                 await session.delete(storage[0])

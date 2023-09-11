@@ -52,14 +52,14 @@ async def create_rp(
     return inserted_rp
 
 
-async def create_storage(storage_dict: dict[str, Any], repo: StorageRepository):
+async def create_storage(storage_dict: dict[str, Any], repo: StorageRepository, user: base_models.GitlabAPIUser):
     storage_dict["configuration"] = storage_models.RCloneConfig.model_validate(storage_dict["configuration"])
     storage = storage_models.CloudStorage.model_validate(storage_dict)
 
-    inserted_storage = await repo.insert_storage(storage)
+    inserted_storage = await repo.insert_storage(storage, user=user)
     assert inserted_storage is not None
     assert inserted_storage.storage_id is not None
-    retrieved_storage = await repo.get_storage_by_id(inserted_storage.storage_id)
+    retrieved_storage = await repo.get_storage_by_id(inserted_storage.storage_id, user=user)
     assert retrieved_storage is not None
 
     assert inserted_storage.model_dump() == retrieved_storage.model_dump()

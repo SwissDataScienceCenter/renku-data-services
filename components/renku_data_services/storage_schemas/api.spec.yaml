@@ -26,7 +26,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/CloudStorageWithId"
+                $ref: "#/components/schemas/CloudStorageGet"
         default:
           $ref: '#/components/responses/Error'
 
@@ -46,7 +46,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/CloudStorageWithId"
+                $ref: "#/components/schemas/CloudStorageGet"
         default:
           $ref: '#/components/responses/Error'
     patch:
@@ -64,7 +64,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/CloudStorageWithId"
+                $ref: "#/components/schemas/CloudStorageGet"
         default:
           $ref: '#/components/responses/Error'
     delete:
@@ -74,6 +74,8 @@ paths:
           description: The rcloud storage was removed or did not exist in the first place
         default:
           $ref: '#/components/responses/Error'
+    tags:
+      - storage
   /storage:
     get:
       summary: get cloud storage for a project or by id
@@ -91,7 +93,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/CloudStorageWithId"
+                  $ref: "#/components/schemas/CloudStorageGet"
         "404":
           description: Storage was not found
           content:
@@ -116,11 +118,11 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/CloudStorageWithId"
+                $ref: "#/components/schemas/CloudStorageGet"
         default:
           $ref: '#/components/responses/Error'
-
-
+    tags:
+      - storage
   /storage_schema:
     get:
       summary: Returns the rclone schema definition, which can be used to create interactive settings editors
@@ -149,11 +151,18 @@ components:
           properties:
             storage_url:
               type: string
+            name:
+              $ref: "#/components/schemas/StorageName"
             target_path:
               type: string
               description: the target path relative to the repository where the storage should be mounted
               example: my/project/folder
+            private:
+              type: boolean
+              description: Whether this storage is private (i.e. requires credentials) or not
+              default: false
           required:
+            - name
             - storage_url
             - target_path
           example:
@@ -167,11 +176,18 @@ components:
               type: string
               description: same as rclone prefix/ rclone config type. Ignored in requests, but returned in responses for convenience.
               readOnly: true
+            name:
+              $ref: "#/components/schemas/StorageName"
             configuration:
               type: object
-              description: Dictionary of rclone key:value pairs (based on schema from '/storage_schema')
+              description: Dictionary of rclone key:value pairs (based on schema from '/storage_schema'). Sensitive values are replaced with <sensitive> tokens
               additionalProperties:
-                type: string
+                oneOf:
+                - type: number
+                - type: string
+                - type: boolean
+                - type: object
+                - type: 'null'
             source_path:
               type: string
               description: the source path to mount, usually starts with bucket/container name
@@ -180,7 +196,12 @@ components:
               type: string
               description: the target path relative to the repository where the storage should be mounted
               example: my/project/folder
+            private:
+              type: boolean
+              description: Whether this storage is private (i.e. requires credentials) or not
+              default: false
           required:
+            - name
             - configuration
             - source_path
             - target_path
@@ -197,7 +218,12 @@ components:
           type: object
           description: Dictionary of rclone key:value pairs (based on schema from '/storage_schema')
           additionalProperties:
-            type: string
+            oneOf:
+            - type: number
+            - type: string
+            - type: boolean
+            - type: object
+            - type: 'null'
         source_path:
           type: string
           description: the source path to mount, usually starts with bucket/container name
@@ -215,6 +241,18 @@ components:
           properties:
             storage_id:
               $ref: "#/components/schemas/UlidId"
+    CloudStorageGet:
+      type: object
+      description: Get response for a cloud storage. Contains storage and information about fields that are required if the storage is private.
+      properties:
+        storage:
+          $ref: "#/components/schemas/CloudStorageWithId"
+        sensitive_fields:
+          type: array
+          items:
+            $ref: "#/components/schemas/RCloneOption"
+      required:
+        - storage
     RCloneSchema:
       description: List of RClone schemas for different storage types
       type: array
@@ -308,6 +346,11 @@ components:
       type: string
       pattern: "^[0-9]+$"
       example: "123456"
+    StorageName:
+      description: Name of the storage
+      type: string
+      minLength: 3
+      pattern: "^[a-zA-Z0-9_-]+$"
     ErrorResponse:
       type: object
       properties:

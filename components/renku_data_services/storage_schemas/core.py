@@ -3,12 +3,15 @@
 
 import json
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, Generator, Union, cast
 
 from pydantic import BaseModel, Field, ValidationError
 from sanic.log import logger
 
 from renku_data_services import errors
+
+if TYPE_CHECKING:
+    from renku_data_services.storage_models import RCloneConfig
 
 
 class RCloneValidator:
@@ -62,8 +65,14 @@ class RCloneValidator:
         for patch in patches:
             patch(spec)
 
-    def validate(self, configuration: dict[str, Any]):
+    def validate(self, configuration: Union["RCloneConfig", dict[str, Any]]):
         """Validates an RClone config."""
+        provider = self.get_provider(configuration)
+
+        provider.validate_config(configuration)
+
+    def get_provider(self, configuration: Union["RCloneConfig", dict[str, Any]]) -> "RCloneProviderSchema":
+        """Get a provider for configuration."""
 
         storage_type = cast(str, configuration.get("type"))
 
@@ -76,12 +85,16 @@ class RCloneValidator:
 
         if provider is None:
             raise errors.ValidationError(message=f"RClone provider '{storage_type}' does not exist.")
-
-        provider.validate_config(configuration)
+        return provider
 
     def asdict(self) -> list[dict[str, Any]]:
         """Return Schema as dict."""
         return [provider.model_dump() for provider in self.providers.values()]
+
+    def get_private_fields(self, configuration: Union["RCloneConfig", dict[str, Any]]):
+        """Get private field descriptions for storage."""
+        provider = self.get_provider(configuration)
+        return provider.get_private_fields(configuration)
 
 
 class RCloneTriState(BaseModel):
@@ -142,12 +155,16 @@ class RCloneOption(BaseModel):
         if "," in provider_check[0]:
             provider_check = provider_check[0].split(",")
 
-        return provider in provider_check == match_type
+        return (provider in provider_check) == match_type
 
     def validate_config(self, value, provider: str | None):
-        """Validate an RClone option."""
+        """Validate an RClone option.
+
+        Sensitive values are replaced with '<sensitive>' placeholders that clients are expected to handle.
+        The placeholders indicate that a value should be there without storing the value.
+        """
         if self.sensitive or self.is_password:
-            raise errors.ValidationError(message=f"Field '{self.name}' is sensitive and should not be set.")
+            return "<sensitive>"
         match self.type:
             case "int" | "Duration" | "SizeSuffix" | "MultiEncoder":
                 if not isinstance(value, int):
@@ -169,6 +186,7 @@ class RCloneOption(BaseModel):
         if self.examples and self.exclusive:
             if not any(e.value == str(value) and e.provider == provider for e in self.examples):
                 raise errors.ValidationError(message=f"Value '{value}' is not valid for field {self.name}")
+        return value
 
 
 class RCloneProviderSchema(BaseModel):
@@ -203,16 +221,21 @@ class RCloneProviderSchema(BaseModel):
 
         return None
 
-    def validate_config(self, configuration: dict[str, Any]):
+    def validate_config(self, configuration: Union["RCloneConfig", dict[str, Any]]):
         """Validate an RClone config."""
         keys = set(configuration.keys()) - {"type"}
-
         provider: str | None = configuration.get("provider")  # type: ignore
 
         missing: list[str] = []
 
+        # remove None values to allow for deletion
+        for key in list(keys):
+            if configuration[key] is None:
+                del configuration[key]
+                keys.remove(key)
+
         for required in self.required_options:
-            if required.name not in configuration and required.provider == provider:
+            if required.name not in configuration and required.matches_provider(provider):
                 missing.append(required.name)
 
         if missing:
@@ -235,4 +258,19 @@ class RCloneProviderSchema(BaseModel):
                 # We can't actually validate those, so we just continue
                 continue
 
-            option.validate_config(value, provider=provider)
+            configuration[key] = option.validate_config(value, provider=provider)
+
+    def get_private_fields(
+        self, configuration: Union["RCloneConfig", dict[str, Any]]
+    ) -> Generator[RCloneOption, None, None]:
+        """Get private field descriptions for storage."""
+        provider: str | None = configuration.get("provider")  # type: ignore
+
+        for option in self.options:
+            if not option.sensitive and not option.is_password:
+                continue
+            if option.advanced:
+                continue
+            if not option.matches_provider(provider):
+                continue
+            yield option

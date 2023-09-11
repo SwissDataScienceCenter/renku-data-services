@@ -14,6 +14,22 @@ from pydantic import ValidationError
 
 from renku_data_services import errors
 from renku_data_services.storage_adapters import StorageRepository
+from renku_data_services.base_models.core import GitlabAPIUser
+
+
+def get_user(storage, valid=True):
+    """Get an api user for a storage."""
+    if valid:
+        return GitlabAPIUser(
+            is_admin=True, id="abcdefg", access_token="abcdefg", project_id=storage.get("project_id")
+        )  # nosec: B106
+    else:
+        return GitlabAPIUser(
+            is_admin=True,
+            id="abcdefg",
+            access_token="abcdefg",
+            project_id=storage.get("project_id") + "0",  # nosec: B106
+        )
 
 
 @given(storage=storage_strat())
@@ -21,7 +37,7 @@ from renku_data_services.storage_adapters import StorageRepository
 @pytest.mark.asyncio
 async def test_storage_insert_get(storage: dict[str, Any], storage_repo: StorageRepository):
     try:
-        await create_storage(storage, storage_repo)
+        await create_storage(storage, storage_repo, user=get_user(storage))
     except (ValidationError, errors.ValidationError):
         pass
 
@@ -33,11 +49,12 @@ async def test_storage_update_path(
     storage: dict[str, Any], new_source_path: str, new_target_path: str, storage_repo: StorageRepository
 ):
     try:
-        inserted_storage = await create_storage(storage, storage_repo)
+        user = user = get_user(storage)
+        inserted_storage = await create_storage(storage, storage_repo, user)
         assert inserted_storage.storage_id is not None
 
         updated_storage = await storage_repo.update_storage(
-            storage_id=inserted_storage.storage_id, source_path=new_source_path, target_path=new_target_path
+            storage_id=inserted_storage.storage_id, source_path=new_source_path, target_path=new_target_path, user=user
         )
     except (ValidationError, errors.ValidationError):
         pass
@@ -53,11 +70,12 @@ async def test_storage_update_config(
     storage: dict[str, Any], new_config: dict[str, Any], storage_repo: StorageRepository
 ):
     try:
-        inserted_storage = await create_storage(storage, storage_repo)
+        user = user = get_user(storage)
+        inserted_storage = await create_storage(storage, storage_repo, user)
         assert inserted_storage.storage_id is not None
 
         updated_storage = await storage_repo.update_storage(
-            storage_id=inserted_storage.storage_id, configuration=new_config
+            storage_id=inserted_storage.storage_id, configuration=new_config, user=user
         )
     except (ValidationError, errors.ValidationError):
         pass
@@ -70,10 +88,11 @@ async def test_storage_update_config(
 @pytest.mark.asyncio
 async def test_storage_delete(storage: dict[str, Any], storage_repo: StorageRepository):
     try:
-        inserted_storage = await create_storage(storage, storage_repo)
+        user = user = get_user(storage)
+        inserted_storage = await create_storage(storage, storage_repo, user)
         assert inserted_storage.storage_id is not None
-        await storage_repo.delete_storage(storage_id=inserted_storage.storage_id)
-        storages = await storage_repo.get_storage(project_id=inserted_storage.project_id)
+        await storage_repo.delete_storage(storage_id=inserted_storage.storage_id, user=user)
+        storages = await storage_repo.get_storage(project_id=inserted_storage.project_id, user=user)
         assert len(storages) == 0
-    except ValidationError:
+    except (ValidationError, errors.ValidationError):
         pass

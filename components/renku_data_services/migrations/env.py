@@ -11,7 +11,9 @@ from sqlalchemy.schema import CreateSchema
 from renku_data_services.migrations.core import DataRepository
 
 
-def _include_object_factory(schema: str):
+def include_object_factory(schema: str):
+    """Filter only objects for the current database schema to be included."""
+
     def _include_object(object, name, type_, reflected, compare_to):
         if type_ == "table" and object.schema != schema:
             return False
@@ -58,7 +60,7 @@ def run_migrations_online(target_metadata, config: Config) -> None:
             target_metadata=target_metadata,
             version_table_schema=target_metadata.schema,
             include_schemas=True,
-            include_object=_include_object_factory(target_metadata.schema),
+            include_object=include_object_factory(target_metadata.schema),
         )
 
         connection.execute(CreateSchema(target_metadata.schema, if_not_exists=True))

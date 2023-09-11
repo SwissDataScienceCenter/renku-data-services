@@ -26,6 +26,7 @@ jobs:
           env: |
             USER_UID=1001
             USER_GID=123
+            HYPOTHESIS_PROFILE=ci
       - name: Coveralls
         uses: coverallsapp/github-action@v2
         env:

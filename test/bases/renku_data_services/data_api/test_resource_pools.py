@@ -50,6 +50,7 @@ def test_client(
         user_store=DummyUserStore(),
         storage_repo=storage_repo,
         authenticator=DummyAuthenticator(admin=True),
+        gitlab_authenticator=DummyAuthenticator(admin=True),
         quota_repo=QuotaRepository(DummyCoreClient({}), DummySchedulingClient({})),
     )
 
