@@ -153,6 +153,7 @@ class CloudStorage(BaseModel):
         source_path = storage_url.path.lstrip("/")
 
         if storage_url.scheme == "s3":
+            configuration["provider"] = "AWS"
             match storage_url.hostname.split(".", 4):
                 case ["s3", region, "amazonaws", "com"]:
                     configuration["region"] = region

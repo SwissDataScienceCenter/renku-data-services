@@ -178,9 +178,14 @@ components:
               $ref: "#/components/schemas/StorageName"
             configuration:
               type: object
-              description: Dictionary of rclone key:value pairs (based on schema from '/storage_schema')
+              description: Dictionary of rclone key:value pairs (based on schema from '/storage_schema'). Sensitive values are replaced with <sensitive> tokens
               additionalProperties:
-                type: string
+                oneOf:
+                - type: number
+                - type: string
+                - type: boolean
+                - type: object
+                - type: 'null'
             source_path:
               type: string
               description: the source path to mount, usually starts with bucket/container name
@@ -211,7 +216,12 @@ components:
           type: object
           description: Dictionary of rclone key:value pairs (based on schema from '/storage_schema')
           additionalProperties:
-            type: string
+            oneOf:
+            - type: number
+            - type: string
+            - type: boolean
+            - type: object
+            - type: 'null'
         source_path:
           type: string
           description: the source path to mount, usually starts with bucket/container name
