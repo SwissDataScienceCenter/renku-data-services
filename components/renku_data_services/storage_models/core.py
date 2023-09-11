@@ -19,6 +19,7 @@ class RCloneConfig(BaseModel, MutableMapping):
 
     @model_validator(mode="before")
     def check_if_from_dict(cls, data: Any) -> Any:
+        """Check if the class was created from a plain dict or an already wrapped dict."""
         if isinstance(data, dict) and {"config"} != data.keys():
             data = {"config": data}
         return data
@@ -31,6 +32,7 @@ class RCloneConfig(BaseModel, MutableMapping):
 
     @model_serializer
     def serialize_model(self) -> dict[str, Any]:
+        """Serialize model by returning contained dict."""
         return self.config
 
     def __len__(self):
@@ -57,6 +59,7 @@ class CloudStorage(BaseModel):
     project_id: str = Field(pattern=r"^\d+$")
     storage_type: str = Field(pattern=r"^[a-z0-9]+$")
     configuration: RCloneConfig
+    private: bool = Field(default=False)
 
     storage_id: str | None = Field(default=None)
 
@@ -95,10 +98,11 @@ class CloudStorage(BaseModel):
             storage_type=data["configuration"]["type"],
             source_path=data["source_path"],
             target_path=data["target_path"],
+            private=data.get("private", False),
         )
 
     @classmethod
-    def from_url(cls, storage_url: str, project_id: str, target_path: str) -> "CloudStorage":
+    def from_url(cls, storage_url: str, private: bool, project_id: str, target_path: str) -> "CloudStorage":
         """Get Cloud Storage/rclone config from a storage URL.
 
         Example:
@@ -118,16 +122,16 @@ class CloudStorage(BaseModel):
 
         match parsed_url.scheme:
             case "s3":
-                return CloudStorage.from_s3_url(parsed_url, project_id, target_path)
+                return CloudStorage.from_s3_url(parsed_url, project_id, private, target_path)
             case "azure" | "az":
-                return CloudStorage.from_azure_url(parsed_url, project_id, target_path)
+                return CloudStorage.from_azure_url(parsed_url, project_id, private, target_path)
             case "http" | "https":
-                return CloudStorage._from_ambiguous_url(parsed_url, project_id, target_path)
+                return CloudStorage._from_ambiguous_url(parsed_url, project_id, private, target_path)
             case _:
                 raise errors.ValidationError(message=f"Scheme '{parsed_url.scheme}' is not supported.")
 
     @classmethod
-    def from_s3_url(cls, storage_url: ParseResult, project_id: str, target_path: str) -> "CloudStorage":
+    def from_s3_url(cls, storage_url: ParseResult, project_id: str, private: bool, target_path: str) -> "CloudStorage":
         """Get Cloud storage from an S3 URL.
 
         Example:
@@ -163,10 +167,13 @@ class CloudStorage(BaseModel):
             configuration=RCloneConfig(config=configuration),
             source_path=source_path,
             target_path=target_path,
+            private=private,
         )
 
     @classmethod
-    def from_azure_url(cls, storage_url: ParseResult, project_id: str, target_path: str) -> "CloudStorage":
+    def from_azure_url(
+        cls, storage_url: ParseResult, project_id: str, private: bool, target_path: str
+    ) -> "CloudStorage":
         """Get Cloud storage from an Azure URL.
 
         Example:
@@ -195,16 +202,19 @@ class CloudStorage(BaseModel):
             configuration=RCloneConfig(config=configuration),
             source_path=source_path,
             target_path=target_path,
+            private=private,
         )
 
     @classmethod
-    def _from_ambiguous_url(cls, storage_url: ParseResult, project_id: str, target_path: str) -> "CloudStorage":
+    def _from_ambiguous_url(
+        cls, storage_url: ParseResult, project_id: str, private: bool, target_path: str
+    ) -> "CloudStorage":
         """Get cloud storage from an ambiguous storage url."""
         if storage_url.hostname is None:
             raise errors.ValidationError(message="Storage URL must contain a host")
 
         if storage_url.hostname.endswith(".windows.net"):
-            return CloudStorage.from_azure_url(storage_url, project_id, target_path)
+            return CloudStorage.from_azure_url(storage_url, project_id, private, target_path)
 
         # default to S3 for unknown URLs, since these are way more common
-        return CloudStorage.from_s3_url(storage_url, project_id, target_path)
+        return CloudStorage.from_s3_url(storage_url, project_id, private, target_path)

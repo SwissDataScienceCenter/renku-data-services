@@ -52,7 +52,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         name="storage",
         url_prefix=url_prefix,
         storage_repo=config.storage_repo,
-        authenticator=config.authenticator,
+        authenticator=config.gitlab_authenticator,
     )
     storage_schema = StorageSchemaBP(name="storage_schema", url_prefix=url_prefix)
     misc = MiscBP(name="misc", url_prefix=url_prefix, apispec=config.spec, version=config.version)

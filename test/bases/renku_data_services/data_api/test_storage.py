@@ -41,12 +41,14 @@ def storage_test_client(
         storage_repo=storage_repo,
         user_store=DummyUserStore(),
         authenticator=DummyAuthenticator(admin=True),
+        gitlab_authenticator=DummyAuthenticator(admin=True),
         quota_repo=QuotaRepository(DummyCoreClient({}), DummySchedulingClient({})),
     )
 
     app = Sanic(config.app_name)
     app = register_all_handlers(app, config)
-    app.ext.add_dependency(RCloneValidator)
+    validator = RCloneValidator()
+    app.ext.dependency(validator)
     return SanicASGITestClient(app)
 
 
@@ -225,9 +227,40 @@ async def test_get_storage(storage_test_client, valid_storage_payload):
     )
     assert res.status_code == 200
     assert len(res.json) == 1
-    assert res.json[0]["project_id"] == project_id
-    assert res.json[0]["storage_type"] == "s3"
-    assert res.json[0]["configuration"]["provider"] == "AWS"
+    result = res.json[0]
+    storage = result["storage"]
+    assert storage["project_id"] == project_id
+    assert storage["storage_type"] == "s3"
+    assert storage["configuration"]["provider"] == "AWS"
+
+
+@pytest.mark.asyncio
+async def test_get_storage_private(storage_test_client, valid_storage_payload):
+    valid_storage_payload["private"] = True
+
+    _, res = await storage_test_client.post(
+        "/api/data/storage",
+        headers={"Authorization": "bearer test"},
+        data=json.dumps(valid_storage_payload),
+    )
+    assert res.status_code == 201
+    assert res.json["storage_type"] == "s3"
+
+    project_id = res.json["project_id"]
+    _, res = await storage_test_client.get(
+        f"/api/data/storage?project_id={project_id}",
+        headers={"Authorization": "bearer test"},
+    )
+    assert res.status_code == 200
+    assert len(res.json) == 1
+    result = res.json[0]
+    assert "sensitive_fields" in result
+    assert len(result["sensitive_fields"]) == 2
+    assert any(f["name"] == "access_key_id" for f in result["sensitive_fields"])
+    storage = result["storage"]
+    assert storage["project_id"] == project_id
+    assert storage["storage_type"] == "s3"
+    assert storage["configuration"]["provider"] == "AWS"
 
 
 @pytest.mark.asyncio

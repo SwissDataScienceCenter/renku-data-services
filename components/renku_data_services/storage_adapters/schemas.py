@@ -1,7 +1,7 @@
 """SQLAlchemy schemas for the cloud storage database."""
 from typing import Any
 
-from sqlalchemy import JSON, MetaData, String
+from sqlalchemy import JSON, Boolean, MetaData, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 from ulid import ULID
@@ -39,6 +39,8 @@ class CloudStorageORM(BaseORM):
     target_path: Mapped[str] = mapped_column("target_path", String())
     """Target folder in the repository to mount to."""
 
+    private: Mapped[bool] = mapped_column("private", Boolean(), default=False)
+
     storage_id: Mapped[str] = mapped_column(
         "storage_id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False
     )
@@ -53,6 +55,7 @@ class CloudStorageORM(BaseORM):
             configuration=storage.configuration.model_dump(),
             source_path=storage.source_path,
             target_path=storage.target_path,
+            private=storage.private,
         )
 
     def dump(self):
@@ -64,4 +67,5 @@ class CloudStorageORM(BaseORM):
             source_path=self.source_path,
             target_path=self.target_path,
             storage_id=self.storage_id,
+            private=self.private,
         )

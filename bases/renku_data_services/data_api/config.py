@@ -22,11 +22,12 @@ from renku_data_services.data_api.server_options import (
 )
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
+from renku_data_services.migrations.core import DataRepository
 from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
 from renku_data_services.storage_adapters import StorageRepository
 from renku_data_services.users.dummy import DummyAuthenticator, DummyUserStore
+from renku_data_services.users.gitlab import GitlabAuthenticator
 from renku_data_services.users.keycloak import KcUserStore, KeycloakAuthenticator
-from renku_data_services.migrations.core import DataRepository
 
 
 @retry(stop=(stop_after_attempt(20) | stop_after_delay(300)), wait=wait_fixed(2), reraise=True)
@@ -73,6 +74,7 @@ class Config:
     storage_repo: StorageRepository
     user_store: base_models.UserStore
     authenticator: base_models.Authenticator
+    gitlab_authenticator: base_models.Authenticator
     quota_repo: QuotaRepository
     spec: Dict[str, Any] = field(init=False, default_factory=dict)
     version: str = "0.0.1"
@@ -121,6 +123,7 @@ class Config:
         prefix = ""
         user_store: base_models.UserStore
         authenticator: base_models.Authenticator
+        gitlab_authenticator: base_models.Authenticator
         version = os.environ.get(f"{prefix}VERSION", "0.0.1")
         keycloak_url = None
         keycloak_realm = "Renku"
@@ -130,6 +133,7 @@ class Config:
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
             authenticator = DummyAuthenticator(admin=True)
+            gitlab_authenticator = DummyAuthenticator(admin=True)
             quota_repo = QuotaRepository(DummyCoreClient({}), DummySchedulingClient({}), namespace=k8s_namespace)
             user_always_exists = os.environ.get("DUMMY_USERSTORE_USER_ALWAYS_EXISTS", "true").lower() == "true"
             user_store = DummyUserStore(user_always_exists=user_always_exists)
@@ -152,6 +156,10 @@ class Config:
             algorithms_lst = [i.strip() for i in algorithms.split(",")]
             jwks = PyJWKClient(jwks_url)
             authenticator = KeycloakAuthenticator(jwks=jwks, algorithms=algorithms_lst)
+            gitlab_url = os.environ.get(f"{prefix}GITLAB_URL")
+            if gitlab_url is None:
+                raise errors.ConfigurationError(message="Please provide the gitlab instance URL")
+            gitlab_authenticator = GitlabAuthenticator(gitlab_url=gitlab_url)
             user_store = KcUserStore(keycloak_url=keycloak_url, realm=keycloak_realm)
 
         pg_host = os.environ.get("DB_HOST", "localhost")
@@ -179,6 +187,7 @@ class Config:
             storage_repo=storage_repo,
             version=version,
             authenticator=authenticator,
+            gitlab_authenticator=gitlab_authenticator,
             user_store=user_store,
             quota_repo=quota_repo,
             server_defaults_file=server_defaults_file,

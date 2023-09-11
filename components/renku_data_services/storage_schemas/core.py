@@ -3,12 +3,15 @@
 
 import json
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, Generator, Union, cast
 
 from pydantic import BaseModel, Field, ValidationError
 from sanic.log import logger
 
 from renku_data_services import errors
+
+if TYPE_CHECKING:
+    from renku_data_services.storage_models import RCloneConfig
 
 
 class RCloneValidator:
@@ -62,8 +65,14 @@ class RCloneValidator:
         for patch in patches:
             patch(spec)
 
-    def validate(self, configuration: dict[str, Any]):
+    def validate(self, configuration: Union["RCloneConfig", dict[str, Any]]):
         """Validates an RClone config."""
+        provider = self.get_provider(configuration)
+
+        provider.validate_config(configuration)
+
+    def get_provider(self, configuration: Union["RCloneConfig", dict[str, Any]]) -> "RCloneProviderSchema":
+        """Get a provider for configuration."""
 
         storage_type = cast(str, configuration.get("type"))
 
@@ -76,12 +85,16 @@ class RCloneValidator:
 
         if provider is None:
             raise errors.ValidationError(message=f"RClone provider '{storage_type}' does not exist.")
-
-        provider.validate_config(configuration)
+        return provider
 
     def asdict(self) -> list[dict[str, Any]]:
         """Return Schema as dict."""
         return [provider.model_dump() for provider in self.providers.values()]
+
+    def get_private_fields(self, configuration: Union["RCloneConfig", dict[str, Any]]):
+        """Get private field descriptions for storage."""
+        provider = self.get_provider(configuration)
+        return provider.get_private_fields(configuration)
 
 
 class RCloneTriState(BaseModel):
@@ -203,16 +216,15 @@ class RCloneProviderSchema(BaseModel):
 
         return None
 
-    def validate_config(self, configuration: dict[str, Any]):
+    def validate_config(self, configuration: Union["RCloneConfig", dict[str, Any]]):
         """Validate an RClone config."""
         keys = set(configuration.keys()) - {"type"}
-
         provider: str | None = configuration.get("provider")  # type: ignore
 
         missing: list[str] = []
 
         for required in self.required_options:
-            if required.name not in configuration and required.provider == provider:
+            if required.name not in configuration and required.matches_provider(provider):
                 missing.append(required.name)
 
         if missing:
@@ -236,3 +248,18 @@ class RCloneProviderSchema(BaseModel):
                 continue
 
             option.validate_config(value, provider=provider)
+
+    def get_private_fields(
+        self, configuration: Union["RCloneConfig", dict[str, Any]]
+    ) -> Generator[RCloneOption, None, None]:
+        """Get private field descriptions for storage."""
+        provider: str | None = configuration.get("provider")  # type: ignore
+
+        for option in self.options:
+            if not option.sensitive and not option.is_password:
+                continue
+            if option.advanced:
+                continue
+            if not option.matches_provider(provider):
+                continue
+            yield option
