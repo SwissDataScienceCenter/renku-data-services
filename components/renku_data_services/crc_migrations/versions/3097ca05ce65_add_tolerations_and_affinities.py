@@ -1,16 +1,17 @@
-"""add tolerations and node affinities
+"""add tolerations and affinities
 
-Revision ID: 2aa4d257eff6
-Revises: 95ce5418d4d9
-Create Date: 2023-09-10 22:16:58.835717
+Revision ID: 3097ca05ce65
+Revises: 0044b54a89b9
+Create Date: 2023-09-11 20:01:15.830659
 
 """
-import sqlalchemy as sa
 from alembic import op
+import sqlalchemy as sa
+
 
 # revision identifiers, used by Alembic.
-revision = "2aa4d257eff6"
-down_revision = "95ce5418d4d9"
+revision = "3097ca05ce65"
+down_revision = "0044b54a89b9"
 branch_labels = None
 depends_on = None
 

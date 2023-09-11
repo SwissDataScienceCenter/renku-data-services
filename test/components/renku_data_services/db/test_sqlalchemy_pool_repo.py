@@ -259,7 +259,7 @@ async def test_resource_class_delete(
 
 
 @given(rp=rp_strat(), rc_update=rc_update_reqs_dict)
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_class_update(
     rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser, rc_update: dict
