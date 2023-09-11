@@ -74,6 +74,8 @@ paths:
           description: The rcloud storage was removed or did not exist in the first place
         default:
           $ref: '#/components/responses/Error'
+    tags:
+      - storage
   /storage:
     get:
       summary: get cloud storage for a project or by id
@@ -119,8 +121,8 @@ paths:
                 $ref: "#/components/schemas/CloudStorageGet"
         default:
           $ref: '#/components/responses/Error'
-
-
+    tags:
+      - storage
   /storage_schema:
     get:
       summary: Returns the rclone schema definition, which can be used to create interactive settings editors
