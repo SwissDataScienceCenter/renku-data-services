@@ -16,6 +16,7 @@ from renku_data_services.users.dummy import DummyAuthenticator, DummyUserStore
 
 _valid_storage: dict[str, Any] = {
     "project_id": "123456",
+    "name": "mystorage",
     "configuration": {
         "type": "s3",
         "provider": "AWS",
@@ -35,13 +36,14 @@ def valid_storage_payload() -> dict[str, Any]:
 def storage_test_client(
     storage_repo: StorageRepository, pool_repo: ResourcePoolRepository, user_repo: UserRepository
 ) -> SanicASGITestClient:
+    gitlab_auth = DummyAuthenticator(admin=True, gitlab=True)
     config = Config(
         user_repo=user_repo,
         rp_repo=pool_repo,
         storage_repo=storage_repo,
         user_store=DummyUserStore(),
         authenticator=DummyAuthenticator(admin=True),
-        gitlab_authenticator=DummyAuthenticator(admin=True),
+        gitlab_authenticator=gitlab_auth,
         quota_repo=QuotaRepository(DummyCoreClient({}), DummySchedulingClient({})),
     )
 
@@ -49,7 +51,7 @@ def storage_test_client(
     app = register_all_handlers(app, config)
     validator = RCloneValidator()
     app.ext.dependency(validator)
-    return SanicASGITestClient(app)
+    return SanicASGITestClient(app), gitlab_auth
 
 
 @pytest.mark.parametrize(
@@ -59,6 +61,7 @@ def storage_test_client(
         (
             {
                 "project_id": "123456",
+                "name": "mystorage",
                 "configuration": {
                     "type": "s3",
                     "provider": "AWS",
@@ -73,6 +76,7 @@ def storage_test_client(
         (
             {
                 "project_id": "123456",
+                "name": "mystorage",
                 "target_path": "my/target",
                 "storage_url": "s3://s3.us-east-2.amazonaws.com/mybucket/myfolder",
             },
@@ -82,6 +86,7 @@ def storage_test_client(
         (
             {
                 "project_id": "123456",
+                "name": "mystorage",
                 "target_path": "my/target",
                 "storage_url": "s3://giab/",
             },
@@ -91,6 +96,7 @@ def storage_test_client(
         (
             {
                 "project_id": "123456",
+                "name": "mystorage",
                 "target_path": "my/target",
                 "storage_url": "s3://mybucket.s3.us-east-2.amazonaws.com/myfolder",
             },
@@ -100,6 +106,7 @@ def storage_test_client(
         (
             {
                 "project_id": "123456",
+                "name": "mystorage",
                 "target_path": "my/target",
                 "storage_url": "https://my.provider.com/mybucket/myfolder",
             },
@@ -109,6 +116,7 @@ def storage_test_client(
         (
             {
                 "project_id": "123456",
+                "name": "mystorage",
                 "target_path": "my/target",
                 "storage_url": "azure://mycontainer/myfolder",
             },
@@ -118,6 +126,7 @@ def storage_test_client(
         (
             {
                 "project_id": "123456",
+                "name": "mystorage",
                 "target_path": "my/target",
                 "storage_url": "az://myaccount.dfs.core.windows.net/myfolder",
             },
@@ -127,6 +136,7 @@ def storage_test_client(
         (
             {
                 "project_id": "123456",
+                "name": "mystorage",
                 "source_path": "bucket/myfolder",
                 "target_path": "my/target",
                 "storage_url": "az://myaccount.blob.core.windows.net/myfolder",
@@ -137,10 +147,11 @@ def storage_test_client(
         (
             {
                 "project_id": "123456",
+                "name": "mystorage",
                 "configuration": {
                     "type": "s3",
                     "provider": "AWS",
-                    "secret_access_key": "1234567",
+                    "secret_access_key": "1234567",  # passing in secret
                 },
                 "source_path": "bucket/myfolder",
                 "target_path": "my/target",
@@ -151,9 +162,10 @@ def storage_test_client(
         (
             {
                 "project_id": "123456",
+                "name": "mystorage",
                 "configuration": {
                     "provider": "AWS",
-                    "region": None,
+                    "region": None,  # missing region
                     "type": "s3",
                 },
                 "source_path": "bucket/myfolder",
@@ -165,12 +177,13 @@ def storage_test_client(
         (
             {
                 "project_id": "123456",
+                "name": "mystorage",
                 "storage_type": "s3",
                 "configuration": {
                     "provider": "AWS",
                     "region": "us-east-1",
                     "type": "s3",
-                },
+                },  # mising source/target path
             },
             422,
             "",
@@ -178,8 +191,38 @@ def storage_test_client(
         (
             {
                 "project_id": "123456",
+                "name": "mystorage",
                 "storage_type": "s3",
+                "configuration": {  # missing type in config
+                    "provider": "AWS",
+                    "region": "us-east-1",
+                },
+                "source_path": "bucket/myfolder",
+                "target_path": "my/target",
+            },
+            422,
+            "",
+        ),
+        (
+            {
+                "project_id": "999999",  # unauthorized storage id
+                "name": "mystorage",
                 "configuration": {
+                    "type": "s3",
+                    "provider": "AWS",
+                    "region": "us-east-1",
+                },
+                "source_path": "bucket/myfolder",
+                "target_path": "my/target",
+            },
+            401,
+            "",
+        ),
+        (
+            {  # no name
+                "project_id": "123456",
+                "configuration": {
+                    "type": "s3",
                     "provider": "AWS",
                     "region": "us-east-1",
                 },
@@ -198,6 +241,7 @@ async def test_storage_creation(
     expected_status_code: int,
     expected_storage_type: str,
 ):
+    storage_test_client, _ = storage_test_client
     _, res = await storage_test_client.post(
         "/api/data/storage",
         headers={"Authorization": "bearer test"},
@@ -208,10 +252,32 @@ async def test_storage_creation(
     assert res.json
     if res.status_code < 300:
         assert res.json["storage_type"] == expected_storage_type
+        assert res.json["name"] == payload["name"]
+        assert res.json["target_path"] == payload["target_path"]
+
+
+@pytest.mark.asyncio
+async def test_create_storage_duplicate_name(storage_test_client, valid_storage_payload):
+    storage_test_client, _ = storage_test_client
+    _, res = await storage_test_client.post(
+        "/api/data/storage",
+        headers={"Authorization": "bearer test"},
+        data=json.dumps(valid_storage_payload),
+    )
+    assert res.status_code == 201
+    assert res.json["storage_type"] == "s3"
+
+    _, res = await storage_test_client.post(
+        "/api/data/storage",
+        headers={"Authorization": "bearer test"},
+        data=json.dumps(valid_storage_payload),
+    )
+    assert res.status_code == 422
 
 
 @pytest.mark.asyncio
 async def test_get_storage(storage_test_client, valid_storage_payload):
+    storage_test_client, _ = storage_test_client
     _, res = await storage_test_client.post(
         "/api/data/storage",
         headers={"Authorization": "bearer test"},
@@ -235,7 +301,28 @@ async def test_get_storage(storage_test_client, valid_storage_payload):
 
 
 @pytest.mark.asyncio
+async def test_get_storage_unauthorized(storage_test_client, valid_storage_payload):
+    storage_test_client, gl_auth = storage_test_client
+    _, res = await storage_test_client.post(
+        "/api/data/storage",
+        headers={"Authorization": "bearer test"},
+        data=json.dumps(valid_storage_payload),
+    )
+    assert res.status_code == 201
+    assert res.json["storage_type"] == "s3"
+
+    project_id = res.json["project_id"]
+    gl_auth.project_id = "9999999"
+    _, res = await storage_test_client.get(
+        f"/api/data/storage?project_id={project_id}",
+        headers={"Authorization": "bearer test"},
+    )
+    assert res.status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_get_storage_private(storage_test_client, valid_storage_payload):
+    storage_test_client, _ = storage_test_client
     valid_storage_payload["private"] = True
 
     _, res = await storage_test_client.post(
@@ -265,6 +352,7 @@ async def test_get_storage_private(storage_test_client, valid_storage_payload):
 
 @pytest.mark.asyncio
 async def test_storage_deletion(storage_test_client, valid_storage_payload):
+    storage_test_client, _ = storage_test_client
     _, res = await storage_test_client.post(
         "/api/data/storage",
         headers={"Authorization": "bearer test"},
@@ -289,7 +377,27 @@ async def test_storage_deletion(storage_test_client, valid_storage_payload):
 
 
 @pytest.mark.asyncio
+async def test_storage_deletion_unauthorized(storage_test_client, valid_storage_payload):
+    storage_test_client, gl_auth = storage_test_client
+    _, res = await storage_test_client.post(
+        "/api/data/storage",
+        headers={"Authorization": "bearer test"},
+        data=json.dumps(valid_storage_payload),
+    )
+    assert res.status_code == 201
+    assert res.json["storage_type"] == "s3"
+    storage_id = res.json["storage_id"]
+    gl_auth.project_id = "999999"
+    _, res = await storage_test_client.delete(
+        f"/api/data/storage/{storage_id}",
+        headers={"Authorization": "bearer test"},
+    )
+    assert res.status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_storage_put(storage_test_client, valid_storage_payload):
+    storage_test_client, _ = storage_test_client
     _, res = await storage_test_client.post(
         "/api/data/storage",
         headers={"Authorization": "bearer test"},
@@ -305,6 +413,7 @@ async def test_storage_put(storage_test_client, valid_storage_payload):
         data=json.dumps(
             {
                 "project_id": valid_storage_payload["project_id"],
+                "name": "newstoragename",
                 "configuration": {"type": "azureblob"},
                 "source_path": "bucket/myfolder",
                 "target_path": "my/target",
@@ -316,7 +425,36 @@ async def test_storage_put(storage_test_client, valid_storage_payload):
 
 
 @pytest.mark.asyncio
+async def test_storage_put_unauthorized(storage_test_client, valid_storage_payload):
+    storage_test_client, gl_auth = storage_test_client
+    _, res = await storage_test_client.post(
+        "/api/data/storage",
+        headers={"Authorization": "bearer test"},
+        data=json.dumps(valid_storage_payload),
+    )
+    assert res.status_code == 201
+    assert res.json["storage_type"] == "s3"
+    storage_id = res.json["storage_id"]
+    gl_auth.project_id = "999999"
+    _, res = await storage_test_client.put(
+        f"/api/data/storage/{storage_id}",
+        headers={"Authorization": "bearer test"},
+        data=json.dumps(
+            {
+                "project_id": valid_storage_payload["project_id"],
+                "name": "newstoragename",
+                "configuration": {"type": "azureblob"},
+                "source_path": "bucket/myfolder",
+                "target_path": "my/target",
+            }
+        ),
+    )
+    assert res.status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_storage_patch(storage_test_client, valid_storage_payload):
+    storage_test_client, _ = storage_test_client
     _, res = await storage_test_client.post(
         "/api/data/storage",
         headers={"Authorization": "bearer test"},
@@ -339,3 +477,28 @@ async def test_storage_patch(storage_test_client, valid_storage_payload):
     assert res.status_code == 200
     assert res.json["storage_type"] == "azureblob"
     assert res.json["source_path"] == "bucket/myotherfolder"
+
+
+@pytest.mark.asyncio
+async def test_storage_patch_unauthroized(storage_test_client, valid_storage_payload):
+    storage_test_client, gl_auth = storage_test_client
+    _, res = await storage_test_client.post(
+        "/api/data/storage",
+        headers={"Authorization": "bearer test"},
+        data=json.dumps(valid_storage_payload),
+    )
+    assert res.status_code == 201
+    assert res.json["storage_type"] == "s3"
+    storage_id = res.json["storage_id"]
+    gl_auth.project_id = "999999"
+    _, res = await storage_test_client.patch(
+        f"/api/data/storage/{storage_id}",
+        headers={"Authorization": "bearer test"},
+        data=json.dumps(
+            {
+                "configuration": {"type": "azureblob"},
+                "source_path": "bucket/myotherfolder",
+            }
+        ),
+    )
+    assert res.status_code == 401
