@@ -1,5 +1,6 @@
 """Cloud storage app."""
 from dataclasses import dataclass
+from typing import Any
 
 from sanic import Request, json
 from sanic_ext import validate
@@ -12,6 +13,16 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.storage_adapters import StorageRepository
 from renku_data_services.storage_schemas import apispec, query_parameters
 from renku_data_services.storage_schemas.core import RCloneValidator
+
+
+def dump_storage_with_sensitive_fields(storage: models.CloudStorage, validator: RCloneValidator) -> dict[str, Any]:
+    """Dump a CloudStorage model alongside sensitive fields."""
+    return apispec.CloudStorageGet.model_validate(
+        {
+            "storage": apispec.CloudStorageWithId.model_validate(storage).model_dump(exclude_none=True),
+            "sensitive_fields": validator.get_private_fields(storage.configuration) if storage.private else None,
+        }
+    ).model_dump(exclude_none=True)
 
 
 @dataclass(kw_only=True)
@@ -30,17 +41,7 @@ class StorageBP(CustomBlueprint):
             storage: list[models.CloudStorage]
             storage = await self.storage_repo.get_storage(user=user, **res_filter.model_dump())
 
-            return json(
-                [
-                    apispec.CloudStorageGet.model_validate(
-                        {
-                            "storage": apispec.CloudStorageWithId.model_validate(s).model_dump(exclude_none=True),
-                            "sensitive_fields": validator.get_private_fields(s.configuration) if s.private else None,
-                        }
-                    ).model_dump(exclude_none=True)
-                    for s in storage
-                ]
-            )
+            return json([dump_storage_with_sensitive_fields(s, validator) for s in storage])
 
         return "/storage", ["GET"], _get
 
@@ -53,16 +54,7 @@ class StorageBP(CustomBlueprint):
         ):
             storage = await self.storage_repo.get_storage_by_id(storage_id, user=user)
 
-            return json(
-                apispec.CloudStorageGet.model_validate(
-                    {
-                        "storage": apispec.CloudStorageWithId.model_validate(storage).model_dump(exclude_none=True),
-                        "sensitive_fields": validator.get_private_fields(storage.configuration)
-                        if storage.private
-                        else None,
-                    }
-                ).model_dump(exclude_none=True)
-            )
+            return json(dump_storage_with_sensitive_fields(storage, validator))
 
         return "/storage/<storage_id>", ["GET"], _get_one
 
@@ -87,10 +79,10 @@ class StorageBP(CustomBlueprint):
                 body = apispec.CloudStorage(**request.json)
                 storage = models.CloudStorage.from_dict(body.model_dump())
 
-            validator.validate(storage.configuration.model_dump())
+            validator.validate(storage.configuration.model_dump(), private=storage.private)
 
             res = await self.storage_repo.insert_storage(storage=storage, user=user)
-            return json(apispec.CloudStorageWithId.model_validate(res).model_dump(exclude_none=True), 201)
+            return json(dump_storage_with_sensitive_fields(res, validator), 201)
 
         return "/storage", ["POST"], _post
 
@@ -117,11 +109,11 @@ class StorageBP(CustomBlueprint):
                 body = apispec.CloudStorage(**request.json)
                 new_storage = models.CloudStorage.from_dict(body.model_dump())
 
-            validator.validate(new_storage.configuration.model_dump())
+            validator.validate(new_storage.configuration.model_dump(), private=new_storage.private)
             body_dict = new_storage.model_dump()
             del body_dict["storage_id"]
             res = await self.storage_repo.update_storage(storage_id=storage_id, user=user, **body_dict)
-            return json(apispec.CloudStorageWithId.model_validate(res).model_dump(exclude_none=True))
+            return json(dump_storage_with_sensitive_fields(res, validator))
 
         return "/storage/<storage_id>", ["PUT"], _put
 
@@ -138,16 +130,24 @@ class StorageBP(CustomBlueprint):
             validator: RCloneValidator,
             user: base_models.GitlabAPIUser,
         ):
+            existing_storage = await self.storage_repo.get_storage_by_id(storage_id, user=user)
+            if not body.private and existing_storage.private:
+                # remove sensitive option if storage is turned public
+                config = existing_storage.configuration.model_copy()
+                validator.remove_sensitive_options_from_config(config)
+                body.configuration = {**config, **(body.configuration or {})}
+
             if body.configuration is not None:
                 # we need to apply the patch to the existing storage to properly validate it
-                existing_storage = await self.storage_repo.get_storage_by_id(storage_id, user=user)
                 body.configuration = {**existing_storage.configuration, **body.configuration}
-                validator.validate(body.configuration)
+                validator.validate(
+                    body.configuration, private=body.private if body.private is not None else existing_storage.private
+                )
 
             body_dict = body.model_dump(exclude_none=True)
 
             res = await self.storage_repo.update_storage(storage_id=storage_id, user=user, **body_dict)
-            return json(apispec.CloudStorageWithId.model_validate(res).model_dump(exclude_none=True))
+            return json(dump_storage_with_sensitive_fields(res, validator))
 
         return "/storage/<storage_id>", ["PATCH"], _patch
 
@@ -183,7 +183,7 @@ class StorageSchemaBP(CustomBlueprint):
                 raise errors.ValidationError(message="The request body is empty. Please provide a valid JSON object.")
             if not isinstance(request.json, dict):
                 raise errors.ValidationError(message="The request body is not a valid JSON object.")
-            validator.validate(request.json, keep_sensitive=True)
+            validator.validate(request.json, private=True, keep_sensitive=True)
             return json(None, 204)
 
         return "/storage_schema/validate", ["POST"], _validate

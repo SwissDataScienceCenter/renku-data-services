@@ -6,7 +6,7 @@ is added.
 """
 from typing import Any, List
 
-from pydantic import BaseModel, ByteSize, Extra, Field, validator
+from pydantic import BaseModel, ByteSize, Field, validator
 
 import renku_data_services.resource_pool_models as models
 
@@ -28,14 +28,14 @@ class ServerOptionsDefaults(BaseModel):
     class Config:
         """Configuration."""
 
-        extra = Extra.ignore
+        extra = "ignore"
 
 
 class _ServerOptionsCpu(BaseModel):
-    options: List[float] = Field(min_items=1)
+    options: List[float] = Field(min_length=1)
 
     class Config:
-        extra = Extra.ignore
+        extra = "ignore"
 
     @validator("options", pre=False, each_item=True)
     def greater_than_zero(cls, val):
@@ -43,10 +43,10 @@ class _ServerOptionsCpu(BaseModel):
 
 
 class _ServerOptionsGpu(BaseModel):
-    options: List[int] = Field(min_items=1)
+    options: List[int] = Field(min_length=1)
 
     class Config:
-        extra = Extra.ignore
+        extra = "ignore"
 
     @validator("options", pre=False, each_item=True)
     def greater_than_or_equal_to_zero(cls, v):
@@ -56,10 +56,10 @@ class _ServerOptionsGpu(BaseModel):
 
 
 class _ServerOptionsBytes(BaseModel):
-    options: List[ByteSize] = Field(min_items=1)
+    options: List[ByteSize] = Field(min_length=1)
 
     class Config:
-        extra = Extra.ignore
+        extra = "ignore"
 
     @validator("options", pre=True)
     def convert_units(cls, vals):
@@ -84,7 +84,7 @@ class ServerOptions(BaseModel):
     class Config:
         """Configuration."""
 
-        extra = Extra.ignore
+        extra = "ignore"
 
     def find_largest_attribute(self) -> str:
         """Find the attribute with the largest number of choices."""
