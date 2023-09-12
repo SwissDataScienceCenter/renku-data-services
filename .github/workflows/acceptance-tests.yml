@@ -40,8 +40,8 @@ jobs:
     if: github.event.action != 'closed' && needs.check-deploy.outputs.pr-contains-string == 'true'
     runs-on: ubuntu-22.04
     environment:
-      name: renku-ci-ui-${{ github.event.number }}
-      url: https://renku-ci-ui-${{ github.event.number }}.dev.renku.ch
+      name: renku-ci-ds-${{ github.event.number }}
+      url: https://renku-ci-ds-${{ github.event.number }}.dev.renku.ch
     steps:
       - uses: actions/checkout@v3
       - name: Find deplyoment url
@@ -58,7 +58,7 @@ jobs:
           token: ${{ secrets.RENKUBOT_GITHUB_TOKEN }}
           issue-number: ${{ github.event.pull_request.number }}
           body: |
-            You can access the deployment of this PR at https://renku-ci-ui-${{ github.event.number }}.dev.renku.ch
+            You can access the deployment of this PR at https://renku-ci-ds-${{ github.event.number }}.dev.renku.ch
       - name: Build and deploy
         uses: SwissDataScienceCenter/renku-actions/deploy-renku@v1.5.2
         env:
@@ -67,7 +67,7 @@ jobs:
           DOCKER_USERNAME: ${{ secrets.RENKU_DOCKER_USERNAME }}
           GITLAB_TOKEN: ${{ secrets.DEV_GITLAB_TOKEN }}
           KUBECONFIG: ${{ github.workspace }}/renkubot-kube.config
-          RENKU_RELEASE: renku-ci-ui-${{ github.event.number }}
+          RENKU_RELEASE: renku-ci-ds-${{ github.event.number }}
           RENKU_VALUES_FILE: ${{ github.workspace }}/values.yaml
           RENKU_VALUES: ${{ secrets.CI_RENKU_VALUES }}
           RENKUBOT_KUBECONFIG: ${{ secrets.RENKUBOT_DEV_KUBECONFIG }}
@@ -76,7 +76,7 @@ jobs:
           RENKU_BOT_DEV_PASSWORD: ${{ secrets.RENKU_BOT_DEV_PASSWORD }}
           RENKU_TESTS_ENABLED: true
           TEST_ARTIFACTS_PATH: "tests-artifacts-${{ github.sha }}"
-          renku_ui: "@${{ github.head_ref }}"
+          renku_ui: "${{ needs.check-deploy.outputs.renku-ui }}"
           renku: "${{ needs.check-deploy.outputs.renku }}"
           renku_core: "${{ needs.check-deploy.outputs.renku-core }}"
           renku_gateway: "${{ needs.check-deploy.outputs.renku-gateway }}"
@@ -92,7 +92,7 @@ jobs:
       - uses: SwissDataScienceCenter/renku-actions/test-renku@v1.5.2
         with:
           kubeconfig: ${{ secrets.RENKUBOT_DEV_KUBECONFIG }}
-          renku-release: renku-ci-ui-${{ github.event.number }}
+          renku-release: renku-ci-ds-${{ github.event.number }}
           gitlab-token: ${{ secrets.DEV_GITLAB_TOKEN }}
           persist: "${{ needs.check-deploy.outputs.persist }}"
           s3-results-access-key: ${{ secrets.ACCEPTANCE_TESTS_BUCKET_ACCESS_KEY }}
@@ -120,7 +120,7 @@ jobs:
         with:
           e2e-target: ${{ matrix.tests }}
           renku-reference: ${{ env.RENKU_REFERENCE }}
-          renku-release: renku-ci-ui-${{ github.event.number }}
+          renku-release: renku-ci-ds-${{ github.event.number }}
           test-user-password: ${{ secrets.RENKU_BOT_DEV_PASSWORD }}
 
   cleanup:
@@ -146,7 +146,7 @@ jobs:
       - name: renku teardown
         uses: SwissDataScienceCenter/renku-actions/cleanup-renku-ci-deployments@v1.5.2
         env:
-          HELM_RELEASE_REGEX: "^renku-ci-ui-${{ github.event.number }}$"
+          HELM_RELEASE_REGEX: "^renku-ci-ds-${{ github.event.number }}$"
           GITLAB_TOKEN: ${{ secrets.DEV_GITLAB_TOKEN }}
           RENKUBOT_KUBECONFIG: ${{ secrets.RENKUBOT_DEV_KUBECONFIG }}
           MAX_AGE_SECONDS: 0

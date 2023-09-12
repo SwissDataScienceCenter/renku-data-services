@@ -171,7 +171,9 @@ class RCloneOption(BaseModel):
 
         return (provider in provider_check) == match_type
 
-    def validate_config(self, value, provider: str | None, keep_sensitive: bool = False):
+    def validate_config(
+        self, value: Any, provider: str | None, keep_sensitive: bool = False
+    ) -> int | bool | dict | str:
         """Validate an RClone option.
 
         Sensitive values are replaced with '<sensitive>' placeholders that clients are expected to handle.
