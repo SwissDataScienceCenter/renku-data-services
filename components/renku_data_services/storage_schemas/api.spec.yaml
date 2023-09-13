@@ -230,6 +230,8 @@ components:
           type: string
           description: same as rclone prefix/ rclone config type. Ignored in requests, but returned in responses for convenience.
           readOnly: true
+        name:
+          $ref: "#/components/schemas/StorageName"
         configuration:
           $ref: "#/components/schemas/RCloneConfig"
         source_path:
