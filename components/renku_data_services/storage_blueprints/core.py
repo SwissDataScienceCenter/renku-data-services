@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from typing import Any
 
-from sanic import Request, json
+from sanic import Request, json, empty
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
@@ -158,7 +158,7 @@ class StorageBP(CustomBlueprint):
         @only_admins
         async def _delete(request: Request, storage_id: str, user: base_models.GitlabAPIUser):
             await self.storage_repo.delete_storage(storage_id=storage_id, user=user)
-            return json(None, 204)
+            return empty(204)
 
         return "/storage/<storage_id>", ["DELETE"], _delete
 
@@ -184,6 +184,6 @@ class StorageSchemaBP(CustomBlueprint):
             if not isinstance(request.json, dict):
                 raise errors.ValidationError(message="The request body is not a valid JSON object.")
             validator.validate(request.json, private=True, keep_sensitive=True)
-            return json(None, 204)
+            return empty(204)
 
         return "/storage_schema/validate", ["POST"], _validate
