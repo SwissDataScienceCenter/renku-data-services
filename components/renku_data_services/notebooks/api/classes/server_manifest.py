@@ -1,4 +1,5 @@
-from typing import Any, Dict, List
+import json
+from typing import Any, Dict, List, Optional
 
 from ...config import config
 from .cloud_storage.existing import ExistingCloudStorage
@@ -81,6 +82,29 @@ class UserServerManifest:
     @property
     def server_name(self) -> str:
         return self.manifest["metadata"]["name"]
+
+    @property
+    def hibernation(self) -> Optional[Dict[str, Any]]:
+        """Return hibernation annotation."""
+        hibernation = self.manifest["metadata"]["annotations"].get("hibernation")
+        return json.loads(hibernation) if hibernation else None
+
+    @property
+    def dirty(self) -> bool:
+        """Return True if server is dirty."""
+        return self.hibernation.get("dirty", False)
+
+    @property
+    def hibernation_commit(self) -> Optional[str]:
+        """Return hibernated server commit if any."""
+        hibernation = self.hibernation or {}
+        return hibernation.get("commit")
+
+    @property
+    def hibernation_branch(self) -> Optional[str]:
+        """Return hibernated server branch if any."""
+        hibernation = self.hibernation or {}
+        return hibernation.get("branch")
 
     @property
     def url(self) -> str:

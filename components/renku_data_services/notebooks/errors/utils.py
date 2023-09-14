@@ -21,6 +21,6 @@ def handle_exception(e):
     elif isinstance(e, GenericError):
         return ErrorResponseFromGenericError().dump(e), e.status_code
     else:
-        logging.exception("Unexpected error occured.")
+        logging.exception("Unexpected error occurred.")
         generic_error = GenericError()
         return ErrorResponseFromGenericError().dump(generic_error), 500

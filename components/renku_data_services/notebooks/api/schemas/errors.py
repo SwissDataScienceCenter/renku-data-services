@@ -12,7 +12,7 @@ class ErrorResponseNested(Schema):
 
 
 class ErrorResponse(Schema):
-    """Top level generic error repsonse."""
+    """Top level generic error response."""
 
     error = fields.Nested(ErrorResponseNested(), required=True)
 

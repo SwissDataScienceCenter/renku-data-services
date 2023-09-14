@@ -24,19 +24,16 @@ from apispec.ext.marshmallow import MarshmallowPlugin
 from apispec_webframeworks.flask import FlaskPlugin
 from flask import Blueprint, Flask, jsonify
 
-from .config import config as config
 from .api.notebooks import (
-    autosave_info,
     check_docker_image,
-    delete_autosave,
     launch_notebook,
+    patch_server,
     server_logs,
     server_options,
     stop_server,
     user_server,
     user_servers,
 )
-from .api.schemas.autosave import AutosavesList
 from .api.schemas.config_server_options import ServerOptionsEndpointResponse
 from .api.schemas.errors import ErrorResponse
 from .api.schemas.logs import ServerLogs
@@ -45,8 +42,10 @@ from .api.schemas.servers_get import (
     ServersGetRequest,
     ServersGetResponse,
 )
+from .api.schemas.servers_patch import PatchServerRequest
 from .api.schemas.servers_post import LaunchNotebookRequest
 from .api.schemas.version import VersionResponse
+from .config import config as config
 from .errors.utils import handle_exception
 
 
@@ -136,13 +135,13 @@ def register_swagger(app):
     # Register schemas
     spec.components.schema("LaunchNotebookRequest", schema=LaunchNotebookRequest)
     spec.components.schema("NotebookResponse", schema=NotebookResponse)
+    spec.components.schema("PatchServerRequest", schema=PatchServerRequest)
     spec.components.schema("ServersGetRequest", schema=ServersGetRequest)
     spec.components.schema("ServersGetResponse", schema=ServersGetResponse)
     spec.components.schema("ServerLogs", schema=ServerLogs)
     spec.components.schema(
         "ServerOptionsEndpointResponse", schema=ServerOptionsEndpointResponse
     )
-    spec.components.schema("AutosavesList", schema=AutosavesList)
     spec.components.schema("VersionResponse", schema=VersionResponse)
     spec.components.schema("ErrorResponse", schema=ErrorResponse)
     # Register endpoints
@@ -150,11 +149,10 @@ def register_swagger(app):
         spec.path(view=user_server)
         spec.path(view=user_servers)
         spec.path(view=launch_notebook)
+        spec.path(view=patch_server)
         spec.path(view=stop_server)
         spec.path(view=server_options)
         spec.path(view=server_logs)
-        spec.path(view=autosave_info)
-        spec.path(view=delete_autosave)
         spec.path(view=check_docker_image)
     # Register security scheme
     security_scheme = {

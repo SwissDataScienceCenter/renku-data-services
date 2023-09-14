@@ -2,12 +2,21 @@ import base64
 import json
 from functools import lru_cache
 from itertools import chain
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urljoin, urlparse
 
-import gitlab
 from flask import current_app
 
+from ...config import config
+from ...errors.programming import ConfigurationError, DuplicateEnvironmentVariableError
+from ...errors.user import MissingResourceError
+from ...util.check_image import (
+    get_docker_token,
+    get_image_workdir,
+    image_exists,
+    parse_image_name,
+)
+from ...util.kubernetes_ import make_server_name
 from ..amalthea_patches import cloudstorage as cloudstorage_patches
 from ..amalthea_patches import general as general_patches
 from ..amalthea_patches import git_proxy as git_proxy_patches
@@ -16,20 +25,10 @@ from ..amalthea_patches import init_containers as init_containers_patches
 from ..amalthea_patches import inject_certificates as inject_certificates_patches
 from ..amalthea_patches import jupyter_server as jupyter_server_patches
 from ..amalthea_patches import ssh as ssh_patches
-from ...config import config
-from ...errors.programming import ConfigurationError, DuplicateEnvironmentVariableError
-from ...errors.user import MissingResourceError
-from .k8s_client import K8sClient
-from .cloud_storage import ICloudStorageRequest
 from ..schemas.server_options import ServerOptions
-from .user import RegisteredUser, User
-from ...util.check_image import (
-    get_docker_token,
-    get_image_workdir,
-    image_exists,
-    parse_image_name,
-)
-from ...util.kubernetes_ import make_server_name
+from .cloud_storage import ICloudStorageRequest
+from .k8s_client import K8sClient
+from .user import AnonymousUser, RegisteredUser
 
 
 class UserServer:
@@ -37,7 +36,7 @@ class UserServer:
 
     def __init__(
         self,
-        user: User,
+        user: Union[AnonymousUser, RegisteredUser],
         namespace: str,
         project: str,
         branch: str,
@@ -68,6 +67,16 @@ class UserServer:
         self.image_workdir: Optional[str] = None
         self.cloudstorage: Optional[List[ICloudStorageRequest]] = cloudstorage
         self.gl_project_name = f"{self.namespace}/{self.project}"
+        self.idle_seconds_threshold: int = (
+            config.sessions.culling.registered.idle_seconds
+            if isinstance(self._user, RegisteredUser)
+            else config.sessions.culling.anonymous.idle_seconds
+        )
+        self.hibernated_seconds_threshold: int = (
+            config.sessions.culling.registered.hibernated_seconds
+            if isinstance(user, RegisteredUser)
+            else config.sessions.culling.anonymous.hibernated_seconds
+        )
 
     def _check_flask_config(self):
         """Check the app config and ensure minimum required parameters are present."""
@@ -98,30 +107,24 @@ class UserServer:
         )
 
     @property
-    @lru_cache(maxsize=8)
-    def autosave_allowed(self):
-        allowed = False
-        if self._user is not None and type(self._user) is RegisteredUser:
-            # gather project permissions for the logged in user
-            permissions = self.gl_project.attributes["permissions"].items()
-            access_levels = [x[1].get("access_level", 0) for x in permissions if x[1]]
-            access_levels_string = ", ".join(map(lambda lev: str(lev), access_levels))
-            current_app.logger.debug(
-                "access level for user {username} in "
-                "{namespace}/{project} = {access_level}".format(
-                    username=self._user.username,
-                    namespace=self.namespace,
-                    project=self.project,
-                    access_level=access_levels_string,
-                )
-            )
-            access_level = gitlab.GUEST_ACCESS
-            if len(access_levels) > 0:
-                access_level = max(access_levels)
-            if access_level >= gitlab.DEVELOPER_ACCESS:
-                allowed = True
+    def user(self) -> Union[AnonymousUser, RegisteredUser]:
+        """Getter for server's user."""
+        return self._user
 
-        return allowed
+    @property
+    def user_is_anonymous(self) -> bool:
+        """Return True if server's user is not registered."""
+        return isinstance(self._user, AnonymousUser)
+
+    @property
+    def k8s_client(self) -> K8sClient:
+        """Return server's k8s client."""
+        return self._k8s_client
+
+    @property
+    @lru_cache(maxsize=8)
+    def hibernation_allowed(self):
+        return self._user and not self.user_is_anonymous
 
     def _branch_exists(self):
         """Check if a specific branch exists in the user's gitlab
@@ -248,7 +251,6 @@ class UserServer:
                 general_patches.session_tolerations(),
                 general_patches.session_affinity(),
                 general_patches.session_node_selector(),
-                general_patches.termination_grace_period(),
                 general_patches.priority_class(self),
                 jupyter_server_patches.args(),
                 jupyter_server_patches.env(self),
@@ -320,16 +322,13 @@ class UserServer:
             "spec": {
                 "auth": session_auth,
                 "culling": {
-                    "idleSecondsThreshold": (
-                        config.sessions.culling.registered.idle_seconds
-                        if type(self._user) is RegisteredUser
-                        else config.sessions.culling.anonymous.idle_seconds
-                    ),
+                    "idleSecondsThreshold": self.idle_seconds_threshold,
                     "maxAgeSecondsThreshold": (
                         config.sessions.culling.registered.max_age_seconds
                         if type(self._user) is RegisteredUser
                         else config.sessions.culling.anonymous.max_age_seconds
                     ),
+                    "hibernatedSecondsThreshold": self.hibernated_seconds_threshold,
                 },
                 "jupyterServer": {
                     "defaultUrl": self.server_options.default_url,
@@ -438,6 +437,17 @@ class UserServer:
             f"{prefix}projectName": self.project,
             f"{prefix}requested-image": self.image,
             f"{prefix}repository": None,
+            f"{prefix}hibernation": "",
+            f"{prefix}hibernationBranch": "",
+            f"{prefix}hibernationCommitSha": "",
+            f"{prefix}hibernationDirty": "",
+            f"{prefix}hibernationSynchronized": "",
+            f"{prefix}hibernationDate": "",
+            f"{prefix}hibernatedSecondsThreshold": str(
+                self.hibernated_seconds_threshold
+            ),
+            f"{prefix}lastActivityDate": "",
+            f"{prefix}idleSecondsThreshold": str(self.idle_seconds_threshold),
         }
         if self.gl_project is not None:
             annotations[f"{prefix}gitlabProjectId"] = str(self.gl_project.id)

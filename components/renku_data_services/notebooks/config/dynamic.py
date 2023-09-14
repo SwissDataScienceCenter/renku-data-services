@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
-from typing import Callable, Dict, Optional, Union, List, Any, Text
+from typing import Any, Callable, Dict, List, Optional, Text, Union
+
 import yaml
 
 from ..api.schemas.config_server_options import (
@@ -153,12 +154,14 @@ class _GenericCullingConfig:
     max_age_seconds: Union[Text, int] = 0
     pending_seconds: Union[Text, int] = 0
     failed_seconds: Union[Text, int] = 0
+    hibernated_seconds: Union[Text, int] = 86400
 
     def __post_init__(self):
         self.idle_seconds = _parse_value_as_numeric(self.idle_seconds, int)
         self.max_age_seconds = _parse_value_as_numeric(self.max_age_seconds, int)
         self.pending_seconds = _parse_value_as_numeric(self.pending_seconds, int)
         self.failed_seconds = _parse_value_as_numeric(self.failed_seconds, int)
+        self.hibernated_seconds = _parse_value_as_numeric(self.hibernated_seconds, int)
 
 
 @dataclass
@@ -201,8 +204,6 @@ class _SessionConfig:
     ssh: _SessionSshConfig
     default_image: Text = "renku/singleuser:latest"
     enforce_cpu_limits: Union[Text, bool] = False
-    autosave_minimum_lfs_file_size_bytes: Union[int, Text] = 1000000
-    termination_grace_period_seconds: Union[int, Text] = 600
     termination_warning_duration_seconds: int = 12 * 60 * 60
     image_default_workdir: Text = "/home/jovyan"
     node_selector: Text = "{}"

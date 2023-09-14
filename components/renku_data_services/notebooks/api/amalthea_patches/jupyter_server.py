@@ -14,14 +14,6 @@ def env(server: "UserServer"):
             "op": "add",
             "path": "/statefulset/spec/template/spec/containers/0/env/-",
             "value": {
-                "name": "GIT_AUTOSAVE",
-                "value": "1" if server.autosave_allowed else "0",
-            },
-        },
-        {
-            "op": "add",
-            "path": "/statefulset/spec/template/spec/containers/0/env/-",
-            "value": {
                 "name": "RENKU_USERNAME",
                 "value": server._user.username,
             },

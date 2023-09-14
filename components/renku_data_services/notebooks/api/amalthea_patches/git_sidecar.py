@@ -1,29 +1,18 @@
 import os
 from typing import TYPE_CHECKING
 
-from ..classes.user import RegisteredUser
-from ...config import config
+from renku_notebooks.api.classes.user import RegisteredUser
+from renku_notebooks.config import config
 
 if TYPE_CHECKING:
     from renku_notebooks.api.classes.server import UserServer
 
 
 def main(server: "UserServer"):
-    # NOTE: Autosaves can be created only for registered users
-    if type(server._user) is not RegisteredUser:
+    # NOTE: Sessions can be persisted only for registered users
+    if not isinstance(server.user, RegisteredUser):
         return []
-    lifecycle = {
-        "preStop": {
-            "exec": {
-                "command": [
-                    ".venv/bin/python",
-                    "-m",
-                    "git_services.sidecar.run_command",
-                    "autosave",
-                ]
-            }
-        }
-    }
+
     patches = [
         {
             "type": "application/json-patch+json",
@@ -91,24 +80,13 @@ def main(server: "UserServer"):
                             },
                             {
                                 "name": "RENKU_USERNAME",
-                                "value": f"{server._user.username}",
+                                "value": f"{server.user.username}",
                             },
-                            # NOTE: The git proxy health port is also used to signal that the proxy
-                            # can safely shut down after any autosave branches have been properly
-                            # created.
                             {
                                 "name": "GIT_RPC_GIT_PROXY_HEALTH_PORT",
                                 "value": str(config.sessions.git_proxy.health_port),
                             },
-                            {
-                                "name": "AUTOSAVE_MINIMUM_LFS_FILE_SIZE_BYTES",
-                                "value": str(
-                                    config.sessions.autosave_minimum_lfs_file_size_bytes
-                                ),
-                            },
                         ],
-                        # NOTE: Autosave Branch creation
-                        "lifecycle": lifecycle,
                         "securityContext": {
                             "allowPrivilegeEscalation": False,
                             "fsGroup": 100,
@@ -222,7 +200,7 @@ def main(server: "UserServer"):
                         "kind": "Service",
                         "metadata": {
                             "name": f"{server.server_name}-rpc-server",
-                            "namespace": server._k8s_client.preferred_namespace,
+                            "namespace": server.k8s_client.preferred_namespace,
                         },
                         "spec": {
                             "ports": [

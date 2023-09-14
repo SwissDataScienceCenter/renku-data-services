@@ -33,21 +33,6 @@ def session_tolerations():
     return patches
 
 
-def termination_grace_period():
-    return [
-        {
-            "type": "application/json-patch+json",
-            "patch": [
-                {
-                    "op": "add",
-                    "path": "/statefulset/spec/template/spec/terminationGracePeriodSeconds",
-                    "value": config.sessions.termination_grace_period_seconds,
-                }
-            ],
-        }
-    ]
-
-
 def session_affinity():
     return [
         {

@@ -52,6 +52,15 @@ class _ServersGetEndpointAnnotations:
     )
     optional_annotation_names: List[str] = field(
         default_factory=lambda: [
+            "renku.io/hibernation",
+            "renku.io/hibernationBranch",
+            "renku.io/hibernationCommitSha",
+            "renku.io/hibernationDirty",
+            "renku.io/hibernationSynchronized",
+            "renku.io/hibernationDate",
+            "renku.io/hibernatedSecondsThreshold",
+            "renku.io/lastActivityDate",
+            "renku.io/idleSecondsThreshold",
             "renku.io/servername",
             "renku.io/username",
             "renku.io/git-host",

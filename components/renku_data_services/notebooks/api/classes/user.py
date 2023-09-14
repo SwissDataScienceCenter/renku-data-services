@@ -1,7 +1,7 @@
 import base64
 import json
 import re
-from abc import ABC, abstractmethod
+from abc import ABC
 from functools import lru_cache
 from math import floor
 from typing import Optional
@@ -10,19 +10,13 @@ import escapism
 import jwt
 from flask import current_app
 from gitlab import Gitlab
-from gitlab.exceptions import GitlabListError
 from gitlab.v4.objects.projects import Project
 
 from ...config import config
-from .storage import AutosaveBranch
 from ...errors.programming import ConfigurationError
 
 
 class User(ABC):
-    @abstractmethod
-    def get_autosaves(self, *args, **kwargs):
-        pass
-
     @lru_cache(maxsize=8)
     def get_renku_project(self, namespace_project) -> Optional[Project]:
         """Retrieve the GitLab project."""
@@ -61,9 +55,6 @@ class AnonymousUser(User):
         self.refresh_token = None
         self.id = headers[self.auth_header]
 
-    def get_autosaves(self, *args, **kwargs):
-        return []
-
     def __str__(self):
         return f"<Anonymous user id:{self.username[:5]}****>"
 
@@ -81,6 +72,7 @@ class RegisteredUser(User):
         )
         if not self.authenticated:
             return
+
         parsed_id_token = self.parse_jwt_from_headers(headers)
         self.email = parsed_id_token["email"]
         self.full_name = parsed_id_token["name"]
@@ -145,40 +137,6 @@ class RegisteredUser(User):
             git_token,
             git_token_expires_at,
         )
-
-    def get_autosaves(self, namespace_project=None):
-        """Get a list of autosaves for all projects for the user"""
-        gl_project = (
-            self.get_renku_project(namespace_project)
-            if namespace_project is not None
-            else None
-        )
-        projects = []
-        autosaves = []
-        # add any autosave branches, regardless of wheter pvcs are supported or not
-        if namespace_project is None:  # get autosave branches from all projects
-            projects = self.gitlab_client.projects.list(iterator=True)
-        elif gl_project:
-            projects.append(gl_project)
-        for project in projects:
-            try:
-                branches = project.branches.list(
-                    search="^renku/autosave/", iterator=True
-                )
-            except GitlabListError:
-                branches = []
-            for branch in branches:
-                autosave = AutosaveBranch.from_name(
-                    self, namespace_project, branch.name
-                )
-                if autosave is not None:
-                    autosaves.append(autosave)
-                else:
-                    current_app.logger.warning(
-                        f"Autosave branch {branch.name} for "
-                        f"project {namespace_project} cannot be instantiated."
-                    )
-        return autosaves
 
     def __str__(self):
         return (

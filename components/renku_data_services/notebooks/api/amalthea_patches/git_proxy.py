@@ -87,12 +87,6 @@ def main(server: "UserServer"):
                                     else "true"
                                 ),
                             },
-                            {
-                                "name": "SESSION_TERMINATION_GRACE_PERIOD_SECONDS",
-                                "value": str(
-                                    config.sessions.termination_grace_period_seconds
-                                ),
-                            },
                         ],
                         "livenessProbe": {
                             "httpGet": {

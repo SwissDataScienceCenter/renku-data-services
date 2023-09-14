@@ -101,12 +101,14 @@ sessions {
             max_age_seconds = 0
             pending_seconds = 0
             failed_seconds = 0
+            hibernated_seconds = 259200
         }
         anonymous {
-            idle_seconds = 86400
+            idle_seconds = 43200
             max_age_seconds = 0
             pending_seconds = 0
             failed_seconds = 0
+            hibernated_seconds = 1
         }
     }
     default_image = renku/singleuser:latest
@@ -165,8 +167,6 @@ sessions {
     }
     ssh {}
     enforce_cpu_limits: false
-    autosave_minimum_lfs_file_size_bytes: 1000000
-    termination_grace_period_seconds: 600
     termination_warning_duration_seconds: 43200
     image_default_workdir: /home/jovyan
     node_selector: "{}"
@@ -212,3 +212,10 @@ crc_url = http://renku-crc
 
 config = get_config(default_config)
 __all__ = ["config"]
+
+
+# NOTE: We don't allow hibernating anonymous users' sessions. However, when these sessions are
+# culled, they are hibernated automatically by Amalthea. To delete them as quickly as possible
+# after hibernation, we set the threshold to the minimum possible value. Since zero means don't
+# delete, 1 is the minimum threshold value.
+config.sessions.culling.anonymous.hibernated_seconds = 1

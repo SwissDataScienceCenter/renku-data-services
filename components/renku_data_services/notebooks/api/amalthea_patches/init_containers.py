@@ -31,16 +31,11 @@ def git_clone(server: "UserServer"):
         {"name": "GIT_CLONE_COMMIT_SHA", "value": server.commit_sha},
         {"name": "GIT_CLONE_BRANCH", "value": server.branch},
         {
-            # used only for naming autosave branch
             "name": "GIT_CLONE_USER__USERNAME",
-            "value": server._user.username,
+            "value": server.user.username,
         },
-        {
-            "name": "GIT_CLONE_GIT_AUTOSAVE",
-            "value": "1" if server.autosave_allowed else "0",
-        },
-        {"name": "GIT_CLONE_GIT_URL", "value": server._user.gitlab_client._base_url},
-        {"name": "GIT_CLONE_USER__OAUTH_TOKEN", "value": server._user.git_token},
+        {"name": "GIT_CLONE_GIT_URL", "value": server.user.gitlab_client.url},
+        {"name": "GIT_CLONE_USER__OAUTH_TOKEN", "value": server.user.git_token},
         {
             "name": "GIT_CLONE_SENTRY__ENABLED",
             "value": str(config.sessions.git_clone.sentry.enabled).lower(),
@@ -77,12 +72,12 @@ def git_clone(server: "UserServer"):
             else "",
         },
     ]
-    if type(server._user) is RegisteredUser:
+    if type(server.user) is RegisteredUser:
         env += [
-            {"name": "GIT_CLONE_USER__EMAIL", "value": server._user.gitlab_user.email},
+            {"name": "GIT_CLONE_USER__EMAIL", "value": server.user.gitlab_user.email},
             {
                 "name": "GIT_CLONE_USER__FULL_NAME",
-                "value": server._user.gitlab_user.name,
+                "value": server.user.gitlab_user.name,
             },
         ]
     return [
@@ -121,7 +116,7 @@ def git_clone(server: "UserServer"):
 
 
 def certificates():
-    initContainer = client.V1Container(
+    init_container = client.V1Container(
         name="init-certificates",
         image=config.sessions.ca_certs.image,
         volume_mounts=get_certificates_volume_mounts(
@@ -158,7 +153,7 @@ def certificates():
                 {
                     "op": "add",
                     "path": "/statefulset/spec/template/spec/initContainers/-",
-                    "value": api_client.sanitize_for_serialization(initContainer),
+                    "value": api_client.sanitize_for_serialization(init_container),
                 },
             ],
         },

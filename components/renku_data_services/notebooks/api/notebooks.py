@@ -16,25 +16,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Notebooks service API."""
-from flask import Blueprint, current_app, jsonify, make_response
+import json
+import logging
+from datetime import datetime, timezone
+
+from flask import Blueprint, current_app, jsonify
 from marshmallow import fields, validate
 from webargs.flaskparser import use_args
 
+from renku_notebooks.api.classes.user import AnonymousUser
+from renku_notebooks.util.repository import get_status
+
 from ..config import config
-from ..errors.user import ImageParseError, MissingResourceError, UserInputError
+from ..errors.intermittent import AnonymousUserPatchError, PVDisabledError
 from ..errors.programming import ProgrammingError
+from ..errors.user import (
+    ImageParseError,
+    InvalidPatchArgumentError,
+    MissingResourceError,
+    UserInputError,
+)
 from ..util.check_image import get_docker_token, image_exists, parse_image_name
 from ..util.kubernetes_ import make_server_name
 from .auth import authenticated
 from .classes.crc import CRCValidator, DummyCRCValidator
 from .classes.server import UserServer
 from .classes.server_manifest import UserServerManifest
-from .classes.storage import AutosaveBranch
-from .schemas.autosave import AutosavesList
 from .schemas.config_server_options import ServerOptionsEndpointResponse
 from .schemas.logs import ServerLogs
 from .schemas.server_options import ServerOptions
 from .schemas.servers_get import NotebookResponse, ServersGetRequest, ServersGetResponse
+from .schemas.servers_patch import PatchServerRequest, PatchServerStatusEnum
 from .schemas.servers_post import LaunchNotebookRequest
 from .schemas.version import VersionResponse
 
@@ -295,9 +307,128 @@ def launch_notebook(
     manifest = server.start()
 
     current_app.logger.debug(f"Server {server.server_name} has been started")
-    for autosave in user.get_autosaves(server.gl_project.path_with_namespace):
-        autosave.cleanup(server.commit_sha)
+
     return NotebookResponse().dump(UserServerManifest(manifest)), 201
+
+
+@bp.route("servers/<server_name>", methods=["PATCH"])
+@use_args(
+    {"server_name": fields.Str(required=True)}, location="view_args", as_kwargs=True
+)
+@use_args(PatchServerRequest(), location="json", as_kwargs=True)
+@authenticated
+def patch_server(user, server_name, state):
+    """
+    Patch a user server by name based on the query param.
+
+    ---
+    patch:
+      description: Patch a running server by name.
+      requestBody:
+        content:
+          application/json:
+            schema: PatchServerRequest
+      parameters:
+        - in: path
+          schema:
+            type: string
+          name: server_name
+          required: true
+          description: The name of the server that should be patched.
+      responses:
+        204:
+          description: The server was patched successfully.
+          content:
+            application/json:
+              schema: NotebookResponse
+        400:
+          description: Invalid json argument value.
+          content:
+            application/json:
+              schema: ErrorResponse
+        404:
+          description: The server cannot be found.
+          content:
+            application/json:
+              schema: ErrorResponse
+        500:
+          description: The server exists but could not be successfully hibernated.
+          content:
+            application/json:
+              schema: ErrorResponse
+      tags:
+        - servers
+    """
+    if not config.sessions.storage.pvs_enabled:
+        raise PVDisabledError()
+
+    if isinstance(user, AnonymousUser):
+        raise AnonymousUserPatchError()
+
+    server = config.k8s.client.get_server(server_name, user.safe_username)
+
+    if state == PatchServerStatusEnum.Hibernated.value:
+        # NOTE: Do nothing if server is already hibernated
+        if server and server.get("spec", {}).get("jupyterServer", {}).get(
+            "hibernated", False
+        ):
+            logging.warning(f"Server {server_name} is already hibernated.")
+
+            return NotebookResponse().dump(UserServerManifest(server)), 204
+
+        hibernation = {"branch": "", "commit": "", "dirty": "", "synchronized": ""}
+
+        status = get_status(server_name=server_name, access_token=user.access_token)
+        if status:
+            hibernation = {
+                "branch": status.get("branch", ""),
+                "commit": status.get("commit", ""),
+                "dirty": not status.get("clean", True),
+                "synchronized": status.get("ahead", 0) == status.get("behind", 0) == 0,
+            }
+
+        hibernation["date"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+        patch = {
+            "metadata": {
+                "annotations": {
+                    "renku.io/hibernation": json.dumps(hibernation),
+                    "renku.io/hibernationBranch": hibernation["branch"],
+                    "renku.io/hibernationCommitSha": hibernation["commit"],
+                    "renku.io/hibernationDirty": str(hibernation["dirty"]).lower(),
+                    "renku.io/hibernationSynchronized": str(
+                        hibernation["synchronized"]
+                    ).lower(),
+                    "renku.io/hibernationDate": hibernation["date"],
+                },
+            },
+            "spec": {
+                "jupyterServer": {
+                    "hibernated": True,
+                },
+            },
+        }
+
+        server = config.k8s.client.patch_server(
+            server_name=server_name, safe_username=user.safe_username, patch=patch
+        )
+    elif state == PatchServerStatusEnum.Running.value:
+        # NOTE: We clear hibernation annotations in Amalthea to avoid flickering in the UI (showing
+        # the repository as dirty when resuming a session for a short period of time).
+        patch = {
+            "spec": {
+                "jupyterServer": {
+                    "hibernated": False,
+                },
+            },
+        }
+        server = config.k8s.client.patch_server(
+            server_name=server_name, safe_username=user.safe_username, patch=patch
+        )
+    else:
+        raise InvalidPatchArgumentError(f"Invalid PATCH argument value: '{state}'")
+
+    return NotebookResponse().dump(UserServerManifest(server)), 204
 
 
 @bp.route("servers/<server_name>", methods=["DELETE"])
@@ -395,7 +526,11 @@ def server_options(user):
     location="query",
 )
 @use_args(
-    {"server_name": fields.Str(required=True)}, location="view_args", as_kwargs=True
+    {
+        "server_name": fields.Str(required=True),
+    },
+    location="view_args",
+    as_kwargs=True,
 )
 @authenticated
 def server_logs(user, max_lines, server_name):
@@ -441,108 +576,6 @@ def server_logs(user, max_lines, server_name):
         safe_username=user.safe_username,
     )
     return jsonify(ServerLogs().dump(logs))
-
-
-@bp.route("<path:namespace_project>/autosave", methods=["GET"])
-@authenticated
-def autosave_info(user, namespace_project):
-    """
-    Information about all autosaves for a project.
-
-    ---
-    get:
-      description: Information about autosaved and recovered work from user sessions.
-      parameters:
-        - in: path
-          name: namespace_project
-          schema:
-            type: string
-          required: true
-          description: |
-            URL encoded namespace and project in the format of `namespace/project`.
-            However since this should be URL encoded what should actually be used
-            in the request is `namespace%2Fproject`.
-      responses:
-        200:
-          description: All the autosave branches or PVs for the project
-          content:
-            application/json:
-              schema: AutosavesList
-        404:
-          description: The requested project and/or namespace cannot be found
-          content:
-            application/json:
-              schema: ErrorResponse
-      tags:
-        - autosave
-    """
-    if user.get_renku_project(namespace_project) is None:
-        raise MissingResourceError(message=f"Cannot find project {namespace_project}")
-    return jsonify(
-        AutosavesList().dump(
-            {
-                "pvsSupport": config.sessions.storage.pvs_enabled,
-                "autosaves": user.get_autosaves(namespace_project),
-            },
-        )
-    )
-
-
-@bp.route(
-    "<path:namespace_project>/autosave/<path:autosave_name>",
-    methods=["DELETE"],
-)
-@authenticated
-def delete_autosave(user, namespace_project, autosave_name):
-    """
-    Delete an autosave PV and or branch.
-
-    ---
-    delete:
-      description: Stop a running server by name.
-      parameters:
-        - in: path
-          schema:
-            type: string
-          name: namespace_project
-          required: true
-          description: |
-            URL encoded namespace and project in the format of `namespace/project`.
-            However since this should be URL encoded what should actually be used
-            in the request is `namespace%2Fproject`.
-        - in: path
-          schema:
-            type: string
-          name: autosave_name
-          required: true
-          description: |
-            URL encoded name of the autosave as returned by the
-            /<namespace_project>/autosave endpoint.
-      responses:
-        204:
-          description: The autosave branch and/or PV has been deleted successfully.
-        404:
-          description: The requested project, namespace and/or autosave cannot be found.
-          content:
-            application/json:
-              schema: ErrorResponse
-      tags:
-        - autosave
-    """
-    if user.get_renku_project(namespace_project) is None:
-        raise MissingResourceError(message=f"Cannot find project {namespace_project}")
-    autosave = AutosaveBranch.from_name(user, namespace_project, autosave_name)
-    if not autosave:
-        raise MissingResourceError(
-            message=f"Cannot initialize or find the autosave {autosave_name}.",
-            detail=(
-                "This could be the result of a malformed autosave name or changing your username. "
-                "If the problem persists you can always find all autosave branches in your "
-                "Gitlab project."
-            ),
-        )
-    autosave.delete()
-    return make_response("", 204)
 
 
 @bp.route("images", methods=["GET"])

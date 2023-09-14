@@ -21,8 +21,8 @@ class UserInputError(GenericError):
 
 @dataclass
 class MissingResourceError(UserInputError):
-    """Raised when any type of resource (either in k8s or outside of the cluster) does not
-    exist but it is expected that it does exist. This is also raised when the user
+    """Raised when any type of resource (either in k8s or outside the cluster) does not
+    exist, but it is expected that it does exist. This is also raised when the user
     is trying to access resources that they do not have access to and an API that was called
     by the notebook service is responding simply with a 404 because the resource is private.
     """
@@ -46,6 +46,15 @@ class AuthenticationError(UserInputError):
 
 
 @dataclass
+class InvalidPatchArgumentError(UserInputError):
+    """Raised when invalid an invalid argument is sent in a PATCH request."""
+
+    message: str
+    code: int = UserInputError.code + 400
+    status_code: int = 400
+
+
+@dataclass
 class DuplicateS3BucketNamesError(UserInputError):
     """Raised when two or more buckets that are mounted in a session have duplicate names. This
     is not allowed because the bucket names are used as the mount points in the session.
@@ -66,7 +75,7 @@ class ImageParseError(UserInputError):
 
 @dataclass
 class InvalidCloudStorageUrl(UserInputError):
-    """Raised when the url for a cloud storage buckeet/container cannot be parsed."""
+    """Raised when the url for a cloud storage bucket/container cannot be parsed."""
 
     message: str = "The url for the cloud storage endpoint is not valid."
     code: int = UserInputError.code + 3
@@ -82,7 +91,7 @@ class OverriddenEnvironmentVariableError(UserInputError):
 
 @dataclass
 class InvalidComputeResourceError(UserInputError):
-    """Raised when invalid server options are requested or when the user has not access
+    """Raised when invalid server options are requested or when the user has not accessed
     to a resource class."""
 
     message: str = (

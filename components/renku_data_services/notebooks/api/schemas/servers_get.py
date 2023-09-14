@@ -4,14 +4,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Dict, Union
 
-from marshmallow import (
-    EXCLUDE,
-    Schema,
-    fields,
-    pre_dump,
-    pre_load,
-    validate,
-)
+from marshmallow import EXCLUDE, Schema, fields, pre_dump, pre_load, validate
 
 from ...config import config
 from ..classes.server_manifest import UserServerManifest
@@ -26,6 +19,7 @@ class ServerStatusEnum(Enum):
     Starting = "starting"
     Stopping = "stopping"
     Failed = "failed"
+    Hibernated = "hibernated"
 
     @classmethod
     def list(cls):
@@ -164,7 +158,7 @@ class LaunchNotebookResponseWithoutS3(Schema):
                 143: default_server_error_message,
                 200: "Cannot clone repository: Unhandled git error.",
                 201: "Cannot clone repository: Git remote server is unavailable. Try again later.",
-                202: "Cannot clone repository: "
+                202: "Deprecated: Cannot clone repository: "
                 "Autosave branch name is in an unexpected format and cannot be processed.",
                 203: "Cannot clone repository: No disk space left on device, "
                 "please stop this session and start a new one with more storage.",
@@ -265,6 +259,16 @@ class LaunchNotebookResponseWithoutS3(Schema):
                 return f"Steps with non-ready statuses: {', '.join(steps_not_ready)}."
             return None
 
+        def is_user_anonymous(server: UserServerManifest):
+            js = server.manifest
+            annotations = js.get("metadata", {}).get("annotations", {})
+            prefix = config.session_get_endpoint_annotations.renku_annotation_prefix
+            return (
+                annotations.get(f"{prefix}userId", "").startswith("anon-")
+                and annotations.get(f"{prefix}username", "").startswith("anon-")
+                and js.get("metadata", {}).get("name", "").startswith("anon-")
+            )
+
         def get_status_breakdown(server: UserServerManifest):
             js = server.manifest
             init_container_summary = (
@@ -303,20 +307,11 @@ class LaunchNotebookResponseWithoutS3(Schema):
                         for container_name in config.sessions.init_containers
                     }
                 if len(container_summary) == 0:
-                    annotations = js.get("metadata", {}).get("annotations", {})
-                    prefix = (
-                        config.session_get_endpoint_annotations.renku_annotation_prefix
-                    )
-                    is_user_anonymous = (
-                        annotations.get(f"{prefix}userId", "").startswith("anon-")
-                        and annotations.get(f"{prefix}username", "").startswith("anon-")
-                        and js.get("metadata", {}).get("name", "").startswith("anon-")
-                    )
                     container_summary = {
                         container_name: StepStatusEnum.waiting.value
                         for container_name in (
                             config.sessions.containers.anonymous
-                            if is_user_anonymous
+                            if is_user_anonymous(server)
                             else config.sessions.containers.registered
                         )
                     }
@@ -384,26 +379,67 @@ class LaunchNotebookResponseWithoutS3(Schema):
                     {"message": "Server was started using the default image."}
                 )
 
-            idle_seconds = int(server.manifest.get("status", {}).get("idleSeconds", 0))
+            now = datetime.now(timezone.utc)
+            annotations = server.manifest.get("metadata", {}).get("annotations", {})
+
+            last_activity_date_str = annotations.get("renku.io/lastActivityDate")
+
             idle_threshold = (
                 server.manifest.get("spec", {})
                 .get("culling", {})
-                .get("idleSecondsTheshold", 0)
+                .get("idleSecondsThreshold", 0)
             )
-            remaining_idle_time = idle_threshold - idle_seconds
 
-            if (
-                idle_threshold > 0
-                and remaining_idle_time
-                < config.sessions.termination_warning_duration_seconds
-            ):
+            if idle_threshold > 0 and last_activity_date_str:
+                last_activity_date = datetime.fromisoformat(last_activity_date_str)
+                idle_seconds = (now - last_activity_date).total_seconds()
+                remaining_idle_time = idle_threshold - idle_seconds
+
+                critical: bool = (
+                    remaining_idle_time
+                    < config.sessions.termination_warning_duration_seconds
+                )
+                action = "deleted" if is_user_anonymous(server) else "hibernated"
                 output["warnings"].append(
                     {
                         "message": (
-                            "Server is idle and will be terminated in "
+                            f"Server is idle and will be {action} in "
                             f"{max(remaining_idle_time, 0)} seconds."
                         ),
-                        "critical": True,
+                        "critical": critical,
+                    }
+                )
+
+            hibernation_date_str = annotations.get("renku.io/hibernationDate")
+
+            hibernated_seconds_threshold = (
+                server.manifest.get("spec", {})
+                .get("culling", {})
+                .get("hibernatedSecondsThreshold", 0)
+            )
+
+            if (
+                hibernation_date_str
+                and hibernated_seconds_threshold > 0
+                and not is_user_anonymous(server)
+            ):
+                hibernation_date = datetime.fromisoformat(hibernation_date_str)
+                hibernated_seconds = (now - hibernation_date).total_seconds()
+                remaining_hibernated_time = (
+                    hibernated_seconds_threshold - hibernated_seconds
+                )
+
+                critical: bool = (
+                    remaining_hibernated_time
+                    < config.sessions.termination_warning_duration_seconds
+                )
+                output["warnings"].append(
+                    {
+                        "message": (
+                            "Server is hibernated and will be terminated in "
+                            f"{max(remaining_idle_time, 0)} seconds."
+                        ),
+                        "critical": critical,
                     }
                 )
 
