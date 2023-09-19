@@ -46,6 +46,9 @@ class CloudStorageORM(BaseORM):
     private: Mapped[bool] = mapped_column("private", Boolean(), default=False)
     """Whether the storage is private (requires credentials) or not """
 
+    readonly: Mapped[bool] = mapped_column("readonly", Boolean(), default=True)
+    """Whether this storage should be mounted readonly or not """
+
     storage_id: Mapped[str] = mapped_column(
         "storage_id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False
     )
@@ -70,6 +73,7 @@ class CloudStorageORM(BaseORM):
             source_path=storage.source_path,
             target_path=storage.target_path,
             private=storage.private,
+            readonly=storage.readonly,
         )
 
     def dump(self):
@@ -83,4 +87,5 @@ class CloudStorageORM(BaseORM):
             target_path=self.target_path,
             storage_id=self.storage_id,
             private=self.private,
+            readonly=self.readonly,
         )

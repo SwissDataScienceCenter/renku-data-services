@@ -74,6 +74,7 @@ class StorageBP(CustomBlueprint):
                     name=url_body.name,
                     target_path=url_body.target_path,
                     private=url_body.private,
+                    readonly=url_body.readonly,
                 )
             else:
                 body = apispec.CloudStorage(**request.json)
@@ -104,6 +105,7 @@ class StorageBP(CustomBlueprint):
                     name=url_body.name,
                     target_path=url_body.target_path,
                     private=url_body.private,
+                    readonly=url_body.readonly,
                 )
             else:
                 body = apispec.CloudStorage(**request.json)
