@@ -1,7 +1,9 @@
 from unittest.mock import MagicMock
+
 import pytest
-import renku_data_services.users.gitlab as gitlab
+
 import renku_data_services.errors as errors
+import renku_data_services.users.gitlab as gitlab
 
 
 def mock_gl_api(
@@ -87,40 +89,65 @@ async def test_gitlab_auth_not_active(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_gitlab_auth_missing_project(monkeypatch):
-    gl_mock = mock_gl_api(project_exists=False)
+async def test_gitlab_user(monkeypatch):
+    import renku_data_services.base_models as base_models
+
+    class _RequestMock:
+        response = MagicMock()
+
+        async def __call__(self, *args, **kwargs):
+            return self.response
+
+    request_mock = _RequestMock()
+    request_mock.response.status_code = 200
+    request_mock.response.json.return_value = {
+        "data": {
+            "projects": {
+                "pageInfo": {"hasNextPage": False, "endCursor": "eyJpZCI6IjkxNjM4In0"},
+                "nodes": [
+                    {"id": "gid://gitlab/Project/1", "projectMembers": {"nodes": []}},
+                    {
+                        "id": "gid://gitlab/Project/2",
+                        "projectMembers": {
+                            "nodes": [
+                                {
+                                    "user": {"id": "gid://gitlab/User/21", "name": "John Dow"},
+                                    "accessLevel": {"stringValue": "OWNER", "integerValue": 50},
+                                }
+                            ]
+                        },
+                    },
+                    {
+                        "id": "gid://gitlab/Project/3",
+                        "projectMembers": {
+                            "nodes": [
+                                {
+                                    "user": {"id": "gid://gitlab/User/21", "name": "JohnDoe"},
+                                    "accessLevel": {"stringValue": "OWNER", "integerValue": 20},
+                                }
+                            ]
+                        },
+                    },
+                ],
+            }
+        }
+    }
     with monkeypatch.context() as monkey:
-        monkey.setattr(gitlab.gitlab, "Gitlab", gl_mock)
-        gl_auth = gitlab.GitlabAuthenticator(gitlab_url="localhost")
-        assert gl_auth.gitlab_url == "https://localhost"
-        request = mock_request()
+        monkey.setattr(base_models.grequests, "post", request_mock)
+        user = base_models.GitlabAPIUser(
+            is_admin=False, id="21", access_token="xxxxxx", name="John Doe", gitlab_url="localhost"  # nosec: B106
+        )
+        projects = await user.filter_projects_by_access_level(
+            ["1", "2", "3"], min_access_level=base_models.GitlabAccessLevel.PUBLIC
+        )
+        assert len(projects) == 3
 
-        with pytest.raises(errors.MissingResourceError):
-            await gl_auth.authenticate("xxxxxx", request)
+        projects = await user.filter_projects_by_access_level(
+            ["1", "2", "3"], min_access_level=base_models.GitlabAccessLevel.MEMBER
+        )
+        assert len(projects) == 2
 
-
-@pytest.mark.asyncio
-async def test_gitlab_auth_not_member(monkeypatch):
-    gl_mock = mock_gl_api(is_member=False)
-    with monkeypatch.context() as monkey:
-        monkey.setattr(gitlab.gitlab, "Gitlab", gl_mock)
-        gl_auth = gitlab.GitlabAuthenticator(gitlab_url="localhost")
-        assert gl_auth.gitlab_url == "https://localhost"
-        request = mock_request()
-
-        with pytest.raises(errors.Unauthorized):
-            await gl_auth.authenticate("xxxxxx", request)
-
-
-@pytest.mark.asyncio
-async def test_gitlab_auth_not_admin(monkeypatch):
-    gl_mock = mock_gl_api(access_level=10)
-    with monkeypatch.context() as monkey:
-        monkey.setattr(gitlab.gitlab, "Gitlab", gl_mock)
-        gl_auth = gitlab.GitlabAuthenticator(gitlab_url="localhost")
-        assert gl_auth.gitlab_url == "https://localhost"
-        request = mock_request()
-
-        result = await gl_auth.authenticate("xxxxxx", request)
-        assert result
-        assert not result.is_admin
+        projects = await user.filter_projects_by_access_level(
+            ["1", "2", "3"], min_access_level=base_models.GitlabAccessLevel.ADMIN
+        )
+        assert len(projects) == 1

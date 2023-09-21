@@ -1,8 +1,12 @@
 """Base models shared by services."""
 from dataclasses import dataclass, field
-from typing import Optional, Protocol
+from enum import Enum
+from typing import List, Optional, Protocol
 
+import grequests
 from sanic import Request
+
+from renku_data_services.errors import errors
 
 
 class Authenticator(Protocol):
@@ -29,11 +33,115 @@ class APIUser:
         return self.id is not None
 
 
+class GitlabAccessLevel(Enum):
+    """Gitlab access level for filtering projects."""
+
+    PUBLIC = 1
+    """User isn't a member but project is public"""
+    MEMBER = 2
+    """User is a member of the project"""
+    ADMIN = 3
+    """User has at least DEVELOPER priviledges"""
+
+
 @dataclass(kw_only=True)
 class GitlabAPIUser(APIUser):
     """The model for a user of the API for Gitlab authenticated requests."""
 
-    project_id: str
+    name: str
+    gitlab_url: str
+
+    async def filter_projects_by_access_level(
+        self, project_ids: List[str], min_access_level: GitlabAccessLevel
+    ) -> List[str]:
+        """Filter projects this user can access in gitlab with at least access level."""
+
+        header = {"Authorization": f"Bearer {self.access_token}"}
+        ids = ",".join(f'"gid://gitlab/Project/{id}"' for id in project_ids)
+        query_body = f"""
+                    pageInfo {{
+                      hasNextPage
+                    }}
+                    nodes {{
+                        id
+                        projectMembers(search: "{self.name}") {{
+                            nodes {{
+                                user {{
+                                    id
+                                    name
+                                }}
+                            }}
+                            accessLevel {{
+                                integerValue
+                            }}
+                        }}
+                    }}
+        """
+        body = {
+            "query": f"""
+                projects(ids: [{ids}]) {{
+                    {query_body}
+                }}
+            """
+        }
+        resp = await grequests.post(self.gitlab_url, json=body, headers=header, timeout=10)
+        if resp.status_code != 200:
+            raise errors.BaseError(message=f"Error querying Gitlab api: {resp.text}")
+        result: List[str] = []
+        resp_body = resp.json()
+
+        def _process_projects(resp_body, min_access_level, result):
+            for project in resp_body["data"]["projects"]["nodes"]:
+                if min_access_level != GitlabAccessLevel.PUBLIC:
+                    if not project["projectMembers"]["nodes"]:
+                        continue
+                    if min_access_level == GitlabAccessLevel.ADMIN:
+                        max_level = max(
+                            n["accessLevel"]["integerValue"]
+                            for n in project["projectMembers"]["nodes"]
+                            if n["user"]["id"].rsplit("/", maxsplit=1)[-1] == self.id
+                        )
+                        if max_level < 30:
+                            continue
+                result.append(project["id"].rsplit("/", maxsplit=1)[-1])
+
+        _process_projects(resp_body, min_access_level, result)
+        page_info = resp_body["data"]["projects"]["pageInfo"]
+        while page_info["hasNextPage"]:
+            cursor = page_info["endCursor"]
+            body = {
+                "query": f"""
+                    projects(ids: [{ids}], after: "{cursor}") {{
+                        {query_body}
+                    }}
+                """
+            }
+            resp = await grequests.post(self.gitlab_url, json=body, headers=header, timeout=10)
+            if resp.status_code != 200:
+                raise errors.BaseError(message=f"Error querying Gitlab api: {resp.text}")
+            resp_body = resp.json()
+            page_info = resp_body["data"]["projects"]["pageInfo"]
+            _process_projects(resp_body, min_access_level, result)
+
+        return result
+
+
+@dataclass(kw_only=True)
+class DummyGitlabAPIUser(GitlabAPIUser):
+    """Dummy user that has admin access to project 123456 and member access to 999999."""
+
+    _admin_project_id = "123456"
+    _member_project_id = "999999"
+
+    async def filter_projects_by_access_level(
+        self, project_ids: List[str], min_access_level: GitlabAccessLevel
+    ) -> List[str]:
+        """Filter projects this user can access in gitlab with at least access level."""
+        if min_access_level == GitlabAccessLevel.PUBLIC:
+            return project_ids
+        if min_access_level == GitlabAccessLevel.MEMBER:
+            return [p for p in project_ids if p in [self._admin_project_id, self._member_project_id]]
+        return [p for p in project_ids if p == self._admin_project_id]
 
 
 class UserStore(Protocol):

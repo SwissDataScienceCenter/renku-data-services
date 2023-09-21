@@ -42,15 +42,17 @@ class DummyAuthenticator:
 
     token_field: str = "Authorization"
 
-    project_id: str = "123456"
-
     gitlab: bool = False
+    project_id: Optional[str] = None
 
     async def authenticate(self, access_token: str, request: Request) -> base_models.APIUser:
         """Indicates whether the user has sucessfully logged in."""
         if self.gitlab:
-            return base_models.GitlabAPIUser(
-                is_admin=self.admin, id="some-id", access_token=access_token, project_id=self.project_id
+            user = base_models.DummyGitlabAPIUser(
+                is_admin=self.admin, id="some-id", access_token=access_token, name="John Doe", gitlab_url="localhost"
             )
+            if self.project_id is not None:
+                user._admin_project_id = self.project_id
+            return user
 
         return base_models.APIUser(is_admin=self.admin, id="some-id", access_token=access_token)
