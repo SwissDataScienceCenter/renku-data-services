@@ -15,19 +15,13 @@ class RCloneConfig(BaseModel, MutableMapping):
 
     config: dict[str, Any] = Field(exclude=True)
 
+    private: bool = Field(exclude=True)
     _validator: RCloneValidator = PrivateAttr(default=RCloneValidator())
-
-    @model_validator(mode="before")
-    def check_if_from_dict(cls, data: Any) -> Any:
-        """Check if the class was created from a plain dict or an already wrapped dict."""
-        if isinstance(data, dict) and {"config"} != data.keys():
-            data = {"config": data}
-        return data
 
     @model_validator(mode="after")
     def check_rclone_schema(self) -> "RCloneConfig":
         """Validate that the reclone config is valid."""
-        self._validator.validate(self.config)
+        self._validator.validate(self.config, private=self.private)
         return self
 
     @model_serializer
@@ -43,11 +37,11 @@ class RCloneConfig(BaseModel, MutableMapping):
 
     def __setitem__(self, key, value):
         self.config[key] = value
-        self._validator.validate(self.config)
+        self._validator.validate(self.config, private=self.private)
 
     def __delitem__(self, key):
         del self.config[key]
-        self._validator.validate(self.config)
+        self._validator.validate(self.config, private=self.private)
 
     def __iter__(self):
         return iter(self.config)
@@ -64,14 +58,14 @@ class CloudStorage(BaseModel):
 
     storage_id: str | None = Field(default=None)
 
-    source_path: str = Field(pattern=r"^((\w+/)*?\w+)$")
+    source_path: str = Field(min_length=1)
     """Path inside the cloud storage.
 
     Note: Since rclone itself doesn't really know about buckets/containers (they're not in the schema),
     bucket/container/etc. has to be the first part of source path.
     """
 
-    target_path: str = Field(pattern=r"^(\w+/)*?\w+$")
+    target_path: str = Field(min_length=1)
     """Path inside the target repository to mouhnt/clone data to."""
 
     @classmethod
@@ -92,15 +86,16 @@ class CloudStorage(BaseModel):
         if "type" not in data["configuration"]:
             raise errors.ValidationError(message="'type' not set in 'configuration'")
 
+        private = data.get("private", False)
         return cls(
             project_id=data["project_id"],
             storage_id=data.get("storage_id"),
             name=data["name"],
-            configuration=RCloneConfig(config=data["configuration"]),
+            configuration=RCloneConfig(config=data["configuration"], private=private),
             storage_type=data["configuration"]["type"],
             source_path=data["source_path"],
             target_path=data["target_path"],
-            private=data.get("private", False),
+            private=private,
         )
 
     @classmethod
@@ -170,7 +165,7 @@ class CloudStorage(BaseModel):
             project_id=project_id,
             name=name,
             storage_type="s3",
-            configuration=RCloneConfig(config=configuration),
+            configuration=RCloneConfig(config=configuration, private=private),
             source_path=source_path,
             target_path=target_path,
             private=private,
@@ -206,7 +201,7 @@ class CloudStorage(BaseModel):
             project_id=project_id,
             name=name,
             storage_type="azureblob",
-            configuration=RCloneConfig(config=configuration),
+            configuration=RCloneConfig(config=configuration, private=private),
             source_path=source_path,
             target_path=target_path,
             private=private,

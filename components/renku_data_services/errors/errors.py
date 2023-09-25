@@ -12,6 +12,14 @@ class BaseError(Exception):
     message: str = "An unexpected error occured"
     detail: Optional[str] = None
 
+    def __repr__(self):
+        """String representation of the error."""
+        return f"{self.__class__.__qualname__}: {self.message}"
+
+    def __str__(self):
+        """String representation of the error."""
+        return f"{self.__class__.__qualname__}: {self.message}"
+
 
 @dataclass
 class MissingResourceError(BaseError):
