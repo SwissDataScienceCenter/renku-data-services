@@ -185,6 +185,10 @@ components:
               type: boolean
               description: Whether this storage is private (i.e. requires credentials) or not
               default: false
+            readonly:
+              type: boolean
+              description: Whether this storage should be mounted readonly or not
+              default: true
           required:
             - name
             - storage_url
@@ -216,6 +220,10 @@ components:
               type: boolean
               description: Whether this storage is private (i.e. requires credentials) or not
               default: false
+            readonly:
+              type: boolean
+              description: Whether this storage should be mounted readonly or not
+              default: true
           required:
             - name
             - configuration
@@ -245,6 +253,10 @@ components:
         private:
           type: boolean
           description: Whether this storage is private (i.e. requires credentials) or not
+        readonly:
+          type: boolean
+          description: Whether this storage should be mounted readonly or not
+          default: true
     CloudStorageWithId:
       allOf:
         - $ref: "#/components/schemas/CloudStorage"
