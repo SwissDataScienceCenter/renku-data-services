@@ -65,11 +65,20 @@ class RCloneValidator:
         for patch in patches:
             patch(spec)
 
-    def validate(self, configuration: Union["RCloneConfig", dict[str, Any]]):
+    def validate(
+        self, configuration: Union["RCloneConfig", dict[str, Any]], private: bool = False, keep_sensitive: bool = False
+    ):
         """Validates an RClone config."""
         provider = self.get_provider(configuration)
 
-        provider.validate_config(configuration)
+        provider.validate_config(configuration, private=private, keep_sensitive=keep_sensitive)
+
+    def remove_sensitive_options_from_config(self, configuration: Union["RCloneConfig", dict[str, Any]]):
+        """Remove sensitive fields from a config, e.g. when turning a private storage public."""
+
+        provider = self.get_provider(configuration)
+
+        provider.remove_sensitive_options_from_config(configuration)
 
     def get_provider(self, configuration: Union["RCloneConfig", dict[str, Any]]) -> "RCloneProviderSchema":
         """Get a provider for configuration."""
@@ -137,6 +146,11 @@ class RCloneOption(BaseModel):
     value_str: str = Field(alias="ValueStr")
     type: str = Field(alias="Type")
 
+    @property
+    def is_sensitive(self):
+        """Whether this options is sensitive (e.g. credentials) or not."""
+        return self.sensitive or self.is_password
+
     def matches_provider(self, provider: str | None) -> bool:
         """Check if this option applies for a provider.
 
@@ -157,13 +171,15 @@ class RCloneOption(BaseModel):
 
         return (provider in provider_check) == match_type
 
-    def validate_config(self, value, provider: str | None):
+    def validate_config(
+        self, value: Any, provider: str | None, keep_sensitive: bool = False
+    ) -> int | bool | dict | str:
         """Validate an RClone option.
 
         Sensitive values are replaced with '<sensitive>' placeholders that clients are expected to handle.
         The placeholders indicate that a value should be there without storing the value.
         """
-        if self.sensitive or self.is_password:
+        if not keep_sensitive and self.is_sensitive:
             return "<sensitive>"
         match self.type:
             case "int" | "Duration" | "SizeSuffix" | "MultiEncoder":
@@ -209,7 +225,7 @@ class RCloneProviderSchema(BaseModel):
     @property
     def sensitive_options(self) -> list[RCloneOption]:
         """Returns all sensitive options for this provider."""
-        return [o for o in self.options if o.sensitive or o.is_password]
+        return [o for o in self.options if o.is_sensitive]
 
     def get_option_for_provider(self, name: str, provider: str | None) -> RCloneOption | None:
         """Get an RClone option matching a provider."""
@@ -221,7 +237,9 @@ class RCloneProviderSchema(BaseModel):
 
         return None
 
-    def validate_config(self, configuration: Union["RCloneConfig", dict[str, Any]]):
+    def validate_config(
+        self, configuration: Union["RCloneConfig", dict[str, Any]], private: bool = False, keep_sensitive: bool = False
+    ):
         """Validate an RClone config."""
         keys = set(configuration.keys()) - {"type"}
         provider: str | None = configuration.get("provider")  # type: ignore
@@ -242,6 +260,14 @@ class RCloneProviderSchema(BaseModel):
             missing_str = "\n".join(missing)
             raise errors.ValidationError(message=f"The following fields are required but missing:\n{missing_str}")
 
+        if not private:
+            for sensitive in self.sensitive_options:
+                if sensitive.name in configuration:
+                    raise errors.ValidationError(
+                        message=f"Setting value for field '{sensitive.name}', which is sensitive, is not allowed for"
+                        " public storage"
+                    )
+
         for key in keys:
             value = configuration[key]
 
@@ -258,7 +284,13 @@ class RCloneProviderSchema(BaseModel):
                 # We can't actually validate those, so we just continue
                 continue
 
-            configuration[key] = option.validate_config(value, provider=provider)
+            configuration[key] = option.validate_config(value, provider=provider, keep_sensitive=keep_sensitive)
+
+    def remove_sensitive_options_from_config(self, configuration: Union["RCloneConfig", dict[str, Any]]):
+        """Remove sensitive options from configuration."""
+        for sensitive in self.sensitive_options:
+            if sensitive.name in configuration:
+                del configuration[sensitive.name]
 
     def get_private_fields(
         self, configuration: Union["RCloneConfig", dict[str, Any]]
@@ -267,7 +299,7 @@ class RCloneProviderSchema(BaseModel):
         provider: str | None = configuration.get("provider")  # type: ignore
 
         for option in self.options:
-            if not option.sensitive and not option.is_password:
+            if not option.is_sensitive:
                 continue
             if option.advanced:
                 continue
