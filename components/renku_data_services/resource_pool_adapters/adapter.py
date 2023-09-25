@@ -5,6 +5,7 @@ These adapters currently do a few things (1) generate SQL queries, (2) apply res
 grows it is worth looking into separating this functionality into separate classes rather than having
 it all in one place.
 """
+from asyncio import gather
 from functools import wraps
 from typing import Dict, List, Optional, Tuple, cast
 
@@ -129,18 +130,7 @@ class ResourcePoolRepository(_Base):
     ) -> List[models.ResourcePool]:
         """Get resource pools from database."""
         async with self.session_maker() as session:
-            stmt = select(schemas.ResourcePoolORM).options(
-                selectinload(
-                    schemas.ResourcePoolORM.classes,
-                ).selectinload(
-                    schemas.ResourceClassORM.node_affinities,
-                ),
-                selectinload(
-                    schemas.ResourcePoolORM.classes,
-                ).selectinload(
-                    schemas.ResourceClassORM.tolerations,
-                ),
-            )
+            stmt = select(schemas.ResourcePoolORM).options(selectinload(schemas.ResourcePoolORM.classes))
             if name is not None:
                 stmt = stmt.where(schemas.ResourcePoolORM.name == name)
             if id is not None:
@@ -172,11 +162,7 @@ class ResourcePoolRepository(_Base):
                 .add_columns(criteria.label("matching"))
                 .order_by(schemas.ResourceClassORM.resource_pool_id, schemas.ResourceClassORM.name)
                 .join(schemas.ResourcePoolORM, schemas.ResourceClassORM.resource_pool)
-                .options(
-                    selectinload(schemas.ResourceClassORM.resource_pool),
-                    selectinload(schemas.ResourceClassORM.node_affinities),
-                    selectinload(schemas.ResourceClassORM.tolerations),
-                )
+                .options(selectinload(schemas.ResourceClassORM.resource_pool))
             )
             # NOTE: The line below ensures that the right users can access the right resources, do not remove.
             stmt = _classes_user_access_control(api_user, stmt)
@@ -247,13 +233,8 @@ class ResourcePoolRepository(_Base):
     ) -> List[models.ResourceClass]:
         """Get classes from the database."""
         async with self.session_maker() as session:
-            stmt = (
-                select(schemas.ResourceClassORM)
-                .join(schemas.ResourcePoolORM, schemas.ResourceClassORM.resource_pool, isouter=True)
-                .options(
-                    selectinload(schemas.ResourceClassORM.tolerations),
-                    selectinload(schemas.ResourceClassORM.node_affinities),
-                )
+            stmt = select(schemas.ResourceClassORM).join(
+                schemas.ResourcePoolORM, schemas.ResourceClassORM.resource_pool, isouter=True
             )
             if resource_pool_id is not None:
                 stmt = stmt.where(schemas.ResourcePoolORM.id == resource_pool_id)
@@ -306,18 +287,7 @@ class ResourcePoolRepository(_Base):
                 stmt = (
                     select(schemas.ResourcePoolORM)
                     .where(schemas.ResourcePoolORM.id == id)
-                    .options(
-                        selectinload(
-                            schemas.ResourcePoolORM.classes,
-                        ).selectinload(
-                            schemas.ResourceClassORM.node_affinities,
-                        ),
-                        selectinload(
-                            schemas.ResourcePoolORM.classes,
-                        ).selectinload(
-                            schemas.ResourceClassORM.tolerations,
-                        ),
-                    )
+                    .options(selectinload(schemas.ResourcePoolORM.classes))
                 )
                 res = await session.execute(stmt)
                 rp = res.scalars().first()
@@ -328,6 +298,7 @@ class ResourcePoolRepository(_Base):
                 # NOTE: The .update method on the model validates the update to the resource pool
                 rp.dump().update(**kwargs)
                 new_classes = None
+                new_classes_coroutines = []
                 for key, val in kwargs.items():
                     match key:
                         case "name" | "public" | "default" | "quota":
@@ -342,14 +313,16 @@ class ResourcePoolRepository(_Base):
                                         message="More fields than the id of the class "
                                         "should be provided when updating it"
                                     )
-                                new_cls = await self.update_resource_class(
-                                    api_user, resource_pool_id=id, resource_class_id=class_id, **cls
+                                new_classes_coroutines.append(
+                                    self.update_resource_class(
+                                        api_user, resource_pool_id=id, resource_class_id=class_id, **cls
+                                    )
                                 )
-                                new_classes.append(new_cls)
                         case _:
                             pass
+                new_classes = await gather(*new_classes_coroutines)
                 output = rp.dump()
-                if new_classes is not None:
+                if new_classes is not None or len(new_classes) > 0:
                     output = output.update(classes=new_classes)
                 return output
 
@@ -394,10 +367,6 @@ class ResourcePoolRepository(_Base):
             async with session.begin():
                 stmt = (
                     select(schemas.ResourceClassORM)
-                    .options(
-                        selectinload(schemas.ResourceClassORM.tolerations),
-                        selectinload(schemas.ResourceClassORM.node_affinities),
-                    )
                     .where(schemas.ResourceClassORM.id == resource_class_id)
                     .where(schemas.ResourceClassORM.resource_pool_id == resource_pool_id)
                 )
@@ -501,18 +470,7 @@ class UserRepository(_Base):
         """Get resource pools that a specific user has access to."""
         async with self.session_maker() as session:
             async with session.begin():
-                stmt = select(schemas.ResourcePoolORM).options(
-                    selectinload(
-                        schemas.ResourcePoolORM.classes,
-                    ).selectinload(
-                        schemas.ResourceClassORM.node_affinities,
-                    ),
-                    selectinload(
-                        schemas.ResourcePoolORM.classes,
-                    ).selectinload(
-                        schemas.ResourceClassORM.tolerations,
-                    ),
-                )
+                stmt = select(schemas.ResourcePoolORM).options(selectinload(schemas.ResourcePoolORM.classes))
                 if resource_pool_name is not None:
                     stmt = stmt.where(schemas.ResourcePoolORM.name == resource_pool_name)
                 if resource_pool_id is not None:
@@ -542,18 +500,7 @@ class UserRepository(_Base):
                 stmt_rp = (
                     select(schemas.ResourcePoolORM)
                     .where(schemas.ResourcePoolORM.id.in_(resource_pool_ids))
-                    .options(
-                        selectinload(
-                            schemas.ResourcePoolORM.classes,
-                        ).selectinload(
-                            schemas.ResourceClassORM.node_affinities,
-                        ),
-                        selectinload(
-                            schemas.ResourcePoolORM.classes,
-                        ).selectinload(
-                            schemas.ResourceClassORM.tolerations,
-                        ),
-                    )
+                    .options(selectinload(schemas.ResourcePoolORM.classes))
                 )
                 res = await session.execute(stmt_rp)
                 rps_to_add = res.scalars().all()
