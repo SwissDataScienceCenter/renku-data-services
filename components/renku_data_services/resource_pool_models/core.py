@@ -1,5 +1,5 @@
 """Domain models for the application."""
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from typing import Callable, List, Optional, Protocol
 from uuid import uuid4
@@ -63,6 +63,19 @@ class ResourcesCompareMixin:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
+class NodeAffinity:
+    """Used to set the node affinity when scheduling sessions."""
+
+    key: str
+    required_during_scheduling: bool = False
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "NodeAffinity":
+        """Create a node affinity from a dictionary."""
+        return cls(**data)
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
 class ResourceClass(ResourcesCompareMixin):
     """Resource class model."""
 
@@ -75,6 +88,8 @@ class ResourceClass(ResourcesCompareMixin):
     default: bool = False
     default_storage: int = 1
     matching: Optional[bool] = None
+    node_affinities: List[NodeAffinity] = field(default_factory=list)
+    tolerations: List[str] = field(default_factory=list)
 
     def __post_init__(self):
         if "\x00" in self.name:
@@ -83,10 +98,22 @@ class ResourceClass(ResourcesCompareMixin):
             raise ValidationError(message="'name' cannot be longer than 40 characters.")
         if self.default_storage > self.max_storage:
             raise ValidationError(message="The default storage cannot be larger than the max allowable storage.")
+        # We need to sort node affinities and tolerations to make '__eq__' reliable
+        object.__setattr__(
+            self, "node_affinities", sorted(self.node_affinities, key=lambda x: (x.key, x.required_during_scheduling))
+        )
+        object.__setattr__(self, "tolerations", sorted(self.tolerations))
 
     @classmethod
     def from_dict(cls, data: dict) -> "ResourceClass":
         """Create the model from a plain dictionary."""
+        if data.get("node_affinities"):
+            data["node_affinities"] = [
+                NodeAffinity.from_dict(affinity) if isinstance(affinity, dict) else affinity
+                for affinity in data.get("node_affinities", [])
+            ]
+        if isinstance(data.get("tolerations"), list):
+            data["tolerations"] = [toleration for toleration in data["tolerations"]]
         return cls(**data)
 
     def is_quota_valid(self, quota: "Quota") -> bool:

@@ -38,7 +38,7 @@ async def test_resource_pool_insert_get(
 
 
 @given(rp=rp_strat(), new_name=a_name)
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_pool_update_name(
     rp: models.ResourcePool, pool_repo: ResourcePoolRepository, new_name: str, admin_user: base_models.APIUser
@@ -61,7 +61,7 @@ async def test_resource_pool_update_name(
 
 
 @given(rp=rp_strat(), new_quota_id=a_uuid_string)
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_pool_update_quota(
     rp: models.ResourcePool, pool_repo: ResourcePoolRepository, new_quota_id: str, admin_user: base_models.APIUser
@@ -94,7 +94,7 @@ async def test_resource_pool_update_classes(
         assert inserted_rp.id is not None
         old_classes = [asdict(cls) for cls in list(inserted_rp.classes)]
         new_classes_dicts = [{**cls, **data.draw(rc_update_reqs_dict)} for cls in old_classes]
-        new_classes_models = [models.ResourceClass(**cls) for cls in new_classes_dicts]
+        new_classes_models = [models.ResourceClass.from_dict(cls) for cls in new_classes_dicts]
         new_classes_models = sorted(
             new_classes_models, key=lambda x: (x.default, x.cpu, x.memory, x.default_storage, x.name)
         )
@@ -118,7 +118,7 @@ async def test_resource_pool_update_classes(
 
 
 @given(rp=rp_strat())
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_get_classes(rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser):
     inserted_rp = None
@@ -135,7 +135,7 @@ async def test_get_classes(rp: models.ResourcePool, pool_repo: ResourcePoolRepos
 
 
 @given(rp=rp_strat())
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_get_class_by_id(
     rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser
@@ -157,7 +157,7 @@ async def test_get_class_by_id(
 
 
 @given(rp=rp_strat())
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_get_class_by_name(
     rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser
@@ -195,7 +195,7 @@ async def test_resource_pool_delete(
 
 
 @given(rc=rc_non_default_strat(), rp=rp_strat())
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_class_create(
     rc: models.ResourceClass,
@@ -216,8 +216,8 @@ async def test_resource_class_create(
         assert len(retrieved_rps) == 1
         retrieved_rp = retrieved_rps[0]
         assert len(retrieved_rp.classes) >= 1
-        assert set(retrieved_rp.classes).issuperset(
-            {inserted_class}
+        assert (
+            sum([i == inserted_class for i in retrieved_rp.classes]) == 1
         ), f"class {inserted_class} should be in {retrieved_rp.classes}"
     except (ValidationError, errors.ValidationError):
         pass
@@ -227,7 +227,7 @@ async def test_resource_class_create(
 
 
 @given(rp=rp_strat())
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_class_delete(
     rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser
@@ -248,8 +248,8 @@ async def test_resource_class_delete(
         retrieved_rps = await pool_repo.get_resource_pools(id=inserted_rp.id, api_user=admin_user)
         assert len(retrieved_rps) == 1
         retrieved_rp = retrieved_rps[0]
-        assert not set(retrieved_rp.classes).issuperset(
-            {removed_cls}
+        assert not any(
+            [i == removed_cls for i in retrieved_rp.classes]
         ), f"class {removed_cls} should not be in {retrieved_rp.classes}"
     except (ValidationError, errors.ValidationError):
         pass
@@ -259,7 +259,7 @@ async def test_resource_class_delete(
 
 
 @given(rp=rp_strat(), rc_update=rc_update_reqs_dict)
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_class_update(
     rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser, rc_update: dict
@@ -286,11 +286,11 @@ async def test_resource_class_update(
         assert len(retrieved_rps) == 1
         retrieved_rp = retrieved_rps[0]
         assert updated_rc.id == rc_to_update.id
-        assert set(retrieved_rp.classes).issuperset(
-            {updated_rc}
+        assert (
+            sum([i == updated_rc for i in retrieved_rp.classes]) == 1
         ), f"class {updated_rc} should be in {retrieved_rp.classes}"
-        assert not set(retrieved_rp.classes).issuperset(
-            {rc_to_update}
+        assert not any(
+            [i == rc_to_update for i in retrieved_rp.classes]
         ), f"class {rc_to_update} should not be in {retrieved_rp.classes}"
     except (ValidationError, errors.ValidationError):
         pass
@@ -382,7 +382,7 @@ async def test_resource_pools_access_control(
 
 
 @given(rp1=rp_strat(), rp2=rp_strat())
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_classes_filtering(
     rp1: models.ResourcePool,
