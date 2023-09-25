@@ -817,6 +817,10 @@ components:
           $ref: "#/components/schemas/Storage"
         default:
           $ref: "#/components/schemas/DefaultFlag"
+        tolerations:
+          $ref: "#/components/schemas/K8sLabelList"
+        node_affinities:
+          $ref: "#/components/schemas/NodeAffinityList"
       required: ["cpu", "memory", "gpu", "max_storage", "name", "default", "default_storage"]
       example:
         name: "resource class"
@@ -825,6 +829,7 @@ components:
         gpu: 0
         max_storage: 100
         default: false
+        default_storage: 10
     ResourceClassPatch:
       type: object
       additionalProperties: false
@@ -843,6 +848,10 @@ components:
           $ref: "#/components/schemas/Storage"
         default:
           $ref: "#/components/schemas/DefaultFlag"
+        tolerations:
+          $ref: "#/components/schemas/K8sLabelList"
+        node_affinities:
+          $ref: "#/components/schemas/NodeAffinityList"
       example:
         name: "resource class"
         cpu: 1.5
@@ -866,6 +875,10 @@ components:
           $ref: "#/components/schemas/IntegerId"
         default:
           $ref: "#/components/schemas/DefaultFlag"
+        tolerations:
+          $ref: "#/components/schemas/K8sLabelList"
+        node_affinities:
+          $ref: "#/components/schemas/NodeAffinityList"
       required: ["id"]
       example:
         id: 1
@@ -890,6 +903,10 @@ components:
           $ref: "#/components/schemas/IntegerId"
         default:
           $ref: "#/components/schemas/DefaultFlag"
+        tolerations:
+          $ref: "#/components/schemas/K8sLabelList"
+        node_affinities:
+          $ref: "#/components/schemas/NodeAffinityList"
       required: ["cpu", "memory", "gpu", "max_storage", "name", "id", "default", "default_storage"]
       example:
         name: "resource class"
@@ -897,6 +914,7 @@ components:
         memory: 2
         gpu: 0
         max_storage: 100
+        default_storage: 10
         id: 1
         default: true
     ResourceClassWithIdFiltered:
@@ -921,6 +939,10 @@ components:
           $ref: "#/components/schemas/DefaultFlag"
         matching:
           type: boolean
+        tolerations:
+          $ref: "#/components/schemas/K8sLabelList"
+        node_affinities:
+          $ref: "#/components/schemas/NodeAffinityList"
       required: ["cpu", "memory", "gpu", "max_storage", "name", "id", "default", "default_storage"]
       example:
         name: "resource class"
@@ -928,8 +950,10 @@ components:
         memory: 2
         gpu: 0
         max_storage: 100
+        default_storage: 10
         id: 1
         default: true
+        matching: true
     ResourceClasses:
       type: array
       items:
@@ -949,10 +973,12 @@ components:
           max_storage: 100
           id: 1
           default: true
+          default_storage: 10
         - name: "resource class 2"
           cpu: 4.5
           memory: 10
           gpu: 2
+          default_storage: 10
           max_storage: 10000
           id: 2
           default: false
@@ -1137,6 +1163,7 @@ components:
             memory: 2
             gpu: 0
             max_storage: 100
+            default_storage: 10
             id: 1
             matching: false
           - name: "resource class 2"
@@ -1144,6 +1171,7 @@ components:
             memory: 10
             gpu: 2
             max_storage: 10000
+            default_storage: 10
             id: 2
             matching: true
         name: "resource pool name"
@@ -1278,6 +1306,45 @@ components:
       description: A resource pool whose classes can be accessed by anyone
       default: false
       example: false
+    K8sLabelList:
+      type: array
+      description: A list of k8s labels used for tolerations
+      items:
+        $ref: "#/components/schemas/K8sLabel"
+      example: ["test-label-1"]
+      uniqueItems: true
+      default: []
+      minItems: 0
+    K8sLabel:
+      type: string
+      description: A valid K8s label
+      example: some-label-1
+      pattern: '^[a-z0-9A-Z][a-z0-9A-Z-_.]*[a-z0-9A-Z]$'
+      minLength: 3
+      maxLength: 63
+    NodeAffinity:
+      type: object
+      additionalProperties: false
+      description: A minimal representation of a node afinity label
+      properties:
+        key: 
+          $ref: "#/components/schemas/K8sLabel"
+        requiredDuringScheduling:
+          type: boolean
+          default: false
+      required: ["key"]
+      example:
+        key: some-label-32
+        requiredDuringScheduling: true
+    NodeAffinityList:
+      type: array
+      description: A list of k8s labels used for tolerations and/or node affinity
+      items:
+        $ref: "#/components/schemas/NodeAffinity"
+      example: [{"key": "test-label-1", "requiedDuringScheduling": false}]
+      uniqueItems: true
+      default: []
+      minItems: 0
     ErrorResponse:
       type: object
       properties:

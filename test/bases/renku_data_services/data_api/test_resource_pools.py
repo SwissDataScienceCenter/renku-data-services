@@ -25,6 +25,8 @@ _valid_resource_pool_payload: Dict[str, Any] = {
             "max_storage": 100,
             "default_storage": 1,
             "default": True,
+            "node_affinities": [],
+            "tolerations": [],
         }
     ],
     "quota": {"cpu": 100, "memory": 100, "gpu": 0},

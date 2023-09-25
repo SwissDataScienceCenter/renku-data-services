@@ -28,6 +28,18 @@ a_row_id = st.integers(min_value=1, max_value=SQL_BIGINT_MAX)
 a_name = st.text(min_size=5)
 a_uuid_string = st.uuids(version=4).map(lambda x: str(x))
 a_bool = st.booleans()
+a_tolerations_list = st.lists(a_uuid_string, min_size=3, max_size=3)
+
+
+@st.composite
+def node_affinity_strat(draw):
+    try:
+        return models.NodeAffinity(
+            key=draw(a_uuid_string),
+            required_during_scheduling=draw(a_bool),
+        )
+    except errors.ValidationError:
+        assume(False)
 
 
 @st.composite
@@ -40,6 +52,8 @@ def rc_non_default_strat(draw):
             max_storage=draw(a_rc_storage),
             memory=draw(a_rc_memory),
             default=False,
+            tolerations=draw(a_tolerations_list),
+            node_affinities=draw(st.lists(node_affinity_strat(), max_size=3)),
         )
     except errors.ValidationError:
         assume(False)

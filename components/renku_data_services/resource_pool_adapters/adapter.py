@@ -5,10 +5,11 @@ These adapters currently do a few things (1) generate SQL queries, (2) apply res
 grows it is worth looking into separating this functionality into separate classes rather than having
 it all in one place.
 """
+from asyncio import gather
 from functools import wraps
 from typing import Dict, List, Optional, Tuple, cast
 
-from sqlalchemy import create_engine, delete, or_, select, update
+from sqlalchemy import create_engine, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 from sqlalchemy.sql import Select, and_
@@ -296,11 +297,14 @@ class ResourcePoolRepository(_Base):
                     return rp.dump()
                 # NOTE: The .update method on the model validates the update to the resource pool
                 rp.dump().update(**kwargs)
+                new_classes = None
+                new_classes_coroutines = []
                 for key, val in kwargs.items():
                     match key:
                         case "name" | "public" | "default" | "quota":
                             setattr(rp, key, val)
                         case "classes":
+                            new_classes = []
                             for cls in val:
                                 class_id = cls.pop("id")
                                 cls.pop("matching", None)
@@ -309,23 +313,18 @@ class ResourcePoolRepository(_Base):
                                         message="More fields than the id of the class "
                                         "should be provided when updating it"
                                     )
-                                stmt_cls = (
-                                    update(schemas.ResourceClassORM)
-                                    .where(schemas.ResourceClassORM.id == class_id)
-                                    .where(schemas.ResourceClassORM.resource_pool_id == id)
-                                    .values(**cls)
-                                    .returning(schemas.ResourceClassORM)
-                                )
-                                res = await session.execute(stmt_cls)
-                                updated_cls = res.scalars().first()
-                                if updated_cls is None:
-                                    raise errors.MissingResourceError(
-                                        message=f"Class with id {class_id} does not exist in the resource pool"
+                                new_classes_coroutines.append(
+                                    self.update_resource_class(
+                                        api_user, resource_pool_id=id, resource_class_id=class_id, **cls
                                     )
+                                )
                         case _:
                             pass
-
-                return rp.dump()
+                new_classes = await gather(*new_classes_coroutines)
+                output = rp.dump()
+                if new_classes is not None and len(new_classes) > 0:
+                    output = output.update(classes=new_classes)
+                return output
 
     @_only_admins
     async def delete_resource_pool(self, api_user: base_models.APIUser, id: int) -> Optional[models.ResourcePool]:
@@ -384,7 +383,20 @@ class ResourcePoolRepository(_Base):
                 if not cls.default:
                     raise errors.ValidationError(message="Only the default resource class can be updated.")
                 for k, v in kwargs.items():
-                    setattr(cls, k, v)
+                    match k:
+                        case "node_affinities":
+                            for affinity in v:
+                                matched_affinity = next(
+                                    filter(lambda x: x.key == affinity["key"], cls.node_affinities), None
+                                )
+                                if matched_affinity:
+                                    # NOTE: The node affinity is already present in the resource class, update it
+                                    matched_affinity.required_during_scheduling = affinity.required_during_scheduling
+                                else:
+                                    # NOTE: The node affinity does not exist, create it
+                                    cls.node_affinities.append(affinity)
+                        case _:
+                            setattr(cls, k, v)
                 return cls.dump()
 
 
