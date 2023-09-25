@@ -322,7 +322,7 @@ class ResourcePoolRepository(_Base):
                             pass
                 new_classes = await gather(*new_classes_coroutines)
                 output = rp.dump()
-                if new_classes is not None or len(new_classes) > 0:
+                if new_classes is not None and len(new_classes) > 0:
                     output = output.update(classes=new_classes)
                 return output
 

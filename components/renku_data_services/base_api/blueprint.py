@@ -29,8 +29,8 @@ class CustomBlueprint:
         members = getmembers(self, ismethod)
         for name, method in members:
             if name != "blueprint" and not name.startswith("_"):
-                bp_method = cast(BlueprintFactory, method)
-                url, http_methods, handler = bp_method()
+                method_factory = cast(BlueprintFactory, method)
+                url, http_methods, handler = method_factory()
                 bp.add_route(handler=handler, uri=url, methods=http_methods)
         for req_mw in self.request_middlewares:
             bp.middleware("request")(req_mw)
