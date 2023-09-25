@@ -46,7 +46,11 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         authenticator=config.authenticator,
     )
     user_resource_pools = UserResourcePoolsBP(
-        name="user_resource_pools", url_prefix=url_prefix, repo=config.user_repo, authenticator=config.authenticator
+        name="user_resource_pools",
+        url_prefix=url_prefix,
+        repo=config.user_repo,
+        authenticator=config.authenticator,
+        quota_repo=config.quota_repo,
     )
     storage = StorageBP(
         name="storage",
