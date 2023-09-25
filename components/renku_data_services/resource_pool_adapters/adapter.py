@@ -5,6 +5,7 @@ These adapters currently do a few things (1) generate SQL queries, (2) apply res
 grows it is worth looking into separating this functionality into separate classes rather than having
 it all in one place.
 """
+from asyncio import gather
 from functools import wraps
 from typing import Dict, List, Optional, Tuple, cast
 
@@ -328,6 +329,7 @@ class ResourcePoolRepository(_Base):
                 # NOTE: The .update method on the model validates the update to the resource pool
                 rp.dump().update(**kwargs)
                 new_classes = None
+                new_classes_coroutines = []
                 for key, val in kwargs.items():
                     match key:
                         case "name" | "public" | "default" | "quota":
@@ -342,14 +344,16 @@ class ResourcePoolRepository(_Base):
                                         message="More fields than the id of the class "
                                         "should be provided when updating it"
                                     )
-                                new_cls = await self.update_resource_class(
-                                    api_user, resource_pool_id=id, resource_class_id=class_id, **cls
+                                new_classes_coroutines.append(
+                                    self.update_resource_class(
+                                        api_user, resource_pool_id=id, resource_class_id=class_id, **cls
+                                    )
                                 )
-                                new_classes.append(new_cls)
                         case _:
                             pass
+                new_classes = await gather(*new_classes_coroutines)
                 output = rp.dump()
-                if new_classes is not None:
+                if new_classes is not None or len(new_classes) > 0:
                     output = output.update(classes=new_classes)
                 return output
 

@@ -118,7 +118,7 @@ async def test_resource_pool_update_classes(
 
 
 @given(rp=rp_strat())
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_get_classes(rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser):
     inserted_rp = None

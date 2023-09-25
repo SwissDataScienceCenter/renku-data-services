@@ -68,11 +68,13 @@ class ResourceClassORM(BaseORM):
         back_populates="resource_class",
         default_factory=list,
         cascade="save-update, merge, delete",
+        lazy="selectin",
     )
     node_affinities: Mapped[List["NodeAffintyORM"]] = relationship(
         back_populates="resource_class",
         default_factory=list,
         cascade="save-update, merge, delete",
+        lazy="selectin",
     )
 
     @classmethod
