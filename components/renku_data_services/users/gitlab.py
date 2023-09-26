@@ -34,11 +34,11 @@ class GitlabAuthenticator:
         if self.token_field != "Authorization":  # nosec: B105
             access_token = str(request.headers.get(self.token_field))
 
-        result = await self._auth_with_repo(access_token)
+        result = await self._get_gitlab_api_user(access_token)
         return result
 
-    async def _auth_with_repo(self, access_token: str) -> base_models.APIUser:
-        """Check if a user has access to a repository on gitlab."""
+    async def _get_gitlab_api_user(self, access_token: str) -> base_models.GitlabAPIUser:
+        """Get and validate a Gitlab API User."""
         client = gitlab.Gitlab(self.gitlab_url, oauth_token=access_token)
         try:
             client.auth()  # needed for the user property to be set

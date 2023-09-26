@@ -42,6 +42,11 @@ class StorageRepository(_Base):
 
             if name is not None:
                 stmt = stmt.where(schemas.CloudStorageORM.name == name)
+            if not project_id and not name and not id:
+                raise errors.ValidationError(
+                    message="One of 'project_id', 'id' or 'name' has to be set when getting storage"
+                )
+
             res = await session.execute(stmt)
             orms = res.scalars().all()
             accessible_projects = await user.filter_projects_by_access_level(

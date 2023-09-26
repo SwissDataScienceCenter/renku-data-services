@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional, Protocol
 
-import grequests
+import httpx
 from sanic import Request
 
 from renku_data_services.errors import errors
@@ -41,7 +41,7 @@ class GitlabAccessLevel(Enum):
     MEMBER = 2
     """User is a member of the project"""
     ADMIN = 3
-    """User has at least DEVELOPER priviledges"""
+    """A user with at least DEVELOPER priviledges in gitlab is considered an Admin"""
 
 
 @dataclass(kw_only=True)
@@ -84,7 +84,8 @@ class GitlabAPIUser(APIUser):
                 }}
             """
         }
-        resp = await grequests.post(self.gitlab_url, json=body, headers=header, timeout=10)
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(self.gitlab_url, json=body, headers=header, timeout=10)
         if resp.status_code != 200:
             raise errors.BaseError(message=f"Error querying Gitlab api: {resp.text}")
         result: List[str] = []
@@ -116,7 +117,8 @@ class GitlabAPIUser(APIUser):
                     }}
                 """
             }
-            resp = await grequests.post(self.gitlab_url, json=body, headers=header, timeout=10)
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(self.gitlab_url, json=body, headers=header, timeout=10)
             if resp.status_code != 200:
                 raise errors.BaseError(message=f"Error querying Gitlab api: {resp.text}")
             resp_body = resp.json()
