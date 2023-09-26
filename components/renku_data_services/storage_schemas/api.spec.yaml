@@ -256,7 +256,6 @@ components:
         readonly:
           type: boolean
           description: Whether this storage should be mounted readonly or not
-          default: true
     CloudStorageWithId:
       allOf:
         - $ref: "#/components/schemas/CloudStorage"

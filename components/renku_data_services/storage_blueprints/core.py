@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from typing import Any
 
-from sanic import Request, json, empty
+from sanic import Request, empty, json
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
@@ -20,7 +20,7 @@ def dump_storage_with_sensitive_fields(storage: models.CloudStorage, validator: 
     return apispec.CloudStorageGet.model_validate(
         {
             "storage": apispec.CloudStorageWithId.model_validate(storage).model_dump(exclude_none=True),
-            "sensitive_fields": validator.get_private_fields(storage.configuration) if storage.private else None,
+            "sensitive_fields": validator.get_private_fields(storage.configuration),
         }
     ).model_dump(exclude_none=True)
 
