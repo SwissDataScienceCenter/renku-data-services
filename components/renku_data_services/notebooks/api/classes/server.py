@@ -248,9 +248,9 @@ class UserServer:
         patches = list(
             chain(
                 general_patches.test(self),
-                general_patches.session_tolerations(),
-                general_patches.session_affinity(),
-                general_patches.session_node_selector(),
+                general_patches.session_tolerations(self),
+                general_patches.session_affinity(self),
+                general_patches.session_node_selector(self),
                 general_patches.priority_class(self),
                 jupyter_server_patches.args(),
                 jupyter_server_patches.env(self),

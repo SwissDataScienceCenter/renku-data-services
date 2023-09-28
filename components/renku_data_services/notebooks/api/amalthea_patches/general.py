@@ -7,60 +7,70 @@ if TYPE_CHECKING:
     from renku_notebooks.api.classes.server import UserServer
 
 
-def session_tolerations():
-    patches = []
-    tolerations = [
-        {
-            "key": f"{config.session_get_endpoint_annotations.renku_annotation_prefix}dedicated",
-            "operator": "Equal",
-            "value": "user",
-            "effect": "NoSchedule",
-        },
-        *config.sessions.tolerations,
-    ]
-    patches.append(
-        {
-            "type": "application/json-patch+json",
-            "patch": [
-                {
-                    "op": "add",
-                    "path": "/statefulset/spec/template/spec/tolerations",
-                    "value": tolerations,
-                }
-            ],
-        }
-    )
-    return patches
+def session_tolerations(server: "UserServer"):
+    """Patch for node taint tolerations, the static tolerations from the configuration are ignored
+    if the tolerations are set in the server options (coming from CRC)."""
+    if not server.server_options.tolerations:
+        key = f"{config.session_get_endpoint_annotations.renku_annotation_prefix}dedicated"
+        tolerations = [
+            {
+                "key": key,
+                "operator": "Equal",
+                "value": "user",
+                "effect": "NoSchedule",
+            },
+        ] + config.sessions.tolerations
+        return [
+            {
+                "type": "application/json-patch+json",
+                "patch": [
+                    {
+                        "op": "add",
+                        "path": "/statefulset/spec/template/spec/tolerations",
+                        "value": tolerations,
+                    }
+                ],
+            }
+        ]
+    return [i.json_patch() for i in server.server_options.tolerations]
 
 
-def session_affinity():
-    return [
-        {
-            "type": "application/json-patch+json",
-            "patch": [
-                {
-                    "op": "add",
-                    "path": "/statefulset/spec/template/spec/affinity",
-                    "value": config.sessions.affinity,
-                }
-            ],
-        }
-    ]
+def session_affinity(server: "UserServer"):
+    """Patch for session affinities, the static affinities from the configuration are ignored
+    if the affinities are set in the server options (coming from CRC)."""
+    if not server.server_options.node_affinities:
+        return [
+            {
+                "type": "application/json-patch+json",
+                "patch": [
+                    {
+                        "op": "add",
+                        "path": "/statefulset/spec/template/spec/affinity",
+                        "value": config.sessions.affinity,
+                    }
+                ],
+            }
+        ]
+    return [i.json_patch() for i in server.server_options.node_affinities]
 
 
-def session_node_selector():
-    return [
-        {
-            "type": "application/json-patch+json",
-            "patch": [
-                {
-                    "op": "add",
-                    "path": "/statefulset/spec/template/spec/nodeSelector",
-                    "value": config.sessions.node_selector,
-                }
-            ],
-        }
-    ]
+def session_node_selector(server: "UserServer"):
+    """Patch for a node selector, if node affinities are specified in the server options
+    (coming from CRC) node selectors in the static configuration are ignored."""
+    if not server.server_options.node_affinities:
+        return [
+            {
+                "type": "application/json-patch+json",
+                "patch": [
+                    {
+                        "op": "add",
+                        "path": "/statefulset/spec/template/spec/nodeSelector",
+                        "value": config.sessions.node_selector,
+                    }
+                ],
+            }
+        ]
+    return []
 
 
 def priority_class(server: "UserServer"):

@@ -1,10 +1,75 @@
-from dataclasses import dataclass
-from typing import Optional, Callable, Dict, Any
+from dataclasses import dataclass, field
+from typing import Optional, Callable, Dict, Any, List
 
 from marshmallow import Schema, fields, post_load
 
 from ...config import config
 from .custom_fields import ByteSizeField, CpuField, GpuField
+from ...errors.programming import ProgrammingError
+
+
+@dataclass
+class NodeAffinity:
+    """Node affinity used to schedule a session on specific nodes."""
+
+    key: str
+    required_during_scheduling: bool = False
+
+    def json_patch(self) -> Dict[str, Any]:
+        match_expressions = {
+            "matchExpressions": {
+                "key": self.key,
+                "operator": "Exists",
+            },
+        }
+        if self.required_during_scheduling:
+            return {
+                "type": "application/json-patch+json",
+                "patch": [
+                    {
+                        "op": "add",
+                        "path": "/statefulset/spec/template/spec/affinity/nodeAffinity"
+                        "/requiredDuringSchedulingIgnoredDuringExecution/nodeSelectorTerms/-",
+                        "value": match_expressions,
+                    }
+                ],
+            }
+        return {
+            "type": "application/json-patch+json",
+            "patch": [
+                {
+                    "op": "add",
+                    "path": "/statefulset/spec/template/spec/affinity/nodeAffinity"
+                    "/preferredDuringSchedulingIgnoredDuringExecution/-",
+                    "value": {
+                        "weight": 1,
+                        "preference": match_expressions,
+                    },
+                }
+            ],
+        }
+
+
+@dataclass
+class Toleration:
+    """Toleration used to schedule a session on tainted nodes."""
+
+    key: str
+
+    def json_patch(self) -> Dict[str, Any]:
+        return {
+            "type": "application/json-patch+json",
+            "patch": [
+                {
+                    "op": "add",
+                    "path": "/statefulset/spec/template/spec/tolerations/-",
+                    "value": {
+                        "key": self.key,
+                        "operator": "Exists",
+                    },
+                }
+            ],
+        }
 
 
 @dataclass
@@ -19,6 +84,8 @@ class ServerOptions:
     lfs_auto_fetch: bool = False
     gigabytes: bool = False
     priority_class: Optional[str] = None
+    node_affinities: List[NodeAffinity] = field(default_factory=list)
+    tolerations: List[Toleration] = field(default_factory=list)
 
     def __post_init__(self):
         if self.default_url is None:
@@ -29,6 +96,27 @@ class ServerOptions:
             self.storage = 1
         elif self.storage is None and not self.gigabytes:
             self.storage = 1_000_000_000
+        if not all([isinstance(i, NodeAffinity) for i in self.node_affinities]):
+            raise ProgrammingError(
+                message="Cannot create a ServerOptions dataclass with node "
+                "affinities that are not of type NodeAffinity"
+            )
+        if not all([isinstance(i, Toleration) for i in self.tolerations]):
+            raise ProgrammingError(
+                message="Cannot create a ServerOptions dataclass with tolerations "
+                "that are not of type Toleration"
+            )
+        if self.node_affinities is None:
+            self.node_affinities = []
+        else:
+            self.node_affinities = sorted(
+                self.node_affinities,
+                key=lambda x: (x.key, x.required_during_scheduling),
+            )
+        if self.tolerations is None:
+            self.tolerations = []
+        else:
+            self.tolerations = sorted(self.tolerations, key=lambda x: x.key)
 
     def __compare(
         self,
@@ -107,6 +195,10 @@ class ServerOptions:
             memory=data["memory"] * 1000000000,
             gpu=data["gpu"],
             storage=data["default_storage"] * 1000000000,
+            node_affinities=[
+                NodeAffinity(**a) for a in data.get("node_affinities", [])
+            ],
+            tolerations=[Toleration(t) for t in data.get("tolerations", [])],
         )
 
     @classmethod
