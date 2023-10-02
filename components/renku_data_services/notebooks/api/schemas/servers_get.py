@@ -437,7 +437,7 @@ class LaunchNotebookResponseWithoutS3(Schema):
                     {
                         "message": (
                             "Server is hibernated and will be terminated in "
-                            f"{max(remaining_idle_time, 0)} seconds."
+                            f"{max(hibernated_seconds_threshold, 0)} seconds."
                         ),
                         "critical": critical,
                     }
