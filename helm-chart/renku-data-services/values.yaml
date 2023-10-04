@@ -1,0 +1,5 @@
+dataService:
+  image:
+    repository:
+      repository: renku/renku-data-service
+      tag: "0.0.1"
