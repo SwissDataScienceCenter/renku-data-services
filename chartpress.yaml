@@ -1,0 +1,17 @@
+charts:
+  - name: helm-chart/renku-data-services
+    resetTag: latest
+    imagePrefix: renku/
+    repo:
+      git: SwissDataScienceCenter/helm-charts
+      published: https://swissdatasciencecenter.github.io/helm-charts
+    paths:
+      - .
+      - bases
+      - components
+      - projects
+    images:
+      renku-data-services:
+        contextPath: .
+        dockerfilePath: projects/renku_data_service/Dockerfile
+        valuesPath: dataService.image
