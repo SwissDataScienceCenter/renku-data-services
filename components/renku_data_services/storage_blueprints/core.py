@@ -62,7 +62,6 @@ class StorageBP(CustomBlueprint):
         """Create a new cloud storage entry."""
 
         @authenticate(self.authenticator)
-        @only_admins
         async def _post(request: Request, validator: RCloneValidator, user: base_models.GitlabAPIUser):
             storage: models.CloudStorage
 
@@ -91,7 +90,6 @@ class StorageBP(CustomBlueprint):
         """Replace a storage entry."""
 
         @authenticate(self.authenticator)
-        @only_admins
         async def _put(request: Request, storage_id: str, validator: RCloneValidator, user: base_models.GitlabAPIUser):
             if not request.json:
                 raise errors.ValidationError(message="The request body is empty. Please provide a valid JSON object.")
@@ -123,7 +121,6 @@ class StorageBP(CustomBlueprint):
         """Update parts of a storage entry."""
 
         @authenticate(self.authenticator)
-        @only_admins
         @validate(json=apispec.CloudStoragePatch)
         async def _patch(
             request: Request,
