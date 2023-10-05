@@ -51,6 +51,18 @@ class GitlabAPIUser(APIUser):
     name: str
     gitlab_url: str
 
+    @property
+    def gitlab_graphql_url(self):
+        """Gets the graphql url for gitlab."""
+        gitlab_url = self.gitlab_url
+
+        if not gitlab_url.startswith("http") and "://" not in gitlab_url:
+            gitlab_url = f"https://{gitlab_url}"
+
+        gitlab_url = gitlab_url.rstrip("/")
+
+        return f"{gitlab_url}/api/graphql"
+
     async def filter_projects_by_access_level(
         self, project_ids: List[str], min_access_level: GitlabAccessLevel
     ) -> List[str]:
@@ -85,9 +97,9 @@ class GitlabAPIUser(APIUser):
             """
         }
         async with httpx.AsyncClient() as client:
-            resp = await client.post(self.gitlab_url, json=body, headers=header, timeout=10)
+            resp = await client.post(self.gitlab_graphql_url, json=body, headers=header, timeout=10)
         if resp.status_code != 200:
-            raise errors.BaseError(message=f"Error querying Gitlab api: {resp.text}")
+            raise errors.BaseError(message=f"Error querying Gitlab api {self.gitlab_graphql_url}: {resp.text}")
         result: List[str] = []
         resp_body = resp.json()
 
@@ -118,7 +130,7 @@ class GitlabAPIUser(APIUser):
                 """
             }
             async with httpx.AsyncClient() as client:
-                resp = await client.post(self.gitlab_url, json=body, headers=header, timeout=10)
+                resp = await client.post(self.gitlab_graphql_url, json=body, headers=header, timeout=10)
             if resp.status_code != 200:
                 raise errors.BaseError(message=f"Error querying Gitlab api: {resp.text}")
             resp_body = resp.json()
