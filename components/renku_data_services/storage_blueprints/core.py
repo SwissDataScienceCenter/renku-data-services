@@ -154,7 +154,6 @@ class StorageBP(CustomBlueprint):
         """Delete a storage entry."""
 
         @authenticate(self.authenticator)
-        @only_admins
         async def _delete(request: Request, storage_id: str, user: base_models.GitlabAPIUser):
             await self.storage_repo.delete_storage(storage_id=storage_id, user=user)
             return empty(204)
