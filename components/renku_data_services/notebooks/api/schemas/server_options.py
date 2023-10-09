@@ -195,9 +195,7 @@ class ServerOptions:
             memory=data["memory"] * 1000000000,
             gpu=data["gpu"],
             storage=data["default_storage"] * 1000000000,
-            node_affinities=[
-                NodeAffinity(**a) for a in data.get("node_affinities", [])
-            ],
+            node_affinities=[NodeAffinity(**a) for a in data.get("node_affinities", [])],
             tolerations=[Toleration(t) for t in data.get("tolerations", [])],
         )
 

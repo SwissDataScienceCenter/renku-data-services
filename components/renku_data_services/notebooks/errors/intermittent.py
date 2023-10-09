@@ -20,9 +20,7 @@ class IntermittentError(GenericError):
     message: str = "We seem to be experiencing some technical difficulties, please try again later."
     code: int = 3000
     status_code: int = 500
-    detail: Optional[
-        str
-    ] = "If this problem persists please contact your administrator."
+    detail: Optional[str] = "If this problem persists please contact your administrator."
 
 
 @dataclass

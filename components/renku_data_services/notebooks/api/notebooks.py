@@ -19,27 +19,28 @@
 import json
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 
 from flask import Blueprint, current_app, jsonify
+from gitlab.const import Visibility as GitlabVisibility
 from marshmallow import fields, validate
 from webargs.flaskparser import use_args
 
 from renku_notebooks.api.classes.user import AnonymousUser
+from renku_notebooks.api.schemas.cloud_storage import create_cloud_storage_object
 from renku_notebooks.util.repository import get_status
 
 from ..config import config
 from ..errors.intermittent import AnonymousUserPatchError, PVDisabledError
 from ..errors.programming import ProgrammingError
 from ..errors.user import (
-    ImageParseError,
     InvalidPatchArgumentError,
     MissingResourceError,
     UserInputError,
 )
-from ..util.check_image import get_docker_token, image_exists, parse_image_name
 from ..util.kubernetes_ import make_server_name
 from .auth import authenticated
-from .classes.crc import CRCValidator, DummyCRCValidator
+from .classes.image import Image
 from .classes.server import UserServer
 from .classes.server_manifest import UserServerManifest
 from .schemas.config_server_options import ServerOptionsEndpointResponse
@@ -49,6 +50,7 @@ from .schemas.servers_get import NotebookResponse, ServersGetRequest, ServersGet
 from .schemas.servers_patch import PatchServerRequest, PatchServerStatusEnum
 from .schemas.servers_post import LaunchNotebookRequest
 from .schemas.version import VersionResponse
+from functools import partial
 
 bp = Blueprint("notebooks_blueprint", __name__, url_prefix=config.service_prefix)
 
@@ -109,28 +111,20 @@ def user_servers(user, **query_params):
       tags:
         - servers
     """
-    servers = [
-        UserServerManifest(s)
-        for s in config.k8s.client.list_servers(user.safe_username)
-    ]
+    servers = [UserServerManifest(s) for s in config.k8s.client.list_servers(user.safe_username)]
     filter_attrs = list(filter(lambda x: x[1] is not None, query_params.items()))
     filtered_servers = {}
     ann_prefix = config.session_get_endpoint_annotations.renku_annotation_prefix
     for server in servers:
         if all(
-            [
-                server.annotations.get(f"{ann_prefix}{key}") == value
-                for key, value in filter_attrs
-            ]
+            [server.annotations.get(f"{ann_prefix}{key}") == value for key, value in filter_attrs]
         ):
             filtered_servers[server.server_name] = server
     return ServersGetResponse().dump({"servers": filtered_servers})
 
 
 @bp.route("servers/<server_name>", methods=["GET"])
-@use_args(
-    {"server_name": fields.Str(required=True)}, location="view_args", as_kwargs=True
-)
+@use_args({"server_name": fields.Str(required=True)}, location="view_args", as_kwargs=True)
 @authenticated
 def user_server(user, server_name):
     """
@@ -215,20 +209,63 @@ def launch_notebook(
       tags:
         - servers
     """
-    crc_validator = CRCValidator(config.crc_url)
-    if config.dummy_stores:
-        crc_validator = DummyCRCValidator()
-    server_name = make_server_name(
-        user.safe_username, namespace, project, branch, commit_sha
-    )
+    server_name = make_server_name(user.safe_username, namespace, project, branch, commit_sha)
     server = config.k8s.client.get_server(server_name, user.safe_username)
     if server:
         return NotebookResponse().dump(UserServerManifest(server)), 200
 
+    gl_project = user.get_renku_project(f"{namespace}/{project}")
+    is_image_private = False
+    using_default_image = False
+    image_repo = None
+    if image:
+        # A specific image was requested
+        parsed_image = Image.from_path(image)
+        image_repo = parsed_image.repo_api()
+        image_exists_publicaly = image_repo.image_exists(parsed_image)
+        image_exists_privately = False
+        if (
+            not image_exists_publicaly
+            and parsed_image.hostname == config.git.registry
+            and user.git_token
+        ):
+            image_repo = image_repo.with_oauth2_token(user.git_token)
+            image_exists_privately = image_repo.image_exists(parsed_image)
+        if not image_exists_privately and not image_exists_publicaly:
+            using_default_image = True
+            image = config.sessions.default_image
+            parsed_image = Image.from_path(image)
+        if image_exists_privately:
+            is_image_private = True
+    else:
+        # An image was not requested specifically, use the one automatically built for the commit
+        image = f"{config.git.registry}/{gl_project.path_with_namespace.lower()}:{commit_sha[:7]}"
+        parsed_image = Image(
+            config.git.registry,
+            gl_project.path_with_namespace.lower(),
+            commit_sha[:7],
+        )
+        # NOTE: a project pulled from the Gitlab API without credentials has no visibility attribute
+        # and by default it can only be public since only public projects are visible to
+        # non-authenticated users. Also a nice footgun from the Gitlab API Python library.
+        is_image_private = (
+            getattr(gl_project, "visibility", GitlabVisibility.PUBLIC) != GitlabVisibility.PUBLIC
+        )
+        image_repo = parsed_image.repo_api()
+        if is_image_private and user.git_token:
+            image_repo = image_repo.with_oauth2_token(user.git_token)
+        if not image_repo.image_exists(parsed_image):
+            raise MissingResourceError(
+                message=(
+                    f"Cannot start the session because the following the image {image} does not "
+                    "exist or the user does not have the permissions to access it."
+                )
+            )
+
     parsed_server_options = None
     if resource_class_id is not None:
         # A resource class ID was passed in, validate with CRC servuce
-        parsed_server_options = crc_validator.validate_class_storage(
+        parsed_server_options = config.crc_validator.validate_class_storage(
             user, resource_class_id, storage
         )
     elif server_options is not None:
@@ -249,7 +286,7 @@ def launch_notebook(
                 f"launching sessions: {type(server_options)}"
             )
         # The old style API was used, try to find a matching class from the CRC service
-        parsed_server_options = crc_validator.find_acceptable_class(
+        parsed_server_options = config.crc_validator.find_acceptable_class(
             user, requested_server_options
         )
         if parsed_server_options is None:
@@ -262,7 +299,7 @@ def launch_notebook(
             )
     else:
         # No resource class ID specified or old-style server options, use defaults from CRC
-        default_resource_class = crc_validator.get_default_class()
+        default_resource_class = config.crc_validator.get_default_class()
         max_storage_gb = default_resource_class.get("max_storage", 0)
         if storage is not None and storage > max_storage_gb:
             raise UserInputError(
@@ -271,9 +308,7 @@ def launch_notebook(
             )
         if storage is None:
             storage = default_resource_class.get("default_storage")
-        parsed_server_options = ServerOptions.from_resource_class(
-            default_resource_class
-        )
+        parsed_server_options = ServerOptions.from_resource_class(default_resource_class)
         # Storage in request is in GB
         parsed_server_options.set_storage(storage, gigabytes=True)
 
@@ -282,6 +317,41 @@ def launch_notebook(
 
     if lfs_auto_fetch is not None:
         parsed_server_options.lfs_auto_fetch = lfs_auto_fetch
+
+    image_work_dir = image_repo.image_workdir(parsed_image) or Path("/")
+    mount_path = image_work_dir / "work"
+    server_work_dir = image_work_dir / "work" / gl_project.path
+
+    if cloudstorage:
+        gl_project_id = gl_project.id if gl_project is not None else 0
+        cloudstorage = list(
+            map(
+                partial(
+                    create_cloud_storage_object,
+                    user=user,
+                    project_id=gl_project_id,
+                    work_dir=server_work_dir.absolute(),
+                ),
+                cloudstorage,
+            )
+        )
+        mount_points = set(
+            s.mount_folder for s in cloudstorage if s.mount_folder and s.mount_folder != "/"
+        )
+        if len(mount_points) != len(cloudstorage):
+            raise UserInputError(
+                "Storage mount points must be set, can't be at the root of the project and must be"
+                " unique."
+            )
+        if any(
+            s1.target_path.startswith(s2.target_path)
+            for s1 in cloudstorage
+            for s2 in cloudstorage
+            if s1 != s2
+        ):
+            raise UserInputError(
+                "Cannot mount a cloud storage into the mount point of another cloud storage."
+            )
 
     server = UserServer(
         user,
@@ -295,6 +365,10 @@ def launch_notebook(
         environment_variables,
         cloudstorage or [],
         config.k8s.client,
+        workspace_mount_path=mount_path,
+        work_dir=server_work_dir,
+        using_default_image=using_default_image,
+        is_image_private=is_image_private,
     )
 
     if len(server.safe_username) > 63:
@@ -312,9 +386,7 @@ def launch_notebook(
 
 
 @bp.route("servers/<server_name>", methods=["PATCH"])
-@use_args(
-    {"server_name": fields.Str(required=True)}, location="view_args", as_kwargs=True
-)
+@use_args({"server_name": fields.Str(required=True)}, location="view_args", as_kwargs=True)
 @use_args(PatchServerRequest(), location="json", as_kwargs=True)
 @authenticated
 def patch_server(user, server_name, state):
@@ -369,9 +441,7 @@ def patch_server(user, server_name, state):
 
     if state == PatchServerStatusEnum.Hibernated.value:
         # NOTE: Do nothing if server is already hibernated
-        if server and server.get("spec", {}).get("jupyterServer", {}).get(
-            "hibernated", False
-        ):
+        if server and server.get("spec", {}).get("jupyterServer", {}).get("hibernated", False):
             logging.warning(f"Server {server_name} is already hibernated.")
 
             return NotebookResponse().dump(UserServerManifest(server)), 204
@@ -396,9 +466,7 @@ def patch_server(user, server_name, state):
                     "renku.io/hibernationBranch": hibernation["branch"],
                     "renku.io/hibernationCommitSha": hibernation["commit"],
                     "renku.io/hibernationDirty": str(hibernation["dirty"]).lower(),
-                    "renku.io/hibernationSynchronized": str(
-                        hibernation["synchronized"]
-                    ).lower(),
+                    "renku.io/hibernationSynchronized": str(hibernation["synchronized"]).lower(),
                     "renku.io/hibernationDate": hibernation["date"],
                 },
             },
@@ -432,12 +500,8 @@ def patch_server(user, server_name, state):
 
 
 @bp.route("servers/<server_name>", methods=["DELETE"])
-@use_args(
-    {"server_name": fields.Str(required=True)}, location="view_args", as_kwargs=True
-)
-@use_args(
-    {"forced": fields.Boolean(load_default=False)}, location="query", as_kwargs=True
-)
+@use_args({"server_name": fields.Str(required=True)}, location="view_args", as_kwargs=True)
+@use_args({"forced": fields.Boolean(load_default=False)}, location="query", as_kwargs=True)
 @authenticated
 def stop_server(user, forced, server_name):
     """
@@ -478,9 +542,7 @@ def stop_server(user, forced, server_name):
       tags:
         - servers
     """
-    config.k8s.client.delete_server(
-        server_name, forced=forced, safe_username=user.safe_username
-    )
+    config.k8s.client.delete_server(server_name, forced=forced, safe_username=user.safe_username)
     return "", 204
 
 
@@ -603,15 +665,11 @@ def check_docker_image(user, image_url):
       tags:
         - images
     """
-    parsed_image = parse_image_name(image_url)
-    if parsed_image is None:
-        raise ImageParseError(
-            f"The image {image_url} cannot be parsed, "
-            "ensure you are providing a valid Docker image name."
-        )
-    token, _ = get_docker_token(**parsed_image, user=user)
-    image_exists_result = image_exists(**parsed_image, token=token)
-    if image_exists_result:
+    parsed_image = Image.from_path(image_url)
+    image_repo = parsed_image.repo_api()
+    if parsed_image.hostname == config.git.registry and user.git_token:
+        image_repo = image_repo.with_oauth2_token(user.git_token)
+    if image_repo.image_exists(parsed_image):
         return "", 200
     else:
         return "", 404

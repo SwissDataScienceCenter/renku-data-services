@@ -1,7 +1,6 @@
-import base64
-import json
 from functools import lru_cache
 from itertools import chain
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urljoin, urlparse
 
@@ -10,12 +9,6 @@ from flask import current_app
 from ...config import config
 from ...errors.programming import ConfigurationError, DuplicateEnvironmentVariableError
 from ...errors.user import MissingResourceError
-from ...util.check_image import (
-    get_docker_token,
-    get_image_workdir,
-    image_exists,
-    parse_image_name,
-)
 from ...util.kubernetes_ import make_server_name
 from ..amalthea_patches import cloudstorage as cloudstorage_patches
 from ..amalthea_patches import general as general_patches
@@ -47,6 +40,10 @@ class UserServer:
         environment_variables: Dict[str, str],
         cloudstorage: List[ICloudStorageRequest],
         k8s_client: K8sClient,
+        workspace_mount_path: Path,
+        work_dir: Path,
+        using_default_image: bool = False,
+        is_image_private: bool = False,
     ):
         self._check_flask_config()
         self._user = user
@@ -60,13 +57,13 @@ class UserServer:
         self.image = image
         self.server_options = server_options
         self.environment_variables = environment_variables
-        self.using_default_image: bool = self.image == config.sessions.default_image
+        self.using_default_image = using_default_image
         self.git_host = urlparse(config.git.url).netloc
-        self.verified_image: Optional[str] = None
-        self.is_image_private: Optional[bool] = None
-        self.image_workdir: Optional[str] = None
+        self.workspace_mount_path = workspace_mount_path
+        self.work_dir = work_dir
         self.cloudstorage: Optional[List[ICloudStorageRequest]] = cloudstorage
         self.gl_project_name = f"{self.namespace}/{self.project}"
+        self.is_image_private = is_image_private
         self.idle_seconds_threshold: int = (
             config.sessions.culling.registered.idle_seconds
             if isinstance(self._user, RegisteredUser)
@@ -154,76 +151,6 @@ class UserServer:
                 return True
         return False
 
-    def _verify_image(self):
-        """Set the notebook image if not specified in the request. If specific image
-        is requested then confirm it exists and it can be accessed."""
-        if self.gl_project is None:
-            return
-        image = self.image
-        if image is None:
-            parsed_image = {
-                "hostname": config.git.registry,
-                "image": self.gl_project.path_with_namespace.lower(),
-                "tag": self.commit_sha[:7],
-            }
-            commit_image = (
-                f"{config.git.registry}/"
-                f"{self.gl_project.path_with_namespace.lower()}"
-                f":{self.commit_sha[:7]}"
-            )
-        else:
-            parsed_image = parse_image_name(image)
-        # get token
-        token, is_image_private = get_docker_token(**parsed_image, user=self._user)
-        # check if images exist
-        image_exists_result = image_exists(**parsed_image, token=token)
-        # assign image
-        if image_exists_result and image is None:
-            # the image tied to the commit exists
-            verified_image = commit_image
-        elif not image_exists_result and image is None:
-            # the image tied to the commit does not exist, fallback to default image
-            verified_image = config.sessions.default_image
-            is_image_private = False
-            current_app.logger.warn(
-                f"Image for the selected commit {self.commit_sha} of {self.project}"
-                " not found, using default image "
-                f"{config.sessions.default_image}"
-            )
-        elif image_exists_result and image is not None:
-            # a specific image was requested and it exists
-            verified_image = image
-        else:
-            # a specific image was requested and it does not exist or any other case
-            verified_image = None
-            is_image_private = None
-        self.using_default_image = verified_image == config.sessions.default_image
-        self.verified_image = verified_image
-        self.is_image_private = is_image_private
-        image_workdir = get_image_workdir(**parsed_image, token=token)
-        self.image_workdir = (
-            image_workdir
-            if image_workdir is not None
-            else config.sessions.image_default_workdir
-        )
-
-    def _get_registry_secret(self, b64encode=True):
-        """If an image from gitlab is used and the image is not public
-        create an image pull secret in k8s so that the private image can be used."""
-        payload = {
-            "auths": {
-                config.git.registry: {
-                    "Username": "oauth2",
-                    "Password": self._user.git_token,
-                    "Email": self._user.gitlab_user.email,
-                }
-            }
-        }
-        output = json.dumps(payload)
-        if b64encode:
-            return base64.b64encode(output.encode()).decode()
-        return output
-
     def _get_session_k8s_resources(self):
         cpu_request = float(self.server_options.cpu)
         mem = self.server_options.memory
@@ -260,7 +187,6 @@ class UserServer:
                 git_proxy_patches.main(self),
                 git_sidecar_patches.main(self),
                 general_patches.oidc_unverified_email(self),
-                cloudstorage_patches.main(self),
                 ssh_patches.main(),
                 # init container for certs must come before all other init containers
                 # so that it runs first before all other init containers
@@ -268,6 +194,11 @@ class UserServer:
                 init_containers_patches.download_image(self),
                 init_containers_patches.git_clone(self),
                 inject_certificates_patches.proxy(self),
+                # Cloud Storage needs to patch the git clone sidecar spec and so should come after
+                # the sidecars
+                # WARN: this patch depends on the index of the sidecar and so needs to be updated
+                # if sidercars are added or removed
+                cloudstorage_patches.main(self),
             )
         )
 
@@ -280,7 +211,7 @@ class UserServer:
                 "pvc": {
                     "enabled": True,
                     "storageClassName": config.sessions.storage.pvs_storage_class,
-                    "mountPath": self.image_workdir.rstrip("/") + "/work",
+                    "mountPath": self.workspace_mount_path.absolute().as_posix(),
                 },
             }
         else:
@@ -290,7 +221,7 @@ class UserServer:
                 else "",
                 "pvc": {
                     "enabled": False,
-                    "mountPath": self.image_workdir.rstrip("/") + "/work",
+                    "mountPath": self.workspace_mount_path.absolute().as_posix(),
                 },
             }
         # Authentication
@@ -332,9 +263,8 @@ class UserServer:
                 },
                 "jupyterServer": {
                     "defaultUrl": self.server_options.default_url,
-                    "image": self.verified_image,
-                    "rootDir": self.image_workdir.rstrip("/")
-                    + f"/work/{self.gl_project.path}/",
+                    "image": self.image,
+                    "rootDir": self.work_dir.absolute().as_posix(),
                     "resources": self._get_session_k8s_resources(),
                 },
                 "routing": {
@@ -386,13 +316,10 @@ class UserServer:
             error.append(f"branch {self.branch} does not exist")
         if not self._commit_sha_exists():
             error.append(f"commit {self.commit_sha} does not exist")
-        self._verify_image()
-        if self.verified_image is None:
+        if self.image is None:
             error.append(f"image {self.image} does not exist or cannot be accessed")
         if len(error) == 0:
-            js = self._k8s_client.create_server(
-                self._get_session_manifest(), self.safe_username
-            )
+            js = self._k8s_client.create_server(self._get_session_manifest(), self.safe_username)
         else:
             raise MissingResourceError(
                 message=(
@@ -443,9 +370,7 @@ class UserServer:
             f"{prefix}hibernationDirty": "",
             f"{prefix}hibernationSynchronized": "",
             f"{prefix}hibernationDate": "",
-            f"{prefix}hibernatedSecondsThreshold": str(
-                self.hibernated_seconds_threshold
-            ),
+            f"{prefix}hibernatedSecondsThreshold": str(self.hibernated_seconds_threshold),
             f"{prefix}lastActivityDate": "",
             f"{prefix}idleSecondsThreshold": str(self.idle_seconds_threshold),
         }

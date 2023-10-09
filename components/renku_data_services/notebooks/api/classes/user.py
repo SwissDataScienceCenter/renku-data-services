@@ -17,6 +17,9 @@ from ...errors.programming import ConfigurationError
 
 
 class User(ABC):
+    access_token = None
+    git_token = None
+
     @lru_cache(maxsize=8)
     def get_renku_project(self, namespace_project) -> Optional[Project]:
         """Retrieve the GitLab project."""
@@ -67,9 +70,7 @@ class RegisteredUser(User):
     ]
 
     def __init__(self, headers):
-        self.authenticated = all(
-            [header in headers.keys() for header in self.auth_headers]
-        )
+        self.authenticated = all([header in headers.keys() for header in self.auth_headers])
         if not self.authenticated:
             return
 
@@ -105,19 +106,13 @@ class RegisteredUser(User):
     @staticmethod
     def parse_jwt_from_headers(headers):
         # No need to verify the signature because this is already done by the gateway
-        return jwt.decode(
-            headers["Renku-Auth-Id-Token"], options={"verify_signature": False}
-        )
+        return jwt.decode(headers["Renku-Auth-Id-Token"], options={"verify_signature": False})
 
     @staticmethod
     def git_creds_from_headers(headers):
-        parsed_dict = json.loads(
-            base64.decodebytes(headers["Renku-Auth-Git-Credentials"].encode())
-        )
+        parsed_dict = json.loads(base64.decodebytes(headers["Renku-Auth-Git-Credentials"].encode()))
         git_url, git_credentials = next(iter(parsed_dict.items()))
-        token_match = re.match(
-            r"^[^\s]+\ ([^\s]+)$", git_credentials["AuthorizationHeader"]
-        )
+        token_match = re.match(r"^[^\s]+\ ([^\s]+)$", git_credentials["AuthorizationHeader"])
         git_token = token_match.group(1) if token_match is not None else None
         git_token_expires_at = git_credentials["AccessTokenExpiresAt"]
         if git_token_expires_at is None:

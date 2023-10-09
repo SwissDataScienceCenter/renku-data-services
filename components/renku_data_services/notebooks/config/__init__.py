@@ -1,20 +1,54 @@
-from dataclasses import dataclass
-import dataconf
 import os
-from typing import Text, Union
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Dict, Optional, Protocol, Text, Union
 
+import dataconf
+
+from ..api.classes.k8s_client import JsServerCache, K8sClient, NamespacedK8sClient
 from .dynamic import (
-    _ServerOptionsConfig,
-    _SessionConfig,
     _AmaltheaConfig,
-    _SentryConfig,
+    _CloudStorage,
     _GitConfig,
     _K8sConfig,
-    _CloudStorage,
     _parse_str_as_bool,
+    _SentryConfig,
+    _ServerOptionsConfig,
+    _SessionConfig,
 )
 from .static import _ServersGetEndpointAnnotations
-from ..api.classes.k8s_client import K8sClient, JsServerCache, NamespacedK8sClient
+
+if TYPE_CHECKING:
+    from ..api.classes.data_service import CloudStorageConfig
+    from ..api.classes.user import User
+    from ..api.schemas.server_options import ServerOptions
+
+
+class CRCValidatorProto(Protocol):
+    def validate_class_storage(
+        self,
+        user: "User",
+        class_id: int,
+        storage: Optional[int] = None,
+    ) -> "ServerOptions":
+        ...
+
+    def get_default_class(self) -> Dict[str, Any]:
+        ...
+
+    def find_acceptable_class(
+        self, user: "User", requested_server_options: "ServerOptions"
+    ) -> Optional["ServerOptions"]:
+        ...
+
+
+class StorageValidatorProto(Protocol):
+    def get_storage_by_id(
+        self, user: "User", project_id: int, storage_id: str
+    ) -> "CloudStorageConfig":
+        ...
+
+    def validate_storage_configuration(self, configuration: Dict[str, Any]) -> None:
+        ...
 
 
 @dataclass
@@ -32,21 +66,18 @@ class _NotebooksConfig:
     service_prefix: str = "/notebooks"
     version: str = "0.0.0"
     keycloak_realm: str = "Renku"
-    crc_url: str = "http://renku-crc"
+    data_service_url: str = "http://renku-data-service"
     dummy_stores: Union[Text, bool] = False
 
     def __post_init__(self):
-        self.anonymous_sessions_enabled = _parse_str_as_bool(
-            self.anonymous_sessions_enabled
-        )
+        self.anonymous_sessions_enabled = _parse_str_as_bool(self.anonymous_sessions_enabled)
         self.ssh_enabled = _parse_str_as_bool(self.ssh_enabled)
         self.dummy_stores = _parse_str_as_bool(self.dummy_stores)
         self.session_get_endpoint_annotations = _ServersGetEndpointAnnotations()
         if not self.k8s.enabled:
             return
         username_label = (
-            self.session_get_endpoint_annotations.renku_annotation_prefix
-            + "safe-username"
+            self.session_get_endpoint_annotations.renku_annotation_prefix + "safe-username"
         )
         if self.k8s.enabled:
             renku_ns_client = NamespacedK8sClient(
@@ -70,6 +101,32 @@ class _NotebooksConfig:
                 session_ns_client=session_ns_client,
                 username_label=username_label,
             )
+        self._crc_validator = None
+        self._storage_validator = None
+
+    @property
+    def crc_validator(self) -> CRCValidatorProto:
+        from ..api.classes.data_service import CRCValidator, DummyCRCValidator
+
+        if not self._crc_validator:
+            if self.dummy_stores:
+                self._crc_validator = DummyCRCValidator()
+            else:
+                self._crc_validator = CRCValidator(self.data_service_url)
+
+        return self._crc_validator
+
+    @property
+    def storage_validator(self) -> StorageValidatorProto:
+        from ..api.classes.data_service import DummyStorageValidator, StorageValidator
+
+        if not self._storage_validator:
+            if self.dummy_stores:
+                self._storage_validator = DummyStorageValidator()
+            else:
+                self._storage_validator = StorageValidator(self.data_service_url)
+
+        return self._storage_validator
 
 
 def get_config(default_config: str) -> _NotebooksConfig:
@@ -207,7 +264,7 @@ ssh_enabled = false
 service_prefix = /notebooks
 version = 0.0.0
 keycloak_realm = Renku
-crc_url = http://renku-crc
+data_service_url = http://renku-data-service
 """
 
 config = get_config(default_config)

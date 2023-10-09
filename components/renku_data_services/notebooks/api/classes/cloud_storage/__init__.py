@@ -12,6 +12,10 @@ class ICloudStorageRequest(ABC):
         pass
 
     @abstractproperty
+    def source_folder(self) -> str:
+        pass
+
+    @abstractproperty
     def bucket(self) -> str:
         pass
 

@@ -43,9 +43,7 @@ class ExistingCloudStorage:
                 ):
                     output.append(
                         cls(
-                            endpoint=patch["value"]["metadata"]["annotations"][
-                                endpoint_annotation
-                            ],
+                            endpoint=patch["value"]["metadata"]["annotations"][endpoint_annotation],
                             bucket=patch["value"]["spec"]["csi"]["volumeAttributes"][
                                 "containerName"
                             ],

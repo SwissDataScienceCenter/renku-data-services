@@ -112,9 +112,7 @@ class NamespacedK8sClient:
         # not made it into the cache. With this we wait for the cache to catch up
         # before we send the response from the POST request out. Exponential backoff
         # is used to avoid overwhelming the cache.
-        server = retry_with_exponential_backoff(lambda x: x is None)(self.get_server)(
-            server_name
-        )
+        server = retry_with_exponential_backoff(lambda x: x is None)(self.get_server)(server_name)
         return server
 
     def patch_server(self, server_name: str, patch: Dict[str, Any]):
@@ -166,9 +164,7 @@ class NamespacedK8sClient:
             return
         return js
 
-    def list_servers(
-        self, label_selector: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+    def list_servers(self, label_selector: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get a list of k8s jupyterserver objects for a specific user."""
         try:
             jss = self._custom_objects.list_namespaced_custom_object(
@@ -203,9 +199,7 @@ class JsServerCache:
                 f"jupyter server cache failed with status code: {res.status_code} "
                 f"and error: {err}"
             )
-            raise JSCacheError(
-                f"The JSCache produced an unexpected status code: {err}"
-            ) from err
+            raise JSCacheError(f"The JSCache produced an unexpected status code: {err}") from err
         except requests.RequestException as err:
             logging.warning(f"Jupyter server cache at {url} cannot be reached: {err}")
             raise JSCacheError("The jupyter server cache is not available") from err
@@ -224,16 +218,13 @@ class JsServerCache:
                 f"jupyter server cache failed with status code: {res.status_code} "
                 f"and body: {res.text}"
             )
-            raise JSCacheError(
-                f"The JSCache produced an unexpected status code: {res.status_code}"
-            )
+            raise JSCacheError(f"The JSCache produced an unexpected status code: {res.status_code}")
         output = res.json()
         if len(output) == 0:
             return
         if len(output) > 1:
             raise ProgrammingError(
-                f"Expected to find 1 server when getting server {name}, "
-                f"found {len(output)}."
+                f"Expected to find 1 server when getting server {name}, " f"found {len(output)}."
             )
         return output[0]
 
@@ -259,9 +250,7 @@ class K8sClient:
         try:
             return self.js_cache.list_servers(safe_username)
         except JSCacheError:
-            logging.warning(
-                f"Skipping the cache to list servers for user: {safe_username}"
-            )
+            logging.warning(f"Skipping the cache to list servers for user: {safe_username}")
             label_selector = f"{self.username_label}={safe_username}"
             return self.renku_ns_client.list_servers(label_selector) + (
                 self.session_ns_client.list_servers(label_selector)
@@ -312,18 +301,11 @@ class K8sClient:
             )
         containers = list(
             server.get("status", {}).get("containerStates", {}).get("init", {}).keys()
-        ) + list(
-            server.get("status", {})
-            .get("containerStates", {})
-            .get("regular", {})
-            .keys()
-        )
+        ) + list(server.get("status", {}).get("containerStates", {}).get("regular", {}).keys())
         namespace = server.get("metadata", {}).get("namespace")
         pod_name = f"{server_name}-0"
         if namespace == self.renku_ns_client.namespace:
-            return self.renku_ns_client.get_pod_logs(
-                pod_name, containers, max_log_lines
-            )
+            return self.renku_ns_client.get_pod_logs(pod_name, containers, max_log_lines)
         return self.session_ns_client.get_pod_logs(pod_name, containers, max_log_lines)
 
     def get_secret(self, name: str) -> Optional[Dict[str, Any]]:
@@ -354,13 +336,9 @@ class K8sClient:
         namespace = server.get("metadata", {}).get("namespace")
 
         if namespace == self.renku_ns_client.namespace:
-            return self.renku_ns_client.patch_server(
-                server_name=server_name, patch=patch
-            )
+            return self.renku_ns_client.patch_server(server_name=server_name, patch=patch)
         else:
-            return self.session_ns_client.patch_server(
-                server_name=server_name, patch=patch
-            )
+            return self.session_ns_client.patch_server(server_name=server_name, patch=patch)
 
     def delete_server(self, server_name: str, safe_username: str, forced: bool = False):
         server = self.get_server(server_name, safe_username)

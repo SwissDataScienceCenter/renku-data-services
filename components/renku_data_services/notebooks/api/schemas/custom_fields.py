@@ -18,9 +18,7 @@ class CpuField(fields.Field):
                 f"must be int or float, got {type(value)}."
             )
         if value < 0:
-            raise ValidationError(
-                "Invalid value during serialization, must be greater than zero."
-            )
+            raise ValidationError("Invalid value during serialization, must be greater than zero.")
         return value
 
     def _deserialize(self, value, attr, data, **kwargs):
@@ -34,9 +32,7 @@ class CpuField(fields.Field):
         try:
             num = float(num)
         except ValueError as error:
-            raise ValidationError(
-                f"Cannot convert {num} to float as fractional cores."
-            ) from error
+            raise ValidationError(f"Cannot convert {num} to float as fractional cores.") from error
         if unit == "m":
             num = num / 1000
         return num
@@ -78,9 +74,7 @@ class ByteSizeField(fields.Field):
                 f"must be int or float, got {type(value)}."
             )
         if value < 0:
-            raise ValidationError(
-                "Invalid value during serialization, must be greater than zero."
-            )
+            raise ValidationError("Invalid value during serialization, must be greater than zero.")
         if (value / 1000000000) % 1 > 0:
             # If value has decimals round to 2 decimals in response
             return "{:.2f}G".format(value / 1000000000)
@@ -97,9 +91,7 @@ class ByteSizeField(fields.Field):
         num, unit = re_match.groups()
         unit_lowercase = unit.lower()
         if len(unit) != 0 and unit_lowercase not in self._to_bytes_conversion:
-            raise ValidationError(
-                f"Cannot recognize unit {unit} for memory or disk space."
-            )
+            raise ValidationError(f"Cannot recognize unit {unit} for memory or disk space.")
         bytes_conversion_factor = self._to_bytes_conversion.get(unit_lowercase, 1)
         try:
             num = float(num)
@@ -149,9 +141,7 @@ class GpuField(fields.Field):
         try:
             num = float(num)
         except ValueError as error:
-            raise ValidationError(
-                f"Cannot convert {num} of GPUs to integer."
-            ) from error
+            raise ValidationError(f"Cannot convert {num} of GPUs to integer.") from error
         if num % 1 != 0:
             raise ValidationError(
                 "Invalid value during GPU amount deserialization, "
@@ -171,15 +161,11 @@ class LowercaseString(fields.String):
         if type(value) is str:
             return value.lower()
         else:
-            raise ValidationError(
-                f"The value {value} is not type string, but {type(value)}."
-            )
+            raise ValidationError(f"The value {value} is not type string, but {type(value)}.")
 
     def _deserialize(self, value, attr, data, **kwargs):
         value = super()._deserialize(value, attr, data, **kwargs)
         if type(value) is str:
             return value.lower()
         else:
-            raise ValidationError(
-                f"The value {value} is not type string, but {type(value)}."
-            )
+            raise ValidationError(f"The value {value} is not type string, but {type(value)}.")

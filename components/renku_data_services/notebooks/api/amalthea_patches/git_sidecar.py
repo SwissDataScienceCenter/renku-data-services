@@ -52,9 +52,7 @@ def main(server: "UserServer"):
                             },
                             {
                                 "name": "GIT_RPC_SENTRY__ENABLED",
-                                "value": str(
-                                    config.sessions.git_rpc_server.sentry.enabled
-                                ).lower(),
+                                "value": str(config.sessions.git_rpc_server.sentry.enabled).lower(),
                             },
                             {
                                 "name": "GIT_RPC_SENTRY__DSN",
@@ -66,9 +64,7 @@ def main(server: "UserServer"):
                             },
                             {
                                 "name": "GIT_RPC_SENTRY__SAMPLE_RATE",
-                                "value": str(
-                                    config.sessions.git_rpc_server.sentry.sample_rate
-                                ),
+                                "value": str(config.sessions.git_rpc_server.sentry.sample_rate),
                             },
                             {
                                 "name": "SENTRY_RELEASE",
@@ -151,9 +147,7 @@ def main(server: "UserServer"):
                 {
                     "op": "add",
                     "path": "/statefulset/spec/template/spec/containers/1/args/-",
-                    "value": (
-                        f"--skip-auth-route=^/sessions/{server.server_name}/sidecar/health$"
-                    ),
+                    "value": (f"--skip-auth-route=^/sessions/{server.server_name}/sidecar/health$"),
                 },
                 {
                     "op": "add",

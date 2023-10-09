@@ -22,8 +22,8 @@ from functools import wraps
 from flask import Blueprint, request
 
 from ..config import config
-from .classes.user import RegisteredUser, AnonymousUser
 from ..errors.user import AuthenticationError
+from .classes.user import AnonymousUser, RegisteredUser
 
 bp = Blueprint("auth_bp", __name__, url_prefix=config.service_prefix)
 

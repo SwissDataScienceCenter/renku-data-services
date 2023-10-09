@@ -1,13 +1,79 @@
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, NamedTuple, Optional
 
 import requests
 
-from ...errors.intermittent import IntermittentError
-from ...errors.programming import ConfigurationError
-from ...errors.user import InvalidComputeResourceError
+from renku_notebooks.errors.user import InvalidCloudStorageConfiguration
+
+from renku_notebooks.errors.intermittent import IntermittentError
+from renku_notebooks.errors.programming import ConfigurationError
+from renku_notebooks.errors.user import InvalidComputeResourceError, MissingResourceError
 from ..schemas.server_options import ServerOptions
 from .user import User
+from renku_notebooks.errors.user import AuthenticationError
+from flask import current_app
+
+CloudStorageConfig = NamedTuple(
+    "CloudStorageConfig",
+    [("config", dict[str, Any]), ("source_path", str), ("target_path", str), ("readonly", bool)],
+)
+
+
+@dataclass
+class StorageValidator:
+    storage_url: str
+
+    def __post_init__(self):
+        self.storage_url = self.storage_url.rstrip("/")
+
+    def get_storage_by_id(self, user: User, project_id: int, storage_id: str) -> CloudStorageConfig:
+        headers = None
+        if user is not None and user.access_token is not None and user.git_token is not None:
+            headers = {
+                "Authorization": f"bearer {user.access_token}",
+                "Gitlab-Access-Token": user.git_token,
+            }
+        # TODO: remove project_id once authz on the data service works properly
+        request_url = self.storage_url + f"/storage/{storage_id}?project_id={project_id}"
+        current_app.logger.info(f"getting storage info by id: {request_url}")
+        res = requests.get(request_url, headers=headers)
+        if res.status_code == 404:
+            raise MissingResourceError(message=f"Couldn't find cloud storage with id {storage_id}")
+        if res.status_code == 401:
+            raise AuthenticationError(
+                "User is not authorized to access this storage on this project."
+            )
+        if res.status_code != 200:
+            raise IntermittentError(
+                message="The data service sent an unexpected response, please try again later",
+            )
+        storage = res.json()["storage"]
+        return CloudStorageConfig(
+            config=storage["configuration"],
+            source_path=storage["source_path"],
+            target_path=storage["target_path"],
+            readonly=storage.get("readonly", True),
+        )
+
+    def validate_storage_configuration(self, configuration: dict[str, Any]) -> None:
+        res = requests.post(self.storage_url + "/storage_schema/validate", json=configuration)
+        if res.status_code == 422:
+            raise InvalidCloudStorageConfiguration(
+                message=f"The provided cloud storage configuration isn't valid: {res.json()}",
+            )
+        if res.status_code != 204:
+            raise IntermittentError(
+                message="The data service sent an unexpected response, please try again later",
+            )
+
+
+@dataclass
+class DummyStorageValidator:
+    def get_storage_by_id(self, user: User, project_id: int, storage_id: str) -> CloudStorageConfig:
+        raise NotImplementedError()
+
+    def validate_storage_configuration(self, configuration: dict[str, Any]) -> None:
+        raise NotImplementedError()
 
 
 @dataclass
@@ -82,9 +148,7 @@ class CRCValidator:
         # greater than or equal to the request
         best_larger_or_equal_diff = None
         best_larger_or_equal_class = None
-        zero_diff = ServerOptions(
-            cpu=0, memory=0, gpu=0, storage=0, priority_class=resource_pools
-        )
+        zero_diff = ServerOptions(cpu=0, memory=0, gpu=0, storage=0, priority_class=resource_pools)
         for resource_pool in resource_pools:
             quota = resource_pool.get("quota")
             for resource_class in resource_pool["classes"]:
@@ -94,10 +158,7 @@ class CRCValidator:
                 diff = resource_class_mdl - requested_server_options
                 if (
                     diff >= zero_diff
-                    and (
-                        best_larger_or_equal_diff is None
-                        or diff < best_larger_or_equal_diff
-                    )
+                    and (best_larger_or_equal_diff is None or diff < best_larger_or_equal_diff)
                     and resource_class["matching"]
                 ):
                     best_larger_or_equal_diff = diff
@@ -124,9 +185,7 @@ class CRCValidator:
                 if server_options.gigabytes
                 else round(server_options.storage / 1_000_000_000),
             }
-        res = requests.get(
-            self.crc_url + "/resource_pools", headers=headers, params=params
-        )
+        res = requests.get(self.crc_url + "/resource_pools", headers=headers, params=params)
         if res.status_code != 200:
             raise IntermittentError(
                 message="The compute resource access control service sent "

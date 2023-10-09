@@ -5,9 +5,9 @@ from uuid import uuid4
 
 from azure.storage.blob import ContainerClient
 
-from . import ICloudStorageRequest
-from ....errors.user import InvalidCloudStorageUrl
 from ....config import config
+from ....errors.user import InvalidCloudStorageUrl
+from . import ICloudStorageRequest
 
 
 class AzureBlobRequest(ICloudStorageRequest):
@@ -16,6 +16,7 @@ class AzureBlobRequest(ICloudStorageRequest):
         endpoint: str,
         container: str,
         mount_folder: str,
+        source_folder: str,
         credential: Optional[str] = None,
         read_only: bool = True,
     ) -> None:
@@ -30,6 +31,7 @@ class AzureBlobRequest(ICloudStorageRequest):
             and ("sig" in parsed_credential or "?sig" in parsed_credential)
         )
         self._mount_folder = str(mount_folder).rstrip("/")
+        self._source_folder = str(source_folder).rstrip("/")
         self._read_only = read_only
 
     @property
@@ -41,6 +43,10 @@ class AzureBlobRequest(ICloudStorageRequest):
         return self._mount_folder
 
     @property
+    def source_folder(self) -> str:
+        return self._source_folder
+
+    @property
     def bucket(self) -> str:
         return self.container
 
@@ -48,6 +54,8 @@ class AzureBlobRequest(ICloudStorageRequest):
     def storage_account_name(self) -> str:
         parsed_url = urlparse(self.endpoint)
         hostname = parsed_url.hostname
+        if hostname is None:
+            raise InvalidCloudStorageUrl("The Azure blob storage account url cannot be parsed.")
         # NOTE: Based on details from the docs at:
         # https://learn.microsoft.com/en-us/azure/storage/common/storage-account-overview
         res = re.match(
@@ -56,14 +64,10 @@ class AzureBlobRequest(ICloudStorageRequest):
             hostname,
         )
         if res is None:
-            raise InvalidCloudStorageUrl(
-                "The Azure blob storage account url cannot be parsed."
-            )
+            raise InvalidCloudStorageUrl("The Azure blob storage account url cannot be parsed.")
         return res.group(1)
 
-    def get_manifest_patch(
-        self, base_name: str, namespace: str, labels={}, annotations={}
-    ):
+    def get_manifest_patch(self, base_name: str, namespace: str, labels={}, annotations={}):
         secret_name = f"{base_name}-secret"
         volume = {
             "apiVersion": "v1",
@@ -141,8 +145,9 @@ class AzureBlobRequest(ICloudStorageRequest):
                     "op": "add",
                     "path": "/statefulset/spec/template/spec/containers/0/volumeMounts/-",
                     "value": {
-                        "mountPath": self.mount_folder + "/" + self.container,
+                        "mountPath": self.mount_folder,
                         "name": base_name,
+                        "subPath": self.source_folder,
                     },
                 },
                 {

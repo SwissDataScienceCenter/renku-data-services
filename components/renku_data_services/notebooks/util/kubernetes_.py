@@ -51,9 +51,7 @@ def make_server_name(
 
     This is used in naming all of the k8s resources created by amalthea.
     """
-    server_string_for_hashing = (
-        f"{safe_username}-{namespace}-{project}-{branch}-{commit_sha}"
-    )
+    server_string_for_hashing = f"{safe_username}-{namespace}-{project}-{branch}-{commit_sha}"
     safe_username_lowercase = safe_username.lower()
     if safe_username_lowercase[0].isalpha() and safe_username_lowercase[0].isascii():
         prefix = ""

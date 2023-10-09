@@ -14,9 +14,7 @@ def _parse_str_as_bool(val: Union[str, bool]) -> bool:
         return val.lower() == "true"
     elif type(val) is bool:
         return val
-    raise ValueError(
-        f"Unsupported data type received, expected str or bool, got {type(val)}"
-    )
+    raise ValueError(f"Unsupported data type received, expected str or bool, got {type(val)}")
 
 
 def _parse_value_as_numeric(val: Any, parse_to: Callable) -> Union[float, int]:
@@ -35,13 +33,11 @@ class _ServerOptionsConfig:
 
     def __post_init__(self):
         with open(self.defaults_path) as f:
-            self.defaults: Dict[
-                str, Union[Text, bool, int, float]
-            ] = ServerOptionsDefaults().loads(f.read())
-        with open(self.ui_choices_path) as f:
-            self.ui_choices: Dict[str, Dict[str, Any]] = ServerOptionsChoices().loads(
+            self.defaults: Dict[str, Union[Text, bool, int, float]] = ServerOptionsDefaults().loads(
                 f.read()
             )
+        with open(self.ui_choices_path) as f:
+            self.ui_choices: Dict[str, Dict[str, Any]] = ServerOptionsChoices().loads(f.read())
 
 
 @dataclass
@@ -101,9 +97,7 @@ class _SessionStorageConfig:
 
     def __post_init__(self):
         self.pvs_enabled = _parse_str_as_bool(self.pvs_enabled)
-        self.use_empty_dir_size_limit = _parse_str_as_bool(
-            self.use_empty_dir_size_limit
-        )
+        self.use_empty_dir_size_limit = _parse_str_as_bool(self.use_empty_dir_size_limit)
 
 
 @dataclass
@@ -248,9 +242,7 @@ class _DynamicConfig:
     version: str = "0.0.0"
 
     def __post_init__(self):
-        self.anonymous_sessions_enabled = _parse_str_as_bool(
-            self.anonymous_sessions_enabled
-        )
+        self.anonymous_sessions_enabled = _parse_str_as_bool(self.anonymous_sessions_enabled)
         self.ssh_enabled = _parse_str_as_bool(self.ssh_enabled)
 
 

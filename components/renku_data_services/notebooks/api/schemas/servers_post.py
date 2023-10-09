@@ -1,7 +1,7 @@
-from marshmallow import Schema, ValidationError, fields, validates_schema
+from marshmallow import Schema, fields
 
 from ...config import config
-from .cloud_storage import LaunchNotebookRequestCloudStorage
+from .cloud_storage import RCloneStorageRequest
 from .custom_fields import LowercaseString
 from .server_options import LaunchNotebookRequestServerOptions
 
@@ -38,32 +38,17 @@ class LaunchNotebookRequestWithoutS3(Schema):
         required=False,
         load_default=config.server_options.defaults["defaultUrl"],
     )
-    environment_variables = fields.Dict(
-        keys=fields.Str(), values=fields.Str(), load_default=dict()
-    )
+    environment_variables = fields.Dict(keys=fields.Str(), values=fields.Str(), load_default=dict())
 
 
 class LaunchNotebookRequestWithS3(LaunchNotebookRequestWithoutS3):
     """Used to validate the requesting for launching a jupyter server"""
 
     cloudstorage = fields.List(
-        fields.Nested(LaunchNotebookRequestCloudStorage()),
+        fields.Nested(RCloneStorageRequest()),
         required=False,
         load_default=[],
     )
-
-    @validates_schema
-    def validate_unique_bucket_names(self, data, **kwargs):
-        errors = {}
-        bucket_names = [i.bucket for i in data["cloudstorage"]]
-        bucket_names_unique = set(bucket_names)
-        if len(bucket_names_unique) < len(bucket_names):
-            errors["cloudstorage"] = [
-                "Found duplicate storage bucket names. "
-                "All provided bucket names have to be unique"
-            ]
-        if errors:
-            raise ValidationError(errors)
 
 
 LaunchNotebookRequest = (

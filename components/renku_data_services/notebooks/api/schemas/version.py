@@ -5,9 +5,7 @@ class NotebooksServiceInfo(Schema):
     """Various notebooks service info."""
 
     anonymousSessionsEnabled = fields.Boolean(required=True)
-    cloudstorageEnabled = fields.Dict(
-        required=True, keys=fields.String, values=fields.Boolean
-    )
+    cloudstorageEnabled = fields.Dict(required=True, keys=fields.String, values=fields.Boolean)
     sshEnabled = fields.Boolean(required=True)
 
 

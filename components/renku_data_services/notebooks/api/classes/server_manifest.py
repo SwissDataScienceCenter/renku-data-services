@@ -45,9 +45,7 @@ class UserServerManifest:
         js_resources = js["spec"]["jupyterServer"]["resources"]["requests"]
         for k8s_res_name in k8s_res_name_xref.keys():
             if k8s_res_name in js_resources.keys():
-                server_options[k8s_res_name_xref[k8s_res_name]] = js_resources[
-                    k8s_res_name
-                ]
+                server_options[k8s_res_name_xref[k8s_res_name]] = js_resources[k8s_res_name]
         # adjust ephemeral storage properly based on whether persistent volumes are used
         if "ephemeral-storage" in server_options.keys():
             server_options["ephemeral-storage"] = (
@@ -58,10 +56,7 @@ class UserServerManifest:
         # lfs auto fetch
         for patches in js["spec"]["patches"]:
             for patch in patches.get("patch", []):
-                if (
-                    patch.get("path")
-                    == "/statefulset/spec/template/spec/initContainers/-"
-                ):
+                if patch.get("path") == "/statefulset/spec/template/spec/initContainers/-":
                     for env in patch.get("value", {}).get("env", []):
                         if env.get("name") == "GIT_CLONE_LFS_AUTO_FETCH":
                             server_options["lfs_auto_fetch"] = env.get("value") == "1"

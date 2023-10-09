@@ -192,9 +192,7 @@ class LaunchNotebookResponseWithoutS3(Schema):
             conditions = pod.get("status", {}).get("conditions", [])
             sorted_conditions = sorted(
                 conditions,
-                key=lambda x: datetime.fromisoformat(
-                    x["lastTransitionTime"].rstrip("Z")
-                ),
+                key=lambda x: datetime.fromisoformat(x["lastTransitionTime"].rstrip("Z")),
                 reverse=True,
             )
             if not (
@@ -213,9 +211,7 @@ class LaunchNotebookResponseWithoutS3(Schema):
                 return msg
             msg_parts = msg_parts[1:]
             try:
-                sorted_parts = sorted(
-                    msg_parts, key=lambda x: int(x.split(" ")[0]), reverse=True
-                )
+                sorted_parts = sorted(msg_parts, key=lambda x: int(x.split(" ")[0]), reverse=True)
             except (ValueError, KeyError):
                 return msg
             reason = sorted_parts[0].lstrip("1234567890 ")
@@ -237,10 +233,7 @@ class LaunchNotebookResponseWithoutS3(Schema):
                 container_status
                 for container_status in container_statuses
                 if (
-                    container_status.get("state", {})
-                    .get("terminated", {})
-                    .get("exitCode", 0)
-                    != 0
+                    container_status.get("state", {}).get("terminated", {}).get("exitCode", 0) != 0
                     or container_status.get("lastState", {})
                     .get("terminated", {})
                     .get("exitCode", 0)
@@ -271,12 +264,8 @@ class LaunchNotebookResponseWithoutS3(Schema):
 
         def get_status_breakdown(server: UserServerManifest):
             js = server.manifest
-            init_container_summary = (
-                js.get("status", {}).get("containerStates", {}).get("init", {})
-            )
-            container_summary = (
-                js.get("status", {}).get("containerStates", {}).get("regular", {})
-            )
+            init_container_summary = js.get("status", {}).get("containerStates", {}).get("init", {})
+            container_summary = js.get("status", {}).get("containerStates", {}).get("regular", {})
             output = []
             init_container_name_desc_xref = OrderedDict(
                 [
@@ -295,10 +284,7 @@ class LaunchNotebookResponseWithoutS3(Schema):
                 ]
             )
             current_state = js.get("status", {}).get("state")
-            if (
-                current_state is None
-                or current_state == ServerStatusEnum.Starting.value
-            ):
+            if current_state is None or current_state == ServerStatusEnum.Starting.value:
                 # NOTE: This means that the server is starting and the statuses are not populated
                 # yet, therefore in this case we will use defaults and set all statuses to waiting
                 if len(init_container_summary) == 0:
@@ -335,9 +321,7 @@ class LaunchNotebookResponseWithoutS3(Schema):
 
         def get_status(server: UserServerManifest, started: datetime):
             """Get the status of the jupyterserver."""
-            state = server.manifest.get("status", {}).get(
-                "state", ServerStatusEnum.Starting.value
-            )
+            state = server.manifest.get("status", {}).get("state", ServerStatusEnum.Starting.value)
             output = {
                 "state": state,
             }
@@ -385,9 +369,7 @@ class LaunchNotebookResponseWithoutS3(Schema):
             last_activity_date_str = annotations.get("renku.io/lastActivityDate")
 
             idle_threshold = (
-                server.manifest.get("spec", {})
-                .get("culling", {})
-                .get("idleSecondsThreshold", 0)
+                server.manifest.get("spec", {}).get("culling", {}).get("idleSecondsThreshold", 0)
             )
 
             if idle_threshold > 0 and last_activity_date_str:
@@ -396,8 +378,7 @@ class LaunchNotebookResponseWithoutS3(Schema):
                 remaining_idle_time = idle_threshold - idle_seconds
 
                 critical: bool = (
-                    remaining_idle_time
-                    < config.sessions.termination_warning_duration_seconds
+                    remaining_idle_time < config.sessions.termination_warning_duration_seconds
                 )
                 action = "deleted" if is_user_anonymous(server) else "hibernated"
                 output["warnings"].append(
@@ -425,13 +406,10 @@ class LaunchNotebookResponseWithoutS3(Schema):
             ):
                 hibernation_date = datetime.fromisoformat(hibernation_date_str)
                 hibernated_seconds = (now - hibernation_date).total_seconds()
-                remaining_hibernated_time = (
-                    hibernated_seconds_threshold - hibernated_seconds
-                )
+                remaining_hibernated_time = hibernated_seconds_threshold - hibernated_seconds
 
                 critical: bool = (
-                    remaining_hibernated_time
-                    < config.sessions.termination_warning_duration_seconds
+                    remaining_hibernated_time < config.sessions.termination_warning_duration_seconds
                 )
                 output["warnings"].append(
                     {
@@ -444,17 +422,14 @@ class LaunchNotebookResponseWithoutS3(Schema):
                 )
 
             max_age_threshold = (
-                server.manifest.get("spec", {})
-                .get("culling", {})
-                .get("maxAgeSecondsThreshold", 0)
+                server.manifest.get("spec", {}).get("culling", {}).get("maxAgeSecondsThreshold", 0)
             )
             age = (datetime.now(timezone.utc) - started).total_seconds()
             remaining_session_time = max_age_threshold - age
 
             if (
                 max_age_threshold > 0
-                and remaining_session_time
-                < config.sessions.termination_warning_duration_seconds
+                and remaining_session_time < config.sessions.termination_warning_duration_seconds
             ):
                 output["warnings"].append(
                     {
@@ -478,17 +453,13 @@ class LaunchNotebookResponseWithoutS3(Schema):
             if "cpu_request" in server_options_keys:
                 resources["cpu"] = CpuField().deserialize(server_options["cpu_request"])
             if "mem_request" in server_options_keys:
-                resources["memory"] = ByteSizeField().deserialize(
-                    server_options["mem_request"]
-                )
+                resources["memory"] = ByteSizeField().deserialize(server_options["mem_request"])
             if (
                 "disk_request" in server_options_keys
                 and server_options["disk_request"] is not None
                 and server_options["disk_request"] != ""
             ):
-                resources["storage"] = ByteSizeField().deserialize(
-                    server_options["disk_request"]
-                )
+                resources["storage"] = ByteSizeField().deserialize(server_options["disk_request"])
             if "gpu_request" in server_options_keys:
                 gpu_request = GpuField().deserialize(server_options["gpu_request"])
                 if gpu_request > 0:
@@ -498,11 +469,7 @@ class LaunchNotebookResponseWithoutS3(Schema):
         def get_resource_usage(
             server: UserServerManifest,
         ) -> Dict[str, Union[str, int]]:
-            usage = (
-                server.manifest.get("status", {})
-                .get("mainPod", {})
-                .get("resourceUsage", {})
-            )
+            usage = server.manifest.get("status", {}).get("mainPod", {}).get("resourceUsage", {})
             formatted_output = {}
             if "cpuMillicores" in usage:
                 formatted_output["cpu"] = usage["cpuMillicores"] / 1000
@@ -525,9 +492,7 @@ class LaunchNotebookResponseWithoutS3(Schema):
                 }
             ),
             "name": server.name,
-            "state": {
-                "pod_name": server.manifest["status"].get("mainPod", {}).get("name")
-            },
+            "state": {"pod_name": server.manifest["status"].get("mainPod", {}).get("name")},
             "started": started,
             "status": get_status(server, started),
             "url": server.url,

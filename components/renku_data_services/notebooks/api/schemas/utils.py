@@ -1,4 +1,4 @@
-from typing import List, Tuple, Any, Union, Optional
+from typing import Any, List, Optional, Tuple, Union
 
 
 def flatten_dict(

@@ -4,8 +4,8 @@ from typing import TYPE_CHECKING
 
 from kubernetes import client
 
-from ..classes.user import RegisteredUser
 from ...config import config
+from ..classes.user import RegisteredUser
 from .utils import get_certificates_volume_mounts
 
 if TYPE_CHECKING:
@@ -19,7 +19,7 @@ def git_clone(server: "UserServer"):
         read_only_etc_certs=True,
     )
     env = [
-        {"name": "GIT_CLONE_MOUNT_PATH", "value": f"/work/{server.gl_project.path}"},
+        {"name": "GIT_CLONE_MOUNT_PATH", "value": server.work_dir.absolute().as_posix()},
         {
             "name": "GIT_CLONE_REPOSITORY_URL",
             "value": server.gl_project.http_url_to_repo,
@@ -55,21 +55,11 @@ def git_clone(server: "UserServer"):
         {"name": "SENTRY_RELEASE", "value": os.environ.get("SENTRY_RELEASE")},
         {
             "name": "REQUESTS_CA_BUNDLE",
-            "value": str(
-                Path(etc_cert_volume_mount[0]["mountPath"]) / "ca-certificates.crt"
-            ),
+            "value": str(Path(etc_cert_volume_mount[0]["mountPath"]) / "ca-certificates.crt"),
         },
         {
             "name": "SSL_CERT_FILE",
-            "value": str(
-                Path(etc_cert_volume_mount[0]["mountPath"]) / "ca-certificates.crt"
-            ),
-        },
-        {
-            "name": "GIT_CLONE_S3_MOUNT",
-            "value": config.cloud_storage.mount_folder
-            if config.cloud_storage.any_enabled and server.cloudstorage
-            else "",
+            "value": str(Path(etc_cert_volume_mount[0]["mountPath"]) / "ca-certificates.crt"),
         },
     ]
     if type(server.user) is RegisteredUser:
@@ -104,7 +94,10 @@ def git_clone(server: "UserServer"):
                             "runAsNonRoot": True,
                         },
                         "volumeMounts": [
-                            {"mountPath": "/work", "name": "workspace"},
+                            {
+                                "mountPath": server.workspace_mount_path.absolute().as_posix(),
+                                "name": "workspace",
+                            },
                             *etc_cert_volume_mount,
                         ],
                         "env": env,
@@ -184,7 +177,7 @@ def certificates():
 def download_image(server: "UserServer"):
     container = client.V1Container(
         name="download-image",
-        image=server.verified_image,
+        image=server.image,
         command=["sh", "-c"],
         args=["exit", "0"],
         resources={

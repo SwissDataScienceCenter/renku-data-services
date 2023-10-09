@@ -71,9 +71,7 @@ def main(server: "UserServer"):
                             },
                             {
                                 "name": "RENKU_CLIENT_SECRET",
-                                "value": str(
-                                    config.sessions.git_proxy.renku_client_secret
-                                ),
+                                "value": str(config.sessions.git_proxy.renku_client_secret),
                             },
                             {
                                 "name": "RENKU_URL",
@@ -82,9 +80,7 @@ def main(server: "UserServer"):
                             {
                                 "name": "ANONYMOUS_SESSION",
                                 "value": (
-                                    "false"
-                                    if type(server._user) is RegisteredUser
-                                    else "true"
+                                    "false" if type(server._user) is RegisteredUser else "true"
                                 ),
                             },
                         ],
