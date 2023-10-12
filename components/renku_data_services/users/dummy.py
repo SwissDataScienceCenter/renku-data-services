@@ -49,7 +49,11 @@ class DummyAuthenticator:
         """Indicates whether the user has sucessfully logged in."""
         if self.gitlab:
             user = base_models.DummyGitlabAPIUser(
-                is_admin=self.admin, id="some-id", access_token=access_token, name="John Doe", gitlab_url="localhost"
+                is_admin=self.admin,
+                id="some-id",
+                access_token=access_token,
+                name="John Doe",
+                gitlab_url="https://localhost",
             )
             if self.project_id is not None:
                 user._admin_project_id = self.project_id

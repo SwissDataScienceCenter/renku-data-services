@@ -8,7 +8,7 @@ from sanic_ext import validate
 import renku_data_services.base_models as base_models
 import renku_data_services.storage_models as models
 from renku_data_services import errors
-from renku_data_services.base_api.auth import authenticate, only_admins
+from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.storage_adapters import StorageRepository
 from renku_data_services.storage_schemas import apispec, query_parameters
