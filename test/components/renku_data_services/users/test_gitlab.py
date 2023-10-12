@@ -55,7 +55,7 @@ async def test_gitlab_auth(json, monkeypatch):
     gl_mock = mock_gl_api()
     with monkeypatch.context() as monkey:
         monkey.setattr(gitlab.gitlab, "Gitlab", gl_mock)
-        gl_auth = gitlab.GitlabAuthenticator(gitlab_url="localhost")
+        gl_auth = gitlab.GitlabAuthenticator(gitlab_url="https://localhost")
         assert gl_auth.gitlab_url == "https://localhost"
         request = mock_request(json)
 
@@ -68,7 +68,7 @@ async def test_gitlab_auth_no_user(monkeypatch):
     gl_mock = mock_gl_api(has_user=False)
     with monkeypatch.context() as monkey:
         monkey.setattr(gitlab.gitlab, "Gitlab", gl_mock)
-        gl_auth = gitlab.GitlabAuthenticator(gitlab_url="localhost")
+        gl_auth = gitlab.GitlabAuthenticator(gitlab_url="https://localhost")
         assert gl_auth.gitlab_url == "https://localhost"
         request = mock_request()
 
@@ -81,7 +81,7 @@ async def test_gitlab_auth_not_active(monkeypatch):
     gl_mock = mock_gl_api(user_state="inactive")
     with monkeypatch.context() as monkey:
         monkey.setattr(gitlab.gitlab, "Gitlab", gl_mock)
-        gl_auth = gitlab.GitlabAuthenticator(gitlab_url="localhost")
+        gl_auth = gitlab.GitlabAuthenticator(gitlab_url="https://localhost")
         assert gl_auth.gitlab_url == "https://localhost"
         request = mock_request()
 
@@ -132,7 +132,7 @@ async def test_gitlab_user(monkeypatch):
     import renku_data_services.base_models as base_models
 
     user = base_models.GitlabAPIUser(
-        is_admin=False, id="21", access_token="xxxxxx", name="John Doe", gitlab_url="localhost"  # nosec: B106
+        is_admin=False, id="21", access_token="xxxxxx", name="John Doe", gitlab_url="https://localhost"  # nosec: B106
     )
     projects = await user.filter_projects_by_access_level(
         ["1", "2", "3"], min_access_level=base_models.GitlabAccessLevel.PUBLIC

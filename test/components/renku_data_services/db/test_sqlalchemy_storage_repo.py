@@ -21,12 +21,20 @@ def get_user(storage, valid=True):
     """Get an api user for a storage."""
     if valid:
         user = DummyGitlabAPIUser(
-            is_admin=True, id="abcdefg", access_token="abcdefg", name="John Doe", gitlab_url="localhost"  # nosec: B106
+            is_admin=True,
+            id="abcdefg",
+            access_token="abcdefg",
+            name="John Doe",
+            gitlab_url="https://localhost",  # nosec: B106
         )
         user._admin_project_id = storage.get("project_id")
     else:
         user = DummyGitlabAPIUser(
-            is_admin=True, id="abcdefg", access_token="abcdefg", name="John Doe", gitlab_url="localhost"  # nosec: B106
+            is_admin=True,
+            id="abcdefg",
+            access_token="abcdefg",
+            name="John Doe",
+            gitlab_url="https://localhost",  # nosec: B106
         )
         user._admin_project_id = storage.get("project_id") + "0"
         user._member_project_id = storage.get("project_id") + "0"

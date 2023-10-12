@@ -27,7 +27,7 @@ def test_config_no_dummy(monkeypatch):
     monkeypatch.setenv("DB_PORT", "5432")
     monkeypatch.setenv("DB_NAME", "storage_db")
     monkeypatch.setenv("DB_PASSWORD", "123456")
-    monkeypatch.setenv("GITLAB_URL", "localhost")
+    monkeypatch.setenv("GITLAB_URL", "https://localhost")
     monkeypatch.setenv("KEYCLOAK_URL", "localhost")
     monkeypatch.setenv("KEYCLOAK_TOKEN_SIGNATURE_ALGS", "test")
     monkeypatch.setattr(conf, "_oidc_discovery", lambda _, __: {"jwks_uri": "localhost"})
