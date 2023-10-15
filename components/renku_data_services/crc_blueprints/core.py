@@ -453,7 +453,7 @@ class UsersBP(CustomBlueprint):
             if user_kc is None:
                 await self.repo.delete_user(id=body.id, api_user=user)
                 raise errors.MissingResourceError(message=f"User with id {body.id} cannot be found in keycloak.")
-            # The user exists in keycloak, fail if the requestd id does not match what is in keycloak.
+            # The user exists in keycloak, fail if the requested id does not match what is in keycloak.
             if body.id != user_kc.keycloak_id:
                 raise errors.ValidationError(message="The provided user ID does not match the ID from keycloak.")
             # The user exists in the db and the request body matches what is the in the db, simply return the user.
@@ -496,7 +496,7 @@ class UsersBP(CustomBlueprint):
 
 @dataclass(kw_only=True)
 class UserResourcePoolsBP(CustomBlueprint):
-    """Handlers for dealing wiht the resource pools of a specific user."""
+    """Handlers for dealing with the resource pools of a specific user."""
 
     repo: UserRepository
     quota_repo: QuotaRepository

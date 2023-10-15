@@ -7,7 +7,7 @@ it all in one place.
 """
 from asyncio import gather
 from functools import wraps
-from typing import Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from sqlalchemy import create_engine, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -46,6 +46,7 @@ def _resource_pool_access_control(
                     message="Your user ID should match the user ID for which you are querying resource pools."
                 )
             output = output.join(schemas.UserORM, schemas.ResourcePoolORM.users, isouter=True).where(
+                # TODO: Should .public be .default
                 or_(schemas.UserORM.keycloak_id == api_user.id, schemas.ResourcePoolORM.public == true())
             )
         case True, True:
@@ -56,6 +57,7 @@ def _resource_pool_access_control(
                 )
         case _:
             # The user is not logged in, they can see only the default resource pools
+            # TODO: Should .public be .default
             output = output.where(schemas.ResourcePoolORM.public == true())
     return output
 
@@ -110,7 +112,7 @@ class ResourcePoolRepository(_Base):
     """The adapter used for accessing resource pools with SQLAlchemy."""
 
     def initialize(self, rp: models.ResourcePool):
-        """Add the default resource pool if it does not already exists."""
+        """Add the default resource pool if it does not already exist."""
         session_maker = sessionmaker(
             self.sync_engine,
             class_=Session,
@@ -440,7 +442,7 @@ class UserRepository(_Base):
 
     @_only_admins
     async def insert_user(self, api_user: base_models.APIUser, user: base_models.User) -> base_models.User:
-        """Inser a user in the database."""
+        """Insert a user in the database."""
         orm = schemas.UserORM.load(user)
         async with self.session_maker() as session:
             async with session.begin():
@@ -470,6 +472,16 @@ class UserRepository(_Base):
         """Get resource pools that a specific user has access to."""
         async with self.session_maker() as session:
             async with session.begin():
+                stmt: Select[Any] = (
+                    select(schemas.UserORM)
+                    .where(schemas.UserORM.keycloak_id == keycloak_id)
+                    .options(selectinload(schemas.UserORM.resource_pools))
+                )
+                res = await session.execute(stmt)
+                user: Optional[schemas.UserORM] = res.scalars().first()
+                if user is None:
+                    raise errors.MissingResourceError(message=f"The user with keycloak id {keycloak_id} does not exist")
+
                 stmt = select(schemas.ResourcePoolORM).options(selectinload(schemas.ResourcePoolORM.classes))
                 if resource_pool_name is not None:
                     stmt = stmt.where(schemas.ResourcePoolORM.name == resource_pool_name)
@@ -479,6 +491,8 @@ class UserRepository(_Base):
                 stmt = _resource_pool_access_control(api_user, stmt, keycloak_id=keycloak_id)
                 res = await session.execute(stmt)
                 rps: List[schemas.ResourcePoolORM] = res.scalars().all()
+                if user.no_default_access:
+                    rps = [rp for rp in rps if not rp.default]
                 return [rp.dump() for rp in rps]
 
     @_only_admins
@@ -509,6 +523,12 @@ class UserRepository(_Base):
                     raise errors.MissingResourceError(
                         message=f"The resource pools with ids: {missing_rps} do not exist."
                     )
+                if user.no_default_access:
+                    default_rp = next((rp for rp in rps_to_add if rp.default), None)
+                    if default_rp:
+                        raise errors.NoDefaultPoolAccessError(
+                            message=f"User with keycloak id {keycloak_id} cannot access the default resource pool"
+                        )
                 if append:
                     user.resource_pools.extend(rps_to_add)
                 else:
@@ -550,13 +570,20 @@ class UserRepository(_Base):
                     raise errors.MissingResourceError(
                         message=f"The resource pool with id {resource_pool_id} does not exist"
                     )
+                if rp.default:
+                    no_default_rp_access_users = [u for u in users if u.no_default_access]
+                    if no_default_rp_access_users:
+                        no_default_rp_access_users_str = ", ".join([str(u.id) for u in no_default_rp_access_users])
+                        raise errors.NoDefaultPoolAccessError(
+                            message=f"Users cannot access default resource pool: [{no_default_rp_access_users_str}]"
+                        )
                 user_ids_to_add_req = [user.keycloak_id for user in users]
                 stmt_usr = select(schemas.UserORM).where(schemas.UserORM.keycloak_id.in_(user_ids_to_add_req))
                 res = await session.execute(stmt_usr)
                 users_to_add_exist = res.scalars().all()
                 user_ids_to_add_exist = [i.keycloak_id for i in users_to_add_exist]
                 users_to_add_missing = [
-                    schemas.UserORM(keycloak_id=i.keycloak_id)
+                    schemas.UserORM(keycloak_id=i.keycloak_id, no_default_access=i.no_default_access)
                     for i in users
                     if i.keycloak_id not in user_ids_to_add_exist
                 ]

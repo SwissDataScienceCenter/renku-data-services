@@ -125,8 +125,6 @@ class Config:
         authenticator: base_models.Authenticator
         gitlab_authenticator: base_models.Authenticator
         version = os.environ.get(f"{prefix}VERSION", "0.0.1")
-        keycloak_url = None
-        keycloak_realm = "Renku"
         server_options_file = os.environ.get("SERVER_OPTIONS")
         server_defaults_file = os.environ.get("SERVER_DEFAULTS")
         k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
@@ -152,7 +150,7 @@ class Config:
                 )
             algorithms = os.environ.get(f"{prefix}KEYCLOAK_TOKEN_SIGNATURE_ALGS")
             if algorithms is None:
-                raise errors.ConfigurationError(message="At least one token signature algorithm is requried.")
+                raise errors.ConfigurationError(message="At least one token signature algorithm is required.")
             algorithms_lst = [i.strip() for i in algorithms.split(",")]
             jwks = PyJWKClient(jwks_url)
             authenticator = KeycloakAuthenticator(jwks=jwks, algorithms=algorithms_lst)
