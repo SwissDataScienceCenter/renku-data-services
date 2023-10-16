@@ -37,7 +37,7 @@ def create_cloud_storage_object(data: Dict[str, Any], user: User, project_id: in
     if data.get("storage_id"):
         # Load from storage service
         if user.access_token is None:
-            raise ValidationError("Storage mounting only supported for logged-in users.")
+            raise ValidationError("Storage mounting is only supported for logged-in users.")
         if project_id < 1:
             raise ValidationError("Could not get gitlab project id")
         (
@@ -73,7 +73,7 @@ def create_cloud_storage_object(data: Dict[str, Any], user: User, project_id: in
             endpoint=configuration["endpoint"],
             container=bucket,
             credential=configuration["secret_access_key"],
-            mount_folder=work_dir / target_path,
+            mount_folder=str(work_dir / target_path),
             source_folder=source_path,
             read_only=readonly,
         )

@@ -1,5 +1,5 @@
 from functools import cached_property
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 import boto3
@@ -57,7 +57,7 @@ class S3Request(ICloudStorageRequest):
 
     def get_manifest_patch(
         self, base_name: str, namespace: str, labels={}, annotations={}
-    ) -> Dict[str, Any]:
+    ) -> List[Dict[str, Any]]:
         secret_name = f"{base_name}-secret"
         # prepare datashim dataset spec
         s3mount_spec = {
@@ -77,73 +77,82 @@ class S3Request(ICloudStorageRequest):
         else:
             s3mount_spec["local"]["secret-name"] = f"{secret_name}"
             s3mount_spec["local"]["secret-namespace"] = namespace
-
-        patch = {
-            "type": "application/json-patch+json",
-            "patch": [
-                # add whole datashim dataset spec
-                {
-                    "op": "add",
-                    "path": f"/{base_name}",
-                    "value": {
-                        "apiVersion": "com.ie.ibm.hpsys/v1alpha1",
-                        "kind": "Dataset",
-                        "metadata": {
-                            "name": base_name,
-                            "namespace": namespace,
-                            "labels": labels,
-                            "annotations": {
-                                **annotations,
-                                config.session_get_endpoint_annotations.renku_annotation_prefix
-                                + "mount_folder": self.mount_folder,
-                            },
-                        },
-                        "spec": s3mount_spec,
-                    },
-                },
-                # mount dataset into user session
-                {
-                    "op": "add",
-                    "path": "/statefulset/spec/template/spec/containers/0/volumeMounts/-",
-                    "value": {
-                        "mountPath": self.mount_folder,
-                        "name": base_name,
-                        "subPath": self.source_folder,
-                    },
-                },
-                {
-                    "op": "add",
-                    "path": "/statefulset/spec/template/spec/volumes/-",
-                    "value": {
-                        "name": base_name,
-                        "persistentVolumeClaim": {"claimName": base_name},
-                    },
-                },
-            ],
-        }
+        patches = []
         # add secret for storing access keys for s3
         if not self.public:
-            patch["patch"].append(
+            patches = [
                 {
-                    "op": "add",
-                    "path": f"/{secret_name}",
-                    "value": {
-                        "apiVersion": "v1",
-                        "kind": "Secret",
-                        "metadata": {
-                            "name": secret_name,
-                            "namespace": namespace,
-                            "labels": labels,
-                            "annotations": annotations,
+                    "type": "application/json-patch+json",
+                    "patch": [
+                        # Add secret for cloud storage
+                        {
+                            "op": "add",
+                            "path": f"/{secret_name}",
+                            "value": {
+                                "apiVersion": "v1",
+                                "kind": "Secret",
+                                "metadata": {
+                                    "name": secret_name,
+                                    "namespace": namespace,
+                                    "labels": labels,
+                                    "annotations": annotations,
+                                },
+                                "stringData": {
+                                    "accessKeyID": self.access_key,
+                                    "secretAccessKey": self.secret_key,
+                                },
+                            },
                         },
-                        "stringData": {
-                            "accessKeyID": self.access_key,
-                            "secretAccessKey": self.secret_key,
+                    ],
+                },
+            ]
+
+        patches.append(
+            {
+                "type": "application/json-patch+json",
+                "patch": [
+                    # add whole datashim dataset spec
+                    {
+                        "op": "add",
+                        "path": f"/{base_name}",
+                        "value": {
+                            "apiVersion": "com.ie.ibm.hpsys/v1alpha1",
+                            "kind": "Dataset",
+                            "metadata": {
+                                "name": base_name,
+                                "namespace": namespace,
+                                "labels": labels,
+                                "annotations": {
+                                    **annotations,
+                                    config.session_get_endpoint_annotations.renku_annotation_prefix
+                                    + "mount_folder": self.mount_folder,
+                                },
+                            },
+                            "spec": s3mount_spec,
                         },
                     },
-                },
-            )
-        return patch
+                    # mount dataset into user session
+                    {
+                        "op": "add",
+                        "path": "/statefulset/spec/template/spec/containers/0/volumeMounts/-",
+                        "value": {
+                            "mountPath": self.mount_folder,
+                            "name": base_name,
+                            "subPath": self.source_folder,
+                        },
+                    },
+                    {
+                        "op": "add",
+                        "path": "/statefulset/spec/template/spec/volumes/-",
+                        "value": {
+                            "name": base_name,
+                            "persistentVolumeClaim": {"claimName": base_name},
+                        },
+                    },
+                ],
+            }
+        )
+        return patches
 
     @property
     def head_bucket(self):
