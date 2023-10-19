@@ -164,6 +164,10 @@ class LaunchNotebookResponseWithoutS3(Schema):
                 "please stop this session and start a new one with more storage.",
                 204: "Cannot clone repository: Requested branch doesn't exist on remote.",
                 205: "Cannot clone repository: Error fetching submodules.",
+                206: "Cloud storage path conflicts: The mounted cloud storage should not overwrite "
+                "existing folders in the session, please revise your mount locations and "
+                "relaunch your session.",
+                207: "The mount paths for cloud storage must be absolute.",
             }
             return exit_code_msg_xref.get(exit_code, default_server_error_message)
 
