@@ -24,7 +24,6 @@ jobs:
       renku-gateway: ${{ steps.deploy-comment.outputs.renku-gateway}}
       renku-graph: ${{ steps.deploy-comment.outputs.renku-graph}}
       renku-notebooks: ${{ steps.deploy-comment.outputs.renku-notebooks}}
-      renku-data-services: ${{ steps.deploy-comment.outputs.renku-data-services }}
       test-enabled: ${{ steps.deploy-comment.outputs.test-enabled}}
       test-cypress-enabled: ${{ steps.deploy-comment.outputs.test-cypress-enabled}}
       persist: ${{ steps.deploy-comment.outputs.persist}}
@@ -70,7 +69,7 @@ jobs:
           KUBECONFIG: ${{ github.workspace }}/renkubot-kube.config
           RENKU_RELEASE: renku-ci-ds-${{ github.event.number }}
           RENKU_VALUES_FILE: ${{ github.workspace }}/values.yaml
-          RENKU_VALUES: ${{ secrets.CI_RENKU_VALUES }}
+          RENKU_VALUES: ${{ secrets.COMBINED_CHARTS_CI_RENKU_VALUES }}
           RENKUBOT_KUBECONFIG: ${{ secrets.RENKUBOT_DEV_KUBECONFIG }}
           RENKUBOT_RANCHER_BEARER_TOKEN: ${{ secrets.RENKUBOT_RANCHER_BEARER_TOKEN }}
           RANCHER_DEV_API_ENDPOINT: ${{ secrets.RANCHER_DEV_API_ENDPOINT }}
@@ -83,7 +82,7 @@ jobs:
           renku_gateway: "${{ needs.check-deploy.outputs.renku-gateway }}"
           renku_graph: "${{ needs.check-deploy.outputs.renku-graph }}"
           renku_notebooks: "${{ needs.check-deploy.outputs.renku-notebooks }}"
-          renku_data_services: "${{ needs.check-deploy.outputs.renku-data-services }}"
+          renku_data_services: "@${{ github.head_ref }}"
           extra_values: "${{ needs.check-deploy.outputs.extra-values }}"
 
   selenium-acceptance-tests:
