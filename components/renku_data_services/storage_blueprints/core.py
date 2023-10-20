@@ -8,7 +8,7 @@ from sanic_ext import validate
 import renku_data_services.base_models as base_models
 import renku_data_services.storage_models as models
 from renku_data_services import errors
-from renku_data_services.base_api.auth import authenticate, only_admins
+from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.storage_adapters import StorageRepository
 from renku_data_services.storage_schemas import apispec, query_parameters
@@ -62,7 +62,6 @@ class StorageBP(CustomBlueprint):
         """Create a new cloud storage entry."""
 
         @authenticate(self.authenticator)
-        @only_admins
         async def _post(request: Request, validator: RCloneValidator, user: base_models.GitlabAPIUser):
             storage: models.CloudStorage
 
@@ -91,7 +90,6 @@ class StorageBP(CustomBlueprint):
         """Replace a storage entry."""
 
         @authenticate(self.authenticator)
-        @only_admins
         async def _put(request: Request, storage_id: str, validator: RCloneValidator, user: base_models.GitlabAPIUser):
             if not request.json:
                 raise errors.ValidationError(message="The request body is empty. Please provide a valid JSON object.")
@@ -123,7 +121,6 @@ class StorageBP(CustomBlueprint):
         """Update parts of a storage entry."""
 
         @authenticate(self.authenticator)
-        @only_admins
         @validate(json=apispec.CloudStoragePatch)
         async def _patch(
             request: Request,
@@ -157,7 +154,6 @@ class StorageBP(CustomBlueprint):
         """Delete a storage entry."""
 
         @authenticate(self.authenticator)
-        @only_admins
         async def _delete(request: Request, storage_id: str, user: base_models.GitlabAPIUser):
             await self.storage_repo.delete_storage(storage_id=storage_id, user=user)
             return empty(204)
