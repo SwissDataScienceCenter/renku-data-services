@@ -28,12 +28,13 @@ from renku_data_services.storage_adapters import StorageRepository
 from renku_data_services.users.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.users.gitlab import GitlabAuthenticator
 from renku_data_services.users.keycloak import KcUserStore, KeycloakAuthenticator
+from renku_data_services.utils.core import get_ssl_context
 
 
 @retry(stop=(stop_after_attempt(20) | stop_after_delay(300)), wait=wait_fixed(2), reraise=True)
 def _oidc_discovery(url: str, realm: str) -> Dict[str, Any]:
     url = f"{url}/realms/{realm}/.well-known/openid-configuration"
-    res = httpx.get(url)
+    res = httpx.get(url, verify=get_ssl_context())
     if res.status_code == 200:
         return res.json()
     raise errors.ConfigurationError(message=f"Cannot successfully do OIDC discovery with url {url}.")
