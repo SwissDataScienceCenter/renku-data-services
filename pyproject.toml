@@ -6,41 +6,42 @@ authors = ["Swiss Data Science Center <contact@datascience.ch>"]
 readme = "README.md"
 license = "Apache License 2.0"
 packages = [
-    {include = "renku_data_services/data_api",from = "bases"},
-    {include = "renku_data_services/users",from = "components"},
-    {include = "renku_data_services/resource_pool_models",from = "components"},
-    {include = "renku_data_services/crc_schemas",from = "components"},
-    {include = "renku_data_services/k8s",from = "components"},
-    {include = "renku_data_services/migrations",from = "components"},
-    {include = "renku_data_services/storage_schemas",from = "components"},
-    {include = "renku_data_services/errors",from = "components"},
-    {include = "renku_data_services/resource_pool_adapters",from = "components"},
-    {include = "renku_data_services/base_models",from = "components"},
-    {include = "renku_data_services/storage_adapters",from = "components"},
-    {include = "renku_data_services/base_api",from = "components"},
-    {include = "renku_data_services/crc_migrations",from = "components"},
-    {include = "renku_data_services/storage_models",from = "components"},
-    {include = "renku_data_services/storage_migrations",from = "components"},
-    {include = "renku_data_services/storage_blueprints",from = "components"},
-    {include = "renku_data_services/base_blueprints",from = "components"},
-    {include = "renku_data_services/crc_blueprints",from = "components"},
+  { include = "renku_data_services/data_api", from = "bases" },
+  { include = "renku_data_services/users", from = "components" },
+  { include = "renku_data_services/resource_pool_models", from = "components" },
+  { include = "renku_data_services/crc_schemas", from = "components" },
+  { include = "renku_data_services/k8s", from = "components" },
+  { include = "renku_data_services/migrations", from = "components" },
+  { include = "renku_data_services/storage_schemas", from = "components" },
+  { include = "renku_data_services/errors", from = "components" },
+  { include = "renku_data_services/resource_pool_adapters", from = "components" },
+  { include = "renku_data_services/base_models", from = "components" },
+  { include = "renku_data_services/storage_adapters", from = "components" },
+  { include = "renku_data_services/base_api", from = "components" },
+  { include = "renku_data_services/crc_migrations", from = "components" },
+  { include = "renku_data_services/storage_models", from = "components" },
+  { include = "renku_data_services/storage_migrations", from = "components" },
+  { include = "renku_data_services/storage_blueprints", from = "components" },
+  { include = "renku_data_services/base_blueprints", from = "components" },
+  { include = "renku_data_services/crc_blueprints", from = "components" },
+  { include = "renku_data_services/utils", from = "components" },
 ]
 
 [tool.poetry.dependencies]
 python = "^3.11"
-sanic = {extras = ["ext"], version = "^23.3.0"}
+sanic = { extras = ["ext"], version = "^23.3.0" }
 pydantic = "^2.1.1"
 datamodel-code-generator = "^0.21.4"
-sqlalchemy = {extras = ["asyncio"], version = "^2.0.9"}
+sqlalchemy = { extras = ["asyncio"], version = "^2.0.9" }
 alembic = "^1.10.3"
 asyncpg = "^0.27.0"
-pyjwt = {extras = ["crypto"], version = "^2.6.0"}
+pyjwt = { extras = ["crypto"], version = "^2.6.0" }
 tenacity = "^8.2.2"
 httpx = "<0.24"
 kubernetes = "^26.1.0"
 python-ulid = "^1.1.0"
 python-gitlab = "^3.15.0"
-psycopg = {version = "^3.1.10", extras = ["binary"]}
+psycopg = { version = "^3.1.10", extras = ["binary"] }
 # urllib3 v2 has some breaking changes that libraries haven't caught up yet (08.2023)
 urllib3 = "^1.26.16"
 deepmerge = "^1.1.0"
@@ -94,23 +95,43 @@ skip_glob = ["migrations/*"]
 [tool.flake8]
 max-line-length = 120
 show-source = true
-ignore = ["E121", "E126", "E203", "E226", "E231", "W503", "W504", "E121", "E126", "E203", "E226", "E231", "W503", "W504", "E121", "E126", "E203", "E226", "E231", "W503", "W504"]
+ignore = [
+  "E121",
+  "E126",
+  "E203",
+  "E226",
+  "E231",
+  "W503",
+  "W504",
+  "E121",
+  "E126",
+  "E203",
+  "E226",
+  "E231",
+  "W503",
+  "W504",
+  "E121",
+  "E126",
+  "E203",
+  "E226",
+  "E231",
+  "W503",
+  "W504",
+]
 exclude = [
-    "components/renku_data_services/migrations/resource_pools/migrations/versions",
-    "components/renku_data_services/crc_schemas/apispec.py",
-    "components/renku_data_services/storage_schemas/apispec.py"
+  "components/renku_data_services/migrations/resource_pools/migrations/versions",
+  "components/renku_data_services/crc_schemas/apispec.py",
+  "components/renku_data_services/storage_schemas/apispec.py",
 ]
 
 [tool.pytest.ini_options]
 addopts = "--black --cov components/ --cov bases/ --cov-report=term-missing -v"
 doctest_optionflags = "ALLOW_UNICODE"
 testpaths = ["bases", "components", "test"]
-markers = [
-    "integration: mark a test as a integration.",
-]
+markers = ["integration: mark a test as a integration."]
 filterwarnings = [
-    "ignore:<class 'pytest_black.BlackItem'> is not using a cooperative constructor:pytest.PytestDeprecationWarning",
-    "ignore:distutils Version classes are deprecated. Use packaging.version instead:DeprecationWarning"
+  "ignore:<class 'pytest_black.BlackItem'> is not using a cooperative constructor:pytest.PytestDeprecationWarning",
+  "ignore:distutils Version classes are deprecated. Use packaging.version instead:DeprecationWarning",
 ]
 postgresql_host = "db"
 postgresql_user = "renku"
@@ -132,20 +153,15 @@ check_untyped_defs = true
 
 [[tool.mypy.overrides]]
 module = [
-    "renku_data_services.crc_schemas.apispec",
-    "renku_data_services.data_api.error_handler",
+  "renku_data_services.crc_schemas.apispec",
+  "renku_data_services.data_api.error_handler",
 ]
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = [
-    "sanic_testing.*",
-    "asyncpg.*",
-    "kubernetes.*",
-    "deepmerge.*",
-]
+module = ["sanic_testing.*", "asyncpg.*", "kubernetes.*", "deepmerge.*"]
 ignore_missing_imports = true
 
 [tool.coverage.run]
-source = [ "bases/", "components/" ]
-omit = [ "components/renku_data_services/migrations/resource_pools/*" ]
+source = ["bases/", "components/"]
+omit = ["components/renku_data_services/migrations/resource_pools/*"]
