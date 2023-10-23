@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Text, Union
+from typing import Any, Dict, List, Optional, Text, Union
 
 import yaml
 
@@ -17,13 +17,14 @@ def _parse_str_as_bool(val: Union[str, bool]) -> bool:
     raise ValueError(f"Unsupported data type received, expected str or bool, got {type(val)}")
 
 
-def _parse_value_as_numeric(val: Any, parse_to: Callable) -> Union[float, int]:
-    output = parse_to(val)
-    if type(output) is not float and type(output) is not int:
-        raise ValueError(
-            f"parse_to should convert to float or int, it returned type {type(output)}"
-        )
-    return output
+def _parse_value_as_int(val: Any) -> int:
+    # NOTE: That int() does not understand scientific notation
+    # even stuff that is "technically" an integer like 3e10, but float does understand it
+    return int(float(val))
+
+
+def _parse_value_as_float(val: Any) -> float:
+    return float(val)
 
 
 @dataclass
@@ -49,7 +50,7 @@ class _SentryConfig:
 
     def __post_init__(self):
         self.enabled = _parse_str_as_bool(self.enabled)
-        self.sample_rate = _parse_value_as_numeric(self.sample_rate, float)
+        self.sample_rate = _parse_value_as_float(self.sample_rate)
 
 
 @dataclass
@@ -68,8 +69,8 @@ class _GitProxyConfig:
     renku_client_id: Text = "renku"
 
     def __post_init__(self):
-        self.port = _parse_value_as_numeric(self.port, int)
-        self.health_port = _parse_value_as_numeric(self.health_port, int)
+        self.port = _parse_value_as_int(self.port)
+        self.health_port = _parse_value_as_int(self.health_port)
 
 
 @dataclass
@@ -80,7 +81,7 @@ class _GitRpcServerConfig:
     sentry: _SentryConfig = field(default_factory=lambda: _SentryConfig(enabled=False))
 
     def __post_init__(self):
-        self.port = _parse_value_as_numeric(self.port, int)
+        self.port = _parse_value_as_int(self.port)
 
 
 @dataclass
@@ -151,11 +152,11 @@ class _GenericCullingConfig:
     hibernated_seconds: Union[Text, int] = 86400
 
     def __post_init__(self):
-        self.idle_seconds = _parse_value_as_numeric(self.idle_seconds, int)
-        self.max_age_seconds = _parse_value_as_numeric(self.max_age_seconds, int)
-        self.pending_seconds = _parse_value_as_numeric(self.pending_seconds, int)
-        self.failed_seconds = _parse_value_as_numeric(self.failed_seconds, int)
-        self.hibernated_seconds = _parse_value_as_numeric(self.hibernated_seconds, int)
+        self.idle_seconds = _parse_value_as_int(self.idle_seconds)
+        self.max_age_seconds = _parse_value_as_int(self.max_age_seconds)
+        self.pending_seconds = _parse_value_as_int(self.pending_seconds)
+        self.failed_seconds = _parse_value_as_int(self.failed_seconds)
+        self.hibernated_seconds = _parse_value_as_int(self.hibernated_seconds)
 
 
 @dataclass
@@ -180,8 +181,8 @@ class _SessionSshConfig:
 
     def __post_init__(self):
         self.enabled = _parse_str_as_bool(self.enabled)
-        self.service_port = _parse_value_as_numeric(self.service_port, int)
-        self.container_port = _parse_value_as_numeric(self.container_port, int)
+        self.service_port = _parse_value_as_int(self.service_port)
+        self.container_port = _parse_value_as_int(self.container_port)
 
 
 @dataclass
