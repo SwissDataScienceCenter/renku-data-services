@@ -7,6 +7,7 @@ import httpx
 from sanic import Request
 
 from renku_data_services.errors import errors
+from renku_data_services.utils.core import get_ssl_context
 
 
 class Authenticator(Protocol):
@@ -99,7 +100,7 @@ class GitlabAPIUser(APIUser):
         }
 
         async def _query_gitlab_graphql(body, header):
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(verify=get_ssl_context()) as client:
                 resp = await client.post(self.gitlab_graphql_url, json=body, headers=header, timeout=10)
             if resp.status_code != 200:
                 raise errors.BaseError(message=f"Error querying Gitlab api {self.gitlab_graphql_url}: {resp.text}")
