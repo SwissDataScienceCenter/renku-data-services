@@ -4,8 +4,8 @@ from hypothesis import assume
 from hypothesis import strategies as st
 
 import renku_data_services.base_models as base_models
-import renku_data_services.resource_pool_models as models
 from renku_data_services import errors
+from renku_data_services.crc import models
 
 
 def make_cpu_float(data) -> Dict[str, int | float]:

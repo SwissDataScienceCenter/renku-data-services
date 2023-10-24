@@ -2,7 +2,7 @@ from io import StringIO
 
 from yaml import safe_load
 
-import renku_data_services.resource_pool_models as models
+from renku_data_services.crc import models
 from renku_data_services.data_api.server_options import (
     ServerOptions,
     ServerOptionsDefaults,

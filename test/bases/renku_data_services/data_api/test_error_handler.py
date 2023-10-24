@@ -10,7 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from renku_data_services import errors
 from renku_data_services.base_api.error_handler import CustomErrorHandler
-from renku_data_services.crc_schemas import apispec
+from renku_data_services.crc import apispec
 
 
 def _trigger_error(err: Exception | Callable | Awaitable) -> RouteHandler:

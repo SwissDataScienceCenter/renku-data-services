@@ -2,10 +2,10 @@ from dataclasses import asdict
 from typing import Any
 
 import renku_data_services.base_models as base_models
-import renku_data_services.resource_pool_models as rp_models
-import renku_data_services.storage_models as storage_models
-from renku_data_services.resource_pool_adapters import ResourcePoolRepository
-from renku_data_services.storage_adapters import StorageRepository
+from renku_data_services.crc import models as rp_models
+from renku_data_services.crc.db import ResourcePoolRepository
+from renku_data_services.storage import models as storage_models
+from renku_data_services.storage.db import StorageRepository
 
 
 def remove_id_from_quota(quota: rp_models.Quota) -> rp_models.Quota:
