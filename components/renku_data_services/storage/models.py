@@ -7,7 +7,7 @@ from urllib.parse import ParseResult, urlparse
 from pydantic import BaseModel, Field, PrivateAttr, model_serializer, model_validator
 
 from renku_data_services import errors
-from renku_data_services.storage_schemas.core import RCloneValidator
+from renku_data_services.storage.rclone import RCloneValidator
 
 
 class RCloneConfig(BaseModel, MutableMapping):

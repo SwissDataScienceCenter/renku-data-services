@@ -6,13 +6,13 @@ from sanic import Request, empty, json
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
-import renku_data_services.storage_models as models
 from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
-from renku_data_services.storage_adapters import StorageRepository
-from renku_data_services.storage_schemas import apispec, query_parameters
-from renku_data_services.storage_schemas.core import RCloneValidator
+from renku_data_services.storage.db import StorageRepository
+from renku_data_services.storage import apispec, models
+from renku_data_services.storage.apispec_base import RepositoryFilter
+from renku_data_services.storage.rclone import RCloneValidator
 
 
 def dump_storage_with_sensitive_fields(storage: models.CloudStorage, validator: RCloneValidator) -> dict[str, Any]:
@@ -37,7 +37,7 @@ class StorageBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _get(request: Request, validator: RCloneValidator, user: base_models.GitlabAPIUser):
-            res_filter = query_parameters.RepositoryFilter.model_validate(dict(request.query_args))
+            res_filter = RepositoryFilter.model_validate(dict(request.query_args))
             storage: list[models.CloudStorage]
             storage = await self.storage_repo.get_storage(user=user, **res_filter.model_dump())
 

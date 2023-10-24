@@ -11,7 +11,7 @@ from sanic.log import logger
 from renku_data_services import errors
 
 if TYPE_CHECKING:
-    from renku_data_services.storage_models import RCloneConfig
+    from renku_data_services.storage.models import RCloneConfig
 
 
 class RCloneValidator:
