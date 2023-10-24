@@ -113,8 +113,8 @@ ignore = [
 ]
 exclude = [
   "components/renku_data_services/migrations/resource_pools/migrations/versions",
-  "components/renku_data_services/crc_schemas/apispec.py",
-  "components/renku_data_services/storage_schemas/apispec.py",
+  "components/renku_data_services/crc_/apispec.py",
+  "components/renku_data_services/storage/apispec.py",
 ]
 
 [tool.pytest.ini_options]

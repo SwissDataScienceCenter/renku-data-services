@@ -5,8 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 import renku_data_services.base_models as base_models
-from renku_data_services.storage import models
 from renku_data_services import errors
+from renku_data_services.storage import models
 from renku_data_services.storage import orm as schemas
 
 

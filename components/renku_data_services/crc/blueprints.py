@@ -7,14 +7,13 @@ from sanic import HTTPResponse, Request, json
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
-from renku_data_services.crc import models
 from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
-from renku_data_services.crc import apispec
+from renku_data_services.crc import apispec, models
 from renku_data_services.crc.apispec_base import ResourceClassesFilter
-from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
+from renku_data_services.k8s.quota import QuotaRepository
 
 
 @dataclass(kw_only=True)

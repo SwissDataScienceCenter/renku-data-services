@@ -8,7 +8,7 @@ from typing import Any, List
 
 from pydantic import BaseModel, ByteSize, Field, validator
 
-import renku_data_services.resource_pool_models as models
+from renku_data_services.crc import models
 
 
 def _check_greater_than_zero(cls: Any, v: int | float) -> int | float:

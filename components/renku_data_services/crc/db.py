@@ -16,8 +16,8 @@ from sqlalchemy.sql import Select, and_
 from sqlalchemy.sql.expression import true
 
 import renku_data_services.base_models as base_models
-from renku_data_services.crc import models
 from renku_data_services import errors
+from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
 
 
