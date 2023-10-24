@@ -167,7 +167,6 @@ components:
         - type: string
         - type: boolean
         - type: object
-        - type: 'null'
     CloudStorageUrl:
       allOf:
         - $ref: "#/components/schemas/GitRequest"
