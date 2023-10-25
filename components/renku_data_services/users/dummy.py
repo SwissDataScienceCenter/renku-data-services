@@ -1,4 +1,5 @@
 """Dummy adapter for communicating with Keycloak to be used for testing."""
+import json
 from asyncio import Lock
 from dataclasses import dataclass
 from typing import Dict, Optional
@@ -37,26 +38,19 @@ class DummyUserStore:
 class DummyAuthenticator:
     """Dummy authenticator that pretends to call Keycloak, not suitable for production."""
 
-    logged_in: bool = True
+    token_field = "Authorization"  # nosec: B105
     admin: bool = False
-
-    token_field: str = "Authorization"
-
-    gitlab: bool = False
-    project_id: Optional[str] = None
 
     async def authenticate(self, access_token: str, request: Request) -> base_models.APIUser:
         """Indicates whether the user has sucessfully logged in."""
-        if self.gitlab:
-            user = base_models.DummyGitlabAPIUser(
-                is_admin=self.admin,
-                id="some-id",
-                access_token=access_token,
-                name="John Doe",
-                gitlab_url="https://localhost",
-            )
-            if self.project_id is not None:
-                user._admin_project_id = self.project_id
-            return user
-
-        return base_models.APIUser(is_admin=self.admin, id="some-id", access_token=access_token)
+        user_props = {}
+        try:
+            user_props = json.loads(access_token)
+        except:
+            pass
+        return base_models.APIUser(
+            is_admin=self.admin,
+            id=user_props.get("id") if user_props.get("id") else "some-id",
+            access_token=access_token,
+            name=user_props.get("name") if user_props.get("name") else "John Doe",
+        )

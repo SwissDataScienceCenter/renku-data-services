@@ -13,28 +13,26 @@ from hypothesis import strategies as st
 from pydantic import ValidationError
 
 from renku_data_services import errors
-from renku_data_services.base_models.core import DummyGitlabAPIUser
+from renku_data_services.base_models.core import APIUser
 from renku_data_services.storage_adapters import StorageRepository
 
 
 def get_user(storage, valid=True):
     """Get an api user for a storage."""
     if valid:
-        user = DummyGitlabAPIUser(
+        user = APIUser(
             is_admin=True,
             id="abcdefg",
             access_token="abcdefg",
-            name="John Doe",
-            gitlab_url="https://localhost",  # nosec: B106
+            name="John Doe",  # nosec: B106
         )
         user._admin_project_id = storage.get("project_id")
     else:
-        user = DummyGitlabAPIUser(
+        user = APIUser(
             is_admin=True,
             id="abcdefg",
             access_token="abcdefg",
-            name="John Doe",
-            gitlab_url="https://localhost",  # nosec: B106
+            name="John Doe",  # nosec: B106
         )
         user._admin_project_id = storage.get("project_id") + "0"
         user._member_project_id = storage.get("project_id") + "0"
