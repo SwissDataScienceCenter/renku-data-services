@@ -29,5 +29,4 @@ RUN apt-get update && apt-get install -y \
 USER 1000:1000
 WORKDIR /app
 COPY --from=builder /app/env ./env
-ENTRYPOINT ["tini", "-g", "--"]
-CMD ["env/bin/python", "-m", "renku_crc.main", "--fast"]
+ENTRYPOINT ["tini", "-g", "--", "env/bin/python", "-m", "renku_crc.main"]
