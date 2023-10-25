@@ -3,22 +3,11 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 from kubernetes import client
-from pydantic import BaseModel, ByteSize
+from kubernetes.utils.quantity import parse_quantity
 
 import renku_data_services.resource_pool_models as models
 from renku_data_services import errors
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface, K8sSchedudlingClientInterface
-
-
-class ByteSizeValidator(BaseModel):
-    """Used to parse memory or disk fields from Kubernetes."""
-
-    # NOTE: the latest version of Pydantic does not support running the validation
-    # from a field when the field is used outside of a model. It is possible but only by calling
-    # a hidden class method (i.e. _validate) on the field class. I did not want to use a "non-public"
-    # method for this purpose so I opted out for a simple model.
-
-    size: ByteSize
 
 
 @dataclass
@@ -41,12 +30,18 @@ class QuotaRepository:
                 gpu_kind = igpu_kind
                 break
         memory_raw = manifest.spec.hard.get("requests.memory")
-        # NOTE: Pydantic will fail to parse "Gi" but will be happy with "Gib", but Kubernetes works with Gi or G
-        if isinstance(memory_raw, str) and len(memory_raw) > 0 and memory_raw[-1] == "i":
-            memory_raw += "b"
+        if memory_raw is None:
+            raise errors.ValidationError(
+                message="Kubernetes resource quota with missing hard.requests.memory is not supported"
+            )
+        cpu_raw = manifest.spec.hard.get("requests.cpu")
+        if cpu_raw is None:
+            raise errors.ValidationError(
+                message="Kubernetes resource quota with missing hard.requests.cpu is not supported"
+            )
         return models.Quota(
-            cpu=float(manifest.spec.hard.get("requests.cpu")),
-            memory=round(ByteSizeValidator(size=memory_raw).size.to("G")),
+            cpu=float(parse_quantity(cpu_raw)),
+            memory=round(parse_quantity(memory_raw) / 1_000_000_000),
             gpu=gpu,
             gpu_kind=gpu_kind,
             id=manifest.metadata.name,
