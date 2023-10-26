@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 from kubernetes import client
-from pydantic import ByteSize
+from kubernetes.utils.quantity import parse_quantity
 
 from renku_data_services import errors
 from renku_data_services.crc import models
@@ -30,11 +30,18 @@ class QuotaRepository:
                 gpu_kind = igpu_kind
                 break
         memory_raw = manifest.spec.hard.get("requests.memory")
-        if memory_raw[-1] == "i":
-            memory_raw += "b"
+        if memory_raw is None:
+            raise errors.ValidationError(
+                message="Kubernetes resource quota with missing hard.requests.memory is not supported"
+            )
+        cpu_raw = manifest.spec.hard.get("requests.cpu")
+        if cpu_raw is None:
+            raise errors.ValidationError(
+                message="Kubernetes resource quota with missing hard.requests.cpu is not supported"
+            )
         return models.Quota(
-            cpu=float(manifest.spec.hard.get("requests.cpu")),
-            memory=round(ByteSize(memory_raw).to("G")),
+            cpu=float(parse_quantity(cpu_raw)),
+            memory=round(parse_quantity(memory_raw) / 1_000_000_000),
             gpu=gpu,
             gpu_kind=gpu_kind,
             id=manifest.metadata.name,
