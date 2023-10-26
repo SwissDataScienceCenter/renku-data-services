@@ -25,6 +25,7 @@ packages = [
   { include = "renku_data_services/base_blueprints", from = "components" },
   { include = "renku_data_services/crc_blueprints", from = "components" },
   { include = "renku_data_services/utils", from = "components" },
+  { include = "renku_data_services/git", from = "components" },
 ]
 
 [tool.poetry.dependencies]

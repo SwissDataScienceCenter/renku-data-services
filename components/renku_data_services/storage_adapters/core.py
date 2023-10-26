@@ -24,9 +24,19 @@ class _Base:
 class StorageRepository(_Base):
     """Repository for cloud storage."""
 
+    def __init__(
+        self,
+        gitlab_client: base_models.GitlabAPIProtocol,
+        sync_sqlalchemy_url: str,
+        async_sqlalchemy_url: str,
+        debug: bool = False,
+    ):
+        super().__init__(sync_sqlalchemy_url, async_sqlalchemy_url, debug)
+        self.gitlab_client = gitlab_client
+
     async def get_storage(
         self,
-        user: base_models.GitlabAPIUser,
+        user: base_models.APIUser,
         id: str | None = None,
         project_id: str | None = None,
         name: str | None = None,
@@ -49,13 +59,13 @@ class StorageRepository(_Base):
 
             res = await session.execute(stmt)
             orms = res.scalars().all()
-            accessible_projects = await user.filter_projects_by_access_level(
-                [p.project_id for p in orms], base_models.GitlabAccessLevel.MEMBER
+            accessible_projects = await self.gitlab_client.filter_projects_by_access_level(
+                user, [p.project_id for p in orms], base_models.GitlabAccessLevel.MEMBER
             )
 
             return [p.dump() for p in orms if p.project_id in accessible_projects]
 
-    async def get_storage_by_id(self, storage_id: str, user: base_models.GitlabAPIUser) -> models.CloudStorage:
+    async def get_storage_by_id(self, storage_id: str, user: base_models.APIUser) -> models.CloudStorage:
         """Get a single storage by id."""
         async with self.session_maker() as session:
             res = await session.execute(
@@ -65,17 +75,17 @@ class StorageRepository(_Base):
 
             if storage is None:
                 raise errors.MissingResourceError(message=f"The storage with id '{storage_id}' cannot be found")
-            if not await user.filter_projects_by_access_level(
-                [storage[0].project_id], base_models.GitlabAccessLevel.MEMBER
+            if not await self.gitlab_client.filter_projects_by_access_level(
+                user, [storage[0].project_id], base_models.GitlabAccessLevel.MEMBER
             ):
                 raise errors.Unauthorized(message="User does not have access to this project")
             return storage[0].dump()
 
-    async def insert_storage(
-        self, storage: models.CloudStorage, user: base_models.GitlabAPIUser
-    ) -> models.CloudStorage:
+    async def insert_storage(self, storage: models.CloudStorage, user: base_models.APIUser) -> models.CloudStorage:
         """Insert a new cloud storage entry."""
-        if not await user.filter_projects_by_access_level([storage.project_id], base_models.GitlabAccessLevel.ADMIN):
+        if not await self.gitlab_client.filter_projects_by_access_level(
+            user, [storage.project_id], base_models.GitlabAccessLevel.ADMIN
+        ):
             raise errors.Unauthorized(message="User does not have access to this project")
         existing_storage = await self.get_storage(user, project_id=storage.project_id, name=storage.name)
         if existing_storage:
@@ -88,7 +98,7 @@ class StorageRepository(_Base):
                 session.add(orm)
         return orm.dump()
 
-    async def update_storage(self, storage_id: str, user: base_models.GitlabAPIUser, **kwargs) -> models.CloudStorage:
+    async def update_storage(self, storage_id: str, user: base_models.APIUser, **kwargs) -> models.CloudStorage:
         """Update a cloud storage entry."""
         async with self.session_maker() as session:
             async with session.begin():
@@ -99,8 +109,8 @@ class StorageRepository(_Base):
 
                 if storage is None:
                     raise errors.MissingResourceError(message=f"The storage with id '{storage_id}' cannot be found")
-                if not await user.filter_projects_by_access_level(
-                    [storage[0].project_id], base_models.GitlabAccessLevel.ADMIN
+                if not await self.gitlab_client.filter_projects_by_access_level(
+                    user, [storage[0].project_id], base_models.GitlabAccessLevel.ADMIN
                 ):
                     raise errors.Unauthorized(message="User does not have access to this project")
                 if "project_id" in kwargs and kwargs["project_id"] != storage[0].project_id:
@@ -125,7 +135,7 @@ class StorageRepository(_Base):
 
         return result
 
-    async def delete_storage(self, storage_id: str, user: base_models.GitlabAPIUser) -> None:
+    async def delete_storage(self, storage_id: str, user: base_models.APIUser) -> None:
         """Delete a cloud storage entry."""
         async with self.session_maker() as session:
             async with session.begin():
@@ -136,8 +146,8 @@ class StorageRepository(_Base):
 
                 if storage is None:
                     return
-                if not await user.filter_projects_by_access_level(
-                    [storage[0].project_id], base_models.GitlabAccessLevel.ADMIN
+                if not await self.gitlab_client.filter_projects_by_access_level(
+                    user, [storage[0].project_id], base_models.GitlabAccessLevel.ADMIN
                 ):
                     raise errors.Unauthorized(message="User does not have access to this project")
 

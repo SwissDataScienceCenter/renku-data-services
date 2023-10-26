@@ -37,7 +37,7 @@ class GitlabAuthenticator:
         result = await self._get_gitlab_api_user(access_token)
         return result
 
-    async def _get_gitlab_api_user(self, access_token: str) -> base_models.GitlabAPIUser:
+    async def _get_gitlab_api_user(self, access_token: str) -> base_models.APIUser:
         """Get and validate a Gitlab API User."""
         client = gitlab.Gitlab(self.gitlab_url, oauth_token=access_token)
         try:
@@ -56,6 +56,4 @@ class GitlabAuthenticator:
         if user_id is None:
             raise errors.Unauthorized(message="Could not get user id")
 
-        return base_models.GitlabAPIUser(
-            is_admin=False, id=str(user_id), access_token=access_token, name=user.name, gitlab_url=self.gitlab_url
-        )
+        return base_models.APIUser(is_admin=False, id=str(user_id), access_token=access_token, name=user.name)
