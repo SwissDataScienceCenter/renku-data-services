@@ -21,6 +21,7 @@ from renku_data_services.data_api.server_options import (
     ServerOptionsDefaults,
     generate_default_resource_pool,
 )
+from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.migrations.core import DataRepository
@@ -125,10 +126,12 @@ class Config:
         user_store: base_models.UserStore
         authenticator: base_models.Authenticator
         gitlab_authenticator: base_models.Authenticator
+        gitlab_client: base_models.GitlabAPIProtocol
         version = os.environ.get(f"{prefix}VERSION", "0.0.1")
         server_options_file = os.environ.get("SERVER_OPTIONS")
         server_defaults_file = os.environ.get("SERVER_DEFAULTS")
         k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
+        gitlab_url = None
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
             authenticator = DummyAuthenticator(admin=True)
@@ -136,6 +139,7 @@ class Config:
             quota_repo = QuotaRepository(DummyCoreClient({}), DummySchedulingClient({}), namespace=k8s_namespace)
             user_always_exists = os.environ.get("DUMMY_USERSTORE_USER_ALWAYS_EXISTS", "true").lower() == "true"
             user_store = DummyUserStore(user_always_exists=user_always_exists)
+            gitlab_client = DummyGitlabAPI()
         else:
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
             keycloak_url = os.environ.get(f"{prefix}KEYCLOAK_URL")
@@ -160,6 +164,7 @@ class Config:
                 raise errors.ConfigurationError(message="Please provide the gitlab instance URL")
             gitlab_authenticator = GitlabAuthenticator(gitlab_url=gitlab_url)
             user_store = KcUserStore(keycloak_url=keycloak_url, realm=keycloak_realm)
+            gitlab_client = GitlabAPI(gitlab_url=gitlab_url)
 
         pg_host = os.environ.get("DB_HOST", "localhost")
         pg_user = os.environ.get("DB_USER", "renku")
@@ -178,7 +183,9 @@ class Config:
             sync_sqlalchemy_url=sync_sqlalchemy_url, async_sqlalchemy_url=async_sqlalchemy_url
         )
         storage_repo = StorageRepository(
-            sync_sqlalchemy_url=sync_sqlalchemy_url, async_sqlalchemy_url=async_sqlalchemy_url
+            gitlab_client=gitlab_client,
+            sync_sqlalchemy_url=sync_sqlalchemy_url,
+            async_sqlalchemy_url=async_sqlalchemy_url,
         )
         return cls(
             user_repo=user_repo,

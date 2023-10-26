@@ -36,7 +36,7 @@ def valid_storage_payload() -> dict[str, Any]:
 def storage_test_client(
     storage_repo: StorageRepository, pool_repo: ResourcePoolRepository, user_repo: UserRepository
 ) -> SanicASGITestClient:
-    gitlab_auth = DummyAuthenticator(admin=True, gitlab=True)
+    gitlab_auth = DummyAuthenticator(admin=True)
     config = Config(
         user_repo=user_repo,
         rp_repo=pool_repo,
@@ -224,7 +224,7 @@ def storage_test_client(
         ),
         (
             {
-                "project_id": "999999",  # unauthorized storage id
+                "project_id": "00000",  # unauthorized storage id
                 "name": "mystorage",
                 "configuration": {
                     "type": "s3",
@@ -331,10 +331,9 @@ async def test_get_storage_unauthorized(storage_test_client, valid_storage_paylo
     assert res.json["storage"]["storage_type"] == "s3"
 
     project_id = res.json["storage"]["project_id"]
-    gl_auth.project_id = "000000"
     _, res = await storage_test_client.get(
         f"/api/data/storage?project_id={project_id}",
-        headers={"Authorization": "bearer test"},
+        headers={"Authorization": '{"name": "Unauthorized"}'},
     )
     assert res.status_code == 200
     assert len(res.json) == 0
@@ -407,10 +406,9 @@ async def test_storage_deletion_unauthorized(storage_test_client, valid_storage_
     assert res.status_code == 201
     assert res.json["storage"]["storage_type"] == "s3"
     storage_id = res.json["storage"]["storage_id"]
-    gl_auth.project_id = "000000"
     _, res = await storage_test_client.delete(
         f"/api/data/storage/{storage_id}",
-        headers={"Authorization": "bearer test"},
+        headers={"Authorization": '{"name": "Unauthorized"}'},
     )
     assert res.status_code == 401
 
@@ -493,10 +491,9 @@ async def test_storage_put_unauthorized(storage_test_client, valid_storage_paylo
     assert res.status_code == 201
     assert res.json["storage"]["storage_type"] == "s3"
     storage_id = res.json["storage"]["storage_id"]
-    gl_auth.project_id = "000000"
     _, res = await storage_test_client.put(
         f"/api/data/storage/{storage_id}",
-        headers={"Authorization": "bearer test"},
+        headers={"Authorization": '{"name": "Unauthorized"}'},
         data=json.dumps(
             {
                 "project_id": valid_storage_payload["project_id"],
@@ -549,10 +546,9 @@ async def test_storage_patch_unauthorized(storage_test_client, valid_storage_pay
     assert res.status_code == 201
     assert res.json["storage"]["storage_type"] == "s3"
     storage_id = res.json["storage"]["storage_id"]
-    gl_auth.project_id = "999999"
     _, res = await storage_test_client.patch(
         f"/api/data/storage/{storage_id}",
-        headers={"Authorization": "bearer test"},
+        headers={"Authorization": '{"name": "Unauthorized"}'},
         data=json.dumps(
             {
                 "configuration": {"type": "azureblob"},

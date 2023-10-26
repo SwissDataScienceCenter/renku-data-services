@@ -52,7 +52,7 @@ async def create_rp(
     return inserted_rp
 
 
-async def create_storage(storage_dict: dict[str, Any], repo: StorageRepository, user: base_models.GitlabAPIUser):
+async def create_storage(storage_dict: dict[str, Any], repo: StorageRepository, user: base_models.APIUser):
     storage_dict["configuration"] = storage_models.RCloneConfig.model_validate(storage_dict["configuration"])
     storage = storage_models.CloudStorage.model_validate(storage_dict)
 

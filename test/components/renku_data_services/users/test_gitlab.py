@@ -5,6 +5,7 @@ import pytest
 
 import renku_data_services.errors as errors
 import renku_data_services.users.gitlab as gitlab
+from renku_data_services.git.gitlab import GitlabAPI
 
 
 def mock_gl_api(
@@ -91,7 +92,7 @@ async def test_gitlab_auth_not_active(monkeypatch):
 
 @pytest.mark.asyncio
 @patch(
-    "renku_data_services.base_models.httpx.AsyncClient.post",
+    "renku_data_services.git.gitlab.httpx.AsyncClient.post",
     return_value=httpx.Response(
         200,
         json={
@@ -131,20 +132,19 @@ async def test_gitlab_auth_not_active(monkeypatch):
 async def test_gitlab_user(monkeypatch):
     import renku_data_services.base_models as base_models
 
-    user = base_models.GitlabAPIUser(
-        is_admin=False, id="21", access_token="xxxxxx", name="John Doe", gitlab_url="https://localhost"  # nosec: B106
-    )
-    projects = await user.filter_projects_by_access_level(
-        ["1", "2", "3"], min_access_level=base_models.GitlabAccessLevel.PUBLIC
+    gitlab_client = GitlabAPI(gitlab_url="https://gitlab.url.com")
+    user = base_models.APIUser(is_admin=False, id="21", access_token="xxxxxx", name="John Doe")  # nosec: B106
+    projects = await gitlab_client.filter_projects_by_access_level(
+        user, ["1", "2", "3"], min_access_level=base_models.GitlabAccessLevel.PUBLIC
     )
     assert len(projects) == 3
 
-    projects = await user.filter_projects_by_access_level(
-        ["1", "2", "3"], min_access_level=base_models.GitlabAccessLevel.MEMBER
+    projects = await gitlab_client.filter_projects_by_access_level(
+        user, ["1", "2", "3"], min_access_level=base_models.GitlabAccessLevel.MEMBER
     )
     assert len(projects) == 2
 
-    projects = await user.filter_projects_by_access_level(
-        ["1", "2", "3"], min_access_level=base_models.GitlabAccessLevel.ADMIN
+    projects = await gitlab_client.filter_projects_by_access_level(
+        user, ["1", "2", "3"], min_access_level=base_models.GitlabAccessLevel.ADMIN
     )
     assert len(projects) == 1

@@ -18,6 +18,7 @@ packages = [
   { include = "renku_data_services/crc", from = "../../components" },
   { include = "renku_data_services/k8s", from = "../../components" },
   { include = "renku_data_services/utils", from = "../../components" },
+  { include = "renku_data_services/git", from = "../../components" },
 ]
 
 [tool.poetry.dependencies]

@@ -36,7 +36,7 @@ class StorageBP(CustomBlueprint):
         """Get cloud storage for a repository."""
 
         @authenticate(self.authenticator)
-        async def _get(request: Request, validator: RCloneValidator, user: base_models.GitlabAPIUser):
+        async def _get(request: Request, validator: RCloneValidator, user: base_models.APIUser):
             res_filter = RepositoryFilter.model_validate(dict(request.query_args))
             storage: list[models.CloudStorage]
             storage = await self.storage_repo.get_storage(user=user, **res_filter.model_dump())
@@ -50,7 +50,10 @@ class StorageBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _get_one(
-            request: Request, storage_id: str, validator: RCloneValidator, user: base_models.GitlabAPIUser
+            request: Request,
+            storage_id: str,
+            validator: RCloneValidator,
+            user: base_models.APIUser,
         ):
             storage = await self.storage_repo.get_storage_by_id(storage_id, user=user)
 
@@ -62,7 +65,7 @@ class StorageBP(CustomBlueprint):
         """Create a new cloud storage entry."""
 
         @authenticate(self.authenticator)
-        async def _post(request: Request, validator: RCloneValidator, user: base_models.GitlabAPIUser):
+        async def _post(request: Request, validator: RCloneValidator, user: base_models.APIUser):
             storage: models.CloudStorage
 
             if "storage_url" in request.json:
@@ -90,7 +93,12 @@ class StorageBP(CustomBlueprint):
         """Replace a storage entry."""
 
         @authenticate(self.authenticator)
-        async def _put(request: Request, storage_id: str, validator: RCloneValidator, user: base_models.GitlabAPIUser):
+        async def _put(
+            request: Request,
+            storage_id: str,
+            validator: RCloneValidator,
+            user: base_models.APIUser,
+        ):
             if not request.json:
                 raise errors.ValidationError(message="The request body is empty. Please provide a valid JSON object.")
             if not isinstance(request.json, dict):
@@ -127,7 +135,7 @@ class StorageBP(CustomBlueprint):
             storage_id: str,
             body: apispec.CloudStoragePatch,
             validator: RCloneValidator,
-            user: base_models.GitlabAPIUser,
+            user: base_models.APIUser,
         ):
             existing_storage = await self.storage_repo.get_storage_by_id(storage_id, user=user)
             if not body.private and existing_storage.private:
@@ -154,7 +162,7 @@ class StorageBP(CustomBlueprint):
         """Delete a storage entry."""
 
         @authenticate(self.authenticator)
-        async def _delete(request: Request, storage_id: str, user: base_models.GitlabAPIUser):
+        async def _delete(request: Request, storage_id: str, user: base_models.APIUser):
             await self.storage_repo.delete_storage(storage_id=storage_id, user=user)
             return empty(204)
 
