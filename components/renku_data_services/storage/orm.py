@@ -7,7 +7,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_co
 from sqlalchemy.schema import UniqueConstraint
 from ulid import ULID
 
-import renku_data_services.storage_models as models
+from renku_data_services.storage import models
 
 JSONVariant = JSON().with_variant(JSONB(), "postgresql")
 

@@ -12,8 +12,8 @@ import pytest
 from hypothesis import HealthCheck, given, settings
 
 import renku_data_services.base_models as base_models
-import renku_data_services.resource_pool_models as models
-from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
+from renku_data_services.crc import models
+from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
 
 
 @given(user=user_strat)

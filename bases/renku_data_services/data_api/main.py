@@ -9,7 +9,7 @@ from sanic.worker.loader import AppLoader
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.data_api.config import Config
 from renku_data_services.migrations.core import run_migrations_for_app
-from renku_data_services.storage_schemas.core import RCloneValidator
+from renku_data_services.storage.rclone import RCloneValidator
 
 
 def create_app() -> Sanic:

@@ -5,8 +5,8 @@ from typing import List, Optional
 from kubernetes import client
 from kubernetes.utils.quantity import parse_quantity
 
-import renku_data_services.resource_pool_models as models
 from renku_data_services import errors
+from renku_data_services.crc import models
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface, K8sSchedudlingClientInterface
 
 

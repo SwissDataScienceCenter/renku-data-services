@@ -1,0 +1,1 @@
+"""Blueprints for cloud storage."""

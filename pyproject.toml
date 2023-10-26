@@ -8,22 +8,15 @@ license = "Apache License 2.0"
 packages = [
   { include = "renku_data_services/data_api", from = "bases" },
   { include = "renku_data_services/users", from = "components" },
-  { include = "renku_data_services/resource_pool_models", from = "components" },
-  { include = "renku_data_services/crc_schemas", from = "components" },
+  { include = "renku_data_services/crc", from = "components" },
+  { include = "renku_data_services/crc_migrations", from = "components" },
   { include = "renku_data_services/k8s", from = "components" },
   { include = "renku_data_services/migrations", from = "components" },
-  { include = "renku_data_services/storage_schemas", from = "components" },
   { include = "renku_data_services/errors", from = "components" },
-  { include = "renku_data_services/resource_pool_adapters", from = "components" },
   { include = "renku_data_services/base_models", from = "components" },
-  { include = "renku_data_services/storage_adapters", from = "components" },
   { include = "renku_data_services/base_api", from = "components" },
-  { include = "renku_data_services/crc_migrations", from = "components" },
-  { include = "renku_data_services/storage_models", from = "components" },
+  { include = "renku_data_services/storage", from = "components" },
   { include = "renku_data_services/storage_migrations", from = "components" },
-  { include = "renku_data_services/storage_blueprints", from = "components" },
-  { include = "renku_data_services/base_blueprints", from = "components" },
-  { include = "renku_data_services/crc_blueprints", from = "components" },
   { include = "renku_data_services/utils", from = "components" },
   { include = "renku_data_services/git", from = "components" },
 ]
@@ -121,8 +114,8 @@ ignore = [
 ]
 exclude = [
   "components/renku_data_services/migrations/resource_pools/migrations/versions",
-  "components/renku_data_services/crc_schemas/apispec.py",
-  "components/renku_data_services/storage_schemas/apispec.py",
+  "components/renku_data_services/crc/apispec.py",
+  "components/renku_data_services/storage/apispec.py",
 ]
 
 [tool.pytest.ini_options]
@@ -154,7 +147,8 @@ check_untyped_defs = true
 
 [[tool.mypy.overrides]]
 module = [
-  "renku_data_services.crc_schemas.apispec",
+  "renku_data_services.crc.apispec",
+  "renku_data_services.storage.apispec",
   "renku_data_services.data_api.error_handler",
 ]
 ignore_errors = true

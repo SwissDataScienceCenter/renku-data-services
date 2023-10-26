@@ -16,9 +16,9 @@ from sqlalchemy.sql import Select, and_
 from sqlalchemy.sql.expression import false, true
 
 import renku_data_services.base_models as base_models
-import renku_data_services.resource_pool_models as models
 from renku_data_services import errors
-from renku_data_services.resource_pool_adapters import schemas
+from renku_data_services.crc import models
+from renku_data_services.crc import orm as schemas
 
 
 class _Base:
@@ -46,6 +46,7 @@ def _resource_pool_access_control(
                     message="Your user ID should match the user ID for which you are querying resource pools."
                 )
             output = output.join(schemas.UserORM, schemas.ResourcePoolORM.users, isouter=True).where(
+                # TODO: Should .public be .default
                 or_(schemas.UserORM.keycloak_id == api_user.id, schemas.ResourcePoolORM.public == true())
             )
         case True, True:
@@ -491,6 +492,8 @@ class UserRepository(_Base):
                 stmt = _resource_pool_access_control(api_user, stmt, keycloak_id=keycloak_id)
                 res = await session.execute(stmt)
                 rps: List[schemas.ResourcePoolORM] = res.scalars().all()
+                if user.no_default_access:
+                    rps = [rp for rp in rps if not rp.default]
                 return [rp.dump() for rp in rps]
 
     @_only_admins
@@ -526,6 +529,12 @@ class UserRepository(_Base):
                             "default resource pool."
                         )
                     )
+                if user.no_default_access:
+                    default_rp = next((rp for rp in rps_to_add if rp.default), None)
+                    if default_rp:
+                        raise errors.NoDefaultPoolAccessError(
+                            message=f"User with keycloak id {keycloak_id} cannot access the default resource pool"
+                        )
                 if append:
                     user.resource_pools.extend(rps_to_add)
                 else:

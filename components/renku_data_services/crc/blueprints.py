@@ -7,13 +7,13 @@ from sanic import HTTPResponse, Request, json
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
-import renku_data_services.resource_pool_models as models
 from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
-from renku_data_services.crc_schemas import apispec, query_parameters
+from renku_data_services.crc import apispec, models
+from renku_data_services.crc.apispec_base import ResourceClassesFilter
+from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
 from renku_data_services.k8s.quota import QuotaRepository
-from renku_data_services.resource_pool_adapters import ResourcePoolRepository, UserRepository
 
 
 @dataclass(kw_only=True)
@@ -30,7 +30,7 @@ class ResourcePoolsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _get_all(request: Request, user: base_models.APIUser):
-            res_filter = query_parameters.ResourceClassesFilter.model_validate(dict(request.query_args))
+            res_filter = ResourceClassesFilter.model_validate(dict(request.query_args))
             rps = await self.rp_repo.filter_resource_pools(api_user=user, **res_filter.dict())
             rps_w_quota = [self.quota_repo.hydrate_resource_pool_quota(rp) for rp in rps]
             return json(

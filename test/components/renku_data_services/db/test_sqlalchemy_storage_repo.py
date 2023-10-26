@@ -14,7 +14,7 @@ from pydantic import ValidationError
 
 from renku_data_services import errors
 from renku_data_services.base_models.core import APIUser
-from renku_data_services.storage_adapters import StorageRepository
+from renku_data_services.storage.db import StorageRepository
 
 
 def get_user(storage, valid=True):

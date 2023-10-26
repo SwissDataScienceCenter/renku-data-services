@@ -1,7 +1,14 @@
-"""Data models for query parameters used in requests."""
-from pydantic import Extra, Field
+"""Base models for API specifications."""
+from pydantic import BaseModel, Extra, Field
 
-from renku_data_services.crc_schemas.base import BaseAPISpec
+
+class BaseAPISpec(BaseModel):
+    """Base API specification."""
+
+    class Config:
+        """Enables orm mode for pydantic."""
+
+        from_attributes = True
 
 
 class ResourceClassesFilter(BaseAPISpec):
