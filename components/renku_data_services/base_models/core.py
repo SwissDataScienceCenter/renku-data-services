@@ -30,7 +30,7 @@ class APIUser:
 
     @property
     def is_authenticated(self):
-        """Indicates whether the user has sucessfully logged in."""
+        """Indicates whether the user has successfully logged in."""
         return self.id is not None
 
 
@@ -179,6 +179,7 @@ class User:
 
     keycloak_id: str
     id: Optional[int] = None
+    no_default_access: bool = False
 
     @classmethod
     def from_dict(cls, data: dict) -> "User":

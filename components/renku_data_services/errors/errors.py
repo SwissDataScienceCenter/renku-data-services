@@ -9,7 +9,7 @@ class BaseError(Exception):
 
     code: int = 1500
     status_code: int = 500
-    message: str = "An unexpected error occured"
+    message: str = "An unexpected error occurred"
     detail: Optional[str] = None
 
     def __repr__(self):
@@ -27,12 +27,12 @@ class MissingResourceError(BaseError):
 
     code: int = 1404
     status_code: int = 404
-    message: str = "The reqested resource does not exist or cannot be found"
+    message: str = "The requested resource does not exist or cannot be found"
 
 
 @dataclass
 class ConfigurationError(BaseError):
-    """Raised when the serverver is not properly configured."""
+    """Raised when the server is not properly configured."""
 
     message: str = "The server is not properly configured and cannot run"
 
@@ -53,3 +53,12 @@ class Unauthorized(BaseError):
     code: int = 1401
     message: str = "The supplied credentials are missing or invalid."
     status_code: int = 401
+
+
+@dataclass
+class NoDefaultPoolAccessError(BaseError):
+    """Raised when the user does not have the right to access the default resource pool."""
+
+    code: int = 1400
+    message: str = "The user cannot access the default resource pool."
+    status_code: int = 400

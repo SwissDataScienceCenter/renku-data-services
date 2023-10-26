@@ -21,8 +21,7 @@ details.
 
 1. `poetry install`
 2. `pre-commit install` to install pre commit hooks
-3. `DUMMY_STORES=true poetry run python src/renku_crc/main.py --debug --dev
-   --fast`
+3. `DUMMY_STORES=true poetry run python bases/renku_data_services/data_api/main.py --debug --dev --fast`
 
 ## Developing
 
@@ -33,11 +32,9 @@ details.
 ### Developing with the container image
 
 The container image can be built to be used as a local development service (for renku_crc):
-`docker build -f projects/renku_crc/Dockerfile . --build-arg DEV_BUILD=true -t renku-crc`
+`docker build -f projects/renku_crc/Dockerfile . --build-arg DEV_BUILD=true -t renku-data-service`
 
-It can then be ran as daemon: `docker run -d -e DUMMY_STORES=true --name
-renku-crc renku-crc`
-
+It can then be run as daemon: `docker run -d -e DUMMY_STORES=true --name renku-crc renku-data-service`
 
 ## Migrations
 to create migrations locally, run alembic like
