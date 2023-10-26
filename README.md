@@ -32,9 +32,9 @@ details.
 ### Developing with the container image
 
 The container image can be built to be used as a local development service (for renku_crc):
-`docker build -f projects/renku_crc/Dockerfile . --build-arg DEV_BUILD=true -t renku-crc`
+`docker build -f projects/renku_crc/Dockerfile . --build-arg DEV_BUILD=true -t renku-data-service`
 
-It can then be run as daemon: `docker run -d -e DUMMY_STORES=true --name renku-crc renku-crc`
+It can then be run as daemon: `docker run -d -e DUMMY_STORES=true --name renku-crc renku-data-service`
 
 ## Migrations
 to create migrations locally, run alembic like

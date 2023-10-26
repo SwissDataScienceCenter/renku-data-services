@@ -13,7 +13,7 @@ from sqlalchemy import create_engine, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 from sqlalchemy.sql import Select, and_
-from sqlalchemy.sql.expression import true
+from sqlalchemy.sql.expression import false, true
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
@@ -40,7 +40,7 @@ def _resource_pool_access_control(
     match (api_user.is_authenticated, api_user.is_admin):
         case True, False:
             # The user is logged in but not an admin, they can see resource pools they have been granted access to
-            # or resource pools that are marked as default.
+            # or resource pools that are marked as public.
             if keycloak_id is not None and api_user.id != keycloak_id:
                 raise errors.ValidationError(
                     message="Your user ID should match the user ID for which you are querying resource pools."
@@ -56,8 +56,7 @@ def _resource_pool_access_control(
                     schemas.UserORM.keycloak_id == keycloak_id
                 )
         case _:
-            # The user is not logged in, they can see only the default resource pools
-            # TODO: Should .public be .default
+            # The user is not logged in, they can see only the public resource pools
             output = output.where(schemas.ResourcePoolORM.public == true())
     return output
 
@@ -487,6 +486,8 @@ class UserRepository(_Base):
                     stmt = stmt.where(schemas.ResourcePoolORM.name == resource_pool_name)
                 if resource_pool_id is not None:
                     stmt = stmt.where(schemas.ResourcePoolORM.id == resource_pool_id)
+                if user.no_default_access:
+                    stmt = stmt.where(schemas.ResourcePoolORM.default == false())
                 # NOTE: The line below ensures that the right users can access the right resources, do not remove.
                 stmt = _resource_pool_access_control(api_user, stmt, keycloak_id=keycloak_id)
                 res = await session.execute(stmt)
@@ -516,12 +517,17 @@ class UserRepository(_Base):
                     .where(schemas.ResourcePoolORM.id.in_(resource_pool_ids))
                     .options(selectinload(schemas.ResourcePoolORM.classes))
                 )
+                if user.no_default_access:
+                    stmt_rp = stmt_rp.where(schemas.ResourcePoolORM.default == false())
                 res = await session.execute(stmt_rp)
                 rps_to_add = res.scalars().all()
                 if len(rps_to_add) != len(resource_pool_ids):
                     missing_rps = set(resource_pool_ids).difference(set([i.id for i in rps_to_add]))
                     raise errors.MissingResourceError(
-                        message=f"The resource pools with ids: {missing_rps} do not exist."
+                        message=(
+                            f"The resource pools with ids: {missing_rps} do not exist or user doesn't have access to "
+                            "default resource pool."
+                        )
                     )
                 if user.no_default_access:
                     default_rp = next((rp for rp in rps_to_add if rp.default), None)
