@@ -30,6 +30,7 @@ class UserORM(BaseORM):
 
     __tablename__ = "users"
     keycloak_id: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    no_default_access: Mapped[bool] = mapped_column(default=False, insert_default=False)
     resource_pools: Mapped[List["ResourcePoolORM"]] = relationship(
         secondary=resource_pools_users,
         back_populates="users",
@@ -41,11 +42,11 @@ class UserORM(BaseORM):
     @classmethod
     def load(cls, user: base_models.User):
         """Create an ORM object from a user model."""
-        return cls(keycloak_id=user.keycloak_id)
+        return cls(keycloak_id=user.keycloak_id, no_default_access=user.no_default_access)
 
     def dump(self) -> base_models.User:
         """Create a user model from the ORM object."""
-        return base_models.User(id=self.id, keycloak_id=self.keycloak_id)
+        return base_models.User(id=self.id, keycloak_id=self.keycloak_id, no_default_access=self.no_default_access)
 
 
 class ResourceClassORM(BaseORM):
