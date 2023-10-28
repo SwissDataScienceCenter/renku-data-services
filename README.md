@@ -9,6 +9,8 @@ compute resources.
 This project follows the [Polylith Architecture]() using the [Polylith Poetry
 Plugin](https://davidvujic.github.io/python-polylith-docs/installation/).
 
+
+
 [Installation
 instructions](https://davidvujic.github.io/python-polylith-docs/installation/)
 for the plugin.
