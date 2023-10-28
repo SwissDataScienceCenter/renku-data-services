@@ -14,7 +14,7 @@ from pydantic import ValidationError
 
 from renku_data_services import errors
 from renku_data_services.base_models.core import APIUser
-from renku_data_services.storage.db import StorageRepository
+from renku_data_services.data_api.config import Config
 
 
 def get_user(storage, valid=True):
@@ -42,7 +42,8 @@ def get_user(storage, valid=True):
 @given(storage=storage_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
-async def test_storage_insert_get(storage: dict[str, Any], storage_repo: StorageRepository):
+async def test_storage_insert_get(storage: dict[str, Any], app_config: Config):
+    storage_repo = app_config.storage_repo
     try:
         await create_storage(storage, storage_repo, user=get_user(storage))
     except (ValidationError, errors.ValidationError):
@@ -53,8 +54,9 @@ async def test_storage_insert_get(storage: dict[str, Any], storage_repo: Storage
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_storage_update_path(
-    storage: dict[str, Any], new_source_path: str, new_target_path: str, storage_repo: StorageRepository
+    storage: dict[str, Any], new_source_path: str, new_target_path: str, app_config: Config
 ):
+    storage_repo = app_config.storage_repo
     try:
         user = user = get_user(storage)
         inserted_storage = await create_storage(storage, storage_repo, user)
@@ -73,9 +75,8 @@ async def test_storage_update_path(
 @given(storage=storage_strat(), new_config=st.one_of(s3_configuration(), azure_configuration()))
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
-async def test_storage_update_config(
-    storage: dict[str, Any], new_config: dict[str, Any], storage_repo: StorageRepository
-):
+async def test_storage_update_config(storage: dict[str, Any], new_config: dict[str, Any], app_config: Config):
+    storage_repo = app_config.storage_repo
     try:
         user = user = get_user(storage)
         inserted_storage = await create_storage(storage, storage_repo, user)
@@ -93,7 +94,8 @@ async def test_storage_update_config(
 @given(storage=storage_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
-async def test_storage_delete(storage: dict[str, Any], storage_repo: StorageRepository):
+async def test_storage_delete(storage: dict[str, Any], app_config: Config):
+    storage_repo = app_config.storage_repo
     try:
         user = user = get_user(storage)
         inserted_storage = await create_storage(storage, storage_repo, user)
