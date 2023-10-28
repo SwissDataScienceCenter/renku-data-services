@@ -37,7 +37,7 @@ class UserORM(BaseORM):
         default_factory=list,
         cascade="save-update, merge, delete",
     )
-    id: Mapped[int] = mapped_column(primary_key=True, init=False)
+    id: Mapped[int] = mapped_column(primary_key=True, init=False, default=None)
 
     @classmethod
     def load(cls, user: base_models.User):
