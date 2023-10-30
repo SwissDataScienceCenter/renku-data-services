@@ -33,7 +33,7 @@ def upgrade() -> None:
             last_id = row[0]
             sequence_name = sql.Identifier("resource_pools", f"{table}_id_seq")
             statement = (sql.SQL("ALTER SEQUENCE {} RESTART WITH ").format(sequence_name).as_string(connection)) + str(
-                last_id
+                last_id + 1
             )  # Could not figure out how to add this to a query with Alembic
             connection.exec_driver_sql(statement)
 
