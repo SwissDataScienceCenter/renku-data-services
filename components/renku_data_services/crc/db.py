@@ -598,3 +598,19 @@ class UserRepository(_Base):
                 else:
                     rp.users = users_to_add_exist + users_to_add_missing
                 return [usr.dump() for usr in rp.users]
+
+    @_only_admins
+    async def update_user(self, api_user: base_models.APIUser, keycloak_id: str, **kwargs) -> base_models.User:
+        """Update a specific user."""
+        async with self.session_maker() as session:
+            async with session.begin():
+                stmt = select(schemas.UserORM).where(schemas.UserORM.keycloak_id == keycloak_id)
+                res = await session.execute(stmt)
+                user: Optional[schemas.UserORM] = res.scalars().first()
+                if not user:
+                    raise errors.MissingResourceError(
+                        message=f"The user with keycloak ID {keycloak_id} does not exist."
+                    )
+                for field_name, field_value in kwargs.items():
+                    setattr(user, field_name, field_value)
+                return user.dump()
