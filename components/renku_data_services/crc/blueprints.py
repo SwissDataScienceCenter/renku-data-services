@@ -256,7 +256,9 @@ class ClassesBP(CustomBlueprint):
             res = await self.repo.get_classes(
                 api_user=user, resource_pool_id=resource_pool_id, name=request.args.get("name")
             )
-            return json([apispec.ResourceClassWithId.model_construct(**asdict(r)).model_dump(exclude_none=True) for r in res])
+            return json(
+                [apispec.ResourceClassWithId.model_construct(**asdict(r)).model_dump(exclude_none=True) for r in res]
+            )
 
         return "/resource_pools/<resource_pool_id>/classes", ["GET"], _get_all
 
@@ -540,7 +542,9 @@ class UserResourcePoolsBP(CustomBlueprint):
         async def _get(_: Request, user_id: str, user: base_models.APIUser):
             rps = await self.repo.get_user_resource_pools(keycloak_id=user_id, api_user=user)
             rps = [self.quota_repo.hydrate_resource_pool_quota(rp) for rp in rps]
-            return json([apispec.ResourcePoolWithId.model_construct(**asdict(rp)).model_dump(exclude_none=True) for rp in rps])
+            return json(
+                [apispec.ResourcePoolWithId.model_construct(**asdict(rp)).model_dump(exclude_none=True) for rp in rps]
+            )
 
         return "/users/<user_id>/resource_pools", ["GET"], _get
 
@@ -573,4 +577,6 @@ class UserResourcePoolsBP(CustomBlueprint):
             keycloak_id=user_id, resource_pool_ids=resource_pool_ids.root, append=post, api_user=api_user
         )
         rps = [self.quota_repo.hydrate_resource_pool_quota(rp) for rp in rps]
-        return json([apispec.ResourcePoolWithId.model_construct(**asdict(rp)).model_dump(exclude_none=True) for rp in rps])
+        return json(
+            [apispec.ResourcePoolWithId.model_construct(**asdict(rp)).model_dump(exclude_none=True) for rp in rps]
+        )

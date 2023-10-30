@@ -176,4 +176,4 @@ async def test_update_user(
         assert (all([i.no_default_access for i in retrieved_users]))
     finally:
         for user in users:
-            res = await user_repo.delete_user(api_user=admin_user, id=user.keycloak_id)
+            await user_repo.delete_user(api_user=admin_user, id=user.keycloak_id)
