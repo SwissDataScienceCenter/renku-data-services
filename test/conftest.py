@@ -1,6 +1,7 @@
 """Fixtures for testing."""
 
 import os
+from typing import Iterator
 
 import pytest
 from hypothesis import settings
@@ -67,29 +68,11 @@ postgresql = factories.postgresql("postgresql_in_docker")
 
 
 @pytest.fixture
-def user_repo(postgresql, monkeypatch):
+def app_config(postgresql, monkeypatch) -> Iterator[DataConfig]:
     monkeypatch.setenv("DUMMY_STORES", "true")
     monkeypatch.setenv("DB_NAME", postgresql.info.dbname)
     config = DataConfig.from_env()
-    yield config.user_repo
-    monkeypatch.delenv("DUMMY_STORES", raising=False)
-
-
-@pytest.fixture
-def pool_repo(postgresql, monkeypatch):
-    monkeypatch.setenv("DUMMY_STORES", "true")
-    monkeypatch.setenv("DB_NAME", postgresql.info.dbname)
-    config = DataConfig.from_env()
-    yield config.rp_repo
-    monkeypatch.delenv("DUMMY_STORES", raising=False)
-
-
-@pytest.fixture
-def storage_repo(postgresql, monkeypatch):
-    monkeypatch.setenv("DUMMY_STORES", "true")
-    monkeypatch.setenv("DB_NAME", postgresql.info.dbname)
-    config = DataConfig.from_env()
-    yield config.storage_repo
+    yield config
     monkeypatch.delenv("DUMMY_STORES", raising=False)
 
 
