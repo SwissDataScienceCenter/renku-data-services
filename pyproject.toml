@@ -17,6 +17,8 @@ packages = [
   { include = "renku_data_services/base_api", from = "components" },
   { include = "renku_data_services/storage", from = "components" },
   { include = "renku_data_services/storage_migrations", from = "components" },
+  { include = "renku_data_services/user_preferences", from = "components" },
+  { include = "renku_data_services/user_preferences_migrations", from = "components" },
   { include = "renku_data_services/utils", from = "components" },
   { include = "renku_data_services/git", from = "components" },
 ]
