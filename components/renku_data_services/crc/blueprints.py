@@ -369,7 +369,6 @@ class QuotaBP(CustomBlueprint):
     async def _put_patch(
         self, resource_pool_id: int, body: apispec.QuotaPatch | apispec.QuotaWithId, api_user: base_models.APIUser
     ):
-        # TODO: Check whether the quota is compatible with all the resource classes
         rps = await self.rp_repo.get_resource_pools(api_user=api_user, id=resource_pool_id)
         if len(rps) < 1:
             raise errors.MissingResourceError(message=f"Cannot find the resource pool with ID {resource_pool_id}.")
@@ -494,7 +493,6 @@ class UserResourcePoolsBP(CustomBlueprint):
         @only_admins
         async def _get(_: Request, user_id: str, user: base_models.APIUser):
             rps = await self.repo.get_user_resource_pools(keycloak_id=user_id, api_user=user)
-            rps = [self.quota_repo.hydrate_resource_pool_quota(rp) for rp in rps]
             return json([apispec.ResourcePoolWithId.model_validate(rp).model_dump(exclude_none=True) for rp in rps])
 
         return "/users/<user_id>/resource_pools", ["GET"], _get
@@ -527,5 +525,4 @@ class UserResourcePoolsBP(CustomBlueprint):
         rps = await self.repo.update_user_resource_pools(
             keycloak_id=user_id, resource_pool_ids=resource_pool_ids.root, append=post, api_user=api_user
         )
-        rps = [self.quota_repo.hydrate_resource_pool_quota(rp) for rp in rps]
         return json([apispec.ResourcePoolWithId.model_validate(rp).model_dump(exclude_none=True) for rp in rps])
