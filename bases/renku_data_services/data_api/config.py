@@ -102,7 +102,7 @@ class Config:
         with open(spec_file, "r") as f:
             user_preferences_spec = safe_load(f)
 
-        self.spec = always_merger.merge(crc_spec, storage_spec, user_preferences_spec)
+        self.spec = always_merger.merge(always_merger.merge(crc_spec, storage_spec), user_preferences_spec)
 
         if self.default_resource_pool_file is not None:
             with open(self.default_resource_pool_file, "r") as f:
