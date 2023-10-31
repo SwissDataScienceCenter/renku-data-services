@@ -44,18 +44,15 @@ def test_get_insert_quota(quota: models.Quota):
     core_client = DummyCoreClient({})
     scheduling_client = DummySchedulingClient({})
     quota_repo = QuotaRepository(core_client, scheduling_client)
-    quota = quota.generate_id()
-    assert quota.id is not None
     quotas = quota_repo.get_quotas()
     assert len(quotas) == 0
     assert len(scheduling_client.pcs) == 0
-    assert quota
     quota_repo.create_quota(quota)
     quotas = quota_repo.get_quotas()
     assert len(quotas) == 1
+    inserted_quota = quotas[0]
     assert len(scheduling_client.pcs) == 1
-    assert scheduling_client.pcs[quota.id].metadata.name == quota.id
-    assert quotas[0] == quota
+    assert scheduling_client.pcs[inserted_quota.id].metadata.name == inserted_quota.id
     specific_quota_list = quota_repo.get_quotas(quota.id)
     assert len(specific_quota_list) == 1
     specific_quota = specific_quota_list[0]
@@ -68,13 +65,11 @@ def test_delete_quota(quota: models.Quota):
     core_client = DummyCoreClient({})
     scheduling_client = DummySchedulingClient({})
     quota_repo = QuotaRepository(core_client, scheduling_client)
-    quota = quota.generate_id()
-    assert quota.id is not None
     quota_repo.create_quota(quota)
     quotas = quota_repo.get_quotas()
     assert len(quotas) == 1
     assert len(scheduling_client.pcs) == 1
-    quota_repo.delete_quota(quota.id)
+    quota_repo.delete_quota(quotas[0].id)
     quotas = quota_repo.get_quotas()
     assert len(quotas) == 0
     assert len(scheduling_client.pcs) == 0
@@ -86,9 +81,7 @@ def test_update_quota(old_quota: models.Quota, new_quota: models.Quota):
         core_client = DummyCoreClient({})
         scheduling_client = DummySchedulingClient({})
         quota_repo = QuotaRepository(core_client, scheduling_client)
-        old_quota = old_quota.generate_id()
-        assert old_quota.id is not None
-        quota_repo.create_quota(old_quota)
+        old_quota = quota_repo.create_quota(old_quota)
         quotas = quota_repo.get_quotas()
         assert len(scheduling_client.pcs) == 1
         assert len(quotas) == 1
