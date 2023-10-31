@@ -7,6 +7,7 @@ from sqlalchemy.schema import ForeignKey
 
 import renku_data_services.base_models as base_models
 from renku_data_services.crc import models
+from renku_data_services.errors import errors
 
 metadata_obj = MetaData(schema="resource_pools")  # Has to match alembic ini section name
 
@@ -122,6 +123,7 @@ class ResourcePoolORM(BaseORM):
         back_populates="resource_pool",
         default_factory=list,
         cascade="save-update, merge, delete",
+        lazy="joined",
     )
     default: Mapped[bool] = mapped_column(default=False, index=True)
     public: Mapped[bool] = mapped_column(default=False, index=True)
@@ -131,25 +133,33 @@ class ResourcePoolORM(BaseORM):
     def load(cls, resource_pool: models.ResourcePool):
         """Create an ORM object from the resource pool model."""
         quota = None
-        if isinstance(resource_pool.quota, str):
-            quota = resource_pool.quota
-        elif isinstance(resource_pool.quota, models.Quota):
+        if isinstance(resource_pool.quota, models.Quota):
             quota = resource_pool.quota.id
         return cls(
             name=resource_pool.name,
-            quota=quota,  # type: ignore[arg-type]
+            quota=quota,
             classes=[ResourceClassORM.load(resource_class) for resource_class in resource_pool.classes],
             public=resource_pool.public,
             default=resource_pool.default,
         )
 
-    def dump(self) -> models.ResourcePool:
-        """Create a resource pool model from the ORM object."""
+    def dump(self, quota: models.Quota | None) -> models.ResourcePool:
+        """Create a resource pool model from the ORM object and a quota."""
         classes: List[ResourceClassORM] = self.classes
+        if quota and quota.id != self.quota:
+            raise errors.BaseError(
+                message="Unexpected error when dumping a resource pool ORM.",
+                detail=f"The quota name in the database {self.quota} and Kubernetes {quota.id} do not match.",
+            )
+        if (quota is None and self.quota is not None) or (quota is not None and self.quota is None):
+            raise errors.BaseError(
+                message="Unexpected error when dumping a resource pool ORM.",
+                detail=f"The quota in the database {self.quota} and Kubernetes {quota} do not match.",
+            )
         return models.ResourcePool(
             id=self.id,
             name=self.name,
-            quota=self.quota,
+            quota=quota,
             classes=[resource_class.dump() for resource_class in classes],
             public=self.public,
             default=self.default,

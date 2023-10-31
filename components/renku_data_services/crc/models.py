@@ -162,7 +162,7 @@ class ResourcePool:
 
     name: str
     classes: List["ResourceClass"]
-    quota: Optional[Quota | str] = None
+    quota: Optional[Quota] = None
     id: Optional[int] = None
     default: bool = False
     public: bool = False
@@ -173,15 +173,13 @@ class ResourcePool:
             raise ValidationError(message="'\x00' is not allowed in 'name' field.")
         if len(self.name) > 40:
             raise ValidationError(message="'name' cannot be longer than 40 characters.")
-        if isinstance(self.quota, str) and "\x00" in self.quota:
-            raise ValidationError(message="'\x00' is not allowed in 'quota' field.")
         if self.default and not self.public:
             raise ValidationError(message="The default resource pool has to be public.")
         if self.default and self.quota is not None:
             raise ValidationError(message="A default resource pool cannot have a quota.")
         default_classes = []
         for cls in list(self.classes):
-            if isinstance(self.quota, Quota) and not self.quota.is_resource_class_compatible(cls):
+            if self.quota and not self.quota.is_resource_class_compatible(cls):
                 raise ValidationError(
                     message=f"The resource class with name {cls.name} is not compatible with the quota."
                 )
@@ -195,10 +193,10 @@ class ResourcePool:
             self, "classes", sorted(self.classes, key=lambda x: (x.default, x.cpu, x.memory, x.default_storage, x.name))
         )
 
-    def set_quota(self, val: Optional[Quota | str]) -> "ResourcePool":
+    def set_quota(self, val: Quota) -> "ResourcePool":
         """Set the quota for a resource pool."""
         for cls in list(self.classes):
-            if isinstance(val, Quota) and not val.is_resource_class_compatible(cls):
+            if not val.is_resource_class_compatible(cls):
                 raise ValidationError(
                     message=f"The resource class with name {cls.name} is not compatiable with the quota."
                 )
@@ -213,12 +211,11 @@ class ResourcePool:
     @classmethod
     def from_dict(cls, data: dict) -> "ResourcePool":
         """Create the model from a plain dictionary."""
-        quota: Optional[str | Quota] = None
+        quota: Optional[Quota] = None
         if "quota" in data and isinstance(data["quota"], dict):
             quota = Quota.from_dict(data["quota"])
-        elif "quota" in data and (isinstance(data["quota"], Quota) or isinstance(data["quota"], str)):
+        elif "quota" in data and isinstance(data["quota"], Quota):
             quota = data["quota"]
-        classes = []
         if "classes" in data and isinstance(data["classes"], set):
             classes = [ResourceClass.from_dict(c) if isinstance(c, dict) else c for c in list(data["classes"])]
         elif "classes" in data and isinstance(data["classes"], list):
