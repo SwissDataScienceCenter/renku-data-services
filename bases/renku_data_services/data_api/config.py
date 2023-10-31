@@ -13,6 +13,7 @@ from yaml import safe_load
 import renku_data_services.base_models as base_models
 import renku_data_services.crc
 import renku_data_services.storage
+import renku_data_services.user_preferences
 from renku_data_services import errors
 from renku_data_services.crc import models
 from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
@@ -97,7 +98,11 @@ class Config:
         with open(spec_file, "r") as f:
             storage_spec = safe_load(f)
 
-        self.spec = always_merger.merge(crc_spec, storage_spec)
+        spec_file = Path(renku_data_services.user_preferences.__file__).resolve().parent / "api.spec.yaml"
+        with open(spec_file, "r") as f:
+            user_preferences_spec = safe_load(f)
+
+        self.spec = always_merger.merge(crc_spec, storage_spec, user_preferences_spec)
 
         if self.default_resource_pool_file is not None:
             with open(self.default_resource_pool_file, "r") as f:
