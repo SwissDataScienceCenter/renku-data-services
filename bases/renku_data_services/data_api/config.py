@@ -26,6 +26,7 @@ from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClie
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.migrations.core import DataRepository
 from renku_data_services.storage.db import StorageRepository
+from renku_data_services.user_preferences.db import UserPreferencesRepository
 from renku_data_services.users.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.users.gitlab import GitlabAuthenticator
 from renku_data_services.users.keycloak import KcUserStore, KeycloakAuthenticator
@@ -74,6 +75,7 @@ class Config:
     user_repo: UserRepository
     rp_repo: ResourcePoolRepository
     storage_repo: StorageRepository
+    user_preferences_repo: UserPreferencesRepository
     user_store: base_models.UserStore
     authenticator: base_models.Authenticator
     gitlab_authenticator: base_models.Authenticator
@@ -187,10 +189,15 @@ class Config:
             sync_sqlalchemy_url=sync_sqlalchemy_url,
             async_sqlalchemy_url=async_sqlalchemy_url,
         )
+        user_preferences_repo = UserPreferencesRepository(
+            sync_sqlalchemy_url=sync_sqlalchemy_url,
+            async_sqlalchemy_url=async_sqlalchemy_url,
+        )
         return cls(
             user_repo=user_repo,
             rp_repo=rp_repo,
             storage_repo=storage_repo,
+            user_preferences_repo=user_preferences_repo,
             version=version,
             authenticator=authenticator,
             gitlab_authenticator=gitlab_authenticator,
