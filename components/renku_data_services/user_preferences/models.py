@@ -11,9 +11,7 @@ class PinnedProjects(BaseModel):
 
     @classmethod
     def from_dict(cls, data: dict) -> "PinnedProjects":
-        return cls(
-            project_slugs=data.get("project_slugs")
-        )
+        return cls(project_slugs=data.get("project_slugs"))
 
 
 class UserPreferences(BaseModel):

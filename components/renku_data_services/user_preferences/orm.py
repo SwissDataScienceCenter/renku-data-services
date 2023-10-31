@@ -40,6 +40,5 @@ class UserPreferencesORM(BaseORM):
     def dump(self):
         """Create a user preferences model from the ORM object."""
         return models.UserPreferences(
-            user_id=self.user_id,
-            pinned_projects=models.PinnedProjects.from_dict(self.pinned_projects)
+            user_id=self.user_id, pinned_projects=models.PinnedProjects.from_dict(self.pinned_projects)
         )

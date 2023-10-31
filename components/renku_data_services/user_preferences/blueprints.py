@@ -1,17 +1,13 @@
 """User preferences app."""
 from dataclasses import dataclass
-# from typing import Any
 
-from sanic import Request ,json
-# from sanic_ext import validate
+from sanic import Request, json
 
 import renku_data_services.base_models as base_models
-# from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
-
-from renku_data_services.user_preferences.db import UserPreferencesRepository
 from renku_data_services.user_preferences import apispec, models
+from renku_data_services.user_preferences.db import UserPreferencesRepository
 
 
 @dataclass(kw_only=True)
