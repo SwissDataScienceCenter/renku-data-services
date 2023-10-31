@@ -34,7 +34,7 @@ class ResourcePoolsBP(CustomBlueprint):
             return json(
                 [
                     apispec.ResourcePoolWithIdFiltered.model_construct(**asdict(r)).model_dump(exclude_none=True)
-                    for r in rps_w_quota
+                    for r in rps
                 ]
             )
 
@@ -345,10 +345,6 @@ class QuotaBP(CustomBlueprint):
                 raise errors.MissingResourceError(
                     message=f"The resource pool with ID {resource_pool_id} does not have a quota."
                 )
-            if isinstance(rp.quota, str):
-                # NOTE: This should never happen because hydrate_resource_pool_quota above makes sure we either
-                # have a models.Quota in this field or None.
-                raise errors.BaseError()
             return json(apispec.QuotaWithId.model_construct(**asdict(rp.quota)).model_dump(exclude_none=True))
 
         return "/resource_pools/<resource_pool_id>/quota", ["GET"], _get
