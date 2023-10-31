@@ -46,5 +46,5 @@ class UserPreferencesRepository(_Base):
             user_preferences = res.one_or_none()
 
             if user_preferences is None:
-                return None
+                raise errors.MissingResourceError(message="Preferences not found for user.")
             return user_preferences[0].dump()
