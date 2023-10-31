@@ -114,7 +114,11 @@ class GitlabAPI:
 
 @dataclass(kw_only=True)
 class DummyGitlabAPI:
-    """Dummy gitlab API where the user with name John Doe has admin access to project 123456 and member access to 999999."""
+    """
+    Dummy gitlab API.
+
+    The user with name John Doe has admin access to project 123456 and member access to 999999.
+    """
 
     _store = {
         "John Doe": {
