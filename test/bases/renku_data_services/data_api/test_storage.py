@@ -5,14 +5,10 @@ import pytest
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 
-from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.data_api.config import Config
-from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient
-from renku_data_services.k8s.quota import QuotaRepository
-from renku_data_services.storage.db import StorageRepository
 from renku_data_services.storage.rclone import RCloneValidator
-from renku_data_services.users.dummy import DummyAuthenticator, DummyUserStore
+from renku_data_services.users.dummy import DummyAuthenticator
 
 _valid_storage: dict[str, Any] = {
     "project_id": "123456",
@@ -33,22 +29,11 @@ def valid_storage_payload() -> dict[str, Any]:
 
 
 @pytest.fixture
-def storage_test_client(
-    storage_repo: StorageRepository, pool_repo: ResourcePoolRepository, user_repo: UserRepository
-) -> SanicASGITestClient:
+def storage_test_client(app_config: Config) -> SanicASGITestClient:
     gitlab_auth = DummyAuthenticator(admin=True)
-    config = Config(
-        user_repo=user_repo,
-        rp_repo=pool_repo,
-        storage_repo=storage_repo,
-        user_store=DummyUserStore(),
-        authenticator=DummyAuthenticator(admin=True),
-        gitlab_authenticator=gitlab_auth,
-        quota_repo=QuotaRepository(DummyCoreClient({}), DummySchedulingClient({})),
-    )
-
-    app = Sanic(config.app_name)
-    app = register_all_handlers(app, config)
+    app_config.gitlab_authenticator = gitlab_auth
+    app = Sanic(app_config.app_name)
+    app = register_all_handlers(app, app_config)
     validator = RCloneValidator()
     app.ext.dependency(validator)
     return SanicASGITestClient(app), gitlab_auth

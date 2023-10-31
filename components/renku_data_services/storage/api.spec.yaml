@@ -29,7 +29,8 @@ paths:
                 $ref: "#/components/schemas/CloudStorageGet"
         default:
           $ref: '#/components/responses/Error'
-
+      tags:
+        - storage
     put:
       summary: update a cloud storage entry
       requestBody:
@@ -49,6 +50,8 @@ paths:
                 $ref: "#/components/schemas/CloudStorageGet"
         default:
           $ref: '#/components/responses/Error'
+      tags:
+        - storage
     patch:
       summary: partially update a cloud storage entry
       requestBody:
@@ -67,6 +70,8 @@ paths:
                 $ref: "#/components/schemas/CloudStorageGet"
         default:
           $ref: '#/components/responses/Error'
+      tags:
+        - storage
     delete:
       summary: remove a cloud storage definition
       responses:
@@ -102,6 +107,8 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         default:
           $ref: '#/components/responses/Error'
+      tags:
+        - storage
     post:
       summary: create a new cloud storage for a project
       requestBody:
@@ -133,6 +140,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RCloneSchema"
+      tags:
+        - storage
   /storage_schema/validate:
     post:
       summary: Validate an RClone config using the schema
@@ -147,6 +156,8 @@ paths:
           description: The configuration is valid
         default:
           $ref: '#/components/responses/Error'
+      tags:
+        - storage
 components:
   schemas:
     GitRequest:
@@ -167,6 +178,7 @@ components:
         - type: string
         - type: boolean
         - type: object
+        - type: "null"
     CloudStorageUrl:
       allOf:
         - $ref: "#/components/schemas/GitRequest"

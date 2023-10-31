@@ -64,7 +64,8 @@ class QuotaRepository:
             ),
         )
 
-    def _get_quota(self, name: str) -> Optional[models.Quota]:
+    def get_quota(self, name: str) -> Optional[models.Quota]:
+        """Get a specific quota by name."""
         try:
             res_quota: client.V1ResourceQuota = self.core_client.read_namespaced_resource_quota(
                 name=name, namespace=self.namespace
@@ -78,7 +79,7 @@ class QuotaRepository:
     def get_quotas(self, name: Optional[str] = None) -> List[models.Quota]:
         """Get a specific resource quota."""
         if name is not None:
-            quota = self._get_quota(name)
+            quota = self.get_quota(name)
             return [quota] if quota is not None else []
         quotas = self.core_client.list_namespaced_resource_quota(
             namespace=self.namespace, label_selector=f"{self._label_name}={self._label_value}"
@@ -87,6 +88,9 @@ class QuotaRepository:
 
     def create_quota(self, quota: models.Quota):
         """Create a resource quota and priority class."""
+        if quota.id:
+            raise errors.BaseError(message=f"Cannot create a quota with a preset id - {quota.id}.")
+        quota = quota.generate_id()
         metadata = {"labels": {self._label_name: self._label_value}, "name": quota.id}
         quota_manifest = self._quota_to_manifest(quota)
         pc: client.V1PriorityClass = self.scheduling_client.create_priority_class(
@@ -98,6 +102,8 @@ class QuotaRepository:
                 metadata=client.V1ObjectMeta(**metadata),
             ),
         )
+        # NOTE: The priority class is cluster-scoped and a namespace-scoped resource cannot be an owner
+        # of a cluster-scoped resource. That is why the priority class is an owner of the quota.
         quota_manifest.owner_references = [
             client.V1OwnerReference(
                 api_version=pc.api_version,
@@ -109,37 +115,27 @@ class QuotaRepository:
             )
         ]
         self.core_client.create_namespaced_resource_quota(self.namespace, quota_manifest)
+        return quota
 
     def delete_quota(self, name: str):
         """Delete a resource quota and priority class."""
-        self.scheduling_client.delete_priority_class(
-            name=name, body=client.V1DeleteOptions(propagation_policy="Foreground")
-        )
         try:
+            self.scheduling_client.delete_priority_class(
+                name=name, body=client.V1DeleteOptions(propagation_policy="Foreground")
+            )
             self.core_client.delete_namespaced_resource_quota(name=name, namespace=self.namespace)
         except client.ApiException as e:
             if e.status == 404:
-                # NOTE: The priorityclass is an owner of the resource quota so when the priority class is delete the
-                # resource class is also deleted.
-                pass
+                # NOTE: The priorityclass is an owner of the resource quota so when the priority class is deleted the
+                # resource quota is also deleted. Also we dont care if the thing we are trying to delete is not there
+                # we have the desired state so we can just go on.
+                return
             raise
 
-    def update_quota(self, quota: models.Quota):
+    def update_quota(self, quota: models.Quota) -> models.Quota:
         """Update a specific resource quota."""
+        if not quota.id:
+            quota = quota.generate_id()
         quota_manifest = self._quota_to_manifest(quota)
         self.core_client.patch_namespaced_resource_quota(name=quota.id, namespace=self.namespace, body=quota_manifest)
-
-    def hydrate_resource_pool_quota(self, resource_pool: models.ResourcePool) -> models.ResourcePool:
-        """Replace the resource pool quota ID with a quota model."""
-
-        if resource_pool.quota is None or isinstance(resource_pool.quota, models.Quota):
-            return resource_pool
-        if isinstance(resource_pool.quota, str):
-            quota = self._get_quota(resource_pool.quota)
-            return resource_pool.set_quota(quota)
-        else:
-            raise errors.BaseError(
-                message=f"Cannot find a quota for the resource pool with id {resource_pool.id}.",
-                detail="The quota field in the resource pool is expected to be either a string or "
-                f"`models.Quota` but we got {type(resource_pool.quota)}",
-            )
+        return quota

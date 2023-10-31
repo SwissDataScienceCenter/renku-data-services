@@ -26,7 +26,6 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         rp_repo=config.rp_repo,
         authenticator=config.authenticator,
         user_repo=config.user_repo,
-        quota_repo=config.quota_repo,
     )
     classes = ClassesBP(name="classes", url_prefix=url_prefix, repo=config.rp_repo, authenticator=config.authenticator)
     quota = QuotaBP(
@@ -51,7 +50,6 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         url_prefix=url_prefix,
         repo=config.user_repo,
         authenticator=config.authenticator,
-        quota_repo=config.quota_repo,
     )
     storage = StorageBP(
         name="storage",
