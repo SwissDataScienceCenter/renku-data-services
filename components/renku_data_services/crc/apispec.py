@@ -44,7 +44,7 @@ class K8sLabel(RootModel):
         example="some-label-1",
         max_length=63,
         min_length=3,
-        pattern="^[a-z0-9A-Z][a-z0-9A-Z-_.]*[a-z0-9A-Z]$",
+        pattern="^[a-z0-9A-Z][a-z0-9A-Z-_./]*[a-z0-9A-Z]$",
     )
 
 
@@ -58,7 +58,7 @@ class NodeAffinity(BaseAPISpec):
         example="some-label-1",
         max_length=63,
         min_length=3,
-        pattern="^[a-z0-9A-Z][a-z0-9A-Z-_.]*[a-z0-9A-Z]$",
+        pattern="^[a-z0-9A-Z][a-z0-9A-Z-_./]*[a-z0-9A-Z]$",
     )
     requiredDuringScheduling: bool = False
 

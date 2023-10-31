@@ -75,11 +75,12 @@ def rc_default_strat(draw):
 
 
 quota_strat = st.builds(models.Quota, cpu=a_quota_cpu, gpu=a_quota_gpu, memory=a_quota_memory)
+quota_strat_w_id = st.builds(models.Quota, cpu=a_quota_cpu, gpu=a_quota_gpu, memory=a_quota_memory, id=a_uuid_string)
 
 
 @st.composite
 def rp_strat(draw):
-    quota = draw(a_uuid_string)
+    quota = draw(quota_strat)
     classes = draw(st.lists(rc_non_default_strat(), min_size=1, max_size=5))
     classes.append(draw(rc_default_strat()))
     default = False

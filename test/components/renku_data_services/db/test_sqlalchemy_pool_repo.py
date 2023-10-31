@@ -18,16 +18,15 @@ from pydantic import ValidationError
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.crc import models
-from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
+from renku_data_services.data_api.config import Config
 
 
 @given(rp=rp_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
-async def test_resource_pool_insert_get(
-    rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser
-):
+async def test_resource_pool_insert_get(rp: models.ResourcePool, app_config: Config, admin_user: base_models.APIUser):
     inserted_rp = None
+    pool_repo = app_config.rp_repo
     try:
         inserted_rp = await create_rp(rp, pool_repo, admin_user)
     except (ValidationError, errors.ValidationError):
@@ -41,9 +40,10 @@ async def test_resource_pool_insert_get(
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_pool_update_name(
-    rp: models.ResourcePool, pool_repo: ResourcePoolRepository, new_name: str, admin_user: base_models.APIUser
+    rp: models.ResourcePool, app_config: Config, new_name: str, admin_user: base_models.APIUser
 ):
     inserted_rp = None
+    pool_repo = app_config.rp_repo
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
@@ -60,21 +60,24 @@ async def test_resource_pool_update_name(
             await pool_repo.delete_resource_pool(admin_user, inserted_rp.id)
 
 
-@given(rp=rp_strat(), new_quota_id=a_uuid_string)
+@given(rp=rp_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
-async def test_resource_pool_update_quota(
-    rp: models.ResourcePool, pool_repo: ResourcePoolRepository, new_quota_id: str, admin_user: base_models.APIUser
-):
+async def test_resource_pool_update_quota(rp: models.ResourcePool, app_config: Config, admin_user: base_models.APIUser):
+    pool_repo = app_config.rp_repo
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
         assert inserted_rp.quota is not None
-        updated_rp = await pool_repo.update_resource_pool(id=inserted_rp.id, quota=new_quota_id, api_user=admin_user)
+        updated_rp = await pool_repo.update_resource_pool(
+            id=inserted_rp.id, quota={"cpu": 999, "memory": 999, "gpu": 999}, api_user=admin_user
+        )
         assert updated_rp.id == inserted_rp.id
         assert updated_rp.quota is not None
         assert inserted_rp.quota != updated_rp.quota
-        assert updated_rp.quota == new_quota_id
+        assert updated_rp.quota.cpu == 999
+        assert updated_rp.quota.memory == 999
+        assert updated_rp.quota.gpu == 999
         retrieved_rps = await pool_repo.get_resource_pools(id=inserted_rp.id, api_user=admin_user)
         assert len(retrieved_rps) == 1
         assert retrieved_rps[0] == updated_rp
@@ -86,9 +89,10 @@ async def test_resource_pool_update_quota(
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_pool_update_classes(
-    rp: models.ResourcePool, pool_repo: ResourcePoolRepository, data, admin_user: base_models.APIUser
+    rp: models.ResourcePool, app_config: Config, data, admin_user: base_models.APIUser
 ):
     inserted_rp = None
+    pool_repo = app_config.rp_repo
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
@@ -120,8 +124,9 @@ async def test_resource_pool_update_classes(
 @given(rp=rp_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
-async def test_get_classes(rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser):
+async def test_get_classes(rp: models.ResourcePool, app_config: Config, admin_user: base_models.APIUser):
     inserted_rp = None
+    pool_repo = app_config.rp_repo
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
@@ -137,10 +142,9 @@ async def test_get_classes(rp: models.ResourcePool, pool_repo: ResourcePoolRepos
 @given(rp=rp_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
-async def test_get_class_by_id(
-    rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser
-):
+async def test_get_class_by_id(rp: models.ResourcePool, app_config: Config, admin_user: base_models.APIUser):
     inserted_rp = None
+    pool_repo = app_config.rp_repo
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
@@ -159,10 +163,9 @@ async def test_get_class_by_id(
 @given(rp=rp_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
-async def test_get_class_by_name(
-    rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser
-):
+async def test_get_class_by_name(rp: models.ResourcePool, app_config: Config, admin_user: base_models.APIUser):
     inserted_rp = None
+    pool_repo = app_config.rp_repo
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
@@ -181,9 +184,8 @@ async def test_get_class_by_name(
 @given(rp=rp_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 @pytest.mark.asyncio
-async def test_resource_pool_delete(
-    rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser
-):
+async def test_resource_pool_delete(rp: models.ResourcePool, app_config: Config, admin_user: base_models.APIUser):
+    pool_repo = app_config.rp_repo
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
@@ -200,10 +202,11 @@ async def test_resource_pool_delete(
 async def test_resource_class_create(
     rc: models.ResourceClass,
     rp: models.ResourcePool,
-    pool_repo: ResourcePoolRepository,
+    app_config: Config,
     admin_user: base_models.APIUser,
 ):
     inserted_rp = None
+    pool_repo = app_config.rp_repo
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
@@ -229,10 +232,9 @@ async def test_resource_class_create(
 @given(rp=rp_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
-async def test_resource_class_delete(
-    rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser
-):
+async def test_resource_class_delete(rp: models.ResourcePool, app_config: Config, admin_user: base_models.APIUser):
     inserted_rp = None
+    pool_repo = app_config.rp_repo
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
@@ -262,9 +264,10 @@ async def test_resource_class_delete(
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_class_update(
-    rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser, rc_update: dict
+    rp: models.ResourcePool, app_config: Config, admin_user: base_models.APIUser, rc_update: dict
 ):
     inserted_rp = None
+    pool_repo = app_config.rp_repo
     try:
         inserted_rp = await pool_repo.insert_resource_pool(resource_pool=rp, api_user=admin_user)
         assert inserted_rp is not None
@@ -302,10 +305,9 @@ async def test_resource_class_update(
 @given(rp=rp_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 @pytest.mark.asyncio
-async def test_lookup_rp_by_name(
-    rp: models.ResourcePool, pool_repo: ResourcePoolRepository, admin_user: base_models.APIUser
-):
+async def test_lookup_rp_by_name(rp: models.ResourcePool, app_config: Config, admin_user: base_models.APIUser):
     inserted_rp = None
+    pool_repo = app_config.rp_repo
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
@@ -323,20 +325,18 @@ async def test_lookup_rp_by_name(
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 @pytest.mark.asyncio
 async def test_insert_class_in_nonexisting_rp(
-    pool_repo: ResourcePoolRepository, rc: models.ResourceClass, admin_user: base_models.APIUser
+    app_config: Config, rc: models.ResourceClass, admin_user: base_models.APIUser
 ):
     with pytest.raises(errors.MissingResourceError):
-        await pool_repo.insert_resource_class(resource_class=rc, resource_pool_id=99999, api_user=admin_user)
+        await app_config.rp_repo.insert_resource_class(resource_class=rc, resource_pool_id=99999, api_user=admin_user)
 
 
 @given(new_quota_id=a_uuid_string)
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 @pytest.mark.asyncio
-async def test_update_quota_in_nonexisting_rp(
-    pool_repo: ResourcePoolRepository, new_quota_id: str, admin_user: base_models.APIUser
-):
+async def test_update_quota_in_nonexisting_rp(app_config: Config, new_quota_id: str, admin_user: base_models.APIUser):
     with pytest.raises(errors.MissingResourceError):
-        await pool_repo.update_resource_pool(id=99999, api_user=admin_user, quota=new_quota_id)
+        await app_config.rp_repo.update_resource_pool(id=99999, api_user=admin_user, quota=new_quota_id)
 
 
 @given(public_rp=public_rp_strat, private_rp=private_rp_strat)
@@ -347,11 +347,12 @@ async def test_resource_pools_access_control(
     private_rp: models.ResourcePool,
     admin_user: base_models.APIUser,
     loggedin_user: base_models.APIUser,
-    pool_repo: ResourcePoolRepository,
-    user_repo: UserRepository,
+    app_config: Config,
 ):
     inserted_public_rp = None
     inserted_private_rp = None
+    pool_repo = app_config.rp_repo
+    user_repo = app_config.user_repo
     try:
         inserted_public_rp = await create_rp(public_rp, pool_repo, admin_user)
         assert inserted_public_rp.id is not None
@@ -387,11 +388,12 @@ async def test_resource_pools_access_control(
 async def test_classes_filtering(
     rp1: models.ResourcePool,
     rp2: models.ResourcePool,
-    pool_repo: ResourcePoolRepository,
     admin_user: base_models.APIUser,
+    app_config: Config,
 ):
     inserted_rp1 = None
     inserted_rp2 = None
+    pool_repo = app_config.rp_repo
     try:
         inserted_rp1 = await create_rp(rp1, pool_repo, api_user=admin_user)
         inserted_rp2 = await create_rp(rp2, pool_repo, api_user=admin_user)

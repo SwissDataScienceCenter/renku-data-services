@@ -1390,7 +1390,7 @@ components:
       type: string
       description: A valid K8s label
       example: some-label-1
-      pattern: '^[a-z0-9A-Z][a-z0-9A-Z-_.]*[a-z0-9A-Z]$'
+      pattern: '^[a-z0-9A-Z][a-z0-9A-Z-_./]*[a-z0-9A-Z]$'
       minLength: 3
       maxLength: 63
     NodeAffinity:

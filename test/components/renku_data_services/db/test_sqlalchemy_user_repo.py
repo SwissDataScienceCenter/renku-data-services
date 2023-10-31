@@ -13,13 +13,14 @@ from hypothesis import HealthCheck, given, settings
 
 import renku_data_services.base_models as base_models
 from renku_data_services.crc import models
-from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
+from renku_data_services.data_api.config import Config
 
 
 @given(user=user_strat)
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
-async def test_insert_user(user_repo: UserRepository, user: base_models.User, admin_user: base_models.APIUser):
+async def test_insert_user(app_config: Config, user: base_models.User, admin_user: base_models.APIUser):
+    user_repo = app_config.user_repo
     inserted_user = await user_repo.insert_user(user=user, api_user=admin_user)
     assert inserted_user is not None
     assert inserted_user.keycloak_id is not None
@@ -35,7 +36,8 @@ async def test_insert_user(user_repo: UserRepository, user: base_models.User, ad
 @given(user=user_strat)
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
-async def test_delete_user(user_repo: UserRepository, user: base_models.User, admin_user: base_models.APIUser):
+async def test_delete_user(app_config: Config, user: base_models.User, admin_user: base_models.APIUser):
+    user_repo = app_config.user_repo
     inserted_user = await user_repo.insert_user(user=user, api_user=admin_user)
     assert inserted_user is not None
     assert inserted_user.keycloak_id is not None
@@ -51,11 +53,12 @@ async def test_delete_user(user_repo: UserRepository, user: base_models.User, ad
 @pytest.mark.asyncio
 async def test_resource_pool_add_users(
     rp: models.ResourcePool,
-    user_repo: UserRepository,
-    pool_repo: ResourcePoolRepository,
+    app_config: Config,
     users: List[base_models.User],
     admin_user: base_models.APIUser,
 ):
+    user_repo = app_config.user_repo
+    pool_repo = app_config.rp_repo
     inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
     assert inserted_rp.id is not None
     await user_repo.update_resource_pool_users(resource_pool_id=inserted_rp.id, users=users, api_user=admin_user)
@@ -80,11 +83,12 @@ async def test_resource_pool_add_users(
 @pytest.mark.asyncio
 async def test_resource_pool_remove_users(
     rp: models.ResourcePool,
-    user_repo: UserRepository,
-    pool_repo: ResourcePoolRepository,
+    app_config: Config,
     users: List[base_models.User],
     admin_user: base_models.APIUser,
 ):
+    user_repo = app_config.user_repo
+    pool_repo = app_config.rp_repo
     inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
     assert inserted_rp.id is not None
     await user_repo.update_resource_pool_users(resource_pool_id=inserted_rp.id, users=users, api_user=admin_user)
@@ -110,13 +114,14 @@ async def test_resource_pool_remove_users(
 @pytest.mark.asyncio
 async def test_get_update_user_resource_pools(
     rps: List[models.ResourcePool],
-    user_repo: UserRepository,
-    pool_repo: ResourcePoolRepository,
+    app_config: Config,
     user: base_models.User,
     admin_user: base_models.APIUser,
 ):
     inserted_user = None
     inserted_rps = None
+    user_repo = app_config.user_repo
+    pool_repo = app_config.rp_repo
     try:
         inserted_rps = await asyncio.gather(*[create_rp(rp, pool_repo, api_user=admin_user) for rp in rps])
         assert len(inserted_rps) == len(rps)

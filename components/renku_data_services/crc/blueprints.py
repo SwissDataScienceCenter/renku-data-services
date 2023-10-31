@@ -1,7 +1,7 @@
 """Compute resource control (CRC) app."""
 import asyncio
 from dataclasses import asdict, dataclass
-from typing import List, cast
+from typing import List
 
 from sanic import HTTPResponse, Request, json
 from sanic_ext import validate
@@ -23,7 +23,6 @@ class ResourcePoolsBP(CustomBlueprint):
     rp_repo: ResourcePoolRepository
     user_repo: UserRepository
     authenticator: base_models.Authenticator
-    quota_repo: QuotaRepository
 
     def get_all(self) -> BlueprintFactoryResponse:
         """List all resource pools."""
@@ -32,7 +31,6 @@ class ResourcePoolsBP(CustomBlueprint):
         async def _get_all(request: Request, user: base_models.APIUser):
             res_filter = ResourceClassesFilter.model_validate(dict(request.query_args))
             rps = await self.rp_repo.filter_resource_pools(api_user=user, **res_filter.dict())
-            rps_w_quota = [self.quota_repo.hydrate_resource_pool_quota(rp) for rp in rps]
             return json(
                 [
                     apispec.ResourcePoolWithIdFiltered.model_construct(**asdict(r)).model_dump(exclude_none=True)
@@ -50,13 +48,7 @@ class ResourcePoolsBP(CustomBlueprint):
         @validate(json=apispec.ResourcePool)
         async def _post(_: Request, body: apispec.ResourcePool, user: base_models.APIUser):
             rp = models.ResourcePool.from_dict(body.model_dump(exclude_none=True))
-            if not isinstance(rp.quota, models.Quota):
-                raise errors.ValidationError(message="The quota in the resource pool is malformed.")
-            quota_with_id = rp.quota.generate_id()
-            rp = rp.set_quota(quota_with_id)
-            self.quota_repo.create_quota(quota_with_id)
             res = await self.rp_repo.insert_resource_pool(api_user=user, resource_pool=rp)
-            res = res.set_quota(quota_with_id)
             return json(apispec.ResourcePoolWithId.model_construct(**asdict(res)).model_dump(exclude_none=True), 201)
 
         return "/resource_pools", ["POST"], _post
@@ -75,7 +67,6 @@ class ResourcePoolsBP(CustomBlueprint):
                     message=f"The resource pool with id {resource_pool_id} cannot be found."
                 )
             rp = rps[0]
-            rp = self.quota_repo.hydrate_resource_pool_quota(rp)
             return json(apispec.ResourcePoolWithId.model_construct(**asdict(rp)).model_dump(exclude_none=True))
 
         return "/resource_pools/<resource_pool_id>", ["GET"], _get_one
@@ -86,9 +77,7 @@ class ResourcePoolsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         async def _delete(_: Request, resource_pool_id: int, user: base_models.APIUser):
-            rp = await self.rp_repo.delete_resource_pool(api_user=user, id=resource_pool_id)
-            if rp is not None and isinstance(rp.quota, str):
-                self.quota_repo.delete_quota(rp.quota)
+            await self.rp_repo.delete_resource_pool(api_user=user, id=resource_pool_id)
             return HTTPResponse(status=204)
 
         return "/resource_pools/<resource_pool_id>", ["DELETE"], _delete
@@ -122,34 +111,6 @@ class ResourcePoolsBP(CustomBlueprint):
         body: apispec.ResourcePoolPut | apispec.ResourcePoolPatch,
     ):
         body_dict = body.model_dump(exclude_none=True)
-        quota_req = body_dict.pop("quota", None)
-        rps = await self.rp_repo.get_resource_pools(api_user, resource_pool_id)
-        if len(rps) == 0:
-            raise errors.ValidationError(message=f"The resource pool with ID {resource_pool_id} does not exist.")
-        rp = rps[0]
-        rp = self.quota_repo.hydrate_resource_pool_quota(rp)
-        match rp.quota, quota_req:
-            case _, None:
-                # No quota is specified in request
-                pass
-            case _, dict(quota_req) if not quota_req:
-                # No quota is specified in request
-                pass
-            case models.Quota(id=None), {}:
-                # The quota does not exist, create it
-                quota_req["id"] = None  # ensure that the id is None to make a new Quota
-                quota_req_model = models.Quota.from_dict(quota_req).generate_id()
-                self.quota_repo.create_quota(quota_req_model)
-                rp.set_quota(quota_req_model)
-            case models.Quota(id=_), {}:
-                # The quota exists already, update it
-                if quota_req.get("id") is not None:
-                    raise errors.ValidationError(message="Cannot update the ID of an existing quota.")
-                if not isinstance(rp.quota, models.Quota):
-                    raise errors.BaseError(message=f"Expected quota but got {type(rp.quota)}")
-                new_quota = models.Quota.from_dict({**asdict(rp.quota), **quota_req})
-                self.quota_repo.update_quota(new_quota)
-                rp.set_quota(new_quota)
         res = await self.rp_repo.update_resource_pool(
             api_user=api_user,
             id=resource_pool_id,
@@ -157,7 +118,6 @@ class ResourcePoolsBP(CustomBlueprint):
         )
         if res is None:
             raise errors.MissingResourceError(message=f"The resource pool with ID {resource_pool_id} cannot be found.")
-        res = self.quota_repo.hydrate_resource_pool_quota(res)
         return json(apispec.ResourcePoolWithId.model_construct(**asdict(res)).model_dump(exclude_none=True))
 
 
@@ -381,7 +341,6 @@ class QuotaBP(CustomBlueprint):
                     message=f"The resource pool with ID {resource_pool_id} cannot be found."
                 )
             rp = rps[0]
-            rp = self.quota_repo.hydrate_resource_pool_quota(rp)
             if rp.quota is None:
                 raise errors.MissingResourceError(
                     message=f"The resource pool with ID {resource_pool_id} does not have a quota."
@@ -419,19 +378,23 @@ class QuotaBP(CustomBlueprint):
     async def _put_patch(
         self, resource_pool_id: int, body: apispec.QuotaPatch | apispec.QuotaWithId, api_user: base_models.APIUser
     ):
+        # TODO: Check whether the quota is compatible with all the resource classes
         rps = await self.rp_repo.get_resource_pools(api_user=api_user, id=resource_pool_id)
         if len(rps) < 1:
             raise errors.MissingResourceError(message=f"Cannot find the resource pool with ID {resource_pool_id}.")
         rp = rps[0]
-        rp = self.quota_repo.hydrate_resource_pool_quota(rp)
         if rp.quota is None:
             raise errors.MissingResourceError(
                 message=f"The resource pool with ID {resource_pool_id} does not have a quota."
             )
         old_quota = rp.quota
-        old_quota = cast(models.Quota, old_quota)
         new_quota = models.Quota.from_dict({**asdict(old_quota), **body.model_dump(exclude_none=True)})
-        self.quota_repo.update_quota(new_quota)
+        for rc in rp.classes:
+            if not new_quota.is_resource_class_compatible(rc):
+                raise errors.ValidationError(
+                    message=f"The quota {new_quota} is not compatible with the resource class {rc}."
+                )
+        new_quota = self.quota_repo.update_quota(new_quota)
         return json(apispec.QuotaWithId.model_construct(**asdict(new_quota)).model_dump(exclude_none=True))
 
 
@@ -531,7 +494,6 @@ class UserResourcePoolsBP(CustomBlueprint):
     """Handlers for dealing with the resource pools of a specific user."""
 
     repo: UserRepository
-    quota_repo: QuotaRepository
     authenticator: base_models.Authenticator
 
     def get(self) -> BlueprintFactoryResponse:

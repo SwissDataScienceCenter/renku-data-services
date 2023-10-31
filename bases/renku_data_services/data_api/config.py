@@ -178,9 +178,13 @@ class Config:
         async_sqlalchemy_url = f"postgresql+asyncpg://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{db_name}"
         sync_sqlalchemy_url = f"postgresql+psycopg://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{db_name}"
 
-        user_repo = UserRepository(sync_sqlalchemy_url=sync_sqlalchemy_url, async_sqlalchemy_url=async_sqlalchemy_url)
+        user_repo = UserRepository(
+            sync_sqlalchemy_url=sync_sqlalchemy_url, async_sqlalchemy_url=async_sqlalchemy_url, quotas_repo=quota_repo
+        )
         rp_repo = ResourcePoolRepository(
-            sync_sqlalchemy_url=sync_sqlalchemy_url, async_sqlalchemy_url=async_sqlalchemy_url
+            sync_sqlalchemy_url=sync_sqlalchemy_url,
+            async_sqlalchemy_url=async_sqlalchemy_url,
+            quotas_repo=quota_repo,
         )
         storage_repo = StorageRepository(
             gitlab_client=gitlab_client,

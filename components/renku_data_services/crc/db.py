@@ -7,7 +7,7 @@ it all in one place.
 """
 from asyncio import gather
 from functools import wraps
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import create_engine, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -19,15 +19,19 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
+from renku_data_services.k8s.quota import QuotaRepository
 
 
 class _Base:
-    def __init__(self, sync_sqlalchemy_url: str, async_sqlalchemy_url: str, debug: bool = False):
+    def __init__(
+        self, sync_sqlalchemy_url: str, async_sqlalchemy_url: str, quotas_repo: QuotaRepository, debug: bool = False
+    ):
         self.engine = create_async_engine(async_sqlalchemy_url, echo=debug)
         self.sync_engine = create_engine(sync_sqlalchemy_url, echo=debug)
         self.session_maker = sessionmaker(
             self.engine, class_=AsyncSession, expire_on_commit=False
         )  # type: ignore[call-overload]
+        self.quotas_repo = quotas_repo
 
 
 def _resource_pool_access_control(
@@ -140,7 +144,11 @@ class ResourcePoolRepository(_Base):
             stmt = _resource_pool_access_control(api_user, stmt)
             res = await session.execute(stmt)
             orms = res.scalars().all()
-            return [orm.dump() for orm in orms]
+            output: List[models.ResourcePool] = []
+            for rp in orms:
+                quota = self.quotas_repo.get_quota(rp.quota) if rp.quota else None
+                output.append(rp.dump(quota))
+            return output
 
     async def filter_resource_pools(
         self,
@@ -168,15 +176,12 @@ class ResourcePoolRepository(_Base):
             # NOTE: The line below ensures that the right users can access the right resources, do not remove.
             stmt = _classes_user_access_control(api_user, stmt)
             res = await session.execute(stmt)
-            orms = cast(List[Tuple[schemas.ResourceClassORM, bool]], res.all())
-            rcs: Dict[int, List[models.ResourceClass]] = {}
-            rps: Dict[int, schemas.ResourcePoolORM] = {}
-            output: List[models.ResourcePool] = []
-            for res_class, matching in orms:
+            output: Dict[int, models.ResourcePool] = {}
+            for res_class, matching in res.all():
                 if res_class.resource_pool_id is None or res_class.resource_pool is None:
                     continue
                 rc_data = res_class.dump()
-                rc_matching = models.ResourceClass(
+                rc = models.ResourceClass(
                     name=rc_data.name,
                     cpu=rc_data.cpu,
                     memory=rc_data.memory,
@@ -187,30 +192,31 @@ class ResourcePoolRepository(_Base):
                     default_storage=res_class.default_storage,
                     matching=matching,
                 )
-                if res_class.resource_pool_id not in rcs:
-                    rcs[res_class.resource_pool_id] = [rc_matching]
-                else:
-                    rcs[res_class.resource_pool_id].append(rc_matching)
-                if res_class.resource_pool_id not in rps:
-                    rps[res_class.resource_pool_id] = res_class.resource_pool
-            for rp_id, rp in sorted(rps.items(), key=lambda x: x[0]):
-                output.append(
-                    models.ResourcePool(
-                        name=rp.name,
-                        classes=rcs[rp_id],
-                        quota=rp.quota,
-                        id=rp.id,
-                        default=rp.default,
-                        public=rp.public,
+                if res_class.resource_pool_id not in output:
+                    quota = (
+                        self.quotas_repo.get_quota(res_class.resource_pool.quota)
+                        if res_class.resource_pool.quota
+                        else None
                     )
-                )
-            return output
+                    output[res_class.resource_pool_id] = res_class.resource_pool.dump(quota)
+                    output[res_class.resource_pool_id].classes.clear()
+                output[res_class.resource_pool_id].classes.append(rc)
+            return sorted(output.values(), key=lambda i: i.id if i.id else 0)
 
     @_only_admins
     async def insert_resource_pool(
         self, api_user: base_models.APIUser, resource_pool: models.ResourcePool
     ) -> models.ResourcePool:
         """Insert resource pool into database."""
+        quota = None
+        if resource_pool.quota:
+            for rc in resource_pool.classes:
+                if not resource_pool.quota.is_resource_class_compatible(rc):
+                    raise errors.ValidationError(
+                        message=f"The quota {quota} is not compatible with resource class {rc}"
+                    )
+            quota = self.quotas_repo.create_quota(resource_pool.quota)
+            resource_pool = resource_pool.set_quota(quota)
         orm = schemas.ResourcePoolORM.load(resource_pool)
         async with self.session_maker() as session:
             async with session.begin():
@@ -223,7 +229,7 @@ class ResourcePoolRepository(_Base):
                             message="There can only be one default resource pool and one already exists."
                         )
                 session.add(orm)
-        return orm.dump()
+        return orm.dump(quota)
 
     async def get_classes(
         self,
@@ -273,6 +279,11 @@ class ResourcePoolRepository(_Base):
                         raise errors.ValidationError(
                             message="There can only be one default resource class per resource pool."
                         )
+                    quota = self.quotas_repo.get_quota(rp.quota) if rp.quota else None
+                    if quota and not quota.is_resource_class_compatible(resource_class):
+                        raise errors.ValidationError(
+                            message="The resource class {resource_class} is not compatible with the quota {quota}."
+                        )
                     cls.resource_pool = rp
                     cls.resource_pool_id = rp.id
 
@@ -294,16 +305,33 @@ class ResourcePoolRepository(_Base):
                 rp = res.scalars().first()
                 if rp is None:
                     raise errors.MissingResourceError(message=f"Resource pool with id {id} cannot be found")
+                quota = self.quotas_repo.get_quota(rp.quota) if rp.quota else None
                 if len(kwargs) == 0:
-                    return rp.dump()
+                    return rp.dump(quota)
                 # NOTE: The .update method on the model validates the update to the resource pool
-                rp.dump().update(**kwargs)
+                old_rp_model = rp.dump(quota)
+                new_rp_model = old_rp_model.update(**kwargs)
                 new_classes = None
                 new_classes_coroutines = []
                 for key, val in kwargs.items():
                     match key:
-                        case "name" | "public" | "default" | "quota":
+                        case "name" | "public" | "default":
                             setattr(rp, key, val)
+                        case "quota":
+                            if val is None:
+                                continue
+                            new_quota = models.Quota.from_dict(val)
+                            if quota and quota.id is not None and new_quota.id is not None and quota.id != new_quota.id:
+                                raise errors.ValidationError(
+                                    message="The ID of an existing quota cannot be updated, "
+                                    f"please remove the ID field from the request or use ID {quota.id}."
+                                )
+                            if new_quota.id:
+                                new_quota = self.quotas_repo.update_quota(new_quota)
+                            else:
+                                new_quota = self.quotas_repo.create_quota(new_quota)
+                            rp.quota = new_quota.id
+                            new_rp_model = new_rp_model.update(quota=new_quota)
                         case "classes":
                             new_classes = []
                             for cls in val:
@@ -322,10 +350,9 @@ class ResourcePoolRepository(_Base):
                         case _:
                             pass
                 new_classes = await gather(*new_classes_coroutines)
-                output = rp.dump()
                 if new_classes is not None and len(new_classes) > 0:
-                    output = output.update(classes=new_classes)
-                return output
+                    new_rp_model = new_rp_model.update(classes=new_classes)
+                return new_rp_model
 
     @_only_admins
     async def delete_resource_pool(self, api_user: base_models.APIUser, id: int) -> Optional[models.ResourcePool]:
@@ -339,7 +366,11 @@ class ResourcePoolRepository(_Base):
                     if rp.default:
                         raise errors.ValidationError(message="The default resource pool cannot be deleted.")
                     await session.delete(rp)
-                    return rp.dump()
+                    quota = None
+                    if rp.quota:
+                        quota = self.quotas_repo.get_quota(rp.quota)
+                        self.quotas_repo.delete_quota(rp.quota)
+                    return rp.dump(quota)
                 return None
 
     @_only_admins
@@ -370,6 +401,8 @@ class ResourcePoolRepository(_Base):
                     select(schemas.ResourceClassORM)
                     .where(schemas.ResourceClassORM.id == resource_class_id)
                     .where(schemas.ResourceClassORM.resource_pool_id == resource_pool_id)
+                    .join(schemas.ResourcePoolORM, schemas.ResourceClassORM.resource_pool)
+                    .options(selectinload(schemas.ResourceClassORM.resource_pool))
                 )
                 res = await session.execute(stmt)
                 cls: Optional[schemas.ResourceClassORM] = res.scalars().first()
@@ -398,7 +431,18 @@ class ResourcePoolRepository(_Base):
                                     cls.node_affinities.append(affinity)
                         case _:
                             setattr(cls, k, v)
-                return cls.dump()
+                if cls.resource_pool is None:
+                    raise errors.BaseError(
+                        message="Unexpected internal error.",
+                        detail=f"The resource class {resource_class_id} is not associated with any resource pool.",
+                    )
+                quota = self.quotas_repo.get_quota(cls.resource_pool.quota) if cls.resource_pool.quota else None
+                cls_model = cls.dump()
+                if quota and not quota.is_resource_class_compatible(cls_model):
+                    raise errors.ValidationError(
+                        message=f"The resource class {cls_model} is not compatible with the quota {quota}"
+                    )
+                return cls_model
 
 
 class UserRepository(_Base):
@@ -492,9 +536,13 @@ class UserRepository(_Base):
                 stmt = _resource_pool_access_control(api_user, stmt, keycloak_id=keycloak_id)
                 res = await session.execute(stmt)
                 rps: List[schemas.ResourcePoolORM] = res.scalars().all()
-                if user.no_default_access:
-                    rps = [rp for rp in rps if not rp.default]
-                return [rp.dump() for rp in rps]
+                output: List[models.ResourcePool] = []
+                for rp in rps:
+                    if user.no_default_access and rp.default:
+                        continue
+                    quota = self.quotas_repo.get_quota(rp.quota) if rp.quota else None
+                    output.append(rp.dump(quota))
+                return output
 
     @_only_admins
     async def update_user_resource_pools(
@@ -539,7 +587,11 @@ class UserRepository(_Base):
                     user.resource_pools.extend(rps_to_add)
                 else:
                     user.resource_pools = rps_to_add
-                return [rp.dump() for rp in rps_to_add]
+                output: List[models.ResourcePool] = []
+                for rp in rps_to_add:
+                    quota = self.quotas_repo.get_quota(rp.quota) if rp.quota else None
+                    output.append(rp.dump(quota))
+                return output
 
     @_only_admins
     async def delete_resource_pool_user(self, api_user: base_models.APIUser, resource_pool_id: int, keycloak_id: str):
