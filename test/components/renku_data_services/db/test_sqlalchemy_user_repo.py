@@ -162,10 +162,11 @@ async def test_get_update_user_resource_pools(
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_update_user(
-    user_repo: UserRepository,
+    app_config: Config,
     users: List[base_models.User],
     admin_user: base_models.APIUser,
 ):
+    user_repo = app_config.user_repo
     try:
         inserted_users: List[base_models.User] = []
         updated_users: List[base_models.User] = []
@@ -175,10 +176,10 @@ async def test_update_user(
         for user in users:
             updated_users.append(await user_repo.update_user(admin_user, user.keycloak_id, no_default_access=True))
         assert len(users) == len(updated_users)
-        assert (all([i.no_default_access for i in updated_users]))
+        assert all([i.no_default_access for i in updated_users])
         retrieved_users = await user_repo.get_users(api_user=admin_user)
         assert len(updated_users) == len(retrieved_users)
-        assert (all([i.no_default_access for i in retrieved_users]))
+        assert all([i.no_default_access for i in retrieved_users])
     finally:
         for user in users:
             await user_repo.delete_user(api_user=admin_user, id=user.keycloak_id)
