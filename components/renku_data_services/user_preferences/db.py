@@ -83,6 +83,6 @@ class UserPreferencesRepository(_Base):
             if not exists:
                 project_slugs.append(project_slug)
 
-            setattr(user_preferences.pinned_projects, "project_slugs", project_slugs)
+            user_preferences.pinned_projects["project_slugs"] = project_slugs
 
             return user_preferences.dump()
