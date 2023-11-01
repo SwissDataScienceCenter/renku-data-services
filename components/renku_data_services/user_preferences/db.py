@@ -70,29 +70,28 @@ class UserPreferencesRepository(_Base):
                     )
                     user_preferences = schemas.UserPreferencesORM.load(new_preferences)
                     session.add(user_preferences)
-                    result = user_preferences.dump()
-                else:
-                    project_slugs: List[str]
-                    project_slugs = user_preferences.pinned_projects.get("project_slugs", [])
+                    return user_preferences.dump()
 
-                    exists = False
-                    for slug in project_slugs:
-                        if project_slug.lower() == slug.lower():
-                            exists = True
-                            break
 
-                    if exists:
-                        result = user_preferences.dump()
-                    else:
-                        logger.warning(f"(DEBUG): {'|'.join(project_slugs)} + {project_slug}")
-                        project_slugs.append(project_slug)
-                        logger.warning(f"(DEBUG): {'|'.join(project_slugs)}")
-                        pinned_projects = models.PinnedProjects(project_slugs=project_slugs).model_dump()
-                        user_preferences.pinned_projects = pinned_projects
-                        logger.warning(f"(DEBUG): {user_preferences.dump().model_dump_json()}")
-                        result = user_preferences.dump()
+                project_slugs: List[str]
+                project_slugs = user_preferences.pinned_projects.get("project_slugs", [])
 
-        return result
+                exists = False
+                for slug in project_slugs:
+                    if project_slug.lower() == slug.lower():
+                        exists = True
+                        break
+
+                if exists:
+                    return user_preferences.dump()
+
+                new_project_slugs = list(project_slugs) + [project_slug]
+                logger.warning(f"(DEBUG): {'|'.join(project_slugs)} + {project_slug}")
+                logger.warning(f"(DEBUG): {'|'.join(new_project_slugs)}")
+                pinned_projects = models.PinnedProjects(project_slugs=project_slugs).model_dump()
+                user_preferences.pinned_projects = pinned_projects
+                logger.warning(f"(DEBUG): {user_preferences.dump().model_dump_json()}")
+                return user_preferences.dump()
 
     async def remove_pinned_project(self, user: base_models.APIUser, project_slug: str) -> models.UserPreferences:
         """Adds a pinned project from the user's preferences."""
@@ -113,5 +112,5 @@ class UserPreferencesRepository(_Base):
                 project_slugs = user_preferences.pinned_projects.get("project_slugs", [])
                 new_project_slugs = [slug for slug in project_slugs if project_slug.lower() != slug.lower()]
                 pinned_projects = models.PinnedProjects(project_slugs=new_project_slugs).model_dump()
-                setattr(user_preferences, "pinned_projects", pinned_projects)
+                user_preferences.pinned_projects = pinned_projects
                 return user_preferences.dump()
