@@ -45,9 +45,9 @@ class UserPreferencesBP(CustomBlueprint):
         """Remove a pinned project from user preferences for the logged in user."""
 
         @authenticate(self.authenticator)
-        async def _post(request: Request, user: base_models.APIUser):
+        async def _delete(request: Request, user: base_models.APIUser):
             res_filter = PinnedProjectFilter.model_validate(dict(request.query_args))
             res = await self.user_preferences_repo.remove_pinned_project(user=user, **res_filter.model_dump())
             return json(apispec.UserPreferences.model_validate(res).model_dump())
 
-        return "/user_preferences/pinned_projects", ["DELETE"], _post
+        return "/user_preferences/pinned_projects", ["DELETE"], _delete
