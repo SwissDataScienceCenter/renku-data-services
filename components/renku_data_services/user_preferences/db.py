@@ -53,40 +53,38 @@ class UserPreferencesRepository(_Base):
 
     async def add_pinned_project(self, user: base_models.APIUser, project_slug: str) -> models.UserPreferences:
         """Adds a new pinned project to the user's preferences."""
-        async with self.session_maker() as session, session.begin():
-            if not user.is_authenticated:
-                raise errors.Unauthorized(message="Anonymous users cannot have user preferences.")
+        async with self.session_maker() as session:
+            async with session.begin():
+                if not user.is_authenticated:
+                    raise errors.Unauthorized(message="Anonymous users cannot have user preferences.")
 
-            res = await session.execute(
-                select(schemas.UserPreferencesORM).where(schemas.UserPreferencesORM.user_id == user.id)
-            )
-            user_preferences = res.one_or_none()
-            user_preferences = user_preferences[0] if user_preferences is not None else None
-
-            if user_preferences is None:
-                new_preferences = models.UserPreferences(
-                    user_id=cast(str, user.id), pinned_projects=models.PinnedProjects(project_slugs=[project_slug])
+                res = await session.execute(
+                    select(schemas.UserPreferencesORM).where(schemas.UserPreferencesORM.user_id == user.id)
                 )
-                user_preferences = schemas.UserPreferencesORM.load(new_preferences)
-                session.add(user_preferences)
-                model = user_preferences.dump()
-                return model
+                user_preferences = res.one_or_none()
+                user_preferences = user_preferences[0] if user_preferences is not None else None
 
-            project_slugs: List[str]
-            project_slugs = user_preferences.pinned_projects.get("project_slugs", [])
+                if user_preferences is None:
+                    new_preferences = models.UserPreferences(
+                        user_id=cast(str, user.id), pinned_projects=models.PinnedProjects(project_slugs=[project_slug])
+                    )
+                    user_preferences = schemas.UserPreferencesORM.load(new_preferences)
+                    session.add(user_preferences)
+                    return user_preferences.dump()
 
-            exists = False
-            for slug in project_slugs:
-                if project_slug.lower() == slug.lower():
-                    exists = True
-                    break
+                project_slugs: List[str]
+                project_slugs = user_preferences.pinned_projects.get("project_slugs", [])
 
-            if exists:
-                model = user_preferences.dump()
-                return model
+                exists = False
+                for slug in project_slugs:
+                    if project_slug.lower() == slug.lower():
+                        exists = True
+                        break
 
-            project_slugs.append(project_slug)
-            pinned_projects = models.PinnedProjects(project_slugs=project_slugs).model_dump()
-            setattr(user_preferences, "pinned_projects", pinned_projects)
-            model = user_preferences.dump()
-            return model
+                if exists:
+                    return user_preferences.dump()
+
+                project_slugs.append(project_slug)
+                pinned_projects = models.PinnedProjects(project_slugs=project_slugs).model_dump()
+                setattr(user_preferences, "pinned_projects", pinned_projects)
+                return user_preferences.dump()
