@@ -7,6 +7,7 @@ from sqlalchemy.orm import sessionmaker
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from sanic.log import logger
 from renku_data_services.user_preferences import models
 from renku_data_services.user_preferences import orm as schemas
 
@@ -38,31 +39,30 @@ class UserPreferencesRepository(_Base):
         user: base_models.APIUser,
     ) -> models.UserPreferences:
         """Get user preferences from the database."""
-        async with self.session_maker() as session:
+        async with cast(AsyncSession, self.session_maker()) as session:
             if not user.is_authenticated:
                 raise errors.Unauthorized(message="Anonymous users cannot have user preferences.")
 
-            res = await session.execute(
+            res = await session.scalars(
                 select(schemas.UserPreferencesORM).where(schemas.UserPreferencesORM.user_id == user.id)
             )
             user_preferences = res.one_or_none()
 
             if user_preferences is None:
                 raise errors.MissingResourceError(message="Preferences not found for user.")
-            return user_preferences[0].dump()
+            return user_preferences.dump()
 
     async def add_pinned_project(self, user: base_models.APIUser, project_slug: str) -> models.UserPreferences:
         """Adds a new pinned project to the user's preferences."""
-        async with self.session_maker() as session:
+        async with cast(AsyncSession, self.session_maker()) as session:
             async with session.begin():
                 if not user.is_authenticated:
                     raise errors.Unauthorized(message="Anonymous users cannot have user preferences.")
 
-                res = await session.execute(
+                res = await session.scalars(
                     select(schemas.UserPreferencesORM).where(schemas.UserPreferencesORM.user_id == user.id)
                 )
                 user_preferences = res.one_or_none()
-                user_preferences = user_preferences[0] if user_preferences is not None else None
 
                 if user_preferences is None:
                     new_preferences = models.UserPreferences(
@@ -84,23 +84,25 @@ class UserPreferencesRepository(_Base):
                 if exists:
                     return user_preferences.dump()
 
+                logger.warning(f"(DEBUG): {'|'.join(project_slugs)} + {project_slug}")
                 project_slugs.append(project_slug)
+                logger.warning(f"(DEBUG): {'|'.join(project_slugs)}")
                 pinned_projects = models.PinnedProjects(project_slugs=project_slugs).model_dump()
                 setattr(user_preferences, "pinned_projects", pinned_projects)
+                logger.warning(f"(DEBUG): {user_preferences.dump().model_dump_json()}")
                 return user_preferences.dump()
 
     async def remove_pinned_project(self, user: base_models.APIUser, project_slug: str) -> models.UserPreferences:
         """Adds a pinned project from the user's preferences."""
-        async with self.session_maker() as session:
+        async with cast(AsyncSession, self.session_maker()) as session:
             async with session.begin():
                 if not user.is_authenticated:
                     raise errors.Unauthorized(message="Anonymous users cannot have user preferences.")
 
-                res = await session.execute(
+                res = await session.scalars(
                     select(schemas.UserPreferencesORM).where(schemas.UserPreferencesORM.user_id == user.id)
                 )
                 user_preferences = res.one_or_none()
-                user_preferences = user_preferences[0] if user_preferences is not None else None
 
                 if user_preferences is None:
                     raise errors.MissingResourceError(message="Preferences not found for user.")
