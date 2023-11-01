@@ -665,6 +665,52 @@ paths:
       tags:
         - users
   /users/{user_id}:
+    put:
+      summary: Edit a user
+      parameters:
+        - in: path
+          name: user_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserPut"
+      responses:
+        "200":
+          description: The user has been edited
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/UserWithId"
+      tags:
+        - users
+    patch:
+      summary: Edit a user
+      parameters:
+        - in: path
+          name: user_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserPatch"
+      responses:
+        "200":
+          description: The user has been edited
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/UserWithId"
+      tags:
+        - users
     delete:
       summary: Remove a user from all resource pools
       parameters:
@@ -1184,14 +1230,39 @@ components:
       type: array
       items:
         $ref: "#/components/schemas/ResourcePoolWithIdFiltered"
+    UserPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        no_default_access:
+          type: boolean
+          description: If set to true the user will not be able to use the default resource pool
+      example:
+        no_default_access: true
+    UserPut:
+      type: object
+      additionalProperties: false
+      properties:
+        no_default_access:
+          type: boolean
+          description: If set to true the user will not be able to use the default resource pool
+      required:
+        - no_default_access
+      example:
+        no_default_access: true
     UserWithId:
       type: object
       additionalProperties: false
       properties:
         id:
           $ref: "#/components/schemas/UserId"
+        no_default_access:
+          type: boolean
+          default: false
+          description: If set to true the user will not be able to use the default resource pool
       required: ["id"]
-      example: "some-random-keycloak-id"
+      example:
+        id: "some-random-keycloak-id"
     UsersWithId:
       type: array
       items:
