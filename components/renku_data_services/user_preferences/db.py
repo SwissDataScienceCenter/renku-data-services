@@ -88,7 +88,7 @@ class UserPreferencesRepository(_Base):
                         project_slugs.append(project_slug)
                         logger.warning(f"(DEBUG): {'|'.join(project_slugs)}")
                         pinned_projects = models.PinnedProjects(project_slugs=project_slugs).model_dump()
-                        user_preferences.pinned_projects.update(**pinned_projects)
+                        user_preferences.pinned_projects = pinned_projects
                         logger.warning(f"(DEBUG): {user_preferences.dump().model_dump_json()}")
                         result = user_preferences.dump()
 
