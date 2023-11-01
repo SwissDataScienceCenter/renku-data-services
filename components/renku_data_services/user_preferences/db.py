@@ -69,7 +69,8 @@ class UserPreferencesRepository(_Base):
                 )
                 user_preferences = schemas.UserPreferencesORM.load(new_preferences)
                 session.add(user_preferences)
-                return user_preferences.dump()
+                model = user_preferences.dump()
+                return model
 
             project_slugs: List[str]
             project_slugs = user_preferences.pinned_projects.get("project_slugs", [])
@@ -81,9 +82,11 @@ class UserPreferencesRepository(_Base):
                     break
 
             if exists:
-                return user_preferences.dump()
+                model = user_preferences.dump()
+                return model
 
             project_slugs.append(project_slug)
             pinned_projects = models.PinnedProjects(project_slugs=project_slugs).model_dump()
             setattr(user_preferences, "pinned_projects", pinned_projects)
-            return user_preferences.dump()
+            model = user_preferences.dump()
+            return model
