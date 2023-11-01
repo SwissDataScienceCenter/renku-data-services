@@ -1,0 +1,382 @@
+---
+openapi: 3.0.2
+info:
+  title: Renku Project Management Service
+  description: |
+    Service that allows creating, updating, deleting, and managing Renku native projects.
+    All errors have the same format as the schema called ErrorResponse.
+  version: v1
+servers:
+  - url: /api/data
+  - url: /ui-server/api/data
+paths:
+  /projects:
+    get:
+      summary: Get all projects
+      responses:
+        "200":
+          description: The project
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Project"
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
+        - projects
+    post:
+      summary: Create a new project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectPost"
+      responses:
+        "201":
+          description: The project was created
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Project"
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
+        - projects
+  /projects/{project_id}:
+    get:
+      summary: Get a project
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The project
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          description: The project does not exist
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
+        - projects
+    put:
+      summary: Update an existing project
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectPut"
+      responses:
+        "200":
+          description: The project
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          description: The project does not exist
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
+        - projects
+    patch:
+      summary: Update specific fields of an existing project
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectPatch"
+      responses:
+        "200":
+          description: The project
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          description: The project does not exist
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
+        - projects
+    delete:
+      summary: Remove a project
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: The project was removed or did not exist in the first place
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
+        - projects
+  /version:
+    get:
+      summary: Get the version of the service
+      responses:
+        "200":
+          description: The error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Version"
+
+components:
+  schemas:
+    Project:
+      type: object
+      description: A Renku native project definition and metadata
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        name:
+          $ref: "#/components/schemas/Name"
+        slug:
+          $ref: "#/components/schemas/Slug"
+        creation_date:
+          $ref: "#/components/schemas/CreationDate"
+        created_by:
+          $ref: "#/components/schemas/User"
+        repositories:
+          $ref: "#/components/schemas/RepositoriesList"
+        visibility:
+          $ref: "#/components/schemas/Visibility"
+        members:
+          $ref: "#/components/schemas/MembersWithRoles"
+      required:
+        - "id"
+        - "name"
+        - "slug"
+        - "created_by"
+        - "visibility"
+      example:
+        id: "TheProjectULID26Characters"
+        name: "Renku R Project"
+        slug: "r-project"
+        created_by:
+          id: "owner-KC-id"
+        visibility: "public"
+    ProjectPost:
+      type: object
+      description: Project metadata to be created in Renku
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/Name"
+        slug:
+          $ref: "#/components/schemas/Slug"
+        created_by:
+          $ref: "#/components/schemas/User"
+        repositories:
+          $ref: "#/components/schemas/RepositoriesList"
+        visibility:
+          $ref: "#/components/schemas/Visibility"
+        members:
+          $ref: "#/components/schemas/MembersWithRoles"
+      required:
+        - "name"
+        - "slug"
+        - "created_by"
+        - "visibility"
+    ProjectPatch:
+      type: object
+      description: Patch of a project
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/Name"
+        slug:
+          $ref: "#/components/schemas/Slug"
+        repositories:
+          $ref: "#/components/schemas/RepositoriesList"
+        visibility:
+          $ref: "#/components/schemas/Visibility"
+        members:
+          $ref: "#/components/schemas/MembersWithRoles"
+    ProjectPut:
+      type: object
+      description: A project to replace another one
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/Name"
+        slug:
+          $ref: "#/components/schemas/Slug"
+        creation_date:
+          $ref: "#/components/schemas/CreationDate"
+        created_by:
+          $ref: "#/components/schemas/User"
+        repositories:
+          $ref: "#/components/schemas/RepositoriesList"
+        visibility:
+          $ref: "#/components/schemas/Visibility"
+        members:
+          $ref: "#/components/schemas/MembersWithRoles"
+      required:
+        - "id"
+        - "name"
+        - "slug"
+        - "created_by"
+
+    Ulid:
+      description: ULID identifier
+      type: string
+      minLength: 26
+      maxLength: 26
+      pattern: "^[A-Za-z0-9]{26}$"
+      format: ulid
+    Name:
+      description: Renku project name
+      type: string
+      minLength: 1
+      maxLength: 99
+      example: "My Renku Project :)"
+    Slug:
+      description: A command-line friendly name for a project
+      type: string
+      minLength: 1
+      maxLength: 99
+      pattern: "^[a-z0-9]+[a-z0-9._-]*$"  # Cannot contain consecutive special characters or end in .git and .atom
+      example: "my-renku-project"
+    CreationDate:
+      description: The date and time the project was created
+      type: string
+      format: date-time
+      example: "2023-11-01T17:32:28Z"
+    User:
+      description: A KeyCloak user
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/UserId"
+      required:
+        - "id"
+      example:
+        id: "some-keycloak-user-id"
+    UserId:
+      description: KeyCloak user ID
+      type: string
+      pattern: "^[A-Za-z0-9-]+$"
+      minLength: 1
+      example: "123-keycloak-user-id-456"
+    RepositoriesList:
+      description: A list of repository URLs
+      type: array
+      items:
+        $ref: "#/components/schemas/GitUrl"
+      minItems: 0
+      uniqueItems: true
+    GitUrl:
+      description: URL of a Git repository
+      type: string
+      format: uri  # TODO: This should support other formats like ``git@`` and ``https+git``
+    Visibility:
+      description: Project's visibility levels
+      type: string
+      enum:
+        - "public"
+        - "private"
+    MembersWithRoles:
+      description: List of users and their access level to the project
+      type: array
+      items:
+        $ref: "#/components/schemas/MemberWithRole"
+      minItems: 0
+      uniqueItems: true
+    MemberWithRoles:
+      description: A user and the access level to the project
+      type: object
+      additionalProperties: false
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        role:
+          $ref: "#/components/schemas/Role"
+      required:
+        - user
+        - role
+    Role:
+      # TODO: Can have multiple owners? Owner here vs ``created_by``?
+      # TODO: Better names for roles: Maintainer, admin, member, ... instead of reader and writer
+      description: Possible roles of users in a project
+      type: string
+      enum:
+        - "reader"
+        - "writer"
+        - "owner"
+
+    Version:
+      type: object
+      properties:
+        version:
+          type: string
+      required:
+        - "version"
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: integer
+              minimum: 0
+              exclusiveMinimum: true
+              example: 1404
+            detail:
+              type: string
+              example: "A more detailed optional message showing what the problem was"
+            message:
+              type: string
+              example: "Something went wrong - please try again later"
+          required:
+            - "code"
+            - "message"
+      required:
+        - "error"
+  responses:
+    Error:
+      description: The schema for all 4xx and 5xx responses
+      content:
+        "application/json":
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
