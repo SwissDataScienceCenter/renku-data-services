@@ -29,17 +29,18 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - user_preferences
+  "/user_preferences/pinned_projects":
     post:
-      summary: Create user preferences for the currently logged in user
+      summary: Add a pinned project
       requestBody:
         required: true
         content:
           "application/json":
             schema:
-              $ref: "#/components/schemas/UserPreferencesWithoutUserId"
+              $ref: "#/components/schemas/AddPinnedProject"
       responses:
-        "201":
-          description: The newly created user preferences
+        "200":
+          description: The updated user preferences
           content:
             "application/json":
               schema:
@@ -48,14 +49,14 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - user_preferences
-    patch:
-      summary: Partially update user preferences for the currently logged in user
-      requestBody:
-        required: true
-        content:
-          "application/json":
-            schema:
-              $ref: "#/components/schemas/UserPreferencesWithoutUserId"
+    delete:
+      summary: Remove a pinned project
+      parameters:
+        - in: query
+          name: project_slug
+          required: true
+          schema:
+            type: string
       responses:
         "200":
           description: The updated user preferences
@@ -70,13 +71,6 @@ paths:
 
 components:
   schemas:
-    UserPreferencesWithoutUserId:
-      type: object
-      description: The object containing user preferences
-      additionalProperties: false
-      properties:
-        pinned_projects:
-          $ref: "#/components/schemas/PinnedProjects"
     UserPreferences:
       type: object
       description: The object containing user preferences
@@ -105,6 +99,13 @@ components:
       description: The slug used to identify a project
       minLength: 3
       example: "user/my-project"
+    AddPinnedProject:
+      type: object
+      additionalProperties: false
+      properties:
+        project_slug:
+          $ref: "#/components/schemas/ProjectSlug"
+      required: ["project_slug"]
     ErrorResponse:
       type: object
       properties:
@@ -131,7 +132,7 @@ components:
       content:
         "application/json":
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            $ref: "#/components/schemas/ErrorResponse"
   securitySchemes:
     oidc:
       type: openIdConnect

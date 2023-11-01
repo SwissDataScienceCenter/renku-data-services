@@ -20,7 +20,7 @@ def get_ssl_context():
 def merge_api_specs(*args):
     """Merges API spec files into a single one."""
     merged_spec: dict[str, Any]
-    merged_spec = functools.reduce(always_merger.merge, list(*args), dict())
+    merged_spec = functools.reduce(always_merger.merge, args, dict())
 
     # Remove duplicate entries in `.servers`
     server_urls: Set[str]
