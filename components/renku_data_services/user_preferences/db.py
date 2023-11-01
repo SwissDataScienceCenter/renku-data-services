@@ -80,9 +80,10 @@ class UserPreferencesRepository(_Base):
                     exists = True
                     break
 
-            if not exists:
-                project_slugs.append(project_slug)
+            if exists:
+                return user_preferences.dump()
 
-            user_preferences.pinned_projects["project_slugs"] = project_slugs
-
+            project_slugs.append(project_slug)
+            pinned_projects = models.PinnedProjects(project_slugs=project_slugs).model_dump()
+            setattr(user_preferences, "pinned_projects", pinned_projects)
             return user_preferences.dump()
