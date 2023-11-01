@@ -76,21 +76,14 @@ class UserPreferencesRepository(_Base):
                 project_slugs: List[str]
                 project_slugs = user_preferences.pinned_projects.get("project_slugs", [])
 
-                exists = False
+                # Do nothing if the project is already listed
                 for slug in project_slugs:
                     if project_slug.lower() == slug.lower():
-                        exists = True
-                        break
-
-                if exists:
-                    return user_preferences.dump()
+                        return user_preferences.dump()
 
                 new_project_slugs = list(project_slugs) + [project_slug]
-                logger.warning(f"(DEBUG): {'|'.join(project_slugs)} + {project_slug}")
-                logger.warning(f"(DEBUG): {'|'.join(new_project_slugs)}")
                 pinned_projects = models.PinnedProjects(project_slugs=new_project_slugs).model_dump()
                 user_preferences.pinned_projects = pinned_projects
-                logger.warning(f"(DEBUG): {user_preferences.dump().model_dump_json()}")
                 return user_preferences.dump()
 
     async def remove_pinned_project(self, user: base_models.APIUser, project_slug: str) -> models.UserPreferences:
