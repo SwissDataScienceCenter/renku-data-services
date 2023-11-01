@@ -51,7 +51,7 @@ class UserPreferencesRepository(_Base):
                 raise errors.MissingResourceError(message="Preferences not found for user.")
             return user_preferences[0].dump()
 
-    async def add_pinned_project(self, user: base_models.APIUser, project_slug: str):
+    async def add_pinned_project(self, user: base_models.APIUser, project_slug: str) -> models.UserPreferences:
         """Adds a new pinned project to the user's preferences."""
         async with self.session_maker() as session, session.begin():
             if not user.is_authenticated:

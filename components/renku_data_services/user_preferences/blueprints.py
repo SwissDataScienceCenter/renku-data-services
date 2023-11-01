@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 
 from sanic import Request, json
+from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate
@@ -27,3 +28,14 @@ class UserPreferencesBP(CustomBlueprint):
             return json(apispec.UserPreferences.model_validate(user_preferences).model_dump())
 
         return "/user_preferences", ["GET"], _get
+
+    def post_pinned_projects(self) -> BlueprintFactoryResponse:
+        """Add a pinned projects to user preferences for the logged in user."""
+
+        @authenticate(self.authenticator)
+        @validate(json=apispec.AddPinnedProject)
+        async def _post(_: Request, body: apispec.AddPinnedProject, user: base_models.APIUser):
+            res = await self.user_preferences_repo.add_pinned_project(user=user, project_slug=body.project_slug)
+            return json(apispec.UserPreferences.model_validate(res).model_dump())
+
+        return "/user_preferences/pinned_projects", ["POST"], _post
