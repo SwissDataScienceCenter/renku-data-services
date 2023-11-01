@@ -1,7 +1,7 @@
 """Adapters for user preferences database classes."""
 from typing import List, cast
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -70,26 +70,29 @@ class UserPreferencesRepository(_Base):
                     )
                     user_preferences = schemas.UserPreferencesORM.load(new_preferences)
                     session.add(user_preferences)
-                    return user_preferences.dump()
+                    result = user_preferences.dump()
+                else:
+                    project_slugs: List[str]
+                    project_slugs = user_preferences.pinned_projects.get("project_slugs", [])
 
-                project_slugs: List[str]
-                project_slugs = user_preferences.pinned_projects.get("project_slugs", [])
+                    exists = False
+                    for slug in project_slugs:
+                        if project_slug.lower() == slug.lower():
+                            exists = True
+                            break
 
-                exists = False
-                for slug in project_slugs:
-                    if project_slug.lower() == slug.lower():
-                        exists = True
-                        break
+                    if exists:
+                        result = user_preferences.dump()
+                    else:
+                        logger.warning(f"(DEBUG): {'|'.join(project_slugs)} + {project_slug}")
+                        project_slugs.append(project_slug)
+                        logger.warning(f"(DEBUG): {'|'.join(project_slugs)}")
+                        pinned_projects = models.PinnedProjects(project_slugs=project_slugs).model_dump()
+                        user_preferences.pinned_projects.update(**pinned_projects)
+                        logger.warning(f"(DEBUG): {user_preferences.dump().model_dump_json()}")
+                        result = user_preferences.dump()
 
-                if exists:
-                    return user_preferences.dump()
-
-                logger.warning(f"(DEBUG): {'|'.join(project_slugs)} + {project_slug}")
-                project_slugs.append(project_slug)
-                logger.warning(f"(DEBUG): {'|'.join(project_slugs)}")
-                user_preferences.pinned_projects = models.PinnedProjects(project_slugs=project_slugs).model_dump()
-                logger.warning(f"(DEBUG): {user_preferences.dump().model_dump_json()}")
-                return user_preferences.dump()
+        return result
 
     async def remove_pinned_project(self, user: base_models.APIUser, project_slug: str) -> models.UserPreferences:
         """Adds a pinned project from the user's preferences."""
