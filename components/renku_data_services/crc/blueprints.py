@@ -132,7 +132,14 @@ class ResourcePoolUsersBP(CustomBlueprint):
         @only_admins
         async def _get_all(_: Request, resource_pool_id: int, user: base_models.APIUser):
             res = await self.repo.get_users(api_user=user, resource_pool_id=resource_pool_id)
-            return json([apispec.UserWithId.model_validate(r).model_dump(exclude_none=True) for r in res])
+            return json(
+                [
+                    apispec.UserWithId(id=r.keycloak_id, no_default_access=r.no_default_access).model_dump(
+                        exclude_none=True
+                    )
+                    for r in res
+                ]
+            )
 
         return "/resource_pools/<resource_pool_id>/users", ["GET"], _get_all
 
@@ -166,7 +173,12 @@ class ResourcePoolUsersBP(CustomBlueprint):
             api_user=api_user, resource_pool_id=resource_pool_id, users=users_to_add, append=post
         )
         return json(
-            [apispec.UserWithId.model_validate(r).model_dump(exclude_none=True) for r in updated_users],
+            [
+                apispec.UserWithId(id=r.keycloak_id, no_default_access=r.no_default_access).model_dump(
+                    exclude_none=True
+                )
+                for r in updated_users
+            ],
             status=201 if post else 200,
         )
 
@@ -180,7 +192,11 @@ class ResourcePoolUsersBP(CustomBlueprint):
                 raise errors.MissingResourceError(
                     message=f"The user with id {user_id} or resource pool with id {resource_pool_id} cannot be found."
                 )
-            return json(apispec.UserWithId.model_validate(res[0]).model_dump(exclude_none=True))
+            return json(
+                apispec.UserWithId(id=res[0].keycloak_id, no_default_access=res[0].no_default_access).model_dump(
+                    exclude_none=True
+                )
+            )
 
         return "/resource_pools/<resource_pool_id>/users/<user_id>", ["GET"], _get
 
@@ -418,13 +434,19 @@ class UsersBP(CustomBlueprint):
             # The user exists in the db and the request body matches what is the in the db, simply return the user.
             if user_db is not None and user_db.keycloak_id == body.id:
                 return json(
-                    apispec.UserWithId.model_validate(user_db).model_dump(exclude_none=True),
+                    apispec.UserWithId(id=user_db.keycloak_id, no_default_access=user_db.no_default_access).model_dump(
+                        exclude_none=True
+                    ),
                     200,
                 )
             # The user does not exist in the db, add it.
-            kc_user = await self.repo.insert_user(api_user=user, user=base_models.User(keycloak_id=body.id))
+            kc_user = await self.repo.insert_user(
+                api_user=user, user=base_models.User(keycloak_id=body.id, no_default_access=body.no_default_access)
+            )
             return json(
-                apispec.UserWithId.model_validate(kc_user).model_dump(exclude_none=True),
+                apispec.UserWithId(id=kc_user.keycloak_id, no_default_access=kc_user.no_default_access).model_dump(
+                    exclude_none=True
+                ),
                 201,
             )
 
@@ -437,7 +459,14 @@ class UsersBP(CustomBlueprint):
         @only_admins
         async def _get_all(_: Request, user: base_models.APIUser):
             res = await self.repo.get_users(api_user=user)
-            return json([apispec.UserWithId.model_validate(r).model_dump(exclude_none=True) for r in res])
+            return json(
+                [
+                    apispec.UserWithId(id=r.keycloak_id, no_default_access=r.no_default_access).model_dump(
+                        exclude_none=True
+                    )
+                    for r in res
+                ]
+            )
 
         return "/users", ["GET"], _get_all
 
@@ -457,11 +486,16 @@ class UsersBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        async def _put(_: Request, user_id: str, user: base_models.APIUser, user_put: apispec.UserPut):
+        @validate(json=apispec.UserPut)
+        async def _put(_: Request, user_id: str, user: base_models.APIUser, body: apispec.UserPut):
             edited_user = await self.repo.update_user(
-                keycloak_id=user_id, api_user=user, **user_put.model_dump(exclude_none=True)
+                keycloak_id=user_id, api_user=user, **body.model_dump(exclude_none=True)
             )
-            return json(apispec.UserWithId.model_validate(edited_user).model_dump(exclude_none=True))
+            return json(
+                apispec.UserWithId(
+                    id=edited_user.keycloak_id, no_default_access=edited_user.no_default_access
+                ).model_dump(exclude_none=True)
+            )
 
         return "/users/<user_id>", ["PUT"], _put
 
@@ -470,11 +504,16 @@ class UsersBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        async def _patch(_: Request, user_id: str, user: base_models.APIUser, user_put: apispec.UserPatch):
+        @validate(json=apispec.UserPatch)
+        async def _patch(_: Request, user_id: str, user: base_models.APIUser, body: apispec.UserPatch):
             edited_user = await self.repo.update_user(
-                keycloak_id=user_id, api_user=user, **user_put.model_dump(exclude_none=True)
+                keycloak_id=user_id, api_user=user, **body.model_dump(exclude_none=True)
             )
-            return json(apispec.UserWithId.model_validate(edited_user).model_dump(exclude_none=True))
+            return json(
+                apispec.UserWithId(
+                    id=edited_user.keycloak_id, no_default_access=edited_user.no_default_access
+                ).model_dump(exclude_none=True)
+            )
 
         return "/users/<user_id>", ["PATCH"], _patch
 
