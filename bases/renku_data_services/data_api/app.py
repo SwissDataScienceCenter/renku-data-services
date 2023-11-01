@@ -13,6 +13,7 @@ from renku_data_services.crc.blueprints import (
     UserResourcePoolsBP,
     UsersBP,
 )
+from renku_data_services.project.blueprints import ProjectsBP
 from renku_data_services.storage.blueprints import StorageBP, StorageSchemaBP
 
 
@@ -58,6 +59,12 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
     )
     storage_schema = StorageSchemaBP(name="storage_schema", url_prefix=url_prefix)
     misc = MiscBP(name="misc", url_prefix=url_prefix, apispec=config.spec, version=config.version)
+    project = ProjectsBP(
+        name="projects",
+        url_prefix=url_prefix,
+        project_repo=config.project_repo,
+        authenticator=config.authenticator,
+    )
     app.blueprint(
         [
             resource_pools.blueprint(),
@@ -69,6 +76,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
             storage.blueprint(),
             storage_schema.blueprint(),
             misc.blueprint(),
+            project.blueprint(),
         ]
     )
 
