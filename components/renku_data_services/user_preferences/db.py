@@ -87,10 +87,8 @@ class UserPreferencesRepository(_Base):
                 logger.warning(f"(DEBUG): {'|'.join(project_slugs)} + {project_slug}")
                 project_slugs.append(project_slug)
                 logger.warning(f"(DEBUG): {'|'.join(project_slugs)}")
-                pinned_projects = models.PinnedProjects(project_slugs=project_slugs).model_dump()
-                setattr(user_preferences, "pinned_projects", pinned_projects)
+                user_preferences.pinned_projects = models.PinnedProjects(project_slugs=project_slugs).model_dump()
                 logger.warning(f"(DEBUG): {user_preferences.dump().model_dump_json()}")
-                session.add(user_preferences)
                 return user_preferences.dump()
 
     async def remove_pinned_project(self, user: base_models.APIUser, project_slug: str) -> models.UserPreferences:
