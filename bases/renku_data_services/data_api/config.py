@@ -24,6 +24,7 @@ from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.migrations.core import DataRepository
+from renku_data_services.project.db import ProjectRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.authn.gitlab import GitlabAuthenticator
@@ -73,6 +74,7 @@ class Config:
     user_repo: UserRepository
     rp_repo: ResourcePoolRepository
     storage_repo: StorageRepository
+    project_repo: ProjectRepository
     user_store: base_models.UserStore
     authenticator: base_models.Authenticator
     gitlab_authenticator: base_models.Authenticator
@@ -130,7 +132,6 @@ class Config:
         server_options_file = os.environ.get("SERVER_OPTIONS")
         server_defaults_file = os.environ.get("SERVER_DEFAULTS")
         k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
-        gitlab_url = None
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
             authenticator = DummyAuthenticator()
@@ -190,10 +191,15 @@ class Config:
             sync_sqlalchemy_url=sync_sqlalchemy_url,
             async_sqlalchemy_url=async_sqlalchemy_url,
         )
+        project_repo = ProjectRepository(
+            sync_sqlalchemy_url=sync_sqlalchemy_url,
+            async_sqlalchemy_url=async_sqlalchemy_url,
+        )
         return cls(
             user_repo=user_repo,
             rp_repo=rp_repo,
             storage_repo=storage_repo,
+            project_repo=project_repo,
             version=version,
             authenticator=authenticator,
             gitlab_authenticator=gitlab_authenticator,

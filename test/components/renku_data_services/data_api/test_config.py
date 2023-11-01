@@ -16,6 +16,7 @@ def test_config_dummy(monkeypatch):
     assert config.storage_repo is not None
     assert config.rp_repo is not None
     assert config.user_repo is not None
+    assert config.project_repo is not None
     assert config.version == "9.9.9"
 
 
@@ -41,4 +42,5 @@ def test_config_no_dummy(monkeypatch):
     assert config.storage_repo is not None
     assert config.rp_repo is not None
     assert config.user_repo is not None
+    assert config.project_repo is not None
     assert config.version == "9.9.9"

@@ -22,6 +22,7 @@ def create_app() -> Sanic:
         # specified below with the main_process_start decorator do not run.
         run_migrations_for_app("resource_pools", config.rp_repo)
         run_migrations_for_app("storage", config.rp_repo)
+        run_migrations_for_app("projects", config.project_repo)
         config.rp_repo.initialize(config.default_resource_pool)
     app = register_all_handlers(app, config)
 
@@ -36,10 +37,11 @@ def create_app() -> Sanic:
         logger.info("running migrations")
         run_migrations_for_app("resource_pools", config.rp_repo)
         run_migrations_for_app("storage", config.rp_repo)
+        run_migrations_for_app("projects", config.project_repo)
         config.rp_repo.initialize(config.default_resource_pool)
 
     @app.before_server_start
-    async def setup_rclone_calidator(app, _):
+    async def setup_rclone_validator(app, _):
         validator = RCloneValidator()
         app.ext.dependency(validator)
 
