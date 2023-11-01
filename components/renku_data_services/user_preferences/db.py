@@ -88,3 +88,26 @@ class UserPreferencesRepository(_Base):
                 pinned_projects = models.PinnedProjects(project_slugs=project_slugs).model_dump()
                 setattr(user_preferences, "pinned_projects", pinned_projects)
                 return user_preferences.dump()
+
+    async def remove_pinned_project(self, user: base_models.APIUser, project_slug: str) -> models.UserPreferences:
+        """Adds a pinned project from the user's preferences."""
+        async with self.session_maker() as session:
+            async with session.begin():
+                if not user.is_authenticated:
+                    raise errors.Unauthorized(message="Anonymous users cannot have user preferences.")
+
+                res = await session.execute(
+                    select(schemas.UserPreferencesORM).where(schemas.UserPreferencesORM.user_id == user.id)
+                )
+                user_preferences = res.one_or_none()
+                user_preferences = user_preferences[0] if user_preferences is not None else None
+
+                if user_preferences is None:
+                    raise errors.MissingResourceError(message="Preferences not found for user.")
+
+                project_slugs: List[str]
+                project_slugs = user_preferences.pinned_projects.get("project_slugs", [])
+                new_project_slugs = [slug for slug in project_slugs if project_slug.lower() != slug.lower()]
+                pinned_projects = models.PinnedProjects(project_slugs=new_project_slugs).model_dump()
+                setattr(user_preferences, "pinned_projects", pinned_projects)
+                return user_preferences.dump()
