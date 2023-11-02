@@ -130,7 +130,7 @@ async def test_get_update_user_resource_pools(
         assert inserted_user.keycloak_id is not None
         user_rps = await user_repo.get_user_resource_pools(keycloak_id=inserted_user.keycloak_id, api_user=admin_user)
 
-        assert len(user_rps) == 0
+        assert len(user_rps) == len([rp for rp in inserted_rps if rp.public])
         inserted_rp_ids = [rp.id for rp in inserted_rps if rp.id is not None]
         user_rps = await user_repo.update_user_resource_pools(
             keycloak_id=inserted_user.keycloak_id, resource_pool_ids=inserted_rp_ids, api_user=admin_user

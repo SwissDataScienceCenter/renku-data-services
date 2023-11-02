@@ -120,6 +120,12 @@ class ResourceClass(ResourcesCompareMixin):
         """Determine if a quota is compatible with the resource class."""
         return quota >= self
 
+    def update(self, **kwargs) -> "ResourceClass":
+        """Update a field of the resource class and return a new copy."""
+        if not kwargs:
+            return self
+        return ResourceClass.from_dict({**asdict(self), **kwargs})
+
 
 class GpuKind(StrEnum):
     """GPU kinds for k8s."""
