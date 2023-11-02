@@ -157,3 +157,41 @@ async def test_put_resource_class(test_client: SanicASGITestClient, valid_resour
     )
     assert res.status_code == 200
     assert res.json == res_cls_expected_response
+
+
+@pytest.mark.asyncio
+async def test_post_users(test_client: SanicASGITestClient):
+    user_payloads = [
+        {"id": "keycloak-id-1"},
+        {"id": "keycloak-id-2", "no_default_access": True},
+    ]
+    for payload in user_payloads:
+        _, res = await test_client.post(
+            "/api/data/users", headers={"Authorization": "bearer test"}, data=json.dumps(payload)
+        )
+        assert res.status_code == 201
+        assert res.json["id"] == payload["id"]
+        assert res.json["no_default_access"] == payload.get("no_default_access", False)
+
+
+@pytest.mark.asyncio
+async def test_patch_put_user(test_client: SanicASGITestClient):
+    user_id = "keycloak-id-1"
+    user_payload = {"id": user_id}
+    headers = {"Authorization": "bearer test"}
+    _, res = await test_client.post("/api/data/users", headers=headers, data=json.dumps(user_payload))
+    assert res.status_code == 201
+    assert res.json["id"] == user_id
+    assert res.json["no_default_access"] == user_payload.get("no_default_access", False)
+    _, res = await test_client.put(
+        f"/api/data/users/{user_id}", headers=headers, data=json.dumps({"no_default_access": True})
+    )
+    assert res.status_code == 200
+    assert res.json["id"] == user_id
+    assert res.json["no_default_access"]
+    _, res = await test_client.patch(
+        f"/api/data/users/{user_id}", headers=headers, data=json.dumps({"no_default_access": False})
+    )
+    assert res.status_code == 200
+    assert res.json["id"] == user_id
+    assert not res.json["no_default_access"]
