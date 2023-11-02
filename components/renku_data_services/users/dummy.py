@@ -46,7 +46,7 @@ class DummyAuthenticator:
         user_props = {}
         try:
             user_props = json.loads(access_token)
-        except:  # noqa: E722 # nosec B110
+        except:  # noqa: E722 # nosec: B110
             pass
         return base_models.APIUser(
             is_admin=self.admin,
