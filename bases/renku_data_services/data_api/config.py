@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import httpx
-from deepmerge import always_merger
+from deepmerge import Merger
 from jwt import PyJWKClient
 from tenacity import retry, stop_after_attempt, stop_after_delay, wait_fixed
 from yaml import safe_load
@@ -30,6 +30,25 @@ from renku_data_services.users.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.users.gitlab import GitlabAuthenticator
 from renku_data_services.users.keycloak import KcUserStore, KeycloakAuthenticator
 from renku_data_services.utils.core import get_ssl_context
+
+
+def merge_list(merger, path, base, nxt):
+    if len(nxt) > 0:
+        for x in nxt:
+            if x not in base:
+                base.append(x)
+    return base
+
+
+unique_list_merger = Merger(
+    [
+        (list, merge_list),
+        (dict, "merge"),
+        (set, "union"),
+    ],
+    ["override"],
+    ["override"],
+)
 
 
 @retry(stop=(stop_after_attempt(20) | stop_after_delay(300)), wait=wait_fixed(2), reraise=True)
@@ -95,7 +114,7 @@ class Config:
         with open(spec_file, "r") as f:
             storage_spec = safe_load(f)
 
-        self.spec = always_merger.merge(crc_spec, storage_spec)
+        self.spec = unique_list_merger.merge(crc_spec, storage_spec)
 
         if self.default_resource_pool_file is not None:
             with open(self.default_resource_pool_file, "r") as f:
