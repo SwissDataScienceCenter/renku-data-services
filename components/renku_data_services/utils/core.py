@@ -2,7 +2,7 @@
 import functools
 import os
 import ssl
-from typing import Any, Set
+from typing import Any
 
 from deepmerge import Merger
 
@@ -27,10 +27,5 @@ def merge_api_specs(*args):
 
     merged_spec: dict[str, Any]
     merged_spec = functools.reduce(merger.merge, args, dict())
-
-    # Remove duplicate entries in `.servers`
-    server_urls: Set[str]
-    server_urls = set((obj["url"] for obj in merged_spec.get("servers", [])))
-    merged_spec["servers"] = [dict(url=url) for url in server_urls]
 
     return merged_spec
