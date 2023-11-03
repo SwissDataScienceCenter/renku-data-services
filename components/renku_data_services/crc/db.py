@@ -428,8 +428,6 @@ class ResourcePoolRepository(_Base):
                             "associated with the resource pool"
                         )
                     )
-                if not cls.default:
-                    raise errors.ValidationError(message="Only the default resource class can be updated.")
                 for k, v in kwargs.items():
                     match k:
                         case "node_affinities":
