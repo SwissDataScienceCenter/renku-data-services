@@ -39,5 +39,11 @@ services:
     # Add "forwardPorts": ["5432"] to **devcontainer.json** to forward PostgreSQL locally.
     # (Adding the "ports" property to this file will not forward from a Codespace.)
 
+  swagger:
+    image: swaggerapi/swagger-ui
+    network_mode: service:db
+    environment:
+      SWAGGER_JSON_URL: http://localhost:8000/api/data/spec.json
+
 volumes:
   postgres-data:
