@@ -1443,9 +1443,13 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
   securitySchemes:
+    bearer:
+      scheme: bearer
+      type: http
     oidc:
       type: openIdConnect
       openIdConnectUrl: /auth/realms/Renku/.well-known/openid-configuration
 security:
   - oidc:
       - openid
+  - bearer: []

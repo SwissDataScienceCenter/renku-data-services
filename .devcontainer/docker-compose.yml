@@ -25,6 +25,7 @@ services:
       DB_NAME: renku
       DB_PASSWORD: renku
       DB_HOST: db
+      CORS_ALLOW_ALL_ORIGINS: "true"
 
   db:
     image: postgres:latest
@@ -44,6 +45,7 @@ services:
     network_mode: service:db
     environment:
       SWAGGER_JSON_URL: http://localhost:8000/api/data/spec.json
+      PORT: "8080"
 
 volumes:
   postgres-data:

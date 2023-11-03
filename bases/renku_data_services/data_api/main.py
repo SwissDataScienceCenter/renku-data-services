@@ -5,7 +5,6 @@ from os import environ
 from sanic import Sanic
 from sanic.log import logger
 from sanic.worker.loader import AppLoader
-from sanic_ext import Extend
 
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.data_api.config import Config
@@ -25,8 +24,12 @@ def create_app() -> Sanic:
         run_migrations_for_app("storage", config.rp_repo)
         config.rp_repo.initialize(config.default_resource_pool)
     app = register_all_handlers(app, config)
-    app.config.CORS_ORIGINS = "*"
-    Extend(app)
+
+    if environ.get("CORS_ALLOW_ALL_ORIGINS", "false").lower() == "true":
+        from sanic_ext import Extend
+
+        app.config.CORS_ORIGINS = "*"
+        Extend(app)
 
     @app.main_process_start
     async def do_migrations(*_):

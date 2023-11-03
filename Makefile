@@ -1,4 +1,4 @@
-.PHONY: schemas tests style_checks pre_commit_checks
+.PHONY: schemas tests style_checks pre_commit_checks run
 
 schemas:
 	poetry run datamodel-codegen --input components/renku_data_services/crc/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/crc/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.crc.apispec_base.BaseAPISpec
@@ -32,3 +32,6 @@ tests:
 
 pre_commit_checks:
 	poetry run pre-commit run --all-files
+
+run:
+	DUMMY_STORES=true poetry run python bases/renku_data_services/data_api/main.py --dev --debug
