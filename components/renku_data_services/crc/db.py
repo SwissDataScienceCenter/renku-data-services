@@ -434,15 +434,29 @@ class ResourcePoolRepository(_Base):
                     match k:
                         case "node_affinities":
                             for affinity in v:
-                                matched_affinity = next(
-                                    filter(lambda x: x.key == affinity["key"], cls.node_affinities), None
+                                affinity = cast(Dict[str, str | bool], affinity)
+                                matched_affinity: schemas.NodeAffintyORM | None = next(
+                                    filter(
+                                        lambda x: x.key == affinity["key"],  # type: ignore[arg-type, union-attr]
+                                        cls.node_affinities,
+                                    ),
+                                    None,
                                 )
                                 if matched_affinity:
                                     # NOTE: The node affinity is already present in the resource class, update it
-                                    matched_affinity.required_during_scheduling = affinity.required_during_scheduling
+                                    matched_affinity.required_during_scheduling = affinity.get(
+                                        "required_during_scheduling", False
+                                    )
                                 else:
                                     # NOTE: The node affinity does not exist, create it
-                                    cls.node_affinities.append(affinity)
+                                    cls.node_affinities.append(schemas.NodeAffintyORM(**affinity))
+                        case "tolerations":
+                            cls_tolerations = [tol.key for tol in cls.tolerations]
+                            for new_toleration in v:
+                                if new_toleration in cls_tolerations:
+                                    continue
+                                cls.tolerations.append(schemas.TolerationORM(key=new_toleration))
+                                cls_tolerations.append(new_toleration)
                         case _:
                             setattr(cls, k, v)
                 if cls.resource_pool is None:

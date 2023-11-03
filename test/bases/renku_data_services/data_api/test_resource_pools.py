@@ -320,3 +320,97 @@ async def test_private_resource_pool_access(
     )
     assert res.status_code == 200
     assert res.json == rp_private
+
+
+@pytest.mark.asyncio
+async def test_patch_tolerations(
+    test_client: SanicASGITestClient, admin_user_headers: Dict[str, str], valid_resource_pool_payload: Dict[str, Any]
+):
+    valid_resource_pool_payload["classes"][0]["tolerations"] = ["toleration1"]
+    _, res = await create_rp(valid_resource_pool_payload, test_client)
+    assert res.status_code == 201
+    rp = res.json
+    rp_id = rp["id"]
+    assert len(rp["classes"]) > 0
+    res_class = rp["classes"][0]
+    res_class_id = res_class["id"]
+    assert len(res_class["tolerations"]) == 1
+    # Patch in a 2nd toleration
+    _, res = await test_client.patch(
+        f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
+        headers=admin_user_headers,
+        data=json.dumps({"tolerations": ["toleration2"]}),
+    )
+    assert res.status_code == 200
+    assert "toleration2" in res.json["tolerations"]
+    # Adding the same toleration again does not add copies of it
+    _, res = await test_client.patch(
+        f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
+        headers=admin_user_headers,
+        data=json.dumps({"tolerations": ["toleration1"]}),
+    )
+    assert res.status_code == 200
+    assert len(res.json["tolerations"]) == 2
+    # Get the resource class to make sure that toleration is truly in the DB
+    _, res = await test_client.get(
+        f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
+        headers=admin_user_headers,
+    )
+    assert res.status_code == 200
+    assert "toleration2" in res.json["tolerations"]
+    assert "toleration1" in res.json["tolerations"]
+    assert len(res.json["tolerations"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_patch_affinities(
+    test_client: SanicASGITestClient, admin_user_headers: Dict[str, str], valid_resource_pool_payload: Dict[str, Any]
+):
+    valid_resource_pool_payload["classes"][0]["node_affinities"] = [{"key": "affinity1"}]
+    _, res = await create_rp(valid_resource_pool_payload, test_client)
+    assert res.status_code == 201
+    rp = res.json
+    rp_id = rp["id"]
+    assert len(rp["classes"]) > 0
+    res_class = rp["classes"][0]
+    res_class_id = res_class["id"]
+    assert len(res_class["node_affinities"]) == 1
+    assert res_class["node_affinities"][0] == {"key": "affinity1", "required_during_scheduling": False}
+    # Patch in a 2nd affinity
+    new_affinity = {"key": "affinity2"}
+    _, res = await test_client.patch(
+        f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
+        headers=admin_user_headers,
+        data=json.dumps({"node_affinities": [new_affinity]}),
+    )
+    assert res.status_code == 200
+    assert len(res.json["node_affinities"]) == 2
+    inserted_affinity = next(filter(lambda x: x["key"] == new_affinity["key"], res.json["node_affinities"]))
+    assert inserted_affinity["key"] == new_affinity["key"]
+    assert not inserted_affinity["required_during_scheduling"]
+    # Adding the same affinity again does not add copies of it
+    _, res = await test_client.patch(
+        f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
+        headers=admin_user_headers,
+        data=json.dumps({"node_affinities": [new_affinity]}),
+    )
+    assert res.status_code == 200
+    assert len(res.json["node_affinities"]) == 2
+    # Updating an affinitiy required_during_scheduling field
+    new_affinity = {"key": "affinity2", "required_during_scheduling": True}
+    _, res = await test_client.patch(
+        f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
+        headers=admin_user_headers,
+        data=json.dumps({"node_affinities": [new_affinity]}),
+    )
+    assert res.status_code == 200
+    assert len(res.json["node_affinities"]) == 2
+    inserted_affinity = next(filter(lambda x: x["key"] == new_affinity["key"], res.json["node_affinities"]))
+    assert inserted_affinity["required_during_scheduling"]
+    # Get the resource class to make sure that node affinities are truly in the DB
+    _, res = await test_client.get(
+        f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
+        headers=admin_user_headers,
+    )
+    assert res.status_code == 200
+    assert len(res.json["node_affinities"]) == 2
