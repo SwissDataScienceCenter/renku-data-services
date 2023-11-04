@@ -178,7 +178,7 @@ components:
         - type: string
         - type: boolean
         - type: object
-        - type: "null"
+        # - type: "null" --> type cannot be null according to the openapi spec
     CloudStorageUrl:
       allOf:
         - $ref: "#/components/schemas/GitRequest"

@@ -10,3 +10,4 @@ dist
 .git
 .venv
 crc_services.db
+.devcontainer
