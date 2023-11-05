@@ -1061,18 +1061,22 @@ components:
           memory: 250
           gpu: 10
         public: true
-        default: true
+        default: false
         classes:
           - name: "resource class 1"
             cpu: 1.5
             memory: 2
             gpu: 0
-            max_storage: 100
+            max_storage: 10
+            default_storage: 2
+            default: true
           - name: "resource class 2"
             cpu: 4.5
             memory: 10
             gpu: 2
             max_storage: 10
+            default_storage: 2
+            default: false
         name: "resource pool name"
     ResourcePoolPatch:
       type: object
@@ -1398,7 +1402,7 @@ components:
       additionalProperties: false
       description: A minimal representation of a node afinity label
       properties:
-        key: 
+        key:
           $ref: "#/components/schemas/K8sLabel"
         requiredDuringScheduling:
           type: boolean

@@ -11,7 +11,7 @@
 		"ghcr.io/devcontainers/features/git:1": {"version": "2.42.1"},
 		"ghcr.io/jungaretti/features/make:1": {},
 		"ghcr.io/rocker-org/devcontainer-features/apt-packages:1": {
-			"packages": "procps,curl,openssh-client"
+			"packages": "procps,gcc,python3-dev,curl,openssh-client"
 		}
 	},
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
