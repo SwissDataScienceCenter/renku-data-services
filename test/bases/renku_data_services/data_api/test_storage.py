@@ -1,5 +1,5 @@
 import json
-from typing import Any
+from typing import Any, Dict
 
 import pytest
 from sanic import Sanic
@@ -29,8 +29,13 @@ def valid_storage_payload() -> dict[str, Any]:
 
 
 @pytest.fixture
+def admin_user_headers() -> Dict[str, str]:
+    return {"Authorization": "Bearer some-token**ADMIN**"}
+
+
+@pytest.fixture
 def storage_test_client(app_config: Config) -> SanicASGITestClient:
-    gitlab_auth = DummyAuthenticator(admin=True)
+    gitlab_auth = DummyAuthenticator()
     app_config.gitlab_authenticator = gitlab_auth
     app = Sanic(app_config.app_name)
     app = register_all_handlers(app, app_config)
@@ -244,11 +249,12 @@ async def test_storage_creation(
     payload: dict[str, Any],
     expected_status_code: int,
     expected_storage_type: str,
+    admin_user_headers: Dict[str, str],
 ):
     storage_test_client, _ = storage_test_client
     _, res = await storage_test_client.post(
         "/api/data/storage",
-        headers={"Authorization": "bearer test"},
+        headers=admin_user_headers,
         data=json.dumps(payload),
     )
     assert res
@@ -261,11 +267,11 @@ async def test_storage_creation(
 
 
 @pytest.mark.asyncio
-async def test_create_storage_duplicate_name(storage_test_client, valid_storage_payload):
+async def test_create_storage_duplicate_name(storage_test_client, valid_storage_payload, admin_user_headers):
     storage_test_client, _ = storage_test_client
     _, res = await storage_test_client.post(
         "/api/data/storage",
-        headers={"Authorization": "bearer test"},
+        headers=admin_user_headers,
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201
@@ -273,18 +279,18 @@ async def test_create_storage_duplicate_name(storage_test_client, valid_storage_
 
     _, res = await storage_test_client.post(
         "/api/data/storage",
-        headers={"Authorization": "bearer test"},
+        headers=admin_user_headers,
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_get_storage(storage_test_client, valid_storage_payload):
+async def test_get_storage(storage_test_client, valid_storage_payload, admin_user_headers):
     storage_test_client, _ = storage_test_client
     _, res = await storage_test_client.post(
         "/api/data/storage",
-        headers={"Authorization": "bearer test"},
+        headers=admin_user_headers,
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201
@@ -293,7 +299,7 @@ async def test_get_storage(storage_test_client, valid_storage_payload):
     project_id = res.json["storage"]["project_id"]
     _, res = await storage_test_client.get(
         f"/api/data/storage?project_id={project_id}",
-        headers={"Authorization": "bearer test"},
+        headers=admin_user_headers,
     )
     assert res.status_code == 200
     assert len(res.json) == 1
