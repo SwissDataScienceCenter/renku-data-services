@@ -36,6 +36,7 @@ def init_db(**kwargs):
     config = DataConfig.from_env()
     run_migrations_for_app("storage", config.storage_repo)
     run_migrations_for_app("resource_pools", config.rp_repo)
+    run_migrations_for_app("user_preferences", config.user_preferences_repo)
 
     if dummy_stores:
         os.environ["DUMMY_STORES"] = dummy_stores
