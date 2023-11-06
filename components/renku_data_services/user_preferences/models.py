@@ -5,12 +5,13 @@ from pydantic import BaseModel, Field
 
 
 class PinnedProjects(BaseModel):
-    """Pinned projects model"""
+    """Pinned projects model."""
 
     project_slugs: Optional[List[str]] = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "PinnedProjects":
+        """Create model from a dict object."""
         return cls(project_slugs=data.get("project_slugs"))
 
 

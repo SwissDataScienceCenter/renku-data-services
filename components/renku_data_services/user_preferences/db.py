@@ -1,13 +1,12 @@
 """Adapters for user preferences database classes."""
 from typing import List, cast
 
-from sqlalchemy import create_engine, select, update
+from sqlalchemy import create_engine, select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
-from sanic.log import logger
 from renku_data_services.user_preferences import models
 from renku_data_services.user_preferences import orm as schemas
 
@@ -52,6 +51,23 @@ class UserPreferencesRepository(_Base):
                 raise errors.MissingResourceError(message="Preferences not found for user.")
             return user_preferences.dump()
 
+    async def delete_user_preferences(self, user: base_models.APIUser) -> None:
+        """Delete user preferences from the database."""
+        async with cast(AsyncSession, self.session_maker()) as session:
+            async with session.begin():
+                if not user.is_authenticated:
+                    return
+
+                res = await session.scalars(
+                    select(schemas.UserPreferencesORM).where(schemas.UserPreferencesORM.user_id == user.id)
+                )
+                user_preferences = res.one_or_none()
+
+                if user_preferences is None:
+                    return
+
+                await session.delete(user_preferences)
+
     async def add_pinned_project(self, user: base_models.APIUser, project_slug: str) -> models.UserPreferences:
         """Adds a new pinned project to the user's preferences."""
         async with cast(AsyncSession, self.session_maker()) as session:
@@ -71,7 +87,6 @@ class UserPreferencesRepository(_Base):
                     user_preferences = schemas.UserPreferencesORM.load(new_preferences)
                     session.add(user_preferences)
                     return user_preferences.dump()
-
 
                 project_slugs: List[str]
                 project_slugs = user_preferences.pinned_projects.get("project_slugs", [])
