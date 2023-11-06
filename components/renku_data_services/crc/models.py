@@ -107,14 +107,16 @@ class ResourceClass(ResourcesCompareMixin):
     @classmethod
     def from_dict(cls, data: dict) -> "ResourceClass":
         """Create the model from a plain dictionary."""
+        node_affinities: List[NodeAffinity] = []
+        tolerations: List[str] = []
         if data.get("node_affinities"):
-            data["node_affinities"] = [
+            node_affinities = [
                 NodeAffinity.from_dict(affinity) if isinstance(affinity, dict) else affinity
                 for affinity in data.get("node_affinities", [])
             ]
         if isinstance(data.get("tolerations"), list):
-            data["tolerations"] = [toleration for toleration in data["tolerations"]]
-        return cls(**data)
+            tolerations = [toleration for toleration in data["tolerations"]]
+        return cls(**{**data, "tolerations": tolerations, "node_affinities": node_affinities})
 
     def is_quota_valid(self, quota: "Quota") -> bool:
         """Determine if a quota is compatible with the resource class."""
@@ -147,9 +149,10 @@ class Quota(ResourcesCompareMixin):
     @classmethod
     def from_dict(cls, data: dict) -> "Quota":
         """Create the model from a plain dictionary."""
+        gpu_kind = GpuKind.NVIDIA
         if "gpu_kind" in data:
-            data["gpu_kind"] = data["gpu_kind"] if isinstance(data["gpu_kind"], GpuKind) else GpuKind[data["gpu_kind"]]
-        return cls(**data)
+            gpu_kind = data["gpu_kind"] if isinstance(data["gpu_kind"], GpuKind) else GpuKind[data["gpu_kind"]]
+        return cls(**{**data, "gpu_kind": gpu_kind})
 
     def is_resource_class_compatible(self, rc: "ResourceClass") -> bool:
         """Determine if a resource class is compatible with the quota."""
