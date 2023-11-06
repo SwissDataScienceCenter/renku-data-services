@@ -73,7 +73,7 @@ include = '\.pyi?$'
 [tool.pydocstyle]
 add_ignore = ["D105", "D107", "D202", "D401"]
 match = '^(?!test_|apispec).*\.py'
-match_dir = '^(?!^test$|^crc_migrations$|^storage_migrations$|\..*).*'
+match_dir = '^(?!^test$|^crc_migrations$|^storage_migrations$|^user_preferences_migrations$|\..*).*'
 
 [tool.bandit]
 skips = ["B101", "B603", "B607", "B404"]
