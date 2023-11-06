@@ -5,11 +5,12 @@ on:
     branches:
       - main
     tags:
-      - 'v*'
+      - "v*"
   pull_request:
     branches:
-      - 'main'
-      - 'hotfix/**'
+      - "main"
+      - "hotfix/**"
+      - "feat-add-user-preferences"
 
 jobs:
   test:
