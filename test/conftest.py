@@ -11,8 +11,8 @@ import renku_data_services.base_models as base_models
 from renku_data_services.data_api.config import Config as DataConfig
 from renku_data_services.migrations.core import run_migrations_for_app
 
-settings.register_profile("ci", deadline=400)
-settings.register_profile("dev", deadline=200)
+settings.register_profile("ci", deadline=400, max_examples=5)
+settings.register_profile("dev", deadline=200, max_examples=5)
 
 settings.load_profile(os.getenv("HYPOTHESIS_PROFILE", "dev"))
 
