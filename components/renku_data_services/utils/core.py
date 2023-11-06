@@ -2,9 +2,9 @@
 import functools
 import os
 import ssl
-from typing import Any, Set
+from typing import Any
 
-from deepmerge import always_merger
+from deepmerge import Merger
 
 
 @functools.lru_cache(1)
@@ -19,12 +19,13 @@ def get_ssl_context():
 
 def merge_api_specs(*args):
     """Merges API spec files into a single one."""
-    merged_spec: dict[str, Any]
-    merged_spec = functools.reduce(always_merger.merge, args, dict())
+    merger = Merger(
+        type_strategies=[(list, "append_unique"), (dict, "merge"), (set, "union")],
+        fallback_strategies=["override"],
+        type_conflict_strategies=["override_if_not_empty"],
+    )
 
-    # Remove duplicate entries in `.servers`
-    server_urls: Set[str]
-    server_urls = set((obj["url"] for obj in merged_spec.get("servers", [])))
-    merged_spec["servers"] = [dict(url=url) for url in server_urls]
+    merged_spec: dict[str, Any]
+    merged_spec = functools.reduce(merger.merge, args, dict())
 
     return merged_spec
