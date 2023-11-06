@@ -15,11 +15,11 @@ paths:
       summary: Get all projects
       responses:
         "200":
-          description: The project
+          description: List of projects
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/Project"
+                $ref: "#/components/schemas/ProjectsList"
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -141,37 +141,6 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - projects
-    put:
-      summary: Replace all members of a project
-      parameters:
-        - in: path
-          name: project_id
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/MembersWithRoles"
-      responses:
-        "200":
-          description: The project's new members
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/MembersWithRoles"
-        "404":
-          description: The project does not exist
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        default:
-          $ref: "#/components/responses/Error"
-      tags:
-        - projects
     patch:
       summary: Add new members to a project or update their roles (if member ID already exists)
       parameters:
@@ -204,19 +173,45 @@ paths:
       tags:
         - projects
     delete:
-      summary: Remove one or more members from a project
+      summary: Remove all members from a project
       parameters:
         - in: path
           name: project_id
           required: true
           schema:
             type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/Members"
+      responses:
+        "200":
+          description: The project's updated members list
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/MembersWithRoles"
+        "404":
+          description: The project does not exist
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - projects
+  /projects/{project_id}/members/{user_id}:
+    # TODO: Do we need a POST here with default ``member`` role?
+    delete:
+      summary: Remove a member from a project
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: user_id
+          required: true
+          schema:
+            type: string
       responses:
         "200":
           description: The project's updated members list
@@ -246,9 +241,16 @@ paths:
                 $ref: "#/components/schemas/Version"
 components:
   schemas:
+    ProjectsList:
+      description: A list of Renku projects
+      type: array
+      items:
+        $ref: "#/components/schemas/Project"
+      minItems: 0
+      uniqueItems: true
     Project:
-      type: object
       description: A Renku native project definition and metadata
+      type: object
       additionalProperties: false
       properties:
         id:
@@ -281,8 +283,8 @@ components:
           id: "owner-KC-id"
         visibility: "public"
     ProjectPost:
-      type: object
       description: Project metadata to be created in Renku
+      type: object
       additionalProperties: false
       properties:
         name:
@@ -313,8 +315,8 @@ components:
         description:
           $ref: "#/components/schemas/Description"
     ProjectPut:
-      type: object
       description: A project to replace another one
+      type: object
       additionalProperties: false
       properties:
         name:
@@ -396,13 +398,6 @@ components:
       enum:
         - "public"
         - "private"
-    Members:
-      description: List of users that have access to a project
-      type: array
-      items:
-        $ref: "#/components/schemas/User"
-      minItems: 0
-      uniqueItems: true
     MembersWithRoles:
       description: List of users and their access level to the project
       type: array
@@ -410,7 +405,7 @@ components:
         $ref: "#/components/schemas/MemberWithRole"
       minItems: 0
       uniqueItems: true
-    MemberWithRoles:
+    MemberWithRole:
       description: A user and the access level to the project
       type: object
       additionalProperties: false
