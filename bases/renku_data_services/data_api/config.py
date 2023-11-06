@@ -133,8 +133,8 @@ class Config:
         gitlab_url = None
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
-            authenticator = DummyAuthenticator(admin=True)
-            gitlab_authenticator = DummyAuthenticator(admin=True)
+            authenticator = DummyAuthenticator()
+            gitlab_authenticator = DummyAuthenticator()
             quota_repo = QuotaRepository(DummyCoreClient({}), DummySchedulingClient({}), namespace=k8s_namespace)
             user_always_exists = os.environ.get("DUMMY_USERSTORE_USER_ALWAYS_EXISTS", "true").lower() == "true"
             user_store = DummyUserStore(user_always_exists=user_always_exists)

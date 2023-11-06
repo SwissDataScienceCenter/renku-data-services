@@ -1404,19 +1404,19 @@ components:
       properties:
         key:
           $ref: "#/components/schemas/K8sLabel"
-        requiredDuringScheduling:
+        required_during_scheduling:
           type: boolean
           default: false
       required: ["key"]
       example:
         key: some-label-32
-        requiredDuringScheduling: true
+        required_during_scheduling: true
     NodeAffinityList:
       type: array
       description: A list of k8s labels used for tolerations and/or node affinity
       items:
         $ref: "#/components/schemas/NodeAffinity"
-      example: [{"key": "test-label-1", "requiedDuringScheduling": false}]
+      example: [{"key": "test-label-1", "required_during_scheduling": false}]
       uniqueItems: true
       default: []
       minItems: 0

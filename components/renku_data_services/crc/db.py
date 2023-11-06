@@ -7,12 +7,12 @@ it all in one place.
 """
 from asyncio import gather
 from functools import wraps
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
-from sqlalchemy import create_engine, delete, or_, select
+from sqlalchemy import create_engine, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import Session, selectinload, sessionmaker
-from sqlalchemy.sql import Select, and_
+from sqlalchemy.sql import Select, and_, or_, not_
 from sqlalchemy.sql.expression import false, true
 
 import renku_data_services.base_models as base_models
@@ -37,29 +37,35 @@ class _Base:
 def _resource_pool_access_control(
     api_user: base_models.APIUser,
     stmt: Select[Tuple[schemas.ResourcePoolORM]],
-    keycloak_id: Optional[str] = None,
 ) -> Select[Tuple[schemas.ResourcePoolORM]]:
     """Modifies a select query to list resource pools based on whether the user is logged in or not."""
     output = stmt
     match (api_user.is_authenticated, api_user.is_admin):
         case True, False:
-            # The user is logged in but not an admin, they can see resource pools they have been granted access to
-            # or resource pools that are marked as public.
-            if keycloak_id is not None and api_user.id != keycloak_id:
-                raise errors.ValidationError(
-                    message="Your user ID should match the user ID for which you are querying resource pools."
-                )
+            # The user is logged in but not an admin
+            api_user_has_default_pool_access = not_(
+                # NOTE: The only way to check that a user is allowed to access the default pool is that such a
+                # record does NOT EXIST in the database
+                select(schemas.UserORM.no_default_access)
+                .where(and_(schemas.UserORM.keycloak_id == api_user.id, schemas.UserORM.no_default_access == true()))
+                .exists()
+            )  # type: ignore[var-annotated]
             output = output.join(schemas.UserORM, schemas.ResourcePoolORM.users, isouter=True).where(
-                # TODO: Should .public be .default
-                or_(schemas.UserORM.keycloak_id == api_user.id, schemas.ResourcePoolORM.public == true())
+                or_(
+                    schemas.UserORM.keycloak_id == api_user.id,  # the user is part of the pool
+                    and_(  # the pool is not default but is public
+                        schemas.ResourcePoolORM.default != true(), schemas.ResourcePoolORM.public == true()
+                    ),
+                    and_(  # the pool is default and the user is not prohibited from accessing it
+                        schemas.ResourcePoolORM.default == true(),
+                        api_user_has_default_pool_access,
+                    ),
+                )
             )
         case True, True:
             # The user is logged in and is an admin, they can see all resource pools
-            if keycloak_id is not None:
-                output = output.join(schemas.UserORM, schemas.ResourcePoolORM.users, isouter=True).where(
-                    schemas.UserORM.keycloak_id == keycloak_id
-                )
-        case _:
+            pass
+        case False, _:
             # The user is not logged in, they can see only the public resource pools
             output = output.where(schemas.ResourcePoolORM.public == true())
     return output
@@ -71,19 +77,36 @@ def _classes_user_access_control(
 ) -> Select[Tuple[schemas.ResourceClassORM]]:
     """Adjust the select statement for classes based on whether the user is logged in or not."""
     output = stmt
-    if api_user.is_authenticated and not api_user.is_admin:
-        # The user is logged in but is not an admin (they have access to resource pools
-        # they have access to and to default resource pools)
-        output = output.join(schemas.UserORM, schemas.ResourcePoolORM.users, isouter=True).where(
-            or_(
-                schemas.UserORM.keycloak_id == api_user.id,
+    match (api_user.is_authenticated, api_user.is_admin):
+        case True, False:
+            # The user is logged in but is not an admin
+            api_user_has_default_pool_access = not_(
+                # NOTE: The only way to check that a user is allowed to access the default pool is that such a
+                # record does NOT EXIST in the database
+                select(schemas.UserORM.no_default_access)
+                .where(and_(schemas.UserORM.keycloak_id == api_user.id, schemas.UserORM.no_default_access == true()))
+                .exists()
+            )  # type: ignore[var-annotated]
+            output = output.join(schemas.UserORM, schemas.ResourcePoolORM.users, isouter=True).where(
+                or_(
+                    schemas.UserORM.keycloak_id == api_user.id,  # the user is part of the pool
+                    and_(  # the pool is not default but is public
+                        schemas.ResourcePoolORM.default != true(), schemas.ResourcePoolORM.public == true()
+                    ),
+                    and_(  # the pool is default and the user is not prohibited from accessing it
+                        schemas.ResourcePoolORM.default == true(),
+                        api_user_has_default_pool_access,
+                    ),
+                )
+            )
+        case True, True:
+            # The user is logged in and is an admin, they can see all resource classes
+            pass
+        case False, _:
+            # The user is not logged in, they can see only the classes from public resource pools
+            output = output.join(schemas.UserORM, schemas.ResourcePoolORM.users, isouter=True).where(
                 schemas.ResourcePoolORM.public == true(),
             )
-        )
-    elif not api_user.is_authenticated:
-        output = output.join(schemas.UserORM, schemas.ResourcePoolORM.users, isouter=True).where(
-            schemas.ResourcePoolORM.public == true(),
-        )
     return output
 
 
@@ -181,17 +204,8 @@ class ResourcePoolRepository(_Base):
                 if res_class.resource_pool_id is None or res_class.resource_pool is None:
                     continue
                 rc_data = res_class.dump()
-                rc = models.ResourceClass(
-                    name=rc_data.name,
-                    cpu=rc_data.cpu,
-                    memory=rc_data.memory,
-                    max_storage=rc_data.max_storage,
-                    gpu=rc_data.gpu,
-                    id=rc_data.id,
-                    default=res_class.default,
-                    default_storage=res_class.default_storage,
-                    matching=matching,
-                )
+                rc_data = cast(models.ResourceClass, rc_data)
+                rc = rc_data.update(matching=matching)
                 if res_class.resource_pool_id not in output:
                     quota = (
                         self.quotas_repo.get_quota(res_class.resource_pool.quota)
@@ -414,21 +428,33 @@ class ResourcePoolRepository(_Base):
                             "associated with the resource pool"
                         )
                     )
-                if not cls.default:
-                    raise errors.ValidationError(message="Only the default resource class can be updated.")
                 for k, v in kwargs.items():
                     match k:
                         case "node_affinities":
                             for affinity in v:
-                                matched_affinity = next(
-                                    filter(lambda x: x.key == affinity["key"], cls.node_affinities), None
+                                affinity = cast(Dict[str, str | bool], affinity)
+                                matched_affinity: schemas.NodeAffintyORM | None = next(
+                                    filter(
+                                        lambda x: x.key == affinity["key"],  # type: ignore[arg-type, union-attr]
+                                        cls.node_affinities,
+                                    ),
+                                    None,
                                 )
                                 if matched_affinity:
                                     # NOTE: The node affinity is already present in the resource class, update it
-                                    matched_affinity.required_during_scheduling = affinity.required_during_scheduling
+                                    matched_affinity.required_during_scheduling = affinity.get(
+                                        "required_during_scheduling", False
+                                    )
                                 else:
                                     # NOTE: The node affinity does not exist, create it
-                                    cls.node_affinities.append(affinity)
+                                    cls.node_affinities.append(schemas.NodeAffintyORM(**affinity))
+                        case "tolerations":
+                            cls_tolerations = [tol.key for tol in cls.tolerations]
+                            for new_toleration in v:
+                                if new_toleration in cls_tolerations:
+                                    continue
+                                cls.tolerations.append(schemas.TolerationORM(key=new_toleration))
+                                cls_tolerations.append(new_toleration)
                         case _:
                             setattr(cls, k, v)
                 if cls.resource_pool is None:
@@ -515,6 +541,10 @@ class UserRepository(_Base):
         """Get resource pools that a specific user has access to."""
         async with self.session_maker() as session:
             async with session.begin():
+                if not api_user.is_admin and api_user.id != keycloak_id:
+                    raise errors.ValidationError(
+                        message="Users cannot query for resource pools that belong to other users."
+                    )
                 stmt: Select[Any] = (
                     select(schemas.UserORM)
                     .where(schemas.UserORM.keycloak_id == keycloak_id)
@@ -526,20 +556,22 @@ class UserRepository(_Base):
                     raise errors.MissingResourceError(message=f"The user with keycloak id {keycloak_id} does not exist")
 
                 stmt = select(schemas.ResourcePoolORM).options(selectinload(schemas.ResourcePoolORM.classes))
+                stmt = stmt.where(
+                    or_(
+                        schemas.ResourcePoolORM.public == true(),
+                        schemas.ResourcePoolORM.users.any(schemas.UserORM.keycloak_id == keycloak_id),
+                    )
+                )
                 if resource_pool_name is not None:
                     stmt = stmt.where(schemas.ResourcePoolORM.name == resource_pool_name)
                 if resource_pool_id is not None:
                     stmt = stmt.where(schemas.ResourcePoolORM.id == resource_pool_id)
-                if user.no_default_access:
-                    stmt = stmt.where(schemas.ResourcePoolORM.default == false())
                 # NOTE: The line below ensures that the right users can access the right resources, do not remove.
-                stmt = _resource_pool_access_control(api_user, stmt, keycloak_id=keycloak_id)
+                stmt = _resource_pool_access_control(api_user, stmt)
                 res = await session.execute(stmt)
                 rps: List[schemas.ResourcePoolORM] = res.scalars().all()
                 output: List[models.ResourcePool] = []
                 for rp in rps:
-                    if user.no_default_access and rp.default:
-                        continue
                     quota = self.quotas_repo.get_quota(rp.quota) if rp.quota else None
                     output.append(rp.dump(quota))
                 return output
