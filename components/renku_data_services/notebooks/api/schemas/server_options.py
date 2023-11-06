@@ -15,38 +15,10 @@ class NodeAffinity:
     key: str
     required_during_scheduling: bool = False
 
-    def json_patch(self) -> Dict[str, Any]:
-        match_expressions = {
-            "matchExpressions": {
-                "key": self.key,
-                "operator": "Exists",
-            },
-        }
-        if self.required_during_scheduling:
-            return {
-                "type": "application/json-patch+json",
-                "patch": [
-                    {
-                        "op": "add",
-                        "path": "/statefulset/spec/template/spec/affinity/nodeAffinity"
-                        "/requiredDuringSchedulingIgnoredDuringExecution/nodeSelectorTerms/-",
-                        "value": match_expressions,
-                    }
-                ],
-            }
+    def json_match_expression(self) -> Dict[str, str]:
         return {
-            "type": "application/json-patch+json",
-            "patch": [
-                {
-                    "op": "add",
-                    "path": "/statefulset/spec/template/spec/affinity/nodeAffinity"
-                    "/preferredDuringSchedulingIgnoredDuringExecution/-",
-                    "value": {
-                        "weight": 1,
-                        "preference": match_expressions,
-                    },
-                }
-            ],
+            "key": self.key,
+            "operator": "Exists",
         }
 
 
@@ -56,19 +28,10 @@ class Toleration:
 
     key: str
 
-    def json_patch(self) -> Dict[str, Any]:
+    def json_match_expression(self) -> Dict[str, Any]:
         return {
-            "type": "application/json-patch+json",
-            "patch": [
-                {
-                    "op": "add",
-                    "path": "/statefulset/spec/template/spec/tolerations/-",
-                    "value": {
-                        "key": self.key,
-                        "operator": "Exists",
-                    },
-                }
-            ],
+            "key": self.key,
+            "operator": "Exists",
         }
 
 
