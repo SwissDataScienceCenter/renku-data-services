@@ -24,6 +24,7 @@ from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.migrations.core import DataRepository
+from renku_data_services.project.authorization import IProjectAuthorizer, SQLProjectAuthorizer
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.users.gitlab import GitlabAuthenticator
@@ -77,6 +78,7 @@ class Config:
     authenticator: base_models.Authenticator
     gitlab_authenticator: base_models.Authenticator
     quota_repo: QuotaRepository
+    project_authz: IProjectAuthorizer
     spec: Dict[str, Any] = field(init=False, default_factory=dict)
     version: str = "0.0.1"
     app_name: str = "renku_crc"
@@ -190,6 +192,7 @@ class Config:
             sync_sqlalchemy_url=sync_sqlalchemy_url,
             async_sqlalchemy_url=async_sqlalchemy_url,
         )
+        project_authz = SQLProjectAuthorizer(sync_sqlalchemy_url, async_sqlalchemy_url)
         return cls(
             user_repo=user_repo,
             rp_repo=rp_repo,
@@ -201,4 +204,5 @@ class Config:
             quota_repo=quota_repo,
             server_defaults_file=server_defaults_file,
             server_options_file=server_options_file,
+            project_authz=project_authz,
         )
