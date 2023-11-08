@@ -137,11 +137,7 @@ mypy_path = ["components", "bases"]
 files = ["bases/**/*.py", "components/**/*.py"]
 namespace_packages = true
 explicit_package_bases = true
-exclude = [
-  "components/renku_data_services/crc_migrations/versions",
-  "components/renku_data_services/storage_migrations/versions",
-  "test",
-]
+exclude = ["test"]
 
 pretty = true
 show_column_numbers = true

@@ -5,13 +5,15 @@ Revises: 18d11d77ff15
 Create Date: 2023-08-31 07:01:25.113476
 
 """
+from typing import Sequence
+
 from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "6be69a523bf9"
 down_revision = "18d11d77ff15"
-branch_labels = None
-depends_on = None
+branch_labels: Sequence[str] | None = None
+depends_on: Sequence[str] | str | None = None
 
 
 def upgrade() -> None:
