@@ -9,7 +9,7 @@ servers:
   - url: /api/data
   - url: /ui-server/api/data
 paths:
-  /user_preferences:
+  "/user/preferences":
     get:
       summary: Get user preferences for the currently logged in user
       responses:
@@ -29,7 +29,7 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - user_preferences
-  "/user_preferences/pinned_projects":
+  "/user/preferences/pinned_projects":
     post:
       summary: Add a pinned project
       requestBody:

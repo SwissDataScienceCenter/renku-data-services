@@ -28,7 +28,7 @@ class UserPreferencesBP(CustomBlueprint):
             user_preferences = await self.user_preferences_repo.get_user_preferences(user=user)
             return json(apispec.UserPreferences.model_validate(user_preferences).model_dump())
 
-        return "/user_preferences", ["GET"], _get
+        return "/user/preferences", ["GET"], _get
 
     def post_pinned_projects(self) -> BlueprintFactoryResponse:
         """Add a pinned project to user preferences for the logged in user."""
@@ -39,7 +39,7 @@ class UserPreferencesBP(CustomBlueprint):
             res = await self.user_preferences_repo.add_pinned_project(user=user, project_slug=body.project_slug)
             return json(apispec.UserPreferences.model_validate(res).model_dump())
 
-        return "/user_preferences/pinned_projects", ["POST"], _post
+        return "/user/preferences/pinned_projects", ["POST"], _post
 
     def delete_pinned_projects(self) -> BlueprintFactoryResponse:
         """Remove a pinned project from user preferences for the logged in user."""
@@ -50,4 +50,4 @@ class UserPreferencesBP(CustomBlueprint):
             res = await self.user_preferences_repo.remove_pinned_project(user=user, **res_filter.model_dump())
             return json(apispec.UserPreferences.model_validate(res).model_dump())
 
-        return "/user_preferences/pinned_projects", ["DELETE"], _delete
+        return "/user/preferences/pinned_projects", ["DELETE"], _delete
