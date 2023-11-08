@@ -8,9 +8,6 @@ on:
       - "v*"
   pull_request:
     branches:
-      - "main"
-      - "hotfix/**"
-      - "feat-add-user-preferences"
 
 jobs:
   test:
