@@ -101,8 +101,10 @@ class UserPreferencesRepository(_Base):
                 user_preferences.pinned_projects = pinned_projects
                 return user_preferences.dump()
 
-    async def remove_pinned_project(self, user: base_models.APIUser, project_slug: str) -> models.UserPreferences:
-        """Removes a pinned project from the user's preferences."""
+    async def remove_pinned_project(
+        self, user: base_models.APIUser, project_slug: str | None
+    ) -> models.UserPreferences:
+        """Removes on or all pinned projects from the user's preferences."""
         async with cast(AsyncSession, self.session_maker()) as session:
             async with session.begin():
                 if not user.is_authenticated:
@@ -118,7 +120,12 @@ class UserPreferencesRepository(_Base):
 
                 project_slugs: List[str]
                 project_slugs = user_preferences.pinned_projects.get("project_slugs", [])
-                new_project_slugs = [slug for slug in project_slugs if project_slug.lower() != slug.lower()]
+
+                # Remove all projects if `project_slug` is None
+                new_project_slugs = (
+                    [slug for slug in project_slugs if project_slug.lower() != slug.lower()] if project_slug else []
+                )
+
                 pinned_projects = models.PinnedProjects(project_slugs=new_project_slugs).model_dump()
                 user_preferences.pinned_projects = pinned_projects
                 return user_preferences.dump()

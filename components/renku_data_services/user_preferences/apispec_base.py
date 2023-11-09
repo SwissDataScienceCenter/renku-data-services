@@ -19,4 +19,4 @@ class PinnedProjectFilter(BaseAPISpec):
 
         extra = Extra.ignore
 
-    project_slug: str = Field()
+    project_slug: str | None = Field()

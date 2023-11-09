@@ -50,11 +50,10 @@ paths:
       tags:
         - user_preferences
     delete:
-      summary: Remove a pinned project
+      summary: Remove one or all pinned projects
       parameters:
         - in: query
           name: project_slug
-          required: true
           schema:
             type: string
       responses:
