@@ -30,7 +30,7 @@ async def test_get_user_preferences(test_client: SanicASGITestClient, valid_add_
     assert res.status_code == 200
 
     _, res = await test_client.get(
-        "/api/data/user_preferences",
+        "/api/data/user/preferences",
         headers={"Authorization": "bearer test"},
     )
 
@@ -51,7 +51,7 @@ async def test_post_user_preferences_pinned_projects(
     assert res.status_code == 200
 
     _, res = await test_client.post(
-        "/api/data/user_preferences/pinned_projects",
+        "/api/data/user/preferences/pinned_projects",
         headers={"Authorization": "bearer test"},
         data=json.dumps(dict(project_slug="user.2/second-project")),
     )
@@ -74,7 +74,7 @@ async def test_post_user_preferences_pinned_projects_existing(
     assert res.status_code == 200
 
     _, res = await test_client.post(
-        "/api/data/user_preferences/pinned_projects",
+        "/api/data/user/preferences/pinned_projects",
         headers={"Authorization": "bearer test"},
         data=json.dumps(valid_add_pinned_project_payload),
     )
@@ -96,7 +96,7 @@ async def test_delete_user_preferences_pinned_projects(
     assert res.status_code == 200
 
     _, res = await test_client.delete(
-        "/api/data/user_preferences/pinned_projects",
+        "/api/data/user/preferences/pinned_projects",
         params=dict(project_slug="user.1/first-project"),
         headers={"Authorization": "bearer test"},
     )
@@ -116,7 +116,7 @@ async def test_delete_user_preferences_pinned_projects_unknown(
     assert res.status_code == 200
 
     _, res = await test_client.delete(
-        "/api/data/user_preferences/pinned_projects",
+        "/api/data/user/preferences/pinned_projects",
         params=dict(project_slug="user.2/second-project"),
         headers={"Authorization": "bearer test"},
     )

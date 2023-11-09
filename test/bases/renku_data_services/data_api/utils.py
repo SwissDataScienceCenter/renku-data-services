@@ -18,7 +18,7 @@ async def create_user_preferences(
 ) -> Tuple[Request, TestingResponse]:
     """Create user preferencers by adding a pinned project"""
     return await test_client.post(
-        "/api/data/user_preferences/pinned_projects",
+        "/api/data/user/preferences/pinned_projects",
         headers={"Authorization": "bearer test"},
         data=json.dumps(valid_add_pinned_project_payload),
     )
