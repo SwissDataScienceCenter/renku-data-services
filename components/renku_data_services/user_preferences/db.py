@@ -102,7 +102,7 @@ class UserPreferencesRepository(_Base):
                 return user_preferences.dump()
 
     async def remove_pinned_project(self, user: base_models.APIUser, project_slug: str) -> models.UserPreferences:
-        """Adds a pinned project from the user's preferences."""
+        """Removes a pinned project from the user's preferences."""
         async with cast(AsyncSession, self.session_maker()) as session:
             async with session.begin():
                 if not user.is_authenticated:
