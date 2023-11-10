@@ -1,7 +1,7 @@
 """SQLAlchemy schemas for the user preferences database."""
 from typing import Any
 
-from sqlalchemy import JSON, MetaData, String
+from sqlalchemy import JSON, Integer, MetaData, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 
@@ -23,7 +23,10 @@ class UserPreferencesORM(BaseORM):
 
     __tablename__ = "user_preferences"
 
-    user_id: Mapped[str] = mapped_column("user_id", String(), primary_key=True)
+    id: Mapped[int] = mapped_column("id", Integer, primary_key=True, default=None, init=False)
+    """Id of this user preferences object."""
+
+    user_id: Mapped[str] = mapped_column("user_id", String(), unique=True)
     """Id of the user."""
 
     pinned_projects: Mapped[dict[str, Any]] = mapped_column("pinned_projects", JSONVariant)
