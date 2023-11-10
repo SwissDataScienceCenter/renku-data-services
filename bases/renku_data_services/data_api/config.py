@@ -12,6 +12,7 @@ from yaml import safe_load
 import renku_data_services.base_models as base_models
 import renku_data_services.crc
 import renku_data_services.storage
+import renku_data_services.user_preferences
 from renku_data_services import errors
 from renku_data_services.crc import models
 from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
@@ -25,6 +26,7 @@ from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClie
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.migrations.core import DataRepository
 from renku_data_services.storage.db import StorageRepository
+from renku_data_services.user_preferences.db import UserPreferencesRepository
 from renku_data_services.users.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.users.gitlab import GitlabAuthenticator
 from renku_data_services.users.keycloak import KcUserStore, KeycloakAuthenticator
@@ -73,6 +75,7 @@ class Config:
     user_repo: UserRepository
     rp_repo: ResourcePoolRepository
     storage_repo: StorageRepository
+    user_preferences_repo: UserPreferencesRepository
     user_store: base_models.UserStore
     authenticator: base_models.Authenticator
     gitlab_authenticator: base_models.Authenticator
@@ -94,7 +97,11 @@ class Config:
         with open(spec_file, "r") as f:
             storage_spec = safe_load(f)
 
-        self.spec = merge_api_specs(crc_spec, storage_spec)
+        spec_file = Path(renku_data_services.user_preferences.__file__).resolve().parent / "api.spec.yaml"
+        with open(spec_file, "r") as f:
+            user_preferences_spec = safe_load(f)
+
+        self.spec = merge_api_specs(crc_spec, storage_spec, user_preferences_spec)
 
         if self.default_resource_pool_file is not None:
             with open(self.default_resource_pool_file, "r") as f:
@@ -190,10 +197,15 @@ class Config:
             sync_sqlalchemy_url=sync_sqlalchemy_url,
             async_sqlalchemy_url=async_sqlalchemy_url,
         )
+        user_preferences_repo = UserPreferencesRepository(
+            sync_sqlalchemy_url=sync_sqlalchemy_url,
+            async_sqlalchemy_url=async_sqlalchemy_url,
+        )
         return cls(
             user_repo=user_repo,
             rp_repo=rp_repo,
             storage_repo=storage_repo,
+            user_preferences_repo=user_preferences_repo,
             version=version,
             authenticator=authenticator,
             gitlab_authenticator=gitlab_authenticator,
