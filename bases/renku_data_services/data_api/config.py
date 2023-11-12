@@ -24,7 +24,7 @@ from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.migrations.core import DataRepository
-from renku_data_services.project.authorization import IProjectAuthorizer, SQLProjectAuthorizer
+from renku_data_services.authz.authz import IProjectAuthorizer, SQLProjectAuthorizer
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.users.gitlab import GitlabAuthenticator

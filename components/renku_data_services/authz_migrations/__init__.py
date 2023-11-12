@@ -1,1 +1,1 @@
-"""Database migrations for project models."""
+"""Database migrations for authz models."""

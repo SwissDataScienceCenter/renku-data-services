@@ -8,9 +8,9 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql import or_
 
 
-from renku_data_services.project.models import AccessLevel, PermissionQualifier
+from renku_data_services.authz.models import AccessLevel, PermissionQualifier
 from renku_data_services.base_models.core import APIUser
-from renku_data_services.project.orm import ProjectUserAuthz
+from renku_data_services.authz.orm import ProjectUserAuthz
 from renku_data_services.errors import errors
 
 

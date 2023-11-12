@@ -8,7 +8,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_co
 class BaseORM(MappedAsDataclass, DeclarativeBase):
     """Base class for all ORM classes."""
 
-    metadata = MetaData(schema="projects")  # Has to match alembic ini section name
+    metadata = MetaData(schema="authz")  # Has to match alembic ini section name
 
 
 class ProjectUserAuthz(BaseORM):

@@ -4,7 +4,7 @@ from ulid import ULID
 from renku_data_services.base_models import APIUser
 from renku_data_services.data_api.config import Config
 from renku_data_services.errors import errors
-from renku_data_services.project.models import AccessLevel, PermissionQualifier
+from renku_data_services.authz.models import AccessLevel, PermissionQualifier
 
 
 admin_user = APIUser(is_admin=True, id="some-id", access_token="some-token", name="admin")  # nosec B106
