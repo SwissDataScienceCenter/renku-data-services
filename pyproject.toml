@@ -19,6 +19,8 @@ packages = [
   { include = "renku_data_services/storage_migrations", from = "components" },
   { include = "renku_data_services/utils", from = "components" },
   { include = "renku_data_services/git", from = "components" },
+  { include = "renku_data_services/project", from = "components" },
+  { include = "renku_data_services/project_migrations", from = "components" },
 ]
 
 [tool.poetry.dependencies]
@@ -71,7 +73,7 @@ include = '\.pyi?$'
 [tool.pydocstyle]
 add_ignore = ["D105", "D107", "D202", "D401"]
 match = '^(?!test_|apispec).*\.py'
-match_dir = '^(?!^test$|^crc_migrations$|^storage_migrations$|\..*).*'
+match_dir = '^(?!^test$|^crc_migrations$|^storage_migrations$|^project_migrations$|\..*).*'
 
 [tool.bandit]
 skips = ["B101", "B603", "B607", "B404"]
@@ -115,6 +117,7 @@ ignore = [
 exclude = [
   "components/renku_data_services/migrations/resource_pools/migrations/versions",
   "components/renku_data_services/crc/apispec.py",
+  "components/renku_data_services/project/apispec.py",
   "components/renku_data_services/storage/apispec.py",
 ]
 
@@ -150,6 +153,7 @@ check_untyped_defs = true
 module = [
   "renku_data_services.crc.apispec",
   "renku_data_services.storage.apispec",
+  "renku_data_services.project.apispec",
   "renku_data_services.data_api.error_handler",
 ]
 ignore_errors = true

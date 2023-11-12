@@ -172,33 +172,7 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - projects
-    delete:
-      summary: Remove all members from a project
-      parameters:
-        - in: path
-          name: project_id
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: The project's updated members list
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/MembersWithRoles"
-        "404":
-          description: The project does not exist
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        default:
-          $ref: "#/components/responses/Error"
-      tags:
-        - projects
   /projects/{project_id}/members/{user_id}:
-    # TODO: Do we need a POST here with default ``member`` role?
     delete:
       summary: Remove a member from a project
       parameters:
@@ -276,7 +250,7 @@ components:
         - "created_by"
         - "visibility"
       example:
-        id: "TheProjectULID26Characters"
+        id: "01AN4Z79ZS5XN0F25N3DB94T4R"
         name: "Renku R Project"
         slug: "r-project"
         created_by:
@@ -314,23 +288,6 @@ components:
           $ref: "#/components/schemas/Visibility"
         description:
           $ref: "#/components/schemas/Description"
-    ProjectPut:
-      description: A project to replace another one
-      type: object
-      additionalProperties: false
-      properties:
-        name:
-          $ref: "#/components/schemas/Name"
-        slug:
-          $ref: "#/components/schemas/Slug"
-        repositories:
-          $ref: "#/components/schemas/RepositoriesList"
-        visibility:
-          $ref: "#/components/schemas/Visibility"
-        description:
-          $ref: "#/components/schemas/Description"
-      required:
-        - "name"
     Ulid:
       description: ULID identifier
       type: string
@@ -342,7 +299,7 @@ components:
       description: Renku project name
       type: string
       minLength: 1
-      maxLength: 99
+      maxLength: 99  # TODO: Is this enough?
       example: "My Renku Project :)"
     Slug:
       description: A command-line friendly name for a project
@@ -360,7 +317,7 @@ components:
       description: A description for project
       type: string
       maxLength: 5000
-    User:
+    User:  # TODO: We return User's KeyCloak ID to the client
       description: A KeyCloak user
       type: object
       additionalProperties: false
@@ -372,7 +329,7 @@ components:
       example:
         id: "some-keycloak-user-id"
     UserId:
-      description: KeyCloak user ID
+      description: User's KeyCloak ID
       type: string
       pattern: "^[A-Za-z0-9-]+$"
       minLength: 1
