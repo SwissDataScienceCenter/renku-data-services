@@ -31,6 +31,7 @@ from renku_data_services.users.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.users.gitlab import GitlabAuthenticator
 from renku_data_services.users.keycloak import KcUserStore, KeycloakAuthenticator
 from renku_data_services.utils.core import get_ssl_context, merge_api_specs
+from renku_data_services.user_preferences.config import UserPreferencesConfig
 
 
 @retry(stop=(stop_after_attempt(20) | stop_after_delay(300)), wait=wait_fixed(2), reraise=True)
@@ -80,6 +81,7 @@ class Config:
     authenticator: base_models.Authenticator
     gitlab_authenticator: base_models.Authenticator
     quota_repo: QuotaRepository
+    user_preferences_config: UserPreferencesConfig
     spec: Dict[str, Any] = field(init=False, default_factory=dict)
     version: str = "0.0.1"
     app_name: str = "renku_crc"
@@ -133,6 +135,7 @@ class Config:
         authenticator: base_models.Authenticator
         gitlab_authenticator: base_models.Authenticator
         gitlab_client: base_models.GitlabAPIProtocol
+        user_preferences_config: UserPreferencesConfig
         version = os.environ.get(f"{prefix}VERSION", "0.0.1")
         server_options_file = os.environ.get("SERVER_OPTIONS")
         server_defaults_file = os.environ.get("SERVER_DEFAULTS")
@@ -172,6 +175,9 @@ class Config:
             user_store = KcUserStore(keycloak_url=keycloak_url, realm=keycloak_realm)
             gitlab_client = GitlabAPI(gitlab_url=gitlab_url)
 
+        max_pinned_projects = int(os.environ.get("MAX_PINNED_PROJECTS", "0"))
+        user_preferences_config = UserPreferencesConfig(max_pinned_projects=max_pinned_projects)
+
         pg_host = os.environ.get("DB_HOST", "localhost")
         pg_user = os.environ.get("DB_USER", "renku")
         pg_port = os.environ.get("DB_PORT", "5432")
@@ -198,6 +204,7 @@ class Config:
             async_sqlalchemy_url=async_sqlalchemy_url,
         )
         user_preferences_repo = UserPreferencesRepository(
+            user_preferences_config=user_preferences_config,
             sync_sqlalchemy_url=sync_sqlalchemy_url,
             async_sqlalchemy_url=async_sqlalchemy_url,
         )
@@ -213,4 +220,5 @@ class Config:
             quota_repo=quota_repo,
             server_defaults_file=server_defaults_file,
             server_options_file=server_options_file,
+            user_preferences_config=user_preferences_config,
         )
