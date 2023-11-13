@@ -13,6 +13,7 @@ import renku_data_services.base_models as base_models
 import renku_data_services.crc
 import renku_data_services.storage
 from renku_data_services import errors
+from renku_data_services.authz.authz import IProjectAuthorizer, SQLProjectAuthorizer
 from renku_data_services.crc import models
 from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
 from renku_data_services.data_api.server_options import (
@@ -24,7 +25,6 @@ from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.migrations.core import DataRepository
-from renku_data_services.authz.authz import IProjectAuthorizer, SQLProjectAuthorizer
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.users.gitlab import GitlabAuthenticator

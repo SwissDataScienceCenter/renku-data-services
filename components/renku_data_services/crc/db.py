@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple, cast
 from sqlalchemy import create_engine, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import Session, selectinload, sessionmaker
-from sqlalchemy.sql import Select, and_, or_, not_
+from sqlalchemy.sql import Select, and_, not_, or_
 from sqlalchemy.sql.expression import false, true
 
 import renku_data_services.base_models as base_models

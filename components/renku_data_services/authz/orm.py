@@ -16,6 +16,6 @@ class ProjectUserAuthz(BaseORM):
 
     __tablename__ = "project_user_authz"
     project_id: Mapped[str] = mapped_column("project_id", String(36), index=True)
-    access_level: Mapped[int] = mapped_column(index=True)
+    role: Mapped[int] = mapped_column(index=True)
     user_id: Mapped[Optional[str]] = mapped_column("user_id", String(36), index=True, default=None)
     id: Mapped[int] = mapped_column(primary_key=True, default=None, init=False)
