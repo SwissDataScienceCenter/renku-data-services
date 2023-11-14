@@ -2,7 +2,7 @@
 import os
 
 from alembic import context
-from sqlalchemy import MetaData, create_engine
+from sqlalchemy import MetaData, NullPool, create_engine
 from sqlalchemy.schema import CreateSchema
 
 from renku_data_services.errors import errors
@@ -32,7 +32,7 @@ def run_migrations_offline(target_metadata, sync_sqlalchemy_url: str) -> None:
     script output.
 
     """
-    engine = create_engine(sync_sqlalchemy_url, pool_size=2, max_overflow=0)
+    engine = create_engine(sync_sqlalchemy_url, pool_size=2, max_overflow=0, poolclass=NullPool)
     with engine.begin() as connection:
         context.configure(
             connection=connection,
