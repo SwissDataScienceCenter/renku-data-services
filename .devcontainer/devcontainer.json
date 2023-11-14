@@ -18,6 +18,7 @@
 	// This can be used to network with other containers or the host.
 	"forwardPorts": [
 		8000,
+		8080,
 		"db:5432"
 	],
 	// Use 'postCreateCommand' to run commands after the container is created.

@@ -5,6 +5,8 @@ Revises: 3097ca05ce65
 Create Date: 2023-1--15 12:33:45.53902
 
 """
+from typing import Sequence
+
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.sql import expression
@@ -12,8 +14,8 @@ from sqlalchemy.sql import expression
 # revision identifiers, used by Alembic.
 revision = "024b215f9a14"
 down_revision = "3097ca05ce65"
-branch_labels = None
-depends_on = None
+branch_labels: Sequence[str] | None = None
+depends_on: Sequence[str] | str | None = None
 
 
 def upgrade() -> None:
