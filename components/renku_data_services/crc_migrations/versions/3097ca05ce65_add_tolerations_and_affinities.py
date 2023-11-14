@@ -5,14 +5,16 @@ Revises: 0044b54a89b9
 Create Date: 2023-09-11 20:01:15.830659
 
 """
+from typing import Sequence
+
 import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "3097ca05ce65"
 down_revision = "0044b54a89b9"
-branch_labels = None
-depends_on = None
+branch_labels: Sequence[str] | None = None
+depends_on: Sequence[str] | str | None = None
 
 
 def upgrade() -> None:

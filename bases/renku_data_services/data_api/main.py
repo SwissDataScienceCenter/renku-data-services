@@ -25,6 +25,12 @@ def create_app() -> Sanic:
         config.rp_repo.initialize(config.default_resource_pool)
     app = register_all_handlers(app, config)
 
+    if environ.get("CORS_ALLOW_ALL_ORIGINS", "false").lower() == "true":
+        from sanic_ext import Extend
+
+        app.config.CORS_ORIGINS = "*"
+        Extend(app)
+
     @app.main_process_start
     async def do_migrations(*_):
         logger.info("running migrations")
