@@ -25,9 +25,9 @@ from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClie
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.migrations.core import DataRepository
 from renku_data_services.storage.db import StorageRepository
-from renku_data_services.users.dummy import DummyAuthenticator, DummyUserStore
-from renku_data_services.users.gitlab import GitlabAuthenticator
-from renku_data_services.users.keycloak import KcUserStore, KeycloakAuthenticator
+from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
+from renku_data_services.authn.gitlab import GitlabAuthenticator
+from renku_data_services.authn.keycloak import KcUserStore, KeycloakAuthenticator
 from renku_data_services.utils.core import get_ssl_context, merge_api_specs
 
 
