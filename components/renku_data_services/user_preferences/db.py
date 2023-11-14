@@ -106,7 +106,7 @@ class UserPreferencesRepository(_Base):
                 ):
                     raise errors.ValidationError(
                         message="Maximum number of pinned projects already allocated"
-                        + f"(limit: {self.user_preferences_config.max_pinned_projects}, current: {len(project_slugs)})"
+                        + f" (limit: {self.user_preferences_config.max_pinned_projects}, current: {len(project_slugs)})"
                     )
 
                 new_project_slugs = list(project_slugs) + [project_slug]
