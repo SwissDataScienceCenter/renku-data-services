@@ -32,10 +32,10 @@ def run_migrations_offline(target_metadata, sync_sqlalchemy_url: str) -> None:
     script output.
 
     """
-    engine = create_engine(sync_sqlalchemy_url, pool_size=2, max_overflow=0, poolclass=NullPool)
-    with engine.begin() as connection:
+    engine = create_engine(sync_sqlalchemy_url, poolclass=NullPool)
+    with engine.connect() as conn:
         context.configure(
-            connection=connection,
+            connection=conn,
             target_metadata=target_metadata,
             literal_binds=True,
             dialect_opts={"paramstyle": "named"},
@@ -43,8 +43,6 @@ def run_migrations_offline(target_metadata, sync_sqlalchemy_url: str) -> None:
 
         with context.begin_transaction():
             context.run_migrations()
-
-    engine.dispose()
 
 
 def run_migrations_online(target_metadata, sync_sqlalchemy_url: str) -> None:
@@ -54,22 +52,20 @@ def run_migrations_online(target_metadata, sync_sqlalchemy_url: str) -> None:
     and associate a connection with the context.
 
     """
-    engine = create_engine(sync_sqlalchemy_url, pool_size=2, max_overflow=0)
-    with engine.begin() as connection:
+    engine = create_engine(sync_sqlalchemy_url, poolclass=NullPool)
+    with engine.connect() as conn:
         context.configure(
-            connection=connection,
+            connection=conn,
             target_metadata=target_metadata,
             version_table_schema=target_metadata.schema,
             include_schemas=True,
             include_object=include_object_factory(target_metadata.schema),
         )
 
-        connection.execute(CreateSchema(target_metadata.schema, if_not_exists=True))
+        conn.execute(CreateSchema(target_metadata.schema, if_not_exists=True))
 
         with context.begin_transaction():
             context.run_migrations()
-
-    engine.dispose()
 
 
 def run_migrations(metadata: MetaData):
