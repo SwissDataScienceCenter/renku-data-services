@@ -4,7 +4,7 @@ import httpx
 import pytest
 
 import renku_data_services.errors as errors
-import renku_data_services.users.gitlab as gitlab
+import renku_data_services.authn.gitlab as gitlab
 from renku_data_services.git.gitlab import GitlabAPI
 
 
