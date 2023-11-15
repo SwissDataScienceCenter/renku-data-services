@@ -10,7 +10,6 @@ packages = [
   { include = "renku_data_services/migrations", from = "../../components" },
   { include = "renku_data_services/storage_migrations", from = "../../components" },
   { include = "renku_data_services/storage", from = "../../components" },
-  { include = "renku_data_services/users", from = "../../components" },
   { include = "renku_data_services/errors", from = "../../components" },
   { include = "renku_data_services/base_models", from = "../../components" },
   { include = "renku_data_services/base_api", from = "../../components" },
@@ -21,6 +20,7 @@ packages = [
   { include = "renku_data_services/git", from = "../../components" },
   { include = "renku_data_services/user_preferences", from = "../../components" },
   { include = "renku_data_services/user_preferences_migrations", from = "../../components" },
+  { include = "renku_data_services/authn", from = "../../components" },
 ]
 
 [tool.poetry.dependencies]

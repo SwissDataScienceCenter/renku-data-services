@@ -20,19 +20,25 @@ def create_app() -> Sanic:
         app.config.TOUCHUP = False
         # NOTE: in single process mode where we usually run schemathesis to get coverage the db migrations
         # specified below with the main_process_start decorator do not run.
-        run_migrations_for_app("resource_pools", config.rp_repo)
-        run_migrations_for_app("storage", config.rp_repo)
-        run_migrations_for_app("user_preferences", config.user_preferences_repo)
-        config.rp_repo.initialize(config.default_resource_pool)
+        run_migrations_for_app("resource_pools")
+        run_migrations_for_app("storage")
+        run_migrations_for_app("user_preferences")
+        config.rp_repo.initialize(config.sync_db_connection_url, config.default_resource_pool)
     app = register_all_handlers(app, config)
+
+    if environ.get("CORS_ALLOW_ALL_ORIGINS", "false").lower() == "true":
+        from sanic_ext import Extend
+
+        app.config.CORS_ORIGINS = "*"
+        Extend(app)
 
     @app.main_process_start
     async def do_migrations(*_):
         logger.info("running migrations")
-        run_migrations_for_app("resource_pools", config.rp_repo)
-        run_migrations_for_app("storage", config.rp_repo)
-        run_migrations_for_app("user_preferences", config.user_preferences_repo)
-        config.rp_repo.initialize(config.default_resource_pool)
+        run_migrations_for_app("resource_pools")
+        run_migrations_for_app("storage")
+        run_migrations_for_app("user_preferences")
+        config.rp_repo.initialize(config.sync_db_connection_url, config.default_resource_pool)
 
     @app.before_server_start
     async def setup_rclone_calidator(app, _):

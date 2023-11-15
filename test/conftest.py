@@ -11,8 +11,8 @@ import renku_data_services.base_models as base_models
 from renku_data_services.data_api.config import Config as DataConfig
 from renku_data_services.migrations.core import run_migrations_for_app
 
-settings.register_profile("ci", deadline=400)
-settings.register_profile("dev", deadline=200)
+settings.register_profile("ci", deadline=400, max_examples=5)
+settings.register_profile("dev", deadline=200, max_examples=5)
 
 settings.load_profile(os.getenv("HYPOTHESIS_PROFILE", "dev"))
 
@@ -33,10 +33,9 @@ def init_db(**kwargs):
     os.environ["DB_HOST"] = kwargs["host"]
     os.environ["DB_PORT"] = str(kwargs["port"])
 
-    config = DataConfig.from_env()
-    run_migrations_for_app("storage", config.storage_repo)
-    run_migrations_for_app("resource_pools", config.rp_repo)
-    run_migrations_for_app("user_preferences", config.user_preferences_repo)
+    run_migrations_for_app("storage")
+    run_migrations_for_app("resource_pools")
+    run_migrations_for_app("user_preferences")
 
     if dummy_stores:
         os.environ["DUMMY_STORES"] = dummy_stores

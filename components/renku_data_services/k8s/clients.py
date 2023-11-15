@@ -1,6 +1,7 @@
 """Different implementations of k8s clients."""
 from copy import deepcopy
 from multiprocessing import Lock
+from multiprocessing.synchronize import Lock as LockType
 from typing import Any, Dict
 from uuid import uuid4
 
@@ -75,7 +76,17 @@ class DummyCoreClient(K8sCoreClientInterface):
 
     def __init__(self, quotas: Dict[str, client.V1ResourceQuota]):
         self.quotas = quotas
-        self._lock = Lock()
+        self.__lock: LockType | None = None
+
+    @property
+    def _lock(self):
+        # NOTE: If this is a regular attribute and initialized when the class in initialized
+        # then Sanic fails to start properly because it clashes with the multiprocessing Lock
+        # used here. This way Sanic starts without a problem because the Lock is initialized
+        # after Sanic has started.
+        if not self.__lock:
+            self.__lock = Lock()
+        return self.__lock
 
     def read_namespaced_resource_quota(self, name: Any, namespace: Any, **kwargs: Any) -> Any:
         """Get a resource quota."""
@@ -132,7 +143,17 @@ class DummySchedulingClient(K8sSchedudlingClientInterface):
 
     def __init__(self, pcs: Dict[str, client.V1PriorityClass]):
         self.pcs = pcs
-        self._lock = Lock()
+        self.__lock: LockType | None = None
+
+    @property
+    def _lock(self):
+        # NOTE: If this is a regular attribute and initialized when the class in initialized
+        # then Sanic fails to start properly because it clashes with the multiprocessing Lock
+        # used here. This way Sanic starts without a problem because the Lock is initialized
+        # after Sanic has started.
+        if not self.__lock:
+            self.__lock = Lock()
+        return self.__lock
 
     def create_priority_class(self, body: Any, **kwargs: Any) -> Any:
         """Create a priority class."""
