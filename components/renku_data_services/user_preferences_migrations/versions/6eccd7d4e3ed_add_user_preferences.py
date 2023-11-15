@@ -5,15 +5,17 @@ Revises:
 Create Date: 2023-11-10 11:43:46.237517
 
 """
+from typing import Sequence
+
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "6eccd7d4e3ed"
-down_revision = None
-branch_labels = None
-depends_on = None
+down_revision: str | None = None
+branch_labels: Sequence[str] | None = None
+depends_on: Sequence[str] | None = None
 
 
 def upgrade() -> None:

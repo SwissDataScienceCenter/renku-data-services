@@ -5,6 +5,8 @@ Revises: 6be69a523bf9
 Create Date: 2023-09-19 14:31:18.224296
 
 """
+from typing import Sequence
+
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.sql import expression
@@ -12,8 +14,8 @@ from sqlalchemy.sql import expression
 # revision identifiers, used by Alembic.
 revision = "c1960188d4cc"
 down_revision = "6be69a523bf9"
-branch_labels = None
-depends_on = None
+branch_labels: Sequence[str] | None = None
+depends_on: Sequence[str] | str | None = None
 
 
 def upgrade() -> None:

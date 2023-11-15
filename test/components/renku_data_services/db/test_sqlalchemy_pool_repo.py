@@ -75,6 +75,7 @@ async def test_resource_pool_update_quota(rp: models.ResourcePool, app_config: C
         assert updated_rp.id == inserted_rp.id
         assert updated_rp.quota is not None
         assert inserted_rp.quota != updated_rp.quota
+        assert inserted_rp.quota.id == updated_rp.quota.id
         assert updated_rp.quota.cpu == 999
         assert updated_rp.quota.memory == 999
         assert updated_rp.quota.gpu == 999

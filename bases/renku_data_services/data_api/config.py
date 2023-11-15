@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional
 
 import httpx
 from jwt import PyJWKClient
+from sqlalchemy.ext.asyncio import create_async_engine
 from tenacity import retry, stop_after_attempt, stop_after_delay, wait_fixed
 from yaml import safe_load
 
@@ -14,6 +15,9 @@ import renku_data_services.crc
 import renku_data_services.storage
 import renku_data_services.user_preferences
 from renku_data_services import errors
+from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
+from renku_data_services.authn.gitlab import GitlabAuthenticator
+from renku_data_services.authn.keycloak import KcUserStore, KeycloakAuthenticator
 from renku_data_services.crc import models
 from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
 from renku_data_services.data_api.server_options import (
@@ -24,12 +28,8 @@ from renku_data_services.data_api.server_options import (
 from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
-from renku_data_services.migrations.core import DataRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.user_preferences.db import UserPreferencesRepository
-from renku_data_services.users.dummy import DummyAuthenticator, DummyUserStore
-from renku_data_services.users.gitlab import GitlabAuthenticator
-from renku_data_services.users.keycloak import KcUserStore, KeycloakAuthenticator
 from renku_data_services.utils.core import get_ssl_context, merge_api_specs
 
 
@@ -80,6 +80,7 @@ class Config:
     authenticator: base_models.Authenticator
     gitlab_authenticator: base_models.Authenticator
     quota_repo: QuotaRepository
+    sync_db_connection_url: str = field(repr=False)
     spec: Dict[str, Any] = field(init=False, default_factory=dict)
     version: str = "0.0.1"
     app_name: str = "renku_crc"
@@ -113,17 +114,6 @@ class Config:
                 defaults = ServerOptionsDefaults.model_validate(safe_load(f))
             self.default_resource_pool = generate_default_resource_pool(options, defaults)
 
-    @property
-    def repo(self) -> DataRepository:
-        """Used by alembic to find the data repository.
-
-        Note:
-            Since alembic doesn't know about different config types for different services,
-            it uses this property to get some DB repository that it uses for database connections
-            for migrations. This property should just expose an underlying repository appropriate for this config.
-        """
-        return self.rp_repo
-
     @classmethod
     def from_env(cls):
         """Create a config from environment variables."""
@@ -140,8 +130,8 @@ class Config:
         gitlab_url = None
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
-            authenticator = DummyAuthenticator(admin=True)
-            gitlab_authenticator = DummyAuthenticator(admin=True)
+            authenticator = DummyAuthenticator()
+            gitlab_authenticator = DummyAuthenticator()
             quota_repo = QuotaRepository(DummyCoreClient({}), DummySchedulingClient({}), namespace=k8s_namespace)
             user_always_exists = os.environ.get("DUMMY_USERSTORE_USER_ALWAYS_EXISTS", "true").lower() == "true"
             user_store = DummyUserStore(user_always_exists=user_always_exists)
@@ -181,25 +171,25 @@ class Config:
             raise errors.ConfigurationError(
                 message="Please provide a database password in the 'DB_PASSWORD' environment variable."
             )
-        async_sqlalchemy_url = f"postgresql+asyncpg://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{db_name}"
+        async_engine = create_async_engine(
+            f"postgresql+asyncpg://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{db_name}",
+            pool_size=10,
+            max_overflow=0,
+        )
+        # NOTE: The synchrounous connection sqlalchemy URL is used only for migrations at startup
         sync_sqlalchemy_url = f"postgresql+psycopg://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{db_name}"
 
-        user_repo = UserRepository(
-            sync_sqlalchemy_url=sync_sqlalchemy_url, async_sqlalchemy_url=async_sqlalchemy_url, quotas_repo=quota_repo
-        )
+        user_repo = UserRepository(engine=async_engine, quotas_repo=quota_repo)
         rp_repo = ResourcePoolRepository(
-            sync_sqlalchemy_url=sync_sqlalchemy_url,
-            async_sqlalchemy_url=async_sqlalchemy_url,
+            engine=async_engine,
             quotas_repo=quota_repo,
         )
         storage_repo = StorageRepository(
             gitlab_client=gitlab_client,
-            sync_sqlalchemy_url=sync_sqlalchemy_url,
-            async_sqlalchemy_url=async_sqlalchemy_url,
+            engine=async_engine,
         )
         user_preferences_repo = UserPreferencesRepository(
-            sync_sqlalchemy_url=sync_sqlalchemy_url,
-            async_sqlalchemy_url=async_sqlalchemy_url,
+            engine=async_engine,
         )
         return cls(
             user_repo=user_repo,
@@ -213,4 +203,5 @@ class Config:
             quota_repo=quota_repo,
             server_defaults_file=server_defaults_file,
             server_options_file=server_options_file,
+            sync_db_connection_url=sync_sqlalchemy_url,
         )

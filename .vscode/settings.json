@@ -1,13 +1,10 @@
 {
   "python.testing.pytestEnabled": true,
-  "python.linting.flake8Path": "flake8",
-  "python.linting.flake8Enabled": true,
-  "python.linting.flake8Args": [
+  "flake8.args": [
     "--config",
     "pyproject.toml",
   ],
-  "python.formatting.provider": "black",
-  "python.formatting.blackArgs": [
+  "black-formatter.args": [
     "-l",
     "120",
     "-t",
@@ -19,13 +16,9 @@
     "src/**",
     "tests/**"
   ],
-  "python.linting.mypyEnabled": true,
-  "python.linting.mypyArgs": [
-    "--config-file",
-    "pyproject.toml",
-  ],
+  "mypy.configFile": "pyproject.toml",
   "python.analysis.extraPaths": [
     "bases",
     "components"
-  ]
+  ],
 }
