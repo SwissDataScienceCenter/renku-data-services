@@ -7,12 +7,12 @@ it all in one place.
 """
 from asyncio import gather
 from functools import wraps
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, List, Optional, Sequence, Tuple, cast
 
 from sqlalchemy import create_engine, delete, select
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 from sqlalchemy.orm import Session, selectinload, sessionmaker
-from sqlalchemy.sql import Select, and_, or_, not_
+from sqlalchemy.sql import Select, and_, not_, or_
 from sqlalchemy.sql.expression import false, true
 
 import renku_data_services.base_models as base_models
@@ -25,9 +25,7 @@ from renku_data_services.k8s.quota import QuotaRepository
 class _Base:
     def __init__(self, engine: AsyncEngine, quotas_repo: QuotaRepository):
         self.engine = engine
-        self.session_maker = sessionmaker(
-            self.engine, class_=AsyncSession, expire_on_commit=False
-        )  # type: ignore[call-overload]
+        self.session_maker = async_sessionmaker(self.engine, expire_on_commit=False)  # type: ignore[call-overload]
         self.quotas_repo = quotas_repo
 
 
@@ -283,7 +281,7 @@ class ResourcePoolRepository(_Base):
                 if resource_pool_id is not None:
                     stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == resource_pool_id)
                     res = await session.execute(stmt)
-                    rp: schemas.ResourcePoolORM = res.scalars().first()
+                    rp = res.scalars().first()
                     if rp is None:
                         raise errors.MissingResourceError(
                             message=f"Resource pool with id {resource_pool_id} does not exist."
@@ -514,11 +512,11 @@ class UserRepository(_Base):
                         )
                     return [user.dump() for user in rp.users]
                 else:
-                    stmt = select(schemas.UserORM)
+                    stmt_usr = select(schemas.UserORM)
                     if keycloak_id is not None:
-                        stmt = stmt.where(schemas.UserORM.keycloak_id == keycloak_id)
-                    res = await session.execute(stmt)
-                    orms = res.scalars().all()
+                        stmt_usr = stmt_usr.where(schemas.UserORM.keycloak_id == keycloak_id)
+                    res_usr = await session.execute(stmt_usr)
+                    orms = res_usr.scalars().all()
                     return [orm.dump() for orm in orms]
 
     @_only_admins
@@ -581,7 +579,7 @@ class UserRepository(_Base):
                 # NOTE: The line below ensures that the right users can access the right resources, do not remove.
                 stmt = _resource_pool_access_control(api_user, stmt)
                 res = await session.execute(stmt)
-                rps: List[schemas.ResourcePoolORM] = res.scalars().all()
+                rps: Sequence[schemas.ResourcePoolORM] = res.scalars().all()
                 output: List[models.ResourcePool] = []
                 for rp in rps:
                     quota = self.quotas_repo.get_quota(rp.quota) if rp.quota else None
@@ -611,8 +609,8 @@ class UserRepository(_Base):
                 )
                 if user.no_default_access:
                     stmt_rp = stmt_rp.where(schemas.ResourcePoolORM.default == false())
-                res = await session.execute(stmt_rp)
-                rps_to_add = res.scalars().all()
+                res_rp = await session.execute(stmt_rp)
+                rps_to_add = res_rp.scalars().all()
                 if len(rps_to_add) != len(resource_pool_ids):
                     missing_rps = set(resource_pool_ids).difference(set([i.id for i in rps_to_add]))
                     raise errors.MissingResourceError(
@@ -630,7 +628,7 @@ class UserRepository(_Base):
                 if append:
                     user.resource_pools.extend(rps_to_add)
                 else:
-                    user.resource_pools = rps_to_add
+                    user.resource_pools = list(rps_to_add)
                 output: List[models.ResourcePool] = []
                 for rp in rps_to_add:
                     quota = self.quotas_repo.get_quota(rp.quota) if rp.quota else None
@@ -681,8 +679,8 @@ class UserRepository(_Base):
                         )
                 user_ids_to_add_req = [user.keycloak_id for user in users]
                 stmt_usr = select(schemas.UserORM).where(schemas.UserORM.keycloak_id.in_(user_ids_to_add_req))
-                res = await session.execute(stmt_usr)
-                users_to_add_exist = res.scalars().all()
+                res_usr = await session.execute(stmt_usr)
+                users_to_add_exist = res_usr.scalars().all()
                 user_ids_to_add_exist = [i.keycloak_id for i in users_to_add_exist]
                 users_to_add_missing = [
                     schemas.UserORM(keycloak_id=i.keycloak_id, no_default_access=i.no_default_access)
@@ -690,9 +688,9 @@ class UserRepository(_Base):
                     if i.keycloak_id not in user_ids_to_add_exist
                 ]
                 if append:
-                    rp.users.extend(users_to_add_exist + users_to_add_missing)
+                    rp.users.extend(list(users_to_add_exist) + users_to_add_missing)
                 else:
-                    rp.users = users_to_add_exist + users_to_add_missing
+                    rp.users = list(users_to_add_exist) + users_to_add_missing
                 return [usr.dump() for usr in rp.users]
 
     @_only_admins
