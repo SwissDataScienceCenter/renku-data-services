@@ -1,11 +1,9 @@
 """Custom migrations env file to support modular migrations."""
-import os
-
 from alembic import context
 from sqlalchemy import MetaData, NullPool, create_engine
 from sqlalchemy.schema import CreateSchema
 
-from renku_data_services.errors import errors
+from renku_data_services.config import DBConfig
 
 
 def include_object_factory(schema: str):
@@ -76,17 +74,8 @@ def run_migrations(metadata: MetaData):
     """Run migrations for a specific base model class."""
     # this is the Alembic Config object, which provides
     # access to the values within the .ini file in use.
-    pg_host = os.environ.get("DB_HOST", "localhost")
-    pg_user = os.environ.get("DB_USER", "renku")
-    pg_port = os.environ.get("DB_PORT", "5432")
-    db_name = os.environ.get("DB_NAME", "renku")
-    pg_password = os.environ.get("DB_PASSWORD")
-    if pg_password is None:
-        raise errors.ConfigurationError(
-            message="Please provide a database password in the 'DB_PASSWORD' environment variable."
-        )
-    sync_sqlalchemy_url = f"postgresql+psycopg://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{db_name}"
-
+    db_config = DBConfig.from_env()
+    sync_sqlalchemy_url = db_config.conn_url(async_client=False)
     if context.is_offline_mode():
         run_migrations_offline(metadata, sync_sqlalchemy_url)
     else:

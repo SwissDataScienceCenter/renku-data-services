@@ -3,8 +3,8 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-import renku_data_services.errors as errors
 import renku_data_services.authn.gitlab as gitlab
+import renku_data_services.errors as errors
 from renku_data_services.git.gitlab import GitlabAPI
 
 

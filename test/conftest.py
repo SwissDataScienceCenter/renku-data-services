@@ -8,7 +8,7 @@ from hypothesis import settings
 from pytest_postgresql import factories
 
 import renku_data_services.base_models as base_models
-from renku_data_services.data_api.config import Config as DataConfig
+from renku_data_services.config import Config as DataConfig
 from renku_data_services.migrations.core import run_migrations_for_app
 
 settings.register_profile("ci", deadline=400, max_examples=5)
@@ -70,9 +70,14 @@ postgresql = factories.postgresql("postgresql_in_docker")
 def app_config(postgresql, monkeypatch) -> Iterator[DataConfig]:
     monkeypatch.setenv("DUMMY_STORES", "true")
     monkeypatch.setenv("DB_NAME", postgresql.info.dbname)
+
     config = DataConfig.from_env()
     yield config
     monkeypatch.delenv("DUMMY_STORES", raising=False)
+    # NOTE: This is necessary because the postgresql pytest extension does not close
+    # the async connection/pool we use in the config and the connection will succeed in the first
+    # test but fail in all others if the connection is not disposed at the end of every test.
+    config.db.dispose_connection()
 
 
 @pytest.fixture

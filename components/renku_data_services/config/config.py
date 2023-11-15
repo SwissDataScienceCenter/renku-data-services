@@ -1,12 +1,23 @@
-"""Configurations."""
+"""
+Configurations.
+
+An important thing to note here is that the configuration classes in here
+contain some getters (i.e. @property decorators) intentionally. This is done for
+things that need a database connection and the purpose is that the database connection
+is not initialized when the classes are initialized. Only if the properties that need
+the database will instantiate a connection when they are used. And even in this case
+a single connection will be reused. This allows for the configuration classes to be
+instantiated multiple times without creating multiple database connections.
+"""
+import asyncio
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, ClassVar, Dict, Optional
 
 import httpx
 from jwt import PyJWKClient
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from tenacity import retry, stop_after_attempt, stop_after_delay, wait_fixed
 from yaml import safe_load
 
@@ -14,6 +25,9 @@ import renku_data_services.base_models as base_models
 import renku_data_services.crc
 import renku_data_services.storage
 from renku_data_services import errors
+from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
+from renku_data_services.authn.gitlab import GitlabAuthenticator
+from renku_data_services.authn.keycloak import KcUserStore, KeycloakAuthenticator
 from renku_data_services.crc import models
 from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
 from renku_data_services.data_api.server_options import (
@@ -25,9 +39,6 @@ from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.storage.db import StorageRepository
-from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
-from renku_data_services.authn.gitlab import GitlabAuthenticator
-from renku_data_services.authn.keycloak import KcUserStore, KeycloakAuthenticator
 from renku_data_services.utils.core import get_ssl_context, merge_api_specs
 
 
@@ -67,17 +78,68 @@ default_resource_pool = models.ResourcePool(
 
 
 @dataclass
+class DBConfig:
+    """Database configuration."""
+
+    password: str = field(repr=False)
+    host: str = "localhost"
+    user: str = "renku"
+    port: str = "5432"
+    db_name: str = "renku"
+    _async_engine: ClassVar[AsyncEngine | None] = field(default=None, repr=False, init=False)
+    _async_engine_write_lock: ClassVar[asyncio.Lock] = asyncio.Lock()
+
+    @classmethod
+    def from_env(cls, prefix: str = ""):
+        """Create a database configuration from environment variables."""
+
+        pg_host = os.environ.get(f"{prefix}DB_HOST")
+        pg_user = os.environ.get(f"{prefix}DB_USER")
+        pg_port = os.environ.get(f"{prefix}DB_PORT")
+        db_name = os.environ.get(f"{prefix}DB_NAME")
+        pg_password = os.environ.get(f"{prefix}DB_PASSWORD")
+        if pg_password is None:
+            raise errors.ConfigurationError(
+                message=f"Please provide a database password in the '{prefix}DB_PASSWORD' environment variable."
+            )
+        kwargs = {"host": pg_host, "password": pg_password, "port": pg_port, "db_name": db_name, "user": pg_user}
+        return cls(**{k: v for (k, v) in kwargs.items() if v is not None})
+
+    def conn_url(self, async_client: bool = True) -> str:
+        """Return an asynchronous or synchronous database connection url."""
+        if async_client:
+            return f"postgresql+asyncpg://{self.user}:{self.password}@{self.host}:{self.port}/{self.db_name}"
+        return f"postgresql+psycopg://{self.user}:{self.password}@{self.host}:{self.port}/{self.db_name}"
+
+    @property
+    def async_session_maker(self) -> Callable[..., AsyncSession]:
+        """The asynchronous DB engine."""
+        if not DBConfig._async_engine:
+            DBConfig._async_engine = create_async_engine(
+                self.conn_url(),
+                pool_size=10,
+                max_overflow=0,
+            )
+        return async_sessionmaker(DBConfig._async_engine, expire_on_commit=False)
+
+    @staticmethod
+    def dispose_connection():
+        """Dispose of the main database connection pool."""
+
+        if DBConfig._async_engine:
+            asyncio.get_event_loop().run_until_complete(DBConfig._async_engine.dispose())
+
+
+@dataclass
 class Config:
     """Configuration for the Data service."""
 
-    user_repo: UserRepository
-    rp_repo: ResourcePoolRepository
-    storage_repo: StorageRepository
     user_store: base_models.UserStore
     authenticator: base_models.Authenticator
     gitlab_authenticator: base_models.Authenticator
     quota_repo: QuotaRepository
-    sync_db_connection_url: str = field(repr=False)
+    db: DBConfig
+    gitlab_client: base_models.GitlabAPIProtocol
     spec: Dict[str, Any] = field(init=False, default_factory=dict)
     version: str = "0.0.1"
     app_name: str = "renku_crc"
@@ -85,6 +147,9 @@ class Config:
     default_resource_pool: models.ResourcePool = default_resource_pool
     server_options_file: Optional[str] = None
     server_defaults_file: Optional[str] = None
+    _user_repo: UserRepository | None = field(default=None, repr=False, init=False)
+    _rp_repo: ResourcePoolRepository | None = field(default=None, repr=False, init=False)
+    _storage_repo: StorageRepository | None = field(default=None, repr=False, init=False)
 
     def __post_init__(self):
         spec_file = Path(renku_data_services.crc.__file__).resolve().parent / "api.spec.yaml"
@@ -107,11 +172,35 @@ class Config:
                 defaults = ServerOptionsDefaults.model_validate(safe_load(f))
             self.default_resource_pool = generate_default_resource_pool(options, defaults)
 
+    @property
+    def user_repo(self) -> UserRepository:
+        """The DB adapter for users."""
+        if not self._user_repo:
+            self._user_repo = UserRepository(session_maker=self.db.async_session_maker, quotas_repo=self.quota_repo)
+        return self._user_repo
+
+    @property
+    def rp_repo(self) -> ResourcePoolRepository:
+        """The DB adapter for resource pools."""
+        if not self._rp_repo:
+            self._rp_repo = ResourcePoolRepository(
+                session_maker=self.db.async_session_maker, quotas_repo=self.quota_repo
+            )
+        return self._rp_repo
+
+    @property
+    def storage_repo(self) -> StorageRepository:
+        """The DB adapter for cloud storage configs."""
+        if not self._storage_repo:
+            self._storage_repo = StorageRepository(
+                session_maker=self.db.async_session_maker, gitlab_client=self.gitlab_client
+            )
+        return self._storage_repo
+
     @classmethod
-    def from_env(cls):
+    def from_env(cls, prefix: str = ""):
         """Create a config from environment variables."""
 
-        prefix = ""
         user_store: base_models.UserStore
         authenticator: base_models.Authenticator
         gitlab_authenticator: base_models.Authenticator
@@ -121,6 +210,7 @@ class Config:
         server_defaults_file = os.environ.get("SERVER_DEFAULTS")
         k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
         gitlab_url = None
+        db = DBConfig.from_env(prefix)
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
             authenticator = DummyAuthenticator()
@@ -155,42 +245,14 @@ class Config:
             user_store = KcUserStore(keycloak_url=keycloak_url, realm=keycloak_realm)
             gitlab_client = GitlabAPI(gitlab_url=gitlab_url)
 
-        pg_host = os.environ.get("DB_HOST", "localhost")
-        pg_user = os.environ.get("DB_USER", "renku")
-        pg_port = os.environ.get("DB_PORT", "5432")
-        db_name = os.environ.get("DB_NAME", "renku")
-        pg_password = os.environ.get("DB_PASSWORD")
-        if pg_password is None:
-            raise errors.ConfigurationError(
-                message="Please provide a database password in the 'DB_PASSWORD' environment variable."
-            )
-        async_engine = create_async_engine(
-            f"postgresql+asyncpg://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{db_name}",
-            pool_size=10,
-            max_overflow=0,
-        )
-        # NOTE: The synchrounous connection sqlalchemy URL is used only for migrations at startup
-        sync_sqlalchemy_url = f"postgresql+psycopg://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{db_name}"
-
-        user_repo = UserRepository(engine=async_engine, quotas_repo=quota_repo)
-        rp_repo = ResourcePoolRepository(
-            engine=async_engine,
-            quotas_repo=quota_repo,
-        )
-        storage_repo = StorageRepository(
-            gitlab_client=gitlab_client,
-            engine=async_engine,
-        )
         return cls(
-            user_repo=user_repo,
-            rp_repo=rp_repo,
-            storage_repo=storage_repo,
             version=version,
             authenticator=authenticator,
             gitlab_authenticator=gitlab_authenticator,
+            gitlab_client=gitlab_client,
             user_store=user_store,
             quota_repo=quota_repo,
             server_defaults_file=server_defaults_file,
             server_options_file=server_options_file,
-            sync_db_connection_url=sync_sqlalchemy_url,
+            db=db,
         )
