@@ -512,11 +512,11 @@ class UserRepository(_Base):
                         )
                     return [user.dump() for user in rp.users]
                 else:
-                    stmt2 = select(schemas.UserORM)
+                    stmt_usr = select(schemas.UserORM)
                     if keycloak_id is not None:
-                        stmt2 = stmt2.where(schemas.UserORM.keycloak_id == keycloak_id)
-                    res2 = await session.execute(stmt2)
-                    orms = res2.scalars().all()
+                        stmt_usr = stmt_usr.where(schemas.UserORM.keycloak_id == keycloak_id)
+                    res_usr = await session.execute(stmt_usr)
+                    orms = res_usr.scalars().all()
                     return [orm.dump() for orm in orms]
 
     @_only_admins
@@ -628,7 +628,7 @@ class UserRepository(_Base):
                 if append:
                     user.resource_pools.extend(rps_to_add)
                 else:
-                    user.resource_pools = list(*rps_to_add)
+                    user.resource_pools = list(rps_to_add)
                 output: List[models.ResourcePool] = []
                 for rp in rps_to_add:
                     quota = self.quotas_repo.get_quota(rp.quota) if rp.quota else None
@@ -688,9 +688,9 @@ class UserRepository(_Base):
                     if i.keycloak_id not in user_ids_to_add_exist
                 ]
                 if append:
-                    rp.users.extend(list(*users_to_add_exist) + users_to_add_missing)
+                    rp.users.extend(list(users_to_add_exist) + users_to_add_missing)
                 else:
-                    rp.users = list(*users_to_add_exist) + users_to_add_missing
+                    rp.users = list(users_to_add_exist) + users_to_add_missing
                 return [usr.dump() for usr in rp.users]
 
     @_only_admins
