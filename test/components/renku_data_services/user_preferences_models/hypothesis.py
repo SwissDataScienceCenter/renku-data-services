@@ -2,7 +2,7 @@ from hypothesis import strategies as st
 
 a_user_id = st.uuids(version=4).map(lambda x: str(x))
 a_project_namespace_or_name = st.text(
-    alphabet=st.characters(whitelist_categories=("Lu", "Ll", "Nd"), whitelist_characters=("-", "_")), min_size=3
+    alphabet=st.characters(categories=("Lu", "Ll", "Nd"), include_characters=("-", "_")), min_size=3
 )
 a_project_slug = st.lists(
     a_project_namespace_or_name,

@@ -31,6 +31,7 @@ from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.user_preferences.db import UserPreferencesRepository
 from renku_data_services.utils.core import get_ssl_context, merge_api_specs
+from renku_data_services.user_preferences.config import UserPreferencesConfig
 
 
 @retry(stop=(stop_after_attempt(20) | stop_after_delay(300)), wait=wait_fixed(2), reraise=True)
@@ -80,6 +81,7 @@ class Config:
     authenticator: base_models.Authenticator
     gitlab_authenticator: base_models.Authenticator
     quota_repo: QuotaRepository
+    user_preferences_config: UserPreferencesConfig
     sync_db_connection_url: str = field(repr=False)
     spec: Dict[str, Any] = field(init=False, default_factory=dict)
     version: str = "0.0.1"
@@ -123,6 +125,7 @@ class Config:
         authenticator: base_models.Authenticator
         gitlab_authenticator: base_models.Authenticator
         gitlab_client: base_models.GitlabAPIProtocol
+        user_preferences_config: UserPreferencesConfig
         version = os.environ.get(f"{prefix}VERSION", "0.0.1")
         server_options_file = os.environ.get("SERVER_OPTIONS")
         server_defaults_file = os.environ.get("SERVER_DEFAULTS")
@@ -162,6 +165,9 @@ class Config:
             user_store = KcUserStore(keycloak_url=keycloak_url, realm=keycloak_realm)
             gitlab_client = GitlabAPI(gitlab_url=gitlab_url)
 
+        max_pinned_projects = int(os.environ.get(f"{prefix}MAX_PINNED_PROJECTS", "10"))
+        user_preferences_config = UserPreferencesConfig(max_pinned_projects=max_pinned_projects)
+
         pg_host = os.environ.get("DB_HOST", "localhost")
         pg_user = os.environ.get("DB_USER", "renku")
         pg_port = os.environ.get("DB_PORT", "5432")
@@ -189,6 +195,7 @@ class Config:
             engine=async_engine,
         )
         user_preferences_repo = UserPreferencesRepository(
+            user_preferences_config=user_preferences_config,
             engine=async_engine,
         )
         return cls(
@@ -203,5 +210,6 @@ class Config:
             quota_repo=quota_repo,
             server_defaults_file=server_defaults_file,
             server_options_file=server_options_file,
+            user_preferences_config=user_preferences_config,
             sync_db_connection_url=sync_sqlalchemy_url,
         )

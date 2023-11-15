@@ -9,6 +9,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.user_preferences import models
 from renku_data_services.user_preferences import orm as schemas
+from renku_data_services.user_preferences.config import UserPreferencesConfig
 
 
 class _Base:
@@ -26,10 +27,12 @@ class UserPreferencesRepository(_Base):
 
     def __init__(
         self,
+        user_preferences_config: UserPreferencesConfig,
         engine: AsyncEngine,
         debug: bool = False,
     ):
         super().__init__(engine, debug)
+        self.user_preferences_config = user_preferences_config
 
     async def get_user_preferences(
         self,
@@ -93,6 +96,16 @@ class UserPreferencesRepository(_Base):
                 for slug in project_slugs:
                     if project_slug.lower() == slug.lower():
                         return user_preferences.dump()
+
+                # Check if we have reached the maximum number of pins
+                if (
+                    self.user_preferences_config.max_pinned_projects > 0
+                    and len(project_slugs) >= self.user_preferences_config.max_pinned_projects
+                ):
+                    raise errors.ValidationError(
+                        message="Maximum number of pinned projects already allocated"
+                        + f" (limit: {self.user_preferences_config.max_pinned_projects}, current: {len(project_slugs)})"
+                    )
 
                 new_project_slugs = list(project_slugs) + [project_slug]
                 pinned_projects = models.PinnedProjects(project_slugs=new_project_slugs).model_dump()
