@@ -25,6 +25,7 @@ services:
       DB_NAME: renku
       DB_PASSWORD: renku
       DB_HOST: db
+      CORS_ALLOW_ALL_ORIGINS: "true"
 
   db:
     image: postgres:latest
@@ -38,6 +39,13 @@ services:
 
     # Add "forwardPorts": ["5432"] to **devcontainer.json** to forward PostgreSQL locally.
     # (Adding the "ports" property to this file will not forward from a Codespace.)
+
+  swagger:
+    image: swaggerapi/swagger-ui
+    network_mode: service:db
+    environment:
+      SWAGGER_JSON_URL: http://localhost:8000/api/data/spec.json
+      PORT: "8080"
 
 volumes:
   postgres-data:

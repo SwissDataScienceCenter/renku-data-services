@@ -23,8 +23,15 @@ def create_app() -> Sanic:
         run_migrations_for_app("resource_pools", config.rp_repo)
         run_migrations_for_app("storage", config.rp_repo)
         run_migrations_for_app("authz", config.project_authz)
+        run_migrations_for_app("projects", config.project_repo)
         config.rp_repo.initialize(config.default_resource_pool)
     app = register_all_handlers(app, config)
+
+    if environ.get("CORS_ALLOW_ALL_ORIGINS", "false").lower() == "true":
+        from sanic_ext import Extend
+
+        app.config.CORS_ORIGINS = "*"
+        Extend(app)
 
     @app.main_process_start
     async def do_migrations(*_):
@@ -32,10 +39,11 @@ def create_app() -> Sanic:
         run_migrations_for_app("resource_pools", config.rp_repo)
         run_migrations_for_app("storage", config.rp_repo)
         run_migrations_for_app("authz", config.project_authz)
+        run_migrations_for_app("projects", config.project_repo)
         config.rp_repo.initialize(config.default_resource_pool)
 
     @app.before_server_start
-    async def setup_rclone_calidator(app, _):
+    async def setup_rclone_validator(app, _):
         validator = RCloneValidator()
         app.ext.dependency(validator)
 

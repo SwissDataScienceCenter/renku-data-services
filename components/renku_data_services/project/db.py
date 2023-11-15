@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from sqlalchemy import create_engine, select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
@@ -52,6 +54,8 @@ class ProjectRepository(_Base):
     async def insert_project(self, user: base_models.APIUser, project: models.Project) -> models.Project:
         """Insert a new project entry."""
         project_orm = schemas.ProjectORM.load(project)
+        project_orm.creation_date = datetime.now(timezone.utc).replace(microsecond=0)
+        project_orm.created_by = user.id
 
         async with self.session_maker() as session:
             async with session.begin():

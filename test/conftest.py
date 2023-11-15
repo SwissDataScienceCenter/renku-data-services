@@ -37,6 +37,7 @@ def init_db(**kwargs):
     run_migrations_for_app("storage", config.storage_repo)
     run_migrations_for_app("resource_pools", config.rp_repo)
     run_migrations_for_app("authz", config.project_authz)
+    run_migrations_for_app("projects", config.project_repo)
 
     if dummy_stores:
         os.environ["DUMMY_STORES"] = dummy_stores

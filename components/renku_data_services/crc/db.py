@@ -334,13 +334,26 @@ class ResourcePoolRepository(_Base):
                         case "quota":
                             if val is None:
                                 continue
-                            new_quota = models.Quota.from_dict(val)
-                            if quota and quota.id is not None and new_quota.id is not None and quota.id != new_quota.id:
+
+                            # For updating a quota, there are two options:
+                            # 1. no quota exists --> create a new one
+                            # 2. a quota exists and can only be updated, not replaced (the ids, if provided, must match)
+
+                            new_id = val.get("id")
+
+                            if quota and quota.id is not None and new_id is not None and quota.id != new_id:
                                 raise errors.ValidationError(
                                     message="The ID of an existing quota cannot be updated, "
                                     f"please remove the ID field from the request or use ID {quota.id}."
                                 )
-                            if new_quota.id:
+
+                            # the id must match for update
+                            if quota:
+                                val["id"] = quota.id or new_id
+
+                            new_quota = models.Quota.from_dict(val)
+
+                            if new_id or quota:
                                 new_quota = self.quotas_repo.update_quota(new_quota)
                             else:
                                 new_quota = self.quotas_repo.create_quota(new_quota)
