@@ -71,6 +71,7 @@ postgresql = factories.postgresql("postgresql_in_docker")
 def app_config(postgresql, monkeypatch) -> Iterator[DataConfig]:
     monkeypatch.setenv("DUMMY_STORES", "true")
     monkeypatch.setenv("DB_NAME", postgresql.info.dbname)
+    monkeypatch.setenv("MAX_PINNED_PROJECTS", "5")
     config = DataConfig.from_env()
     yield config
     monkeypatch.delenv("DUMMY_STORES", raising=False)

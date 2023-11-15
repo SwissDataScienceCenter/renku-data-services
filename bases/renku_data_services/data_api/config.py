@@ -165,7 +165,7 @@ class Config:
             user_store = KcUserStore(keycloak_url=keycloak_url, realm=keycloak_realm)
             gitlab_client = GitlabAPI(gitlab_url=gitlab_url)
 
-        max_pinned_projects = int(os.environ.get("MAX_PINNED_PROJECTS", "0"))
+        max_pinned_projects = int(os.environ.get(f"{prefix}MAX_PINNED_PROJECTS", "10"))
         user_preferences_config = UserPreferencesConfig(max_pinned_projects=max_pinned_projects)
 
         pg_host = os.environ.get("DB_HOST", "localhost")
