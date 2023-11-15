@@ -15,6 +15,9 @@ import renku_data_services.crc
 import renku_data_services.storage
 import renku_data_services.user_preferences
 from renku_data_services import errors
+from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
+from renku_data_services.authn.gitlab import GitlabAuthenticator
+from renku_data_services.authn.keycloak import KcUserStore, KeycloakAuthenticator
 from renku_data_services.crc import models
 from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
 from renku_data_services.data_api.server_options import (
@@ -27,9 +30,6 @@ from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClie
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.user_preferences.db import UserPreferencesRepository
-from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
-from renku_data_services.authn.gitlab import GitlabAuthenticator
-from renku_data_services.authn.keycloak import KcUserStore, KeycloakAuthenticator
 from renku_data_services.utils.core import get_ssl_context, merge_api_specs
 
 
@@ -189,8 +189,6 @@ class Config:
             engine=async_engine,
         )
         user_preferences_repo = UserPreferencesRepository(
-            # sync_sqlalchemy_url=sync_sqlalchemy_url,
-            # async_sqlalchemy_url=async_sqlalchemy_url,
             engine=async_engine,
         )
         return cls(
