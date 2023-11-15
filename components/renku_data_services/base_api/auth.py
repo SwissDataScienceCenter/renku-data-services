@@ -38,7 +38,7 @@ def only_admins(f):
         if user is None or user.access_token is None:
             raise errors.Unauthorized(message="Please provide valid access credentials in the Authorization header.")
         if not user.is_admin:
-            raise errors.Unauthorized(message="You do not have the reuqired permissions for this operation.")
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
         # the user is authenticated and is an admin
         response = await f(request, *args, **kwargs, user=user)
