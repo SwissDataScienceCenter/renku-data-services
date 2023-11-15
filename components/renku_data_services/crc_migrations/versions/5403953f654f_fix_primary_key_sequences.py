@@ -5,6 +5,8 @@ Revises: 024b215f9a14
 Create Date: 2023-10-28 13:23:45.947375
 
 """
+from typing import Sequence
+
 import sqlalchemy as sa
 from alembic import op
 from psycopg import sql
@@ -12,8 +14,8 @@ from psycopg import sql
 # revision identifiers, used by Alembic.
 revision = "5403953f654f"
 down_revision = "024b215f9a14"
-branch_labels = None
-depends_on = None
+branch_labels: Sequence[str] | None = None
+depends_on: Sequence[str] | str | None = None
 
 
 def upgrade() -> None:
