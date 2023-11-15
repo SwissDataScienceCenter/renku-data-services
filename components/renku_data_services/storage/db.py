@@ -1,8 +1,7 @@
 """Adapters for storage database classes."""
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
@@ -15,9 +14,7 @@ class _Base:
 
     def __init__(self, engine: AsyncEngine, debug: bool = False):
         self.engine = engine
-        self.session_maker = sessionmaker(
-            self.engine, class_=AsyncSession, expire_on_commit=False
-        )  # type: ignore[call-overload]
+        self.session_maker = async_sessionmaker(self.engine, expire_on_commit=False)  # type: ignore[call-overload]
 
 
 class StorageRepository(_Base):
@@ -103,17 +100,16 @@ class StorageRepository(_Base):
                 res = await session.execute(
                     select(schemas.CloudStorageORM).where(schemas.CloudStorageORM.storage_id == storage_id)
                 )
-                storage = res.one_or_none()
+                storage = res.scalars().one_or_none()
 
                 if storage is None:
                     raise errors.MissingResourceError(message=f"The storage with id '{storage_id}' cannot be found")
                 if not await self.gitlab_client.filter_projects_by_access_level(
-                    user, [storage[0].project_id], base_models.GitlabAccessLevel.ADMIN
+                    user, [storage.project_id], base_models.GitlabAccessLevel.ADMIN
                 ):
                     raise errors.Unauthorized(message="User does not have access to this project")
-                if "project_id" in kwargs and kwargs["project_id"] != storage[0].project_id:
+                if "project_id" in kwargs and kwargs["project_id"] != storage.project_id:
                     raise errors.ValidationError(message="Cannot change project id of existing storage.")
-                storage = storage[0]
                 name = kwargs.get("name", storage.name)
                 if storage.name != name:
                     existing_storage = await self.get_storage(user, project_id=storage.project_id, name=name)
