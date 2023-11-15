@@ -33,9 +33,8 @@ def init_db(**kwargs):
     os.environ["DB_HOST"] = kwargs["host"]
     os.environ["DB_PORT"] = str(kwargs["port"])
 
-    config = DataConfig.from_env()
-    run_migrations_for_app("storage", config.storage_repo)
-    run_migrations_for_app("resource_pools", config.rp_repo)
+    run_migrations_for_app("storage")
+    run_migrations_for_app("resource_pools")
 
     if dummy_stores:
         os.environ["DUMMY_STORES"] = dummy_stores

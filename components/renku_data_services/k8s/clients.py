@@ -80,6 +80,10 @@ class DummyCoreClient(K8sCoreClientInterface):
 
     @property
     def _lock(self):
+        # NOTE: If this is a regular attribute and initialized when the class in initialized
+        # then Sanic fails to start properly because it clashes with the multiprocessing Lock
+        # used here. This way Sanic starts without a problem because the Lock is initialized
+        # after Sanic has started.
         if not self.__lock:
             self.__lock = Lock()
         return self.__lock
@@ -143,6 +147,10 @@ class DummySchedulingClient(K8sSchedudlingClientInterface):
 
     @property
     def _lock(self):
+        # NOTE: If this is a regular attribute and initialized when the class in initialized
+        # then Sanic fails to start properly because it clashes with the multiprocessing Lock
+        # used here. This way Sanic starts without a problem because the Lock is initialized
+        # after Sanic has started.
         if not self.__lock:
             self.__lock = Lock()
         return self.__lock
