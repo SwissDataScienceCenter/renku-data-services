@@ -2,8 +2,7 @@
 from typing import List, cast
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
@@ -17,9 +16,7 @@ class _Base:
 
     def __init__(self, engine: AsyncEngine, debug: bool = False):
         self.engine = engine
-        self.session_maker = sessionmaker(
-            self.engine, class_=AsyncSession, expire_on_commit=False
-        )  # type: ignore[call-overload]
+        self.session_maker = async_sessionmaker(self.engine, expire_on_commit=False)
 
 
 class UserPreferencesRepository(_Base):
@@ -39,7 +36,7 @@ class UserPreferencesRepository(_Base):
         user: base_models.APIUser,
     ) -> models.UserPreferences:
         """Get user preferences from the database."""
-        async with cast(AsyncSession, self.session_maker()) as session:
+        async with self.session_maker() as session:
             if not user.is_authenticated:
                 raise errors.Unauthorized(message="Anonymous users cannot have user preferences.")
 
@@ -54,7 +51,7 @@ class UserPreferencesRepository(_Base):
 
     async def delete_user_preferences(self, user: base_models.APIUser) -> None:
         """Delete user preferences from the database."""
-        async with cast(AsyncSession, self.session_maker()) as session:
+        async with self.session_maker() as session:
             async with session.begin():
                 if not user.is_authenticated:
                     return
@@ -71,7 +68,7 @@ class UserPreferencesRepository(_Base):
 
     async def add_pinned_project(self, user: base_models.APIUser, project_slug: str) -> models.UserPreferences:
         """Adds a new pinned project to the user's preferences."""
-        async with cast(AsyncSession, self.session_maker()) as session:
+        async with self.session_maker() as session:
             async with session.begin():
                 if not user.is_authenticated:
                     raise errors.Unauthorized(message="Anonymous users cannot have user preferences.")
@@ -114,7 +111,7 @@ class UserPreferencesRepository(_Base):
 
     async def remove_pinned_project(self, user: base_models.APIUser, project_slug: str) -> models.UserPreferences:
         """Removes on or all pinned projects from the user's preferences."""
-        async with cast(AsyncSession, self.session_maker()) as session:
+        async with self.session_maker() as session:
             async with session.begin():
                 if not user.is_authenticated:
                     raise errors.Unauthorized(message="Anonymous users cannot have user preferences.")
