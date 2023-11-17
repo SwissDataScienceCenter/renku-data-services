@@ -87,7 +87,6 @@ class DBConfig:
     port: str = "5432"
     db_name: str = "renku"
     _async_engine: ClassVar[AsyncEngine | None] = field(default=None, repr=False, init=False)
-    _async_engine_write_lock: ClassVar[asyncio.Lock] = asyncio.Lock()
 
     @classmethod
     def from_env(cls, prefix: str = ""):

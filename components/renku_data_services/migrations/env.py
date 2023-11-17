@@ -42,8 +42,6 @@ def run_migrations_offline(target_metadata, sync_sqlalchemy_url: str) -> None:
         with context.begin_transaction():
             context.run_migrations()
 
-    engine.dispose()
-
 
 def run_migrations_online(target_metadata, sync_sqlalchemy_url: str) -> None:
     """Run migrations in 'online' mode.
