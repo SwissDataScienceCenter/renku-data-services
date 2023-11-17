@@ -23,13 +23,13 @@ class IProjectAuthorizer(Protocol):
         """Whether the user is a member of the project with the specific role."""
         ...
 
-    async def project_accessible_by(
+    async def get_project_users(
         self, requested_by: APIUser, project_id: str, scope: Scope
     ) -> Tuple[MemberQualifier, List[str]]:
         """Which users have the specific permission on a project."""
         ...
 
-    async def user_can_access(self, requested_by: APIUser, user_id: str | MemberQualifier, scope: Scope) -> List[str]:
+    async def get_user_projects(self, requested_by: APIUser, user_id: str | MemberQualifier, scope: Scope) -> List[str]:
         """The projects to which the user has specific permission."""
         ...
 
@@ -94,7 +94,7 @@ class SQLProjectAuthorizer:
             permission = res.scalars().first()
         return permission is not None
 
-    async def project_accessible_by(
+    async def get_project_users(
         self, requested_by: APIUser, project_id: str, scope: Scope
     ) -> Tuple[MemberQualifier, List[str]]:
         """Which users have been granted permissions to the project at the access level."""
@@ -121,7 +121,7 @@ class SQLProjectAuthorizer:
             else:
                 return MemberQualifier.SOME, users_list  # type: ignore[return-value]
 
-    async def user_can_access(self, requested_by: APIUser, user_id: str | MemberQualifier, scope: Scope) -> List[str]:
+    async def get_user_projects(self, requested_by: APIUser, user_id: str | MemberQualifier, scope: Scope) -> List[str]:
         """Which project IDs can a specific user access at the designated access level."""
         if not requested_by.is_authenticated and user_id != MemberQualifier.ALL:
             raise errors.Unauthorized(message="Unauthenticated users cannot query permissions of specific users.")
