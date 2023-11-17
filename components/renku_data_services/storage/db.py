@@ -1,7 +1,9 @@
 """Adapters for storage database classes."""
 
+from typing import Callable
+
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
@@ -12,9 +14,8 @@ from renku_data_services.storage import orm as schemas
 class _Base:
     """Base class for repositories."""
 
-    def __init__(self, engine: AsyncEngine, debug: bool = False):
-        self.engine = engine
-        self.session_maker = async_sessionmaker(self.engine, expire_on_commit=False)  # type: ignore[call-overload]
+    def __init__(self, session_maker: Callable[..., AsyncSession]):
+        self.session_maker = session_maker  # type: ignore[call-overload]
 
 
 class StorageRepository(_Base):
@@ -23,10 +24,9 @@ class StorageRepository(_Base):
     def __init__(
         self,
         gitlab_client: base_models.GitlabAPIProtocol,
-        engine: AsyncEngine,
-        debug: bool = False,
+        session_maker: Callable[..., AsyncSession],
     ):
-        super().__init__(engine, debug)
+        super().__init__(session_maker)
         self.gitlab_client = gitlab_client
 
     async def get_storage(
