@@ -147,7 +147,6 @@ class ResourcePoolRepository(_Base):
                 if default_rp is None:
                     orm = schemas.ResourcePoolORM.load(rp)
                     session.add(orm)
-        engine.dispose()
 
     async def get_resource_pools(
         self, api_user: base_models.APIUser, id: Optional[int] = None, name: Optional[str] = None

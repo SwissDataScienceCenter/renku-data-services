@@ -65,8 +65,6 @@ def run_migrations_online(target_metadata, sync_sqlalchemy_url: str) -> None:
         with context.begin_transaction():
             context.run_migrations()
 
-    engine.dispose()
-
 
 def run_migrations(metadata: MetaData):
     """Run migrations for a specific base model class."""
