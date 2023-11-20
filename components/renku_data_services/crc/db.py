@@ -7,10 +7,10 @@ it all in one place.
 """
 from asyncio import gather
 from functools import wraps
-from typing import Any, Dict, List, Optional, Sequence, Tuple, cast
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, cast
 
-from sqlalchemy import create_engine, delete, select
-from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
+from sqlalchemy import NullPool, create_engine, delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 from sqlalchemy.sql import Select, and_, not_, or_
 from sqlalchemy.sql.expression import false, true
@@ -23,9 +23,8 @@ from renku_data_services.k8s.quota import QuotaRepository
 
 
 class _Base:
-    def __init__(self, engine: AsyncEngine, quotas_repo: QuotaRepository):
-        self.engine = engine
-        self.session_maker = async_sessionmaker(self.engine, expire_on_commit=False)  # type: ignore[call-overload]
+    def __init__(self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository):
+        self.session_maker = session_maker  # type: ignore[call-overload]
         self.quotas_repo = quotas_repo
 
 
@@ -134,7 +133,7 @@ class ResourcePoolRepository(_Base):
 
     def initialize(self, sync_connection_url: str, rp: models.ResourcePool):
         """Add the default resource pool if it does not already exist."""
-        engine = create_engine(sync_connection_url, pool_size=2, max_overflow=0)
+        engine = create_engine(sync_connection_url, poolclass=NullPool)
         session_maker = sessionmaker(
             engine,
             class_=Session,
@@ -148,7 +147,6 @@ class ResourcePoolRepository(_Base):
                 if default_rp is None:
                     orm = schemas.ResourcePoolORM.load(rp)
                     session.add(orm)
-        engine.dispose()
 
     async def get_resource_pools(
         self, api_user: base_models.APIUser, id: Optional[int] = None, name: Optional[str] = None

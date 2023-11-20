@@ -6,8 +6,8 @@ from sanic import Sanic
 from sanic.log import logger
 from sanic.worker.loader import AppLoader
 
+from renku_data_services.config import Config
 from renku_data_services.data_api.app import register_all_handlers
-from renku_data_services.data_api.config import Config
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.storage.rclone import RCloneValidator
 
@@ -23,7 +23,7 @@ def create_app() -> Sanic:
         run_migrations_for_app("resource_pools")
         run_migrations_for_app("storage")
         run_migrations_for_app("user_preferences")
-        config.rp_repo.initialize(config.sync_db_connection_url, config.default_resource_pool)
+        config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
     app = register_all_handlers(app, config)
 
     if environ.get("CORS_ALLOW_ALL_ORIGINS", "false").lower() == "true":
@@ -38,7 +38,7 @@ def create_app() -> Sanic:
         run_migrations_for_app("resource_pools")
         run_migrations_for_app("storage")
         run_migrations_for_app("user_preferences")
-        config.rp_repo.initialize(config.sync_db_connection_url, config.default_resource_pool)
+        config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
 
     @app.before_server_start
     async def setup_rclone_calidator(app, _):
