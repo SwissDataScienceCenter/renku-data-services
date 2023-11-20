@@ -133,7 +133,7 @@ class RCloneOption(BaseModel):
     provider: str = Field(alias="Provider")
     default: str | int | bool | list[str] | RCloneTriState | None = Field(alias="Default")
     value: str | int | bool | RCloneTriState | None = Field(alias="Value")
-    examples: list[RCloneExample] | None = Field(default=None)
+    examples: list[RCloneExample] | None = Field(default=None, alias="Examples")
     short_opt: str = Field(alias="ShortOpt")
     hide: int = Field(alias="Hide")
     required: bool = Field(alias="Required")
