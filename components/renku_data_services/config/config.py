@@ -9,6 +9,7 @@ the database will instantiate a connection when they are used. And even in this 
 a single connection will be reused. This allows for the configuration classes to be
 instantiated multiple times without creating multiple database connections.
 """
+
 import asyncio
 import os
 from dataclasses import dataclass, field
@@ -28,6 +29,7 @@ from renku_data_services import errors
 from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.authn.gitlab import GitlabAuthenticator
 from renku_data_services.authn.keycloak import KcUserStore, KeycloakAuthenticator
+from renku_data_services.authz.authz import SQLProjectAuthorizer
 from renku_data_services.crc import models
 from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
 from renku_data_services.data_api.server_options import (
@@ -151,6 +153,7 @@ class Config:
     _rp_repo: ResourcePoolRepository | None = field(default=None, repr=False, init=False)
     _storage_repo: StorageRepository | None = field(default=None, repr=False, init=False)
     _project_repo: ProjectRepository | None = field(default=None, repr=False, init=False)
+    _project_authz: SQLProjectAuthorizer | None = field(default=None, repr=False, init=False)
 
     def __post_init__(self):
         spec_file = Path(renku_data_services.crc.__file__).resolve().parent / "api.spec.yaml"
@@ -204,6 +207,13 @@ class Config:
         if not self._project_repo:
             self._project_repo = ProjectRepository(session_maker=self.db.async_session_maker)
         return self._project_repo
+
+    @property
+    def project_authz(self) -> SQLProjectAuthorizer:
+        """The DB adapter for authorization."""
+        if not self._project_authz:
+            self._project_authz = SQLProjectAuthorizer(session_maker=self.db.async_session_maker)
+        return self._project_authz
 
     @classmethod
     def from_env(cls, prefix: str = ""):
