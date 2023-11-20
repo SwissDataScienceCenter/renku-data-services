@@ -154,7 +154,7 @@ class Config:
     _user_repo: UserRepository | None = field(default=None, repr=False, init=False)
     _rp_repo: ResourcePoolRepository | None = field(default=None, repr=False, init=False)
     _storage_repo: StorageRepository | None = field(default=None, repr=False, init=False)
-    __user_preferences_repo: UserPreferencesRepository | None = field(default=None, repr=False, init=False)
+    _user_preferences_repo: UserPreferencesRepository | None = field(default=None, repr=False, init=False)
 
     def __post_init__(self):
         spec_file = Path(renku_data_services.crc.__file__).resolve().parent / "api.spec.yaml"
@@ -205,7 +205,7 @@ class Config:
                 session_maker=self.db.async_session_maker, gitlab_client=self.gitlab_client
             )
         return self._storage_repo
-    
+
     @property
     def user_preferences_repo(self) -> UserPreferencesRepository:
         """The DB adapter for user preferences."""
@@ -214,7 +214,7 @@ class Config:
                 session_maker=self.db.async_session_maker,
                 user_preferences_config=self.user_preferences_config,
             )
-        return self.__user_preferences_repo
+        return self._user_preferences_repo
 
     @classmethod
     def from_env(cls, prefix: str = ""):
