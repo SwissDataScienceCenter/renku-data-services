@@ -1,11 +1,10 @@
----
-openapi: 3.0.2
+openapi: 3.1.0
 info:
   title: Renku Project Management Service
   description: |
     Service that allows creating, updating, deleting, and managing Renku native projects.
     All errors have the same format as the schema called ErrorResponse.
-  version: v1
+  version: 0.3.0
 servers:
   - url: /api/data
   - url: /ui-server/api/data
@@ -13,13 +12,52 @@ paths:
   /projects:
     get:
       summary: Get all projects
+      parameters:
+        - in: query
+          description: Result's page number starting from 1
+          name: page
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          description: The number of results per page
+          name: per_page
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20  # TODO: Should results always be paginated or only if these parameters are passed in?
       responses:
         "200":
           description: List of projects
           content:
-            "application/json":
+            application/json:
               schema:
                 $ref: "#/components/schemas/ProjectsList"
+          headers:
+            Page:
+              description: The index of the current page (starting at 1).
+              required: true  # TODO: Should these be required only if pagination is requested by the API caller?
+              schema:
+                type: integer
+            Per-Page:
+              description: The number of items per page.
+              required: true
+              schema:
+                type: integer
+            Total:
+              description: The total number of items.
+              required: true
+              schema:
+                type: integer
+            Total-Pages:
+              description: The total number of pages.
+              required: true
+              schema:
+                type: integer
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -36,7 +74,7 @@ paths:
         "201":
           description: The project was created
           content:
-            "application/json":
+            application/json:
               schema:
                 $ref: "#/components/schemas/Project"
         default:
@@ -56,13 +94,13 @@ paths:
         "200":
           description: The project
           content:
-            "application/json":
+            application/json:
               schema:
                 $ref: "#/components/schemas/Project"
         "404":
           description: The project does not exist
           content:
-            "application/json":
+            application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         default:
@@ -85,15 +123,15 @@ paths:
               $ref: "#/components/schemas/ProjectPatch"
       responses:
         "200":
-          description: The project
+          description: The patched project
           content:
-            "application/json":
+            application/json:
               schema:
                 $ref: "#/components/schemas/Project"
         "404":
           description: The project does not exist
           content:
-            "application/json":
+            application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         default:
@@ -128,13 +166,13 @@ paths:
         "200":
           description: The project's members
           content:
-            "application/json":
+            application/json:
               schema:
                 $ref: "#/components/schemas/MembersWithRoles"
         "404":
           description: The project does not exist
           content:
-            "application/json":
+            application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         default:
@@ -142,7 +180,10 @@ paths:
       tags:
         - projects
     patch:
-      summary: Add new members to a project or update their roles (if member ID already exists)
+      summary: |
+        New members in the list are added to the project's members. If a member
+        already exists, then only the role is updated. No member will be deleted
+        in this endpoint.
       parameters:
         - in: path
           name: project_id
@@ -159,13 +200,13 @@ paths:
         "200":
           description: The project's updated members list
           content:
-            "application/json":
+            application/json:
               schema:
                 $ref: "#/components/schemas/MembersWithRoles"
         "404":
           description: The project does not exist
           content:
-            "application/json":
+            application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         default:
@@ -190,13 +231,13 @@ paths:
         "200":
           description: The project's updated members list
           content:
-            "application/json":
+            application/json:
               schema:
                 $ref: "#/components/schemas/MembersWithRoles"
         "404":
           description: The project does not exist
           content:
-            "application/json":
+            application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         default:
@@ -210,7 +251,7 @@ paths:
         "200":
           description: The error
           content:
-            "application/json":
+            application/json:
               schema:
                 $ref: "#/components/schemas/Version"
 components:
@@ -221,7 +262,6 @@ components:
       items:
         $ref: "#/components/schemas/Project"
       minItems: 0
-      uniqueItems: true
     Project:
       description: A Renku native project definition and metadata
       type: object
@@ -243,11 +283,14 @@ components:
           $ref: "#/components/schemas/Visibility"
         description:
           $ref: "#/components/schemas/Description"
+        members:
+          $ref: "#/components/schemas/MembersWithRoles"
       required:
         - "id"
         - "name"
         - "slug"
         - "created_by"
+        - "creation_date"
         - "visibility"
       example:
         id: "01AN4Z79ZS5XN0F25N3DB94T4R"
@@ -256,19 +299,28 @@ components:
         created_by:
           id: "owner-KC-id"
         visibility: "public"
+        repositories:
+          - https://github.com/SwissDataScienceCenter/project-1.git
+          - git@github.com:SwissDataScienceCenter/project-2.git
+        members:
+          - id: "some-keycloak-user-id"
+            role: "owner"
+          - id: "another-keycloak-user-id"
+            role: "member"
     ProjectPost:
       description: Project metadata to be created in Renku
       type: object
       additionalProperties: false
       properties:
         name:
-          $ref: "#/components/schemas/Name"
+          $ref: "#/components/schemas/Name"  # TODO: Should name be unique?
         slug:
-          $ref: "#/components/schemas/Slug"
+          $ref: "#/components/schemas/Slug"  # TODO: Should slug be unique?
         repositories:
           $ref: "#/components/schemas/RepositoriesList"
         visibility:
-          $ref: "#/components/schemas/Visibility"
+          $ref: "#/components/schemas/Visibility"  # Visibility is ``private`` if not passed at this point
+          default: "private"
         description:
           $ref: "#/components/schemas/Description"
       required:
@@ -279,13 +331,13 @@ components:
       additionalProperties: false
       properties:
         name:
-          $ref: "#/components/schemas/Name"
+          $ref: "#/components/schemas/Name"  # TODO: Should we allow changing project's name?
         slug:
           $ref: "#/components/schemas/Slug"
         repositories:
           $ref: "#/components/schemas/RepositoriesList"
         visibility:
-          $ref: "#/components/schemas/Visibility"
+          $ref: "#/components/schemas/Visibility"  # TODO: Should we allow ``public`` to ``private`` transition?
         description:
           $ref: "#/components/schemas/Description"
     Ulid:
@@ -299,7 +351,7 @@ components:
       description: Renku project name
       type: string
       minLength: 1
-      maxLength: 99  # TODO: Is this enough?
+      maxLength: 99
       example: "My Renku Project :)"
     Slug:
       description: A command-line friendly name for a project
@@ -309,10 +361,10 @@ components:
       pattern: "^[a-z0-9]+[a-z0-9._-]*$"  # Cannot contain consecutive special characters or end in .git and .atom
       example: "my-renku-project"
     CreationDate:
-      description: The date and time the project was created
+      description: The date and time the project was created (time is always in UTC)
       type: string
       format: date-time
-      example: "2023-11-01T17:32:28Z"  # Time is always in UTC timezone
+      example: "2023-11-01T17:32:28Z"
     Description:
       description: A description for project
       type: string
@@ -340,28 +392,24 @@ components:
       items:
         $ref: "#/components/schemas/GitUrl"
       minItems: 0
-      uniqueItems: true
       example:
         - https://github.com/SwissDataScienceCenter/project-1.git
         - git@github.com:SwissDataScienceCenter/project-2.git
     GitUrl:
       description: URL of a Git repository
       type: string
-      format: uri  # TODO: This should support other formats like ``git@`` and ``https+git``
     Visibility:
       description: Project's visibility levels
       type: string
-      default: "private"
       enum:
-        - "public"
-        - "private"
+        - private
+        - public
     MembersWithRoles:
       description: List of users and their access level to the project
       type: array
       items:
         $ref: "#/components/schemas/MemberWithRole"
       minItems: 0
-      uniqueItems: true
     MemberWithRole:
       description: A user and the access level to the project
       type: object
@@ -373,6 +421,7 @@ components:
           $ref: "#/components/schemas/Role"
       required:
         - "user"
+        - "role"
       example:
         user:
           id: "some-keycloak-user-id"
@@ -380,11 +429,9 @@ components:
     Role:
       description: Possible roles of users in a project
       type: string
-      default: "member"
       enum:
-        - "owner"
-        - "member"
-        - "admin"
+        - member
+        - owner
     Version:
       type: object
       properties:
@@ -418,6 +465,6 @@ components:
     Error:
       description: The schema for all 4xx and 5xx responses
       content:
-        "application/json":
+        application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"

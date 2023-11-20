@@ -1,6 +1,7 @@
 """Project blueprint."""
 
 from dataclasses import dataclass
+from datetime import timezone, datetime
 
 from sanic import HTTPResponse, Request, json
 from sanic_ext import validate
@@ -32,20 +33,23 @@ class ProjectsBP(CustomBlueprint):
         return "/projects", ["GET"], _get_all
 
     def post(self) -> BlueprintFactoryResponse:
-        """Add a new resource pool."""
+        """Create a new project."""
 
         @authenticate(self.authenticator)
         @validate(json=apispec.ProjectPost)
         async def _post(_: Request, body: apispec.ProjectPost, user: base_models.APIUser):
-            created_by = models.User(id=user.id)
-            project = models.Project.from_dict(body.model_dump(exclude_none=True), created_by=created_by)
+            data = body.model_dump(exclude_none=True)
+            data["created_by"] = models.User(id=user.id)
+            # NOTE: Set ``creation_date`` to override possible value set by users
+            data["creation_date"] = datetime.now(timezone.utc).replace(microsecond=0)
+            project = models.Project.from_dict(data)
             result = await self.project_repo.insert_project(user=user, project=project)
             return json(apispec.Project.model_validate(result).model_dump(exclude_none=True, mode="json"), 201)
 
         return "/projects", ["POST"], _post
 
     def get_one(self) -> BlueprintFactoryResponse:
-        """Get a specific resource pool."""
+        """Get a specific project."""
 
         @authenticate(self.authenticator)
         async def _get_one(_: Request, project_id: str, user: base_models.APIUser):

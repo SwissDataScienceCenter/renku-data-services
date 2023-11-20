@@ -38,13 +38,18 @@ class Project(BaseModel):
     description: Optional[str] = None
 
     @classmethod
-    def from_dict(cls, data: Dict, created_by: User) -> "Project":
+    def from_dict(cls, data: Dict) -> "Project":
         """Create the model from a plain dictionary."""
         if "name" not in data:
             raise errors.ValidationError(message="'name' not set")
+        if "created_by" not in data:
+            raise errors.ValidationError(message="'created_by' not set")
+        if not isinstance(data["created_by"], User):
+            raise errors.ValidationError(message="'created_by' must be an instance of 'User'")
 
         name = data["name"]
         slug = data.get("slug") or get_slug(name)
+        created_by = data["created_by"]
         creation_date = data.get("creation_date") or datetime.now(timezone.utc).replace(microsecond=0)
 
         return cls(
@@ -63,14 +68,14 @@ def get_slug(name: str, invalid_chars: Optional[List[str]] = None, lowercase: bo
     """Create a slug from name."""
     invalid_chars = invalid_chars or []
     lower_case = name.lower() if lowercase else name
-    no_space = re.sub(r"\s+", "_", lower_case)
+    no_space = re.sub(r"\s+", "-", lower_case)
     normalized = unicodedata.normalize("NFKD", no_space).encode("ascii", "ignore").decode("utf-8")
 
     valid_chars_pattern = [r"\w", ".", "_", "-"]
     if len(invalid_chars) > 0:
         valid_chars_pattern = [ch for ch in valid_chars_pattern if ch not in invalid_chars]
 
-    no_invalid_characters = re.sub(f'[^{"".join(valid_chars_pattern)}]', "_", normalized)
+    no_invalid_characters = re.sub(f'[^{"".join(valid_chars_pattern)}]', "-", normalized)
     no_duplicates = re.sub(r"([._-])[._-]+", r"\1", no_invalid_characters)
     valid_start = re.sub(r"^[._-]", "", no_duplicates)
     valid_end = re.sub(r"[._-]$", "", valid_start)
