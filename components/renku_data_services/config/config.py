@@ -141,7 +141,6 @@ class Config:
     gitlab_authenticator: base_models.Authenticator
     quota_repo: QuotaRepository
     user_preferences_config: UserPreferencesConfig
-    # sync_db_connection_url: str = field(repr=False)
     db: DBConfig
     gitlab_client: base_models.GitlabAPIProtocol
     spec: Dict[str, Any] = field(init=False, default_factory=dict)
