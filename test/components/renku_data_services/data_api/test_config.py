@@ -1,8 +1,8 @@
 from unittest.mock import MagicMock
 
-import renku_data_services.data_api.config as conf
-from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient
+import renku_data_services.config.config as conf
 from renku_data_services.authn.dummy import DummyAuthenticator
+from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient
 
 
 def test_config_dummy(monkeypatch):

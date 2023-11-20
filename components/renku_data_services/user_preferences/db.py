@@ -1,8 +1,8 @@
 """Adapters for user preferences database classes."""
-from typing import List, cast
+from typing import Callable, List, cast
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
@@ -14,21 +14,15 @@ from renku_data_services.user_preferences.config import UserPreferencesConfig
 class _Base:
     """Base class for repositories."""
 
-    def __init__(self, engine: AsyncEngine, debug: bool = False):
-        self.engine = engine
-        self.session_maker = async_sessionmaker(self.engine, expire_on_commit=False)
+    def __init__(self, session_maker: Callable[..., AsyncSession]):
+        self.session_maker = session_maker
 
 
 class UserPreferencesRepository(_Base):
     """Repository for user preferences."""
 
-    def __init__(
-        self,
-        user_preferences_config: UserPreferencesConfig,
-        engine: AsyncEngine,
-        debug: bool = False,
-    ):
-        super().__init__(engine, debug)
+    def __init__(self, user_preferences_config: UserPreferencesConfig, session_maker: Callable[..., AsyncSession]):
+        super().__init__(session_maker)
         self.user_preferences_config = user_preferences_config
 
     async def get_user_preferences(

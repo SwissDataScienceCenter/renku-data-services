@@ -12,8 +12,8 @@ import pytest
 from hypothesis import HealthCheck, given, settings
 
 import renku_data_services.base_models as base_models
+from renku_data_services.config import Config
 from renku_data_services.crc import models
-from renku_data_services.data_api.config import Config
 
 
 @given(user=user_strat)
