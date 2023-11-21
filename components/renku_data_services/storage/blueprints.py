@@ -197,9 +197,7 @@ class StorageSchemaBP(CustomBlueprint):
                 return empty(204)
             if not request.json.get("source_path"):
                 raise errors.ValidationError(message="'source_path' is required to test the connection.")
-            result = validator.test_connection(request.json["configuration"], request.json["source_path"])
-            if not result.supported:
-                return empty(501)
+            result = await validator.test_connection(request.json["configuration"], request.json["source_path"])
             if not result.success:
                 raise errors.ValidationError(message=result.error)
             return empty(204)
