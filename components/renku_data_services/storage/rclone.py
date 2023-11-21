@@ -3,8 +3,12 @@
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Generator, Union, cast
+from typing import TYPE_CHECKING, Any, Generator, NamedTuple, Tuple, Union, cast
 
+import boto3
+from botocore import UNSIGNED
+from botocore.client import Config
+from botocore.exceptions import ClientError, EndpointConnectionError, NoCredentialsError
 from pydantic import BaseModel, Field, ValidationError
 from sanic.log import logger
 
@@ -12,6 +16,8 @@ from renku_data_services import errors
 
 if TYPE_CHECKING:
     from renku_data_services.storage.models import RCloneConfig
+
+ConnectionResult = NamedTuple("ConnectionResult", [("supported", bool), ("success", bool), ("error", str)])
 
 
 class RCloneValidator:
@@ -72,6 +78,23 @@ class RCloneValidator:
         provider = self.get_provider(configuration)
 
         provider.validate_config(configuration, private=private, keep_sensitive=keep_sensitive)
+
+    def test_connection(self, configuration: Union["RCloneConfig", dict[str, Any]], source_path: str):
+        """Tests connecting with an RClone config."""
+        provider = self.get_provider(configuration)
+        if not provider:
+            return ConnectionResult(False, False, "Unknown provider")
+        private_fields = set(p.name for p in provider.get_private_fields(configuration))
+        private = bool(private_fields.intersection(configuration.keys()))
+        match configuration.get("type"):
+            case "s3":
+                supported = True
+                success, error = test_s3_connection(configuration, source_path.split("/")[0], private)
+            case _:
+                supported = False
+                success = False
+                error = "Backend not supported"
+        return ConnectionResult(supported=supported, success=success, error=error)
 
     def remove_sensitive_options_from_config(self, configuration: Union["RCloneConfig", dict[str, Any]]):
         """Remove sensitive fields from a config, e.g. when turning a private storage public."""
@@ -306,3 +329,27 @@ class RCloneProviderSchema(BaseModel):
             if not option.matches_provider(provider):
                 continue
             yield option
+
+
+def test_s3_connection(
+    configuration: Union["RCloneConfig", dict[str, Any]], bucket: str, private: bool
+) -> Tuple[bool, str]:
+    """Test if connection to s3 works."""
+    client = boto3.session.Session().client(
+        service_name="s3",
+        aws_access_key_id=configuration.get("access_key_id"),
+        aws_secret_access_key=configuration.get("secret_access_key"),
+        endpoint_url=configuration.get("endpoint"),
+        region_name=configuration.get("region"),
+        config=None if private else Config(signature_version=UNSIGNED),
+    )
+
+    try:
+        head_bucket = client.head_bucket(Bucket=bucket)
+    except (ClientError, EndpointConnectionError) as e:
+        return False, f"Couldn't connect to remote: {e}"
+    except (NoCredentialsError, ValueError) as e:
+        return False, f"Invalid credentials: {e}"
+    if not head_bucket or head_bucket.get("ResponseMetadata", {}).get("HTTPStatusCode", 404) != 200:
+        return False, "Couldn't find specified bucket."
+    return True, ""

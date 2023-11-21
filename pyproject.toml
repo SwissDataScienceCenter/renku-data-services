@@ -40,6 +40,7 @@ psycopg = { version = "^3.1.10", extras = ["binary"] }
 # urllib3 v2 has some breaking changes that libraries haven't caught up yet (08.2023)
 urllib3 = "^1.26.16"
 deepmerge = "^1.1.0"
+boto3 = "^1.29.4"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.7.5"
@@ -156,7 +157,7 @@ module = [
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = ["sanic_testing.*", "asyncpg.*", "kubernetes.*", "deepmerge.*"]
+module = ["sanic_testing.*", "asyncpg.*", "kubernetes.*", "deepmerge.*","boto3.*", "botocore.*"]
 ignore_missing_imports = true
 
 [tool.coverage.run]

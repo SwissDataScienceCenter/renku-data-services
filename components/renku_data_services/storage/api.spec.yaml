@@ -145,15 +145,32 @@ paths:
   /storage_schema/validate:
     post:
       summary: Validate an RClone config using the schema
+      parameters:
+        - in: query
+          name: test_connection
+          required: false
+          default: false
+          schema:
+            type: boolean
+            description: Whether to test if the storage can be connected to. source_path is required if this is true
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/RCloneConfig"
+              type: object
+              properties:
+                configuration:
+                  $ref: "#/components/schemas/RCloneConfig"
+                source_path:
+                  $ref: "#/components/schemas/SourcePath"
+              required:
+                - configuration
       responses:
         "204":
           description: The configuration is valid
+        "501":
+          description: The schema seems valid but testing the connection is not supported
         default:
           $ref: '#/components/responses/Error'
       tags:
@@ -212,9 +229,7 @@ components:
         - type: object
           properties:
             storage_type:
-              type: string
-              description: same as rclone prefix/ rclone config type. Ignored in requests, but returned in responses for convenience.
-              readOnly: true
+              $ref: "#/components/schemas/SourcePath"
             name:
               $ref: "#/components/schemas/StorageName"
             configuration:
@@ -254,9 +269,7 @@ components:
         configuration:
           $ref: "#/components/schemas/RCloneConfig"
         source_path:
-          type: string
-          description: the source path to mount, usually starts with bucket/container name
-          example: bucket/my/storage/folder/
+          $ref: "#/components/schemas/SourcePath"
         target_path:
           type: string
           description: the target path relative to the repository where the storage should be mounted
@@ -386,6 +399,10 @@ components:
       type: string
       minLength: 3
       pattern: "^[a-zA-Z0-9_-]+$"
+    SourcePath:
+      type: string
+      description: the source path to mount, usually starts with bucket/container name
+      example: bucket/my/storage/folder/
     ErrorResponse:
       type: object
       properties:

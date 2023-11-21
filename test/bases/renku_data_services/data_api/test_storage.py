@@ -553,7 +553,7 @@ async def test_storage_patch_unauthorized(storage_test_client, valid_storage_pay
 @pytest.mark.asyncio
 async def test_storage_validate_success(storage_test_client):
     storage_test_client, _ = storage_test_client
-    body = {"type": "s3", "provider": "Other", "endpoint": "example.com", "access_key_id": "abcdefg"}
+    body = {"configuration": {"type": "s3", "provider": "Other", "endpoint": "example.com", "access_key_id": "abcdefg"}}
     _, res = await storage_test_client.post("/api/data/storage_schema/validate", data=json.dumps(body))
     assert res.status_code == 204
 
@@ -561,7 +561,7 @@ async def test_storage_validate_success(storage_test_client):
 @pytest.mark.asyncio
 async def test_storage_validate_error(storage_test_client):
     storage_test_client, _ = storage_test_client
-    body = {"type": "s3", "provider": "Other"}
+    body = {"configuration": {"type": "s3", "provider": "Other"}}
     _, res = await storage_test_client.post("/api/data/storage_schema/validate", data=json.dumps(body))
     assert res.status_code == 422
     assert "missing:\nendpoint" in res.json["error"]["message"]
@@ -570,7 +570,7 @@ async def test_storage_validate_error(storage_test_client):
 @pytest.mark.asyncio
 async def test_storage_validate_error_sensitive(storage_test_client):
     storage_test_client, _ = storage_test_client
-    body = {"type": "s3", "provider": "Other", "endpoint": "example.com", "access_key_id": 5}
+    body = {"configuration": {"type": "s3", "provider": "Other", "endpoint": "example.com", "access_key_id": 5}}
     _, res = await storage_test_client.post("/api/data/storage_schema/validate", data=json.dumps(body))
     assert res.status_code == 422
     assert "Value '5' for field 'access_key_id' is not of type string" in res.json["error"]["message"]
