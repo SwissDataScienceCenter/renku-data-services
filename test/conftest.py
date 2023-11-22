@@ -35,6 +35,7 @@ def init_db(**kwargs):
 
     run_migrations_for_app("storage")
     run_migrations_for_app("resource_pools")
+    run_migrations_for_app("user_preferences")
 
     if dummy_stores:
         os.environ["DUMMY_STORES"] = dummy_stores
@@ -70,6 +71,7 @@ postgresql = factories.postgresql("postgresql_in_docker")
 def app_config(postgresql, monkeypatch) -> Iterator[DataConfig]:
     monkeypatch.setenv("DUMMY_STORES", "true")
     monkeypatch.setenv("DB_NAME", postgresql.info.dbname)
+    monkeypatch.setenv("MAX_PINNED_PROJECTS", "5")
 
     config = DataConfig.from_env()
     yield config
