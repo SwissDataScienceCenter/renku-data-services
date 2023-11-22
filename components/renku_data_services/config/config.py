@@ -24,6 +24,7 @@ from yaml import safe_load
 import renku_data_services.base_models as base_models
 import renku_data_services.crc
 import renku_data_services.storage
+import renku_data_services.user_preferences
 from renku_data_services import errors
 from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.authn.gitlab import GitlabAuthenticator
@@ -39,7 +40,9 @@ from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.storage.db import StorageRepository
+from renku_data_services.user_preferences.db import UserPreferencesRepository
 from renku_data_services.utils.core import get_ssl_context, merge_api_specs
+from renku_data_services.user_preferences.config import UserPreferencesConfig
 
 
 @retry(stop=(stop_after_attempt(20) | stop_after_delay(300)), wait=wait_fixed(2), reraise=True)
@@ -137,6 +140,7 @@ class Config:
     authenticator: base_models.Authenticator
     gitlab_authenticator: base_models.Authenticator
     quota_repo: QuotaRepository
+    user_preferences_config: UserPreferencesConfig
     db: DBConfig
     gitlab_client: base_models.GitlabAPIProtocol
     spec: Dict[str, Any] = field(init=False, default_factory=dict)
@@ -149,6 +153,7 @@ class Config:
     _user_repo: UserRepository | None = field(default=None, repr=False, init=False)
     _rp_repo: ResourcePoolRepository | None = field(default=None, repr=False, init=False)
     _storage_repo: StorageRepository | None = field(default=None, repr=False, init=False)
+    _user_preferences_repo: UserPreferencesRepository | None = field(default=None, repr=False, init=False)
 
     def __post_init__(self):
         spec_file = Path(renku_data_services.crc.__file__).resolve().parent / "api.spec.yaml"
@@ -159,7 +164,11 @@ class Config:
         with open(spec_file, "r") as f:
             storage_spec = safe_load(f)
 
-        self.spec = merge_api_specs(crc_spec, storage_spec)
+        spec_file = Path(renku_data_services.user_preferences.__file__).resolve().parent / "api.spec.yaml"
+        with open(spec_file, "r") as f:
+            user_preferences_spec = safe_load(f)
+
+        self.spec = merge_api_specs(crc_spec, storage_spec, user_preferences_spec)
 
         if self.default_resource_pool_file is not None:
             with open(self.default_resource_pool_file, "r") as f:
@@ -196,6 +205,16 @@ class Config:
             )
         return self._storage_repo
 
+    @property
+    def user_preferences_repo(self) -> UserPreferencesRepository:
+        """The DB adapter for user preferences."""
+        if not self._user_preferences_repo:
+            self._user_preferences_repo = UserPreferencesRepository(
+                session_maker=self.db.async_session_maker,
+                user_preferences_config=self.user_preferences_config,
+            )
+        return self._user_preferences_repo
+
     @classmethod
     def from_env(cls, prefix: str = ""):
         """Create a config from environment variables."""
@@ -204,11 +223,14 @@ class Config:
         authenticator: base_models.Authenticator
         gitlab_authenticator: base_models.Authenticator
         gitlab_client: base_models.GitlabAPIProtocol
+        user_preferences_config: UserPreferencesConfig
         version = os.environ.get(f"{prefix}VERSION", "0.0.1")
         server_options_file = os.environ.get("SERVER_OPTIONS")
         server_defaults_file = os.environ.get("SERVER_DEFAULTS")
         k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
         gitlab_url = None
+        max_pinned_projects = int(os.environ.get(f"{prefix}MAX_PINNED_PROJECTS", "10"))
+        user_preferences_config = UserPreferencesConfig(max_pinned_projects=max_pinned_projects)
         db = DBConfig.from_env(prefix)
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
@@ -253,5 +275,6 @@ class Config:
             quota_repo=quota_repo,
             server_defaults_file=server_defaults_file,
             server_options_file=server_options_file,
+            user_preferences_config=user_preferences_config,
             db=db,
         )

@@ -14,6 +14,7 @@ from renku_data_services.crc.blueprints import (
     UsersBP,
 )
 from renku_data_services.storage.blueprints import StorageBP, StorageSchemaBP
+from renku_data_services.user_preferences.blueprints import UserPreferencesBP
 
 
 def register_all_handlers(app: Sanic, config: Config) -> Sanic:
@@ -57,6 +58,12 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         authenticator=config.gitlab_authenticator,
     )
     storage_schema = StorageSchemaBP(name="storage_schema", url_prefix=url_prefix)
+    user_preferences = UserPreferencesBP(
+        name="user_preferences",
+        url_prefix=url_prefix,
+        user_preferences_repo=config.user_preferences_repo,
+        authenticator=config.authenticator,
+    )
     misc = MiscBP(name="misc", url_prefix=url_prefix, apispec=config.spec, version=config.version)
     app.blueprint(
         [
@@ -68,6 +75,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
             user_resource_pools.blueprint(),
             storage.blueprint(),
             storage_schema.blueprint(),
+            user_preferences.blueprint(),
             misc.blueprint(),
         ]
     )
