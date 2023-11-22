@@ -515,13 +515,13 @@ async def test_storage_patch(storage_test_client, valid_storage_payload):
         headers={"Authorization": "bearer test"},
         data=json.dumps(
             {
-                "configuration": {"type": "azureblob", "region": None},
+                "configuration": {"provider": "Other", "region": None},
                 "source_path": "bucket/myotherfolder",
             }
         ),
     )
     assert res.status_code == 200
-    assert res.json["storage"]["storage_type"] == "azureblob"
+    assert res.json["storage"]["configuration"]["provider"] == "Other"
     assert res.json["storage"]["source_path"] == "bucket/myotherfolder"
     assert "region" not in res.json["storage"]["configuration"]
 
