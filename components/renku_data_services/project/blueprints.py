@@ -29,8 +29,8 @@ class ProjectsBP(CustomBlueprint):
             default_number_of_elements_per_page = 20
 
             args = request.args if request.args else {}
-            page = args.get("page", default_page_number)
-            per_page = args.get("per_page", default_number_of_elements_per_page)
+            page = int(args.get("page", default_page_number))
+            per_page = int(args.get("per_page", default_number_of_elements_per_page))
 
             projects, pagination = await self.project_repo.get_projects(user=user, page=page, per_page=per_page)
             return json(

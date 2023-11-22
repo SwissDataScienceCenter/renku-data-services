@@ -42,7 +42,7 @@ paths:
               description: The index of the current page (starting at 1).
               required: true
               schema:
-                type: integer  # TODO: Should these types be string or integer? Sanic headers are string.
+                type: integer
             per-page:
               description: The number of items per page.
               required: true
@@ -228,12 +228,8 @@ paths:
           schema:
             type: string
       responses:
-        "200":
-          description: The project's updated members list
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MembersWithRoles"
+        "204":
+          description: The user was removed or wasn't part of project's members.
         "404":
           description: The project does not exist
           content:
@@ -368,7 +364,7 @@ components:
     Description:
       description: A description for project
       type: string
-      maxLength: 5000
+      maxLength: 500
     User:  # TODO: We return User's KeyCloak ID to the client
       description: A KeyCloak user
       type: object

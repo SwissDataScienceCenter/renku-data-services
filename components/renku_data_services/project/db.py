@@ -28,12 +28,9 @@ class ProjectRepository:
         self.session_maker = session_maker  # type: ignore[call-overload]
 
     async def get_projects(
-        self, user: base_models.APIUser, page: str, per_page: str
+        self, user: base_models.APIUser, page: int, per_page: int
     ) -> Tuple[list[models.Project], PaginationResponse]:
         """Get all projects from the database."""
-        page = int(page)
-        per_page = int(per_page)
-
         if page < 1:
             raise errors.ValidationError(message=f"Parameter 'page' must be a natural number")
         if per_page < 1 or per_page > 100:
@@ -49,8 +46,8 @@ class ProjectRepository:
             stmt = select(func.count()).select_from(schemas.ProjectORM)
             result = await session.execute(stmt)
             n_total_elements = result.scalar()
-            total_pages, reminder = divmod(n_total_elements, per_page)
-            if reminder:
+            total_pages, remainder = divmod(n_total_elements, per_page)
+            if remainder:
                 total_pages += 1
 
             pagination = PaginationResponse(page, per_page, n_total_elements, total_pages)

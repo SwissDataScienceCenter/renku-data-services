@@ -29,7 +29,7 @@ def upgrade() -> None:
         sa.Column("created_by_id", sa.String(99), nullable=False),
         sa.Column("creation_date", sa.DateTime(timezone=True), nullable=False),
         sa.Column("repositories", sa.ARRAY(sa.String), nullable=True),
-        sa.Column("description", sa.String(5000), nullable=True),
+        sa.Column("description", sa.String(500), nullable=True),
         sa.PrimaryKeyConstraint("id"),
         schema="projects",
     )

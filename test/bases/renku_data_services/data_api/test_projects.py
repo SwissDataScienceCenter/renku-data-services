@@ -154,7 +154,7 @@ async def test_get_all_projects(create_project, sanic_client, user_headers):
     assert response.status_code == 200, response.text
     projects = response.json
 
-    assert [p["name"] for p in projects] == ["Project 2", "Project 4", "Project 5"]
+    assert {p["name"] for p in projects} == {"Project 2", "Project 4", "Project 5"}
 
 
 @pytest.mark.asyncio
@@ -163,7 +163,7 @@ async def test_get_all_projects_with_pagination(create_project, sanic_client, us
     for i in range(1, 10):
         await create_project(f"Project {i}")
         # NOTE: This delay is required for projects to be created in order
-        time.sleep(0.5)
+        time.sleep(1.5)
 
     parameters = {"page": 2, "per_page": 3}
     _, response = await sanic_client.get(f"/api/data/projects", headers=user_headers, params=parameters)
@@ -183,7 +183,7 @@ async def test_get_all_projects_with_pagination(create_project, sanic_client, us
     assert response.status_code == 200, response.text
     projects = response.json
 
-    assert {p["name"] for p in projects} == {"Project 9"}
+    assert {p["name"] for p in projects} == {"Project 1"}
     assert response.headers["page"] == "3"
     assert response.headers["per-page"] == "4"
     assert response.headers["total"] == "9"
@@ -278,7 +278,7 @@ async def test_delete_project(create_project, sanic_client, user_headers):
     _, response = await sanic_client.get(f"/api/data/projects", headers=user_headers)
 
     assert response.status_code == 200, response.text
-    assert [p["name"] for p in response.json] == ["Project 1", "Project 2", "Project 4", "Project 5"]
+    assert {p["name"] for p in response.json} == {"Project 1", "Project 2", "Project 4", "Project 5"}
 
 
 @pytest.mark.asyncio

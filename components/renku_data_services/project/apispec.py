@@ -82,7 +82,7 @@ class CreationDate(RootModel):
 
 
 class Description(RootModel):
-    root: str = Field(..., description="A description for project", max_length=5000)
+    root: str = Field(..., description="A description for project", max_length=500)
 
 
 class UserId(RootModel):

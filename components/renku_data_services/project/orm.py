@@ -31,7 +31,7 @@ class ProjectORM(BaseORM):
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
     creation_date: Mapped[datetime] = mapped_column("creation_date", DateTime(timezone=True))
     repositories: Mapped[List[str]] = mapped_column("repositories", ARRAY(String))
-    description: Mapped[str] = mapped_column("description", String(5000))
+    description: Mapped[str] = mapped_column("description", String(500))
 
     @classmethod
     def load(cls, project: models.Project):
