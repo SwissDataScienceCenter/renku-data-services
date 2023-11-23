@@ -10,7 +10,7 @@ from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.storage import apispec, models
-from renku_data_services.storage.apispec_base import RepositoryFilter, SchemaValidationArguments
+from renku_data_services.storage.apispec_base import RepositoryFilter
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.storage.rclone import RCloneValidator
 
@@ -185,25 +185,35 @@ class StorageSchemaBP(CustomBlueprint):
 
         return "/storage_schema", ["GET"], _get
 
-    def validate(self) -> BlueprintFactoryResponse:
+    def test_connection(self) -> BlueprintFactoryResponse:
         """Validate an RClone config."""
 
-        async def _validate(request: Request, validator: RCloneValidator):
-            validation_args = SchemaValidationArguments.model_validate(dict(request.query_args))
+        async def _test_connection(request: Request, validator: RCloneValidator):
             if not request.json:
                 raise errors.ValidationError(message="The request body is empty. Please provide a valid JSON object.")
             if not isinstance(request.json, dict):
                 raise errors.ValidationError(message="The request body is not a valid JSON object.")
             if not request.json.get("configuration"):
                 raise errors.ValidationError(message="No 'configuration' sent.")
-            validator.validate(request.json["configuration"], private=True, keep_sensitive=True)
-            if not validation_args.test_connection:
-                return empty(204)
             if not request.json.get("source_path"):
                 raise errors.ValidationError(message="'source_path' is required to test the connection.")
+            validator.validate(request.json["configuration"], private=True, keep_sensitive=True)
             result = await validator.test_connection(request.json["configuration"], request.json["source_path"])
             if not result.success:
                 raise errors.ValidationError(message=result.error)
+            return empty(204)
+
+        return "/storage_schema/test_connection", ["POST"], _test_connection
+
+    def validate(self) -> BlueprintFactoryResponse:
+        """Validate an RClone config."""
+
+        async def _validate(request: Request, validator: RCloneValidator):
+            if not request.json:
+                raise errors.ValidationError(message="The request body is empty. Please provide a valid JSON object.")
+            if not isinstance(request.json, dict):
+                raise errors.ValidationError(message="The request body is not a valid JSON object.")
+            validator.validate(request.json, private=True, keep_sensitive=True)
             return empty(204)
 
         return "/storage_schema/validate", ["POST"], _validate

@@ -20,14 +20,3 @@ class RepositoryFilter(BaseAPISpec):
         extra = Extra.ignore
 
     project_id: str = Field()
-
-
-class SchemaValidationArguments(BaseAPISpec):
-    """The schema for the query parameters used rclone schema validation."""
-
-    class Config:
-        """Configuration."""
-
-        extra = Extra.ignore
-
-    test_connection: bool = Field(default=False)

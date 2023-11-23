@@ -145,14 +145,24 @@ paths:
   /storage_schema/validate:
     post:
       summary: Validate an RClone config using the schema
-      parameters:
-        - in: query
-          name: test_connection
-          required: false
-          schema:
-            type: boolean
-            default: false
-            description: Whether to test if the storage can be connected to. source_path is required if this is true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RCloneConfig"
+      responses:
+        "204":
+          description: The configuration is valid
+        "501":
+          description: The schema seems valid but testing the connection is not supported
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
+        - storage
+  /storage_schema/test_connection:
+    post:
+      summary: Test that an rclone connection can be made
       requestBody:
         required: true
         content:
@@ -166,6 +176,7 @@ paths:
                   $ref: "#/components/schemas/SourcePath"
               required:
                 - configuration
+                - source_path
       responses:
         "204":
           description: The configuration is valid
