@@ -18,7 +18,7 @@ logging.basicConfig(level=logging.INFO)
 async def main():
     """Synchronize data from Keycloak and the user database."""
     config = SyncConfig.from_env()
-    run_migrations_for_app("users", config.db)
+    run_migrations_for_app("users")
     engine = create_engine(config.sync_sqlalchemy_url)
     with Session(engine) as session, session.begin():
         if config.total_user_sync:
