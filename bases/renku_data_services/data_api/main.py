@@ -24,6 +24,7 @@ def create_app() -> Sanic:
         run_migrations_for_app("storage")
         run_migrations_for_app("authz")
         run_migrations_for_app("projects")
+        run_migrations_for_app("user_preferences")
         config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
     app = register_all_handlers(app, config)
 
@@ -40,6 +41,7 @@ def create_app() -> Sanic:
         run_migrations_for_app("storage")
         run_migrations_for_app("authz")
         run_migrations_for_app("projects")
+        run_migrations_for_app("user_preferences")
         config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
 
     @app.before_server_start

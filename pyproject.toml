@@ -20,6 +20,8 @@ packages = [
   { include = "renku_data_services/base_api", from = "components" },
   { include = "renku_data_services/storage", from = "components" },
   { include = "renku_data_services/storage_migrations", from = "components" },
+  { include = "renku_data_services/user_preferences", from = "components" },
+  { include = "renku_data_services/user_preferences_migrations", from = "components" },
   { include = "renku_data_services/utils", from = "components" },
   { include = "renku_data_services/git", from = "components" },
   { include = "renku_data_services/project", from = "components" },
@@ -76,7 +78,7 @@ include = '\.pyi?$'
 [tool.pydocstyle]
 add_ignore = ["D105", "D107", "D202", "D401"]
 match = '^(?!test_|apispec).*\.py'
-match_dir = '^(?!^test$|^crc_migrations$|^storage_migrations$|^project_migrations$|^authz_migrations$|\..*).*'
+match_dir = '^(?!^test$|^crc_migrations$|^storage_migrations$|^user_preferences_migrations$|^project_migrations$|^authz_migrations$|\..*).*'
 
 [tool.bandit]
 skips = ["B101", "B603", "B607", "B404"]
