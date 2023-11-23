@@ -149,9 +149,9 @@ paths:
         - in: query
           name: test_connection
           required: false
-          default: false
           schema:
             type: boolean
+            default: false
             description: Whether to test if the storage can be connected to. source_path is required if this is true
       requestBody:
         required: true

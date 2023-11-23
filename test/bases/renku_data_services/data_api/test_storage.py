@@ -574,6 +574,18 @@ async def test_storage_validate_success(storage_test_client):
 @pytest.mark.asyncio
 async def test_storage_validate_connection(storage_test_client):
     storage_test_client, _ = storage_test_client
+    body = {"configuration": {"type": "s3", "provider": "AWS"}}
+    _, res = await storage_test_client.post(
+        "/api/data/storage_schema/validate?test_connection=true", data=json.dumps(body)
+    )
+    assert res.status_code == 422
+
+    body = {"configuration": {"type": "s3", "provider": "AWS"}, "source_path": "doesntexistatall/"}
+    _, res = await storage_test_client.post(
+        "/api/data/storage_schema/validate?test_connection=true", data=json.dumps(body)
+    )
+    assert res.status_code == 422
+
     body = {"configuration": {"type": "s3", "provider": "AWS"}, "source_path": "giab/"}
     _, res = await storage_test_client.post(
         "/api/data/storage_schema/validate?test_connection=true", data=json.dumps(body)
@@ -584,10 +596,29 @@ async def test_storage_validate_connection(storage_test_client):
 @pytest.mark.asyncio
 async def test_storage_validate_error(storage_test_client):
     storage_test_client, _ = storage_test_client
+
+    _, res = await storage_test_client.post("/api/data/storage_schema/validate")
+    assert res.status_code == 422
+
+    _, res = await storage_test_client.post("/api/data/storage_schema/validate", data="test")
+    assert res.status_code == 400
+
+    _, res = await storage_test_client.post("/api/data/storage_schema/validate", data="{}")
+    assert res.status_code == 422
+
     body = {"configuration": {"type": "s3", "provider": "Other"}}
     _, res = await storage_test_client.post("/api/data/storage_schema/validate", data=json.dumps(body))
     assert res.status_code == 422
     assert "missing:\nendpoint" in res.json["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_storage_validate_error_wrong_type(storage_test_client):
+    storage_test_client, _ = storage_test_client
+    body = {"configuration": {"type": "doesntexist"}}
+    _, res = await storage_test_client.post("/api/data/storage_schema/validate", data=json.dumps(body))
+    assert res.status_code == 422
+    assert "does not exist" in res.json["error"]["message"]
 
 
 @pytest.mark.asyncio
