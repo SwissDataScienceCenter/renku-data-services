@@ -15,3 +15,8 @@ charts:
         contextPath: .
         dockerfilePath: projects/renku_data_service/Dockerfile
         valuesPath: dataService.image
+      keycloak-sync:
+        contextPath: .
+        dockerfilePath: projects/keycloak_sync/Dockerfile
+        valuesPath: dataService.keycloakSync.image
+      
