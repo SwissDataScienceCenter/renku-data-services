@@ -147,7 +147,7 @@ class StorageBP(CustomBlueprint):
             if body.configuration is not None:
                 # we need to apply the patch to the existing storage to properly validate it
                 body.configuration = {**existing_storage.configuration, **body.configuration}
-                for k, v in body.configuration.items():
+                for k, v in list(body.configuration.items()):
                     if v is None:
                         # delete fields that were unset
                         del body.configuration[k]

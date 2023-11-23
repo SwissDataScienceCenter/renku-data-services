@@ -520,6 +520,19 @@ async def test_storage_patch(storage_test_client, valid_storage_payload):
             }
         ),
     )
+    assert res.status_code == 422
+    assert "endpoint" in res.text
+
+    _, res = await storage_test_client.patch(
+        f"/api/data/storage/{storage_id}",
+        headers={"Authorization": "bearer test"},
+        data=json.dumps(
+            {
+                "configuration": {"provider": "Other", "region": None, "endpoint": "https://test.com"},
+                "source_path": "bucket/myotherfolder",
+            }
+        ),
+    )
     assert res.status_code == 200
     assert res.json["storage"]["configuration"]["provider"] == "Other"
     assert res.json["storage"]["source_path"] == "bucket/myotherfolder"
