@@ -9,6 +9,7 @@ the database will instantiate a connection when they are used. And even in this 
 a single connection will be reused. This allows for the configuration classes to be
 instantiated multiple times without creating multiple database connections.
 """
+
 import asyncio
 import os
 from dataclasses import dataclass, field
@@ -28,6 +29,7 @@ from renku_data_services import errors
 from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.authn.gitlab import GitlabAuthenticator
 from renku_data_services.authn.keycloak import KcUserStore, KeycloakAuthenticator
+from renku_data_services.authz.authz import SQLProjectAuthorizer
 from renku_data_services.crc import models
 from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
 from renku_data_services.data_api.server_options import (
@@ -38,6 +40,7 @@ from renku_data_services.data_api.server_options import (
 from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
+from renku_data_services.project.db import ProjectRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.utils.core import get_ssl_context, merge_api_specs
 
@@ -149,6 +152,8 @@ class Config:
     _user_repo: UserRepository | None = field(default=None, repr=False, init=False)
     _rp_repo: ResourcePoolRepository | None = field(default=None, repr=False, init=False)
     _storage_repo: StorageRepository | None = field(default=None, repr=False, init=False)
+    _project_repo: ProjectRepository | None = field(default=None, repr=False, init=False)
+    _project_authz: SQLProjectAuthorizer | None = field(default=None, repr=False, init=False)
 
     def __post_init__(self):
         spec_file = Path(renku_data_services.crc.__file__).resolve().parent / "api.spec.yaml"
@@ -196,6 +201,20 @@ class Config:
             )
         return self._storage_repo
 
+    @property
+    def project_repo(self) -> ProjectRepository:
+        """The DB adapter for Renku native projects."""
+        if not self._project_repo:
+            self._project_repo = ProjectRepository(session_maker=self.db.async_session_maker)
+        return self._project_repo
+
+    @property
+    def project_authz(self) -> SQLProjectAuthorizer:
+        """The DB adapter for authorization."""
+        if not self._project_authz:
+            self._project_authz = SQLProjectAuthorizer(session_maker=self.db.async_session_maker)
+        return self._project_authz
+
     @classmethod
     def from_env(cls, prefix: str = ""):
         """Create a config from environment variables."""
@@ -208,7 +227,6 @@ class Config:
         server_options_file = os.environ.get("SERVER_OPTIONS")
         server_defaults_file = os.environ.get("SERVER_DEFAULTS")
         k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
-        gitlab_url = None
         db = DBConfig.from_env(prefix)
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
