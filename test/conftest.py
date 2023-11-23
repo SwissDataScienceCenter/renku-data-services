@@ -8,7 +8,7 @@ from hypothesis import settings
 from pytest_postgresql import factories
 
 import renku_data_services.base_models as base_models
-from renku_data_services.data_api.config import Config as DataConfig
+from renku_data_services.config import Config as DataConfig
 from renku_data_services.migrations.core import run_migrations_for_app
 
 settings.register_profile("ci", deadline=400, max_examples=5)
@@ -33,9 +33,11 @@ def init_db(**kwargs):
     os.environ["DB_HOST"] = kwargs["host"]
     os.environ["DB_PORT"] = str(kwargs["port"])
 
-    config = DataConfig.from_env()
-    run_migrations_for_app("storage", config.storage_repo)
-    run_migrations_for_app("resource_pools", config.rp_repo)
+    run_migrations_for_app("storage")
+    run_migrations_for_app("resource_pools")
+    run_migrations_for_app("projects")
+    run_migrations_for_app("authz")
+    run_migrations_for_app("user_preferences")
 
     if dummy_stores:
         os.environ["DUMMY_STORES"] = dummy_stores
@@ -71,9 +73,15 @@ postgresql = factories.postgresql("postgresql_in_docker")
 def app_config(postgresql, monkeypatch) -> Iterator[DataConfig]:
     monkeypatch.setenv("DUMMY_STORES", "true")
     monkeypatch.setenv("DB_NAME", postgresql.info.dbname)
+    monkeypatch.setenv("MAX_PINNED_PROJECTS", "5")
+
     config = DataConfig.from_env()
     yield config
     monkeypatch.delenv("DUMMY_STORES", raising=False)
+    # NOTE: This is necessary because the postgresql pytest extension does not close
+    # the async connection/pool we use in the config and the connection will succeed in the first
+    # test but fail in all others if the connection is not disposed at the end of every test.
+    config.db.dispose_connection()
 
 
 @pytest.fixture

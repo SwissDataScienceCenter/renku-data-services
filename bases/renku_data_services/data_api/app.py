@@ -3,6 +3,7 @@ from sanic import Sanic
 
 from renku_data_services.base_api.error_handler import CustomErrorHandler
 from renku_data_services.base_api.misc import MiscBP
+from renku_data_services.config import Config
 from renku_data_services.crc import apispec
 from renku_data_services.crc.blueprints import (
     ClassesBP,
@@ -12,8 +13,9 @@ from renku_data_services.crc.blueprints import (
     UserResourcePoolsBP,
     UsersBP,
 )
-from renku_data_services.data_api.config import Config
+from renku_data_services.project.blueprints import ProjectsBP
 from renku_data_services.storage.blueprints import StorageBP, StorageSchemaBP
+from renku_data_services.user_preferences.blueprints import UserPreferencesBP
 
 
 def register_all_handlers(app: Sanic, config: Config) -> Sanic:
@@ -57,7 +59,19 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         authenticator=config.gitlab_authenticator,
     )
     storage_schema = StorageSchemaBP(name="storage_schema", url_prefix=url_prefix)
+    user_preferences = UserPreferencesBP(
+        name="user_preferences",
+        url_prefix=url_prefix,
+        user_preferences_repo=config.user_preferences_repo,
+        authenticator=config.authenticator,
+    )
     misc = MiscBP(name="misc", url_prefix=url_prefix, apispec=config.spec, version=config.version)
+    project = ProjectsBP(
+        name="projects",
+        url_prefix=url_prefix,
+        project_repo=config.project_repo,
+        authenticator=config.authenticator,
+    )
     app.blueprint(
         [
             resource_pools.blueprint(),
@@ -68,7 +82,9 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
             user_resource_pools.blueprint(),
             storage.blueprint(),
             storage_schema.blueprint(),
+            user_preferences.blueprint(),
             misc.blueprint(),
+            project.blueprint(),
         ]
     )
 

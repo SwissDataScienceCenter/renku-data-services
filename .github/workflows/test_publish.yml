@@ -5,11 +5,9 @@ on:
     branches:
       - main
     tags:
-      - 'v*'
+      - "v*"
   pull_request:
     branches:
-      - 'main'
-      - 'hotfix/**'
 
 jobs:
   test:

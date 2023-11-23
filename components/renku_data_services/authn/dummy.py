@@ -10,7 +10,7 @@ import renku_data_services.base_models as base_models
 
 
 class DummyUserStore:
-    """A dummy adapter for keycloak. By default it will create and return users that do not exist."""
+    """A dummy adapter for keycloak. By default, it will create and return users that do not exist."""
 
     def __init__(self, *, user_always_exists: bool = True):
         self._users: Dict[str, base_models.User] = {}
@@ -39,8 +39,9 @@ class DummyAuthenticator:
 
     token_field = "Authorization"  # nosec: B105
 
-    async def authenticate(self, access_token: str, request: Request) -> base_models.APIUser:
-        """Indicates whether the user has sucessfully logged in."""
+    @staticmethod
+    async def authenticate(access_token: str, request: Request) -> base_models.APIUser:
+        """Indicates whether the user has successfully logged in."""
         user_props = {}
         try:
             user_props = json.loads(access_token)

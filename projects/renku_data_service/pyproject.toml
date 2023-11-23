@@ -7,6 +7,7 @@ license = "Apache License 2.0"
 
 packages = [
   { include = "renku_data_services/data_api", from = "../../bases" },
+  { include = "renku_data_services/config", from = "../../components" },
   { include = "renku_data_services/migrations", from = "../../components" },
   { include = "renku_data_services/storage_migrations", from = "../../components" },
   { include = "renku_data_services/storage", from = "../../components" },
@@ -18,9 +19,15 @@ packages = [
   { include = "renku_data_services/k8s", from = "../../components" },
   { include = "renku_data_services/utils", from = "../../components" },
   { include = "renku_data_services/git", from = "../../components" },
+  { include = "renku_data_services/user_preferences", from = "../../components" },
+  { include = "renku_data_services/user_preferences_migrations", from = "../../components" },
   { include = "renku_data_services/authn", from = "../../components" },
   { include = "renku_data_services/users", from = "../../components" },
   { include = "renku_data_services/users_migrations", from = "../../components" },
+  { include = "renku_data_services/authz", from = "../../components" },
+  { include = "renku_data_services/authz_migrations", from = "../../components" },
+  { include = "renku_data_services/project_migrations", from = "../../components" },
+  { include = "renku_data_services/project", from = "../../components" },
 ]
 
 [tool.poetry.dependencies]

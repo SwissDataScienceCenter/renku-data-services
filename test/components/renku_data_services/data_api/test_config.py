@@ -1,8 +1,8 @@
 from unittest.mock import MagicMock
 
-import renku_data_services.data_api.config as conf
-from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient
+import renku_data_services.config.config as conf
 from renku_data_services.authn.dummy import DummyAuthenticator
+from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient
 
 
 def test_config_dummy(monkeypatch):
@@ -16,6 +16,8 @@ def test_config_dummy(monkeypatch):
     assert config.storage_repo is not None
     assert config.rp_repo is not None
     assert config.user_repo is not None
+    assert config.project_repo is not None
+    assert config.user_preferences_repo is not None
     assert config.version == "9.9.9"
 
 
@@ -41,4 +43,6 @@ def test_config_no_dummy(monkeypatch):
     assert config.storage_repo is not None
     assert config.rp_repo is not None
     assert config.user_repo is not None
+    assert config.project_repo is not None
+    assert config.user_preferences_repo is not None
     assert config.version == "9.9.9"
