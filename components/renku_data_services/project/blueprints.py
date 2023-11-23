@@ -52,7 +52,8 @@ class ProjectsBP(CustomBlueprint):
         @validate(json=apispec.ProjectPost)
         async def _post(_: Request, body: apispec.ProjectPost, user: base_models.APIUser):
             data = body.model_dump(exclude_none=True)
-            data["created_by"] = models.User(id=user.id)
+            if user.id:
+                data["created_by"] = models.User(id=user.id)
             # NOTE: Set ``creation_date`` to override possible value set by users
             data["creation_date"] = datetime.now(timezone.utc).replace(microsecond=0)
             project = models.Project.from_dict(data)

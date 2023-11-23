@@ -43,9 +43,9 @@ from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClie
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.storage.db import StorageRepository
+from renku_data_services.user_preferences.config import UserPreferencesConfig
 from renku_data_services.user_preferences.db import UserPreferencesRepository
 from renku_data_services.utils.core import get_ssl_context, merge_api_specs
-from renku_data_services.user_preferences.config import UserPreferencesConfig
 
 
 @retry(stop=(stop_after_attempt(20) | stop_after_delay(300)), wait=wait_fixed(2), reraise=True)
@@ -223,7 +223,7 @@ class Config:
         if not self._project_authz:
             self._project_authz = SQLProjectAuthorizer(session_maker=self.db.async_session_maker)
         return self._project_authz
-    
+
     @property
     def user_preferences_repo(self) -> UserPreferencesRepository:
         """The DB adapter for user preferences."""

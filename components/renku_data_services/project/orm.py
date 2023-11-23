@@ -1,7 +1,7 @@
 """SQLAlchemy's schemas for the projects database."""
 
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 from sqlalchemy import ARRAY, DateTime, MetaData, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
@@ -29,9 +29,9 @@ class ProjectORM(BaseORM):
     slug: Mapped[str] = mapped_column("slug", String(99))
     visibility: Mapped[Visibility]
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
-    creation_date: Mapped[datetime] = mapped_column("creation_date", DateTime(timezone=True))
+    creation_date: Mapped[Optional[datetime]] = mapped_column("creation_date", DateTime(timezone=True))
     repositories: Mapped[List[str]] = mapped_column("repositories", ARRAY(String))
-    description: Mapped[str] = mapped_column("description", String(500))
+    description: Mapped[Optional[str]] = mapped_column("description", String(500))
 
     @classmethod
     def load(cls, project: models.Project):
@@ -42,7 +42,7 @@ class ProjectORM(BaseORM):
             visibility=project.visibility,
             created_by_id=project.created_by.id,
             creation_date=project.creation_date,
-            repositories=project.repositories,
+            repositories=project.repositories if project.repositories else [],
             description=project.description,
         )
 

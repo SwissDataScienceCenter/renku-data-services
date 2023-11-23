@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Callable, NamedTuple, Tuple
+from typing import Callable, NamedTuple, Tuple, cast
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +15,8 @@ from renku_data_services.project import orm as schemas
 
 
 class PaginationResponse(NamedTuple):
+    """Paginated response."""
+
     page: int
     per_page: int
     total: int
@@ -32,9 +34,9 @@ class ProjectRepository:
     ) -> Tuple[list[models.Project], PaginationResponse]:
         """Get all projects from the database."""
         if page < 1:
-            raise errors.ValidationError(message=f"Parameter 'page' must be a natural number")
+            raise errors.ValidationError(message="Parameter 'page' must be a natural number")
         if per_page < 1 or per_page > 100:
-            raise errors.ValidationError(message=f"Parameter 'per_page' must be between 1 and 100")
+            raise errors.ValidationError(message="Parameter 'per_page' must be between 1 and 100")
 
         async with self.session_maker() as session:
             stmt = select(schemas.ProjectORM)
@@ -43,9 +45,9 @@ class ProjectRepository:
             result = await session.execute(stmt)
             projects_orm = result.scalars().all()
 
-            stmt = select(func.count()).select_from(schemas.ProjectORM)
-            result = await session.execute(stmt)
-            n_total_elements = result.scalar()
+            stmt_count = select(func.count()).select_from(schemas.ProjectORM)
+            result = await session.execute(stmt_count)
+            n_total_elements = cast(int, result.scalar() or 0)
             total_pages, remainder = divmod(n_total_elements, per_page)
             if remainder:
                 total_pages += 1

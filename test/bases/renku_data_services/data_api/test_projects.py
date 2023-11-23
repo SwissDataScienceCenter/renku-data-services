@@ -108,7 +108,7 @@ async def test_project_creation_with_default_values(sanic_client, user_headers, 
     assert "description" not in project or project["description"] is None
     assert project["visibility"] == "private"
     assert project["created_by"] == {"id": "user"}
-    assert "repositories" not in project or project["repositories"] is None
+    assert len(project["repositories"]) == 0
 
 
 @pytest.mark.asyncio
@@ -149,7 +149,7 @@ async def test_get_all_projects(create_project, sanic_client, user_headers):
     await create_project("Project 5", **payload)
 
     # Get all non-admin projects
-    _, response = await sanic_client.get(f"/api/data/projects", headers=user_headers)
+    _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
 
     assert response.status_code == 200, response.text
     projects = response.json
@@ -166,7 +166,7 @@ async def test_get_all_projects_with_pagination(create_project, sanic_client, us
         time.sleep(1.5)
 
     parameters = {"page": 2, "per_page": 3}
-    _, response = await sanic_client.get(f"/api/data/projects", headers=user_headers, params=parameters)
+    _, response = await sanic_client.get("/api/data/projects", headers=user_headers, params=parameters)
 
     assert response.status_code == 200, response.text
     projects = response.json
@@ -178,7 +178,7 @@ async def test_get_all_projects_with_pagination(create_project, sanic_client, us
     assert response.headers["total-pages"] == "3"
 
     parameters = {"page": 3, "per_page": 4}
-    _, response = await sanic_client.get(f"/api/data/projects", headers=user_headers, params=parameters)
+    _, response = await sanic_client.get("/api/data/projects", headers=user_headers, params=parameters)
 
     assert response.status_code == 200, response.text
     projects = response.json
@@ -197,7 +197,7 @@ async def test_default_pagination(create_project, sanic_client, user_headers):
     await create_project("Project 2")
     await create_project("Project 3")
 
-    _, response = await sanic_client.get(f"/api/data/projects", headers=user_headers)
+    _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
 
     assert response.status_code == 200, response.text
 
@@ -215,7 +215,7 @@ async def test_pagination_with_non_existing_page(create_project, sanic_client, u
     await create_project("Project 3")
 
     parameters = {"page": 42, "per_page": 3}
-    _, response = await sanic_client.get(f"/api/data/projects", headers=user_headers, params=parameters)
+    _, response = await sanic_client.get("/api/data/projects", headers=user_headers, params=parameters)
 
     assert response.status_code == 200, response.text
     projects = response.json
@@ -230,7 +230,7 @@ async def test_pagination_with_non_existing_page(create_project, sanic_client, u
 @pytest.mark.asyncio
 async def test_pagination_with_invalid_page(create_project, sanic_client, user_headers):
     parameters = {"page": 0}
-    _, response = await sanic_client.get(f"/api/data/projects", headers=user_headers, params=parameters)
+    _, response = await sanic_client.get("/api/data/projects", headers=user_headers, params=parameters)
 
     assert response.status_code == 422, response.text
 
@@ -238,7 +238,7 @@ async def test_pagination_with_invalid_page(create_project, sanic_client, user_h
 @pytest.mark.asyncio
 async def test_pagination_with_invalid_per_page(create_project, sanic_client, user_headers):
     parameters = {"per_page": 0}
-    _, response = await sanic_client.get(f"/api/data/projects", headers=user_headers, params=parameters)
+    _, response = await sanic_client.get("/api/data/projects", headers=user_headers, params=parameters)
 
     assert response.status_code == 422, response.text
 
@@ -251,7 +251,7 @@ async def test_result_is_sorted_by_creation_date(create_project, sanic_client, u
         # NOTE: This delay is required for projects to be created in order
         time.sleep(1.5)
 
-    _, response = await sanic_client.get(f"/api/data/projects", headers=user_headers)
+    _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
 
     assert response.status_code == 200, response.text
     projects = response.json
@@ -275,7 +275,7 @@ async def test_delete_project(create_project, sanic_client, user_headers):
     assert response.status_code == 204, response.text
 
     # Get all projects
-    _, response = await sanic_client.get(f"/api/data/projects", headers=user_headers)
+    _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
 
     assert response.status_code == 200, response.text
     assert {p["name"] for p in response.json} == {"Project 1", "Project 2", "Project 4", "Project 5"}
