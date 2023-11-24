@@ -4,13 +4,13 @@ import logging
 from dataclasses import asdict
 from datetime import datetime, timedelta
 
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session
+from sqlalchemy import select, func, NullPool
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.keycloak_sync.config import SyncConfig
 from renku_data_services.users.models import KeycloakAdminEvent, UserInfoUpdate, UserInfo
-from renku_data_services.users.orm import LastKeycloakEventTimestamp
+from renku_data_services.users.orm import LastKeycloakEventTimestamp, UserORM
 
 logging.basicConfig(level=logging.INFO)
 
@@ -19,8 +19,8 @@ async def main():
     """Synchronize data from Keycloak and the user database."""
     config = SyncConfig.from_env()
     run_migrations_for_app("users")
-    engine = create_engine(config.sync_sqlalchemy_url)
-    with Session(engine) as session, session.begin():
+    engine = create_async_engine(config.async_sqlalchemy_url, poolclass=NullPool)
+    async with AsyncSession(engine) as session, session.begin():
         if config.total_user_sync:
             logging.info("Starting a total user database sync.")
             kc_users = config.kc_api.get_users()
@@ -30,9 +30,17 @@ async def main():
                 if db_user != kc_user:
                     await config.db.update_or_insert_user(kc_user.id, **asdict(kc_user))
         else:
+            res_count = await session.execute(select(func.count()).select_from(UserORM))
+            count = res_count.scalar() or 0
+            if count == 0:
+                logging.info("No users found in the database, doing a full sync.")
+                kc_users = config.kc_api.get_users()
+                for raw_kc_user in kc_users:
+                    kc_user = UserInfo.from_kc_user_payload(raw_kc_user)
+                    await config.db.update_or_insert_user(kc_user.id, **asdict(kc_user))
             logging.info("Starting periodic event sync.")
             stmt = select(LastKeycloakEventTimestamp)
-            latest_utc_timestamp_orm = session.execute(stmt).scalar_one_or_none()
+            latest_utc_timestamp_orm = (await session.execute(stmt)).scalar_one_or_none()
             previous_sync_latest_utc_timestamp = (
                 latest_utc_timestamp_orm.timestamp_utc if latest_utc_timestamp_orm is not None else None
             )

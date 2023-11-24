@@ -35,7 +35,7 @@ class SyncConfig:
         keycloak_url = os.environ["KEYCLOAK_URL"]
         client_id = os.environ["KEYCLOAK_CLIENT_ID"]
         client_secret = os.environ["KEYCLOAK_CLIENT_SECRET"]
-        realm = os.environ["KEYCLOAK_REALM"]
+        realm = os.environ.get("KEYCLOAK_REALM", "Renku")
         kc_api = KeycloakAPI(keycloak_url=keycloak_url, client_id=client_id, client_secret=client_secret, realm=realm)
         total_user_sync = os.environ.get("TOTAL_USER_SYNC", "false").lower() == "true"
         return cls(async_sqlalchemy_url, sync_sqlalchemy_url, db, kc_api, total_user_sync)

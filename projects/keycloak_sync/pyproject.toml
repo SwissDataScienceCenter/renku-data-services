@@ -23,8 +23,7 @@ requests = "^2.31.0"
 sqlalchemy = "^2.0.23"
 asyncpg = "^0.29.0"
 sanic-ext = "^23.6.0"
-
-[tool.poetry.group.dev.dependencies]
+psycopg = {extras = ["binary"], version = "^3.1.13"}
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
