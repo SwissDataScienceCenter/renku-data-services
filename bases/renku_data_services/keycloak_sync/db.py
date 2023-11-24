@@ -41,7 +41,7 @@ class DB:
     async def update_or_insert_user(self, user_id: str, **kwargs):
         """Update a user or insert it if it does not exist."""
         async with self.session_maker() as session, session.begin():
-            res = await session.execute(select(UserORM).where(UserORM.id == user_id))
+            res = await session.execute(select(UserORM).where(UserORM.keycloak_id == user_id))
             existing_user = res.scalar_one_or_none()
             kwargs.pop("keycloak_id", None)
             kwargs.pop("id", None)
@@ -53,11 +53,6 @@ class DB:
                     if getattr(existing_user, field_name, None) != field_value:
                         setattr(existing_user, field_name, field_value)
 
-    async def process_updates(self, updates: List[UserInfoUpdate]):
-        """Process a series of updates from keycloak events."""
-        async with self.session_maker() as session, session.begin():
-            for update in updates:
-                await self.update_or_insert_user(update.user_id, **{update.field_name: update.new_value})
 
     async def remove_user(self, user_id: str):
         """Remove a user from the database."""

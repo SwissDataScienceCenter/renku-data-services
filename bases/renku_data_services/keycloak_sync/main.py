@@ -55,10 +55,6 @@ async def main():
             delete_admin_events = config.kc_api.get_admin_events(
                 start_date=start_date, event_types=[KeycloakAdminEvent.DELETE]
             )
-            logging.info(
-                f"Received {len(user_events)} user events, {len(update_admin_events)} "
-                f"update admin events and {len(delete_admin_events)} delete user events"
-            )
             parsed_updates = UserInfoUpdate.from_json_admin_events(update_admin_events)
             parsed_updates.extend(UserInfoUpdate.from_json_user_events(user_events))
             parsed_deletions = UserInfoUpdate.from_json_admin_events(delete_admin_events)
@@ -66,20 +62,20 @@ async def main():
             parsed_deletions = sorted(parsed_deletions, key=lambda x: x.timestamp_utc)
             if previous_sync_latest_utc_timestamp is not None:
                 # Some events have already been processed - filter out old events we have seen
+                logging.info(f"Filtering events older than {previous_sync_latest_utc_timestamp}")
                 parsed_updates = [u for u in parsed_updates if u.timestamp_utc > previous_sync_latest_utc_timestamp]
                 parsed_deletions = [u for u in parsed_deletions if u.timestamp_utc > previous_sync_latest_utc_timestamp]
-                logging.info(
-                    "Attempted to filter out events based on timestamps,"
-                    f"after filtering there are {len(user_events)} user events, {len(update_admin_events)} "
-                    f"update admin events and {len(delete_admin_events)} delete user events"
-                )
-            logging.info(f"Processing user updates {parsed_updates}")
-            await config.db.process_updates(parsed_updates)
-            logging.info(f"Processing user deletions {parsed_deletions}")
-            await asyncio.gather(*[config.db.remove_user(deleted_user.user_id) for deleted_user in parsed_deletions])
+            latest_update_timestamp = None
+            latest_delete_timestamp = None
+            for update in parsed_updates:
+                logging.info(f"Processing update event {update}")
+                await config.db.update_or_insert_user(update.user_id, **{update.field_name: update.new_value})
+                latest_update_timestamp = update.timestamp_utc
+            for deletion in parsed_deletions:
+                logging.info(f"Processing deletion event {deletion}")
+                await config.db.remove_user(deletion.user_id)
+                latest_delete_timestamp = deletion.timestamp_utc
             # Update the latest processed event timestamp
-            latest_update_timestamp = parsed_updates[-1].timestamp_utc if len(parsed_updates) > 0 else None
-            latest_delete_timestamp = parsed_deletions[-1].timestamp_utc if len(parsed_deletions) > 0 else None
             current_sync_latest_utc_timestamp = latest_update_timestamp
             if latest_delete_timestamp is not None and (
                 current_sync_latest_utc_timestamp is None or current_sync_latest_utc_timestamp < latest_delete_timestamp

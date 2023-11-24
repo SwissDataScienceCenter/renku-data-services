@@ -44,7 +44,7 @@ class UserInfoUpdate:
             if not timestamp_epoch:
                 logging.warning("Expected response from keycloak events to have a time field.")
                 continue
-            timestamp_utc = datetime.fromtimestamp(timestamp_epoch)
+            timestamp_utc = datetime.utcfromtimestamp(timestamp_epoch / 1000)
             if not details:
                 logging.warning("Expected response from keycloak events to have a details field.")
                 continue
@@ -130,7 +130,7 @@ class UserInfoUpdate:
             if not timestamp_epoch:
                 logging.warning("Expected response from keycloak events to have a time field.")
                 continue
-            timestamp_utc = datetime.fromtimestamp(timestamp_epoch)
+            timestamp_utc = datetime.utcfromtimestamp(timestamp_epoch / 1000)
             resource = event.get("resourceType")
             if resource != "USER":
                 continue
@@ -142,7 +142,7 @@ class UserInfoUpdate:
             if not resource_path:
                 logging.warning("Cannot find resource path in events response")
                 continue
-            user_id_match = re.match(r"^user/(.+)", resource_path)
+            user_id_match = re.match(r"^users/(.+)", resource_path)
             if not user_id_match:
                 logging.warning("No match for user ID in resource path")
                 continue
@@ -181,7 +181,11 @@ class UserInfoUpdate:
                             )
                         )
                 case KeycloakAdminEvent.DELETE.value:
-                    logging.info(f"Passing through DELETE admin event for user {user_id}")
+                    output.append(
+                        UserInfoUpdate(
+                            field_name="email", new_value="", timestamp_utc=timestamp_utc, user_id=user_id
+                        )
+                    )
                 case _:
                     logging.warning(f"Skipping unknown admin event operation when parsing Keycloak events: {operation}")
         return output
