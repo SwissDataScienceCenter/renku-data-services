@@ -8,7 +8,7 @@ import pytest
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 
-from renku_data_services.config import Config
+from renku_data_services.app_config import Config
 from renku_data_services.data_api.app import register_all_handlers
 
 

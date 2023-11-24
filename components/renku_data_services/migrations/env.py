@@ -3,7 +3,7 @@ from alembic import context
 from sqlalchemy import MetaData, NullPool, create_engine
 from sqlalchemy.schema import CreateSchema
 
-from renku_data_services.config import DBConfig
+from renku_data_services.db_config import DBConfig
 
 
 def include_object_factory(schema: str):

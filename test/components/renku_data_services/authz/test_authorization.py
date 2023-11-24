@@ -3,7 +3,7 @@ from ulid import ULID
 
 from renku_data_services.authz.models import MemberQualifier, Role, Scope
 from renku_data_services.base_models import APIUser
-from renku_data_services.config import Config
+from renku_data_services.app_config import Config
 from renku_data_services.errors import errors
 
 admin_user = APIUser(is_admin=True, id="some-id", access_token="some-token", name="admin")  # nosec B106

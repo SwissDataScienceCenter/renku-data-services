@@ -7,7 +7,8 @@ license = "Apache License 2.0"
 
 packages = [
   { include = "renku_data_services/data_api", from = "../../bases" },
-  { include = "renku_data_services/config", from = "../../components" },
+  { include = "renku_data_services/app_config", from = "../../components" },
+  { include = "renku_data_services/db_config", from = "../../components" },
   { include = "renku_data_services/migrations", from = "../../components" },
   { include = "renku_data_services/storage_migrations", from = "../../components" },
   { include = "renku_data_services/storage", from = "../../components" },

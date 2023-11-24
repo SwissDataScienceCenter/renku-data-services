@@ -8,7 +8,7 @@ from hypothesis import settings
 from pytest_postgresql import factories
 
 import renku_data_services.base_models as base_models
-from renku_data_services.config import Config as DataConfig
+from renku_data_services.app_config import Config as DataConfig
 from renku_data_services.migrations.core import run_migrations_for_app
 
 settings.register_profile("ci", deadline=400, max_examples=5)

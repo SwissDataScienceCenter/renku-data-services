@@ -13,6 +13,7 @@ packages = [
   { include = "renku_data_services/base_api", from = "../../components" },
   { include = "renku_data_services/base_models", from = "../../components" },
   { include = "renku_data_services/migrations", from = "../../components" },
+  { include = "renku_data_services/db_config", from = "../../components" },
 ]
 
 [tool.poetry.dependencies]
