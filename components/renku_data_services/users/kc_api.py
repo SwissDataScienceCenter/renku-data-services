@@ -3,6 +3,8 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Dict, Iterator, List, cast
 
+from authlib.integrations.requests_client import OAuth2Session  # type: ignore[import-untyped, import]
+from authlib.oauth2.rfc7523 import ClientSecretJWT  # type: ignore[import-untyped, import]
 import requests  # type: ignore[import-untyped, import]
 from requests.adapters import HTTPAdapter  # type: ignore[import-untyped, import]
 from urllib3.util import Retry
@@ -21,35 +23,31 @@ class KeycloakAPI:
     client_secret: str = field(repr=False)
     realm: str = "Renku"
     client_id: str = "renku"
-    result_per_request_limit: int = 100
-    _http_client: requests.Session = field(
-        init=False, repr=False, default_factory=lambda: KeycloakAPI._get_http_client()
-    )
-    _access_token: str | None = field(repr=False, default=None, init=False)
+    result_per_request_limit: int = 20
+    _http_client: requests.Session = field(init=False, repr=False)
 
     def __post_init__(self):
         self.keycloak_url = self.keycloak_url.rstrip("/")
-
-    @staticmethod
-    def _get_http_client() -> requests.Session:
         retry_strategy = Retry(
             total=5,
             backoff_factor=2,
         )
         adapter = HTTPAdapter(max_retries=retry_strategy)
-        session = requests.Session()
+        token_endpoint = f"{self.keycloak_url}/realms/{self.realm}/protocol/openid-connect/token"
+        session = OAuth2Session(
+            client_id=self.client_id,
+            client_secret=self.client_secret,
+            token_endpoint_auth_method=ClientSecretJWT(token_endpoint),
+        )
         session.mount("http://", adapter)
         session.mount("https://", adapter)
-        return session
-
-    def _authenticate(self):
-        self._access_token = "access_token"  # nosec: B105
-
-    @property
-    def _auth_headers(self) -> Dict[str, str]:
-        if not self._access_token:
-            self._authenticate()
-        return {"Authorization": f"Bearer {self._access_token}"}
+        session.fetch_token(
+            url=token_endpoint,
+            client_id=self.client_id,
+            client_secret=self.client_secret,
+            grant_type="client_credentials",
+        )
+        self._http_client = session
 
     def get_users(self) -> Iterator[Dict[str, Any]]:
         """Get all users from Keycloak."""
@@ -58,10 +56,7 @@ class KeycloakAPI:
             "max": self.result_per_request_limit + 1,
         }
         first = 0
-        res = self._http_client.get(url, params={**query_args, "first": first}, headers=self._auth_headers)
-        if res.status_code == 401:
-            self._authenticate()
-            res = self._http_client.get(url, params={**query_args, "first": first}, headers=self._auth_headers)
+        res = self._http_client.get(url, params={**query_args, "first": first})
         output = res.json()
         if not isinstance(output, list):
             raise ValueError("Received unexpected response from Keycloak for users")
@@ -88,10 +83,7 @@ class KeycloakAPI:
         if end_date:
             query_args["dateTo"] = end_date.isoformat()
         first = 0
-        res = self._http_client.get(url, params={**query_args, "first": first}, headers=self._auth_headers)
-        if res.status_code == 401:
-            self._authenticate()
-            res = self._http_client.get(url, params={**query_args, "first": first}, headers=self._auth_headers)
+        res = self._http_client.get(url, params={**query_args, "first": first})
         output = res.json()
         if not isinstance(output, list):
             raise ValueError("Received unexpected response from Keycloak for events")
@@ -121,10 +113,7 @@ class KeycloakAPI:
         if end_date:
             query_args["dateTo"] = end_date.isoformat()
         first = 0
-        res = self._http_client.get(url, params={**query_args, "first": first}, headers=self._auth_headers)
-        if res.status_code == 401:
-            self._authenticate()
-            res = self._http_client.get(url, params={**query_args, "first": first}, headers=self._auth_headers)
+        res = self._http_client.get(url, params={**query_args, "first": first})
         output = res.json()
         if not isinstance(output, list):
             raise ValueError("Received unexpected response from Keycloak for events")
