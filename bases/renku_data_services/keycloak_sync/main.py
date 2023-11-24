@@ -4,12 +4,12 @@ import logging
 from dataclasses import asdict
 from datetime import datetime, timedelta
 
-from sqlalchemy import select, func, NullPool
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy import NullPool, func, select
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.keycloak_sync.config import SyncConfig
-from renku_data_services.users.models import KeycloakAdminEvent, UserInfoUpdate, UserInfo
+from renku_data_services.migrations.core import run_migrations_for_app
+from renku_data_services.users.models import KeycloakAdminEvent, UserInfo, UserInfoUpdate
 from renku_data_services.users.orm import LastKeycloakEventTimestamp, UserORM
 
 logging.basicConfig(level=logging.INFO)

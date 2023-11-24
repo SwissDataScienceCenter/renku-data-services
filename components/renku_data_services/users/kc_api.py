@@ -2,12 +2,12 @@
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Dict, Iterator, List, cast
-from urllib3.util import Retry
 
 import requests  # type: ignore[import-untyped, import]
 from requests.adapters import HTTPAdapter  # type: ignore[import-untyped, import]
+from urllib3.util import Retry
 
-from renku_data_services.users.models import KeycloakEvent, KeycloakAdminEvent
+from renku_data_services.users.models import KeycloakAdminEvent, KeycloakEvent
 
 
 @dataclass

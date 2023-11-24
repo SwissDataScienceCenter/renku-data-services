@@ -1,6 +1,6 @@
 """Database adapters and helpers."""
 import logging
-from typing import List, Callable
+from typing import Callable, List
 
 from sqlalchemy import create_engine, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine

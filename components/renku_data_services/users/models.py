@@ -1,11 +1,11 @@
 """Base models for users."""
+import json
 import logging
 import re
-import json
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, List, Dict
+from typing import Any, Dict, List
 
 
 class KeycloakEvent(Enum):

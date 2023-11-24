@@ -1,15 +1,15 @@
 """Database adapters and helpers for users."""
 from functools import wraps
-from typing import List, Callable
+from typing import Callable, List
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-from renku_data_services.users.models import UserInfo
-from renku_data_services.users.orm import UserORM
 from renku_data_services.base_api.auth import APIUser
 from renku_data_services.errors import errors
+from renku_data_services.users.models import UserInfo
+from renku_data_services.users.orm import UserORM
 
 
 def _authenticated(f):

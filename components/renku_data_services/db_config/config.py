@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from renku_data_services import errors
 
 
-
 @dataclass
 class DBConfig:
     """Database configuration."""

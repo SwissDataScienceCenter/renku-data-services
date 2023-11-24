@@ -3,8 +3,8 @@ import os
 from dataclasses import dataclass, field
 
 from renku_data_services.errors import errors
-from renku_data_services.users.kc_api import KeycloakAPI
 from renku_data_services.keycloak_sync.db import DB
+from renku_data_services.users.kc_api import KeycloakAPI
 
 
 @dataclass

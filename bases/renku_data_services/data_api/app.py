@@ -1,9 +1,9 @@
 """Data service app."""
 from sanic import Sanic
 
+from renku_data_services.app_config import Config
 from renku_data_services.base_api.error_handler import CustomErrorHandler
 from renku_data_services.base_api.misc import MiscBP
-from renku_data_services.app_config import Config
 from renku_data_services.crc import apispec
 from renku_data_services.crc.blueprints import (
     ClassesBP,
