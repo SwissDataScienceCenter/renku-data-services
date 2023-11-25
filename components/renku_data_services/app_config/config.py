@@ -24,6 +24,7 @@ import renku_data_services.base_models as base_models
 import renku_data_services.crc
 import renku_data_services.storage
 import renku_data_services.user_preferences
+import renku_data_services.users
 from renku_data_services import errors
 from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.authn.gitlab import GitlabAuthenticator
@@ -45,6 +46,7 @@ from renku_data_services.storage.db import StorageRepository
 from renku_data_services.user_preferences.config import UserPreferencesConfig
 from renku_data_services.user_preferences.db import UserPreferencesRepository
 from renku_data_services.utils.core import get_ssl_context, merge_api_specs
+from renku_data_services.users.db import UserRepo as KcUserRepo
 
 
 @retry(stop=(stop_after_attempt(20) | stop_after_delay(300)), wait=wait_fixed(2), reraise=True)
@@ -106,6 +108,7 @@ class Config:
     _project_repo: ProjectRepository | None = field(default=None, repr=False, init=False)
     _project_authz: SQLProjectAuthorizer | None = field(default=None, repr=False, init=False)
     _user_preferences_repo: UserPreferencesRepository | None = field(default=None, repr=False, init=False)
+    _kc_user_repo: KcUserRepo | None = field(default=None, repr=False, init=False)
 
     def __post_init__(self):
         spec_file = Path(renku_data_services.crc.__file__).resolve().parent / "api.spec.yaml"
@@ -120,7 +123,11 @@ class Config:
         with open(spec_file, "r") as f:
             user_preferences_spec = safe_load(f)
 
-        self.spec = merge_api_specs(crc_spec, storage_spec, user_preferences_spec)
+        spec_file = Path(renku_data_services.users.__file__).resolve().parent / "api.spec.yaml"
+        with open(spec_file, "r") as f:
+            users = safe_load(f)
+
+        self.spec = merge_api_specs(crc_spec, storage_spec, user_preferences_spec, users)
 
         if self.default_resource_pool_file is not None:
             with open(self.default_resource_pool_file, "r") as f:
@@ -180,6 +187,13 @@ class Config:
                 user_preferences_config=self.user_preferences_config,
             )
         return self._user_preferences_repo
+
+    @property
+    def kc_user_repo(self) -> KcUserRepo:
+        """The DB adapter for users."""
+        if not self._kc_user_repo:
+            self._kc_user_repo = KcUserRepo(session_maker=self.db.async_session_maker)
+        return self._kc_user_repo
 
     @classmethod
     def from_env(cls, prefix: str = ""):

@@ -26,7 +26,7 @@ paths:
       summary: List all users
       parameters:
         - in: query
-          name: email
+          name: exact_email
           schema:
             type: string
           required: false

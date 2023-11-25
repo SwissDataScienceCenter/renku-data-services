@@ -39,14 +39,8 @@ def _authenticated(f):
 class UserRepo:
     """An adapter for accessing users from the database."""
 
-    def __init__(
-        self, sync_sqlalchemy_url: str, async_sqlalchemy_url: str, debug: bool = False
-    ):
-        self.engine = create_async_engine(async_sqlalchemy_url, echo=debug)
-        self.sync_engine = create_engine(sync_sqlalchemy_url, echo=debug)
-        self.session_maker: Callable[..., AsyncSession] = sessionmaker(
-            self.engine, class_=AsyncSession, expire_on_commit=False
-        )  # type: ignore[call-overload]
+    def __init__(self, session_maker: Callable[..., AsyncSession]):
+        self.session_maker = session_maker
 
     @_authenticated
     async def get_user(self, requested_by: APIUser, id: str) -> UserInfo | None:
