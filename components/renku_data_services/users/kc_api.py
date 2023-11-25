@@ -3,9 +3,9 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Dict, Iterator, List, cast
 
+import requests  # type: ignore[import-untyped, import]
 from authlib.integrations.requests_client import OAuth2Session  # type: ignore[import-untyped, import]
 from authlib.oauth2.rfc7523 import ClientSecretJWT  # type: ignore[import-untyped, import]
-import requests  # type: ignore[import-untyped, import]
 from requests.adapters import HTTPAdapter  # type: ignore[import-untyped, import]
 from urllib3.util import Retry
 

@@ -23,13 +23,13 @@ def _authenticated(f):
     async def decorated_function(self, *args, **kwargs):
         api_user = None
         if "requested_by" in kwargs:
-            api_user = kwargs["api_user"]
+            api_user = kwargs["requested_by"]
         elif len(args) >= 1:
             api_user = args[0]
         if api_user is None or not api_user.is_authenticated:
             raise errors.Unauthorized(message="You have to be authenticated to perform this operation.")
 
-        # the user is authenticated and is an admin
+        # the user is authenticated
         response = await f(self, *args, **kwargs)
         return response
 
@@ -45,7 +45,7 @@ class UserRepo:
     @_authenticated
     async def get_user(self, requested_by: APIUser, id: str) -> UserInfo | None:
         """Get a specific user from the database."""
-        if not requested_by.is_admin or requested_by.id != id:
+        if not requested_by.is_admin and requested_by.id != id:
             raise errors.Unauthorized(message="Users are not allowed to lookup other users.")
         async with self.session_maker() as session:
             stmt = select(UserORM).where(UserORM.keycloak_id == id)

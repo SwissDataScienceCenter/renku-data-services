@@ -112,7 +112,6 @@ components:
       type: string
       description: Keycloak user ID
       example: f74a228b-1790-4276-af5f-25c2424e9b0c
-      format: uuid
     UserFirstLastName:
       type: string
       description: First or last name of the user

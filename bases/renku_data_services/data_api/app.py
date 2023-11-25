@@ -11,11 +11,11 @@ from renku_data_services.crc.blueprints import (
     ResourcePoolsBP,
     ResourcePoolUsersBP,
     UserResourcePoolsBP,
-    UsersBP,
 )
 from renku_data_services.project.blueprints import ProjectsBP
 from renku_data_services.storage.blueprints import StorageBP, StorageSchemaBP
 from renku_data_services.user_preferences.blueprints import UserPreferencesBP
+from renku_data_services.users.blueprints import KCUsersBP
 
 
 def register_all_handlers(app: Sanic, config: Config) -> Sanic:
@@ -39,13 +39,16 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
     resource_pools_users = ResourcePoolUsersBP(
         name="resource_pool_users", url_prefix=url_prefix, repo=config.user_repo, authenticator=config.authenticator
     )
-    users = UsersBP(
-        name="users",
-        url_prefix=url_prefix,
-        repo=config.user_repo,
-        user_store=config.user_store,
-        authenticator=config.authenticator,
+    users = KCUsersBP(
+        name="users", url_prefix=url_prefix, repo=config.kc_user_repo, authenticator=config.authenticator
     )
+    # users = UsersBP(
+    #     name="users",
+    #     url_prefix=url_prefix,
+    #     repo=config.user_repo,
+    #     user_store=config.user_store,
+    #     authenticator=config.authenticator,
+    # )
     user_resource_pools = UserResourcePoolsBP(
         name="user_resource_pools",
         url_prefix=url_prefix,

@@ -45,8 +45,8 @@ from renku_data_services.project.db import ProjectRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.user_preferences.config import UserPreferencesConfig
 from renku_data_services.user_preferences.db import UserPreferencesRepository
-from renku_data_services.utils.core import get_ssl_context, merge_api_specs
 from renku_data_services.users.db import UserRepo as KcUserRepo
+from renku_data_services.utils.core import get_ssl_context, merge_api_specs
 
 
 @retry(stop=(stop_after_attempt(20) | stop_after_delay(300)), wait=wait_fixed(2), reraise=True)
