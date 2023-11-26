@@ -24,14 +24,12 @@ class KCUsersBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         async def _get_all(request: Request, user: base_models.APIUser):
-            email_filter = request.query_args.get("exact_email")
+            email_filter = request.args.get("exact_email")
             users = await self.repo.get_users(requested_by=user, email=email_filter)
-            return json(
-                [apispec.UserWithId.model_validate(user).model_dump(exclude_none=True) for user in users]
-            )
-        
+            return json([apispec.UserWithId.model_validate(user).model_dump(exclude_none=True) for user in users])
+
         return "/users", ["GET"], _get_all
-    
+
     def get_self(self) -> BlueprintFactoryResponse:
         """Get info about the logged in user."""
 

@@ -1,5 +1,6 @@
 """The entrypoint for the data service application."""
 import argparse
+import asyncio
 from os import environ
 
 from sanic import Sanic
@@ -27,6 +28,7 @@ def create_app() -> Sanic:
         run_migrations_for_app("user_preferences")
         run_migrations_for_app("users")
         config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
+        asyncio.run(config.kc_user_repo.initialize(config.kc_api))
     app = register_all_handlers(app, config)
 
     if environ.get("CORS_ALLOW_ALL_ORIGINS", "false").lower() == "true":
@@ -45,6 +47,7 @@ def create_app() -> Sanic:
         run_migrations_for_app("user_preferences")
         run_migrations_for_app("users")
         config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
+        await config.kc_user_repo.initialize(config.kc_api)
 
     @app.before_server_start
     async def setup_rclone_validator(app, _):

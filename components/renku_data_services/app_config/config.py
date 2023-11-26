@@ -46,6 +46,8 @@ from renku_data_services.storage.db import StorageRepository
 from renku_data_services.user_preferences.config import UserPreferencesConfig
 from renku_data_services.user_preferences.db import UserPreferencesRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
+from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
+from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
 from renku_data_services.utils.core import get_ssl_context, merge_api_specs
 
 
@@ -95,6 +97,7 @@ class Config:
     user_preferences_config: UserPreferencesConfig
     db: DBConfig
     gitlab_client: base_models.GitlabAPIProtocol
+    kc_api: IKeycloakAPI
     spec: Dict[str, Any] = field(init=False, default_factory=dict)
     version: str = "0.0.1"
     app_name: str = "renku_crc"
@@ -212,6 +215,7 @@ class Config:
         max_pinned_projects = int(os.environ.get(f"{prefix}MAX_PINNED_PROJECTS", "10"))
         user_preferences_config = UserPreferencesConfig(max_pinned_projects=max_pinned_projects)
         db = DBConfig.from_env(prefix)
+        kc_api: IKeycloakAPI
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
             authenticator = DummyAuthenticator()
@@ -220,6 +224,7 @@ class Config:
             user_always_exists = os.environ.get("DUMMY_USERSTORE_USER_ALWAYS_EXISTS", "true").lower() == "true"
             user_store = DummyUserStore(user_always_exists=user_always_exists)
             gitlab_client = DummyGitlabAPI()
+            kc_api = DummyKeycloakAPI()
         else:
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
             keycloak_url = os.environ.get(f"{prefix}KEYCLOAK_URL")
@@ -245,6 +250,14 @@ class Config:
             gitlab_authenticator = GitlabAuthenticator(gitlab_url=gitlab_url)
             user_store = KcUserStore(keycloak_url=keycloak_url, realm=keycloak_realm)
             gitlab_client = GitlabAPI(gitlab_url=gitlab_url)
+            client_id = os.environ[f"{prefix}KEYCLOAK_CLIENT_ID"]
+            client_secret = os.environ[f"{prefix}KEYCLOAK_CLIENT_SECRET"]
+            kc_api = KeycloakAPI(
+                keycloak_url=keycloak_url,
+                client_id=client_id,
+                client_secret=client_secret,
+                realm=keycloak_realm,
+            )
 
         return cls(
             version=version,
@@ -257,4 +270,5 @@ class Config:
             server_options_file=server_options_file,
             user_preferences_config=user_preferences_config,
             db=db,
+            kc_api=kc_api,
         )

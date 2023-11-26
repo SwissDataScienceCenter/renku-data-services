@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterable, List
 
 
 class KeycloakEvent(Enum):
@@ -34,7 +34,7 @@ class UserInfoUpdate:
     old_value: str | None = None
 
     @classmethod
-    def from_json_user_events(self, val: List[Dict[str, Any]]) -> List["UserInfoUpdate"]:
+    def from_json_user_events(self, val: Iterable[Dict[str, Any]]) -> List["UserInfoUpdate"]:
         """Generate a list of updates from a json response from Keycloak."""
         output: List["UserInfoUpdate"] = []
         for event in val:
@@ -122,7 +122,7 @@ class UserInfoUpdate:
         return output
 
     @classmethod
-    def from_json_admin_events(self, val: List[Dict[str, Any]]) -> List["UserInfoUpdate"]:
+    def from_json_admin_events(self, val: Iterable[Dict[str, Any]]) -> List["UserInfoUpdate"]:
         """Generate a list of updates from a json response from Keycloak."""
         output: List["UserInfoUpdate"] = []
         for event in val:
@@ -182,9 +182,7 @@ class UserInfoUpdate:
                         )
                 case KeycloakAdminEvent.DELETE.value:
                     output.append(
-                        UserInfoUpdate(
-                            field_name="email", new_value="", timestamp_utc=timestamp_utc, user_id=user_id
-                        )
+                        UserInfoUpdate(field_name="email", new_value="", timestamp_utc=timestamp_utc, user_id=user_id)
                     )
                 case _:
                     logging.warning(f"Skipping unknown admin event operation when parsing Keycloak events: {operation}")

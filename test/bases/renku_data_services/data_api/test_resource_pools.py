@@ -3,6 +3,7 @@ from test.bases.renku_data_services.data_api.utils import create_rp
 from typing import Any, Dict
 
 import pytest
+import pytest_asyncio
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 
@@ -35,10 +36,11 @@ def valid_resource_pool_payload() -> Dict[str, Any]:
     return _valid_resource_pool_payload
 
 
-@pytest.fixture
-def test_client(app_config: Config) -> SanicASGITestClient:
+@pytest_asyncio.fixture
+async def test_client(app_config: Config) -> SanicASGITestClient:
     app = Sanic(app_config.app_name)
     app = register_all_handlers(app, app_config)
+    await app_config.kc_user_repo.initialize(app_config.kc_api)
     return SanicASGITestClient(app)
 
 
@@ -175,42 +177,6 @@ async def test_put_resource_class(
 
 
 @pytest.mark.asyncio
-async def test_post_users(test_client: SanicASGITestClient, admin_user_headers: Dict[str, str]):
-    user_payloads = [
-        {"id": "keycloak-id-1"},
-        {"id": "keycloak-id-2", "no_default_access": True},
-    ]
-    for payload in user_payloads:
-        _, res = await test_client.post("/api/data/users", headers=admin_user_headers, data=json.dumps(payload))
-        assert res.status_code == 201
-        assert res.json["id"] == payload["id"]
-        assert res.json["no_default_access"] == payload.get("no_default_access", False)
-
-
-@pytest.mark.asyncio
-async def test_patch_put_user(test_client: SanicASGITestClient, admin_user_headers: Dict[str, str]):
-    user_id = "keycloak-id-1"
-    user_payload = {"id": user_id}
-    headers = admin_user_headers
-    _, res = await test_client.post("/api/data/users", headers=headers, data=json.dumps(user_payload))
-    assert res.status_code == 201
-    assert res.json["id"] == user_id
-    assert res.json["no_default_access"] == user_payload.get("no_default_access", False)
-    _, res = await test_client.put(
-        f"/api/data/users/{user_id}", headers=headers, data=json.dumps({"no_default_access": True})
-    )
-    assert res.status_code == 200
-    assert res.json["id"] == user_id
-    assert res.json["no_default_access"]
-    _, res = await test_client.patch(
-        f"/api/data/users/{user_id}", headers=headers, data=json.dumps({"no_default_access": False})
-    )
-    assert res.status_code == 200
-    assert res.json["id"] == user_id
-    assert not res.json["no_default_access"]
-
-
-@pytest.mark.asyncio
 async def test_restriced_default_resource_pool_access(
     test_client: SanicASGITestClient, admin_user_headers: Dict[str, str], valid_resource_pool_payload: Dict[str, Any]
 ):
@@ -226,18 +192,24 @@ async def test_restriced_default_resource_pool_access(
     _, res = await create_rp(valid_resource_pool_payload, test_client)
     assert res.status_code == 201
     rp_public = res.json
-    # Create a user that has no acccess to the default pool
-    no_default_user_id = "keycloak-id-1"
-    user_payload = {"id": no_default_user_id, "no_default_access": True}
-    _, res = await test_client.post("/api/data/users", headers=admin_user_headers, data=json.dumps(user_payload))
-    assert res.status_code == 201
+    # Get existing users
+    _, res = await test_client.get("/api/data/users", headers=admin_user_headers)
+    existing_users = res.json
+    assert res.status_code == 200
+    assert len(existing_users) >= 2
+    # Restrict one user to not have access to the default pool
+    no_default_user = existing_users[0]
+    no_default_user_id = no_default_user["id"]
     no_default_access_token = json.dumps({"id": no_default_user_id})
-    # Create a user that has access to the default pool
-    user_id = "keycloak-id-2"
-    user_payload = {"id": user_id, "no_default_access": False}
-    _, res = await test_client.post("/api/data/users", headers=admin_user_headers, data=json.dumps(user_payload))
+    _, res = await test_client.delete(
+        f"/api/data/resource_pools/{rp_default['id']}/users/{no_default_user_id}",
+        headers=admin_user_headers,
+    )
+    assert res.status_code == 204
+    # The other user in the db should be able to access the default pool
+    default_access_user = existing_users[1]
+    user_id = default_access_user["id"]
     access_token = json.dumps({"id": user_id})
-    assert res.status_code == 201
     # Ensure non-authenticated users have acess to the default pool
     _, res = await test_client.get(f"/api/data/resource_pools/{rp_default['id']}")
     assert res.status_code == 200
@@ -285,23 +257,26 @@ async def test_private_resource_pool_access(
     _, res = await create_rp(valid_resource_pool_payload, test_client)
     assert res.status_code == 201
     rp_private = res.json
-    # Create a user that has no acccess to the private pool
-    restricted_user_id = "keycloak-id-1"
-    user_payload = {"id": restricted_user_id, "no_default_access": True}
-    _, res = await test_client.post("/api/data/users", headers=admin_user_headers, data=json.dumps(user_payload))
-    assert res.status_code == 201
+    # Get existing users
+    _, res = await test_client.get("/api/data/users", headers=admin_user_headers)
+    existing_users = res.json
+    assert res.status_code == 200
+    assert len(existing_users) >= 2
+    # Select one user that has no access
+    restricted_user = existing_users[0]
+    restricted_user_id = restricted_user["id"]
     restricted_access_token = json.dumps({"id": restricted_user_id})
-    # Create a user that has access to the private pool
-    allowed_user_id = "keycloak-id-2"
-    user_payload = {"id": allowed_user_id, "no_default_access": False}
-    _, res = await test_client.post("/api/data/users", headers=admin_user_headers, data=json.dumps(user_payload))
+    # Give another user access to the private pool
+    allowed_user = existing_users[1]
+    allowed_user_id = allowed_user["id"]
+    user_payload = [{"id": allowed_user_id}]
     allowed_access_token = json.dumps({"id": allowed_user_id})
     _, res = await test_client.post(
-        f"/api/data/users/{allowed_user_id}/resource_pools",
+        f"/api/data/resource_pools/{rp_private['id']}/users",
         headers=admin_user_headers,
-        data=json.dumps([rp_private["id"]]),
+        data=json.dumps(user_payload),
     )
-    assert res.status_code == 200
+    assert res.status_code == 201
     # Ensure non-authenticated users cannot see the private pool
     _, res = await test_client.get(f"/api/data/resource_pools/{rp_private['id']}")
     assert res.status_code == 404

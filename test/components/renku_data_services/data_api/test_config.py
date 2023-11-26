@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 import renku_data_services.app_config.config as conf
 from renku_data_services.authn.dummy import DummyAuthenticator
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient
+from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 
 
 def test_config_dummy(monkeypatch):
@@ -32,10 +33,17 @@ def test_config_no_dummy(monkeypatch):
     monkeypatch.setenv("GITLAB_URL", "https://localhost")
     monkeypatch.setenv("KEYCLOAK_URL", "localhost")
     monkeypatch.setenv("KEYCLOAK_TOKEN_SIGNATURE_ALGS", "test")
+    monkeypatch.setenv("KEYCLOAK_CLIENT_ID", "data-service")
+    monkeypatch.setenv("KEYCLOAK_CLIENT_SECRET", "data-service-client-secret")
     monkeypatch.setattr(conf, "_oidc_discovery", lambda _, __: {"jwks_uri": "localhost"})
     monkeypatch.setattr(conf, "PyJWKClient", lambda _: MagicMock())
     monkeypatch.setattr(conf, "K8sCoreClient", lambda: DummyCoreClient({}))
     monkeypatch.setattr(conf, "K8sSchedulingClient", lambda: DummySchedulingClient({}))
+
+    def patch_kc_api(*args, **kwargs):
+        return DummyKeycloakAPI()
+
+    monkeypatch.setattr(conf, "KeycloakAPI", patch_kc_api)
 
     config = conf.Config.from_env()
 

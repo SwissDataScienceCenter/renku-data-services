@@ -1,5 +1,5 @@
 """Base models for API specifications."""
-from pydantic import BaseModel, Extra, Field
+from pydantic import BaseModel
 
 
 class BaseAPISpec(BaseModel):

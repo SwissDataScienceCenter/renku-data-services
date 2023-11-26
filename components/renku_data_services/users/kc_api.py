@@ -1,7 +1,7 @@
 """Keycloak API."""
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Any, Dict, Iterator, List, cast
+from typing import Any, Dict, Iterable, List, Protocol, cast
 
 import requests  # type: ignore[import-untyped, import]
 from authlib.integrations.requests_client import OAuth2Session  # type: ignore[import-untyped, import]
@@ -10,6 +10,26 @@ from requests.adapters import HTTPAdapter  # type: ignore[import-untyped, import
 from urllib3.util import Retry
 
 from renku_data_services.users.models import KeycloakAdminEvent, KeycloakEvent
+
+
+class IKeycloakAPI(Protocol):
+    """Protocol for the Keycloak API."""
+
+    def get_users(self) -> Iterable[Dict[str, Any]]:
+        """Get all users."""
+        ...
+
+    def get_user_events(
+        self, start_date: date, end_date: date | None = None, event_types: List[KeycloakEvent] | None = None
+    ) -> Iterable[Dict[str, Any]]:
+        """Get user events."""
+        ...
+
+    def get_admin_events(
+        self, start_date: date, end_date: date | None = None, event_types: List[KeycloakAdminEvent] | None = None
+    ) -> Iterable[Dict[str, Any]]:
+        """Get admin events."""
+        ...
 
 
 @dataclass
@@ -49,7 +69,7 @@ class KeycloakAPI:
         )
         self._http_client = session
 
-    def get_users(self) -> Iterator[Dict[str, Any]]:
+    def get_users(self) -> Iterable[Dict[str, Any]]:
         """Get all users from Keycloak."""
         url = self.keycloak_url + f"/admin/realms/{self.realm}/users"
         query_args = {
@@ -68,7 +88,7 @@ class KeycloakAPI:
 
     def get_user_events(
         self, start_date: date, end_date: date | None = None, event_types: List[KeycloakEvent] | None = None
-    ) -> Iterator[Dict[str, Any]]:
+    ) -> Iterable[Dict[str, Any]]:
         """Get user events from Keycloak."""
         url = self.keycloak_url + f"/admin/realms/{self.realm}/events"
         query_event_types = event_types or [
@@ -96,7 +116,7 @@ class KeycloakAPI:
 
     def get_admin_events(
         self, start_date: date, end_date: date | None = None, event_types: List[KeycloakAdminEvent] | None = None
-    ) -> Iterator[Dict[str, Any]]:
+    ) -> Iterable[Dict[str, Any]]:
         """Get admin events from Keycloak."""
         url = self.keycloak_url + f"/admin/realms/{self.realm}/admin-events"
         query_event_types = event_types or [

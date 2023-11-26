@@ -36,24 +36,20 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         authenticator=config.authenticator,
         quota_repo=config.quota_repo,
     )
+    users = KCUsersBP(name="users", url_prefix=url_prefix, repo=config.kc_user_repo, authenticator=config.authenticator)
     resource_pools_users = ResourcePoolUsersBP(
-        name="resource_pool_users", url_prefix=url_prefix, repo=config.user_repo, authenticator=config.authenticator
+        name="resource_pool_users",
+        url_prefix=url_prefix,
+        repo=config.user_repo,
+        authenticator=config.authenticator,
+        kc_user_repo=config.kc_user_repo,
     )
-    users = KCUsersBP(
-        name="users", url_prefix=url_prefix, repo=config.kc_user_repo, authenticator=config.authenticator
-    )
-    # users = UsersBP(
-    #     name="users",
-    #     url_prefix=url_prefix,
-    #     repo=config.user_repo,
-    #     user_store=config.user_store,
-    #     authenticator=config.authenticator,
-    # )
     user_resource_pools = UserResourcePoolsBP(
         name="user_resource_pools",
         url_prefix=url_prefix,
         repo=config.user_repo,
         authenticator=config.authenticator,
+        kc_user_repo=config.kc_user_repo,
     )
     storage = StorageBP(
         name="storage",
