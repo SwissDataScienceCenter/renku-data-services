@@ -307,9 +307,9 @@ components:
       type: object
       properties:
         name:
-          $ref: "#/components/schemas/Name"  # TODO: Should name be unique?
+          $ref: "#/components/schemas/Name"
         slug:
-          $ref: "#/components/schemas/Slug"  # TODO: Should slug be unique?
+          $ref: "#/components/schemas/Slug"
         repositories:
           $ref: "#/components/schemas/RepositoriesList"
         visibility:
@@ -324,13 +324,13 @@ components:
       description: Patch of a project
       properties:
         name:
-          $ref: "#/components/schemas/Name"  # TODO: Should we allow changing project's name?
+          $ref: "#/components/schemas/Name"
         slug:
-          $ref: "#/components/schemas/Slug"
+          $ref: "#/components/schemas/Slug"  # TODO: Should we remove this?
         repositories:
           $ref: "#/components/schemas/RepositoriesList"
         visibility:
-          $ref: "#/components/schemas/Visibility"  # TODO: Should we allow ``public`` to ``private`` transition?
+          $ref: "#/components/schemas/Visibility"
         description:
           $ref: "#/components/schemas/Description"
     Ulid:
@@ -362,7 +362,7 @@ components:
       description: A description for project
       type: string
       maxLength: 500
-    User:  # TODO: We return User's KeyCloak ID to the client
+    User: # TODO: We return User's KeyCloak ID to the client
       description: A KeyCloak user
       type: object
       properties:

@@ -10,8 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from renku_data_services.authz.authz import SQLProjectAuthorizer
+from renku_data_services.authz.models import MemberQualifier, Scope
 from renku_data_services.project import models
 from renku_data_services.project import orm as schemas
+from renku_data_services.project.apispec import Visibility
 
 
 class PaginationResponse(NamedTuple):
@@ -26,8 +29,9 @@ class PaginationResponse(NamedTuple):
 class ProjectRepository:
     """Repository for project."""
 
-    def __init__(self, session_maker: Callable[..., AsyncSession]):
+    def __init__(self, session_maker: Callable[..., AsyncSession], project_authz: SQLProjectAuthorizer):
         self.session_maker = session_maker  # type: ignore[call-overload]
+        self.project_authz: SQLProjectAuthorizer = project_authz
 
     async def get_projects(
         self, user: base_models.APIUser, page: int, per_page: int
@@ -38,8 +42,12 @@ class ProjectRepository:
         if per_page < 1 or per_page > 100:
             raise errors.ValidationError(message="Parameter 'per_page' must be between 1 and 100")
 
+        user_id = user.id if user.is_authenticated else MemberQualifier.ALL
+        project_ids = await self.project_authz.get_user_projects(requested_by=user, user_id=user_id, scope=Scope.READ)
+
         async with self.session_maker() as session:
             stmt = select(schemas.ProjectORM)
+            stmt = stmt.where(schemas.ProjectORM.id.in_(project_ids))
             stmt = stmt.limit(per_page).offset((page - 1) * per_page)
             stmt = stmt.order_by(schemas.ProjectORM.creation_date.desc())
             result = await session.execute(stmt)
@@ -54,21 +62,21 @@ class ProjectRepository:
 
             pagination = PaginationResponse(page, per_page, n_total_elements, total_pages)
 
-            # TODO: Filter based on the APIUser
-
             return [p.dump() for p in projects_orm], pagination
 
-    async def get_project(self, user: base_models.APIUser, id: str) -> models.Project:
+    async def get_project(self, user: base_models.APIUser, project_id: str) -> models.Project:
         """Get one project from the database."""
+        authorized = await self.project_authz.has_permission(user=user, project_id=project_id, scope=Scope.READ)
+        if not authorized:
+            raise errors.Unauthorized(message="You do not have the required permissions to access this project.")
+
         async with self.session_maker() as session:
-            stmt = select(schemas.ProjectORM).where(schemas.ProjectORM.id == id)
+            stmt = select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id)
             result = await session.execute(stmt)
             project_orm = result.scalars().first()
 
-            # TODO: Filter based on the APIUser
-
             if project_orm is None:
-                raise errors.MissingResourceError(message=f"Project with id {id} does not exist.")
+                raise errors.MissingResourceError(message=f"Project with id '{project_id}' does not exist.")
 
             return project_orm.dump()
 
@@ -82,41 +90,53 @@ class ProjectRepository:
             async with session.begin():
                 session.add(project_orm)
 
+                # TODO: Test that raising an exception causes the transaction to be aborted or not
+
+                project = project_orm.dump()
+                public_project = project.visibility == Visibility.public
+                await self.project_authz.create_project(
+                    requested_by=user, project_id=project.id, public_project=public_project
+                )
+
         return project_orm.dump()
 
-    async def update_project(self, user: base_models.APIUser, id: str, **kwargs) -> models.Project:
+    async def update_project(self, user: base_models.APIUser, project_id: str, **kwargs) -> models.Project:
         """Update a project entry."""
+        authorized = await self.project_authz.has_permission(user=user, project_id=project_id, scope=Scope.WRITE)
+        if not authorized:
+            raise errors.Unauthorized(message="You do not have the required permissions to update the project.")
+
         async with self.session_maker() as session:
             async with session.begin():
-                result = await session.execute(select(schemas.ProjectORM).where(schemas.ProjectORM.id == id))
+                result = await session.execute(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
                 projects = result.one_or_none()
 
                 if projects is None:
-                    raise errors.MissingResourceError(message=f"The project with id '{id}' cannot be found")
-
-                # TODO: Check if the user can access this project
+                    raise errors.MissingResourceError(message=f"The project with id '{project_id}' cannot be found")
 
                 project = projects[0]
 
-                if "id" in kwargs and kwargs["id"] != project.id:
-                    raise errors.ValidationError(message="Cannot change 'id' of existing project.")
-                # TODO: What about created_by and date_created
-
                 for key, value in kwargs.items():
-                    setattr(project, key, value)
+                    # NOTE: ``slug``, ``id``, ``created_by``, and ``creation_date`` cannot be edited
+                    if key not in ["slug", "id", "created_by", "creation_date"]:
+                        setattr(project, key, value)
+
+                # TODO: Update members -> Add, remove members
 
                 return project.dump()  # NOTE: Triggers validation before the transaction saves data
 
-    async def delete_project(self, user: base_models.APIUser, id: str) -> None:
+    async def delete_project(self, user: base_models.APIUser, project_id: str) -> None:
         """Delete a cloud project entry."""
+        authorized = await self.project_authz.has_permission(user=user, project_id=project_id, scope=Scope.DELETE)
+        if not authorized:
+            raise errors.Unauthorized(message="You do not have the required permissions to delete the project.")
+
         async with self.session_maker() as session:
             async with session.begin():
-                result = await session.execute(select(schemas.ProjectORM).where(schemas.ProjectORM.id == id))
+                result = await session.execute(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
                 projects = result.one_or_none()
 
                 if projects is None:
                     return
-
-                # TODO: Check if the user can access this project
 
                 await session.delete(projects[0])

@@ -60,7 +60,6 @@ class SQLProjectAuthorizer:
             stmt = stmt.where(scope.sql_access_test()).where(
                 or_(ProjectUserAuthz.user_id == user.id, ProjectUserAuthz.user_id.is_(None))
             )
-        permission = None
         async with self.session_maker() as session:
             res = await session.execute(stmt)
             permission = res.scalars().first()
@@ -75,7 +74,6 @@ class SQLProjectAuthorizer:
             stmt = stmt.where(or_(ProjectUserAuthz.user_id == user.id, ProjectUserAuthz.user_id.is_(None))).where(
                 role.sql_access_test()
             )
-        permission = None
         async with self.session_maker() as session:
             res = await session.execute(stmt)
             permission = res.scalars().first()

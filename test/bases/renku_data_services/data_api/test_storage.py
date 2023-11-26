@@ -30,7 +30,7 @@ def valid_storage_payload() -> dict[str, Any]:
 
 @pytest.fixture
 def admin_user_headers() -> Dict[str, str]:
-    return {"Authorization": "Bearer some-token**ADMIN**"}
+    return {"Authorization": 'Bearer {"is_admin": true}'}
 
 
 @pytest.fixture
@@ -315,7 +315,7 @@ async def test_get_storage_unauthorized(storage_test_client, valid_storage_paylo
     storage_test_client, gl_auth = storage_test_client
     _, res = await storage_test_client.post(
         "/api/data/storage",
-        headers={"Authorization": "bearer test"},
+        headers={"Authorization": '{"is_admin": false}'},
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201
@@ -324,7 +324,7 @@ async def test_get_storage_unauthorized(storage_test_client, valid_storage_paylo
     project_id = res.json["storage"]["project_id"]
     _, res = await storage_test_client.get(
         f"/api/data/storage?project_id={project_id}",
-        headers={"Authorization": '{"name": "Unauthorized"}'},
+        headers={"Authorization": ""},
     )
     assert res.status_code == 200
     assert len(res.json) == 0
@@ -337,7 +337,7 @@ async def test_get_storage_private(storage_test_client, valid_storage_payload):
 
     _, res = await storage_test_client.post(
         "/api/data/storage",
-        headers={"Authorization": "bearer test"},
+        headers={"Authorization": '{"is_admin": false}'},
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201
@@ -346,7 +346,7 @@ async def test_get_storage_private(storage_test_client, valid_storage_payload):
     project_id = res.json["storage"]["project_id"]
     _, res = await storage_test_client.get(
         f"/api/data/storage?project_id={project_id}",
-        headers={"Authorization": "bearer test"},
+        headers={"Authorization": '{"is_admin": false}'},
     )
     assert res.status_code == 200
     assert len(res.json) == 1
@@ -365,7 +365,7 @@ async def test_storage_deletion(storage_test_client, valid_storage_payload):
     storage_test_client, _ = storage_test_client
     _, res = await storage_test_client.post(
         "/api/data/storage",
-        headers={"Authorization": "bearer test"},
+        headers={"Authorization": '{"is_admin": false}'},
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201
@@ -374,13 +374,13 @@ async def test_storage_deletion(storage_test_client, valid_storage_payload):
 
     _, res = await storage_test_client.delete(
         f"/api/data/storage/{storage_id}",
-        headers={"Authorization": "bearer test"},
+        headers={"Authorization": '{"is_admin": false}'},
     )
     assert res.status_code == 204
 
     _, res = await storage_test_client.get(
         f"/api/data/storage/{storage_id}",
-        headers={"Authorization": "bearer test"},
+        headers={"Authorization": '{"is_admin": false}'},
     )
 
     assert res.status_code == 404
@@ -391,7 +391,7 @@ async def test_storage_deletion_unauthorized(storage_test_client, valid_storage_
     storage_test_client, gl_auth = storage_test_client
     _, res = await storage_test_client.post(
         "/api/data/storage",
-        headers={"Authorization": "bearer test"},
+        headers={"Authorization": '{"is_admin": false}'},
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201
@@ -399,7 +399,7 @@ async def test_storage_deletion_unauthorized(storage_test_client, valid_storage_
     storage_id = res.json["storage"]["storage_id"]
     _, res = await storage_test_client.delete(
         f"/api/data/storage/{storage_id}",
-        headers={"Authorization": '{"name": "Unauthorized"}'},
+        headers={"Authorization": ""},
     )
     assert res.status_code == 401
 
@@ -409,7 +409,7 @@ async def test_storage_put(storage_test_client, valid_storage_payload):
     storage_test_client, _ = storage_test_client
     _, res = await storage_test_client.post(
         "/api/data/storage",
-        headers={"Authorization": "bearer test"},
+        headers={"Authorization": '{"is_admin": false}'},
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201
@@ -418,7 +418,7 @@ async def test_storage_put(storage_test_client, valid_storage_payload):
 
     _, res = await storage_test_client.put(
         f"/api/data/storage/{storage_id}",
-        headers={"Authorization": "bearer test"},
+        headers={"Authorization": '{"is_admin": false}'},
         data=json.dumps(
             {
                 "project_id": valid_storage_payload["project_id"],
@@ -448,7 +448,7 @@ async def test_storage_patch_make_public(storage_test_client):
     storage_test_client, _ = storage_test_client
     _, res = await storage_test_client.post(
         "/api/data/storage",
-        headers={"Authorization": "bearer test"},
+        headers={"Authorization": '{"is_admin": false}'},
         data=json.dumps(payload),
     )
     assert res.status_code == 201
@@ -459,7 +459,7 @@ async def test_storage_patch_make_public(storage_test_client):
 
     _, res = await storage_test_client.patch(
         f"/api/data/storage/{storage_id}",
-        headers={"Authorization": "bearer test"},
+        headers={"Authorization": '{"is_admin": false}'},
         data=json.dumps(
             {
                 "private": False,
@@ -476,7 +476,7 @@ async def test_storage_put_unauthorized(storage_test_client, valid_storage_paylo
     storage_test_client, gl_auth = storage_test_client
     _, res = await storage_test_client.post(
         "/api/data/storage",
-        headers={"Authorization": "bearer test"},
+        headers={"Authorization": '{"is_admin": false}'},
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201
@@ -484,7 +484,7 @@ async def test_storage_put_unauthorized(storage_test_client, valid_storage_paylo
     storage_id = res.json["storage"]["storage_id"]
     _, res = await storage_test_client.put(
         f"/api/data/storage/{storage_id}",
-        headers={"Authorization": '{"name": "Unauthorized"}'},
+        headers={"Authorization": ""},
         data=json.dumps(
             {
                 "project_id": valid_storage_payload["project_id"],
@@ -503,7 +503,7 @@ async def test_storage_patch(storage_test_client, valid_storage_payload):
     storage_test_client, _ = storage_test_client
     _, res = await storage_test_client.post(
         "/api/data/storage",
-        headers={"Authorization": "bearer test"},
+        headers={"Authorization": '{"is_admin": false}'},
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201
@@ -512,7 +512,7 @@ async def test_storage_patch(storage_test_client, valid_storage_payload):
 
     _, res = await storage_test_client.patch(
         f"/api/data/storage/{storage_id}",
-        headers={"Authorization": "bearer test"},
+        headers={"Authorization": '{"is_admin": false}'},
         data=json.dumps(
             {
                 "configuration": {"type": "azureblob", "region": None},
@@ -531,7 +531,7 @@ async def test_storage_patch_unauthorized(storage_test_client, valid_storage_pay
     storage_test_client, gl_auth = storage_test_client
     _, res = await storage_test_client.post(
         "/api/data/storage",
-        headers={"Authorization": "bearer test"},
+        headers={"Authorization": '{"is_admin": false}'},
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201
@@ -539,7 +539,7 @@ async def test_storage_patch_unauthorized(storage_test_client, valid_storage_pay
     storage_id = res.json["storage"]["storage_id"]
     _, res = await storage_test_client.patch(
         f"/api/data/storage/{storage_id}",
-        headers={"Authorization": '{"name": "Unauthorized"}'},
+        headers={"Authorization": ""},
         data=json.dumps(
             {
                 "configuration": {"type": "azureblob"},

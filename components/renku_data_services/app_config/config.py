@@ -171,7 +171,9 @@ class Config:
     def project_repo(self) -> ProjectRepository:
         """The DB adapter for Renku native projects."""
         if not self._project_repo:
-            self._project_repo = ProjectRepository(session_maker=self.db.async_session_maker)
+            self._project_repo = ProjectRepository(
+                session_maker=self.db.async_session_maker, project_authz=self.project_authz
+            )
         return self._project_repo
 
     @property
