@@ -5,6 +5,7 @@ ARG USER_GID=$USER_UID
 
 RUN groupadd --gid $USER_GID renku && \
     adduser --gid $USER_GID --uid $USER_UID renku
+RUN curl -fsSL https://rclone.org/install.sh| bash
 USER $USER_UID:$USER_GID
 WORKDIR /app
 RUN python3 -m pip install --user pipx && \
@@ -30,6 +31,7 @@ RUN apt-get update && apt-get install -y \
     rm -rf /var/lib/apt/lists/* && \
     groupadd --gid $USER_GID renku && \
     adduser --gid $USER_GID --uid $USER_UID renku
+COPY --from=builder /usr/bin/rclone /usr/bin
 USER $USER_UID:$USER_GID
 WORKDIR /app
 COPY --from=builder /app/env ./env

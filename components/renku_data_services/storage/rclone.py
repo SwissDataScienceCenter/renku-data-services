@@ -1,9 +1,11 @@
 """Apispec schemas for storage service."""
 
 
+import asyncio
 import json
+import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Generator, Union, cast
+from typing import TYPE_CHECKING, Any, Generator, NamedTuple, Union, cast
 
 from pydantic import BaseModel, Field, ValidationError
 from sanic.log import logger
@@ -12,6 +14,8 @@ from renku_data_services import errors
 
 if TYPE_CHECKING:
     from renku_data_services.storage.models import RCloneConfig
+
+ConnectionResult = NamedTuple("ConnectionResult", [("success", bool), ("error", str)])
 
 
 class RCloneValidator:
@@ -73,6 +77,29 @@ class RCloneValidator:
 
         provider.validate_config(configuration, private=private, keep_sensitive=keep_sensitive)
 
+    async def test_connection(self, configuration: Union["RCloneConfig", dict[str, Any]], source_path: str):
+        """Tests connecting with an RClone config."""
+        provider = self.get_provider(configuration)
+        if not provider:
+            return ConnectionResult(False, "Unknown provider")
+
+        with tempfile.NamedTemporaryFile(mode="w+", delete=False, encoding="utf-8") as f:
+            config = "\n".join(f"{k}={v}" for k, v in configuration.items())
+            f.write(f"[temp]\n{config}")
+            f.close()
+            proc = await asyncio.create_subprocess_exec(
+                "rclone",
+                "lsf",
+                "--config",
+                f.name,
+                f"temp:{source_path}",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, error = await proc.communicate()
+            success = proc.returncode == 0
+        return ConnectionResult(success=success, error=error.decode())
+
     def remove_sensitive_options_from_config(self, configuration: Union["RCloneConfig", dict[str, Any]]):
         """Remove sensitive fields from a config, e.g. when turning a private storage public."""
 
@@ -133,7 +160,7 @@ class RCloneOption(BaseModel):
     provider: str = Field(alias="Provider")
     default: str | int | bool | list[str] | RCloneTriState | None = Field(alias="Default")
     value: str | int | bool | RCloneTriState | None = Field(alias="Value")
-    examples: list[RCloneExample] | None = Field(default=None)
+    examples: list[RCloneExample] | None = Field(default=None, alias="Examples")
     short_opt: str = Field(alias="ShortOpt")
     hide: int = Field(alias="Hide")
     required: bool = Field(alias="Required")
