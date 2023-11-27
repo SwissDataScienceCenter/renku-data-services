@@ -77,7 +77,7 @@ class UserRepo:
         async with self.session_maker() as session:
             stmt = select(UserORM)
             if email:
-                stmt.where(UserORM.email == email)
+                stmt = stmt.where(UserORM.email == email)
             res = await session.execute(stmt)
             orms = res.scalars().all()
             return [orm.dump() for orm in orms]
