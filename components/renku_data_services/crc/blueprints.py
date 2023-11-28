@@ -1,4 +1,5 @@
 """Compute resource control (CRC) app."""
+import asyncio
 from dataclasses import asdict, dataclass
 from typing import List
 
@@ -14,6 +15,7 @@ from renku_data_services.crc.apispec_base import ResourceClassesFilter
 from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
+from renku_data_services.users.models import UserInfo
 
 
 @dataclass(kw_only=True)
@@ -169,13 +171,19 @@ class ResourcePoolUsersBP(CustomBlueprint):
     async def _put_post(
         self, api_user: base_models.APIUser, resource_pool_id: int, body: apispec.UsersWithId, post: bool = True
     ):
-        users_to_add = [base_models.User(keycloak_id=user.id) for user in body.root]
-        for user in users_to_add:
-            user_check = await self.kc_user_repo.get_user(requested_by=api_user, id=user.keycloak_id)
-            if not user_check:
-                raise errors.MissingResourceError(message=f"User with user ID {user.keycloak_id} cannot be found")
+        user_ids_to_add = set([user.id for user in body.root])
+        users_checks: List[UserInfo | None] = await asyncio.gather(
+            *[self.kc_user_repo.get_user(requested_by=api_user, id=id) for id in user_ids_to_add]
+        )
+        existing_user_ids = set([user.id for user in users_checks if user is not None])
+        if existing_user_ids != user_ids_to_add:
+            missing_ids = user_ids_to_add.difference(existing_user_ids)
+            raise errors.MissingResourceError(message=f"The users with IDs {missing_ids} cannot be found")
         updated_users = await self.repo.update_resource_pool_users(
-            api_user=api_user, resource_pool_id=resource_pool_id, users=users_to_add, append=post
+            api_user=api_user,
+            resource_pool_id=resource_pool_id,
+            users=[base_models.User(keycloak_id=id) for id in user_ids_to_add],
+            append=post,
         )
         return json(
             [

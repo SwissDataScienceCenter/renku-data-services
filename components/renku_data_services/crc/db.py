@@ -662,16 +662,15 @@ class UserRepository(_Base):
                 if rp.default:
                     # NOTE: If the resource pool is default just check if any users are prevented from having
                     # default resource pool access - and remove the restriction.
-                    output: List[base_models.User] = []
                     no_default_rp_access_users = [u for u in users if u.no_default_access]
-                    for no_default_rp_access_user in no_default_rp_access_users:
-                        modified_user = await self.update_user(
-                            api_user=api_user,
-                            keycloak_id=no_default_rp_access_user.keycloak_id,
-                            no_default_access=False,
-                        )
-                        output.append(modified_user)
-                        return output
+                    return await gather(
+                        *[
+                            self.update_user(
+                                api_user=api_user, keycloak_id=no_default_user.keycloak_id, no_default_access=False
+                            )
+                            for no_default_user in no_default_rp_access_users
+                        ]
+                    )
                 user_ids_to_add_req = [user.keycloak_id for user in users]
                 stmt_usr = select(schemas.UserORM).where(schemas.UserORM.keycloak_id.in_(user_ids_to_add_req))
                 res_usr = await session.execute(stmt_usr)
@@ -705,6 +704,6 @@ class UserRepository(_Base):
                         message=f"Only the following fields {allowed_updates} "
                         "can be updated for a resource pool user.."
                     )
-                if kwargs.get("no_default_access", None) is not None:
-                    user.no_default_access = kwargs["no_default_access"]
+                if (no_default_access := kwargs.get("no_default_access", None)) is not None:
+                    user.no_default_access = no_default_access
                 return user.dump()

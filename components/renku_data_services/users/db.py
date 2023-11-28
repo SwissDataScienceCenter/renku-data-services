@@ -1,9 +1,10 @@
 """Database adapters and helpers for users."""
+import asyncio
 import logging
 from dataclasses import asdict
 from datetime import datetime, timedelta
 from functools import wraps
-from typing import Callable, List
+from typing import Any, Callable, Dict, List
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,7 +29,9 @@ def _authenticated(f):
         if "requested_by" in kwargs:
             api_user = kwargs["requested_by"]
         elif len(args) >= 1:
-            api_user = args[0]
+            api_user_search = [a for a in args if isinstance(a, APIUser)]
+            if len(api_user_search) == 1:
+                api_user = api_user_search[0]
         if api_user is None or not api_user.is_authenticated:
             raise errors.Unauthorized(message="You have to be authenticated to perform this operation.")
 
@@ -127,11 +130,15 @@ class UsersSync:
         async with self.session_maker() as session, session.begin():
             logging.info("Starting a total user database sync.")
             kc_users = kc_api.get_users()
-            for raw_kc_user in kc_users:
+
+            async def _do_update(raw_kc_user: Dict[str, Any]):
                 kc_user = UserInfo.from_kc_user_payload(raw_kc_user)
                 db_user = await self._get_user(kc_user.id)
                 if db_user != kc_user:
+                    logging.info(f"Inserting or updating user {db_user} -> {kc_user}")
                     await self._update_or_insert_user(kc_user.id, **asdict(kc_user))
+
+            await asyncio.gather(*[_do_update(u) for u in kc_users])
 
     async def events_sync(self, kc_api: IKeycloakAPI):
         """Use the events from Keycloak to update the users database."""
