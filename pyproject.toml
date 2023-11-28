@@ -7,8 +7,10 @@ readme = "README.md"
 license = "Apache License 2.0"
 packages = [
   { include = "renku_data_services/data_api", from = "bases" },
+  { include = "renku_data_services/keycloak_sync", from = "bases" },
   { include = "renku_data_services/authn", from = "components" },
-  { include = "renku_data_services/config", from = "components" },
+  { include = "renku_data_services/db_config", from = "components" },
+  { include = "renku_data_services/app_config", from = "components" },
   { include = "renku_data_services/authz", from = "components" },
   { include = "renku_data_services/authz_migrations", from = "components" },
   { include = "renku_data_services/crc", from = "components" },
@@ -24,6 +26,8 @@ packages = [
   { include = "renku_data_services/user_preferences_migrations", from = "components" },
   { include = "renku_data_services/utils", from = "components" },
   { include = "renku_data_services/git", from = "components" },
+  { include = "renku_data_services/users", from = "components" },
+  { include = "renku_data_services/users_migrations", from = "components" },
   { include = "renku_data_services/project", from = "components" },
   { include = "renku_data_services/project_migrations", from = "components" },
 ]
@@ -46,6 +50,7 @@ psycopg = { version = "^3.1.10", extras = ["binary"] }
 # urllib3 v2 has some breaking changes that libraries haven't caught up yet (08.2023)
 urllib3 = "^1.26.16"
 deepmerge = "^1.1.0"
+authlib = "^1.2.1"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.7.5"
@@ -65,6 +70,7 @@ types-pyyaml = "^6.0.12.9"
 schemathesis = "^3.19.0"
 pytest-asyncio = "^0.21.1"
 pytest-postgresql = "^5.0.0"
+types-urllib3 = "^1.26.25.14"
 
 [build-system]
 requires = ["poetry-core"]
@@ -78,7 +84,7 @@ include = '\.pyi?$'
 [tool.pydocstyle]
 add_ignore = ["D105", "D107", "D202", "D401"]
 match = '^(?!test_|apispec).*\.py'
-match_dir = '^(?!^test$|^crc_migrations$|^storage_migrations$|^user_preferences_migrations$|^project_migrations$|^authz_migrations$|\..*).*'
+match_dir = '^(?!^test$|^crc_migrations$|^storage_migrations$|^user_preferences_migrations$|^project_migrations$|^authz_migrations$|^users_migrations$|\..*).*'
 
 [tool.bandit]
 skips = ["B101", "B603", "B607", "B404"]
@@ -120,11 +126,16 @@ ignore = [
   "W504",
 ]
 exclude = [
+  "components/renku_data_services/users_migrations/versions",
+  "components/renku_data_services/user_preferences_migrations/versions",
   "components/renku_data_services/crc_migrations/versions",
   "components/renku_data_services/authz_migrations/versions",
+  "components/renku_data_services/project_migrations/versions",
   "components/renku_data_services/crc/apispec.py",
   "components/renku_data_services/project/apispec.py",
   "components/renku_data_services/storage/apispec.py",
+  "components/renku_data_services/users/apispec.py",
+  "components/renku_data_services/user_preferences/apispec.py",
 ]
 
 [tool.pytest.ini_options]

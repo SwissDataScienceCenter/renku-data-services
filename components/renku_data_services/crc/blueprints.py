@@ -14,6 +14,8 @@ from renku_data_services.crc import apispec, models
 from renku_data_services.crc.apispec_base import ResourceClassesFilter
 from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
 from renku_data_services.k8s.quota import QuotaRepository
+from renku_data_services.users.db import UserRepo as KcUserRepo
+from renku_data_services.users.models import UserInfo
 
 
 @dataclass(kw_only=True)
@@ -123,6 +125,7 @@ class ResourcePoolUsersBP(CustomBlueprint):
     """Handlers for dealing with the users of individual resource pools."""
 
     repo: UserRepository
+    kc_user_repo: KcUserRepo
     authenticator: base_models.Authenticator
 
     def get_all(self) -> BlueprintFactoryResponse:
@@ -131,7 +134,7 @@ class ResourcePoolUsersBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         async def _get_all(_: Request, resource_pool_id: int, user: base_models.APIUser):
-            res = await self.repo.get_users(api_user=user, resource_pool_id=resource_pool_id)
+            res = await self.repo.get_resource_pool_users(api_user=user, resource_pool_id=resource_pool_id)
             return json(
                 [
                     apispec.UserWithId(id=r.keycloak_id, no_default_access=r.no_default_access).model_dump(
@@ -168,9 +171,19 @@ class ResourcePoolUsersBP(CustomBlueprint):
     async def _put_post(
         self, api_user: base_models.APIUser, resource_pool_id: int, body: apispec.UsersWithId, post: bool = True
     ):
-        users_to_add = [base_models.User(keycloak_id=user.id) for user in body.root]
+        user_ids_to_add = set([user.id for user in body.root])
+        users_checks: List[UserInfo | None] = await asyncio.gather(
+            *[self.kc_user_repo.get_user(requested_by=api_user, id=id) for id in user_ids_to_add]
+        )
+        existing_user_ids = set([user.id for user in users_checks if user is not None])
+        if existing_user_ids != user_ids_to_add:
+            missing_ids = user_ids_to_add.difference(existing_user_ids)
+            raise errors.MissingResourceError(message=f"The users with IDs {missing_ids} cannot be found")
         updated_users = await self.repo.update_resource_pool_users(
-            api_user=api_user, resource_pool_id=resource_pool_id, users=users_to_add, append=post
+            api_user=api_user,
+            resource_pool_id=resource_pool_id,
+            users=[base_models.User(keycloak_id=id) for id in user_ids_to_add],
+            append=post,
         )
         return json(
             [
@@ -183,11 +196,13 @@ class ResourcePoolUsersBP(CustomBlueprint):
         )
 
     def get(self) -> BlueprintFactoryResponse:
-        """Get a specific user of a specific resource pool."""
+        """Check if a specific user has access to a resource pool."""
 
         @authenticate(self.authenticator)
         async def _get(_: Request, resource_pool_id: int, user_id: str, user: base_models.APIUser):
-            res = await self.repo.get_users(keycloak_id=user_id, resource_pool_id=resource_pool_id, api_user=user)
+            res = await self.repo.get_resource_pool_users(
+                keycloak_id=user_id, resource_pool_id=resource_pool_id, api_user=user
+            )
             if len(res) < 1:
                 raise errors.MissingResourceError(
                     message=f"The user with id {user_id} or resource pool with id {resource_pool_id} cannot be found."
@@ -201,14 +216,24 @@ class ResourcePoolUsersBP(CustomBlueprint):
         return "/resource_pools/<resource_pool_id>/users/<user_id>", ["GET"], _get
 
     def delete(self) -> BlueprintFactoryResponse:
-        """Delete a specific user of a specific resource pool."""
+        """Remove access for a specific user to a specific resource pool."""
 
         @authenticate(self.authenticator)
         @only_admins
         async def _delete(_: Request, resource_pool_id: int, user_id: str, user: base_models.APIUser):
-            await self.repo.delete_resource_pool_user(
-                resource_pool_id=resource_pool_id, keycloak_id=user_id, api_user=user
-            )
+            user_exists = await self.kc_user_repo.get_user(requested_by=user, id=user_id)
+            if not user_exists:
+                raise errors.MissingResourceError(message=f"The user with id {user_id} cannot be found.")
+            resource_pools = await self.repo.get_user_resource_pools(api_user=user, keycloak_id=user_id)
+            if len(resource_pools) == 0:
+                return HTTPResponse(status=204)
+            resource_pool = resource_pools[0]
+            if resource_pool.default:
+                await self.repo.update_user(api_user=user, keycloak_id=user_id, no_default_access=True)
+            else:
+                await self.repo.delete_resource_pool_user(
+                    resource_pool_id=resource_pool_id, keycloak_id=user_id, api_user=user
+                )
             return HTTPResponse(status=204)
 
         return "/resource_pools/<resource_pool_id>/users/<user_id>", ["DELETE"], _delete
@@ -405,124 +430,11 @@ class QuotaBP(CustomBlueprint):
 
 
 @dataclass(kw_only=True)
-class UsersBP(CustomBlueprint):
-    """Handlers for creating and listing users."""
-
-    repo: UserRepository
-    user_store: base_models.UserStore
-    authenticator: base_models.Authenticator
-
-    def post(self) -> BlueprintFactoryResponse:
-        """Add a new user. The user has to exist in Keycloak."""
-
-        @authenticate(self.authenticator)
-        @only_admins
-        @validate(json=apispec.UserWithId)
-        async def _post(request: Request, body: apispec.UserWithId, user: base_models.APIUser):
-            users_db, user_kc = await asyncio.gather(
-                self.repo.get_users(keycloak_id=body.id, api_user=user),
-                self.user_store.get_user_by_id(body.id, user.access_token),  # type: ignore[arg-type]
-            )
-            user_db = next(iter(users_db), None)
-            # The user does not exist in keycloak, delete it form the crc database and fail.
-            if user_kc is None:
-                await self.repo.delete_user(id=body.id, api_user=user)
-                raise errors.MissingResourceError(message=f"User with id {body.id} cannot be found in keycloak.")
-            # The user exists in keycloak, fail if the requested id does not match what is in keycloak.
-            if body.id != user_kc.keycloak_id:
-                raise errors.ValidationError(message="The provided user ID does not match the ID from keycloak.")
-            # The user exists in the db and the request body matches what is the in the db, simply return the user.
-            if user_db is not None and user_db.keycloak_id == body.id:
-                return json(
-                    apispec.UserWithId(id=user_db.keycloak_id, no_default_access=user_db.no_default_access).model_dump(
-                        exclude_none=True
-                    ),
-                    200,
-                )
-            # The user does not exist in the db, add it.
-            kc_user = await self.repo.insert_user(
-                api_user=user, user=base_models.User(keycloak_id=body.id, no_default_access=body.no_default_access)
-            )
-            return json(
-                apispec.UserWithId(id=kc_user.keycloak_id, no_default_access=kc_user.no_default_access).model_dump(
-                    exclude_none=True
-                ),
-                201,
-            )
-
-        return "/users", ["POST"], _post
-
-    def get_all(self) -> BlueprintFactoryResponse:
-        """Get all users. Please note that this is a subset of the users from Keycloak."""
-
-        @authenticate(self.authenticator)
-        @only_admins
-        async def _get_all(_: Request, user: base_models.APIUser):
-            res = await self.repo.get_users(api_user=user)
-            return json(
-                [
-                    apispec.UserWithId(id=r.keycloak_id, no_default_access=r.no_default_access).model_dump(
-                        exclude_none=True
-                    )
-                    for r in res
-                ]
-            )
-
-        return "/users", ["GET"], _get_all
-
-    def delete(self) -> BlueprintFactoryResponse:
-        """Delete a specific user, removing them from any resource pool they had access to."""
-
-        @authenticate(self.authenticator)
-        @only_admins
-        async def _delete(_: Request, user_id: str, user: base_models.APIUser):
-            await self.repo.delete_user(id=user_id, api_user=user)
-            return HTTPResponse(status=204)
-
-        return "/users/<user_id>", ["DELETE"], _delete
-
-    def put(self) -> BlueprintFactoryResponse:
-        """Update all fields for a specific user."""
-
-        @authenticate(self.authenticator)
-        @only_admins
-        @validate(json=apispec.UserPut)
-        async def _put(_: Request, user_id: str, user: base_models.APIUser, body: apispec.UserPut):
-            edited_user = await self.repo.update_user(
-                keycloak_id=user_id, api_user=user, **body.model_dump(exclude_none=True)
-            )
-            return json(
-                apispec.UserWithId(
-                    id=edited_user.keycloak_id, no_default_access=edited_user.no_default_access
-                ).model_dump(exclude_none=True)
-            )
-
-        return "/users/<user_id>", ["PUT"], _put
-
-    def patch(self) -> BlueprintFactoryResponse:
-        """Update some fields for a specific user."""
-
-        @authenticate(self.authenticator)
-        @only_admins
-        @validate(json=apispec.UserPatch)
-        async def _patch(_: Request, user_id: str, user: base_models.APIUser, body: apispec.UserPatch):
-            edited_user = await self.repo.update_user(
-                keycloak_id=user_id, api_user=user, **body.model_dump(exclude_none=True)
-            )
-            return json(
-                apispec.UserWithId(
-                    id=edited_user.keycloak_id, no_default_access=edited_user.no_default_access
-                ).model_dump(exclude_none=True)
-            )
-
-        return "/users/<user_id>", ["PATCH"], _patch
-
-
-@dataclass(kw_only=True)
 class UserResourcePoolsBP(CustomBlueprint):
     """Handlers for dealing with the resource pools of a specific user."""
 
     repo: UserRepository
+    kc_user_repo: KcUserRepo
     authenticator: base_models.Authenticator
 
     def get(self) -> BlueprintFactoryResponse:
@@ -561,6 +473,9 @@ class UserResourcePoolsBP(CustomBlueprint):
     async def _post_put(
         self, user_id: str, resource_pool_ids: apispec.IntegerIds, api_user: base_models.APIUser, post: bool = True
     ):
+        user_check = await self.kc_user_repo.get_user(requested_by=api_user, id=user_id)
+        if not user_check:
+            raise errors.MissingResourceError(message=f"User with user ID {user_id} cannot be found")
         rps = await self.repo.update_user_resource_pools(
             keycloak_id=user_id, resource_pool_ids=resource_pool_ids.root, append=post, api_user=api_user
         )

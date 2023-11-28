@@ -7,7 +7,7 @@ it all in one place.
 """
 from asyncio import gather
 from functools import wraps
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, cast
+from typing import Callable, Dict, List, Optional, Sequence, Tuple, cast
 
 from sqlalchemy import NullPool, create_engine, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -483,14 +483,14 @@ class UserRepository(_Base):
     """The adapter used for accessing users with SQLAlchemy."""
 
     @_only_admins
-    async def get_users(
+    async def get_resource_pool_users(
         self,
         *,
         api_user: base_models.APIUser,
         keycloak_id: Optional[str] = None,
         resource_pool_id: Optional[int] = None,
     ) -> List[base_models.User]:
-        """Get users from the database."""
+        """Get users of a specific resource pool from the database."""
         async with self.session_maker() as session:
             async with session.begin():
                 if resource_pool_id is not None:
@@ -519,7 +519,7 @@ class UserRepository(_Base):
 
     @_only_admins
     async def insert_user(self, api_user: base_models.APIUser, user: base_models.User) -> base_models.User:
-        """Insert a user in the database."""
+        """Insert a user in the resource pool access lists."""
         orm = schemas.UserORM.load(user)
         async with self.session_maker() as session:
             async with session.begin():
@@ -528,7 +528,7 @@ class UserRepository(_Base):
 
     @_only_admins
     async def delete_user(self, api_user: base_models.APIUser, id: str):
-        """Remove a user from the database."""
+        """Remove a user from the resource pool access lists."""
         async with self.session_maker() as session:
             async with session.begin():
                 stmt = select(schemas.UserORM).where(schemas.UserORM.keycloak_id == id)
@@ -553,15 +553,6 @@ class UserRepository(_Base):
                     raise errors.ValidationError(
                         message="Users cannot query for resource pools that belong to other users."
                     )
-                stmt: Select[Any] = (
-                    select(schemas.UserORM)
-                    .where(schemas.UserORM.keycloak_id == keycloak_id)
-                    .options(selectinload(schemas.UserORM.resource_pools))
-                )
-                res = await session.execute(stmt)
-                user: Optional[schemas.UserORM] = res.scalars().first()
-                if user is None:
-                    raise errors.MissingResourceError(message=f"The user with keycloak id {keycloak_id} does not exist")
 
                 stmt = select(schemas.ResourcePoolORM).options(selectinload(schemas.ResourcePoolORM.classes))
                 stmt = stmt.where(
@@ -669,12 +660,17 @@ class UserRepository(_Base):
                         message=f"The resource pool with id {resource_pool_id} does not exist"
                     )
                 if rp.default:
+                    # NOTE: If the resource pool is default just check if any users are prevented from having
+                    # default resource pool access - and remove the restriction.
                     no_default_rp_access_users = [u for u in users if u.no_default_access]
-                    if no_default_rp_access_users:
-                        no_default_rp_access_users_str = ", ".join([str(u.id) for u in no_default_rp_access_users])
-                        raise errors.NoDefaultPoolAccessError(
-                            message=f"Users cannot access default resource pool: [{no_default_rp_access_users_str}]"
-                        )
+                    return await gather(
+                        *[
+                            self.update_user(
+                                api_user=api_user, keycloak_id=no_default_user.keycloak_id, no_default_access=False
+                            )
+                            for no_default_user in no_default_rp_access_users
+                        ]
+                    )
                 user_ids_to_add_req = [user.keycloak_id for user in users]
                 stmt_usr = select(schemas.UserORM).where(schemas.UserORM.keycloak_id.in_(user_ids_to_add_req))
                 res_usr = await session.execute(stmt_usr)
@@ -700,9 +696,14 @@ class UserRepository(_Base):
                 res = await session.execute(stmt)
                 user: Optional[schemas.UserORM] = res.scalars().first()
                 if not user:
-                    raise errors.MissingResourceError(
-                        message=f"The user with keycloak ID {keycloak_id} does not exist."
+                    user = schemas.UserORM(keycloak_id=keycloak_id)
+                    session.add(user)
+                allowed_updates = set(["no_default_access"])
+                if not set(kwargs.keys()).issubset(allowed_updates):
+                    raise errors.ValidationError(
+                        message=f"Only the following fields {allowed_updates} "
+                        "can be updated for a resource pool user.."
                     )
-                for field_name, field_value in kwargs.items():
-                    setattr(user, field_name, field_value)
+                if (no_default_access := kwargs.get("no_default_access", None)) is not None:
+                    user.no_default_access = no_default_access
                 return user.dump()
