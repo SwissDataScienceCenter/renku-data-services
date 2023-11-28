@@ -78,6 +78,38 @@ class RCloneValidator:
                     ):
                         option["Required"] = True
 
+    @staticmethod
+    def __patch_schema_add_switch_provider(spec: list[dict[str, Any]]) -> None:
+        """Adds a fake provider to help with setting up switch storage."""
+        s3 = next(s for s in spec if s["Prefix"] == "s3")
+        providers = next(o for o in s3["Options"] if o["Name"] == "provider")
+        providers["Examples"].append({"Value": "Switch", "Help": "Switch Object Storage", "Provider": ""})
+        s3["Options"].append(
+            {
+                "Name": "endpoint",
+                "Help": "Endpoint for Switch S3 API.",
+                "Provider": "Switch",
+                "Default": "https://s3-zh.os.switch.ch",
+                "Value": None,
+                "Examples": [
+                    {"Value": "https://s3-zh.os.switch.ch", "Help": "Cloudian Hyperstore (ZH)", "Provider": ""},
+                    {"Value": "https://os.zhdk.cloud.switch.ch", "Help": "Ceph Object Gateway (ZH)", "Provider": ""},
+                    {"Value": "https://os.unil.cloud.switch.ch", "Help": "Ceph Object Gateway (LS)", "Provider": ""},
+                ],
+                "ShortOpt": "",
+                "Hide": 0,
+                "Required": True,
+                "IsPassword": False,
+                "NoPrefix": False,
+                "Advanced": False,
+                "Exclusive": True,
+                "Sensitive": False,
+                "DefaultStr": "",
+                "ValueStr": "",
+                "Type": "string",
+            }
+        )
+
     def apply_patches(self, spec: list[dict[str, Any]]) -> None:
         """Apply patches to RClone schema."""
         patches = [
