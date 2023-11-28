@@ -17,6 +17,19 @@ if TYPE_CHECKING:
 
 ConnectionResult = NamedTuple("ConnectionResult", [("success", bool), ("error", str)])
 
+BANNED_STORAGE = {
+    "alias",
+    "crypt",
+    "cache",
+    "chunker",
+    "combine",
+    "compress",
+    "hasher",
+    "local",
+    "memory",
+    "union",
+}
+
 
 class RCloneValidator:
     """Class for validating RClone configs."""
@@ -37,6 +50,13 @@ class RCloneValidator:
             except ValidationError:
                 logger.error("Couldn't load RClone config: %s", provider_config)
                 raise
+
+    @staticmethod
+    def __patch_schema_remove_unsafe(spec: list[dict[str, Any]]) -> None:
+        """Remove storages that aren't safe to use in the service."""
+        indices = [i for i, v in enumerate(spec) if v["Prefix"] in BANNED_STORAGE]
+        for i in sorted(indices, reverse=True):
+            spec.pop(i)
 
     @staticmethod
     def __patch_schema_azure_account_sensitive(spec: list[dict[str, Any]]) -> None:
@@ -116,6 +136,8 @@ class RCloneValidator:
             raise errors.ValidationError(
                 message="Expected a `type` field in the RClone configuration, but didn't find it."
             )
+        if storage_type in BANNED_STORAGE:
+            raise errors.ValidationError(message=f"Storage '{storage_type}' is not supported.")
 
         provider = self.providers.get(storage_type)
 

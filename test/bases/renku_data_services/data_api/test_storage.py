@@ -614,6 +614,11 @@ async def test_storage_validate_error_wrong_type(storage_test_client):
     assert res.status_code == 422
     assert "does not exist" in res.json["error"]["message"]
 
+    body = {"type": "local"}
+    _, res = await storage_test_client.post("/api/data/storage_schema/validate", data=json.dumps(body))
+    assert res.status_code == 422
+    assert "local" in res.json["error"]["message"]
+
 
 @pytest.mark.asyncio
 async def test_storage_validate_error_sensitive(storage_test_client):
@@ -629,6 +634,7 @@ async def test_storage_schema(storage_test_client):
     storage_test_client, _ = storage_test_client
     _, res = await storage_test_client.get("/api/data/storage_schema")
     assert res.status_code == 200
+    assert not next((e for e in res.json if e["prefix"] == "alias"), None)  # prohibited storage
     s3 = next(e for e in res.json if e["prefix"] == "s3")
     assert s3
     providers = next(p for p in s3["options"] if p["name"] == "provider")
