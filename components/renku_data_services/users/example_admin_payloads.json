@@ -1,0 +1,43 @@
+[
+    {
+        "time": 1700668537624,
+        "realmId": "c379ffd2-9e17-4dfe-b28b-dcacdda5086c",
+        "authDetails": {
+            "realmId": "95061e0e-a731-4152-9dd2-e26196a748c8",
+            "clientId": "1cdaeb95-56dc-4fa7-b7ce-17bc5ea38979",
+            "userId": "3aabcffa-32f6-427f-8204-3451eb80f566",
+            "ipAddress": "192.168.0.128"
+        },
+        "operationType": "UPDATE",
+        "resourceType": "USER",
+        "resourcePath": "users/09a6589d-08d0-4415-9b12-a5763b119cc2",
+        "representation": "{\"enabled\":true,\"emailVerified\":false,\"firstName\":\"Tasko12\",\"lastName\":\"Olevski\",\"email\":\"olevski90@gmail.com\",\"requiredActions\":[]}"
+    },
+    {
+        "time": 1700668587351,
+        "realmId": "c379ffd2-9e17-4dfe-b28b-dcacdda5086c",
+        "authDetails": {
+            "realmId": "95061e0e-a731-4152-9dd2-e26196a748c8",
+            "clientId": "1cdaeb95-56dc-4fa7-b7ce-17bc5ea38979",
+            "userId": "3aabcffa-32f6-427f-8204-3451eb80f566",
+            "ipAddress": "192.168.0.128"
+        },
+        "operationType": "DELETE",
+        "resourceType": "USER",
+        "resourcePath": "users/09a6589d-08d0-4415-9b12-a5763b119cc2"
+    },
+    {
+        "time": 1700670233597,
+        "realmId": "c379ffd2-9e17-4dfe-b28b-dcacdda5086c",
+        "authDetails": {
+            "realmId": "95061e0e-a731-4152-9dd2-e26196a748c8",
+            "clientId": "1cdaeb95-56dc-4fa7-b7ce-17bc5ea38979",
+            "userId": "3aabcffa-32f6-427f-8204-3451eb80f566",
+            "ipAddress": "192.168.0.128"
+        },
+        "operationType": "CREATE",
+        "resourceType": "USER",
+        "resourcePath": "users/2681edb2-6b57-45bb-ba71-4bf25e431c96",
+        "representation": "{\"enabled\":true,\"emailVerified\":false,\"firstName\":\"some\",\"lastName\":\"user\",\"email\":\"some-email@gmail.com\",\"requiredActions\":[],\"groups\":[]}"
+    }
+]
