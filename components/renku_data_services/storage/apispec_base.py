@@ -1,5 +1,5 @@
 """Base models for API specifications."""
-from pydantic import BaseModel, Extra, Field
+from pydantic import BaseModel, Field
 
 
 class BaseAPISpec(BaseModel):
@@ -17,6 +17,6 @@ class RepositoryFilter(BaseAPISpec):
     class Config:
         """Configuration."""
 
-        extra = Extra.ignore
+        extra = "ignore"
 
     project_id: str = Field()
