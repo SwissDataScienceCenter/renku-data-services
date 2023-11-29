@@ -1,4 +1,5 @@
 import json
+from test.bases.renku_data_services.keycloak_sync.test_sync import get_kc_users
 from typing import List
 
 import pytest
@@ -10,7 +11,6 @@ from renku_data_services.app_config import Config as DataConfig
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import UserInfo
-from test.bases.renku_data_services.keycloak_sync.test_sync import get_kc_users
 
 
 @pytest.fixture

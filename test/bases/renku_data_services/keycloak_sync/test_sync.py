@@ -1,14 +1,15 @@
 import json
-import pytest
 from dataclasses import asdict
 from datetime import datetime
 from typing import Any, Dict, List, Tuple
 
+import pytest
+
 from bases.renku_data_services.keycloak_sync.config import SyncConfig
 from renku_data_services.db_config import DBConfig
-from renku_data_services.users.db import UsersSync, UserRepo
+from renku_data_services.users.db import UserRepo, UsersSync
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
-from renku_data_services.users.models import UserInfoUpdate, UserInfo, KeycloakAdminEvent
+from renku_data_services.users.models import KeycloakAdminEvent, UserInfo, UserInfoUpdate
 
 
 @pytest.fixture
