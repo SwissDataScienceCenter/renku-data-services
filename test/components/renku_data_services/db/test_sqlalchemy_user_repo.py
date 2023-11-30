@@ -24,7 +24,7 @@ async def test_insert_user(app_config: Config, user: base_models.User, admin_use
     inserted_user = await user_repo.insert_user(user=user, api_user=admin_user)
     assert inserted_user is not None
     assert inserted_user.keycloak_id is not None
-    retrieved_users = await user_repo.get_resource_pool_users(keycloak_id=user.keycloak_id, api_user=admin_user)
+    retrieved_users = await user_repo.get_users(id=user.keycloak_id, api_user=admin_user)
     assert len(retrieved_users) == 1
     retrieved_user = retrieved_users[0]
     assert user.keycloak_id == retrieved_user.keycloak_id
@@ -41,10 +41,10 @@ async def test_delete_user(app_config: Config, user: base_models.User, admin_use
     inserted_user = await user_repo.insert_user(user=user, api_user=admin_user)
     assert inserted_user is not None
     assert inserted_user.keycloak_id is not None
-    retrieved_users = await user_repo.get_resource_pool_users(keycloak_id=user.keycloak_id, api_user=admin_user)
+    retrieved_users = await user_repo.get_users(id=user.keycloak_id, api_user=admin_user)
     assert len(retrieved_users) == 1
     await user_repo.delete_user(id=user.keycloak_id, api_user=admin_user)
-    retrieved_users = await user_repo.get_resource_pool_users(keycloak_id=user.keycloak_id, api_user=admin_user)
+    retrieved_users = await user_repo.get_users(id=user.keycloak_id, api_user=admin_user)
     assert len(retrieved_users) == 0
 
 
@@ -61,18 +61,26 @@ async def test_resource_pool_add_users(
     pool_repo = app_config.rp_repo
     inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
     assert inserted_rp.id is not None
-    await user_repo.update_resource_pool_users(resource_pool_id=inserted_rp.id, users=users, api_user=admin_user)
-    retrieved_users = await user_repo.get_resource_pool_users(resource_pool_id=inserted_rp.id, api_user=admin_user)
-    assert len(retrieved_users) == len(users)
-    retrieved_users_ids = [user.keycloak_id for user in retrieved_users]
-    assert all([user.keycloak_id in retrieved_users_ids for user in users])
-    a_user = users[0]
     await user_repo.update_resource_pool_users(
-        resource_pool_id=inserted_rp.id, users=[a_user], append=False, api_user=admin_user
+        resource_pool_id=inserted_rp.id, user_ids=[user.keycloak_id for user in users], api_user=admin_user
     )
     retrieved_users = await user_repo.get_resource_pool_users(resource_pool_id=inserted_rp.id, api_user=admin_user)
-    assert len(retrieved_users) == 1
-    assert retrieved_users[0].keycloak_id == a_user.keycloak_id
+    retrieved_users_ids = [user.keycloak_id for user in retrieved_users.allowed]
+    if not inserted_rp.public:
+        assert len(retrieved_users.allowed) == len(users)
+        assert all([user.keycloak_id in retrieved_users_ids for user in users])
+    else:
+        assert len(retrieved_users.allowed) == 0
+    a_user = users[0]
+    await user_repo.update_resource_pool_users(
+        resource_pool_id=inserted_rp.id, user_ids=[a_user.keycloak_id], append=False, api_user=admin_user
+    )
+    retrieved_users = await user_repo.get_resource_pool_users(resource_pool_id=inserted_rp.id, api_user=admin_user)
+    if not inserted_rp.public:
+        assert len(retrieved_users.allowed) == 1
+        assert retrieved_users.allowed[0].keycloak_id == a_user.keycloak_id
+    else:
+        assert len(retrieved_users.allowed) == 0
     # NOTE: The db is not cleaned up for every sample of the fuzzy fixtures, so we clean up the users here
     for user in users:
         await user_repo.delete_user(id=user.keycloak_id, api_user=admin_user)
@@ -91,19 +99,25 @@ async def test_resource_pool_remove_users(
     pool_repo = app_config.rp_repo
     inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
     assert inserted_rp.id is not None
-    await user_repo.update_resource_pool_users(resource_pool_id=inserted_rp.id, users=users, api_user=admin_user)
+    await user_repo.update_resource_pool_users(
+        resource_pool_id=inserted_rp.id, user_ids=[user.keycloak_id for user in users], api_user=admin_user
+    )
     original_users = await user_repo.get_resource_pool_users(resource_pool_id=inserted_rp.id, api_user=admin_user)
-    assert len(original_users) == len(users)
-    remove_user = original_users[0]
+    if not inserted_rp.public:
+        assert len(original_users.allowed) == len(users)
+    else:
+        assert len(original_users.allowed) == 0
+    remove_user = original_users.allowed[0]
     await user_repo.delete_resource_pool_user(
         resource_pool_id=inserted_rp.id, keycloak_id=remove_user.keycloak_id, api_user=admin_user
     )
 
     new_users = await user_repo.get_resource_pool_users(resource_pool_id=inserted_rp.id, api_user=admin_user)
-    assert remove_user not in new_users
-    assert all([user in original_users for user in new_users])
-    all_users = await user_repo.get_resource_pool_users(api_user=admin_user)
-    assert all([user in all_users for user in original_users])
+    if not inserted_rp.public:
+        assert remove_user not in new_users.allowed
+        assert all([user in original_users.allowed for user in new_users.allowed])
+    if inserted_rp.default:
+        assert remove_user in new_users.disallowed
     # NOTE: The db is not cleaned up for every sample of the fuzzy fixtures, so we clean up the users here
     for user in users:
         await user_repo.delete_user(id=user.keycloak_id, api_user=admin_user)
@@ -177,7 +191,7 @@ async def test_update_user(
             updated_users.append(await user_repo.update_user(admin_user, user.keycloak_id, no_default_access=True))
         assert len(users) == len(updated_users)
         assert all([i.no_default_access for i in updated_users])
-        retrieved_users = await user_repo.get_resource_pool_users(api_user=admin_user)
+        retrieved_users = await user_repo.get_users(api_user=admin_user)
         assert len(updated_users) == len(retrieved_users)
         assert all([i.no_default_access for i in retrieved_users])
     finally:
