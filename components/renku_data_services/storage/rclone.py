@@ -109,6 +109,10 @@ class RCloneValidator:
                 "Type": "string",
             }
         )
+        existing_endpoint_spec = next(
+            o for o in s3["Options"] if o["Name"] == "endpoint" and o["Provider"].startswith("!AWS,")
+        )
+        existing_endpoint_spec["Provider"] += ",Switch"
 
     def apply_patches(self, spec: list[dict[str, Any]]) -> None:
         """Apply patches to RClone schema."""
