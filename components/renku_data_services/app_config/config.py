@@ -41,7 +41,7 @@ from renku_data_services.db_config import DBConfig
 from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
-from renku_data_services.project.db import ProjectRepository
+from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.user_preferences.config import UserPreferencesConfig
 from renku_data_services.user_preferences.db import UserPreferencesRepository
@@ -112,6 +112,7 @@ class Config:
     _project_authz: IProjectAuthorizer | None = field(default=None, repr=False, init=False)
     _user_preferences_repo: UserPreferencesRepository | None = field(default=None, repr=False, init=False)
     _kc_user_repo: KcUserRepo | None = field(default=None, repr=False, init=False)
+    _project_member_repo: ProjectMemberRepository | None = field(default=None, repr=False, init=False)
 
     def __post_init__(self):
         spec_file = Path(renku_data_services.crc.__file__).resolve().parent / "api.spec.yaml"
@@ -175,6 +176,15 @@ class Config:
                 session_maker=self.db.async_session_maker, project_authz=self.project_authz
             )
         return self._project_repo
+
+    @property
+    def project_member_repo(self) -> ProjectMemberRepository:
+        """The DB adapter for Renku native projects members."""
+        if not self._project_member_repo:
+            self._project_member_repo = ProjectMemberRepository(
+                session_maker=self.db.async_session_maker, project_authz=self.project_authz
+            )
+        return self._project_member_repo
 
     @property
     def project_authz(self) -> IProjectAuthorizer:

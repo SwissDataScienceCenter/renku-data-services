@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Callable, NamedTuple, Tuple, cast
+from typing import Any, Callable, Dict, List, NamedTuple, Tuple, cast
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import renku_data_services.base_models as base_models
@@ -14,7 +14,13 @@ from renku_data_services.authz.authz import IProjectAuthorizer
 from renku_data_services.authz.models import MemberQualifier, Scope
 from renku_data_services.project import models
 from renku_data_services.project import orm as schemas
-from renku_data_services.project.apispec import Visibility
+from renku_data_services.project.apispec import Role, Visibility
+from renku_data_services.authz import models as authz_models
+
+
+def convert_role(role: Role) -> authz_models.Role:
+    """Covert from project member Role to authz Role."""
+    return authz_models.Role.OWNER if role == Role.owner else authz_models.Role.MEMBER
 
 
 class PaginationResponse(NamedTuple):
@@ -94,9 +100,13 @@ class ProjectRepository:
             async with session.begin():
                 session.add(project_orm)
 
+                project = project_orm.dump()
+
+                owner = schemas.ProjectMemberORM(project_id=project.id, role=Role.owner, id=user.id)
+                session.add(owner)
+
                 # TODO: Test that raising an exception causes the transaction to be aborted or not
 
-                project = project_orm.dump()
                 public_project = project.visibility == Visibility.public
                 if project.id is None:
                     raise errors.BaseError(detail="The created project does not have an ID but it should.")
@@ -106,7 +116,7 @@ class ProjectRepository:
 
         return project_orm.dump()
 
-    async def update_project(self, user: base_models.APIUser, project_id: str, **kwargs) -> models.Project:
+    async def update_project(self, user: base_models.APIUser, project_id: str, **payload) -> models.Project:
         """Update a project entry."""
         authorized = await self.project_authz.has_permission(user=user, project_id=project_id, scope=Scope.WRITE)
         if not authorized:
@@ -124,12 +134,10 @@ class ProjectRepository:
 
                 project = projects[0]
 
-                for key, value in kwargs.items():
+                for key, value in payload.items():
                     # NOTE: ``slug``, ``id``, ``created_by``, and ``creation_date`` cannot be edited
                     if key not in ["slug", "id", "created_by", "creation_date"]:
                         setattr(project, key, value)
-
-                # TODO: Update members -> Add, remove members
 
                 return project.dump()  # NOTE: Triggers validation before the transaction saves data
 
@@ -150,3 +158,92 @@ class ProjectRepository:
                     return
 
                 await session.delete(projects[0])
+
+                await self.project_authz.delete_project(requested_by=user, project_id=project_id)
+
+
+class ProjectMemberRepository:
+    """Repository for project members."""
+
+    def __init__(self, session_maker: Callable[..., AsyncSession], project_authz: IProjectAuthorizer):
+        self.session_maker = session_maker  # type: ignore[call-overload]
+        self.project_authz: IProjectAuthorizer = project_authz
+
+    async def get_members(self, user: base_models.APIUser, project_id: str) -> List[models.MemberWithRole]:
+        """Get all members of a project."""
+        authorized = await self.project_authz.has_permission(user=user, project_id=project_id, scope=Scope.READ)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
+
+        async with self.session_maker() as session:
+            stmt = select(schemas.ProjectMemberORM).where(schemas.ProjectMemberORM.project_id == project_id)
+            result = await session.execute(stmt)
+            members_orm = result.scalars().all()
+
+            return [m.dump() for m in members_orm]
+
+    async def update_members(self, user: base_models.APIUser, project_id: str, members: List[Dict[str, Any]]) -> None:
+        """Update project's members."""
+        authorized = await self.project_authz.has_permission(user=user, project_id=project_id, scope=Scope.WRITE)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
+
+        async with self.session_maker() as session:
+            async with session.begin():
+                result = await session.execute(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
+                projects = result.one_or_none()
+
+                if projects is None:
+                    raise errors.MissingResourceError(message=f"The project with id '{project_id}' cannot be found")
+
+                # TODO: Test that this is validated by the REST API
+                ids = [m["member"]["id"] for m in members]
+
+                stmt = delete(schemas.ProjectMemberORM).where(
+                    and_(schemas.ProjectMemberORM.project_id == project_id, schemas.ProjectMemberORM.id.in_(ids))
+                )
+
+                # TODO: Check what happens when we delete some rows but the next operation fails
+
+                await session.execute(stmt)
+
+                members_with_roles = [models.MemberWithRole.from_dict(m) for m in members]
+                members_orm = [schemas.ProjectMemberORM.load(m, project_id=project_id) for m in members_with_roles]
+
+                session.add_all(members_orm)
+
+                for member in members:
+                    await self.project_authz.update_or_add_user(
+                        requested_by=user,
+                        project_id=project_id,
+                        user_id=member["member"]["id"],
+                        role=convert_role(Role(member["role"])),
+                    )
+
+    async def delete_member(self, user: base_models.APIUser, project_id: str, member_id: str) -> None:
+        """Delete a single member from a project."""
+        authorized = await self.project_authz.has_permission(user=user, project_id=project_id, scope=Scope.WRITE)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
+
+        async with self.session_maker() as session:
+            async with session.begin():
+                result = await session.execute(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
+                projects = result.one_or_none()
+
+                if projects is None:
+                    raise errors.MissingResourceError(message=f"The project with id '{project_id}' cannot be found")
+
+                stmt = delete(schemas.ProjectMemberORM).where(
+                    and_(schemas.ProjectMemberORM.project_id == project_id, schemas.ProjectMemberORM.id == member_id)
+                )
+
+                await session.execute(stmt)
+
+                await self.project_authz.delete_user(requested_by=user, project_id=project_id, user_id=member_id)

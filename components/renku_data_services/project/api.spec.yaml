@@ -4,7 +4,7 @@ info:
   description: |
     Service that allows creating, updating, deleting, and managing Renku native projects.
     All errors have the same format as the schema called ErrorResponse.
-  version: 0.3.0
+  version: 0.4.0
 servers:
   - url: /api/data
   - url: /ui-server/api/data
@@ -168,7 +168,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/MembersWithRoles"
+                $ref: "#/components/schemas/FullUsersWithRoles"
         "404":
           description: The project does not exist
           content:
@@ -198,11 +198,7 @@ paths:
               $ref: "#/components/schemas/MembersWithRoles"
       responses:
         "200":
-          description: The project's updated members list
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MembersWithRoles"
+          description: The project's members were updated
         "404":
           description: The project does not exist
           content:
@@ -213,7 +209,7 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - projects
-  /projects/{project_id}/members/{user_id}:
+  /projects/{project_id}/members/{member_id}:
     delete:
       summary: Remove a member from a project
       parameters:
@@ -223,13 +219,13 @@ paths:
           schema:
             type: string
         - in: path
-          name: user_id
+          name: member_id
           required: true
           schema:
             type: string
       responses:
         "204":
-          description: The user was removed or wasn't part of project's members.
+          description: The member was removed or wasn't part of project's members.
         "404":
           description: The project does not exist
           content:
@@ -240,16 +236,6 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - projects
-  /version:
-    get:
-      summary: Get the version of the service
-      responses:
-        "200":
-          description: The error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Version"
 components:
   schemas:
     ProjectsList:
@@ -271,15 +257,13 @@ components:
         creation_date:
           $ref: "#/components/schemas/CreationDate"
         created_by:
-          $ref: "#/components/schemas/User"
+          $ref: "#/components/schemas/Member"
         repositories:
           $ref: "#/components/schemas/RepositoriesList"
         visibility:
           $ref: "#/components/schemas/Visibility"
         description:
           $ref: "#/components/schemas/Description"
-        members:
-          $ref: "#/components/schemas/MembersWithRoles"
       required:
         - "id"
         - "name"
@@ -364,19 +348,19 @@ components:
       description: A description for project
       type: string
       maxLength: 500
-    User: # TODO: We return User's KeyCloak ID to the client
+    Member:
       description: A KeyCloak user
       type: object
       additionalProperties: false
       properties:
         id:
-          $ref: "#/components/schemas/UserId"
+          $ref: "#/components/schemas/KeyCloakId"
       required:
         - "id"
       example:
         id: "some-keycloak-user-id"
-    UserId:
-      description: User's KeyCloak ID
+    KeyCloakId:
+      description: Member's KeyCloak ID
       type: string
       pattern: "^[A-Za-z0-9-]+$"
       minLength: 1
@@ -400,40 +384,51 @@ components:
         - private
         - public
     MembersWithRoles:
-      description: List of users and their access level to the project
+      description: List of members and their access level to the project
       type: array
       items:
         $ref: "#/components/schemas/MemberWithRole"
       minItems: 0
     MemberWithRole:
-      description: A user and the access level to the project
+      description: A member and the access level to the project
       type: object
       additionalProperties: false
       properties:
-        user:
-          $ref: "#/components/schemas/User"
+        member:
+          $ref: "#/components/schemas/Member"
         role:
           $ref: "#/components/schemas/Role"
       required:
-        - "user"
+        - "member"
         - "role"
       example:
-        user:
+        member:
           id: "some-keycloak-user-id"
         role: "owner"
+    FullUsersWithRoles:
+      description: List of members with full info and their access level to the project
+      type: array
+      items:
+        $ref: "#/components/schemas/FullUserWithRole"
+      minItems: 0
+    FullUserWithRole:
+      description: A member with full info (email, name, ...) and the access level to the project
+      type: object
+      additionalProperties: false
+      properties:
+        member:
+          $ref: "../users/api.spec.yaml#/components/schemas/UserWithId"
+        role:
+          $ref: "#/components/schemas/Role"
+      required:
+        - "member"
+        - "role"
     Role:
-      description: Possible roles of users in a project
+      description: Possible roles of members in a project
       type: string
       enum:
         - member
         - owner
-    Version:
-      type: object
-      properties:
-        version:
-          type: string
-      required:
-        - "version"
     ErrorResponse:
       type: object
       properties:

@@ -2,7 +2,7 @@
 from dataclasses import dataclass, field
 from typing import Callable, List, Protocol, Tuple
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import and_, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.authz.models import MemberQualifier, Role, Scope
@@ -34,6 +34,14 @@ class IProjectAuthorizer(Protocol):
 
     async def add_user(self, requested_by: APIUser, user_id: str | MemberQualifier, project_id: str, role: Role):
         """Grant the specific permission level to the user for the specific project."""
+        ...
+
+    async def update_or_add_user(self, requested_by: APIUser, user_id: str | MemberQualifier, project_id: str, role: Role):
+        """Update user's role or add user if it doesn't exist."""
+        ...
+
+    async def delete_user(self, requested_by: APIUser, user_id: str | MemberQualifier, project_id: str):
+        """Delete a member from a project."""
         ...
 
     async def create_project(self, requested_by: APIUser, project_id: str, public_project: bool = False):
@@ -99,6 +107,9 @@ class SQLProjectAuthorizer:
             res = await session.execute(stmt)
             users = res.scalars().all()
             users_list = [i for i in users]
+
+            print("\n\n\n", "ID", project_id, users, "\n\n\n")
+
             if len(users_list) == 0:
                 return MemberQualifier.NONE, []
             elif None in users_list:
@@ -158,6 +169,51 @@ class SQLProjectAuthorizer:
                         else user_id,
                     )
                 )
+
+    async def update_or_add_user(self, requested_by: APIUser, user_id: str | MemberQualifier, project_id: str, role: Role):
+        """Update user's role or add user if it doesn't exist."""
+        if not requested_by.is_authenticated:
+            raise errors.Unauthorized(message="Unauthenticated users cannot update users.")
+        if isinstance(user_id, MemberQualifier):
+            raise errors.ValidationError(message=f"Cannot use qualifiers as user ID: {user_id}.")
+        if not requested_by.is_admin:
+            can_update_users = await self.has_role(requested_by, project_id, Role.OWNER)
+            if not can_update_users:
+                raise errors.Unauthorized(
+                    message=f"The user with ID {requested_by.id} cannot update users of project with ID {project_id}",
+                    detail=f"Only users with role {Role.OWNER} can do this.",
+                )
+        async with self.session_maker() as session:
+            async with session.begin():
+                stmt = select(ProjectUserAuthz).where(
+                    and_(ProjectUserAuthz.project_id == project_id, ProjectUserAuthz.user_id == user_id)
+                )
+                result = await session.execute(stmt)
+                user_authz = result.scalars().first()
+                if user_authz:
+                    user_authz.role = role.value
+                else:
+                    session.add(ProjectUserAuthz(project_id=project_id, role=role.value, user_id=user_id))
+
+    async def delete_user(self, requested_by: APIUser, user_id: str | MemberQualifier, project_id: str):
+        """Delete a member from a project."""
+        if not requested_by.is_authenticated:
+            raise errors.Unauthorized(message="Unauthenticated users cannot delete users.")
+        if isinstance(user_id, MemberQualifier):
+            raise errors.ValidationError(message=f"Cannot use qualifiers as user ID: {user_id}.")
+        if not requested_by.is_admin:
+            can_delete_users = await self.has_role(requested_by, project_id, Role.OWNER)
+            if not can_delete_users:
+                raise errors.Unauthorized(
+                    message=f"The user with ID {requested_by.id} cannot delete users of project with ID {project_id}",
+                    detail=f"Only users with role {Role.OWNER} can do this.",
+                )
+        async with self.session_maker() as session:
+            async with session.begin():
+                stmt = delete(ProjectUserAuthz).where(
+                    and_(ProjectUserAuthz.project_id == project_id, ProjectUserAuthz.user_id == user_id)
+                )
+                await session.execute(stmt)
 
     async def create_project(self, requested_by: APIUser, project_id: str, public_project: bool = False):
         """Insert the project in the authorization table."""
