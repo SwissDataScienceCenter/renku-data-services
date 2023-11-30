@@ -105,9 +105,10 @@ async def test_resource_pool_remove_users(
     original_users = await user_repo.get_resource_pool_users(resource_pool_id=inserted_rp.id, api_user=admin_user)
     if not inserted_rp.public:
         assert len(original_users.allowed) == len(users)
+        remove_user = original_users.allowed[0]
     else:
         assert len(original_users.allowed) == 0
-    remove_user = original_users.allowed[0]
+        remove_user = users[0]
     await user_repo.delete_resource_pool_user(
         resource_pool_id=inserted_rp.id, keycloak_id=remove_user.keycloak_id, api_user=admin_user
     )
