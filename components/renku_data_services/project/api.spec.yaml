@@ -261,7 +261,6 @@ components:
     Project:
       description: A Renku native project definition and metadata
       type: object
-      additionalProperties: false
       properties:
         id:
           $ref: "#/components/schemas/Ulid"
@@ -309,9 +308,9 @@ components:
       additionalProperties: false
       properties:
         name:
-          $ref: "#/components/schemas/Name"  # TODO: Should name be unique?
+          $ref: "#/components/schemas/Name"
         slug:
-          $ref: "#/components/schemas/Slug"  # TODO: Should slug be unique?
+          $ref: "#/components/schemas/Slug"
         repositories:
           $ref: "#/components/schemas/RepositoriesList"
         visibility:
@@ -327,13 +326,13 @@ components:
       additionalProperties: false
       properties:
         name:
-          $ref: "#/components/schemas/Name"  # TODO: Should we allow changing project's name?
+          $ref: "#/components/schemas/Name"
         slug:
-          $ref: "#/components/schemas/Slug"
+          $ref: "#/components/schemas/Slug"  # TODO: Should we remove this?
         repositories:
           $ref: "#/components/schemas/RepositoriesList"
         visibility:
-          $ref: "#/components/schemas/Visibility"  # TODO: Should we allow ``public`` to ``private`` transition?
+          $ref: "#/components/schemas/Visibility"
         description:
           $ref: "#/components/schemas/Description"
     Ulid:
@@ -365,7 +364,7 @@ components:
       description: A description for project
       type: string
       maxLength: 500
-    User:  # TODO: We return User's KeyCloak ID to the client
+    User: # TODO: We return User's KeyCloak ID to the client
       description: A KeyCloak user
       type: object
       additionalProperties: false
