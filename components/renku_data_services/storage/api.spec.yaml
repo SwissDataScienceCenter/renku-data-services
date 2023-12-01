@@ -200,6 +200,11 @@ components:
     RCloneConfig:
       type: object
       description: Dictionary of rclone key:value pairs (based on schema from '/storage_schema')
+      properties:
+        type:
+          type: string
+      required:
+        - type
       additionalProperties:
         oneOf:
         - type: number
@@ -220,10 +225,6 @@ components:
               type: string
               description: the target path relative to the repository where the storage should be mounted
               example: my/project/folder
-            private:
-              type: boolean
-              description: Whether this storage is private (i.e. requires credentials) or not
-              default: false
             readonly:
               type: boolean
               description: Whether this storage should be mounted readonly or not
@@ -253,10 +254,6 @@ components:
               type: string
               description: the target path relative to the repository where the storage should be mounted
               example: my/project/folder
-            private:
-              type: boolean
-              description: Whether this storage is private (i.e. requires credentials) or not
-              default: false
             readonly:
               type: boolean
               description: Whether this storage should be mounted readonly or not
@@ -283,9 +280,6 @@ components:
           type: string
           description: the target path relative to the repository where the storage should be mounted
           example: my/project/folder
-        private:
-          type: boolean
-          description: Whether this storage is private (i.e. requires credentials) or not
         readonly:
           type: boolean
           description: Whether this storage should be mounted readonly or not

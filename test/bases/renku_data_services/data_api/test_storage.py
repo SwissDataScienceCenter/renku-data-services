@@ -147,7 +147,6 @@ def storage_test_client(app_config: Config) -> SanicASGITestClient:
                 },
                 "source_path": "bucket/myfolder",
                 "target_path": "my/target",
-                "private": False,
             },
             422,
             "",
@@ -163,7 +162,6 @@ def storage_test_client(app_config: Config) -> SanicASGITestClient:
                 },
                 "source_path": "bucket/myfolder",
                 "target_path": "my/target",
-                "private": True,
                 "readonly": True,
             },
             201,
@@ -331,36 +329,6 @@ async def test_get_storage_unauthorized(storage_test_client, valid_storage_paylo
 
 
 @pytest.mark.asyncio
-async def test_get_storage_private(storage_test_client, valid_storage_payload):
-    storage_test_client, _ = storage_test_client
-    valid_storage_payload["private"] = True
-
-    _, res = await storage_test_client.post(
-        "/api/data/storage",
-        headers={"Authorization": "bearer test"},
-        data=json.dumps(valid_storage_payload),
-    )
-    assert res.status_code == 201
-    assert res.json["storage"]["storage_type"] == "s3"
-
-    project_id = res.json["storage"]["project_id"]
-    _, res = await storage_test_client.get(
-        f"/api/data/storage?project_id={project_id}",
-        headers={"Authorization": "bearer test"},
-    )
-    assert res.status_code == 200
-    assert len(res.json) == 1
-    result = res.json[0]
-    assert "sensitive_fields" in result
-    assert len(result["sensitive_fields"]) == 3
-    assert any(f["name"] == "access_key_id" for f in result["sensitive_fields"])
-    storage = result["storage"]
-    assert storage["project_id"] == project_id
-    assert storage["storage_type"] == "s3"
-    assert storage["configuration"]["provider"] == "AWS"
-
-
-@pytest.mark.asyncio
 async def test_storage_deletion(storage_test_client, valid_storage_payload):
     storage_test_client, _ = storage_test_client
     _, res = await storage_test_client.post(
@@ -426,13 +394,11 @@ async def test_storage_put(storage_test_client, valid_storage_payload):
                 "configuration": {"type": "azureblob"},
                 "source_path": "bucket/myfolder",
                 "target_path": "my/target",
-                "private": True,
             }
         ),
     )
     assert res.status_code == 200
     assert res.json["storage"]["storage_type"] == "azureblob"
-    assert res.json["storage"]["private"]
 
 
 @pytest.mark.asyncio
@@ -443,7 +409,6 @@ async def test_storage_patch_make_public(storage_test_client):
         "configuration": {"type": "s3", "provider": "AWS", "region": "us-east-1", "access_key_id": "my-secret"},
         "source_path": "bucket/myfolder",
         "target_path": "my/target",
-        "private": "true",
     }
     storage_test_client, _ = storage_test_client
     _, res = await storage_test_client.post(
@@ -453,21 +418,15 @@ async def test_storage_patch_make_public(storage_test_client):
     )
     assert res.status_code == 201
     assert res.json["storage"]["storage_type"] == "s3"
-    assert res.json["storage"]["private"]
     assert "access_key_id" in res.json["storage"]["configuration"]
     storage_id = res.json["storage"]["storage_id"]
 
     _, res = await storage_test_client.patch(
         f"/api/data/storage/{storage_id}",
         headers={"Authorization": "bearer test"},
-        data=json.dumps(
-            {
-                "private": False,
-            }
-        ),
+        data=json.dumps({}),
     )
     assert res.status_code == 200
-    assert not res.json["storage"]["private"]
     assert "access_key_id" not in res.json["storage"]["configuration"]
 
 
