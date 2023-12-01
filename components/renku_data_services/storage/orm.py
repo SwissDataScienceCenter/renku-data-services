@@ -43,9 +43,6 @@ class CloudStorageORM(BaseORM):
     name: Mapped[str] = mapped_column("name", String())
     """Name of the cloud storage"""
 
-    private: Mapped[bool] = mapped_column("private", Boolean(), default=False)
-    """Whether the storage is private (requires credentials) or not """
-
     readonly: Mapped[bool] = mapped_column("readonly", Boolean(), default=True)
     """Whether this storage should be mounted readonly or not """
 
@@ -72,7 +69,6 @@ class CloudStorageORM(BaseORM):
             configuration=storage.configuration.model_dump(),
             source_path=storage.source_path,
             target_path=storage.target_path,
-            private=storage.private,
             readonly=storage.readonly,
         )
 
@@ -82,10 +78,9 @@ class CloudStorageORM(BaseORM):
             project_id=self.project_id,
             name=self.name,
             storage_type=self.storage_type,
-            configuration=models.RCloneConfig(config=self.configuration, private=self.private),
+            configuration=models.RCloneConfig(config=self.configuration),
             source_path=self.source_path,
             target_path=self.target_path,
             storage_id=self.storage_id,
-            private=self.private,
             readonly=self.readonly,
         )
