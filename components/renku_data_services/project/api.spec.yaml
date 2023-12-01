@@ -305,6 +305,7 @@ components:
     ProjectPost:
       description: Project metadata to be created in Renku
       type: object
+      additionalProperties: false
       properties:
         name:
           $ref: "#/components/schemas/Name"
@@ -322,6 +323,7 @@ components:
     ProjectPatch:
       type: object
       description: Patch of a project
+      additionalProperties: false
       properties:
         name:
           $ref: "#/components/schemas/Name"
@@ -365,6 +367,7 @@ components:
     User: # TODO: We return User's KeyCloak ID to the client
       description: A KeyCloak user
       type: object
+      additionalProperties: false
       properties:
         id:
           $ref: "#/components/schemas/UserId"
@@ -405,6 +408,7 @@ components:
     MemberWithRole:
       description: A user and the access level to the project
       type: object
+      additionalProperties: false
       properties:
         user:
           $ref: "#/components/schemas/User"

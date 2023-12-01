@@ -29,7 +29,7 @@ from renku_data_services import errors
 from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.authn.gitlab import GitlabAuthenticator
 from renku_data_services.authn.keycloak import KcUserStore, KeycloakAuthenticator
-from renku_data_services.authz.authz import SQLProjectAuthorizer
+from renku_data_services.authz.authz import IProjectAuthorizer, SQLProjectAuthorizer
 from renku_data_services.crc import models
 from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
 from renku_data_services.data_api.server_options import (
@@ -109,7 +109,7 @@ class Config:
     _rp_repo: ResourcePoolRepository | None = field(default=None, repr=False, init=False)
     _storage_repo: StorageRepository | None = field(default=None, repr=False, init=False)
     _project_repo: ProjectRepository | None = field(default=None, repr=False, init=False)
-    _project_authz: SQLProjectAuthorizer | None = field(default=None, repr=False, init=False)
+    _project_authz: IProjectAuthorizer | None = field(default=None, repr=False, init=False)
     _user_preferences_repo: UserPreferencesRepository | None = field(default=None, repr=False, init=False)
     _kc_user_repo: KcUserRepo | None = field(default=None, repr=False, init=False)
 
@@ -177,7 +177,7 @@ class Config:
         return self._project_repo
 
     @property
-    def project_authz(self) -> SQLProjectAuthorizer:
+    def project_authz(self) -> IProjectAuthorizer:
         """The DB adapter for authorization."""
         if not self._project_authz:
             self._project_authz = SQLProjectAuthorizer(session_maker=self.db.async_session_maker)

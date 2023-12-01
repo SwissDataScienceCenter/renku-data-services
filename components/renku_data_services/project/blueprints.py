@@ -91,10 +91,6 @@ class ProjectsBP(CustomBlueprint):
         async def _patch(_: Request, *, user: base_models.APIUser, project_id: str, body: apispec.ProjectPatch):
             body_dict = body.model_dump(exclude_none=True)
 
-            for field in ["slug", "id", "created_by", "creation_date"]:
-                if field in body_dict:
-                    raise errors.ValidationError(message=f"Cannot change '{field}' of a project.")
-
             updated_project = await self.project_repo.update_project(user=user, project_id=project_id, **body_dict)
 
             return json(apispec.Project.model_validate(updated_project).model_dump(exclude_none=True, mode="json"))

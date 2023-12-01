@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
-from renku_data_services.authz.authz import SQLProjectAuthorizer
+from renku_data_services.authz.authz import IProjectAuthorizer
 from renku_data_services.authz.models import MemberQualifier, Scope
 from renku_data_services.project import models
 from renku_data_services.project import orm as schemas
@@ -29,9 +29,9 @@ class PaginationResponse(NamedTuple):
 class ProjectRepository:
     """Repository for project."""
 
-    def __init__(self, session_maker: Callable[..., AsyncSession], project_authz: SQLProjectAuthorizer):
+    def __init__(self, session_maker: Callable[..., AsyncSession], project_authz: IProjectAuthorizer):
         self.session_maker = session_maker  # type: ignore[call-overload]
-        self.project_authz: SQLProjectAuthorizer = project_authz
+        self.project_authz: IProjectAuthorizer = project_authz
 
     async def get_projects(
         self, user: base_models.APIUser, page: int, per_page: int
@@ -68,7 +68,9 @@ class ProjectRepository:
         """Get one project from the database."""
         authorized = await self.project_authz.has_permission(user=user, project_id=project_id, scope=Scope.READ)
         if not authorized:
-            raise errors.Unauthorized(message="You do not have the required permissions to access this project.")
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
 
         async with self.session_maker() as session:
             stmt = select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id)
@@ -104,7 +106,9 @@ class ProjectRepository:
         """Update a project entry."""
         authorized = await self.project_authz.has_permission(user=user, project_id=project_id, scope=Scope.WRITE)
         if not authorized:
-            raise errors.Unauthorized(message="You do not have the required permissions to update the project.")
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
 
         async with self.session_maker() as session:
             async with session.begin():
@@ -129,7 +133,9 @@ class ProjectRepository:
         """Delete a cloud project entry."""
         authorized = await self.project_authz.has_permission(user=user, project_id=project_id, scope=Scope.DELETE)
         if not authorized:
-            raise errors.Unauthorized(message="You do not have the required permissions to delete the project.")
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
 
         async with self.session_maker() as session:
             async with session.begin():
