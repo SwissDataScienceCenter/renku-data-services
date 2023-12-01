@@ -67,4 +67,7 @@ class KeycloakAuthenticator:
             id=parsed.get("sub"),
             access_token=access_token,
             name=parsed.get("name"),
+            first_name=parsed.get("given_name"),
+            last_name=parsed.get("family_name"),
+            email=parsed.get("email"),
         )

@@ -47,14 +47,30 @@ class UserRepo:
 
     def __init__(self, session_maker: Callable[..., AsyncSession]):
         self.session_maker = session_maker
+        self._users_sync = UsersSync(self.session_maker)
 
     async def initialize(self, kc_api: IKeycloakAPI):
         """Do a total sync of users from Keycloak if there is nothing in the DB."""
         users = await self._get_users()
         if len(users) > 0:
             return
-        users_sync = UsersSync(self.session_maker)
-        await users_sync.users_sync(kc_api)
+        await self._users_sync.users_sync(kc_api)
+
+    async def _add_api_user(self, user: APIUser) -> UserInfo:
+        if not user.id:
+            raise errors.Unauthorized(message="The user has to be authenticated to be inserted in the DB.")
+        await self._users_sync.update_or_insert_user(
+            user_id=user.id,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            email=user.email,
+        )
+        return UserInfo(
+            id=user.id,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            email=user.email,
+        )
 
     @_authenticated
     async def get_user(self, requested_by: APIUser, id: str) -> UserInfo | None:
@@ -65,16 +81,26 @@ class UserRepo:
             stmt = select(UserORM).where(UserORM.keycloak_id == id)
             res = await session.execute(stmt)
             orm = res.scalar_one_or_none()
+            if not orm and id == requested_by.id:
+                return await self._add_api_user(requested_by)
             if not orm:
                 return None
             return orm.dump()
 
     @_authenticated
     async def get_users(self, requested_by: APIUser, email: str | None = None) -> List[UserInfo]:
-        """Get user from the database."""
+        """Get users from the database."""
         if not email and not requested_by.is_admin:
             raise errors.Unauthorized(message="Non-admin users cannot list all users.")
-        return await self._get_users(email)
+        users = await self._get_users(email)
+
+        def is_api_user_missing() -> bool:
+            return not any([requested_by.id == user.id for user in users])
+
+        if not email and is_api_user_missing():
+            api_user_info = await self._add_api_user(requested_by)
+            users.append(api_user_info)
+        return users
 
     async def _get_users(self, email: str | None = None) -> List[UserInfo]:
         async with self.session_maker() as session:
@@ -103,7 +129,7 @@ class UsersSync:
             orm = res.scalar_one_or_none()
             return orm.dump() if orm else None
 
-    async def _update_or_insert_user(self, user_id: str, **kwargs):
+    async def update_or_insert_user(self, user_id: str, **kwargs):
         """Update a user or insert it if it does not exist."""
         async with self.session_maker() as session, session.begin():
             res = await session.execute(select(UserORM).where(UserORM.keycloak_id == user_id))
@@ -136,7 +162,7 @@ class UsersSync:
                 db_user = await self._get_user(kc_user.id)
                 if db_user != kc_user:
                     logging.info(f"Inserting or updating user {db_user} -> {kc_user}")
-                    await self._update_or_insert_user(kc_user.id, **asdict(kc_user))
+                    await self.update_or_insert_user(kc_user.id, **asdict(kc_user))
 
             await asyncio.gather(*[_do_update(u) for u in kc_users])
 
@@ -178,7 +204,7 @@ class UsersSync:
             latest_delete_timestamp = None
             for update in parsed_updates:
                 logging.info(f"Processing update event {update}")
-                await self._update_or_insert_user(update.user_id, **{update.field_name: update.new_value})
+                await self.update_or_insert_user(update.user_id, **{update.field_name: update.new_value})
                 latest_update_timestamp = update.timestamp_utc
             for deletion in parsed_deletions:
                 logging.info(f"Processing deletion event {deletion}")

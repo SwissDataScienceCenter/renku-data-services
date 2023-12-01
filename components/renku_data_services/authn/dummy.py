@@ -52,4 +52,7 @@ class DummyAuthenticator:
             id=user_props.get("id") if user_props.get("id") else "some-id",
             access_token=access_token,
             name=user_props.get("name") if user_props.get("name") else "John Doe",
+            first_name=user_props.get("first_name") if user_props.get("first_name") else "John",
+            last_name=user_props.get("last_name") if user_props.get("last_name") else "Doe",
+            email=user_props.get("email") if user_props.get("email") else "john.doe@gmail.com",
         )

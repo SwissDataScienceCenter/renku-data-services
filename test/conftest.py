@@ -88,7 +88,13 @@ def app_config(postgresql, monkeypatch) -> Iterator[DataConfig]:
 @pytest.fixture
 def admin_user() -> base_models.APIUser:
     return base_models.APIUser(
-        is_admin=True, id="some-random-id-123456", access_token="some-access-token"
+        is_admin=True,
+        id="some-random-id-123456",
+        access_token="some-access-token",
+        name="Admin Adminson",
+        first_name="Admin",
+        last_name="Adminson",
+        email="admin@gmail.com",
     )  # nosec B106
 
 

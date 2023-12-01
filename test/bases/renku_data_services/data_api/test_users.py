@@ -1,6 +1,7 @@
 import json
 from test.bases.renku_data_services.keycloak_sync.test_sync import get_kc_users
 from typing import List
+from uuid import uuid4
 
 import pytest
 import pytest_asyncio
@@ -32,13 +33,26 @@ async def users_test_client(app_config: DataConfig, users: List[UserInfo]) -> Sa
 
 @pytest.mark.asyncio
 async def test_get_all_users_as_admin(users_test_client, users):
-    admin_token = {"id": "admin-id", "is_admin": True}
+    admin = UserInfo(
+        id="admin-id",
+        first_name="Admin",
+        last_name="Adminson",
+        email="admin@gmail.com",
+    )
+    admin_token = {
+        "id": admin.id,
+        "is_admin": True,
+        "first_name": admin.first_name,
+        "last_name": admin.last_name,
+        "email": admin.email,
+    }
     _, res = await users_test_client.get(
         "/api/data/users",
         headers={"Authorization": f"bearer {json.dumps(admin_token)}"},
     )
+    users.append(admin)
     assert res.status_code == 200
-    assert len(res.json) == 2
+    assert len(res.json) == len(users)
     retrieved_users = [
         UserInfo(user["id"], user.get("first_name"), user.get("last_name"), user.get("email")) for user in res.json
     ]
@@ -106,3 +120,34 @@ async def test_logged_in_users_cannot_get_other_users(users_test_client, users):
         headers={"Authorization": f"bearer {json.dumps(access_token)}"},
     )
     assert res.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_logged_in_user_check_adds_user_if_missing(users_test_client, users):
+    user = UserInfo(
+        id=str(uuid4()),
+        first_name="Peter",
+        last_name="Parker",
+        email="peter@spiderman.com",
+    )
+    assert user not in users
+    access_token = {
+        "id": user.id,
+        "is_admin": False,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "email": user.email,
+        "name": f"{user.first_name} {user.last_name}",
+    }
+    _, res = await users_test_client.get(
+        f"/api/data/users/{user.id}",
+        headers={"Authorization": f"bearer {json.dumps(access_token)}"},
+    )
+    assert res.status_code == 200
+    user_response = UserInfo(
+        id=res.json["id"],
+        first_name=res.json.get("first_name"),
+        last_name=res.json.get("last_name"),
+        email=res.json.get("email"),
+    )
+    assert user_response == user
