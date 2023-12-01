@@ -7,7 +7,7 @@ from sanic import HTTPResponse, Request, json
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
-from renku_data_services.base_api.auth import authenticate
+from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.errors import errors
 from renku_data_services.project import apispec, models
@@ -50,6 +50,7 @@ class ProjectsBP(CustomBlueprint):
         """Create a new project."""
 
         @authenticate(self.authenticator)
+        @only_authenticated
         @validate(json=apispec.ProjectPost)
         async def _post(_: Request, *, user: base_models.APIUser, body: apispec.ProjectPost):
             data = body.model_dump(exclude_none=True)
@@ -77,6 +78,7 @@ class ProjectsBP(CustomBlueprint):
         """Delete a specific project."""
 
         @authenticate(self.authenticator)
+        @only_authenticated
         async def _delete(_: Request, *, user: base_models.APIUser, project_id: str):
             await self.project_repo.delete_project(user=user, project_id=project_id)
             return HTTPResponse(status=204)
@@ -87,6 +89,7 @@ class ProjectsBP(CustomBlueprint):
         """Partially update a specific project."""
 
         @authenticate(self.authenticator)
+        @only_authenticated
         @validate(json=apispec.ProjectPatch)
         async def _patch(_: Request, *, user: base_models.APIUser, project_id: str, body: apispec.ProjectPatch):
             body_dict = body.model_dump(exclude_none=True)
