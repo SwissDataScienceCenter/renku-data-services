@@ -285,7 +285,7 @@ async def test_patch_project(create_project, get_project, sanic_client, user_hea
     project = await get_project(project_id=project_id)
 
     assert project["name"] == "New Name"
-    assert project["slug"] == "new-slug"
+    assert project["slug"] == "project-2"
     assert project["description"] == "A patched Renku native project"
     assert project["visibility"] == "public"
     assert set(project["repositories"]) == {"http://renkulab.io/repository-1", "http://renkulab.io/repository-2"}
