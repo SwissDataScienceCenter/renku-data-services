@@ -22,7 +22,6 @@ class KCUsersBP(CustomBlueprint):
         """Get all users."""
 
         @authenticate(self.authenticator)
-        @only_admins
         async def _get_all(request: Request, user: base_models.APIUser):
             email_filter = request.args.get("exact_email")
             users = await self.repo.get_users(requested_by=user, email=email_filter)
