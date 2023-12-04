@@ -150,7 +150,7 @@ class StorageBP(CustomBlueprint):
                 for k, v in list(body.configuration.items()):
                     if v is None:
                         # delete fields that were unset
-                        del body.configuration[k]
+                        del body.configuration[k]  # type: ignore[unreachable]
                 validator.validate(
                     body.configuration, private=body.private if body.private is not None else existing_storage.private
                 )
