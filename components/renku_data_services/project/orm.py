@@ -42,7 +42,7 @@ class ProjectORM(BaseORM):
             visibility=project.visibility,
             created_by_id=project.created_by.id,
             creation_date=project.creation_date,
-            repositories=project.repositories if project.repositories else [],
+            repositories=project.repositories,
             description=project.description,
         )
 

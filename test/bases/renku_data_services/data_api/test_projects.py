@@ -114,7 +114,7 @@ async def test_project_creation_with_default_values(sanic_client, user_headers, 
     assert "description" not in project or project["description"] is None
     assert project["visibility"] == "private"
     assert project["created_by"] == {"id": "user"}
-    assert len(project["repositories"]) == 0
+    assert len(project.get("repositories", [])) == 0
 
 
 @pytest.mark.asyncio
