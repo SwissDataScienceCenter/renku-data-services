@@ -37,7 +37,7 @@ class MemberQualifier(Enum):
         match self:
             case MemberQualifier.ALL:
                 if len(user_ids) > 0:
-                    raise ValueError("Cannot use 'ALL' member qualifier with specific uers")
+                    raise ValueError("Cannot use 'ALL' member qualifier with specific users")
                 return ProjectUserAuthz.user_id.is_(None)
             case MemberQualifier.SOME:
                 if len(user_ids) == 0:

@@ -24,7 +24,7 @@ class ProjectsBP(CustomBlueprint):
         """List all projects."""
 
         @authenticate(self.authenticator)
-        async def _get_all(request: Request, user: base_models.APIUser):
+        async def _get_all(request: Request, *, user: base_models.APIUser):
             default_page_number = 1
             default_number_of_elements_per_page = 20
 
@@ -50,7 +50,7 @@ class ProjectsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @validate(json=apispec.ProjectPost)
-        async def _post(_: Request, body: apispec.ProjectPost, user: base_models.APIUser):
+        async def _post(_: Request, *, user: base_models.APIUser, body: apispec.ProjectPost):
             data = body.model_dump(exclude_none=True)
             if user.id:
                 data["created_by"] = models.User(id=user.id)
@@ -66,8 +66,8 @@ class ProjectsBP(CustomBlueprint):
         """Get a specific project."""
 
         @authenticate(self.authenticator)
-        async def _get_one(_: Request, project_id: str, user: base_models.APIUser):
-            project = await self.project_repo.get_project(user=user, id=project_id)
+        async def _get_one(_: Request, *, user: base_models.APIUser, project_id: str):
+            project = await self.project_repo.get_project(user=user, project_id=project_id)
             return json(apispec.Project.model_validate(project).model_dump(exclude_none=True, mode="json"))
 
         return "/projects/<project_id>", ["GET"], _get_one
@@ -76,8 +76,8 @@ class ProjectsBP(CustomBlueprint):
         """Delete a specific project."""
 
         @authenticate(self.authenticator)
-        async def _delete(_: Request, project_id: str, user: base_models.APIUser):
-            await self.project_repo.delete_project(user=user, id=project_id)
+        async def _delete(_: Request, *, user: base_models.APIUser, project_id: str):
+            await self.project_repo.delete_project(user=user, project_id=project_id)
             return HTTPResponse(status=204)
 
         return "/projects/<project_id>", ["DELETE"], _delete
@@ -87,10 +87,10 @@ class ProjectsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @validate(json=apispec.ProjectPatch)
-        async def _patch(_: Request, project_id: str, body: apispec.ProjectPatch, user: base_models.APIUser):
+        async def _patch(_: Request, *, user: base_models.APIUser, project_id: str, body: apispec.ProjectPatch):
             body_dict = body.model_dump(exclude_none=True)
 
-            updated_project = await self.project_repo.update_project(user=user, id=project_id, **body_dict)
+            updated_project = await self.project_repo.update_project(user=user, project_id=project_id, **body_dict)
 
             return json(apispec.Project.model_validate(updated_project).model_dump(exclude_none=True, mode="json"))
 

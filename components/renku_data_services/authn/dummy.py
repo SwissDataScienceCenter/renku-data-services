@@ -47,9 +47,12 @@ class DummyAuthenticator:
             user_props = json.loads(access_token)
         except:  # noqa: E722 # nosec: B110
             pass
+
+        is_set = bool(user_props.get("id") or user_props.get("name") or user_props.get("is_admin") is not None)
+
         return base_models.APIUser(
             is_admin=user_props.get("is_admin", False),  # type: ignore[arg-type]
-            id=user_props.get("id") if user_props.get("id") else "some-id",
+            id=user_props.get("id") if user_props.get("id") else "some-id" if is_set else None,
             access_token=access_token,
-            name=user_props.get("name") if user_props.get("name") else "John Doe",
+            name=user_props.get("name") if user_props.get("name") else "John Doe" if is_set else None,
         )
