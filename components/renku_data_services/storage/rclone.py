@@ -345,7 +345,6 @@ class RCloneProviderSchema(BaseModel):
 
         if missing:
             missing_str = "\n".join(missing)
-            breakpoint()
             raise errors.ValidationError(message=f"The following fields are required but missing:\n{missing_str}")
 
         for key in keys:

@@ -138,14 +138,13 @@ class StorageBP(CustomBlueprint):
             existing_storage = await self.storage_repo.get_storage_by_id(storage_id, user=user)
             if body.configuration is not None:
                 # we need to apply the patch to the existing storage to properly validate it
-                body.configuration = apispec.RCloneConfig(
-                    **{**existing_storage.configuration, **body.configuration.dict()}
-                )
-                for k, v in list(body.configuration.dict().items()):
+                body.configuration = {**existing_storage.configuration, **body.configuration}
+
+                for k, v in list(body.configuration.items()):
                     if v is None:
                         # delete fields that were unset
-                        delattr(body.configuration, k)
-                validator.validate(models.RCloneConfig.from_schema_config(body.configuration))
+                        del body.configuration[k]
+                validator.validate(body.configuration)
 
             body_dict = body.model_dump(exclude_none=True)
 

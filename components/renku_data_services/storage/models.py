@@ -7,7 +7,6 @@ from urllib.parse import ParseResult, urlparse
 from pydantic import BaseModel, Field, PrivateAttr, model_serializer, model_validator
 
 from renku_data_services import errors
-from renku_data_services.storage.apispec import RCloneConfig as RCloneConfigSchema
 from renku_data_services.storage.rclone import RCloneValidator
 
 
@@ -45,11 +44,6 @@ class RCloneConfig(BaseModel, MutableMapping):
 
     def __iter__(self):
         return iter(self.config)
-
-    @classmethod
-    def from_schema_config(cls, config: RCloneConfigSchema):
-        """Create from apispec schema."""
-        return cls(**config.dict())
 
 
 class CloudStorage(BaseModel):
