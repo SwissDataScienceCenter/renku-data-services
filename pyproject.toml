@@ -36,7 +36,7 @@ packages = [
 python = "^3.11"
 sanic = { extras = ["ext"], version = "^23.3.0" }
 pydantic = "^2.1.1"
-datamodel-code-generator = "^0.21.4"
+datamodel-code-generator = "^0.24.2"
 sqlalchemy = { extras = ["asyncio"], version = "^2.0.9" }
 alembic = "^1.10.3"
 asyncpg = "^0.27.0"
@@ -171,6 +171,7 @@ module = [
   "renku_data_services.crc.apispec",
   "renku_data_services.storage.apispec",
   "renku_data_services.project.apispec",
+  "renku_data_services.user_preferences.apispec",
   "renku_data_services.data_api.error_handler",
 ]
 ignore_errors = true
@@ -181,4 +182,5 @@ ignore_missing_imports = true
 
 [tool.coverage.run]
 source = ["bases/", "components/"]
+concurrency = ["thread", "greenlet"]
 omit = ["components/renku_data_services/migrations/resource_pools/*"]

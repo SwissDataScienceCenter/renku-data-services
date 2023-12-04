@@ -147,6 +147,10 @@ class StorageBP(CustomBlueprint):
             if body.configuration is not None:
                 # we need to apply the patch to the existing storage to properly validate it
                 body.configuration = {**existing_storage.configuration, **body.configuration}
+                for k, v in list(body.configuration.items()):
+                    if v is None:
+                        # delete fields that were unset
+                        del body.configuration[k]
                 validator.validate(
                     body.configuration, private=body.private if body.private is not None else existing_storage.private
                 )
@@ -180,6 +184,26 @@ class StorageSchemaBP(CustomBlueprint):
             return json(validator.asdict())
 
         return "/storage_schema", ["GET"], _get
+
+    def test_connection(self) -> BlueprintFactoryResponse:
+        """Validate an RClone config."""
+
+        async def _test_connection(request: Request, validator: RCloneValidator):
+            if not request.json:
+                raise errors.ValidationError(message="The request body is empty. Please provide a valid JSON object.")
+            if not isinstance(request.json, dict):
+                raise errors.ValidationError(message="The request body is not a valid JSON object.")
+            if not request.json.get("configuration"):
+                raise errors.ValidationError(message="No 'configuration' sent.")
+            if not request.json.get("source_path"):
+                raise errors.ValidationError(message="'source_path' is required to test the connection.")
+            validator.validate(request.json["configuration"], private=True, keep_sensitive=True)
+            result = await validator.test_connection(request.json["configuration"], request.json["source_path"])
+            if not result.success:
+                raise errors.ValidationError(message=result.error)
+            return empty(204)
+
+        return "/storage_schema/test_connection", ["POST"], _test_connection
 
     def validate(self) -> BlueprintFactoryResponse:
         """Validate an RClone config."""
