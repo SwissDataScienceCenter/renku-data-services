@@ -501,9 +501,12 @@ async def test_storage_put_unauthorized(storage_test_client, valid_storage_paylo
 @pytest.mark.asyncio
 async def test_storage_patch(storage_test_client, valid_storage_payload):
     storage_test_client, _ = storage_test_client
+    # NOTE: The keycloak dummy client used to authorize the storage patch requests only has info
+    # on a user with name John Doe, using a different user will fail with a 401 error.
+    access_token = json.dumps({"is_admin": False, "id": "some-id", "name": "John Doe"})
     _, res = await storage_test_client.post(
         "/api/data/storage",
-        headers={"Authorization": '{"is_admin": false}'},
+        headers={"Authorization": f"bearer {access_token}"},
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201
@@ -512,7 +515,7 @@ async def test_storage_patch(storage_test_client, valid_storage_payload):
 
     _, res = await storage_test_client.patch(
         f"/api/data/storage/{storage_id}",
-        headers={"Authorization": '{"is_admin": false}'},
+        headers={"Authorization": f"bearer {access_token}"},
         data=json.dumps(
             {
                 "configuration": {"provider": "Other", "region": None},
@@ -525,7 +528,7 @@ async def test_storage_patch(storage_test_client, valid_storage_payload):
 
     _, res = await storage_test_client.patch(
         f"/api/data/storage/{storage_id}",
-        headers={"Authorization": "bearer test"},
+        headers={"Authorization": f"bearer {access_token}"},
         data=json.dumps(
             {
                 "configuration": {"provider": "Other", "region": None, "endpoint": "https://test.com"},
