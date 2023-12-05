@@ -289,7 +289,7 @@ class RCloneOption(BaseModel):
                     )
 
         if self.examples and self.exclusive:
-            if not any(e.value == str(value) and e.provider == provider for e in self.examples):
+            if not any(e.value == str(value) and (not e.provider or e.provider == provider) for e in self.examples):
                 raise errors.ValidationError(message=f"Value '{value}' is not valid for field {self.name}")
         return value
 
