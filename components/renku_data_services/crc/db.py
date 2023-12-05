@@ -41,13 +41,15 @@ def _resource_pool_access_control(
             api_user_has_default_pool_access = not_(
                 # NOTE: The only way to check that a user is allowed to access the default pool is that such a
                 # record does NOT EXIST in the database
-                select(schemas.UserORM.no_default_access)
-                .where(and_(schemas.UserORM.keycloak_id == api_user.id, schemas.UserORM.no_default_access == true()))
+                select(schemas.RPUserORM.no_default_access)
+                .where(
+                    and_(schemas.RPUserORM.keycloak_id == api_user.id, schemas.RPUserORM.no_default_access == true())
+                )
                 .exists()
             )  # type: ignore[var-annotated]
-            output = output.join(schemas.UserORM, schemas.ResourcePoolORM.users, isouter=True).where(
+            output = output.join(schemas.RPUserORM, schemas.ResourcePoolORM.users, isouter=True).where(
                 or_(
-                    schemas.UserORM.keycloak_id == api_user.id,  # the user is part of the pool
+                    schemas.RPUserORM.keycloak_id == api_user.id,  # the user is part of the pool
                     and_(  # the pool is not default but is public
                         schemas.ResourcePoolORM.default != true(), schemas.ResourcePoolORM.public == true()
                     ),
@@ -78,13 +80,15 @@ def _classes_user_access_control(
             api_user_has_default_pool_access = not_(
                 # NOTE: The only way to check that a user is allowed to access the default pool is that such a
                 # record does NOT EXIST in the database
-                select(schemas.UserORM.no_default_access)
-                .where(and_(schemas.UserORM.keycloak_id == api_user.id, schemas.UserORM.no_default_access == true()))
+                select(schemas.RPUserORM.no_default_access)
+                .where(
+                    and_(schemas.RPUserORM.keycloak_id == api_user.id, schemas.RPUserORM.no_default_access == true())
+                )
                 .exists()
             )  # type: ignore[var-annotated]
-            output = output.join(schemas.UserORM, schemas.ResourcePoolORM.users, isouter=True).where(
+            output = output.join(schemas.RPUserORM, schemas.ResourcePoolORM.users, isouter=True).where(
                 or_(
-                    schemas.UserORM.keycloak_id == api_user.id,  # the user is part of the pool
+                    schemas.RPUserORM.keycloak_id == api_user.id,  # the user is part of the pool
                     and_(  # the pool is not default but is public
                         schemas.ResourcePoolORM.default != true(), schemas.ResourcePoolORM.public == true()
                     ),
@@ -99,7 +103,7 @@ def _classes_user_access_control(
             pass
         case False, _:
             # The user is not logged in, they can see only the classes from public resource pools
-            output = output.join(schemas.UserORM, schemas.ResourcePoolORM.users, isouter=True).where(
+            output = output.join(schemas.RPUserORM, schemas.ResourcePoolORM.users, isouter=True).where(
                 schemas.ResourcePoolORM.public == true(),
             )
     return output
@@ -511,7 +515,7 @@ class UserRepository(_Base):
                 if keycloak_id is not None:
                     stmt = stmt.join(schemas.ResourcePoolORM.users, isouter=True).where(
                         or_(
-                            schemas.UserORM.keycloak_id == keycloak_id,
+                            schemas.RPUserORM.keycloak_id == keycloak_id,
                             schemas.ResourcePoolORM.public == true(),
                             schemas.ResourceClassORM.default == true(),
                         )
@@ -525,17 +529,21 @@ class UserRepository(_Base):
                 specific_user: base_models.User | None = None
                 if keycloak_id:
                     specific_user_res = (
-                        await session.execute(select(schemas.UserORM).where(schemas.UserORM.keycloak_id == keycloak_id))
+                        await session.execute(
+                            select(schemas.RPUserORM).where(schemas.RPUserORM.keycloak_id == keycloak_id)
+                        )
                     ).scalar_one_or_none()
                     specific_user = None if not specific_user_res else specific_user_res.dump()
                 allowed: List[base_models.User] = []
                 disallowed: List[base_models.User] = []
                 if rp.default:
-                    disallowed_stmt = select(schemas.UserORM).where(schemas.UserORM.no_default_access == true())
+                    disallowed_stmt = select(schemas.RPUserORM).where(schemas.RPUserORM.no_default_access == true())
                     if keycloak_id:
-                        disallowed_stmt = disallowed_stmt.where(schemas.UserORM.keycloak_id == keycloak_id)
+                        disallowed_stmt = disallowed_stmt.where(schemas.RPUserORM.keycloak_id == keycloak_id)
                     disallowed_res = await session.execute(disallowed_stmt)
                     disallowed = [user.dump() for user in disallowed_res.scalars().all()]
+                    if specific_user and specific_user not in disallowed:
+                        allowed = [specific_user]
                 elif rp.public and not rp.default:
                     if specific_user:
                         allowed = [specific_user]
@@ -553,16 +561,16 @@ class UserRepository(_Base):
         """Get users from the users-resource pools access lists."""
         async with self.session_maker() as session:
             async with session.begin():
-                stmt = select(schemas.UserORM)
+                stmt = select(schemas.RPUserORM)
                 if id:
-                    stmt.where(schemas.UserORM.keycloak_id == id)
+                    stmt.where(schemas.RPUserORM.keycloak_id == id)
                 res = await session.execute(stmt)
                 return [user.dump() for user in res.scalars().all()]
 
     @_only_admins
     async def insert_user(self, api_user: base_models.APIUser, user: base_models.User) -> base_models.User:
         """Insert a user in the resource pool access lists."""
-        orm = schemas.UserORM.load(user)
+        orm = schemas.RPUserORM.load(user)
         async with self.session_maker() as session:
             async with session.begin():
                 session.add(orm)
@@ -573,7 +581,7 @@ class UserRepository(_Base):
         """Remove a user from the resource pool access lists."""
         async with self.session_maker() as session:
             async with session.begin():
-                stmt = select(schemas.UserORM).where(schemas.UserORM.keycloak_id == id)
+                stmt = select(schemas.RPUserORM).where(schemas.RPUserORM.keycloak_id == id)
                 res = await session.execute(stmt)
                 user = res.scalars().first()
                 if user is None:
@@ -600,7 +608,7 @@ class UserRepository(_Base):
                 stmt = stmt.where(
                     or_(
                         schemas.ResourcePoolORM.public == true(),
-                        schemas.ResourcePoolORM.users.any(schemas.UserORM.keycloak_id == keycloak_id),
+                        schemas.ResourcePoolORM.users.any(schemas.RPUserORM.keycloak_id == keycloak_id),
                     )
                 )
                 if resource_pool_name is not None:
@@ -625,12 +633,12 @@ class UserRepository(_Base):
         async with self.session_maker() as session:
             async with session.begin():
                 stmt = (
-                    select(schemas.UserORM)
-                    .where(schemas.UserORM.keycloak_id == keycloak_id)
-                    .options(selectinload(schemas.UserORM.resource_pools))
+                    select(schemas.RPUserORM)
+                    .where(schemas.RPUserORM.keycloak_id == keycloak_id)
+                    .options(selectinload(schemas.RPUserORM.resource_pools))
                 )
                 res = await session.execute(stmt)
-                user: Optional[schemas.UserORM] = res.scalars().first()
+                user: Optional[schemas.RPUserORM] = res.scalars().first()
                 if user is None:
                     raise errors.MissingResourceError(message=f"The user with keycloak id {keycloak_id} does not exist")
                 stmt_rp = (
@@ -672,9 +680,9 @@ class UserRepository(_Base):
         async with self.session_maker() as session:
             async with session.begin():
                 sub = (
-                    select(schemas.UserORM.id)
-                    .join(schemas.ResourcePoolORM, schemas.UserORM.resource_pools)
-                    .where(schemas.UserORM.keycloak_id == keycloak_id)
+                    select(schemas.RPUserORM.id)
+                    .join(schemas.ResourcePoolORM, schemas.RPUserORM.resource_pools)
+                    .where(schemas.RPUserORM.keycloak_id == keycloak_id)
                     .where(schemas.ResourcePoolORM.id == resource_pool_id)
                 )
                 stmt = delete(schemas.resource_pools_users).where(schemas.resource_pools_users.c.user_id.in_(sub))
@@ -684,7 +692,7 @@ class UserRepository(_Base):
     async def update_resource_pool_users(
         self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: List[str], append: bool = True
     ) -> List[base_models.User]:
-        """Update the users that have access to a specific resource pool."""
+        """Update the users to have access to a specific resource pool."""
         async with self.session_maker() as session:
             async with session.begin():
                 stmt = (
@@ -716,12 +724,14 @@ class UserRepository(_Base):
                             for no_default_user in users_to_modify
                         ]
                     )
-                stmt_usr = select(schemas.UserORM).where(schemas.UserORM.keycloak_id.in_(user_ids))
+                stmt_usr = select(schemas.RPUserORM).where(schemas.RPUserORM.keycloak_id.in_(user_ids))
                 res_usr = await session.execute(stmt_usr)
                 users_to_add_exist = res_usr.scalars().all()
                 user_ids_to_add_exist = [i.keycloak_id for i in users_to_add_exist]
                 users_to_add_missing = [
-                    schemas.UserORM(keycloak_id=user_id) for user_id in user_ids if user_id not in user_ids_to_add_exist
+                    schemas.RPUserORM(keycloak_id=user_id)
+                    for user_id in user_ids
+                    if user_id not in user_ids_to_add_exist
                 ]
                 if append:
                     rp.users.extend(list(users_to_add_exist) + users_to_add_missing)
@@ -734,11 +744,11 @@ class UserRepository(_Base):
         """Update a specific user."""
         async with self.session_maker() as session:
             async with session.begin():
-                stmt = select(schemas.UserORM).where(schemas.UserORM.keycloak_id == keycloak_id)
+                stmt = select(schemas.RPUserORM).where(schemas.RPUserORM.keycloak_id == keycloak_id)
                 res = await session.execute(stmt)
-                user: Optional[schemas.UserORM] = res.scalars().first()
+                user: Optional[schemas.RPUserORM] = res.scalars().first()
                 if not user:
-                    user = schemas.UserORM(keycloak_id=keycloak_id)
+                    user = schemas.RPUserORM(keycloak_id=keycloak_id)
                     session.add(user)
                 allowed_updates = set(["no_default_access"])
                 if not set(kwargs.keys()).issubset(allowed_updates):

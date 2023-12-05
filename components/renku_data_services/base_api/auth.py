@@ -55,9 +55,6 @@ def only_authenticated(f):
 
     @wraps(f)
     async def decorated_function(self, *args, **kwargs):
-        import logging
-
-        logging.error(f"Receiving args: {args}, kwargs{kwargs}")
         api_user = None
         if "requested_by" in kwargs and isinstance(kwargs["requested_by"], APIUser):
             api_user = kwargs["requested_by"]
@@ -69,7 +66,8 @@ def only_authenticated(f):
                 api_user = api_user_search[0]
             else:
                 raise errors.ProgrammingError(
-                    detail="Found two valid non-keyword APIUser arguments when authenticating user, expected only one."
+                    detail="Found no or more than one valid non-keyword APIUser arguments when "
+                    "authenticating user, expected only one."
                 )
 
         if api_user is None or not api_user.is_authenticated:

@@ -62,3 +62,12 @@ class NoDefaultPoolAccessError(BaseError):
     code: int = 1400
     message: str = "The user cannot access the default resource pool."
     status_code: int = 400
+
+
+@dataclass
+class ProgrammingError(BaseError):
+    """Raised an irrecoverable programming error or bug occurs."""
+
+    code: int = 1500
+    message: str = "An unexpected error occurred."
+    status_code: int = 500
