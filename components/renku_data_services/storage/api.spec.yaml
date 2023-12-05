@@ -202,7 +202,7 @@ components:
       description: Dictionary of rclone key:value pairs (based on schema from '/storage_schema')
       additionalProperties:
         oneOf:
-        - type: number
+        - type: integer
         - type: string
           nullable: true
         - type: boolean
