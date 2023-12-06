@@ -69,7 +69,9 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         name="projects",
         url_prefix=url_prefix,
         project_repo=config.project_repo,
+        project_member_repo=config.project_member_repo,
         authenticator=config.authenticator,
+        user_repo=config.kc_user_repo,
     )
     app.blueprint(
         [

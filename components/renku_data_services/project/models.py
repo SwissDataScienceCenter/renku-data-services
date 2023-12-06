@@ -9,19 +9,38 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel
 
 from renku_data_services import errors
-from renku_data_services.project.apispec import Visibility
+from renku_data_services.project.apispec import Role, Visibility
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class User(BaseModel):
-    """User model."""
+class Member(BaseModel):
+    """Member model."""
 
     id: str
 
     @classmethod
-    def from_dict(cls, data: dict) -> "User":
+    def from_dict(cls, data: dict) -> "Member":
         """Create an instance from a dictionary."""
         return cls(**data)
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class MemberWithRole(BaseModel):
+    """Model for project's members."""
+
+    member: Member
+    role: Role
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "MemberWithRole":
+        """Create an instance from a dictionary."""
+        member = data.get("member")
+        if not member or not isinstance(member, dict) or "id" not in member:
+            raise errors.ValidationError(message="'member' not set or doesn't have 'id'")
+        if "role" not in data:
+            raise errors.ValidationError(message="'role' not set")
+
+        return cls(member=Member.from_dict(member), role=Role(data["role"]))
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -32,7 +51,7 @@ class Project(BaseModel):
     name: str
     slug: str
     visibility: Visibility
-    created_by: User
+    created_by: Member
     creation_date: Optional[datetime] = None
     repositories: List[str] = field(default_factory=list)
     description: Optional[str] = None
@@ -44,8 +63,8 @@ class Project(BaseModel):
             raise errors.ValidationError(message="'name' not set")
         if "created_by" not in data:
             raise errors.ValidationError(message="'created_by' not set")
-        if not isinstance(data["created_by"], User):
-            raise errors.ValidationError(message="'created_by' must be an instance of 'User'")
+        if not isinstance(data["created_by"], Member):
+            raise errors.ValidationError(message="'created_by' must be an instance of 'Member'")
 
         name = data["name"]
         slug = data.get("slug") or get_slug(name)
