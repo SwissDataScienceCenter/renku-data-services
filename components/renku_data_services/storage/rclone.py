@@ -59,13 +59,19 @@ class RCloneValidator:
             spec.pop(i)
 
     @staticmethod
-    def __patch_schema_azure_account_sensitive(spec: list[dict[str, Any]]) -> None:
-        """Make account name not sensitive."""
+    def __patch_schema_sensitive(spec: list[dict[str, Any]]) -> None:
+        """Fix sensitive settings on providers."""
         for storage in spec:
             if storage["Prefix"] == "azureblob":
                 for option in storage["Options"]:
                     if option["Name"] == "account":
                         option["Sensitive"] = False
+            if storage["Prefix"] == "webdav":
+                for option in storage["Options"]:
+                    if option["Name"] == "user":
+                        option["Sensitive"] = False
+                    if option["Name"] == "pass":
+                        option["Sensitive"] = True
 
     @staticmethod
     def __patch_schema_s3_endpoint_required(spec: list[dict[str, Any]]) -> None:
@@ -125,13 +131,11 @@ class RCloneValidator:
         for patch in patches:
             patch(spec)
 
-    def validate(
-        self, configuration: Union["RCloneConfig", dict[str, Any]], private: bool = False, keep_sensitive: bool = False
-    ):
+    def validate(self, configuration: Union["RCloneConfig", dict[str, Any]], keep_sensitive: bool = False):
         """Validates an RClone config."""
         provider = self.get_provider(configuration)
 
-        provider.validate_config(configuration, private=private, keep_sensitive=keep_sensitive)
+        provider.validate_config(configuration, keep_sensitive=keep_sensitive)
 
     async def test_connection(self, configuration: Union["RCloneConfig", dict[str, Any]], source_path: str):
         """Tests connecting with an RClone config."""
@@ -285,7 +289,7 @@ class RCloneOption(BaseModel):
                     )
 
         if self.examples and self.exclusive:
-            if not any(e.value == str(value) and e.provider == provider for e in self.examples):
+            if not any(e.value == str(value) and (not e.provider or e.provider == provider) for e in self.examples):
                 raise errors.ValidationError(message=f"Value '{value}' is not valid for field {self.name}")
         return value
 
@@ -322,9 +326,7 @@ class RCloneProviderSchema(BaseModel):
 
         return None
 
-    def validate_config(
-        self, configuration: Union["RCloneConfig", dict[str, Any]], private: bool = False, keep_sensitive: bool = False
-    ):
+    def validate_config(self, configuration: Union["RCloneConfig", dict[str, Any]], keep_sensitive: bool = False):
         """Validate an RClone config."""
         keys = set(configuration.keys()) - {"type"}
         provider: str | None = configuration.get("provider")  # type: ignore
@@ -344,14 +346,6 @@ class RCloneProviderSchema(BaseModel):
         if missing:
             missing_str = "\n".join(missing)
             raise errors.ValidationError(message=f"The following fields are required but missing:\n{missing_str}")
-
-        if not private:
-            for sensitive in self.sensitive_options:
-                if sensitive.name in configuration:
-                    raise errors.ValidationError(
-                        message=f"Setting value for field '{sensitive.name}', which is sensitive, is not allowed for"
-                        " public storage"
-                    )
 
         for key in keys:
             value = configuration[key]
