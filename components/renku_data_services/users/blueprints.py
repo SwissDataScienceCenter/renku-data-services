@@ -34,7 +34,7 @@ class KCUsersBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _get_self(request: Request, user: base_models.APIUser):
-            user_info = await self.repo.get_user(requested_by=user, id=user.id)
+            user_info = await self.repo.get_or_create_user(requested_by=user, id=user.id)
             if not user_info:
                 raise errors.MissingResourceError(message=f"The user with ID {user.id} cannot be found.")
             return json(apispec.UserWithId.model_validate(user_info).model_dump(exclude_none=True))
@@ -46,7 +46,7 @@ class KCUsersBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _get_one(request: Request, user_id: str, user: base_models.APIUser):
-            user_info = await self.repo.get_user(requested_by=user, id=user_id)
+            user_info = await self.repo.get_or_create_user(requested_by=user, id=user_id)
             if not user_info:
                 raise errors.MissingResourceError(message=f"The user with ID {user_id} cannot be found.")
             return json(apispec.UserWithId.model_validate(user_info).model_dump(exclude_none=True))

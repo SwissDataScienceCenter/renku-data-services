@@ -6,10 +6,10 @@ from renku_data_services.authz.models import MemberQualifier, Role, Scope
 from renku_data_services.base_models import APIUser
 from renku_data_services.errors import errors
 
-admin_user = APIUser(is_admin=True, id="some-id", access_token="some-token", name="admin")  # nosec B106
+admin_user = APIUser(is_admin=True, id="some-id", access_token="some-token", full_name="admin")  # nosec B106
 anon_user = APIUser(is_admin=False)
-regular_user1 = APIUser(is_admin=False, id="some-id1", access_token="some-token1", name="some-user1")  # nosec B106
-regular_user2 = APIUser(is_admin=False, id="some-id2", access_token="some-token2", name="some-user2")  # nosec B106
+regular_user1 = APIUser(is_admin=False, id="some-id1", access_token="some-token1", full_name="some-user1")  # nosec B106
+regular_user2 = APIUser(is_admin=False, id="some-id2", access_token="some-token2", full_name="some-user2")  # nosec B106
 
 
 @pytest.mark.asyncio

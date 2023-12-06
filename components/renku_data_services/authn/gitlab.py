@@ -56,4 +56,25 @@ class GitlabAuthenticator:
         if user_id is None:
             raise errors.Unauthorized(message="Could not get user id")
 
-        return base_models.APIUser(is_admin=False, id=str(user_id), access_token=access_token, name=user.name)
+        full_name: str | None = user.name
+        last_name: str | None = None
+        first_name: str | None = None
+        email: str | None = user.email
+        if full_name:
+            name_parts = full_name.split()
+            try:
+                first_name = name_parts.pop(0)
+            except IndexError:
+                pass
+            if len(name_parts) >= 1:
+                last_name = " ".join(name_parts)
+
+        return base_models.APIUser(
+            is_admin=False,
+            id=str(user_id),
+            access_token=access_token,
+            first_name=first_name,
+            last_name=last_name,
+            email=email,
+            full_name=full_name,
+        )

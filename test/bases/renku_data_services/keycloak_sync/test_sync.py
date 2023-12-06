@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Tuple
 import pytest
 
 from bases.renku_data_services.keycloak_sync.config import SyncConfig
+from renku_data_services.base_models import APIUser
 from renku_data_services.db_config import DBConfig
 from renku_data_services.users.db import UserRepo, UsersSync
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
@@ -142,18 +143,29 @@ def get_kc_admin_events(updates: List[Tuple[UserInfo, KeycloakAdminEvent]]) -> L
 
 
 @pytest.mark.asyncio
-async def test_total_users_sync(get_app_configs, admin_user):
+async def test_total_users_sync(get_app_configs, admin_user: APIUser):
     kc_api = DummyKeycloakAPI()
     user1 = UserInfo("user-1-id", "John", "Doe", "john.doe@gmail.com")
     user2 = UserInfo("user-2-id", "Jane", "Doe", "jane.doe@gmail.com")
-    kc_api.users = get_kc_users([user1, user2])
+    admin_user_info = UserInfo(
+        id=admin_user.id,
+        first_name=admin_user.first_name,
+        last_name=admin_user.last_name,
+        email=admin_user.email,
+    )
+    kc_api.users = get_kc_users([user1, user2, admin_user_info])
     sync_config: SyncConfig
     user_repo: UserRepo
     sync_config, user_repo = get_app_configs(kc_api)
     db_users = await user_repo.get_users(admin_user)
     kc_users = [UserInfo.from_kc_user_payload(user) for user in sync_config.kc_api.get_users()]
-    assert set(kc_users) == {user1, user2}
-    assert len(db_users) == 0
+    kc_users.append(
+        UserInfo(
+            id=admin_user.id, first_name=admin_user.first_name, last_name=admin_user.last_name, email=admin_user.email
+        )
+    )
+    assert set(kc_users) == {user1, user2, admin_user_info}
+    assert len(db_users) == 1  # listing users add the requesting user if not present
     await sync_config.syncer.users_sync(kc_api)
     db_users = await user_repo.get_users(admin_user)
     assert set(kc_users) == set(db_users)
@@ -164,9 +176,15 @@ async def test_total_users_sync(get_app_configs, admin_user):
 
 
 @pytest.mark.asyncio
-async def test_user_events_update(get_app_configs, admin_user):
+async def test_user_events_update(get_app_configs, admin_user: APIUser):
     kc_api = DummyKeycloakAPI()
     user1 = UserInfo("user-1-id", "John", "Doe", "john.doe@gmail.com")
+    admin_user_info = UserInfo(
+        id=admin_user.id,
+        first_name=admin_user.first_name,
+        last_name=admin_user.last_name,
+        email=admin_user.email,
+    )
     kc_api.users = get_kc_users([user1])
     sync_config: SyncConfig
     user_repo: UserRepo
@@ -174,9 +192,10 @@ async def test_user_events_update(get_app_configs, admin_user):
     db_users = await user_repo.get_users(admin_user)
     kc_users = [UserInfo.from_kc_user_payload(user) for user in sync_config.kc_api.get_users()]
     assert set(kc_users) == {user1}
-    assert len(db_users) == 0
+    assert len(db_users) == 1  # listing users add the requesting user if not present
     await sync_config.syncer.users_sync(kc_api)
     db_users = await user_repo.get_users(admin_user)
+    kc_users.append(admin_user_info)
     assert set(kc_users) == set(db_users)
     # Add update and create events
     user2 = UserInfo("user-2-id", "Jane", "Doe", "jane.doe@gmail.com")
@@ -186,27 +205,33 @@ async def test_user_events_update(get_app_configs, admin_user):
     # Process events and check if updates show up
     await sync_config.syncer.events_sync(kc_api)
     db_users = await user_repo.get_users(admin_user)
-    assert set(db_users) == {user1_updated, user2}
+    assert set(db_users) == {user1_updated, user2, admin_user_info}
     # Ensure re-processing events does not break anything
     kc_api.user_events = get_kc_user_create_events([user2]) + get_kc_user_update_events([user1_update])
     await sync_config.syncer.events_sync(kc_api)
     db_users = await user_repo.get_users(admin_user)
-    assert set(db_users) == {user1_updated, user2}
+    assert set(db_users) == {user1_updated, user2, admin_user_info}
 
 
 @pytest.mark.asyncio
-async def test_admin_events(get_app_configs, admin_user):
+async def test_admin_events(get_app_configs, admin_user: APIUser):
     kc_api = DummyKeycloakAPI()
     user1 = UserInfo("user-1-id", "John", "Doe", "john.doe@gmail.com")
     user2 = UserInfo("user-2-id", "Jane", "Doe", "jane.doe@gmail.com")
-    kc_api.users = get_kc_users([user1, user2])
+    admin_user_info = UserInfo(
+        id=admin_user.id,
+        first_name=admin_user.first_name,
+        last_name=admin_user.last_name,
+        email=admin_user.email,
+    )
+    kc_api.users = get_kc_users([user1, user2, admin_user_info])
     sync_config: SyncConfig
     user_repo: UserRepo
     sync_config, user_repo = get_app_configs(kc_api)
     db_users = await user_repo.get_users(admin_user)
     kc_users = [UserInfo.from_kc_user_payload(user) for user in sync_config.kc_api.get_users()]
-    assert set(kc_users) == {user1, user2}
-    assert len(db_users) == 0
+    assert set(kc_users) == {user1, user2, admin_user_info}
+    assert len(db_users) == 1  # listing users add the requesting user if not present
     await sync_config.syncer.users_sync(kc_api)
     db_users = await user_repo.get_users(admin_user)
     assert set(kc_users) == set(db_users)
@@ -217,22 +242,30 @@ async def test_admin_events(get_app_configs, admin_user):
     # Process admin events
     await sync_config.syncer.events_sync(kc_api)
     db_users = await user_repo.get_users(admin_user)
-    assert {user1_updated} == set(db_users)
+    assert {user1_updated, admin_user_info} == set(db_users)
 
 
 @pytest.mark.asyncio
-async def test_events_update_error(get_app_configs, admin_user):
+async def test_events_update_error(get_app_configs, admin_user: APIUser):
     kc_api = DummyKeycloakAPI()
     user1 = UserInfo("user-1-id", "John", "Doe", "john.doe@gmail.com")
     user2 = UserInfo("user-2-id", "Jane", "Doe", "jane.doe@gmail.com")
+    admin_user_info = UserInfo(
+        id=admin_user.id,
+        first_name=admin_user.first_name,
+        last_name=admin_user.last_name,
+        email=admin_user.email,
+    )
     kc_api.users = get_kc_users([user1, user2])
     sync_config: SyncConfig
     user_repo: UserRepo
     sync_config, user_repo = get_app_configs(kc_api)
     db_users = await user_repo.get_users(admin_user)
     kc_users = [UserInfo.from_kc_user_payload(user) for user in sync_config.kc_api.get_users()]
-    assert set(kc_users) == {user1, user2}
-    assert len(db_users) == 0
+    kc_users.append(admin_user_info)
+    assert set(kc_users) == {user1, user2, admin_user_info}
+    assert len(db_users) == 1  # listing users add the requesting user if not present
+    assert db_users[0] == admin_user_info
     await sync_config.syncer.users_sync(kc_api)
     db_users = await user_repo.get_users(admin_user)
     assert set(kc_users) == set(db_users)
@@ -249,29 +282,35 @@ async def test_events_update_error(get_app_configs, admin_user):
         await sync_config.syncer.events_sync(kc_api)
     db_users = await user_repo.get_users(admin_user)
     # An error occurs in processing an event or between events and none of the events are processed
-    assert {user1, user2} == set(db_users)
+    assert {user1, user2, admin_user_info} == set(db_users)
     # Add admin events without error
     kc_api.admin_update_events = get_kc_admin_events(
         [(user1_updated, KeycloakAdminEvent.UPDATE)]
     ) + get_kc_admin_events([(user2_updated, KeycloakAdminEvent.UPDATE)])
     await sync_config.syncer.events_sync(kc_api)
     db_users = await user_repo.get_users(admin_user)
-    assert {user1_updated, user2_updated} == set(db_users)
+    assert {user1_updated, user2_updated, admin_user_info} == set(db_users)
 
 
 @pytest.mark.asyncio
-async def test_removing_non_existent_user(get_app_configs, admin_user):
+async def test_removing_non_existent_user(get_app_configs, admin_user: APIUser):
     kc_api = DummyKeycloakAPI()
     user1 = UserInfo("user-1-id", "John", "Doe", "john.doe@gmail.com")
     non_existent_user = UserInfo("user-2-id", "Jane", "Doe", "jane.doe@gmail.com")
-    kc_api.users = get_kc_users([user1])
+    admin_user_info = UserInfo(
+        id=admin_user.id,
+        first_name=admin_user.first_name,
+        last_name=admin_user.last_name,
+        email=admin_user.email,
+    )
+    kc_api.users = get_kc_users([user1, admin_user_info])
     sync_config: SyncConfig
     user_repo: UserRepo
     sync_config, user_repo = get_app_configs(kc_api)
     db_users = await user_repo.get_users(admin_user)
     kc_users = [UserInfo.from_kc_user_payload(user) for user in sync_config.kc_api.get_users()]
-    assert set(kc_users) == {user1}
-    assert len(db_users) == 0
+    assert set(kc_users) == {user1, admin_user_info}
+    assert len(db_users) == 1
     await sync_config.syncer.users_sync(kc_api)
     db_users = await user_repo.get_users(admin_user)
     assert set(kc_users) == set(db_users)
@@ -280,4 +319,4 @@ async def test_removing_non_existent_user(get_app_configs, admin_user):
     # Process events
     await sync_config.syncer.events_sync(kc_api)
     db_users = await user_repo.get_users(admin_user)
-    assert {user1} == set(db_users)
+    assert set(db_users) == {user1, admin_user_info}
