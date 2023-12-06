@@ -15,13 +15,12 @@ class RCloneConfig(BaseModel, MutableMapping):
 
     config: dict[str, Any] = Field(exclude=True)
 
-    private: bool = Field(exclude=True)
     _validator: RCloneValidator = PrivateAttr(default=RCloneValidator())
 
     @model_validator(mode="after")
     def check_rclone_schema(self) -> "RCloneConfig":
         """Validate that the reclone config is valid."""
-        self._validator.validate(self.config, private=self.private)
+        self._validator.validate(self.config)
         return self
 
     @model_serializer
@@ -37,11 +36,11 @@ class RCloneConfig(BaseModel, MutableMapping):
 
     def __setitem__(self, key, value):
         self.config[key] = value
-        self._validator.validate(self.config, private=self.private)
+        self._validator.validate(self.config)
 
     def __delitem__(self, key):
         del self.config[key]
-        self._validator.validate(self.config, private=self.private)
+        self._validator.validate(self.config)
 
     def __iter__(self):
         return iter(self.config)
@@ -54,7 +53,6 @@ class CloudStorage(BaseModel):
     name: str = Field(min_length=3)
     storage_type: str = Field(pattern=r"^[a-z0-9]+$")
     configuration: RCloneConfig
-    private: bool = Field(default=False)
     readonly: bool = Field(default=True)
 
     storage_id: str | None = Field(default=None)
@@ -87,23 +85,19 @@ class CloudStorage(BaseModel):
         if "type" not in data["configuration"]:
             raise errors.ValidationError(message="'type' not set in 'configuration'")
 
-        private = data.get("private", False)
         return cls(
             project_id=data["project_id"],
             storage_id=data.get("storage_id"),
             name=data["name"],
-            configuration=RCloneConfig(config=data["configuration"], private=private),
+            configuration=RCloneConfig(config=data["configuration"]),
             storage_type=data["configuration"]["type"],
             source_path=data["source_path"],
             target_path=data["target_path"],
-            private=private,
             readonly=data.get("readonly", True),
         )
 
     @classmethod
-    def from_url(
-        cls, storage_url: str, name: str, private: bool, readonly: bool, project_id: str, target_path: str
-    ) -> "CloudStorage":
+    def from_url(cls, storage_url: str, name: str, readonly: bool, project_id: str, target_path: str) -> "CloudStorage":
         """Get Cloud Storage/rclone config from a storage URL.
 
         Example:
@@ -123,17 +117,17 @@ class CloudStorage(BaseModel):
 
         match parsed_url.scheme:
             case "s3":
-                return CloudStorage.from_s3_url(parsed_url, project_id, name, private, readonly, target_path)
+                return CloudStorage.from_s3_url(parsed_url, project_id, name, readonly, target_path)
             case "azure" | "az":
-                return CloudStorage.from_azure_url(parsed_url, project_id, name, private, readonly, target_path)
+                return CloudStorage.from_azure_url(parsed_url, project_id, name, readonly, target_path)
             case "http" | "https":
-                return CloudStorage._from_ambiguous_url(parsed_url, project_id, name, private, readonly, target_path)
+                return CloudStorage._from_ambiguous_url(parsed_url, project_id, name, readonly, target_path)
             case _:
                 raise errors.ValidationError(message=f"Scheme '{parsed_url.scheme}' is not supported.")
 
     @classmethod
     def from_s3_url(
-        cls, storage_url: ParseResult, project_id: str, name: str, private: bool, readonly: bool, target_path: str
+        cls, storage_url: ParseResult, project_id: str, name: str, readonly: bool, target_path: str
     ) -> "CloudStorage":
         """Get Cloud storage from an S3 URL.
 
@@ -169,16 +163,15 @@ class CloudStorage(BaseModel):
             project_id=project_id,
             name=name,
             storage_type="s3",
-            configuration=RCloneConfig(config=configuration, private=private),
+            configuration=RCloneConfig(config=configuration),
             source_path=source_path,
             target_path=target_path,
-            private=private,
             readonly=readonly,
         )
 
     @classmethod
     def from_azure_url(
-        cls, storage_url: ParseResult, project_id: str, name: str, private: bool, readonly: bool, target_path: str
+        cls, storage_url: ParseResult, project_id: str, name: str, readonly: bool, target_path: str
     ) -> "CloudStorage":
         """Get Cloud storage from an Azure URL.
 
@@ -206,23 +199,22 @@ class CloudStorage(BaseModel):
             project_id=project_id,
             name=name,
             storage_type="azureblob",
-            configuration=RCloneConfig(config=configuration, private=private),
+            configuration=RCloneConfig(config=configuration),
             source_path=source_path,
             target_path=target_path,
-            private=private,
             readonly=readonly,
         )
 
     @classmethod
     def _from_ambiguous_url(
-        cls, storage_url: ParseResult, project_id: str, name: str, private: bool, readonly: bool, target_path: str
+        cls, storage_url: ParseResult, project_id: str, name: str, readonly: bool, target_path: str
     ) -> "CloudStorage":
         """Get cloud storage from an ambiguous storage url."""
         if storage_url.hostname is None:
             raise errors.ValidationError(message="Storage URL must contain a host")
 
         if storage_url.hostname.endswith(".windows.net"):
-            return CloudStorage.from_azure_url(storage_url, project_id, name, private, readonly, target_path)
+            return CloudStorage.from_azure_url(storage_url, project_id, name, readonly, target_path)
 
         # default to S3 for unknown URLs, since these are way more common
-        return CloudStorage.from_s3_url(storage_url, project_id, name, private, readonly, target_path)
+        return CloudStorage.from_s3_url(storage_url, project_id, name, readonly, target_path)

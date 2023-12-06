@@ -202,7 +202,7 @@ components:
       description: Dictionary of rclone key:value pairs (based on schema from '/storage_schema')
       additionalProperties:
         oneOf:
-        - type: number
+        - type: integer
         - type: string
           nullable: true
         - type: boolean
@@ -220,10 +220,6 @@ components:
               type: string
               description: the target path relative to the repository where the storage should be mounted
               example: my/project/folder
-            private:
-              type: boolean
-              description: Whether this storage is private (i.e. requires credentials) or not
-              default: false
             readonly:
               type: boolean
               description: Whether this storage should be mounted readonly or not
@@ -240,7 +236,7 @@ components:
         - type: object
           properties:
             storage_type:
-              $ref: "#/components/schemas/SourcePath"
+              $ref: "#/components/schemas/StorageType"
             name:
               $ref: "#/components/schemas/StorageName"
             configuration:
@@ -253,10 +249,6 @@ components:
               type: string
               description: the target path relative to the repository where the storage should be mounted
               example: my/project/folder
-            private:
-              type: boolean
-              description: Whether this storage is private (i.e. requires credentials) or not
-              default: false
             readonly:
               type: boolean
               description: Whether this storage should be mounted readonly or not
@@ -272,9 +264,7 @@ components:
         project_id:
           $ref: "#/components/schemas/GitlabProjectId"
         storage_type:
-          type: string
-          description: same as rclone prefix/ rclone config type. Ignored in requests, but returned in responses for convenience.
-          readOnly: true
+          $ref: "#/components/schemas/StorageType"
         name:
           $ref: "#/components/schemas/StorageName"
         configuration:
@@ -285,9 +275,6 @@ components:
           type: string
           description: the target path relative to the repository where the storage should be mounted
           example: my/project/folder
-        private:
-          type: boolean
-          description: Whether this storage is private (i.e. requires credentials) or not
         readonly:
           type: boolean
           description: Whether this storage should be mounted readonly or not
@@ -414,6 +401,10 @@ components:
       type: string
       description: the source path to mount, usually starts with bucket/container name
       example: bucket/my/storage/folder/
+    StorageType:
+      type: string
+      description: same as rclone prefix/ rclone config type. Ignored in requests, but returned in responses for convenience.
+      readOnly: true
     ErrorResponse:
       type: object
       properties:
