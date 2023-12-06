@@ -189,7 +189,7 @@ class UserInfoUpdate:
         return output
 
 
-@dataclass(eq=True)
+@dataclass(eq=True, frozen=True)
 class UserInfo:
     """Keycloak user."""
 

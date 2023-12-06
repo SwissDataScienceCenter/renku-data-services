@@ -1,14 +1,18 @@
 import json
+from copy import deepcopy
 from test.bases.renku_data_services.data_api.utils import create_rp
-from typing import Any, Dict
+from test.bases.renku_data_services.keycloak_sync.test_sync import get_kc_users
+from typing import Any, Dict, List
 
 import pytest
 import pytest_asyncio
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 
-from renku_data_services.app_config import Config
+from renku_data_services.app_config import Config as DataConfig
 from renku_data_services.data_api.app import register_all_handlers
+from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
+from renku_data_services.users.models import UserInfo
 
 _valid_resource_pool_payload: Dict[str, Any] = {
     "name": "test-name",
@@ -33,11 +37,20 @@ _valid_resource_pool_payload: Dict[str, Any] = {
 
 @pytest.fixture
 def valid_resource_pool_payload() -> Dict[str, Any]:
-    return _valid_resource_pool_payload
+    return deepcopy(_valid_resource_pool_payload)
+
+
+@pytest.fixture
+def users() -> List[UserInfo]:
+    return [
+        UserInfo("user-1-id", "John", "Doe", "john.doe@gmail.com"),
+        UserInfo("user-2-id", "Jane", "Doe", "jane.doe@gmail.com"),
+    ]
 
 
 @pytest_asyncio.fixture
-async def test_client(app_config: Config) -> SanicASGITestClient:
+async def test_client(app_config: DataConfig, users: List[UserInfo]) -> SanicASGITestClient:
+    app_config.kc_api = DummyKeycloakAPI(users=get_kc_users(users))
     app = Sanic(app_config.app_name)
     app = register_all_handlers(app, app_config)
     await app_config.kc_user_repo.initialize(app_config.kc_api)
@@ -245,6 +258,50 @@ async def test_restriced_default_resource_pool_access(
     )
     assert res.status_code == 200
     assert res.json == rp_public
+
+
+@pytest.mark.asyncio
+async def test_restriced_default_resource_pool_access_changes(
+    test_client: SanicASGITestClient, admin_user_headers: Dict[str, str], valid_resource_pool_payload: Dict[str, Any]
+):
+    valid_resource_pool_payload["default"] = True
+    valid_resource_pool_payload["public"] = True
+    del valid_resource_pool_payload["quota"]
+    # Create default resource pool
+    _, res = await create_rp(valid_resource_pool_payload, test_client)
+    assert res.status_code == 201
+    rp_default = res.json
+    # Get existing users
+    _, res = await test_client.get("/api/data/users", headers=admin_user_headers)
+    existing_users = res.json
+    assert res.status_code == 200
+    assert len(existing_users) >= 2
+    # Restrict one user to not have access to the default pool
+    no_default_user = existing_users[0]
+    no_default_user_id = no_default_user["id"]
+    no_default_access_token = json.dumps({"id": no_default_user_id})
+    _, res = await test_client.delete(
+        f"/api/data/resource_pools/{rp_default['id']}/users/{no_default_user_id}",
+        headers=admin_user_headers,
+    )
+    assert res.status_code == 204
+    # Ensure that no_default_pool user cannot get the default pool
+    _, res = await test_client.get(
+        f"/api/data/resource_pools/{rp_default['id']}", headers={"Authorization": f"Bearer {no_default_access_token}"}
+    )
+    assert res.status_code == 404
+    # Add the no_default user back to the default pool
+    _, res = await test_client.post(
+        f"/api/data/resource_pools/{rp_default['id']}/users",
+        headers=admin_user_headers,
+        data=json.dumps([{"id": no_default_user_id}]),
+    )
+    assert res.status_code == 201
+    # Ensure that the user can now see the default pool
+    _, res = await test_client.get(
+        f"/api/data/resource_pools/{rp_default['id']}", headers={"Authorization": f"Bearer {no_default_access_token}"}
+    )
+    assert res.status_code == 200
 
 
 @pytest.mark.asyncio

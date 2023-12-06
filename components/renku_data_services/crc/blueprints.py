@@ -140,7 +140,7 @@ class ResourcePoolUsersBP(CustomBlueprint):
                     apispec.UserWithId(id=r.keycloak_id, no_default_access=r.no_default_access).model_dump(
                         exclude_none=True
                     )
-                    for r in res
+                    for r in res.allowed
                 ]
             )
 
@@ -182,7 +182,7 @@ class ResourcePoolUsersBP(CustomBlueprint):
         updated_users = await self.repo.update_resource_pool_users(
             api_user=api_user,
             resource_pool_id=resource_pool_id,
-            users=[base_models.User(keycloak_id=id) for id in user_ids_to_add],
+            user_ids=user_ids_to_add,
             append=post,
         )
         return json(
@@ -203,14 +203,14 @@ class ResourcePoolUsersBP(CustomBlueprint):
             res = await self.repo.get_resource_pool_users(
                 keycloak_id=user_id, resource_pool_id=resource_pool_id, api_user=user
             )
-            if len(res) < 1:
-                raise errors.MissingResourceError(
-                    message=f"The user with id {user_id} or resource pool with id {resource_pool_id} cannot be found."
+            if len(res.allowed) > 0:
+                return json(
+                    apispec.UserWithId(
+                        id=res.allowed[0].keycloak_id, no_default_access=res.allowed[0].no_default_access
+                    ).model_dump(exclude_none=True)
                 )
-            return json(
-                apispec.UserWithId(id=res[0].keycloak_id, no_default_access=res[0].no_default_access).model_dump(
-                    exclude_none=True
-                )
+            raise errors.MissingResourceError(
+                message=f"The user with id {user_id} or resource pool with id {resource_pool_id} cannot be found."
             )
 
         return "/resource_pools/<resource_pool_id>/users/<user_id>", ["GET"], _get
