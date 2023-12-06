@@ -54,11 +54,23 @@ class UserRepo:
             stmt = select(UserORM).where(UserORM.keycloak_id == id)
             res = await session.execute(stmt)
             orm = res.scalar_one_or_none()
-            if not orm and id == requested_by.id:
-                return await self._add_api_user(requested_by)
             if not orm:
                 return None
             return orm.dump()
+
+    @only_authenticated
+    async def get_or_create_user(self, requested_by: APIUser, id: str) -> UserInfo | None:
+        """Get a specific user from the database and create it potentially if it does not exist.
+
+        If the caller is the same user that is being retrieved and they are authenticated and
+        their user information is not in the database then this call adds the user in the DB
+        in addition to returning the user information.
+        """
+        async with self.session_maker() as session, session.begin():
+            user = await self.get_user(requested_by=requested_by, id=id)
+            if not user and id == requested_by.id:
+                return await self._add_api_user(requested_by)
+            return user
 
     @only_authenticated
     async def get_users(self, requested_by: APIUser, email: str | None = None) -> List[UserInfo]:
@@ -67,10 +79,9 @@ class UserRepo:
             raise errors.Unauthorized(message="Non-admin users cannot list all users.")
         users = await self._get_users(email)
 
-        def is_api_user_missing() -> bool:
-            return not any([requested_by.id == user.id for user in users])
+        is_api_user_missing = not any([requested_by.id == user.id for user in users])
 
-        if not email and is_api_user_missing():
+        if not email and is_api_user_missing:
             api_user_info = await self._add_api_user(requested_by)
             users.append(api_user_info)
         return users

@@ -23,7 +23,7 @@ class APIUser:
     is_admin: bool = False
     id: Optional[str] = None  # the sub claim in the access token - i.e. the Keycloak user ID
     access_token: Optional[str] = field(repr=False, default=None)
-    name: Optional[str] = None  # the full name of the user
+    full_name: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     email: Optional[str] = None

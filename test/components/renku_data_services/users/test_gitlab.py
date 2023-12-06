@@ -133,7 +133,7 @@ async def test_gitlab_user(monkeypatch):
     import renku_data_services.base_models as base_models
 
     gitlab_client = GitlabAPI(gitlab_url="https://gitlab.url.com")
-    user = base_models.APIUser(is_admin=False, id="21", access_token="xxxxxx", name="John Doe")  # nosec: B106
+    user = base_models.APIUser(is_admin=False, id="21", access_token="xxxxxx", full_name="John Doe")  # nosec: B106
     projects = await gitlab_client.filter_projects_by_access_level(
         user, ["1", "2", "3"], min_access_level=base_models.GitlabAccessLevel.PUBLIC
     )

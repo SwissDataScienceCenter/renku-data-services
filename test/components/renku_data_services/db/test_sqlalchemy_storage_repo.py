@@ -24,7 +24,7 @@ def get_user(storage, valid=True):
             is_admin=True,
             id="abcdefg",
             access_token="abcdefg",
-            name="John Doe",  # nosec: B106
+            full_name="John Doe",  # nosec: B106
         )
         user._admin_project_id = storage.get("project_id")
     else:
@@ -32,7 +32,7 @@ def get_user(storage, valid=True):
             is_admin=True,
             id="abcdefg",
             access_token="abcdefg",
-            name="John Doe",  # nosec: B106
+            full_name="John Doe",  # nosec: B106
         )
         user._admin_project_id = storage.get("project_id") + "0"
         user._member_project_id = storage.get("project_id") + "0"

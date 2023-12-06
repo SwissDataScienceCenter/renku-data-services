@@ -157,7 +157,7 @@ async def test_logged_in_user_check_adds_user_if_missing(users_test_client, user
     # Check that the user just added via acccess token is returned in the list when the admin lists all users
     admin_token = json.dumps(asdict(admin_user))
     _, res = await users_test_client.get(
-        f"/api/data/users",
+        "/api/data/users",
         headers={"Authorization": f"bearer {admin_token}"},
     )
     assert res.status_code == 200

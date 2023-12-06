@@ -50,7 +50,7 @@ class DummyAuthenticator:
 
         is_set = bool(
             user_props.get("id")
-            or user_props.get("name")
+            or user_props.get("full_name")
             or user_props.get("is_admin") is not None
             or user_props.get("first_name")
             or user_props.get("last_name")
@@ -59,10 +59,10 @@ class DummyAuthenticator:
 
         return base_models.APIUser(
             is_admin=user_props.get("is_admin", False),  # type: ignore[arg-type]
-            id=user_props.get("id") if user_props.get("id") else "some-id" if is_set else None,
+            id=user_props.get("id", "some-id") if is_set else None,
             access_token=access_token,
-            first_name=user_props.get("first_name") if user_props.get("first_name") else "John" if is_set else None,
-            last_name=user_props.get("last_name") if user_props.get("last_name") else "Doe" if is_set else None,
-            email=user_props.get("email") if user_props.get("email") else "john.doe@gmail.com" if is_set else None,
-            name=user_props.get("name") if user_props.get("name") else "John Doe" if is_set else None,
+            first_name=user_props.get("first_name", "John") if is_set else None,
+            last_name=user_props.get("last_name", "Doe") if is_set else None,
+            email=user_props.get("email", "john.doe@gmail.com") if is_set else None,
+            full_name=user_props.get("full_name", "John Doe") if is_set else None,
         )

@@ -32,7 +32,7 @@ class GitlabAPI:
     ) -> List[str]:
         """Filter projects this user can access in gitlab with at least access level."""
 
-        if not user.access_token or not user.name:
+        if not user.access_token or not user.full_name:
             return []
         header = {"Authorization": f"Bearer {user.access_token}", "Content-Type": "application/json"}
         ids = ",".join(f'"gid://gitlab/Project/{id}"' for id in project_ids)
@@ -42,7 +42,7 @@ class GitlabAPI:
                     }}
                     nodes {{
                         id
-                        projectMembers(search: "{user.name}") {{
+                        projectMembers(search: "{user.full_name}") {{
                             nodes {{
                                 user {{
                                     id
@@ -131,9 +131,9 @@ class DummyGitlabAPI:
         self, user: APIUser, project_ids: List[str], min_access_level: GitlabAccessLevel
     ) -> List[str]:
         """Filter projects this user can access in gitlab with at least access level."""
-        if not user.access_token or not user.name:
+        if not user.access_token or not user.full_name:
             return []
         if min_access_level == GitlabAccessLevel.PUBLIC:
             return []
-        user_projects = self._store.get(user.name, {}).get(min_access_level, [])
+        user_projects = self._store.get(user.full_name, {}).get(min_access_level, [])
         return [p for p in project_ids if p in user_projects]

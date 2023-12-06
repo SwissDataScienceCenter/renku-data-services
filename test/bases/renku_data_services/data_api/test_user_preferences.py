@@ -29,7 +29,7 @@ def test_client(app_config: Config) -> SanicASGITestClient:
 @pytest.fixture
 def api_user() -> APIUser:
     id = str(uuid4())
-    name = "Some R. User"
+    full_name = "Some R. User"
     first_name = "Some"
     last_name = "R. User"
     email = "some-user@gmail.com"
@@ -37,7 +37,7 @@ def api_user() -> APIUser:
     return APIUser(
         is_admin=is_admin,
         id=id,
-        name=name,
+        full_name=full_name,
         # The dummy authentication client in the tests will parse the access token to create
         # the same APIUser as this when it receives this json-formatted access token
         access_token=json.dumps(
@@ -47,7 +47,7 @@ def api_user() -> APIUser:
                 "last_name": last_name,
                 "email": email,
                 "is_admin": is_admin,
-                "name": name,
+                "full_name": full_name,
             }
         ),
     )

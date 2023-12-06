@@ -91,7 +91,7 @@ def admin_user() -> base_models.APIUser:
         is_admin=True,
         id="some-random-id-123456",
         access_token="some-access-token",
-        name="Admin Adminson",
+        full_name="Admin Adminson",
         first_name="Admin",
         last_name="Adminson",
         email="admin@gmail.com",
