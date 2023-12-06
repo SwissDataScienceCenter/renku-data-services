@@ -25,6 +25,8 @@ style_checks:
 	@$(call test_apispec_up_to_date,"storage")
 	@echo "checking user preferences apispec is up to date"
 	@$(call test_apispec_up_to_date,"user_preferences")
+	@echo "checking user preferences apispec is up to date"
+	@$(call test_apispec_up_to_date,"project")
 	poetry run mypy
 	poetry run flake8 -v
 	poetry run bandit -c pyproject.toml -r .

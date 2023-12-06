@@ -8,7 +8,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_co
 from ulid import ULID
 
 from renku_data_services.project import models
-from renku_data_services.project.apispec import Visibility
+from renku_data_services.project.apispec import Role, Visibility
 
 metadata_obj = MetaData(schema="projects")  # Has to match alembic ini section name
 
@@ -53,8 +53,28 @@ class ProjectORM(BaseORM):
             name=self.name,
             slug=self.slug,
             visibility=self.visibility,
-            created_by=models.User(id=self.created_by_id),
+            created_by=models.Member(id=self.created_by_id),
             creation_date=self.creation_date,
             repositories=self.repositories,
             description=self.description,
         )
+
+
+class ProjectMemberORM(BaseORM):
+    """A Renku native project."""
+
+    __tablename__ = "projects_members"
+
+    project_id: Mapped[str] = mapped_column("project_id", String(26), primary_key=True)
+    role: Mapped[Role]
+    # NOTE: This is KeyCloak ID's of a user and not a unique ID
+    id: Mapped[str] = mapped_column("id", String(36), unique=False, index=True, primary_key=True)
+
+    @classmethod
+    def load(cls, member: models.MemberWithRole, project_id: str):
+        """Create an instance from MemberWithRole."""
+        return cls(project_id=project_id, role=member.role, id=member.member.id)
+
+    def dump(self) -> models.MemberWithRole:
+        """Create a project members model."""
+        return models.MemberWithRole(member=models.Member(id=self.id), role=self.role)
