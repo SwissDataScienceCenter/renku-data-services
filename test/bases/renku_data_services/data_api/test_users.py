@@ -1,4 +1,5 @@
 import json
+from dataclasses import asdict
 from test.bases.renku_data_services.keycloak_sync.test_sync import get_kc_users
 from typing import List
 from uuid import uuid4
@@ -123,13 +124,14 @@ async def test_logged_in_users_cannot_get_other_users(users_test_client, users):
 
 
 @pytest.mark.asyncio
-async def test_logged_in_user_check_adds_user_if_missing(users_test_client, users):
+async def test_logged_in_user_check_adds_user_if_missing(users_test_client, users, admin_user):
     user = UserInfo(
         id=str(uuid4()),
         first_name="Peter",
         last_name="Parker",
         email="peter@spiderman.com",
     )
+    # The user is not really in the database
     assert user not in users
     access_token = {
         "id": user.id,
@@ -139,6 +141,7 @@ async def test_logged_in_user_check_adds_user_if_missing(users_test_client, user
         "email": user.email,
         "name": f"{user.first_name} {user.last_name}",
     }
+    # Just by hitting the users endpoint with valid credentials the user will be aded to the database
     _, res = await users_test_client.get(
         f"/api/data/users/{user.id}",
         headers={"Authorization": f"bearer {json.dumps(access_token)}"},
@@ -151,3 +154,12 @@ async def test_logged_in_user_check_adds_user_if_missing(users_test_client, user
         email=res.json.get("email"),
     )
     assert user_response == user
+    # Check that the user just added via acccess token is returned in the list when the admin lists all users
+    admin_token = json.dumps(asdict(admin_user))
+    _, res = await users_test_client.get(
+        f"/api/data/users",
+        headers={"Authorization": f"bearer {admin_token}"},
+    )
+    assert res.status_code == 200
+    users_response = [UserInfo(**iuser) for iuser in res.json]
+    assert user in users_response
