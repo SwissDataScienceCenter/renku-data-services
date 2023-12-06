@@ -1,5 +1,5 @@
 """Base models for API specifications."""
-from pydantic import BaseModel, Extra, Field
+from pydantic import BaseModel, Field
 
 
 class BaseAPISpec(BaseModel):
@@ -17,7 +17,7 @@ class ResourceClassesFilter(BaseAPISpec):
     class Config:
         """Configuration."""
 
-        extra = Extra.ignore
+        extra = "ignore"
 
     cpu: float = Field(ge=0.0, default=0.0)
     memory: int = Field(ge=0, default=0)

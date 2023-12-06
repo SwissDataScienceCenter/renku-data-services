@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from sanic import Request, json
 
 import renku_data_services.base_models as base_models
-from renku_data_services.base_api.auth import authenticate, only_admins
+from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.errors import errors
 from renku_data_services.users import apispec
@@ -22,7 +22,6 @@ class KCUsersBP(CustomBlueprint):
         """Get all users."""
 
         @authenticate(self.authenticator)
-        @only_admins
         async def _get_all(request: Request, user: base_models.APIUser):
             email_filter = request.args.get("exact_email")
             users = await self.repo.get_users(requested_by=user, email=email_filter)

@@ -147,10 +147,9 @@ def storage_test_client(app_config: Config) -> SanicASGITestClient:
                 },
                 "source_path": "bucket/myfolder",
                 "target_path": "my/target",
-                "private": False,
             },
-            422,
-            "",
+            201,
+            "s3",
         ),
         (
             {
@@ -163,7 +162,6 @@ def storage_test_client(app_config: Config) -> SanicASGITestClient:
                 },
                 "source_path": "bucket/myfolder",
                 "target_path": "my/target",
-                "private": True,
                 "readonly": True,
             },
             201,
@@ -331,36 +329,6 @@ async def test_get_storage_unauthorized(storage_test_client, valid_storage_paylo
 
 
 @pytest.mark.asyncio
-async def test_get_storage_private(storage_test_client, valid_storage_payload):
-    storage_test_client, _ = storage_test_client
-    valid_storage_payload["private"] = True
-
-    _, res = await storage_test_client.post(
-        "/api/data/storage",
-        headers={"Authorization": '{"is_admin": false}'},
-        data=json.dumps(valid_storage_payload),
-    )
-    assert res.status_code == 201
-    assert res.json["storage"]["storage_type"] == "s3"
-
-    project_id = res.json["storage"]["project_id"]
-    _, res = await storage_test_client.get(
-        f"/api/data/storage?project_id={project_id}",
-        headers={"Authorization": '{"is_admin": false}'},
-    )
-    assert res.status_code == 200
-    assert len(res.json) == 1
-    result = res.json[0]
-    assert "sensitive_fields" in result
-    assert len(result["sensitive_fields"]) == 3
-    assert any(f["name"] == "access_key_id" for f in result["sensitive_fields"])
-    storage = result["storage"]
-    assert storage["project_id"] == project_id
-    assert storage["storage_type"] == "s3"
-    assert storage["configuration"]["provider"] == "AWS"
-
-
-@pytest.mark.asyncio
 async def test_storage_deletion(storage_test_client, valid_storage_payload):
     storage_test_client, _ = storage_test_client
     _, res = await storage_test_client.post(
@@ -426,49 +394,11 @@ async def test_storage_put(storage_test_client, valid_storage_payload):
                 "configuration": {"type": "azureblob"},
                 "source_path": "bucket/myfolder",
                 "target_path": "my/target",
-                "private": True,
             }
         ),
     )
     assert res.status_code == 200
     assert res.json["storage"]["storage_type"] == "azureblob"
-    assert res.json["storage"]["private"]
-
-
-@pytest.mark.asyncio
-async def test_storage_patch_make_public(storage_test_client):
-    payload = {
-        "project_id": "123456",
-        "name": "mystorage",
-        "configuration": {"type": "s3", "provider": "AWS", "region": "us-east-1", "access_key_id": "my-secret"},
-        "source_path": "bucket/myfolder",
-        "target_path": "my/target",
-        "private": "true",
-    }
-    storage_test_client, _ = storage_test_client
-    _, res = await storage_test_client.post(
-        "/api/data/storage",
-        headers={"Authorization": '{"is_admin": false}'},
-        data=json.dumps(payload),
-    )
-    assert res.status_code == 201
-    assert res.json["storage"]["storage_type"] == "s3"
-    assert res.json["storage"]["private"]
-    assert "access_key_id" in res.json["storage"]["configuration"]
-    storage_id = res.json["storage"]["storage_id"]
-
-    _, res = await storage_test_client.patch(
-        f"/api/data/storage/{storage_id}",
-        headers={"Authorization": '{"is_admin": false}'},
-        data=json.dumps(
-            {
-                "private": False,
-            }
-        ),
-    )
-    assert res.status_code == 200
-    assert not res.json["storage"]["private"]
-    assert "access_key_id" not in res.json["storage"]["configuration"]
 
 
 @pytest.mark.asyncio
@@ -501,9 +431,12 @@ async def test_storage_put_unauthorized(storage_test_client, valid_storage_paylo
 @pytest.mark.asyncio
 async def test_storage_patch(storage_test_client, valid_storage_payload):
     storage_test_client, _ = storage_test_client
+    # NOTE: The keycloak dummy client used to authorize the storage patch requests only has info
+    # on a user with name John Doe, using a different user will fail with a 401 error.
+    access_token = json.dumps({"is_admin": False, "id": "some-id", "name": "John Doe"})
     _, res = await storage_test_client.post(
         "/api/data/storage",
-        headers={"Authorization": '{"is_admin": false}'},
+        headers={"Authorization": f"bearer {access_token}"},
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201
@@ -512,16 +445,29 @@ async def test_storage_patch(storage_test_client, valid_storage_payload):
 
     _, res = await storage_test_client.patch(
         f"/api/data/storage/{storage_id}",
-        headers={"Authorization": '{"is_admin": false}'},
+        headers={"Authorization": f"bearer {access_token}"},
         data=json.dumps(
             {
-                "configuration": {"type": "azureblob", "region": None},
+                "configuration": {"provider": "Other", "region": None},
+                "source_path": "bucket/myotherfolder",
+            }
+        ),
+    )
+    assert res.status_code == 422
+    assert "endpoint" in res.text
+
+    _, res = await storage_test_client.patch(
+        f"/api/data/storage/{storage_id}",
+        headers={"Authorization": f"bearer {access_token}"},
+        data=json.dumps(
+            {
+                "configuration": {"provider": "Other", "region": None, "endpoint": "https://test.com"},
                 "source_path": "bucket/myotherfolder",
             }
         ),
     )
     assert res.status_code == 200
-    assert res.json["storage"]["storage_type"] == "azureblob"
+    assert res.json["storage"]["configuration"]["provider"] == "Other"
     assert res.json["storage"]["source_path"] == "bucket/myotherfolder"
     assert "region" not in res.json["storage"]["configuration"]
 
@@ -559,12 +505,52 @@ async def test_storage_validate_success(storage_test_client):
 
 
 @pytest.mark.asyncio
+async def test_storage_validate_connection(storage_test_client):
+    storage_test_client, _ = storage_test_client
+    body = {"configuration": {"type": "s3", "provider": "AWS"}}
+    _, res = await storage_test_client.post("/api/data/storage_schema/test_connection", data=json.dumps(body))
+    assert res.status_code == 422
+
+    body = {"configuration": {"type": "s3", "provider": "AWS"}, "source_path": "doesntexistatall/"}
+    _, res = await storage_test_client.post("/api/data/storage_schema/test_connection", data=json.dumps(body))
+    assert res.status_code == 422
+
+    body = {"configuration": {"type": "s3", "provider": "AWS"}, "source_path": "giab/"}
+    _, res = await storage_test_client.post("/api/data/storage_schema/test_connection", data=json.dumps(body))
+    assert res.status_code == 204
+
+
+@pytest.mark.asyncio
 async def test_storage_validate_error(storage_test_client):
     storage_test_client, _ = storage_test_client
+
+    _, res = await storage_test_client.post("/api/data/storage_schema/validate")
+    assert res.status_code == 422
+
+    _, res = await storage_test_client.post("/api/data/storage_schema/validate", data="test")
+    assert res.status_code == 400
+
+    _, res = await storage_test_client.post("/api/data/storage_schema/validate", data="{}")
+    assert res.status_code == 422
+
     body = {"type": "s3", "provider": "Other"}
     _, res = await storage_test_client.post("/api/data/storage_schema/validate", data=json.dumps(body))
     assert res.status_code == 422
     assert "missing:\nendpoint" in res.json["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_storage_validate_error_wrong_type(storage_test_client):
+    storage_test_client, _ = storage_test_client
+    body = {"type": "doesntexist"}
+    _, res = await storage_test_client.post("/api/data/storage_schema/validate", data=json.dumps(body))
+    assert res.status_code == 422
+    assert "does not exist" in res.json["error"]["message"]
+
+    body = {"type": "local"}
+    _, res = await storage_test_client.post("/api/data/storage_schema/validate", data=json.dumps(body))
+    assert res.status_code == 422
+    assert "local" in res.json["error"]["message"]
 
 
 @pytest.mark.asyncio
@@ -574,3 +560,16 @@ async def test_storage_validate_error_sensitive(storage_test_client):
     _, res = await storage_test_client.post("/api/data/storage_schema/validate", data=json.dumps(body))
     assert res.status_code == 422
     assert "Value '5' for field 'access_key_id' is not of type string" in res.json["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_storage_schema(storage_test_client):
+    storage_test_client, _ = storage_test_client
+    _, res = await storage_test_client.get("/api/data/storage_schema")
+    assert res.status_code == 200
+    assert not next((e for e in res.json if e["prefix"] == "alias"), None)  # prohibited storage
+    s3 = next(e for e in res.json if e["prefix"] == "s3")
+    assert s3
+    providers = next(p for p in s3["options"] if p["name"] == "provider")
+    assert providers
+    assert providers.get("examples")

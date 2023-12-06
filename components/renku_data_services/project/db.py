@@ -43,6 +43,8 @@ class ProjectRepository:
             raise errors.ValidationError(message="Parameter 'per_page' must be between 1 and 100")
 
         user_id = user.id if user.is_authenticated else MemberQualifier.ALL
+        # NOTE: without the line below mypy thinks user_id can be None
+        user_id = user_id if user_id is not None else MemberQualifier.ALL
         project_ids = await self.project_authz.get_user_projects(requested_by=user, user_id=user_id, scope=Scope.READ)
 
         async with self.session_maker() as session:
@@ -96,6 +98,8 @@ class ProjectRepository:
 
                 project = project_orm.dump()
                 public_project = project.visibility == Visibility.public
+                if project.id is None:
+                    raise errors.BaseError(detail="The created project does not have an ID but it should.")
                 await self.project_authz.create_project(
                     requested_by=user, project_id=project.id, public_project=public_project
                 )

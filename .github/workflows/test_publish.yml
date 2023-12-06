@@ -21,7 +21,9 @@ jobs:
           USER_UID: 1001
           USER_GID: 123
         with:
-          runCmd: make tests
+          runCmd: |
+            make style_checks
+            make tests
           push: never
           skipContainerUserIdUpdate: false
           env: |

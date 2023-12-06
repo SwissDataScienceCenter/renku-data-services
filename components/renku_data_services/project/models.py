@@ -2,7 +2,7 @@
 
 import re
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
@@ -34,7 +34,7 @@ class Project(BaseModel):
     visibility: Visibility
     created_by: User
     creation_date: Optional[datetime] = None
-    repositories: Optional[List[str]] = None
+    repositories: List[str] = field(default_factory=list)
     description: Optional[str] = None
 
     @classmethod
@@ -59,7 +59,7 @@ class Project(BaseModel):
             created_by=created_by,
             visibility=data.get("visibility", Visibility.private),
             creation_date=creation_date,
-            repositories=data.get("repositories"),
+            repositories=data.get("repositories", []),
             description=data.get("description"),
         )
 

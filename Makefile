@@ -1,5 +1,15 @@
 .PHONY: schemas tests style_checks pre_commit_checks run
 
+define test_apispec_up_to_date
+	$(eval $@_NAME=$(1))
+	cp "components/renku_data_services/${$@_NAME}/apispec.py" "/tmp/apispec_orig.py"
+	poetry run datamodel-codegen --input components/renku_data_services/${$@_NAME}/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/${$@_NAME}/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.${$@_NAME}.apispec_base.BaseAPISpec
+	diff -I "^#   timestamp\: " "/tmp/apispec_orig.py" "components/renku_data_services/${$@_NAME}/apispec.py"
+	@RESULT=$?
+	cp "/tmp/apispec_orig.py" "components/renku_data_services/${$@_NAME}/apispec.py"
+	exit ${RESULT}
+endef
+
 schemas:
 	poetry run datamodel-codegen --input components/renku_data_services/crc/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/crc/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.crc.apispec_base.BaseAPISpec
 	poetry run datamodel-codegen --input components/renku_data_services/storage/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/storage/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.storage.apispec_base.BaseAPISpec
@@ -9,6 +19,12 @@ schemas:
 
 style_checks:
 	poetry check
+	@echo "checking crc apispec is up to date"
+	@$(call test_apispec_up_to_date,"crc")
+	@echo "checking storage apispec is up to date"
+	@$(call test_apispec_up_to_date,"storage")
+	@echo "checking user preferences apispec is up to date"
+	@$(call test_apispec_up_to_date,"user_preferences")
 	poetry run mypy
 	poetry run flake8 -v
 	poetry run bandit -c pyproject.toml -r .

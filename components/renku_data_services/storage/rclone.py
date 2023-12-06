@@ -1,9 +1,11 @@
 """Apispec schemas for storage service."""
 
 
+import asyncio
 import json
+import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Generator, Union, cast
+from typing import TYPE_CHECKING, Any, Generator, NamedTuple, Union, cast
 
 from pydantic import BaseModel, Field, ValidationError
 from sanic.log import logger
@@ -12,6 +14,21 @@ from renku_data_services import errors
 
 if TYPE_CHECKING:
     from renku_data_services.storage.models import RCloneConfig
+
+ConnectionResult = NamedTuple("ConnectionResult", [("success", bool), ("error", str)])
+
+BANNED_STORAGE = {
+    "alias",
+    "crypt",
+    "cache",
+    "chunker",
+    "combine",
+    "compress",
+    "hasher",
+    "local",
+    "memory",
+    "union",
+}
 
 
 class RCloneValidator:
@@ -35,13 +52,26 @@ class RCloneValidator:
                 raise
 
     @staticmethod
-    def __patch_schema_azure_account_sensitive(spec: list[dict[str, Any]]) -> None:
-        """Make account name not sensitive."""
+    def __patch_schema_remove_unsafe(spec: list[dict[str, Any]]) -> None:
+        """Remove storages that aren't safe to use in the service."""
+        indices = [i for i, v in enumerate(spec) if v["Prefix"] in BANNED_STORAGE]
+        for i in sorted(indices, reverse=True):
+            spec.pop(i)
+
+    @staticmethod
+    def __patch_schema_sensitive(spec: list[dict[str, Any]]) -> None:
+        """Fix sensitive settings on providers."""
         for storage in spec:
             if storage["Prefix"] == "azureblob":
                 for option in storage["Options"]:
                     if option["Name"] == "account":
                         option["Sensitive"] = False
+            if storage["Prefix"] == "webdav":
+                for option in storage["Options"]:
+                    if option["Name"] == "user":
+                        option["Sensitive"] = False
+                    if option["Name"] == "pass":
+                        option["Sensitive"] = True
 
     @staticmethod
     def __patch_schema_s3_endpoint_required(spec: list[dict[str, Any]]) -> None:
@@ -54,6 +84,42 @@ class RCloneValidator:
                     ):
                         option["Required"] = True
 
+    @staticmethod
+    def __patch_schema_add_switch_provider(spec: list[dict[str, Any]]) -> None:
+        """Adds a fake provider to help with setting up switch storage."""
+        s3 = next(s for s in spec if s["Prefix"] == "s3")
+        providers = next(o for o in s3["Options"] if o["Name"] == "provider")
+        providers["Examples"].append({"Value": "Switch", "Help": "Switch Object Storage", "Provider": ""})
+        s3["Options"].append(
+            {
+                "Name": "endpoint",
+                "Help": "Endpoint for Switch S3 API.",
+                "Provider": "Switch",
+                "Default": "https://s3-zh.os.switch.ch",
+                "Value": None,
+                "Examples": [
+                    {"Value": "https://s3-zh.os.switch.ch", "Help": "Cloudian Hyperstore (ZH)", "Provider": ""},
+                    {"Value": "https://os.zhdk.cloud.switch.ch", "Help": "Ceph Object Gateway (ZH)", "Provider": ""},
+                    {"Value": "https://os.unil.cloud.switch.ch", "Help": "Ceph Object Gateway (LS)", "Provider": ""},
+                ],
+                "ShortOpt": "",
+                "Hide": 0,
+                "Required": True,
+                "IsPassword": False,
+                "NoPrefix": False,
+                "Advanced": False,
+                "Exclusive": True,
+                "Sensitive": False,
+                "DefaultStr": "",
+                "ValueStr": "",
+                "Type": "string",
+            }
+        )
+        existing_endpoint_spec = next(
+            o for o in s3["Options"] if o["Name"] == "endpoint" and o["Provider"].startswith("!AWS,")
+        )
+        existing_endpoint_spec["Provider"] += ",Switch"
+
     def apply_patches(self, spec: list[dict[str, Any]]) -> None:
         """Apply patches to RClone schema."""
         patches = [
@@ -65,13 +131,34 @@ class RCloneValidator:
         for patch in patches:
             patch(spec)
 
-    def validate(
-        self, configuration: Union["RCloneConfig", dict[str, Any]], private: bool = False, keep_sensitive: bool = False
-    ):
+    def validate(self, configuration: Union["RCloneConfig", dict[str, Any]], keep_sensitive: bool = False):
         """Validates an RClone config."""
         provider = self.get_provider(configuration)
 
-        provider.validate_config(configuration, private=private, keep_sensitive=keep_sensitive)
+        provider.validate_config(configuration, keep_sensitive=keep_sensitive)
+
+    async def test_connection(self, configuration: Union["RCloneConfig", dict[str, Any]], source_path: str):
+        """Tests connecting with an RClone config."""
+        provider = self.get_provider(configuration)
+        if not provider:
+            return ConnectionResult(False, "Unknown provider")
+
+        with tempfile.NamedTemporaryFile(mode="w+", delete=False, encoding="utf-8") as f:
+            config = "\n".join(f"{k}={v}" for k, v in configuration.items())
+            f.write(f"[temp]\n{config}")
+            f.close()
+            proc = await asyncio.create_subprocess_exec(
+                "rclone",
+                "lsf",
+                "--config",
+                f.name,
+                f"temp:{source_path}",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, error = await proc.communicate()
+            success = proc.returncode == 0
+        return ConnectionResult(success=success, error=error.decode())
 
     def remove_sensitive_options_from_config(self, configuration: Union["RCloneConfig", dict[str, Any]]):
         """Remove sensitive fields from a config, e.g. when turning a private storage public."""
@@ -89,6 +176,8 @@ class RCloneValidator:
             raise errors.ValidationError(
                 message="Expected a `type` field in the RClone configuration, but didn't find it."
             )
+        if storage_type in BANNED_STORAGE:
+            raise errors.ValidationError(message=f"Storage '{storage_type}' is not supported.")
 
         provider = self.providers.get(storage_type)
 
@@ -133,7 +222,7 @@ class RCloneOption(BaseModel):
     provider: str = Field(alias="Provider")
     default: str | int | bool | list[str] | RCloneTriState | None = Field(alias="Default")
     value: str | int | bool | RCloneTriState | None = Field(alias="Value")
-    examples: list[RCloneExample] | None = Field(default=None)
+    examples: list[RCloneExample] | None = Field(default=None, alias="Examples")
     short_opt: str = Field(alias="ShortOpt")
     hide: int = Field(alias="Hide")
     required: bool = Field(alias="Required")
@@ -200,7 +289,7 @@ class RCloneOption(BaseModel):
                     )
 
         if self.examples and self.exclusive:
-            if not any(e.value == str(value) and e.provider == provider for e in self.examples):
+            if not any(e.value == str(value) and (not e.provider or e.provider == provider) for e in self.examples):
                 raise errors.ValidationError(message=f"Value '{value}' is not valid for field {self.name}")
         return value
 
@@ -237,9 +326,7 @@ class RCloneProviderSchema(BaseModel):
 
         return None
 
-    def validate_config(
-        self, configuration: Union["RCloneConfig", dict[str, Any]], private: bool = False, keep_sensitive: bool = False
-    ):
+    def validate_config(self, configuration: Union["RCloneConfig", dict[str, Any]], keep_sensitive: bool = False):
         """Validate an RClone config."""
         keys = set(configuration.keys()) - {"type"}
         provider: str | None = configuration.get("provider")  # type: ignore
@@ -259,14 +346,6 @@ class RCloneProviderSchema(BaseModel):
         if missing:
             missing_str = "\n".join(missing)
             raise errors.ValidationError(message=f"The following fields are required but missing:\n{missing_str}")
-
-        if not private:
-            for sensitive in self.sensitive_options:
-                if sensitive.name in configuration:
-                    raise errors.ValidationError(
-                        message=f"Setting value for field '{sensitive.name}', which is sensitive, is not allowed for"
-                        " public storage"
-                    )
 
         for key in keys:
             value = configuration[key]

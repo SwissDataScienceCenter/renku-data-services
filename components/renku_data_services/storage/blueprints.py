@@ -75,14 +75,13 @@ class StorageBP(CustomBlueprint):
                     project_id=url_body.project_id,
                     name=url_body.name,
                     target_path=url_body.target_path,
-                    private=url_body.private,
                     readonly=url_body.readonly,
                 )
             else:
                 body = apispec.CloudStorage(**request.json)
                 storage = models.CloudStorage.from_dict(body.model_dump())
 
-            validator.validate(storage.configuration.model_dump(), private=storage.private)
+            validator.validate(storage.configuration.model_dump())
 
             res = await self.storage_repo.insert_storage(storage=storage, user=user)
             return json(dump_storage_with_sensitive_fields(res, validator), 201)
@@ -110,14 +109,13 @@ class StorageBP(CustomBlueprint):
                     project_id=url_body.project_id,
                     name=url_body.name,
                     target_path=url_body.target_path,
-                    private=url_body.private,
                     readonly=url_body.readonly,
                 )
             else:
                 body = apispec.CloudStorage(**request.json)
                 new_storage = models.CloudStorage.from_dict(body.model_dump())
 
-            validator.validate(new_storage.configuration.model_dump(), private=new_storage.private)
+            validator.validate(new_storage.configuration.model_dump())
             body_dict = new_storage.model_dump()
             del body_dict["storage_id"]
             res = await self.storage_repo.update_storage(storage_id=storage_id, user=user, **body_dict)
@@ -138,18 +136,15 @@ class StorageBP(CustomBlueprint):
             user: base_models.APIUser,
         ):
             existing_storage = await self.storage_repo.get_storage_by_id(storage_id, user=user)
-            if not body.private and existing_storage.private:
-                # remove sensitive option if storage is turned public
-                config = existing_storage.configuration.model_copy()
-                validator.remove_sensitive_options_from_config(config)
-                body.configuration = {**config, **(body.configuration or {})}
-
             if body.configuration is not None:
                 # we need to apply the patch to the existing storage to properly validate it
                 body.configuration = {**existing_storage.configuration, **body.configuration}
-                validator.validate(
-                    body.configuration, private=body.private if body.private is not None else existing_storage.private
-                )
+
+                for k, v in list(body.configuration.items()):
+                    if v is None:
+                        # delete fields that were unset
+                        del body.configuration[k]
+                validator.validate(body.configuration)
 
             body_dict = body.model_dump(exclude_none=True)
 
@@ -181,6 +176,26 @@ class StorageSchemaBP(CustomBlueprint):
 
         return "/storage_schema", ["GET"], _get
 
+    def test_connection(self) -> BlueprintFactoryResponse:
+        """Validate an RClone config."""
+
+        async def _test_connection(request: Request, validator: RCloneValidator):
+            if not request.json:
+                raise errors.ValidationError(message="The request body is empty. Please provide a valid JSON object.")
+            if not isinstance(request.json, dict):
+                raise errors.ValidationError(message="The request body is not a valid JSON object.")
+            if not request.json.get("configuration"):
+                raise errors.ValidationError(message="No 'configuration' sent.")
+            if not request.json.get("source_path"):
+                raise errors.ValidationError(message="'source_path' is required to test the connection.")
+            validator.validate(request.json["configuration"], keep_sensitive=True)
+            result = await validator.test_connection(request.json["configuration"], request.json["source_path"])
+            if not result.success:
+                raise errors.ValidationError(message=result.error)
+            return empty(204)
+
+        return "/storage_schema/test_connection", ["POST"], _test_connection
+
     def validate(self) -> BlueprintFactoryResponse:
         """Validate an RClone config."""
 
@@ -189,7 +204,7 @@ class StorageSchemaBP(CustomBlueprint):
                 raise errors.ValidationError(message="The request body is empty. Please provide a valid JSON object.")
             if not isinstance(request.json, dict):
                 raise errors.ValidationError(message="The request body is not a valid JSON object.")
-            validator.validate(request.json, private=True, keep_sensitive=True)
+            validator.validate(request.json, keep_sensitive=True)
             return empty(204)
 
         return "/storage_schema/validate", ["POST"], _validate
