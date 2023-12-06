@@ -118,10 +118,10 @@ class ProjectsBP(CustomBlueprint):
                 if not user_info:
                     raise errors.MissingResourceError(message=f"The user with ID {user_id} cannot be found.")
 
-                user = UserWithId(
+                user_with_id = UserWithId(
                     id=user_id, email=user_info.email, first_name=user_info.first_name, last_name=user_info.last_name
                 )
-                full_user = FullUserWithRole(member=user, role=member.role)
+                full_user = FullUserWithRole(member=user_with_id, role=member.role)
                 users.append(full_user)
 
             return json(
@@ -134,12 +134,9 @@ class ProjectsBP(CustomBlueprint):
         """Update or add project members."""
 
         @authenticate(self.authenticator)
-        @validate(json=apispec.MemberWithRole)
-        async def _update_members(
-            _: Request, *, user: base_models.APIUser, project_id: str, body: apispec.MemberWithRole
-        ):
-            body_dump = body.model_dump(exclude_none=True)
-            await self.project_member_repo.update_members(user=user, project_id=project_id, members=[body_dump])
+        async def _update_members(request: Request, *, user: base_models.APIUser, project_id: str):
+            body_dump = apispec.MembersWithRoles.model_validate(request.json).model_dump(exclude_none=True)
+            await self.project_member_repo.update_members(user=user, project_id=project_id, members=body_dump)
             return HTTPResponse(status=200)
 
         return "/projects/<project_id>/members", ["PATCH"], _update_members

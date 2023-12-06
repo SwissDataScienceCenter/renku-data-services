@@ -10,12 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from renku_data_services.authz import models as authz_models
 from renku_data_services.authz.authz import IProjectAuthorizer
 from renku_data_services.authz.models import MemberQualifier, Scope
 from renku_data_services.project import models
 from renku_data_services.project import orm as schemas
 from renku_data_services.project.apispec import Role, Visibility
-from renku_data_services.authz import models as authz_models
 
 
 def convert_role(role: Role) -> authz_models.Role:

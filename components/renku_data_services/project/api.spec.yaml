@@ -220,6 +220,7 @@ paths:
             type: string
         - in: path
           name: member_id
+          description: This is user's KeyCloak ID
           required: true
           schema:
             type: string
@@ -281,11 +282,6 @@ components:
         repositories:
           - https://github.com/SwissDataScienceCenter/project-1.git
           - git@github.com:SwissDataScienceCenter/project-2.git
-        members:
-          - id: "some-keycloak-user-id"
-            role: "owner"
-          - id: "another-keycloak-user-id"
-            role: "member"
     ProjectPost:
       description: Project metadata to be created in Renku
       type: object
@@ -389,6 +385,11 @@ components:
       items:
         $ref: "#/components/schemas/MemberWithRole"
       minItems: 0
+      example:
+        - id: "some-keycloak-user-id"
+          role: "owner"
+        - id: "another-keycloak-user-id"
+          role: "member"
     MemberWithRole:
       description: A member and the access level to the project
       type: object
@@ -417,7 +418,7 @@ components:
       additionalProperties: false
       properties:
         member:
-          $ref: "../users/api.spec.yaml#/components/schemas/UserWithId"
+          $ref: "#/components/schemas/UserWithId"
         role:
           $ref: "#/components/schemas/Role"
       required:
@@ -429,6 +430,38 @@ components:
       enum:
         - member
         - owner
+    UserWithId:
+      type: object
+      description: This is copied from ../users/api.spec.yaml
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/UserId"
+        email:
+          $ref: "#/components/schemas/UserEmail"
+        first_name:
+          $ref: "#/components/schemas/UserFirstLastName"
+        last_name:
+          $ref: "#/components/schemas/UserFirstLastName"
+      required: ["id"]
+      example:
+        id: "some-random-keycloak-id"
+        email: "user@gmail.com"
+    UserId:
+      type: string
+      description: Keycloak user ID
+      example: f74a228b-1790-4276-af5f-25c2424e9b0c
+    UserFirstLastName:
+      type: string
+      description: First or last name of the user
+      example: John
+      minLength: 1
+      maxLength: 256
+    UserEmail:
+      type: string
+      format: email
+      description: User email
+      example: some-user@gmail.com
     ErrorResponse:
       type: object
       properties:
