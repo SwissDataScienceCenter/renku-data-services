@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import cast
 
 from sanic import HTTPResponse, Request, json
 from sanic_ext import validate
@@ -58,7 +59,8 @@ class ProjectsBP(CustomBlueprint):
         @validate(json=apispec.ProjectPost)
         async def _post(_: Request, *, user: base_models.APIUser, body: apispec.ProjectPost):
             data = body.model_dump(exclude_none=True)
-            data["created_by"] = models.Member(id=user.id)
+            user_id: str = cast(str, user.id)
+            data["created_by"] = models.Member(id=user_id)
             # NOTE: Set ``creation_date`` to override possible value set by users
             data["creation_date"] = datetime.now(timezone.utc).replace(microsecond=0)
             project = models.Project.from_dict(data)

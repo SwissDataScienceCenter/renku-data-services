@@ -36,7 +36,9 @@ class IProjectAuthorizer(Protocol):
         """Grant the specific permission level to the user for the specific project."""
         ...
 
-    async def update_or_add_user(self, requested_by: APIUser, user_id: str | MemberQualifier, project_id: str, role: Role):
+    async def update_or_add_user(
+        self, requested_by: APIUser, user_id: str | MemberQualifier, project_id: str, role: Role
+    ):
         """Update user's role or add user if it doesn't exist."""
         ...
 
@@ -108,8 +110,6 @@ class SQLProjectAuthorizer:
             users = res.scalars().all()
             users_list = [i for i in users]
 
-            print("\n\n\n", "ID", project_id, users, "\n\n\n")
-
             if len(users_list) == 0:
                 return MemberQualifier.NONE, []
             elif None in users_list:
@@ -170,7 +170,9 @@ class SQLProjectAuthorizer:
                     )
                 )
 
-    async def update_or_add_user(self, requested_by: APIUser, user_id: str | MemberQualifier, project_id: str, role: Role):
+    async def update_or_add_user(
+        self, requested_by: APIUser, user_id: str | MemberQualifier, project_id: str, role: Role
+    ):
         """Update user's role or add user if it doesn't exist."""
         if not requested_by.is_authenticated:
             raise errors.Unauthorized(message="Unauthenticated users cannot update users.")

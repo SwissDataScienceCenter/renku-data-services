@@ -101,8 +101,10 @@ class ProjectRepository:
                 session.add(project_orm)
 
                 project = project_orm.dump()
+                project_id: str = cast(str, project.id)
+                user_id: str = cast(str, user.id)
 
-                owner = schemas.ProjectMemberORM(project_id=project.id, role=Role.owner, id=user.id)
+                owner = schemas.ProjectMemberORM(project_id=project_id, role=Role.owner, id=user_id)
                 session.add(owner)
 
                 # TODO: Test that raising an exception causes the transaction to be aborted or not
