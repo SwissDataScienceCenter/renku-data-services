@@ -48,8 +48,6 @@ class UserRepo:
     @only_authenticated
     async def get_user(self, requested_by: APIUser, id: str) -> UserInfo | None:
         """Get a specific user from the database."""
-        if not requested_by.is_admin and requested_by.id != id:
-            raise errors.Unauthorized(message="Users are not allowed to lookup other users.")
         async with self.session_maker() as session:
             stmt = select(UserORM).where(UserORM.keycloak_id == id)
             res = await session.execute(stmt)

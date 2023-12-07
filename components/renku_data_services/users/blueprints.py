@@ -19,7 +19,7 @@ class KCUsersBP(CustomBlueprint):
     authenticator: base_models.Authenticator
 
     def get_all(self) -> BlueprintFactoryResponse:
-        """Get all users."""
+        """Get all users or search by email."""
 
         @authenticate(self.authenticator)
         async def _get_all(request: Request, user: base_models.APIUser):

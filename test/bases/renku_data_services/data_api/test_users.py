@@ -112,7 +112,7 @@ async def test_get_logged_in_user(users_test_client, users):
 
 
 @pytest.mark.asyncio
-async def test_logged_in_users_cannot_get_other_users(users_test_client, users):
+async def test_logged_in_users_can_get_other_users(users_test_client, users):
     user = users[0]
     other_user = users[1]
     access_token = {"id": user.id, "is_admin": False}
@@ -120,7 +120,9 @@ async def test_logged_in_users_cannot_get_other_users(users_test_client, users):
         f"/api/data/users/{other_user.id}",
         headers={"Authorization": f"bearer {json.dumps(access_token)}"},
     )
-    assert res.status_code == 401
+    assert res.status_code == 200
+    retrieved_other_user = UserInfo(**res.json)
+    assert retrieved_other_user == other_user
 
 
 @pytest.mark.asyncio
