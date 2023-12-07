@@ -131,7 +131,11 @@ class Config:
         with open(spec_file, "r") as f:
             users = safe_load(f)
 
-        self.spec = merge_api_specs(crc_spec, storage_spec, user_preferences_spec, users)
+        spec_file = Path(renku_data_services.project.__file__).resolve().parent / "api.spec.yaml"
+        with open(spec_file, "r") as f:
+            projects = safe_load(f)
+
+        self.spec = merge_api_specs(crc_spec, storage_spec, user_preferences_spec, users, projects)
 
         if self.default_resource_pool_file is not None:
             with open(self.default_resource_pool_file, "r") as f:
