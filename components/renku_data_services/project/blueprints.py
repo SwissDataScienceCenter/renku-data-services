@@ -138,7 +138,11 @@ class ProjectsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         async def _update_members(request: Request, *, user: base_models.APIUser, project_id: str):
             body_dump = apispec.MembersWithRoles.model_validate(request.json).model_dump(exclude_none=True)
-            await self.project_member_repo.update_members(user=user, project_id=project_id, members=body_dump)
+            await self.project_member_repo.update_members(
+                user=user,
+                project_id=project_id,
+                members=body_dump,  # type: ignore[arg-type]
+            )
             return HTTPResponse(status=200)
 
         return "/projects/<project_id>/members", ["PATCH"], _update_members
