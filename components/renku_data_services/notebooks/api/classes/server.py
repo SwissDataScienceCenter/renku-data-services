@@ -179,6 +179,7 @@ class UserServer:
                 general_patches.session_affinity(self),
                 general_patches.session_node_selector(self),
                 general_patches.priority_class(self),
+                general_patches.dev_shm(self),
                 jupyter_server_patches.args(),
                 jupyter_server_patches.env(self),
                 jupyter_server_patches.image_pull_secret(self),
