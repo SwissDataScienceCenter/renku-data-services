@@ -15,12 +15,6 @@ from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import UserInfo
 
-# @pytest.fixture
-# def sanic_client(app_config: Config, users) -> SanicASGITestClient:
-#     app = Sanic(app_config.app_name)
-#     app = register_all_handlers(app, app_config)
-#     return SanicASGITestClient(app)
-
 
 @pytest.fixture
 def users() -> List[UserInfo]:
@@ -107,7 +101,10 @@ async def test_project_creation(sanic_client, user_headers):
     assert project["description"] == "First Renku native project"
     assert project["visibility"] == "public"
     assert project["created_by"] == {"id": "user"}
-    assert set(project["repositories"]) == {"http://renkulab.io/repository-1", "http://renkulab.io/repository-2"}
+    assert {r for r in project["repositories"]} == {
+        "http://renkulab.io/repository-1",
+        "http://renkulab.io/repository-2",
+    }
 
     project_id = project["id"]
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
@@ -119,7 +116,10 @@ async def test_project_creation(sanic_client, user_headers):
     assert project["description"] == "First Renku native project"
     assert project["visibility"] == "public"
     assert project["created_by"] == {"id": "user"}
-    assert set(project["repositories"]) == {"http://renkulab.io/repository-1", "http://renkulab.io/repository-2"}
+    assert {r for r in project["repositories"]} == {
+        "http://renkulab.io/repository-1",
+        "http://renkulab.io/repository-2",
+    }
 
 
 @pytest.mark.asyncio
@@ -291,7 +291,7 @@ async def test_delete_project(create_project, sanic_client, user_headers):
 async def test_patch_project(create_project, get_project, sanic_client, user_headers):
     # Create some projects
     await create_project("Project 1")
-    project = await create_project("Project 2")
+    project = await create_project("Project 2", repositories=["http://renkulab.io/repository-0"])
     await create_project("Project 3")
 
     # Patch a project
@@ -313,30 +313,52 @@ async def test_patch_project(create_project, get_project, sanic_client, user_hea
     assert project["slug"] == project["slug"]
     assert project["description"] == "A patched Renku native project"
     assert project["visibility"] == "public"
-    assert set(project["repositories"]) == {"http://renkulab.io/repository-1", "http://renkulab.io/repository-2"}
+    assert {r for r in project["repositories"]} == {
+        "http://renkulab.io/repository-1",
+        "http://renkulab.io/repository-2",
+    }
 
 
 @pytest.mark.asyncio
-async def test_cannot_patch_slug(create_project, get_project, sanic_client, user_headers):
-    project = await create_project("Project 1", slug="original-value")
+async def test_patch_visibility_to_private_hides_project(create_project, admin_headers, sanic_client, user_headers):
+    project = await create_project("Project 1", admin=True, visibility="public")
 
-    # Try to patch the project's slug
+    _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
+    assert response.json[0]["name"] == "Project 1"
+
     patch = {
-        "slug": "new-value",
+        "visibility": "private",
     }
     project_id = project["id"]
-    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=user_headers, json=patch)
-
+    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=admin_headers, json=patch)
     assert response.status_code == 200, response.text
 
-    # Check that the "slug"'s value didn't change
-    project = await get_project(project_id=project_id)
+    _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
 
-    assert project["slug"] == "original-value"
+    assert len(response.json) == 0
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("field", ["id", "created_by", "creation_date"])
+async def test_patch_visibility_to_public_shows_project(create_project, admin_headers, sanic_client, user_headers):
+    project = await create_project("Project 1", admin=True, visibility="private")
+
+    _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
+    assert len(response.json) == 0
+
+    patch = {
+        "visibility": "public",
+    }
+    project_id = project["id"]
+    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=admin_headers, json=patch)
+    assert response.status_code == 200, response.text
+
+    _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
+
+    assert response.json[0]["name"] == "Project 1"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["id", "slug", "created_by", "creation_date"])
 async def test_cannot_patch_reserved_fields(create_project, get_project, sanic_client, user_headers, field):
     project = await create_project("Project 1")
     original_value = project[field]
@@ -349,6 +371,7 @@ async def test_cannot_patch_reserved_fields(create_project, get_project, sanic_c
     _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=user_headers, json=patch)
 
     assert response.status_code == 422
+    assert f"{field}: Extra inputs are not permitted" in response.text
 
     # Check that the field's value didn't change
     project = await get_project(project_id=project_id)

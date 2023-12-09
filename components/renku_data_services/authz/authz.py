@@ -11,6 +11,14 @@ from renku_data_services.base_models.core import APIUser
 from renku_data_services.errors import errors
 
 
+@dataclass
+class RoleUserId:
+    """A class to hold a user and her role."""
+
+    role: Role
+    user_id: str
+
+
 class IProjectAuthorizer(Protocol):
     """An interface for a project authorization adapter."""
 
@@ -22,10 +30,14 @@ class IProjectAuthorizer(Protocol):
         """Whether the user is a member of the project with the specific role."""
         ...
 
-    async def get_project_users(
+    async def get_project_qualifier_and_users(
         self, requested_by: APIUser, project_id: str, scope: Scope
     ) -> Tuple[MemberQualifier, List[str]]:
-        """Which users have the specific permission on a project."""
+        """Which users have the specific permission on a project considering member qualifier."""
+        ...
+
+    async def get_project_users(self, requested_by: APIUser, project_id: str, scope: Scope) -> List[RoleUserId]:
+        """Get users that have explicit access to a project."""
         ...
 
     async def get_user_projects(self, requested_by: APIUser, user_id: str | MemberQualifier, scope: Scope) -> List[str]:
@@ -48,6 +60,10 @@ class IProjectAuthorizer(Protocol):
 
     async def create_project(self, requested_by: APIUser, project_id: str, public_project: bool = False):
         """Insert the project in the authorization records."""
+        ...
+
+    async def update_project_visibility(self, requested_by: APIUser, project_id: str, public_project: bool):
+        """Change project's qualifier accordingly."""
         ...
 
     async def delete_project(self, requested_by: APIUser, project_id: str):
@@ -89,10 +105,10 @@ class SQLProjectAuthorizer:
             permission = res.scalars().first()
         return permission is not None
 
-    async def get_project_users(
+    async def get_project_qualifier_and_users(
         self, requested_by: APIUser, project_id: str, scope: Scope
     ) -> Tuple[MemberQualifier, List[str]]:
-        """Which users have been granted permissions to the project at the access level."""
+        """Which users have the specific permission on a project considering member qualifier."""
         async with self.session_maker() as session:
             if not requested_by.is_authenticated:
                 raise errors.Unauthorized(message="Unauthenticated users cannot query permissions of other users.")
@@ -116,6 +132,26 @@ class SQLProjectAuthorizer:
                 return MemberQualifier.ALL, []
             else:
                 return MemberQualifier.SOME, users_list  # type: ignore[return-value]
+
+    async def get_project_users(self, requested_by: APIUser, project_id: str, scope: Scope) -> List[RoleUserId]:
+        """Get users that have explicit access to a project."""
+        async with self.session_maker() as session:
+            if not requested_by.is_authenticated:
+                raise errors.Unauthorized(message="Unauthenticated users cannot query permissions of other users.")
+            if not requested_by.is_admin:
+                requested_by_owner = await self.has_role(requested_by, project_id, Role.OWNER)
+                if not requested_by_owner:
+                    raise errors.Unauthorized(message="Only the owner of the project can see who has access to it.")
+            stmt = (
+                select(ProjectUserAuthz)
+                .distinct()
+                .where(ProjectUserAuthz.project_id == project_id)
+                .where(scope.sql_access_test())
+            )
+            res = await session.execute(stmt)
+            users = res.scalars().all()
+
+            return [RoleUserId(role=Role(u.role), user_id=u.user_id) for u in users if u.user_id is not None]
 
     async def get_user_projects(self, requested_by: APIUser, user_id: str | MemberQualifier, scope: Scope) -> List[str]:
         """Which project IDs can a specific user access at the designated access level."""
@@ -234,6 +270,36 @@ class SQLProjectAuthorizer:
                 if public_project:
                     session.add(ProjectUserAuthz(project_id=project_id, role=Role.MEMBER.value, user_id=None))
                 session.add(ProjectUserAuthz(project_id=project_id, role=Role.OWNER.value, user_id=requested_by.id))
+
+    async def update_project_visibility(self, requested_by: APIUser, project_id: str, public_project: bool):
+        """Change project's qualifier accordingly."""
+        async with self.session_maker() as session:
+            async with session.begin():
+                if not requested_by.is_authenticated:
+                    raise errors.Unauthorized(message="Unauthenticated users cannot update projects.")
+                if not requested_by.is_admin:
+                    requested_by_owner = await self.has_role(requested_by, project_id, Role.OWNER)
+                    if not requested_by_owner:
+                        raise errors.Unauthorized(message="Only the owner of the project can update a project.")
+
+                if public_project:
+                    stmt = (
+                        select(ProjectUserAuthz.user_id)
+                        .where(ProjectUserAuthz.project_id == project_id)
+                        .where(ProjectUserAuthz.user_id.is_(None))
+                    )
+                    result = await session.execute(stmt)
+                    rows = result.scalars().all()
+                    if rows:
+                        # There already exists a row that shows the project is public
+                        return
+
+                    session.add(ProjectUserAuthz(project_id=project_id, role=Role.MEMBER.value, user_id=None))
+                else:
+                    del_stmt = delete(ProjectUserAuthz).where(
+                        and_(ProjectUserAuthz.project_id == project_id, ProjectUserAuthz.user_id.is_(None))
+                    )
+                    await session.execute(del_stmt)
 
     async def delete_project(self, requested_by: APIUser, project_id: str):
         """Delete all instances of the project in the authorization table."""

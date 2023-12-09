@@ -63,7 +63,7 @@ async def test_listing_users_with_access(app_config: Config, public_project: boo
     authz = app_config.project_authz
     project_id = str(ULID())
     await authz.create_project(requested_by=regular_user1, project_id=project_id, public_project=public_project)
-    access_qualifier, user_list = await authz.get_project_users(regular_user1, project_id, Role.MEMBER)
+    access_qualifier, user_list = await authz.get_project_qualifier_and_users(regular_user1, project_id, Scope.READ)
     if public_project:
         assert access_qualifier == MemberQualifier.ALL
         assert user_list == []
