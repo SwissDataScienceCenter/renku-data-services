@@ -18,8 +18,10 @@
 """Kubernetes helper functions."""
 
 from hashlib import md5
+from typing import Tuple
 
 import escapism
+from kubernetes.client import V1Container
 
 
 def filter_resources_by_annotations(
@@ -69,3 +71,20 @@ def make_server_name(
         project=escapism.escape(project, escape_char="-")[:24].lower(),
         hash=md5(server_string_for_hashing.encode()).hexdigest()[:8].lower(),
     )
+
+
+def find_env_var(container: V1Container, env_name: str) -> Tuple[int, str] | None:
+    """Find the index and value of a specific environment variable by name
+    from a Kubernetes container."""
+    env_var = next(
+        filter(
+            lambda x: x[1].name == env_name,
+            enumerate(container.env),
+        ),
+        None,
+    )
+    if not env_var:
+        return None
+    ind = env_var[0]
+    val = env_var[1].value
+    return (ind, val)

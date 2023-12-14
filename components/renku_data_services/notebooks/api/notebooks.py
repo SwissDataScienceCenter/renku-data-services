@@ -32,6 +32,7 @@ from renku_notebooks.api.schemas.cloud_storage import create_cloud_storage_objec
 from renku_notebooks.util.repository import get_status
 
 from ..config import config
+from .classes.auth import GitlabToken, RenkuTokens
 from ..errors.intermittent import AnonymousUserPatchError, PVDisabledError
 from ..errors.programming import ProgrammingError
 from ..errors.user import InvalidPatchArgumentError, MissingResourceError, UserInputError
@@ -489,6 +490,13 @@ def patch_server(user, server_name, state):
                 },
             },
         }
+        # NOTE: The tokens in the session could expire if the session is hibernated long enough,
+        # here we inject new ones to make sure everything is valid when the session starts back up.
+        renku_tokens = RenkuTokens(access_token=user.access_token, refresh_token=user.refresh_token)
+        gitlab_token = GitlabToken(
+            access_token=user.git_token, expires_at=user.git_token_expires_at
+        )
+        config.k8s.client.patch_tokens(server_name, renku_tokens, gitlab_token)
         server = config.k8s.client.patch_server(
             server_name=server_name, safe_username=user.safe_username, patch=patch
         )

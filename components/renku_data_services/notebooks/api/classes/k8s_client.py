@@ -1,5 +1,7 @@
 """An abstraction over the k8s client and the k8s-watcher."""
 
+import base64
+import json
 import logging
 from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin
@@ -16,6 +18,7 @@ from kubernetes.config.incluster_config import (
     InClusterConfigLoader,
 )
 
+from .auth import GitlabToken, RenkuTokens
 from ...errors.intermittent import (
     CannotStartServerError,
     DeleteServerError,
@@ -26,6 +29,7 @@ from ...errors.intermittent import (
 from ...errors.programming import ProgrammingError
 from ...errors.user import MissingResourceError
 from ...util.retries import retry_with_exponential_backoff
+from ...util.kubernetes_ import find_env_var
 
 
 class NamespacedK8sClient:
@@ -50,6 +54,7 @@ class NamespacedK8sClient:
             load_config()
         self._custom_objects = client.CustomObjectsApi(client.ApiClient())
         self._core_v1 = client.CoreV1Api()
+        self._apps_v1 = client.AppsV1Api()
 
     def _get_container_logs(
         self, pod_name: str, container_name: str, max_log_lines: Optional[int] = None
@@ -182,6 +187,140 @@ class NamespacedK8sClient:
                 )
             return []
         return jss.get("items", [])
+
+    def patch_image_pull_secret(self, server_name: str, gitlab_token: GitlabToken):
+        """Patch the image pull secret used in a Renku session."""
+        secret_name = f"{server_name}-image-secret"
+        try:
+            secret = self._core_v1.read_namespaced_secret(secret_name, self.namespace)
+        except ApiException as err:
+            if err.status == 404:
+                # NOTE: In many cases the session does not have an image pull secret
+                # this happens when the repo for the project is public so images are public
+                return
+            raise
+        old_docker_config = json.loads(base64.b64decode(secret.data[".dockerconfigjson"]).decode())
+        hostname = next(iter(old_docker_config["auths"].keys()), None)
+        if not hostname:
+            raise ProgrammingError(
+                "Failed to refresh the access credentials in the image pull secret.",
+                detail="Please contact a Renku administrator.",
+            )
+        new_docker_config = {
+            "auths": {
+                hostname: {
+                    "Username": "oauth2",
+                    "Password": gitlab_token.access_token,
+                    "Email": old_docker_config["auths"][hostname]["Email"],
+                }
+            }
+        }
+        patch_path = "/data/.dockerconfigjson"
+        patch = [
+            {
+                "op": "replace",
+                "path": patch_path,
+                "value": base64.b64encode(json.dumps(new_docker_config).encode()).decode(),
+            }
+        ]
+        self._core_v1.patch_namespaced_secret(
+            secret_name,
+            self.namespace,
+            patch,
+        )
+
+    def patch_statefulset_tokens(
+        self, name: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken
+    ):
+        """Patch the Renku and Gitlab access tokens that are used in the session statefulset."""
+        try:
+            ss = self._apps_v1.read_namespaced_stateful_set(name, self.namespace)
+        except ApiException as err:
+            if err.status == 404:
+                # NOTE: It can happen potentially that another request or something else
+                # deleted the session as this request was going on, in this case we ignore
+                # the missing statefulset
+                return
+            raise
+        if (
+            len(ss.spec.template.spec.containers) < 3
+            or len(ss.spec.template.spec.init_containers) < 3
+        ):
+            raise ProgrammingError(
+                "The expected setup for a session was not found when trying to inject new tokens",
+                detail="Please contact a Renku administrator.",
+            )
+        git_proxy_container_index = 2
+        git_proxy_container = ss.spec.template.spec.containers[git_proxy_container_index]
+        git_init_container_index = 2
+        git_init_container = ss.spec.template.spec.init_containers[git_init_container_index]
+        patch = []
+        expires_at_env = find_env_var(git_proxy_container, "GITLAB_OAUTH_TOKEN_EXPIRES_AT")
+        gitlab_token_env = find_env_var(git_proxy_container, "GITLAB_OAUTH_TOKEN")
+        git_init_token_env = find_env_var(git_init_container, "GIT_CLONE_USER__OAUTH_TOKEN")
+        renku_access_token_env = find_env_var(git_proxy_container, "RENKU_ACCESS_TOKEN")
+        renku_refresh_token_env = find_env_var(git_proxy_container, "RENKU_REFRESH_TOKEN")
+        if not all(
+            [
+                expires_at_env,
+                gitlab_token_env,
+                git_init_token_env,
+                renku_access_token_env,
+                renku_refresh_token_env,
+            ]
+        ):
+            raise ProgrammingError(
+                "The expected environment variables were not found "
+                "when trying to inject new tokens.",
+                detail="Please contact a Renku administrator.",
+            )
+        patch = [
+            {
+                "op": "replace",
+                "path": (
+                    f"/spec/template/spec/containers/{git_proxy_container_index}"
+                    f"/env/{expires_at_env[0]}/value"
+                ),
+                "value": str(gitlab_token.expires_at),
+            },
+            {
+                "op": "replace",
+                "path": (
+                    f"/spec/template/spec/containers/{git_proxy_container_index}"
+                    f"/env/{gitlab_token_env[0]}/value"
+                ),
+                "value": gitlab_token.access_token,
+            },
+            {
+                "op": "replace",
+                "path": (
+                    f"/spec/template/spec/initContainers/{git_init_container_index}"
+                    f"/env/{git_init_token_env[0]}/value"
+                ),
+                "value": gitlab_token.access_token,
+            },
+            {
+                "op": "replace",
+                "path": (
+                    f"/spec/template/spec/containers/{git_proxy_container_index}"
+                    f"/env/{renku_access_token_env[0]}/value"
+                ),
+                "value": renku_tokens.access_token,
+            },
+            {
+                "op": "replace",
+                "path": (
+                    f"/spec/template/spec/containers/{git_proxy_container_index}"
+                    f"/env/{renku_refresh_token_env[0]}/value"
+                ),
+                "value": renku_tokens.refresh_token,
+            },
+        ]
+        self._apps_v1.patch_namespaced_stateful_set(
+            name,
+            self.namespace,
+            patch,
+        )
 
 
 class JsServerCache:
@@ -352,6 +491,15 @@ class K8sClient:
             self.renku_ns_client.delete_server(server_name, forced)
         else:
             self.session_ns_client.delete_server(server_name, forced)
+
+    def patch_tokens(self, server_name, renku_tokens: RenkuTokens, gitlab_token: GitlabToken):
+        """Patch the Renku and Gitlab access tokens used in a session."""
+        if self.session_ns_client:
+            client = self.session_ns_client
+        else:
+            client = self.renku_ns_client
+        client.patch_statefulset_tokens(server_name, renku_tokens, gitlab_token)
+        client.patch_image_pull_secret(server_name, gitlab_token)
 
     @property
     def preferred_namespace(self) -> str:
