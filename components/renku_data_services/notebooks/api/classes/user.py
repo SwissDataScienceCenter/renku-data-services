@@ -14,6 +14,7 @@ from gitlab.v4.objects.projects import Project
 
 from ...config import config
 from ...errors.programming import ConfigurationError
+from ...errors.user import AuthenticationError
 
 
 class User(ABC):
@@ -66,13 +67,18 @@ class RegisteredUser(User):
     auth_headers = [
         "Renku-Auth-Access-Token",
         "Renku-Auth-Id-Token",
-        "Renku-Auth-Git-Credentials",
     ]
+    git_header = "Renku-Auth-Git-Credentials"
 
     def __init__(self, headers):
         self.authenticated = all([header in headers.keys() for header in self.auth_headers])
         if not self.authenticated:
             return
+        if not headers.get(self.git_header):
+            raise AuthenticationError(
+                "Your Gitlab credentials are invalid or expired, "
+                "please login Renku, or fully log out and log back in."
+            )
 
         parsed_id_token = self.parse_jwt_from_headers(headers)
         self.email = parsed_id_token["email"]
