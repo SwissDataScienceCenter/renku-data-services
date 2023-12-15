@@ -185,6 +185,31 @@ paths:
         default:
           $ref: '#/components/responses/Error'
       tags:
+        - storage/storage_schema/test_connection:
+  /storage_schema/obscure:
+    post:
+      summary: Obscure password fields for rclone
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                configuration:
+                  $ref: "#/components/schemas/RCloneConfig"
+              required:
+                - configuration
+      responses:
+        "200":
+          description: The config with password values obscured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RCloneConfig"
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
         - storage
 components:
   schemas:

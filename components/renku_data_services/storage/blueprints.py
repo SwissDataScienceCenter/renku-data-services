@@ -217,3 +217,16 @@ class StorageSchemaBP(CustomBlueprint):
             return empty(204)
 
         return "/storage_schema/validate", ["POST"], _validate
+
+    def obscure(self) -> BlueprintFactoryResponse:
+        """Obscure values in config."""
+
+        async def _obscure(request: Request, validator: RCloneValidator):
+            if not request.json:
+                raise errors.ValidationError(message="The request body is empty. Please provide a valid JSON object.")
+            if not isinstance(request.json, dict):
+                raise errors.ValidationError(message="The request body is not a valid JSON object.")
+            config = await validator.obscure_config(request.json)
+            return json(config)
+
+        return "/storage_schema/obscure", ["POST"], _obscure
