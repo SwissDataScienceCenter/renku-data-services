@@ -34,7 +34,7 @@ def upgrade() -> None:
     )
     op.create_table(
         "projects_repositories",
-        sa.Column("url", sa.String(99), nullable=False),
+        sa.Column("url", sa.String(2000), nullable=False),
         sa.Column("project_id", sa.String(26), nullable=True),
         sa.Column("id", sa.Integer(), nullable=False, primary_key=True),
         sa.ForeignKeyConstraint(

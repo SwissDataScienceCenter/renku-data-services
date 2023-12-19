@@ -1,4 +1,6 @@
 """Models for projects."""
+
+from dataclasses import dataclass
 from enum import Enum
 from typing import List
 
@@ -67,3 +69,11 @@ class Scope(Enum):
     def sql_access_test(self) -> ColumnExpressionArgument[bool]:
         """Get the SQL logical tests to enforce the permissions."""
         return self._least_authorized_member().sql_access_test()
+
+
+@dataclass
+class ProjectMember:
+    """A class to hold a user and her role."""
+
+    role: Role
+    user_id: str

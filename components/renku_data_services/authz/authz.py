@@ -1,22 +1,14 @@
 """Projects authorization adapter."""
 from dataclasses import dataclass, field
-from typing import Callable, List, Protocol, Tuple
+from typing import Callable, List, Protocol, Tuple, cast
 
 from sqlalchemy import and_, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from renku_data_services.authz.models import MemberQualifier, Role, Scope
+from renku_data_services.authz.models import MemberQualifier, ProjectMember, Role, Scope
 from renku_data_services.authz.orm import ProjectUserAuthz
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.errors import errors
-
-
-@dataclass
-class RoleUserId:
-    """A class to hold a user and her role."""
-
-    role: Role
-    user_id: str
 
 
 class IProjectAuthorizer(Protocol):
@@ -36,7 +28,7 @@ class IProjectAuthorizer(Protocol):
         """Which users have the specific permission on a project considering member qualifier."""
         ...
 
-    async def get_project_users(self, requested_by: APIUser, project_id: str, scope: Scope) -> List[RoleUserId]:
+    async def get_project_users(self, requested_by: APIUser, project_id: str, scope: Scope) -> List[ProjectMember]:
         """Get users that have explicit access to a project."""
         ...
 
@@ -109,32 +101,26 @@ class SQLProjectAuthorizer:
         self, requested_by: APIUser, project_id: str, scope: Scope
     ) -> Tuple[MemberQualifier, List[str]]:
         """Which users have the specific permission on a project considering member qualifier."""
-        async with self.session_maker() as session:
-            if not requested_by.is_authenticated:
-                raise errors.Unauthorized(message="Unauthenticated users cannot query permissions of other users.")
-            if not requested_by.is_admin:
-                requested_by_owner = await self.has_role(requested_by, project_id, Role.OWNER)
-                if not requested_by_owner:
-                    raise errors.Unauthorized(message="Only the owner of the project can see who has access to it.")
-            stmt = (
-                select(ProjectUserAuthz.user_id)
-                .distinct()
-                .where(ProjectUserAuthz.project_id == project_id)
-                .where(scope.sql_access_test())
-            )
-            res = await session.execute(stmt)
-            users = res.scalars().all()
-            users_list = [i for i in users]
+        users = await self._get_project_users_full(requested_by=requested_by, project_id=project_id, scope=scope)
+        users_list = [u.user_id for u in users]
 
-            if len(users_list) == 0:
-                return MemberQualifier.NONE, []
-            elif None in users_list:
-                return MemberQualifier.ALL, []
-            else:
-                return MemberQualifier.SOME, users_list  # type: ignore[return-value]
+        if len(users_list) == 0:
+            return MemberQualifier.NONE, []
+        elif None in users_list:
+            return MemberQualifier.ALL, []
+        else:
+            return MemberQualifier.SOME, users_list  # type: ignore[return-value]
 
-    async def get_project_users(self, requested_by: APIUser, project_id: str, scope: Scope) -> List[RoleUserId]:
+    async def get_project_users(self, requested_by: APIUser, project_id: str, scope: Scope) -> List[ProjectMember]:
         """Get users that have explicit access to a project."""
+        users = await self._get_project_users_full(requested_by=requested_by, project_id=project_id, scope=scope)
+
+        return [ProjectMember(role=Role(u.role), user_id=u.user_id) for u in users if u.user_id is not None]
+
+    async def _get_project_users_full(
+        self, requested_by: APIUser, project_id: str, scope: Scope
+    ) -> List[ProjectUserAuthz]:
+        """Get all users of a project."""
         async with self.session_maker() as session:
             if not requested_by.is_authenticated:
                 raise errors.Unauthorized(message="Unauthenticated users cannot query permissions of other users.")
@@ -151,7 +137,7 @@ class SQLProjectAuthorizer:
             res = await session.execute(stmt)
             users = res.scalars().all()
 
-            return [RoleUserId(role=Role(u.role), user_id=u.user_id) for u in users if u.user_id is not None]
+            return cast(List[ProjectUserAuthz], users)
 
     async def get_user_projects(self, requested_by: APIUser, user_id: str | MemberQualifier, scope: Scope) -> List[str]:
         """Which project IDs can a specific user access at the designated access level."""
