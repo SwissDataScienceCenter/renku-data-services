@@ -4,7 +4,7 @@ info:
   description: |
     Service that allows creating, updating, deleting, and managing Renku native projects.
     All errors have the same format as the schema called ErrorResponse.
-  version: 0.4.0
+  version: 0.5.0
 servers:
   - url: /api/data
   - url: /ui-server/api/data
@@ -280,8 +280,8 @@ components:
           id: "owner-KC-id"
         visibility: "public"
         repositories:
-          - https://github.com/SwissDataScienceCenter/project-1.git
-          - git@github.com:SwissDataScienceCenter/project-2.git
+          - url: https://github.com/SwissDataScienceCenter/project-1.git
+          - url: git@github.com:SwissDataScienceCenter/project-2.git
     ProjectPost:
       description: Project metadata to be created in Renku
       type: object
@@ -307,8 +307,6 @@ components:
       properties:
         name:
           $ref: "#/components/schemas/Name"
-        slug:
-          $ref: "#/components/schemas/Slug"  # TODO: Should we remove this?
         repositories:
           $ref: "#/components/schemas/RepositoriesList"
         visibility:
@@ -362,17 +360,19 @@ components:
       minLength: 1
       example: "123-keycloak-user-id-456"
     RepositoriesList:
-      description: A list of repository URLs
+      description: A list of repositories
       type: array
       items:
-        $ref: "#/components/schemas/GitUrl"
+        $ref: "#/components/schemas/Repository"
       minItems: 0
       example:
         - https://github.com/SwissDataScienceCenter/project-1.git
         - git@github.com:SwissDataScienceCenter/project-2.git
-    GitUrl:
-      description: URL of a Git repository
+    Repository:
+      description: A project's repository
       type: string
+      example:
+        git@github.com:SwissDataScienceCenter/project-1.git
     Visibility:
       description: Project's visibility levels
       type: string

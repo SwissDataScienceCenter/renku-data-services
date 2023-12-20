@@ -3,12 +3,13 @@
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import ARRAY, DateTime, MetaData, String
-from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
+from sqlalchemy import DateTime, Integer, MetaData, String
+from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
+from sqlalchemy.schema import ForeignKey
 from ulid import ULID
 
 from renku_data_services.project import models
-from renku_data_services.project.apispec import Role, Visibility
+from renku_data_services.project.apispec import Visibility
 
 metadata_obj = MetaData(schema="projects")  # Has to match alembic ini section name
 
@@ -30,8 +31,13 @@ class ProjectORM(BaseORM):
     visibility: Mapped[Visibility]
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
     creation_date: Mapped[Optional[datetime]] = mapped_column("creation_date", DateTime(timezone=True))
-    repositories: Mapped[List[str]] = mapped_column("repositories", ARRAY(String))
     description: Mapped[Optional[str]] = mapped_column("description", String(500))
+    repositories: Mapped[List["ProjectRepositoryORM"]] = relationship(
+        back_populates="project",
+        default_factory=list,
+        cascade="save-update, merge, delete",
+        lazy="selectin",
+    )
 
     @classmethod
     def load(cls, project: models.Project):
@@ -42,7 +48,7 @@ class ProjectORM(BaseORM):
             visibility=project.visibility,
             created_by_id=project.created_by.id,
             creation_date=project.creation_date,
-            repositories=project.repositories,
+            repositories=[ProjectRepositoryORM(url=r) for r in project.repositories],
             description=project.description,
         )
 
@@ -55,26 +61,19 @@ class ProjectORM(BaseORM):
             visibility=self.visibility,
             created_by=models.Member(id=self.created_by_id),
             creation_date=self.creation_date,
-            repositories=self.repositories,
+            repositories=[models.Repository(r.url) for r in self.repositories],
             description=self.description,
         )
 
 
-class ProjectMemberORM(BaseORM):
-    """A Renku native project."""
+class ProjectRepositoryORM(BaseORM):
+    """Renku project repositories."""
 
-    __tablename__ = "projects_members"
+    __tablename__ = "projects_repositories"
 
-    project_id: Mapped[str] = mapped_column("project_id", String(26), primary_key=True)
-    role: Mapped[Role]
-    # NOTE: This is KeyCloak ID's of a user and not a unique ID
-    id: Mapped[str] = mapped_column("id", String(36), unique=False, index=True, primary_key=True)
-
-    @classmethod
-    def load(cls, member: models.MemberWithRole, project_id: str):
-        """Create an instance from MemberWithRole."""
-        return cls(project_id=project_id, role=member.role, id=member.member.id)
-
-    def dump(self) -> models.MemberWithRole:
-        """Create a project members model."""
-        return models.MemberWithRole(member=models.Member(id=self.id), role=self.role)
+    id: Mapped[int] = mapped_column("id", Integer, primary_key=True, default=None, init=False)
+    url: Mapped[str] = mapped_column("url", String(2000))
+    project_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), default=None, index=True
+    )
+    project: Mapped[Optional[ProjectORM]] = relationship(back_populates="repositories", default=None)

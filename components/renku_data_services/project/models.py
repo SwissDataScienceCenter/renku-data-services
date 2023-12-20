@@ -43,6 +43,9 @@ class MemberWithRole(BaseModel):
         return cls(member=Member.from_dict(member), role=Role(data["role"]))
 
 
+Repository = str
+
+
 @dataclass(frozen=True, eq=True, kw_only=True)
 class Project(BaseModel):
     """Project model."""
@@ -53,7 +56,7 @@ class Project(BaseModel):
     visibility: Visibility
     created_by: Member
     creation_date: Optional[datetime] = None
-    repositories: List[str] = field(default_factory=list)
+    repositories: List[Repository] = field(default_factory=list)
     description: Optional[str] = None
 
     @classmethod
@@ -66,19 +69,20 @@ class Project(BaseModel):
         if not isinstance(data["created_by"], Member):
             raise errors.ValidationError(message="'created_by' must be an instance of 'Member'")
 
+        project_id = data.get("id")
         name = data["name"]
         slug = data.get("slug") or get_slug(name)
         created_by = data["created_by"]
         creation_date = data.get("creation_date") or datetime.now(timezone.utc).replace(microsecond=0)
 
         return cls(
-            id=data.get("id"),
+            id=project_id,
             name=name,
             slug=slug,
             created_by=created_by,
             visibility=data.get("visibility", Visibility.private),
             creation_date=creation_date,
-            repositories=data.get("repositories", []),
+            repositories=[Repository(r) for r in data.get("repositories", [])],
             description=data.get("description"),
         )
 
