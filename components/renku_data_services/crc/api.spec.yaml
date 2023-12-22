@@ -686,6 +686,14 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/UserWithId"
+        "404":
+          description: The user does not exist
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - users
     patch:
@@ -709,6 +717,14 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/UserWithId"
+        "404":
+          description: The user does not exist
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - users
     delete:

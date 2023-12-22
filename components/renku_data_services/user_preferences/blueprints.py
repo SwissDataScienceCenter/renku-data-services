@@ -7,6 +7,7 @@ from sanic_ext import validate
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.errors import errors
 from renku_data_services.user_preferences import apispec, models
 from renku_data_services.user_preferences.apispec_base import PinnedProjectFilter
 from renku_data_services.user_preferences.db import UserPreferencesRepository
@@ -36,6 +37,8 @@ class UserPreferencesBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @validate(json=apispec.AddPinnedProject)
         async def _post(_: Request, body: apispec.AddPinnedProject, user: base_models.APIUser):
+            if "\u0000" in body.project_slug:
+                raise errors.ValidationError(message="The '\u0000' (null) character is not allowed in a project slug.")
             res = await self.user_preferences_repo.add_pinned_project(user=user, project_slug=body.project_slug)
             return json(apispec.UserPreferences.model_validate(res).model_dump())
 

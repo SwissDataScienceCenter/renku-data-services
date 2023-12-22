@@ -232,7 +232,7 @@ class ResourcePoolRepository(_Base):
                 if orm.default:
                     stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.default == true())
                     res = await session.execute(stmt)
-                    default_rps = res.scalars().all()
+                    default_rps = res.unique().scalars().all()
                     if len(default_rps) >= 1:
                         raise errors.ValidationError(
                             message="There can only be one default resource pool and one already exists."

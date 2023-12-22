@@ -1,4 +1,5 @@
 """SQLAlchemy schemas for the CRC database."""
+import logging
 from typing import List, Optional
 
 from sqlalchemy import BigInteger, Column, Integer, MetaData, String, Table
@@ -152,9 +153,10 @@ class ResourcePoolORM(BaseORM):
                 detail=f"The quota name in the database {self.quota} and Kubernetes {quota.id} do not match.",
             )
         if (quota is None and self.quota is not None) or (quota is not None and self.quota is None):
-            raise errors.BaseError(
-                message="Unexpected error when dumping a resource pool ORM.",
-                detail=f"The quota in the database {self.quota} and Kubernetes {quota} do not match.",
+            logging.error(
+                f"Unexpected error when dumping resource pool ORM with ID {self.id}. "
+                f"The quota in the database {self.quota} and Kubernetes {quota} do not match. "
+                f"Using the quota {quota} in the response."
             )
         return models.ResourcePool(
             id=self.id,
