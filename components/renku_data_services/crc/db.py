@@ -6,12 +6,13 @@ grows it is worth looking into separating this functionality into separate class
 it all in one place.
 """
 from asyncio import gather
+from dataclasses import asdict
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, cast
 
 from sqlalchemy import NullPool, create_engine, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session, selectinload, sessionmaker
+from sqlalchemy.orm import Session, joinedload, selectinload, sessionmaker
 from sqlalchemy.sql import Select, and_, not_, or_
 from sqlalchemy.sql.expression import false, true
 
@@ -178,39 +179,27 @@ class ResourcePoolRepository(_Base):
     ) -> List[models.ResourcePool]:
         """Get resource pools from database with indication of which resource class matches the specified crtieria."""
         async with self.session_maker() as session:
-            criteria = and_(
-                schemas.ResourceClassORM.cpu >= cpu,
-                schemas.ResourceClassORM.gpu >= gpu,
-                schemas.ResourceClassORM.memory >= memory,
-                schemas.ResourceClassORM.max_storage >= max_storage,
+            criteria = models.ResourceClass(
+                name="criteria",
+                cpu=cpu,
+                gpu=gpu,
+                memory=memory,
+                max_storage=max_storage,
             )
             stmt = (
-                select(schemas.ResourceClassORM)
-                .add_columns(criteria.label("matching"))
-                .order_by(schemas.ResourceClassORM.resource_pool_id, schemas.ResourceClassORM.name)
-                .join(schemas.ResourcePoolORM, schemas.ResourceClassORM.resource_pool)
-                .options(selectinload(schemas.ResourceClassORM.resource_pool))
+                select(schemas.ResourcePoolORM)
+                .join(schemas.ResourcePoolORM.classes)
+                .order_by(
+                    schemas.ResourcePoolORM.id,
+                    schemas.ResourcePoolORM.name,
+                    schemas.ResourceClassORM.id,
+                    schemas.ResourceClassORM.name,
+                )
             )
             # NOTE: The line below ensures that the right users can access the right resources, do not remove.
-            stmt = _classes_user_access_control(api_user, stmt)
+            stmt = _resource_pool_access_control(api_user, stmt)
             res = await session.execute(stmt)
-            output: Dict[int, models.ResourcePool] = {}
-            for res_class, matching in res.all():
-                if res_class.resource_pool_id is None or res_class.resource_pool is None:
-                    continue
-                rc_data = res_class.dump()
-                rc_data = cast(models.ResourceClass, rc_data)
-                rc = rc_data.update(matching=matching)
-                if res_class.resource_pool_id not in output:
-                    quota = (
-                        self.quotas_repo.get_quota(res_class.resource_pool.quota)
-                        if res_class.resource_pool.quota
-                        else None
-                    )
-                    output[res_class.resource_pool_id] = res_class.resource_pool.dump(quota)
-                    output[res_class.resource_pool_id].classes.clear()
-                output[res_class.resource_pool_id].classes.append(rc)
-            return sorted(output.values(), key=lambda i: i.id if i.id else 0)
+            return [i.dump(self.quotas_repo.get_quota(i.quota), criteria) for i in res.unique().scalars().all()]
 
     @_only_admins
     async def insert_resource_pool(

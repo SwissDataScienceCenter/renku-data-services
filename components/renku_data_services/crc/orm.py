@@ -95,7 +95,7 @@ class ResourceClassORM(BaseORM):
             tolerations=[TolerationORM(key=toleration) for toleration in resource_class.tolerations],
         )
 
-    def dump(self) -> models.ResourceClass:
+    def dump(self, matching: Optional[bool] = None) -> models.ResourceClass:
         """Create a resource class model from the ORM object."""
         return models.ResourceClass(
             id=self.id,
@@ -108,6 +108,7 @@ class ResourceClassORM(BaseORM):
             default_storage=self.default_storage,
             node_affinities=[affinity.dump() for affinity in self.node_affinities],
             tolerations=[toleration.key for toleration in self.tolerations],
+            matching=matching,
         )
 
 
@@ -124,7 +125,7 @@ class ResourcePoolORM(BaseORM):
         back_populates="resource_pool",
         default_factory=list,
         cascade="save-update, merge, delete",
-        lazy="joined",
+        lazy="selectin",
     )
     default: Mapped[bool] = mapped_column(default=False, index=True)
     public: Mapped[bool] = mapped_column(default=False, index=True)
@@ -144,7 +145,9 @@ class ResourcePoolORM(BaseORM):
             default=resource_pool.default,
         )
 
-    def dump(self, quota: models.Quota | None) -> models.ResourcePool:
+    def dump(
+        self, quota: models.Quota | None, class_match_criteria: models.ResourceClass | None = None
+    ) -> models.ResourcePool:
         """Create a resource pool model from the ORM object and a quota."""
         classes: List[ResourceClassORM] = self.classes
         if quota and quota.id != self.quota:
@@ -162,7 +165,12 @@ class ResourcePoolORM(BaseORM):
             id=self.id,
             name=self.name,
             quota=quota,
-            classes=[resource_class.dump() for resource_class in classes],
+            classes=[
+                resource_class.dump(
+                    resource_class.dump() >= class_match_criteria if class_match_criteria is not None else None
+                )
+                for resource_class in classes
+            ],
             public=self.public,
             default=self.default,
         )
