@@ -6,13 +6,12 @@ grows it is worth looking into separating this functionality into separate class
 it all in one place.
 """
 from asyncio import gather
-from dataclasses import asdict
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, cast
 
 from sqlalchemy import NullPool, create_engine, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session, joinedload, selectinload, sessionmaker
+from sqlalchemy.orm import Session, selectinload, sessionmaker
 from sqlalchemy.sql import Select, and_, not_, or_
 from sqlalchemy.sql.expression import false, true
 
