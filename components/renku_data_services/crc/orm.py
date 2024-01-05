@@ -95,8 +95,16 @@ class ResourceClassORM(BaseORM):
             tolerations=[TolerationORM(key=toleration) for toleration in resource_class.tolerations],
         )
 
-    def dump(self, matching: Optional[bool] = None) -> models.ResourceClass:
+    def dump(self, matching_criteria: models.ResourceClass | None = None) -> models.ResourceClass:
         """Create a resource class model from the ORM object."""
+        matching: bool | None = None
+        if matching_criteria:
+            matching = (
+                self.cpu >= matching_criteria.cpu
+                and self.memory >= matching_criteria.memory
+                and self.gpu >= matching_criteria.gpu
+                and self.max_storage >= matching_criteria.max_storage
+            )
         return models.ResourceClass(
             id=self.id,
             name=self.name,
@@ -165,12 +173,7 @@ class ResourcePoolORM(BaseORM):
             id=self.id,
             name=self.name,
             quota=quota,
-            classes=[
-                resource_class.dump(
-                    resource_class.dump() >= class_match_criteria if class_match_criteria is not None else None
-                )
-                for resource_class in classes
-            ],
+            classes=[resource_class.dump(class_match_criteria) for resource_class in classes],
             public=self.public,
             default=self.default,
         )

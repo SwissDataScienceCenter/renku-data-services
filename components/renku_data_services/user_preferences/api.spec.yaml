@@ -98,6 +98,9 @@ components:
       description: The slug used to identify a project
       minLength: 3
       example: "user/my-project"
+      # limitations based on allowed characters in project slugs from Gitlab from here:
+      # https://docs.gitlab.com/ee/user/reserved_names.html
+      pattern: "[a-zA-Z0-9_.-/]"
     AddPinnedProject:
       type: object
       additionalProperties: false

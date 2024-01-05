@@ -50,11 +50,11 @@ def validate_db_ids(f):
         class_id = kwargs.get("class_id")
         min_val = 1  # postgres primary keys start at 1
         max_val = 2_147_483_647  # the max value for a default postgres primary key sequence
-        if resource_pool_id and (resource_pool_id < min_val or resource_pool_id > max_val):
+        if resource_pool_id and not min_val <= resource_pool_id <= max_val:
             raise errors.ValidationError(
                 message=f"The provided resource pool ID is outside of the allowed range [{min_val}, {max_val}]"
             )
-        if class_id and (class_id < min_val or class_id > max_val):
+        if class_id and not min_val <= class_id <= max_val:
             raise errors.ValidationError(
                 message=f"The provided resource class ID is outside of the allowed range [{min_val}, {max_val}]"
             )
