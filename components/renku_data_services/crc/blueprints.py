@@ -3,7 +3,7 @@ import asyncio
 from dataclasses import asdict, dataclass
 from typing import List
 
-from sanic import HTTPResponse, Request, json
+from sanic import HTTPResponse, Request, json, empty
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
@@ -360,7 +360,7 @@ class ClassesBP(CustomBlueprint):
         @only_admins
         async def _delete_tolerations(_: Request, resource_pool_id: int, class_id: int, user: base_models.APIUser):
             await self.repo.delete_tolerations(user, resource_pool_id, class_id)
-            return HTTPResponse(status=204)
+            return empty()
 
         return "/resource_pools/<resource_pool_id>/classes/<class_id>/tolerations", ["DELETE"], _delete_tolerations
 
@@ -382,7 +382,7 @@ class ClassesBP(CustomBlueprint):
         @only_admins
         async def _delete_affinities(_: Request, resource_pool_id: int, class_id: int, user: base_models.APIUser):
             await self.repo.delete_affinities(user, resource_pool_id, class_id)
-            return HTTPResponse(status=204)
+            return empty()
 
         return "/resource_pools/<resource_pool_id>/classes/<class_id>/node_affinities", ["DELETE"], _delete_affinities
 
