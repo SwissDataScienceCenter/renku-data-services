@@ -349,7 +349,7 @@ class ClassesBP(CustomBlueprint):
         @only_admins
         async def _get_tolerations(_: Request, resource_pool_id: int, class_id: int, user: base_models.APIUser):
             res = await self.repo.get_tolerations(user, resource_pool_id, class_id)
-            return json([i for i in res])
+            return json(list(res))
 
         return "/resource_pools/<resource_pool_id>/classes/<class_id>/tolerations", ["GET"], _get_tolerations
 
