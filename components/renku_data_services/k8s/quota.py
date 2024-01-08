@@ -64,8 +64,10 @@ class QuotaRepository:
             ),
         )
 
-    def get_quota(self, name: str) -> Optional[models.Quota]:
+    def get_quota(self, name: str | None) -> Optional[models.Quota]:
         """Get a specific quota by name."""
+        if not name:
+            return None
         try:
             res_quota: client.V1ResourceQuota = self.core_client.read_namespaced_resource_quota(
                 name=name, namespace=self.namespace

@@ -342,6 +342,7 @@ components:
             - type: string
             - type: boolean
             - type: object
+            - type: array
           description: default value for the option
         default_str:
           type: string

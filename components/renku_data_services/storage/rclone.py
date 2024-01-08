@@ -187,7 +187,7 @@ class RCloneValidator:
 
     def asdict(self) -> list[dict[str, Any]]:
         """Return Schema as dict."""
-        return [provider.model_dump() for provider in self.providers.values()]
+        return [provider.model_dump(exclude_none=True) for provider in self.providers.values()]
 
     def get_private_fields(self, configuration: Union["RCloneConfig", dict[str, Any]]):
         """Get private field descriptions for storage."""

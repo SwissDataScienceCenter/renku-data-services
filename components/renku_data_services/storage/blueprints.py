@@ -67,7 +67,11 @@ class StorageBP(CustomBlueprint):
         @authenticate(self.authenticator)
         async def _post(request: Request, validator: RCloneValidator, user: base_models.APIUser):
             storage: models.CloudStorage
-
+            if not isinstance(request.json, dict):
+                body_type = type(request.json)
+                raise errors.ValidationError(
+                    message=f"The payload is supposed to be a dictionary, got {body_type.__name__}"
+                )
             if "storage_url" in request.json:
                 url_body = apispec.CloudStorageUrl(**request.json)
                 storage = models.CloudStorage.from_url(
@@ -186,6 +190,11 @@ class StorageSchemaBP(CustomBlueprint):
                 raise errors.ValidationError(message="The request body is not a valid JSON object.")
             if not request.json.get("configuration"):
                 raise errors.ValidationError(message="No 'configuration' sent.")
+            if not isinstance(request.json.get("configuration"), dict):
+                config_type = type(request.json.get("configuration"))
+                raise errors.ValidationError(
+                    message=f"The R clone configuration should be a dictionary, not {config_type.__name__}"
+                )
             if not request.json.get("source_path"):
                 raise errors.ValidationError(message="'source_path' is required to test the connection.")
             validator.validate(request.json["configuration"], keep_sensitive=True)
