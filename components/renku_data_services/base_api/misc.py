@@ -1,5 +1,6 @@
 """Common blueprints."""
 from dataclasses import dataclass
+from functools import wraps
 from typing import Any, Dict
 
 from sanic import Request, json
@@ -38,3 +39,26 @@ class MiscBP(CustomBlueprint):
             return json({"version": self.version})
 
         return "/version", ["GET"], _get_version
+
+
+def validate_db_ids(f):
+    """Decorator for a Sanic handler that errors out if passed in IDs are outside of the valid range for postgres."""
+
+    @wraps(f)
+    async def decorated_function(*args, **kwargs):
+        resource_pool_id = kwargs.get("resource_pool_id")
+        class_id = kwargs.get("class_id")
+        min_val = 1  # postgres primary keys start at 1
+        max_val = 2_147_483_647  # the max value for a default postgres primary key sequence
+        if resource_pool_id and not min_val <= resource_pool_id <= max_val:
+            raise errors.ValidationError(
+                message=f"The provided resource pool ID is outside of the allowed range [{min_val}, {max_val}]"
+            )
+        if class_id and not min_val <= class_id <= max_val:
+            raise errors.ValidationError(
+                message=f"The provided resource class ID is outside of the allowed range [{min_val}, {max_val}]"
+            )
+        response = await f(*args, **kwargs)
+        return response
+
+    return decorated_function

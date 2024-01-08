@@ -10,6 +10,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_api.misc import validate_db_ids
 from renku_data_services.crc import apispec, models
 from renku_data_services.crc.apispec_base import ResourceClassesFilter
 from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
@@ -54,6 +55,7 @@ class ResourcePoolsBP(CustomBlueprint):
         """Get a specific resource pool."""
 
         @authenticate(self.authenticator)
+        @validate_db_ids
         async def _get_one(request: Request, resource_pool_id: int, user: base_models.APIUser):
             rps: List[models.ResourcePool]
             rps = await self.rp_repo.get_resource_pools(
@@ -73,6 +75,7 @@ class ResourcePoolsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
+        @validate_db_ids
         async def _delete(_: Request, resource_pool_id: int, user: base_models.APIUser):
             await self.rp_repo.delete_resource_pool(api_user=user, id=resource_pool_id)
             return HTTPResponse(status=204)
@@ -84,6 +87,7 @@ class ResourcePoolsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
+        @validate_db_ids
         @validate(json=apispec.ResourcePoolPut)
         async def _put(_: Request, resource_pool_id: int, body: apispec.ResourcePoolPut, user: base_models.APIUser):
             res = await self.rp_repo.update_resource_pool(
@@ -105,6 +109,7 @@ class ResourcePoolsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
+        @validate_db_ids
         @validate(json=apispec.ResourcePoolPatch)
         async def _patch(_: Request, resource_pool_id: int, body: apispec.ResourcePoolPatch, user: base_models.APIUser):
             res = await self.rp_repo.update_resource_pool(
@@ -134,6 +139,7 @@ class ResourcePoolUsersBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
+        @validate_db_ids
         async def _get_all(_: Request, resource_pool_id: int, user: base_models.APIUser):
             res = await self.repo.get_users(api_user=user, resource_pool_id=resource_pool_id)
             return json(
@@ -152,6 +158,7 @@ class ResourcePoolUsersBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
+        @validate_db_ids
         async def _post(request: Request, resource_pool_id: int, user: base_models.APIUser):
             users = apispec.UsersWithId.model_validate(request.json)  # validation
             return await self._put_post(api_user=user, resource_pool_id=resource_pool_id, body=users, post=True)
@@ -163,6 +170,7 @@ class ResourcePoolUsersBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
+        @validate_db_ids
         async def _put(request: Request, resource_pool_id: int, user: base_models.APIUser):
             users = apispec.UsersWithId.model_validate(request.json)  # validation
             return await self._put_post(api_user=user, resource_pool_id=resource_pool_id, body=users, post=False)
@@ -190,6 +198,7 @@ class ResourcePoolUsersBP(CustomBlueprint):
         """Get a specific user of a specific resource pool."""
 
         @authenticate(self.authenticator)
+        @validate_db_ids
         async def _get(_: Request, resource_pool_id: int, user_id: str, user: base_models.APIUser):
             res = await self.repo.get_users(keycloak_id=user_id, resource_pool_id=resource_pool_id, api_user=user)
             if len(res) < 1:
@@ -209,6 +218,7 @@ class ResourcePoolUsersBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
+        @validate_db_ids
         async def _delete(_: Request, resource_pool_id: int, user_id: str, user: base_models.APIUser):
             await self.repo.delete_resource_pool_user(
                 resource_pool_id=resource_pool_id, keycloak_id=user_id, api_user=user
@@ -229,6 +239,7 @@ class ClassesBP(CustomBlueprint):
         """Get the classes of a specific resource pool."""
 
         @authenticate(self.authenticator)
+        @validate_db_ids
         async def _get_all(request: Request, resource_pool_id: int, user: base_models.APIUser):
             res = await self.repo.get_classes(
                 api_user=user, resource_pool_id=resource_pool_id, name=request.args.get("name")
@@ -242,6 +253,7 @@ class ClassesBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
+        @validate_db_ids
         @validate(json=apispec.ResourceClass)
         async def _post(_: Request, body: apispec.ResourceClass, resource_pool_id: int, user: base_models.APIUser):
             cls = models.ResourceClass.from_dict(body.model_dump())
@@ -256,6 +268,7 @@ class ClassesBP(CustomBlueprint):
         """Get a specific class of a specific resource pool."""
 
         @authenticate(self.authenticator)
+        @validate_db_ids
         async def _get(_: Request, resource_pool_id: int, class_id: int, user: base_models.APIUser):
             res = await self.repo.get_classes(api_user=user, resource_pool_id=resource_pool_id, id=class_id)
             if len(res) < 1:
@@ -270,6 +283,7 @@ class ClassesBP(CustomBlueprint):
         """Get a specific class."""
 
         @authenticate(self.authenticator)
+        @validate_db_ids
         async def _get_no_pool(_: Request, class_id: int, user: base_models.APIUser):
             res = await self.repo.get_classes(api_user=user, id=class_id)
             if len(res) < 1:
@@ -283,6 +297,7 @@ class ClassesBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
+        @validate_db_ids
         async def _delete(_: Request, resource_pool_id: int, class_id: int, user: base_models.APIUser):
             await self.repo.delete_resource_class(
                 api_user=user, resource_pool_id=resource_pool_id, resource_class_id=class_id
@@ -384,6 +399,7 @@ class QuotaBP(CustomBlueprint):
         """Get the quota for a specific resource pool."""
 
         @authenticate(self.authenticator)
+        @validate_db_ids
         async def _get(_: Request, resource_pool_id: int, user: base_models.APIUser):
             rps = await self.rp_repo.get_resource_pools(api_user=user, id=resource_pool_id)
             if len(rps) < 1:

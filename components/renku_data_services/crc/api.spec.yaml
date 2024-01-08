@@ -776,6 +776,14 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/UserWithId"
+        "404":
+          description: The user does not exist
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - users
     patch:
@@ -799,6 +807,14 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/UserWithId"
+        "404":
+          description: The user does not exist
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - users
     delete:
@@ -1427,17 +1443,23 @@ components:
       example: 4
       exclusiveMinimum: true
       minimum: 0
+      # Max value for int64 in postgres
+      maximum: 9223372036854775807
     Gpu:
       type: integer
       description: Number of GPUs
       example: 8
       minimum: 0
+      # Max value for int64 in postgres
+      maximum: 9223372036854775807
     Storage:
       type: integer
       description: Number of gigabytes of storage
       example: 100
       exclusiveMinimum: true
       minimum: 0
+      # Max value for int64 in postgres
+      maximum: 9223372036854775807
     UserId:
       type: string
       description: Keycloak user ID
