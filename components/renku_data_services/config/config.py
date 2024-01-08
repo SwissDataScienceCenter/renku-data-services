@@ -40,9 +40,9 @@ from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.storage.db import StorageRepository
+from renku_data_services.user_preferences.config import UserPreferencesConfig
 from renku_data_services.user_preferences.db import UserPreferencesRepository
 from renku_data_services.utils.core import get_ssl_context, merge_api_specs
-from renku_data_services.user_preferences.config import UserPreferencesConfig
 
 
 @retry(stop=(stop_after_attempt(20) | stop_after_delay(300)), wait=wait_fixed(2), reraise=True)

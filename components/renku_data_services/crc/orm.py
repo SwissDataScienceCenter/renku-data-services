@@ -183,8 +183,10 @@ class TolerationORM(BaseORM):
     """The key for a K8s toleration used to schedule loads on tainted nodes."""
 
     __tablename__ = "tolerations"
-    key: Mapped[str] = mapped_column(String(63))
-    resource_class: Mapped[Optional["ResourceClassORM"]] = relationship(back_populates="tolerations", default=None)
+    key: Mapped[str] = mapped_column(String(63), index=True)
+    resource_class: Mapped[Optional["ResourceClassORM"]] = relationship(
+        back_populates="tolerations", default=None, lazy="selectin"
+    )
     resource_class_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("resource_classes.id"), default=None, index=True
     )
@@ -195,8 +197,10 @@ class NodeAffintyORM(BaseORM):
     """The key for a K8s node label used to schedule loads specific nodes."""
 
     __tablename__ = "node_affinities"
-    key: Mapped[str] = mapped_column(String(63))
-    resource_class: Mapped[Optional["ResourceClassORM"]] = relationship(back_populates="node_affinities", default=None)
+    key: Mapped[str] = mapped_column(String(63), index=True)
+    resource_class: Mapped[Optional["ResourceClassORM"]] = relationship(
+        back_populates="node_affinities", default=None, lazy="selectin"
+    )
     resource_class_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("resource_classes.id"), default=None, index=True
     )

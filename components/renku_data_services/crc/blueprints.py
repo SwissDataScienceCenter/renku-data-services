@@ -3,7 +3,7 @@ import asyncio
 from dataclasses import asdict, dataclass
 from typing import List
 
-from sanic import HTTPResponse, Request, json
+from sanic import HTTPResponse, Request, json, empty
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
@@ -90,7 +90,17 @@ class ResourcePoolsBP(CustomBlueprint):
         @validate_db_ids
         @validate(json=apispec.ResourcePoolPut)
         async def _put(_: Request, resource_pool_id: int, body: apispec.ResourcePoolPut, user: base_models.APIUser):
-            return await self._put_patch_resource_pool(api_user=user, resource_pool_id=resource_pool_id, body=body)
+            res = await self.rp_repo.update_resource_pool(
+                api_user=user,
+                id=resource_pool_id,
+                put=True,
+                **body.model_dump(exclude_none=True),
+            )
+            if res is None:
+                raise errors.MissingResourceError(
+                    message=f"The resource pool with ID {resource_pool_id} cannot be found."
+                )
+            return json(apispec.ResourcePoolWithId.model_validate(res).model_dump(exclude_none=True))
 
         return "/resource_pools/<resource_pool_id>", ["PUT"], _put
 
@@ -102,25 +112,19 @@ class ResourcePoolsBP(CustomBlueprint):
         @validate_db_ids
         @validate(json=apispec.ResourcePoolPatch)
         async def _patch(_: Request, resource_pool_id: int, body: apispec.ResourcePoolPatch, user: base_models.APIUser):
-            return await self._put_patch_resource_pool(api_user=user, resource_pool_id=resource_pool_id, body=body)
+            res = await self.rp_repo.update_resource_pool(
+                api_user=user,
+                id=resource_pool_id,
+                put=False,
+                **body.model_dump(exclude_none=True),
+            )
+            if res is None:
+                raise errors.MissingResourceError(
+                    message=f"The resource pool with ID {resource_pool_id} cannot be found."
+                )
+            return json(apispec.ResourcePoolWithId.model_validate(res).model_dump(exclude_none=True))
 
         return "/resource_pools/<resource_pool_id>", ["PATCH"], _patch
-
-    async def _put_patch_resource_pool(
-        self,
-        api_user: base_models.APIUser,
-        resource_pool_id: int,
-        body: apispec.ResourcePoolPut | apispec.ResourcePoolPatch,
-    ):
-        body_dict = body.model_dump(exclude_none=True)
-        res = await self.rp_repo.update_resource_pool(
-            api_user=api_user,
-            id=resource_pool_id,
-            **body_dict,
-        )
-        if res is None:
-            raise errors.MissingResourceError(message=f"The resource pool with ID {resource_pool_id} cannot be found.")
-        return json(apispec.ResourcePoolWithId.model_validate(res).model_dump(exclude_none=True))
 
 
 @dataclass(kw_only=True)
@@ -311,7 +315,10 @@ class ClassesBP(CustomBlueprint):
         async def _put(
             _: Request, body: apispec.ResourceClass, resource_pool_id: int, class_id: int, user: base_models.APIUser
         ):
-            return await self._put_patch(user, resource_pool_id, class_id, body)
+            res = await self.repo.update_resource_class(
+                user, resource_pool_id, class_id, put=True, **body.model_dump(exclude_none=True)
+            )
+            return json(apispec.ResourceClassWithId.model_validate(res).model_dump(exclude_none=True))
 
         return "/resource_pools/<resource_pool_id>/classes/<class_id>", ["PUT"], _put
 
@@ -328,24 +335,56 @@ class ClassesBP(CustomBlueprint):
             class_id: int,
             user: base_models.APIUser,
         ):
-            return await self._put_patch(user, resource_pool_id, class_id, body)
+            res = await self.repo.update_resource_class(
+                user, resource_pool_id, class_id, put=False, **body.model_dump(exclude_none=True)
+            )
+            return json(apispec.ResourceClassWithId.model_validate(res).model_dump(exclude_none=True))
 
         return "/resource_pools/<resource_pool_id>/classes/<class_id>", ["PATCH"], _patch
 
-    async def _put_patch(
-        self,
-        api_user: base_models.APIUser,
-        resource_pool_id: int,
-        class_id: int,
-        body: apispec.ResourceClassPatch | apispec.ResourceClass,
-    ):
-        cls = await self.repo.update_resource_class(
-            api_user=api_user,
-            resource_pool_id=resource_pool_id,
-            resource_class_id=class_id,
-            **body.model_dump(exclude_none=True),
-        )
-        return json(apispec.ResourceClassWithId.model_validate(cls).model_dump(exclude_none=True))
+    def get_tolerations(self) -> BlueprintFactoryResponse:
+        """Get all tolerations of a resource class."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        async def _get_tolerations(_: Request, resource_pool_id: int, class_id: int, user: base_models.APIUser):
+            res = await self.repo.get_tolerations(user, resource_pool_id, class_id)
+            return json(list(res))
+
+        return "/resource_pools/<resource_pool_id>/classes/<class_id>/tolerations", ["GET"], _get_tolerations
+
+    def delete_tolerations(self) -> BlueprintFactoryResponse:
+        """Delete all tolerations of a resource class."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        async def _delete_tolerations(_: Request, resource_pool_id: int, class_id: int, user: base_models.APIUser):
+            await self.repo.delete_tolerations(user, resource_pool_id, class_id)
+            return empty()
+
+        return "/resource_pools/<resource_pool_id>/classes/<class_id>/tolerations", ["DELETE"], _delete_tolerations
+
+    def get_affinities(self) -> BlueprintFactoryResponse:
+        """Get all affinities of a resource class."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        async def _get_affinities(_: Request, resource_pool_id: int, class_id: int, user: base_models.APIUser):
+            res = await self.repo.get_affinities(user, resource_pool_id, class_id)
+            return json([apispec.NodeAffinity.model_validate(i).model_dump(exclude_none=True) for i in res])
+
+        return "/resource_pools/<resource_pool_id>/classes/<class_id>/node_affinities", ["GET"], _get_affinities
+
+    def delete_affinities(self) -> BlueprintFactoryResponse:
+        """Delete all affinities of a resource class."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        async def _delete_affinities(_: Request, resource_pool_id: int, class_id: int, user: base_models.APIUser):
+            await self.repo.delete_affinities(user, resource_pool_id, class_id)
+            return empty()
+
+        return "/resource_pools/<resource_pool_id>/classes/<class_id>/node_affinities", ["DELETE"], _delete_affinities
 
 
 @dataclass(kw_only=True)

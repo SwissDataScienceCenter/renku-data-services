@@ -506,6 +506,96 @@ paths:
           $ref: '#/components/responses/Error'
       tags:
         - classes
+  /resource_pools/{resource_pool_id}/classes/{class_id}/tolerations:
+    get:
+      summary: Get the tolerations from a resource class
+      parameters:
+        - in: path
+          name: resource_pool_id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: class_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: All the tolerations for a resource class
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/K8sLabelList"
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
+        - classes
+    delete:
+      summary: Remove all tolerations from a resource class
+      parameters:
+        - in: path
+          name: resource_pool_id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: class_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: The tolerations have been removed
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
+        - classes
+  /resource_pools/{resource_pool_id}/classes/{class_id}/node_affinities:
+    get:
+      summary: Get the node affinities from a resource class
+      parameters:
+        - in: path
+          name: resource_pool_id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: class_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: All the affinities for a resource class
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/NodeAffinityList"
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
+        - classes
+    delete:
+      summary: Remove all node affinities from a resource class
+      parameters:
+        - in: path
+          name: resource_pool_id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: class_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: The node affinities have been removed
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
+        - classes
   /classes/{class_id}:
     get:
       summary: Get a specific resource class
