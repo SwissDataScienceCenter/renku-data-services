@@ -184,6 +184,9 @@ class ResourcePoolRepository(_Base):
                 gpu=gpu,
                 memory=memory,
                 max_storage=max_storage,
+                # NOTE: the default storage has to be <= max_storage but is not used for filtering classes,
+                # only the max_storage is used to filter resource classes that match a request
+                default_storage=max_storage,
             )
             stmt = (
                 select(schemas.ResourcePoolORM)
