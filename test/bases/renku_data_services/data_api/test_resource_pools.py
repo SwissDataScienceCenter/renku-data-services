@@ -88,6 +88,68 @@ async def test_resource_pool_creation(
 
 
 @pytest.mark.asyncio
+async def test_resource_class_filtering(
+    test_client: SanicASGITestClient,
+    admin_user_headers: Dict[str, str],
+):
+    new_classes = [
+        {
+            "name": "resource class 1",
+            "cpu": 1.0,
+            "memory": 2,
+            "gpu": 0,
+            "max_storage": 100,
+            "default": True,
+            "default_storage": 1,
+            "node_affinities": [],
+            "tolerations": [],
+        },
+        {
+            "name": "resource class 2",
+            "cpu": 2,
+            "memory": 4,
+            "gpu": 0,
+            "max_storage": 100,
+            "default": False,
+            "default_storage": 4,
+            "node_affinities": [],
+            "tolerations": [],
+        },
+        {
+            "name": "resource class 3",
+            "cpu": 2.0,
+            "memory": 32,
+            "gpu": 1,
+            "max_storage": 100,
+            "default": False,
+            "default_storage": 30,
+            "node_affinities": [],
+            "tolerations": [],
+        },
+    ]
+    payload = deepcopy(_valid_resource_pool_payload)
+    payload["quota"] = {"cpu": 100, "memory": 100, "gpu": 100}
+    payload["classes"] = new_classes
+    _, res = await create_rp(payload, test_client)
+    assert res.status_code == 201
+    _, res = await test_client.get(
+        "/api/data/resource_pools",
+        params = {"cpu": 1, "gpu": 1},
+        headers = admin_user_headers,
+    )
+    assert res.status_code == 200
+    assert len(res.json) == 1
+    rp_filtered = res.json[0]
+    assert len(rp_filtered["classes"]) == len(new_classes)
+    matching_classes = list(filter(lambda x: x["matching"], rp_filtered["classes"]))
+    assert len(matching_classes) == 1
+    matching_class = matching_classes[0]
+    matching_class.pop("id")    
+    matching_class.pop("matching")
+    assert matching_class == new_classes[2]
+
+
+@pytest.mark.asyncio
 async def test_get_single_pool_quota(
     test_client: SanicASGITestClient, valid_resource_pool_payload: Dict[str, Any], admin_user_headers: Dict[str, str]
 ):
