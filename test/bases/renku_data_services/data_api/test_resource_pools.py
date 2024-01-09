@@ -134,8 +134,8 @@ async def test_resource_class_filtering(
     assert res.status_code == 201
     _, res = await test_client.get(
         "/api/data/resource_pools",
-        params = {"cpu": 1, "gpu": 1},
-        headers = admin_user_headers,
+        params={"cpu": 1, "gpu": 1},
+        headers=admin_user_headers,
     )
     assert res.status_code == 200
     assert len(res.json) == 1
@@ -144,9 +144,17 @@ async def test_resource_class_filtering(
     matching_classes = list(filter(lambda x: x["matching"], rp_filtered["classes"]))
     assert len(matching_classes) == 1
     matching_class = matching_classes[0]
-    matching_class.pop("id")    
+    matching_class.pop("id")
     matching_class.pop("matching")
     assert matching_class == new_classes[2]
+    # Test without any filtering
+    _, res = await test_client.get(
+        "/api/data/resource_pools",
+        headers=admin_user_headers,
+    )
+    assert res.status_code == 200
+    assert len(res.json) == 1
+    assert len(res.json[0]["classes"]) == len(new_classes)
 
 
 @pytest.mark.asyncio
