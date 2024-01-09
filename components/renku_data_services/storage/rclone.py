@@ -120,6 +120,36 @@ class RCloneValidator:
         )
         existing_endpoint_spec["Provider"] += ",Switch"
 
+    @staticmethod
+    def __patch_schema_remove_oauth_propeties(spec: list[dict[str, Any]]) -> None:
+        """Removes OAuth2 fields since we can't do an oauth flow in the rclone CSI."""
+        providers = [
+            "acd",
+            "box",
+            "drive",
+            "dropbox",
+            "gcs",
+            "gphotos",
+            "hidrive",
+            "jottacloud",
+            "mailru",
+            "onedrive",
+            "pcloud",
+            "pikpak",
+            "premiumzeme",
+            "putio",
+            "sharefile",
+            "yandex",
+            "zoho",
+        ]
+        for storage in spec:
+            if storage["Prefix"] in providers:
+                options = []
+                for option in storage["Options"]:
+                    if option["Name"] not in ["client_id", "client_secret"]:
+                        options.append(option)
+                storage["Options"] = options
+
     def apply_patches(self, spec: list[dict[str, Any]]) -> None:
         """Apply patches to RClone schema."""
         patches = [
