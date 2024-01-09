@@ -3,7 +3,7 @@ import asyncio
 from dataclasses import asdict, dataclass
 from typing import List
 
-from sanic import HTTPResponse, Request, json, empty
+from sanic import HTTPResponse, Request, empty, json
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models

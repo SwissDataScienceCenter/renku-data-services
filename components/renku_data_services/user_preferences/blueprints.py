@@ -7,7 +7,6 @@ from sanic_ext import validate
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
-from renku_data_services.errors import errors
 from renku_data_services.user_preferences import apispec, models
 from renku_data_services.user_preferences.apispec_base import PinnedProjectFilter
 from renku_data_services.user_preferences.db import UserPreferencesRepository
