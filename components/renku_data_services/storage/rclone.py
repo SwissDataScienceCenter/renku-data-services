@@ -388,7 +388,7 @@ class RCloneProviderSchema(BaseModel):
     async def obscure_password_options(
         self, configuration: Union["RCloneConfig", dict[str, Any]]
     ) -> Union["RCloneConfig", dict[str, Any]]:
-        """Obscure all passwod options."""
+        """Obscure all password options."""
         for passwd in self.password_options:
             if val := configuration.get(passwd.name):
                 proc = await asyncio.create_subprocess_exec(
@@ -416,8 +416,8 @@ class RCloneProviderSchema(BaseModel):
         for option in self.options:
             if not option.is_sensitive:
                 continue
-            if option.advanced:
-                continue
             if not option.matches_provider(provider):
+                continue
+            if option.name not in configuration:
                 continue
             yield option
