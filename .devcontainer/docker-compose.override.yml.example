@@ -1,0 +1,9 @@
+version: '3.8'
+
+services:
+  data_service:
+	volumes:
+	  - $HOME/.bash_history:/home/renku/.bash_history
+  db:
+    ports:
+      - 5432:5432

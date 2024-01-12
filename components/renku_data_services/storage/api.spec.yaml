@@ -185,7 +185,7 @@ paths:
         default:
           $ref: '#/components/responses/Error'
       tags:
-        - storage/storage_schema/test_connection:
+        - storage
   /storage_schema/obscure:
     post:
       summary: Obscure password fields for rclone
