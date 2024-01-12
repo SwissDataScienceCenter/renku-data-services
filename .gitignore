@@ -67,3 +67,6 @@ target/
 
 # Mac
 .DS_Store
+
+# docker compose
+docker-compose.override.yml
