@@ -183,39 +183,30 @@ class ResourcePoolRepository(_Base):
     ) -> List[models.ResourcePool]:
         """Get resource pools from database with indication of which resource class matches the specified crtieria."""
         async with self.session_maker() as session:
-            criteria = and_(
-                schemas.ResourceClassORM.cpu >= cpu,
-                schemas.ResourceClassORM.gpu >= gpu,
-                schemas.ResourceClassORM.memory >= memory,
-                schemas.ResourceClassORM.max_storage >= max_storage,
+            criteria = models.ResourceClass(
+                name="criteria",
+                cpu=cpu,
+                gpu=gpu,
+                memory=memory,
+                max_storage=max_storage,
+                # NOTE: the default storage has to be <= max_storage but is not used for filtering classes,
+                # only the max_storage is used to filter resource classes that match a request
+                default_storage=max_storage,
             )
             stmt = (
-                select(schemas.ResourceClassORM)
-                .add_columns(criteria.label("matching"))
-                .order_by(schemas.ResourceClassORM.resource_pool_id, schemas.ResourceClassORM.name)
-                .join(schemas.ResourcePoolORM, schemas.ResourceClassORM.resource_pool)
-                .options(selectinload(schemas.ResourceClassORM.resource_pool))
+                select(schemas.ResourcePoolORM)
+                .join(schemas.ResourcePoolORM.classes)
+                .order_by(
+                    schemas.ResourcePoolORM.id,
+                    schemas.ResourcePoolORM.name,
+                    schemas.ResourceClassORM.id,
+                    schemas.ResourceClassORM.name,
+                )
             )
             # NOTE: The line below ensures that the right users can access the right resources, do not remove.
-            stmt = _classes_user_access_control(api_user, stmt)
+            stmt = _resource_pool_access_control(api_user, stmt)
             res = await session.execute(stmt)
-            output: Dict[int, models.ResourcePool] = {}
-            for res_class, matching in res.all():
-                if res_class.resource_pool_id is None or res_class.resource_pool is None:
-                    continue
-                rc_data = res_class.dump()
-                rc_data = cast(models.ResourceClass, rc_data)
-                rc = rc_data.update(matching=matching)
-                if res_class.resource_pool_id not in output:
-                    quota = (
-                        self.quotas_repo.get_quota(res_class.resource_pool.quota)
-                        if res_class.resource_pool.quota
-                        else None
-                    )
-                    output[res_class.resource_pool_id] = res_class.resource_pool.dump(quota)
-                    output[res_class.resource_pool_id].classes.clear()
-                output[res_class.resource_pool_id].classes.append(rc)
-            return sorted(output.values(), key=lambda i: i.id if i.id else 0)
+            return [i.dump(self.quotas_repo.get_quota(i.quota), criteria) for i in res.unique().scalars().all()]
 
     @_only_admins
     async def insert_resource_pool(
@@ -237,7 +228,7 @@ class ResourcePoolRepository(_Base):
                 if orm.default:
                     stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.default == true())
                     res = await session.execute(stmt)
-                    default_rps = res.scalars().all()
+                    default_rps = res.unique().scalars().all()
                     if len(default_rps) >= 1:
                         raise errors.ValidationError(
                             message="There can only be one default resource pool and one already exists."
@@ -305,7 +296,9 @@ class ResourcePoolRepository(_Base):
         return cls.dump()
 
     @_only_admins
-    async def update_resource_pool(self, api_user: base_models.APIUser, id: int, **kwargs) -> models.ResourcePool:
+    async def update_resource_pool(
+        self, api_user: base_models.APIUser, id: int, put: bool, **kwargs
+    ) -> models.ResourcePool:
         """Update an existing resource pool in the database."""
         rp: Optional[schemas.ResourcePoolORM] = None
         async with self.session_maker() as session:
@@ -371,7 +364,7 @@ class ResourcePoolRepository(_Base):
                                     )
                                 new_classes_coroutines.append(
                                     self.update_resource_class(
-                                        api_user, resource_pool_id=id, resource_class_id=class_id, **cls
+                                        api_user, resource_pool_id=id, resource_class_id=class_id, put=put, **cls
                                     )
                                 )
                         case _:
@@ -419,7 +412,7 @@ class ResourcePoolRepository(_Base):
 
     @_only_admins
     async def update_resource_class(
-        self, api_user: base_models.APIUser, resource_pool_id: int, resource_class_id: int, **kwargs
+        self, api_user: base_models.APIUser, resource_pool_id: int, resource_class_id: int, put: bool, **kwargs
     ) -> models.ResourceClass:
         """Update a specific resource class."""
         async with self.session_maker() as session:
@@ -444,30 +437,49 @@ class ResourcePoolRepository(_Base):
                 for k, v in kwargs.items():
                     match k:
                         case "node_affinities":
-                            for affinity in v:
-                                affinity = cast(Dict[str, str | bool], affinity)
-                                matched_affinity: schemas.NodeAffintyORM | None = next(
-                                    filter(
-                                        lambda x: x.key == affinity["key"],  # type: ignore[arg-type, union-attr]
-                                        cls.node_affinities,
-                                    ),
-                                    None,
-                                )
-                                if matched_affinity:
-                                    # NOTE: The node affinity is already present in the resource class, update it
-                                    matched_affinity.required_during_scheduling = affinity.get(
-                                        "required_during_scheduling", False
-                                    )
+                            v = cast(List[Dict[str, str | bool]], v)
+                            existing_affinities: Dict[str, schemas.NodeAffintyORM] = {
+                                i.key: i for i in cls.node_affinities
+                            }
+                            new_affinities: Dict[str, schemas.NodeAffintyORM] = {
+                                i["key"]: schemas.NodeAffintyORM(**i) for i in v
+                            }
+                            for new_affinity_key, new_affinity in new_affinities.items():
+                                if new_affinity_key in existing_affinities:
+                                    # UPDATE existing affinity
+                                    existing_affinity = existing_affinities[new_affinity_key]
+                                    if (
+                                        new_affinity.required_during_scheduling
+                                        != existing_affinity.required_during_scheduling
+                                    ):
+                                        existing_affinity.required_during_scheduling = (
+                                            new_affinity.required_during_scheduling
+                                        )
                                 else:
-                                    # NOTE: The node affinity does not exist, create it
-                                    cls.node_affinities.append(schemas.NodeAffintyORM(**affinity))
+                                    # CREATE a brand new affinity
+                                    cls.node_affinities.append(new_affinity)
+                            if put:
+                                # REMOVE an affinity
+                                for existing_affinity_key, existing_affinity in existing_affinities.items():
+                                    if existing_affinity_key not in new_affinities.keys():
+                                        cls.node_affinities.remove(existing_affinity)
                         case "tolerations":
-                            cls_tolerations = [tol.key for tol in cls.tolerations]
-                            for new_toleration in v:
-                                if new_toleration in cls_tolerations:
-                                    continue
-                                cls.tolerations.append(schemas.TolerationORM(key=new_toleration))
-                                cls_tolerations.append(new_toleration)
+                            v = cast(List[str], v)
+                            existing_tolerations: Dict[str, schemas.TolerationORM] = {
+                                tol.key: tol for tol in cls.tolerations
+                            }
+                            new_tolerations: Dict[str, schemas.TolerationORM] = {
+                                tol: schemas.TolerationORM(key=tol) for tol in v
+                            }
+                            for new_tol_key, new_tol in new_tolerations.items():
+                                if new_tol_key not in existing_tolerations.keys():
+                                    # CREATE a brand new toleration
+                                    cls.tolerations.append(new_tol)
+                            if put:
+                                # REMOVE a toleration
+                                for existing_tol_key, existing_tol in existing_tolerations.items():
+                                    if existing_tol_key not in new_tolerations.keys():
+                                        cls.tolerations.remove(existing_tol)
                         case _:
                             setattr(cls, k, v)
                 if cls.resource_pool is None:
@@ -482,6 +494,62 @@ class ResourcePoolRepository(_Base):
                         message=f"The resource class {cls_model} is not compatible with the quota {quota}"
                     )
                 return cls_model
+
+    @_only_admins
+    async def get_tolerations(self, api_user: base_models.APIUser, resource_pool_id: int, class_id: int) -> List[str]:
+        """Get all tolerations of a resource class."""
+        async with self.session_maker() as session:
+            res_classes = await self.get_classes(api_user, class_id, resource_pool_id=resource_pool_id)
+            if len(res_classes) == 0:
+                raise errors.MissingResourceError(
+                    message=f"The resource pool with ID {resource_pool_id} or the resource "
+                    f"class with ID {class_id} do not exist, or they are not related."
+                )
+            stmt = select(schemas.TolerationORM).where(schemas.TolerationORM.resource_class_id == class_id)
+            res = await session.execute(stmt)
+            return [i.key for i in res.scalars().all()]
+
+    @_only_admins
+    async def delete_tolerations(self, api_user: base_models.APIUser, resource_pool_id: int, class_id: int):
+        """Delete all tolerations for a specific resource class."""
+        async with self.session_maker() as session, session.begin():
+            res_classes = await self.get_classes(api_user, class_id, resource_pool_id=resource_pool_id)
+            if len(res_classes) == 0:
+                raise errors.MissingResourceError(
+                    message=f"The resource pool with ID {resource_pool_id} or the resource "
+                    f"class with ID {class_id} do not exist, or they are not related."
+                )
+            stmt = delete(schemas.TolerationORM).where(schemas.TolerationORM.resource_class_id == class_id)
+            await session.execute(stmt)
+
+    @_only_admins
+    async def get_affinities(
+        self, api_user: base_models.APIUser, resource_pool_id: int, class_id: int
+    ) -> List[models.NodeAffinity]:
+        """Get all affinities for a resource class."""
+        async with self.session_maker() as session:
+            res_classes = await self.get_classes(api_user, class_id, resource_pool_id=resource_pool_id)
+            if len(res_classes) == 0:
+                raise errors.MissingResourceError(
+                    message=f"The resource pool with ID {resource_pool_id} or the resource "
+                    f"class with ID {class_id} do not exist, or they are not related."
+                )
+            stmt = select(schemas.NodeAffintyORM).where(schemas.NodeAffintyORM.resource_class_id == class_id)
+            res = await session.execute(stmt)
+            return [i.dump() for i in res.scalars().all()]
+
+    @_only_admins
+    async def delete_affinities(self, api_user: base_models.APIUser, resource_pool_id: int, class_id: int):
+        """Delete all affinities from a resource class."""
+        async with self.session_maker() as session, session.begin():
+            res_classes = await self.get_classes(api_user, class_id, resource_pool_id=resource_pool_id)
+            if len(res_classes) == 0:
+                raise errors.MissingResourceError(
+                    message=f"The resource pool with ID {resource_pool_id} or the resource "
+                    f"class with ID {class_id} do not exist, or they are not related."
+                )
+            stmt = delete(schemas.NodeAffintyORM).where(schemas.NodeAffintyORM.resource_class_id == class_id)
+            await session.execute(stmt)
 
 
 @dataclass

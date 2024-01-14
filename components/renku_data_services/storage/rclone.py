@@ -120,6 +120,36 @@ class RCloneValidator:
         )
         existing_endpoint_spec["Provider"] += ",Switch"
 
+    @staticmethod
+    def __patch_schema_remove_oauth_propeties(spec: list[dict[str, Any]]) -> None:
+        """Removes OAuth2 fields since we can't do an oauth flow in the rclone CSI."""
+        providers = [
+            "acd",
+            "box",
+            "drive",
+            "dropbox",
+            "gcs",
+            "gphotos",
+            "hidrive",
+            "jottacloud",
+            "mailru",
+            "onedrive",
+            "pcloud",
+            "pikpak",
+            "premiumzeme",
+            "putio",
+            "sharefile",
+            "yandex",
+            "zoho",
+        ]
+        for storage in spec:
+            if storage["Prefix"] in providers:
+                options = []
+                for option in storage["Options"]:
+                    if option["Name"] not in ["client_id", "client_secret"]:
+                        options.append(option)
+                storage["Options"] = options
+
     def apply_patches(self, spec: list[dict[str, Any]]) -> None:
         """Apply patches to RClone schema."""
         patches = [
@@ -139,9 +169,10 @@ class RCloneValidator:
 
     async def test_connection(self, configuration: Union["RCloneConfig", dict[str, Any]], source_path: str):
         """Tests connecting with an RClone config."""
-        provider = self.get_provider(configuration)
-        if not provider:
-            return ConnectionResult(False, "Unknown provider")
+        try:
+            self.get_provider(configuration)
+        except errors.ValidationError as e:
+            return ConnectionResult(False, str(e))
 
         with tempfile.NamedTemporaryFile(mode="w+", delete=False, encoding="utf-8") as f:
             config = "\n".join(f"{k}={v}" for k, v in configuration.items())
@@ -159,6 +190,14 @@ class RCloneValidator:
             _, error = await proc.communicate()
             success = proc.returncode == 0
         return ConnectionResult(success=success, error=error.decode())
+
+    async def obscure_config(
+        self, configuration: Union["RCloneConfig", dict[str, Any]]
+    ) -> Union["RCloneConfig", dict[str, Any]]:
+        """Obscure secrets in rclone config."""
+        provider = self.get_provider(configuration)
+        result = await provider.obscure_password_options(configuration)
+        return result
 
     def remove_sensitive_options_from_config(self, configuration: Union["RCloneConfig", dict[str, Any]]):
         """Remove sensitive fields from a config, e.g. when turning a private storage public."""
@@ -187,7 +226,7 @@ class RCloneValidator:
 
     def asdict(self) -> list[dict[str, Any]]:
         """Return Schema as dict."""
-        return [provider.model_dump() for provider in self.providers.values()]
+        return [provider.model_dump(exclude_none=True) for provider in self.providers.values()]
 
     def get_private_fields(self, configuration: Union["RCloneConfig", dict[str, Any]]):
         """Get private field descriptions for storage."""
@@ -316,6 +355,11 @@ class RCloneProviderSchema(BaseModel):
         """Returns all sensitive options for this provider."""
         return [o for o in self.options if o.is_sensitive]
 
+    @property
+    def password_options(self) -> list[RCloneOption]:
+        """Returns all password options for this provider."""
+        return [o for o in self.options if o.is_password]
+
     def get_option_for_provider(self, name: str, provider: str | None) -> RCloneOption | None:
         """Get an RClone option matching a provider."""
         for option in self.options:
@@ -371,6 +415,28 @@ class RCloneProviderSchema(BaseModel):
             if sensitive.name in configuration:
                 del configuration[sensitive.name]
 
+    async def obscure_password_options(
+        self, configuration: Union["RCloneConfig", dict[str, Any]]
+    ) -> Union["RCloneConfig", dict[str, Any]]:
+        """Obscure all password options."""
+        for passwd in self.password_options:
+            if val := configuration.get(passwd.name):
+                proc = await asyncio.create_subprocess_exec(
+                    "rclone",
+                    "obscure",
+                    val,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                result, error = await proc.communicate()
+                success = proc.returncode == 0
+                if not success:
+                    raise errors.ConfigurationError(
+                        message=f"Couldn't obscure password value for field '{passwd.name}'"
+                    )
+                configuration[passwd.name] = result.decode().strip()
+        return configuration
+
     def get_private_fields(
         self, configuration: Union["RCloneConfig", dict[str, Any]]
     ) -> Generator[RCloneOption, None, None]:
@@ -380,8 +446,8 @@ class RCloneProviderSchema(BaseModel):
         for option in self.options:
             if not option.is_sensitive:
                 continue
-            if option.advanced:
-                continue
             if not option.matches_provider(provider):
+                continue
+            if option.name not in configuration:
                 continue
             yield option

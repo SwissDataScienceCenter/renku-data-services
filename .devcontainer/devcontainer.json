@@ -4,6 +4,7 @@
 	"name": "Python 3 & PostgreSQL",
 	"dockerComposeFile": "docker-compose.yml",
 	"service": "data_service",
+	"remoteUser": "renku",
 	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
 	// Features to add to the dev container. More info: https://containers.dev/features.
 	"features": {
@@ -22,7 +23,7 @@
 		"db:5432"
 	],
 	// Use 'postCreateCommand' to run commands after the container is created.
-	"postCreateCommand": "poetry install --with dev",
+	"postCreateCommand": "poetry self add poetry-polylith-plugin && poetry install --with dev && echo 'cd /workspaces/renku-data-services/'>~/.bashrc",
 	// Configure tool-specific properties.
 	"customizations": {
 		// Configure properties specific to VS Code.

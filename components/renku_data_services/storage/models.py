@@ -57,7 +57,7 @@ class CloudStorage(BaseModel):
 
     storage_id: str | None = Field(default=None)
 
-    source_path: str = Field(min_length=1)
+    source_path: str = Field()
     """Path inside the cloud storage.
 
     Note: Since rclone itself doesn't really know about buckets/containers (they're not in the schema),

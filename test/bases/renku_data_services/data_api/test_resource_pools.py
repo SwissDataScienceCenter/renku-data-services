@@ -102,6 +102,76 @@ async def test_resource_pool_creation(
 
 
 @pytest.mark.asyncio
+async def test_resource_class_filtering(
+    test_client: SanicASGITestClient,
+    admin_user_headers: Dict[str, str],
+):
+    new_classes = [
+        {
+            "name": "resource class 1",
+            "cpu": 1.0,
+            "memory": 2,
+            "gpu": 0,
+            "max_storage": 100,
+            "default": True,
+            "default_storage": 1,
+            "node_affinities": [],
+            "tolerations": [],
+        },
+        {
+            "name": "resource class 2",
+            "cpu": 2,
+            "memory": 4,
+            "gpu": 0,
+            "max_storage": 100,
+            "default": False,
+            "default_storage": 4,
+            "node_affinities": [],
+            "tolerations": [],
+        },
+        {
+            "name": "resource class 3",
+            "cpu": 2.0,
+            "memory": 32,
+            "gpu": 1,
+            "max_storage": 100,
+            "default": False,
+            "default_storage": 30,
+            "node_affinities": [],
+            "tolerations": [],
+        },
+    ]
+    payload = deepcopy(_valid_resource_pool_payload)
+    payload["quota"] = {"cpu": 100, "memory": 100, "gpu": 100}
+    payload["classes"] = new_classes
+    _, res = await create_rp(payload, test_client)
+    assert res.status_code == 201
+    _, res = await test_client.get(
+        "/api/data/resource_pools",
+        params={"cpu": 1, "gpu": 1},
+        headers=admin_user_headers,
+    )
+    assert res.status_code == 200
+    assert len(res.json) == 1
+    rp_filtered = res.json[0]
+    assert len(rp_filtered["classes"]) == len(new_classes)
+    matching_classes = list(filter(lambda x: x["matching"], rp_filtered["classes"]))
+    assert len(matching_classes) == 1
+    matching_class = matching_classes[0]
+    matching_class.pop("id")
+    matching_class.pop("matching")
+    assert matching_class == new_classes[2]
+    # Test without any filtering
+    _, res = await test_client.get(
+        "/api/data/resource_pools",
+        headers=admin_user_headers,
+    )
+    assert res.status_code == 200
+    assert len(res.json) == 1
+    assert len(res.json[0]["classes"]) == len(new_classes)
+
+
+@pytest.mark.asyncio
 async def test_get_single_pool_quota(
     test_client: SanicASGITestClient, valid_resource_pool_payload: Dict[str, Any], admin_user_headers: Dict[str, str]
 ):
@@ -446,3 +516,227 @@ async def test_patch_affinities(
     )
     assert res.status_code == 200
     assert len(res.json["node_affinities"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_remove_all_tolerations_put(
+    test_client: SanicASGITestClient, admin_user_headers: Dict[str, str], valid_resource_pool_payload: Dict[str, Any]
+):
+    valid_resource_pool_payload["classes"][0]["tolerations"] = ["toleration1"]
+    _, res = await create_rp(valid_resource_pool_payload, test_client)
+    assert res.status_code == 201
+    rp = res.json
+    rp_id = rp["id"]
+    assert len(rp["classes"]) > 0
+    res_class = rp["classes"][0]
+    res_class_id = res_class["id"]
+    assert len(res_class["tolerations"]) == 1
+    assert res_class["tolerations"][0] == "toleration1"
+    new_class = deepcopy(res_class)
+    new_class.pop("id")
+    new_class["tolerations"] = []
+    _, res = await test_client.put(
+        f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
+        headers=admin_user_headers,
+        data=json.dumps(new_class),
+    )
+    assert res.status_code == 200
+    assert not res.json.get("tolerations")
+    _, res = await test_client.get(
+        f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
+        headers=admin_user_headers,
+    )
+    assert res.status_code == 200
+    assert res.json["tolerations"] == []
+
+
+@pytest.mark.asyncio
+async def test_remove_all_affinities_put(
+    test_client: SanicASGITestClient, admin_user_headers: Dict[str, str], valid_resource_pool_payload: Dict[str, Any]
+):
+    valid_resource_pool_payload["classes"][0]["node_affinities"] = [{"key": "affinity1"}]
+    _, res = await create_rp(valid_resource_pool_payload, test_client)
+    assert res.status_code == 201
+    rp = res.json
+    rp_id = rp["id"]
+    assert len(rp["classes"]) > 0
+    res_class = rp["classes"][0]
+    res_class_id = res_class["id"]
+    assert len(res_class["node_affinities"]) == 1
+    assert res_class["node_affinities"][0] == {"key": "affinity1", "required_during_scheduling": False}
+    new_class = deepcopy(res_class)
+    new_class.pop("id")
+    new_class["node_affinities"] = []
+    _, res = await test_client.put(
+        f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
+        headers=admin_user_headers,
+        data=json.dumps(new_class),
+    )
+    assert res.status_code == 200
+    assert not res.json.get("node_affinities")
+    _, res = await test_client.get(
+        f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
+        headers=admin_user_headers,
+    )
+    assert res.status_code == 200
+    assert res.json["node_affinities"] == []
+
+
+@pytest.mark.asyncio
+async def test_put_tolerations(
+    test_client: SanicASGITestClient, admin_user_headers: Dict[str, str], valid_resource_pool_payload: Dict[str, Any]
+):
+    valid_resource_pool_payload["classes"][0]["tolerations"] = ["toleration1"]
+    _, res = await create_rp(valid_resource_pool_payload, test_client)
+    assert res.status_code == 201
+    rp = res.json
+    rp_id = rp["id"]
+    assert len(rp["classes"]) > 0
+    res_class = rp["classes"][0]
+    res_class_id = res_class["id"]
+    assert len(res_class["tolerations"]) == 1
+    assert res_class["tolerations"][0] == "toleration1"
+    new_class = deepcopy(res_class)
+    new_class.pop("id")
+    new_class["tolerations"] = ["toleration2", "toleration3"]
+    _, res = await test_client.put(
+        f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
+        headers=admin_user_headers,
+        data=json.dumps(new_class),
+    )
+    assert res.status_code == 200
+    assert res.json["tolerations"] == ["toleration2", "toleration3"]
+    _, res = await test_client.get(
+        f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
+        headers=admin_user_headers,
+    )
+    assert res.status_code == 200
+    assert res.json["tolerations"] == ["toleration2", "toleration3"]
+
+
+@pytest.mark.asyncio
+async def test_put_affinities(
+    test_client: SanicASGITestClient, admin_user_headers: Dict[str, str], valid_resource_pool_payload: Dict[str, Any]
+):
+    valid_resource_pool_payload["classes"][0]["node_affinities"] = [{"key": "affinity1"}]
+    _, res = await create_rp(valid_resource_pool_payload, test_client)
+    assert res.status_code == 201
+    rp = res.json
+    rp_id = rp["id"]
+    assert len(rp["classes"]) > 0
+    res_class = rp["classes"][0]
+    res_class_id = res_class["id"]
+    assert len(res_class["node_affinities"]) == 1
+    assert res_class["node_affinities"][0] == {"key": "affinity1", "required_during_scheduling": False}
+    new_class = deepcopy(res_class)
+    new_class.pop("id")
+    new_class["node_affinities"] = [{"key": "affinity1", "required_during_scheduling": True}, {"key": "affinity2"}]
+    _, res = await test_client.put(
+        f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
+        headers=admin_user_headers,
+        data=json.dumps(new_class),
+    )
+    assert res.status_code == 200
+    assert res.json["node_affinities"] == [
+        {"key": "affinity1", "required_during_scheduling": True},
+        {"key": "affinity2", "required_during_scheduling": False},
+    ]
+    _, res = await test_client.get(
+        f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
+        headers=admin_user_headers,
+    )
+    assert res.status_code == 200
+    assert res.json["node_affinities"] == [
+        {"key": "affinity1", "required_during_scheduling": True},
+        {"key": "affinity2", "required_during_scheduling": False},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_get_all_tolerations(
+    test_client: SanicASGITestClient, admin_user_headers: Dict[str, str], valid_resource_pool_payload: Dict[str, Any]
+):
+    valid_resource_pool_payload["classes"][0]["tolerations"] = ["toleration1"]
+    _, res = await create_rp(valid_resource_pool_payload, test_client)
+    assert res.status_code == 201
+    rp = res.json
+    rp_id = rp["id"]
+    assert len(rp["classes"]) > 0
+    res_class = rp["classes"][0]
+    res_class_id = res_class["id"]
+    _, res = await test_client.get(
+        f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}/tolerations",
+        headers=admin_user_headers,
+    )
+    assert res.status_code == 200
+    assert res.json == ["toleration1"]
+
+
+@pytest.mark.asyncio
+async def test_get_all_affinities(
+    test_client: SanicASGITestClient, admin_user_headers: Dict[str, str], valid_resource_pool_payload: Dict[str, Any]
+):
+    valid_resource_pool_payload["classes"][0]["node_affinities"] = [{"key": "affinity1"}]
+    _, res = await create_rp(valid_resource_pool_payload, test_client)
+    assert res.status_code == 201
+    rp = res.json
+    rp_id = rp["id"]
+    assert len(rp["classes"]) > 0
+    res_class = rp["classes"][0]
+    res_class_id = res_class["id"]
+    _, res = await test_client.get(
+        f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}/node_affinities",
+        headers=admin_user_headers,
+    )
+    assert res.status_code == 200
+    assert res.json == [{"key": "affinity1", "required_during_scheduling": False}]
+
+
+@pytest.mark.asyncio
+async def test_delete_all_affinities(
+    test_client: SanicASGITestClient, admin_user_headers: Dict[str, str], valid_resource_pool_payload: Dict[str, Any]
+):
+    valid_resource_pool_payload["classes"][0]["node_affinities"] = [{"key": "affinity1"}]
+    _, res = await create_rp(valid_resource_pool_payload, test_client)
+    assert res.status_code == 201
+    rp = res.json
+    rp_id = rp["id"]
+    assert len(rp["classes"]) > 0
+    res_class = rp["classes"][0]
+    res_class_id = res_class["id"]
+    _, res = await test_client.delete(
+        f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}/node_affinities",
+        headers=admin_user_headers,
+    )
+    assert res.status_code == 204
+    _, res = await test_client.get(
+        f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}/node_affinities",
+        headers=admin_user_headers,
+    )
+    assert res.status_code == 200
+    assert res.json == []
+
+
+@pytest.mark.asyncio
+async def test_delete_all_tolerations(
+    test_client: SanicASGITestClient, admin_user_headers: Dict[str, str], valid_resource_pool_payload: Dict[str, Any]
+):
+    valid_resource_pool_payload["classes"][0]["tolerations"] = ["toleration1"]
+    _, res = await create_rp(valid_resource_pool_payload, test_client)
+    assert res.status_code == 201
+    rp = res.json
+    rp_id = rp["id"]
+    assert len(rp["classes"]) > 0
+    res_class = rp["classes"][0]
+    res_class_id = res_class["id"]
+    _, res = await test_client.delete(
+        f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}/tolerations",
+        headers=admin_user_headers,
+    )
+    assert res.status_code == 204
+    _, res = await test_client.get(
+        f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}/tolerations",
+        headers=admin_user_headers,
+    )
+    assert res.status_code == 200
+    assert res.json == []
