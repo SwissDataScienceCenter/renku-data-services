@@ -6,7 +6,7 @@ from .custom_fields import LowercaseString
 from .server_options import LaunchNotebookRequestServerOptions
 
 
-class LaunchNotebookRequestWithoutS3(Schema):
+class LaunchNotebookRequestWithoutStorage(Schema):
     """Used to validate the requesting for launching a jupyter server"""
 
     # namespaces in gitlab are NOT case sensitive
@@ -41,7 +41,7 @@ class LaunchNotebookRequestWithoutS3(Schema):
     environment_variables = fields.Dict(keys=fields.Str(), values=fields.Str(), load_default=dict())
 
 
-class LaunchNotebookRequestWithS3(LaunchNotebookRequestWithoutS3):
+class LaunchNotebookRequestWithStorage(LaunchNotebookRequestWithoutStorage):
     """Used to validate the requesting for launching a jupyter server"""
 
     cloudstorage = fields.List(
@@ -52,7 +52,7 @@ class LaunchNotebookRequestWithS3(LaunchNotebookRequestWithoutS3):
 
 
 LaunchNotebookRequest = (
-    LaunchNotebookRequestWithS3
-    if config.cloud_storage.any_enabled
-    else LaunchNotebookRequestWithoutS3
+    LaunchNotebookRequestWithStorage
+    if config.cloud_storage.enabled
+    else LaunchNotebookRequestWithoutStorage
 )

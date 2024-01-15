@@ -36,16 +36,10 @@ class ServerOptionsDefaults(Schema):
     lfs_auto_fetch = fields.Bool(required=True)
 
 
-class CloudStorageServerOption(Schema):
-    """Used to indicate in the server_options endpoint which types of cloud storage is enabled."""
-
-    s3 = fields.Nested(
-        Schema.from_dict({"enabled": fields.Bool(required=True)})(),
-        required=True,
-    )
-
-
 class ServerOptionsEndpointResponse(ServerOptionsChoices):
     """Used to serialize the server options sent out through the server_options endpoint."""
 
-    cloudstorage = fields.Nested(CloudStorageServerOption(), required=True)
+    cloudstorage = fields.Nested(
+        Schema.from_dict({"enabled": fields.Bool(required=True)})(),
+        required=True,
+    )

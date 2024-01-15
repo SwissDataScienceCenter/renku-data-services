@@ -2,20 +2,29 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, NamedTuple, Optional
 
 import requests
-
-from renku_notebooks.errors.user import InvalidCloudStorageConfiguration
+from flask import current_app
 
 from renku_notebooks.errors.intermittent import IntermittentError
 from renku_notebooks.errors.programming import ConfigurationError
-from renku_notebooks.errors.user import InvalidComputeResourceError, MissingResourceError
+from renku_notebooks.errors.user import (
+    AuthenticationError,
+    InvalidCloudStorageConfiguration,
+    InvalidComputeResourceError,
+    MissingResourceError,
+)
+
 from ..schemas.server_options import ServerOptions
 from .user import User
-from renku_notebooks.errors.user import AuthenticationError
-from flask import current_app
 
 CloudStorageConfig = NamedTuple(
     "CloudStorageConfig",
-    [("config", dict[str, Any]), ("source_path", str), ("target_path", str), ("readonly", bool)],
+    [
+        ("config", dict[str, Any]),
+        ("source_path", str),
+        ("target_path", str),
+        ("readonly", bool),
+        ("name", str),
+    ],
 )
 
 
@@ -53,9 +62,12 @@ class StorageValidator:
             source_path=storage["source_path"],
             target_path=storage["target_path"],
             readonly=storage.get("readonly", True),
+            name=storage["name"],
         )
 
-    def validate_storage_configuration(self, configuration: dict[str, Any]) -> None:
+    def validate_storage_configuration(
+        self, configuration: dict[str, Any], source_path: str
+    ) -> None:
         res = requests.post(self.storage_url + "/storage_schema/validate", json=configuration)
         if res.status_code == 422:
             raise InvalidCloudStorageConfiguration(
@@ -66,13 +78,26 @@ class StorageValidator:
                 message="The data service sent an unexpected response, please try again later",
             )
 
+    def obscure_password_fields_for_storage(self, configuration: dict[str, Any]) -> dict[str, Any]:
+        """Obscures password fields for use with rclone."""
+        res = requests.post(self.storage_url + "/storage_schema/obscure", json=configuration)
+
+        if res.status_code != 200:
+            raise InvalidCloudStorageConfiguration(
+                message=f"Couldn't obscure password fields for configuration: {res.json()}"
+            )
+
+        return res.json()
+
 
 @dataclass
 class DummyStorageValidator:
     def get_storage_by_id(self, user: User, project_id: int, storage_id: str) -> CloudStorageConfig:
         raise NotImplementedError()
 
-    def validate_storage_configuration(self, configuration: dict[str, Any]) -> None:
+    def validate_storage_configuration(
+        self, configuration: dict[str, Any], source_path: str
+    ) -> None:
         raise NotImplementedError()
 
 

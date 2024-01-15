@@ -53,16 +53,6 @@ class InvalidPatchArgumentError(UserInputError):
 
 
 @dataclass
-class DuplicateS3BucketNamesError(UserInputError):
-    """Raised when two or more buckets that are mounted in a session have duplicate names. This
-    is not allowed because the bucket names are used as the mount points in the session.
-    """
-
-    message: str = "The names of all mounted S3 buckets should be unique."
-    code: int = UserInputError.code + 1
-
-
-@dataclass
 class ImageParseError(UserInputError):
     """Raised when an invalid docker image name is provided. If the image name is valid
     but the image cannot be found a MissingResourceError is raised."""

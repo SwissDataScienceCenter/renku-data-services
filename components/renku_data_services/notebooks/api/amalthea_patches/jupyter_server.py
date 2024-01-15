@@ -3,8 +3,8 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List
 
-from renku_notebooks.errors.user import OverriddenEnvironmentVariableError
 from renku_notebooks.config import config
+from renku_notebooks.errors.user import OverriddenEnvironmentVariableError
 
 if TYPE_CHECKING:
     from renku_notebooks.api.classes.server import UserServer

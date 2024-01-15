@@ -19,7 +19,6 @@
 import json
 import logging
 from datetime import datetime, timezone
-from functools import partial
 from pathlib import Path
 
 from flask import Blueprint, current_app, jsonify
@@ -28,7 +27,7 @@ from marshmallow import ValidationError, fields, validate
 from webargs.flaskparser import use_args
 
 from renku_notebooks.api.classes.user import AnonymousUser
-from renku_notebooks.api.schemas.cloud_storage import create_cloud_storage_object
+from renku_notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_notebooks.util.repository import get_status
 
 from ..config import config
@@ -74,10 +73,8 @@ def version():
                 "version": config.version,
                 "data": {
                     "anonymousSessionsEnabled": config.anonymous_sessions_enabled,
-                    "cloudstorageEnabled": {
-                        "s3": config.cloud_storage.s3.enabled,
-                        "azure_blob": config.cloud_storage.azure_blob.enabled,
-                    },
+                    "cloudstorageEnabled": config.cloud_storage.enabled,
+                    "cloudstorageClass": config.cloud_storage.storage_class,
                     "sshEnabled": config.ssh_enabled,
                 },
             }
@@ -321,20 +318,20 @@ def launch_notebook(
 
     if cloudstorage:
         gl_project_id = gl_project.id if gl_project is not None else 0
+        storages = []
         try:
-            cloudstorage = list(
-                map(
-                    partial(
-                        create_cloud_storage_object,
+            for storage in cloudstorage:
+                storages.append(
+                    RCloneStorage.storage_from_schema(
+                        storage,
                         user=user,
                         project_id=gl_project_id,
                         work_dir=server_work_dir.absolute(),
-                    ),
-                    cloudstorage,
+                    )
                 )
-            )
         except ValidationError as e:
             raise UserInputError(f"Couldn't load cloud storage config: {str(e)}")
+        cloudstorage = storages
         mount_points = set(
             s.mount_folder for s in cloudstorage if s.mount_folder and s.mount_folder != "/"
         )
@@ -576,8 +573,7 @@ def server_options(user):
         {
             **config.server_options.ui_choices,
             "cloudstorage": {
-                "s3": {"enabled": config.cloud_storage.s3.enabled},
-                "azure_blob": {"enabled": config.cloud_storage.azure_blob.enabled},
+                "enabled": config.cloud_storage.enabled,
             },
         },
     )

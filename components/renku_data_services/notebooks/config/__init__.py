@@ -47,7 +47,12 @@ class StorageValidatorProto(Protocol):
     ) -> "CloudStorageConfig":
         ...
 
-    def validate_storage_configuration(self, configuration: Dict[str, Any]) -> None:
+    def validate_storage_configuration(
+        self, configuration: Dict[str, Any], source_path: str
+    ) -> None:
+        ...
+
+    def obscure_password_fields_for_storage(self, configuration: dict[str, Any]) -> dict[str, Any]:
         ...
 
 
@@ -249,14 +254,7 @@ k8s {
     renku_namespace = renku
 }
 cloud_storage {
-    s3 {
-        enabled = false
-        read_only = true
-    }
-    azure_blob {
-        enabled = false
-        read_only = true
-    }
+    enabled = false
     mount_folder = /cloudstorage
 }
 anonymous_sessions_enabled = false

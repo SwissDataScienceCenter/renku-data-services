@@ -24,7 +24,7 @@ def main(server: "UserServer") -> List[Dict[str, Any]]:
                         "op": "add",
                         "path": "/statefulset/spec/template/spec/initContainers/2/env/-",
                         "value": {
-                            "name": f"GIT_CLONE_S3_MOUNTS_{i}",
+                            "name": f"GIT_CLONE_STORAGE_MOUNTS_{i}",
                             "value": cloud_storage_request.mount_folder,
                         },
                     },

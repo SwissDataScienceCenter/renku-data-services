@@ -92,7 +92,7 @@ class UserPodResources(Schema):
     usage = fields.Nested(ResourceUsage(), required=False)
 
 
-class LaunchNotebookResponseWithoutS3(Schema):
+class LaunchNotebookResponseWithoutStorage(Schema):
     """
     The response sent after a successful creation of a jupyter server. Or
     if the user tries to create a server that already exists. Used only for
@@ -506,12 +506,12 @@ class LaunchNotebookResponseWithoutS3(Schema):
             },
             "image": server.image,
         }
-        if config.cloud_storage.any_enabled:
+        if config.cloud_storage.enabled:
             output["cloudstorage"] = server.cloudstorage
         return output
 
 
-class LaunchNotebookResponseWithS3(LaunchNotebookResponseWithoutS3):
+class LaunchNotebookResponseWithStorage(LaunchNotebookResponseWithoutStorage):
     """
     The response sent after a successful creation of a jupyter server. Or
     if the user tries to create a server that already exists. Used only for
@@ -531,9 +531,9 @@ class ServersGetResponse(Schema):
     servers = fields.Dict(
         keys=fields.Str(),
         values=fields.Nested(
-            LaunchNotebookResponseWithS3()
-            if config.cloud_storage.any_enabled
-            else LaunchNotebookResponseWithoutS3()
+            LaunchNotebookResponseWithStorage()
+            if config.cloud_storage.enabled
+            else LaunchNotebookResponseWithoutStorage()
         ),
     )
 
@@ -553,7 +553,7 @@ class ServersGetRequest(Schema):
 
 
 NotebookResponse = (
-    LaunchNotebookResponseWithS3
-    if config.cloud_storage.any_enabled
-    else LaunchNotebookResponseWithoutS3
+    LaunchNotebookResponseWithStorage
+    if config.cloud_storage.enabled
+    else LaunchNotebookResponseWithoutStorage
 )

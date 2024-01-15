@@ -1,9 +1,9 @@
 import base64
 import re
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Optional
-from enum import Enum
 
 import requests
 from werkzeug.datastructures import WWWAuthenticate

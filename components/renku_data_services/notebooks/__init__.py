@@ -37,11 +37,7 @@ from .api.notebooks import (
 from .api.schemas.config_server_options import ServerOptionsEndpointResponse
 from .api.schemas.errors import ErrorResponse
 from .api.schemas.logs import ServerLogs
-from .api.schemas.servers_get import (
-    NotebookResponse,
-    ServersGetRequest,
-    ServersGetResponse,
-)
+from .api.schemas.servers_get import NotebookResponse, ServersGetRequest, ServersGetResponse
 from .api.schemas.servers_patch import PatchServerRequest
 from .api.schemas.servers_post import LaunchNotebookRequest
 from .api.schemas.version import VersionResponse
