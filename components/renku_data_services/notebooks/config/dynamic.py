@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Dict, List, Optional, Text, Union
 
 import yaml
@@ -22,6 +23,12 @@ def _parse_value_as_int(val: Any) -> int:
 
 def _parse_value_as_float(val: Any) -> float:
     return float(val)
+
+
+class CPUEnforcement(str, Enum):
+    LAX: str = "lax"  # CPU limit equals 3x cpu request
+    STRICT: str = "strict"  # CPU limit equals cpu request
+    OFF: str = "off"  # no CPU limit at all
 
 
 @dataclass
@@ -195,7 +202,7 @@ class _SessionConfig:
     containers: _SessionContainers
     ssh: _SessionSshConfig
     default_image: Text = "renku/singleuser:latest"
-    enforce_cpu_limits: Union[Text, bool] = False
+    enforce_cpu_limits: CPUEnforcement = CPUEnforcement.OFF
     termination_warning_duration_seconds: int = 12 * 60 * 60
     image_default_workdir: Text = "/home/jovyan"
     node_selector: Text = "{}"

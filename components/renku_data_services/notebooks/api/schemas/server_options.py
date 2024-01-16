@@ -4,8 +4,9 @@ from typing import Any, Callable, Dict, List, Optional
 from marshmallow import Schema, fields, post_load
 
 from ...config import config
-from ...errors.programming import ProgrammingError
+from ...config.dynamic import CPUEnforcement
 from .custom_fields import ByteSizeField, CpuField, GpuField
+from ...errors.programming import ProgrammingError
 
 
 @dataclass
@@ -49,6 +50,7 @@ class ServerOptions:
     priority_class: Optional[str] = None
     node_affinities: List[NodeAffinity] = field(default_factory=list)
     tolerations: List[Toleration] = field(default_factory=list)
+    resource_class_id: Optional[int] = None
 
     def __post_init__(self):
         if self.default_url is None:
@@ -149,6 +151,27 @@ class ServerOptions:
             and self.priority_class == other.priority_class
         )
 
+    def to_k8s_resources(
+        self, enforce_cpu_limits: CPUEnforcement = CPUEnforcement.OFF
+    ) -> Dict[str, Any]:
+        """Convert to the K8s resource requests and limits for cpu, memory and gpus."""
+        cpu_request = float(self.cpu)
+        mem = f"{self.memory}G" if self.gigabytes else self.memory
+        gpu_req = self.gpu
+        gpu = {"nvidia.com/gpu": str(gpu_req)} if gpu_req > 0 else None
+        resources = {
+            "requests": {"memory": mem, "cpu": cpu_request},
+            "limits": {"memory": mem},
+        }
+        if enforce_cpu_limits == CPUEnforcement.LAX:
+            resources["limits"]["cpu"] = 3 * cpu_request
+        elif enforce_cpu_limits == CPUEnforcement.STRICT:
+            resources["limits"]["cpu"] = cpu_request
+        if gpu:
+            resources["requests"] = {**resources["requests"], **gpu}
+            resources["limits"] = {**resources["limits"], **gpu}
+        return resources
+
     @classmethod
     def from_resource_class(cls, data: Dict[str, Any]) -> "ServerOptions":
         """Convert a CRC resource class to server options. CRC users GB for storage and memory
@@ -160,6 +183,7 @@ class ServerOptions:
             storage=data["default_storage"] * 1000000000,
             node_affinities=[NodeAffinity(**a) for a in data.get("node_affinities", [])],
             tolerations=[Toleration(t) for t in data.get("tolerations", [])],
+            resource_class_id=data.get("id"),
         )
 
     @classmethod

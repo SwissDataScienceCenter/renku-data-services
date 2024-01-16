@@ -151,25 +151,6 @@ class UserServer:
                 return True
         return False
 
-    def _get_session_k8s_resources(self):
-        cpu_request = float(self.server_options.cpu)
-        mem = self.server_options.memory
-        gpu_req = self.server_options.gpu
-        gpu = {"nvidia.com/gpu": str(gpu_req)} if gpu_req > 0 else None
-        resources = {
-            "requests": {"memory": mem, "cpu": cpu_request},
-            "limits": {"memory": mem},
-        }
-        if config.sessions.enforce_cpu_limits == "lax":
-            lax_cpu_limit_allowance_factor = 3
-            resources["limits"]["cpu"] = lax_cpu_limit_allowance_factor * cpu_request
-        elif config.sessions.enforce_cpu_limits == "strict":
-            resources["limits"]["cpu"] = cpu_request
-        if gpu:
-            resources["requests"] = {**resources["requests"], **gpu}
-            resources["limits"] = {**resources["limits"], **gpu}
-        return resources
-
     def _get_session_manifest(self):
         """Compose the body of the user session for the k8s operator"""
         patches = list(
@@ -266,7 +247,9 @@ class UserServer:
                     "defaultUrl": self.server_options.default_url,
                     "image": self.image,
                     "rootDir": self.work_dir.absolute().as_posix(),
-                    "resources": self._get_session_k8s_resources(),
+                    "resources": self.server_options.to_k8s_resources(
+                        enforce_cpu_limits=config.sessions.enforce_cpu_limits
+                    ),
                 },
                 "routing": {
                     "host": urlparse(self.server_url).netloc,
@@ -375,6 +358,8 @@ class UserServer:
             f"{prefix}lastActivityDate": "",
             f"{prefix}idleSecondsThreshold": str(self.idle_seconds_threshold),
         }
+        if self.server_options.resource_class_id:
+            annotations[f"{prefix}resourceClassId"] = str(self.server_options.resource_class_id)
         if self.gl_project is not None:
             annotations[f"{prefix}gitlabProjectId"] = str(self.gl_project.id)
             annotations[f"{prefix}repository"] = self.gl_project.web_url

@@ -65,6 +65,7 @@ class _ServersGetEndpointAnnotations:
             "renku.io/username",
             "renku.io/git-host",
             "renku.io/gitlabProjectId",
+            "renku.io/resourceClassId",
             "jupyter.org/servername",
             "jupyter.org/username",
         ]

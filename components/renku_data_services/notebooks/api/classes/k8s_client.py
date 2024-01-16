@@ -53,6 +53,10 @@ class NamespacedK8sClient:
         except ConfigException:
             load_config()
         self._custom_objects = client.CustomObjectsApi(client.ApiClient())
+        self._custom_objects_patch = client.CustomObjectsApi(client.ApiClient())
+        self._custom_objects_patch.api_client.set_default_header(
+            "Content-Type", "application/json-patch+json"
+        )
         self._core_v1 = client.CoreV1Api()
         self._apps_v1 = client.AppsV1Api()
 
@@ -120,9 +124,17 @@ class NamespacedK8sClient:
         server = retry_with_exponential_backoff(lambda x: x is None)(self.get_server)(server_name)
         return server
 
-    def patch_server(self, server_name: str, patch: Dict[str, Any]):
+    def patch_server(self, server_name: str, patch: Dict[str, Any] | List[Dict[str, Any]]):
         try:
-            server = self._custom_objects.patch_namespaced_custom_object(
+            if isinstance(patch, list):
+                # NOTE: The _custom_objects_patch will only accept rfc6902 json-patch.
+                # We can recognize the type of patch because this is the only one that uses a list
+                client = self._custom_objects_patch
+            else:
+                # NOTE: The _custom_objects will accept the usual rfc7386 merge patches
+                client = self._custom_objects
+
+            server = client.patch_namespaced_custom_object(
                 group=self.amalthea_group,
                 version=self.amalthea_version,
                 namespace=self.namespace,
@@ -130,11 +142,30 @@ class NamespacedK8sClient:
                 name=server_name,
                 body=patch,
             )
+
         except ApiException as e:
             logging.exception(f"Cannot patch server {server_name} because of {e}")
             raise PatchServerError()
 
         return server
+
+    def patch_statefulset(
+        self, server_name: str, patch: Dict[str, Any] | List[Dict[str, Any]] | client.V1StatefulSet
+    ) -> client.V1StatefulSet | None:
+        try:
+            ss = self._apps_v1.patch_namespaced_stateful_set(
+                server_name,
+                self.namespace,
+                patch,
+            )
+        except ApiException as err:
+            if err.status == 404:
+                # NOTE: It can happen potentially that another request or something else
+                # deleted the session as this request was going on, in this case we ignore
+                # the missing statefulset
+                return
+            raise
+        return ss
 
     def delete_server(self, server_name: str, forced: bool = False):
         try:
@@ -478,6 +509,15 @@ class K8sClient:
             return self.renku_ns_client.patch_server(server_name=server_name, patch=patch)
         else:
             return self.session_ns_client.patch_server(server_name=server_name, patch=patch)
+
+    def patch_statefulset(
+        self, server_name: str, patch: Dict[str, Any]
+    ) -> client.V1StatefulSet | None:
+        if self.session_ns_client:
+            client = self.session_ns_client
+        else:
+            client = self.renku_ns_client
+        return client.patch_statefulset(server_name=server_name, patch=patch)
 
     def delete_server(self, server_name: str, safe_username: str, forced: bool = False):
         server = self.get_server(server_name, safe_username)
