@@ -35,7 +35,11 @@ class ProjectsBP(CustomBlueprint):
             default_number_of_elements_per_page = 20
 
             args = request.args if request.args else {}
-            page = int(args.get("page", default_page_number))
+            page_parameter = args.get("page", default_page_number)
+            try:
+                page = int(page_parameter)
+            except ValueError:
+                raise errors.ValidationError(message=f"Invalid value for parameter 'page': {page_parameter}")
             per_page = int(args.get("per_page", default_number_of_elements_per_page))
 
             projects, pagination = await self.project_repo.get_projects(user=user, page=page, per_page=per_page)
