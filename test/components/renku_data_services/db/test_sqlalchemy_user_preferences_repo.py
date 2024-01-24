@@ -10,7 +10,7 @@ from hypothesis import HealthCheck, given, settings, target
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
-from renku_data_services.config import Config
+from renku_data_services.app_config import Config
 
 
 @given(project_slug=project_slug_strat)

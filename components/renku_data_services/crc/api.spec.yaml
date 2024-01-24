@@ -4,7 +4,7 @@ info:
   title: Renku Compute Resource Control (CRC) service
   description: |
     Service that provide information about compute resources, resource pools
-    and user acces to them. All errors have the same format as the schema
+    and user access to them. All errors have the same format as the schema
     called ErrorResponse.
   version: v1
 servers:
@@ -1512,7 +1512,7 @@ components:
     NodeAffinity:
       type: object
       additionalProperties: false
-      description: A minimal representation of a node afinity label
+      description: A minimal representation of a node affinity label
       properties:
         key:
           $ref: "#/components/schemas/K8sLabel"

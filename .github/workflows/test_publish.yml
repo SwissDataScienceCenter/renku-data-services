@@ -24,7 +24,9 @@ jobs:
       - name: Tests
         uses: devcontainers/ci@v0.3
         with:
-          runCmd: make tests
+          runCmd: |
+            make style_checks
+            make tests
           push: never
           skipContainerUserIdUpdate: false
           env: |

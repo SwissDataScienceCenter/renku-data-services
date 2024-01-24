@@ -1,9 +1,9 @@
 """Data service app."""
 from sanic import Sanic
 
+from renku_data_services.app_config import Config
 from renku_data_services.base_api.error_handler import CustomErrorHandler
 from renku_data_services.base_api.misc import MiscBP
-from renku_data_services.config import Config
 from renku_data_services.crc import apispec
 from renku_data_services.crc.blueprints import (
     ClassesBP,
@@ -11,10 +11,11 @@ from renku_data_services.crc.blueprints import (
     ResourcePoolsBP,
     ResourcePoolUsersBP,
     UserResourcePoolsBP,
-    UsersBP,
 )
+from renku_data_services.project.blueprints import ProjectsBP
 from renku_data_services.storage.blueprints import StorageBP, StorageSchemaBP
 from renku_data_services.user_preferences.blueprints import UserPreferencesBP
+from renku_data_services.users.blueprints import KCUsersBP
 
 
 def register_all_handlers(app: Sanic, config: Config) -> Sanic:
@@ -35,21 +36,20 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         authenticator=config.authenticator,
         quota_repo=config.quota_repo,
     )
+    users = KCUsersBP(name="users", url_prefix=url_prefix, repo=config.kc_user_repo, authenticator=config.authenticator)
     resource_pools_users = ResourcePoolUsersBP(
-        name="resource_pool_users", url_prefix=url_prefix, repo=config.user_repo, authenticator=config.authenticator
-    )
-    users = UsersBP(
-        name="users",
+        name="resource_pool_users",
         url_prefix=url_prefix,
         repo=config.user_repo,
-        user_store=config.user_store,
         authenticator=config.authenticator,
+        kc_user_repo=config.kc_user_repo,
     )
     user_resource_pools = UserResourcePoolsBP(
         name="user_resource_pools",
         url_prefix=url_prefix,
         repo=config.user_repo,
         authenticator=config.authenticator,
+        kc_user_repo=config.kc_user_repo,
     )
     storage = StorageBP(
         name="storage",
@@ -65,6 +65,14 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         authenticator=config.authenticator,
     )
     misc = MiscBP(name="misc", url_prefix=url_prefix, apispec=config.spec, version=config.version)
+    project = ProjectsBP(
+        name="projects",
+        url_prefix=url_prefix,
+        project_repo=config.project_repo,
+        project_member_repo=config.project_member_repo,
+        authenticator=config.authenticator,
+        user_repo=config.kc_user_repo,
+    )
     app.blueprint(
         [
             resource_pools.blueprint(),
@@ -77,6 +85,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
             storage_schema.blueprint(),
             user_preferences.blueprint(),
             misc.blueprint(),
+            project.blueprint(),
         ]
     )
 

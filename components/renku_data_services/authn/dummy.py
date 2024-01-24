@@ -10,7 +10,7 @@ import renku_data_services.base_models as base_models
 
 
 class DummyUserStore:
-    """A dummy adapter for keycloak. By default it will create and return users that do not exist."""
+    """A dummy adapter for keycloak. By default, it will create and return users that do not exist."""
 
     def __init__(self, *, user_always_exists: bool = True):
         self._users: Dict[str, base_models.User] = {}
@@ -39,16 +39,30 @@ class DummyAuthenticator:
 
     token_field = "Authorization"  # nosec: B105
 
-    async def authenticate(self, access_token: str, request: Request) -> base_models.APIUser:
-        """Indicates whether the user has sucessfully logged in."""
+    @staticmethod
+    async def authenticate(access_token: str, request: Request) -> base_models.APIUser:
+        """Indicates whether the user has successfully logged in."""
         user_props = {}
         try:
             user_props = json.loads(access_token)
         except:  # noqa: E722 # nosec: B110
             pass
+
+        is_set = bool(
+            user_props.get("id")
+            or user_props.get("full_name")
+            or user_props.get("is_admin") is not None
+            or user_props.get("first_name")
+            or user_props.get("last_name")
+            or user_props.get("email")
+        )
+
         return base_models.APIUser(
             is_admin=user_props.get("is_admin", False),  # type: ignore[arg-type]
-            id=user_props.get("id") if user_props.get("id") else "some-id",
+            id=user_props.get("id", "some-id") if is_set else None,
             access_token=access_token,
-            name=user_props.get("name") if user_props.get("name") else "John Doe",
+            first_name=user_props.get("first_name", "John") if is_set else None,
+            last_name=user_props.get("last_name", "Doe") if is_set else None,
+            email=user_props.get("email", "john.doe@gmail.com") if is_set else None,
+            full_name=user_props.get("full_name", "John Doe") if is_set else None,
         )

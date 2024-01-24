@@ -8,7 +8,7 @@ from hypothesis import settings
 from pytest_postgresql import factories
 
 import renku_data_services.base_models as base_models
-from renku_data_services.config import Config as DataConfig
+from renku_data_services.app_config import Config as DataConfig
 from renku_data_services.migrations.core import run_migrations_for_app
 
 settings.register_profile("ci", deadline=400, max_examples=5)
@@ -35,7 +35,10 @@ def init_db(**kwargs):
 
     run_migrations_for_app("storage")
     run_migrations_for_app("resource_pools")
+    run_migrations_for_app("projects")
+    run_migrations_for_app("authz")
     run_migrations_for_app("user_preferences")
+    run_migrations_for_app("users")
 
     if dummy_stores:
         os.environ["DUMMY_STORES"] = dummy_stores
@@ -85,7 +88,13 @@ def app_config(postgresql, monkeypatch) -> Iterator[DataConfig]:
 @pytest.fixture
 def admin_user() -> base_models.APIUser:
     return base_models.APIUser(
-        is_admin=True, id="some-random-id-123456", access_token="some-access-token"
+        is_admin=True,
+        id="some-random-id-123456",
+        access_token="some-access-token",
+        full_name="Admin Adminson",
+        first_name="Admin",
+        last_name="Adminson",
+        email="admin@gmail.com",
     )  # nosec B106
 
 

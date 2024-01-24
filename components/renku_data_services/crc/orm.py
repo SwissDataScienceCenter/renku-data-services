@@ -19,6 +19,8 @@ class BaseORM(MappedAsDataclass, DeclarativeBase):
     metadata = metadata_obj
 
 
+# This table indicates which users have access to which resource pools
+# An entry in the table indicates that the user can access that resource pool.
 resource_pools_users = Table(
     "resource_pools_users",
     BaseORM.metadata,
@@ -27,8 +29,16 @@ resource_pools_users = Table(
 )
 
 
-class UserORM(BaseORM):
-    """Stores the Keycloak user ID."""
+class RPUserORM(BaseORM):
+    """
+    Stores the Keycloak user ID for controlling user access to resource pools.
+
+    Used in combination with the `resource_pool_users` table this table provides information
+    about which user ID (based on Keycloak IDs) has access to which resource pools.
+    In addition this table stores the indication of whether a specific user is expressly
+    prohibited from accessing the default resource pool. If a user cannot access the default
+    resource pool, the no_default_access field in this table for the specific user is set to true.
+    """
 
     __tablename__ = "users"
     keycloak_id: Mapped[str] = mapped_column(String(50), unique=True, index=True)
@@ -126,7 +136,7 @@ class ResourcePoolORM(BaseORM):
     __tablename__ = "resource_pools"
     name: Mapped[str] = mapped_column(String(40), index=True)
     quota: Mapped[Optional[str]] = mapped_column(String(63), index=True, default=None)
-    users: Mapped[List["UserORM"]] = relationship(
+    users: Mapped[List["RPUserORM"]] = relationship(
         secondary=resource_pools_users, back_populates="resource_pools", default_factory=list
     )
     classes: Mapped[List["ResourceClassORM"]] = relationship(

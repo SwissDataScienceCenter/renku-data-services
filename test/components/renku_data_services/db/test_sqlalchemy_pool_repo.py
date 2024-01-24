@@ -17,7 +17,7 @@ from pydantic import ValidationError
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
-from renku_data_services.config import Config
+from renku_data_services.app_config import Config
 from renku_data_services.crc import models
 
 
@@ -342,7 +342,7 @@ async def test_insert_class_in_nonexisting_rp(
 
 
 @given(new_quota_id=a_uuid_string)
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_update_quota_in_nonexisting_rp(app_config: Config, new_quota_id: str, admin_user: base_models.APIUser):
     with pytest.raises(errors.MissingResourceError):
@@ -377,7 +377,7 @@ async def test_resource_pools_access_control(
         assert loggedin_user.id is not None
         user_to_add = base_models.User(keycloak_id=loggedin_user.id)
         updated_users = await user_repo.update_resource_pool_users(
-            admin_user, inserted_private_rp.id, [user_to_add], append=True
+            admin_user, inserted_private_rp.id, [loggedin_user.id], append=True
         )
 
         assert user_to_add in [remove_id_from_user(user) for user in updated_users]
