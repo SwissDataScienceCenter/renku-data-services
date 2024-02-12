@@ -73,6 +73,7 @@ schemathesis = "^3.19.0"
 pytest-asyncio = "^0.21.1"
 pytest-postgresql = "^5.0.0"
 types-urllib3 = "^1.26.25.14"
+dataclasses-avroschema = {extras = ["pydantic"], version = "^0.56.2"}
 
 [build-system]
 requires = ["poetry-core"]

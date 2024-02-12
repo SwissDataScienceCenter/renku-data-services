@@ -53,6 +53,7 @@ deepmerge = "^1.1.0"
 authlib = "^1.2.1"
 redis = "^5.0.1"
 [tool.poetry.group.dev.dependencies]
+dataclasses-avroschema = {extras = ["pydantic"], version = "^0.56.2"}
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
