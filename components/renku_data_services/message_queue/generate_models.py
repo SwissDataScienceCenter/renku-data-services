@@ -1,9 +1,10 @@
 """Script to generate python models from avro schemas."""
 
-import os
 import pathlib
 
+import pyavro_gen.codewriters.core
 import pyavro_gen.schema_and_classes_container
+from avro_preprocessor.avro_paths import shutil
 
 
 # monkey patch writer to get correct namespaces
@@ -50,7 +51,7 @@ def generate_schemas():
 
     AVRO_GENERATOR.process(None)
     # pyavro creates mock classes for tests that we don't need and that have broken imports anyways
-    os.rmdir(root / "models_test")
+    shutil.rmtree(root / "avro_models_test", ignore_errors=True)
 
 
 generate_schemas()
