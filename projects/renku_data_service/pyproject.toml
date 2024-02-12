@@ -29,6 +29,7 @@ packages = [
   { include = "renku_data_services/authz_migrations", from = "../../components" },
   { include = "renku_data_services/project_migrations", from = "../../components" },
   { include = "renku_data_services/project", from = "../../components" },
+  { include = "renku_data_services/message_queue", from = "../../components" },
 ]
 
 [tool.poetry.dependencies]
@@ -50,6 +51,7 @@ psycopg = { version = "^3.1.10", extras = ["binary"] }
 urllib3 = "^1.26.16"
 deepmerge = "^1.1.0"
 authlib = "^1.2.1"
+redis = "^5.0.1"
 [tool.poetry.group.dev.dependencies]
 
 [build-system]

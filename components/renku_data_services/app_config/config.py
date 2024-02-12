@@ -41,6 +41,7 @@ from renku_data_services.db_config import DBConfig
 from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
+from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.user_preferences.config import UserPreferencesConfig
@@ -96,6 +97,7 @@ class Config:
     quota_repo: QuotaRepository
     user_preferences_config: UserPreferencesConfig
     db: DBConfig
+    redis: RedisConfig
     gitlab_client: base_models.GitlabAPIProtocol
     kc_api: IKeycloakAPI
     spec: Dict[str, Any] = field(init=False, default_factory=dict)
@@ -231,6 +233,7 @@ class Config:
         max_pinned_projects = int(os.environ.get(f"{prefix}MAX_PINNED_PROJECTS", "10"))
         user_preferences_config = UserPreferencesConfig(max_pinned_projects=max_pinned_projects)
         db = DBConfig.from_env(prefix)
+        redis = RedisConfig.from_env(prefix)
         kc_api: IKeycloakAPI
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
@@ -286,5 +289,6 @@ class Config:
             server_options_file=server_options_file,
             user_preferences_config=user_preferences_config,
             db=db,
+            redis=redis,
             kc_api=kc_api,
         )
