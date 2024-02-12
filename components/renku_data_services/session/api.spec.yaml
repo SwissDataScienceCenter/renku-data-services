@@ -136,10 +136,10 @@ components:
           $ref: "#/components/schemas/Description"
         environment_id:
           $ref: "#/components/schemas/EnvironmentId"
+        project_id:
+          $ref: "#/components/schemas/Ulid"
         status:
           $ref: "#/components/schemas/Status"
-        tags:
-          $ref: "#/components/schemas/TagsList"
       required:
         - "id"
         - "name"
@@ -153,10 +153,6 @@ components:
         description: "R compute session"
         status: "running"
         environment_id: "01AN4Z79ZS6XX96588FDX0H099"
-        tags:
-          - "renku"
-          - "r"
-          - "session"
     SessionPost:
       description: Metadata to start a session
       type: object
@@ -168,11 +164,12 @@ components:
           $ref: "#/components/schemas/Description"
         environment_id:
           $ref: "#/components/schemas/EnvironmentId"
-        tags:
-          $ref: "#/components/schemas/TagsList"
+        project_id:
+          $ref: "#/components/schemas/Ulid"
       required:
         - "name"
         - "environment_id"
+        - "project_id"
     SessionPatch:
       type: object
       description: Update a session
@@ -182,8 +179,6 @@ components:
           $ref: "#/components/schemas/Name"
         description:
           $ref: "#/components/schemas/Description"
-        tags:
-          $ref: "#/components/schemas/TagsList"
     Ulid:
       description: ULID identifier
       type: string
@@ -205,18 +200,6 @@ components:
           FROM ${RENKU_BASE_IMAGE} as builder
           ARG RENKU_VERSION=2.7.0
           ...
-    TagsList:
-      description: A list of tags
-      type: array
-      items:
-        $ref: "#/components/schemas/Tag"
-      minItems: 0
-    Tag:
-      description: A tag
-      type: string
-      minLength: 1
-      maxLength: 99
-      example: "my renku session"
     CreationDate:
       description: The date and time the session was created (time is always in UTC)
       type: string
