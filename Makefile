@@ -20,7 +20,7 @@ schemas:
 
 avro:
 	@echo "generating message queues classes from avro schemas"
-	git subtree pull --prefix components/renku_data_services/message_queue/schemas/ https://github.com/SwissDataScienceCenter/renku-schema.git main --squash
+	#git subtree pull --prefix components/renku_data_services/message_queue/schemas/ https://github.com/SwissDataScienceCenter/renku-schema.git main --squash
 	poetry run python components/renku_data_services/message_queue/generate_models.py
 
 style_checks:

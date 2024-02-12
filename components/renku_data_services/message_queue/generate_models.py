@@ -1,26 +1,56 @@
 """Script to generate python models from avro schemas."""
 
-import json
 import os
 import pathlib
 
-from dataclasses_avroschema import ModelGenerator
+import pyavro_gen.schema_and_classes_container
 
-root = pathlib.Path(__file__).parent.resolve()
-schema_folder = root / "schemas"
-target = root / "models.py"
 
-schemas = list()
+# monkey patch writer to get correct namespaces
+def getv(self):
+    """Fake getter."""
+    return "renku_data_services.message_queue.avro_models"
 
-for path, _, files in os.walk(schema_folder):
-    for file in files:
-        if not file.endswith("avsc"):
-            continue
-        with open(pathlib.Path(path) / file) as f:
-            schemas.append(json.loads(f.read()))
 
-model_generator = ModelGenerator()
-result = model_generator.render_module(schemas=schemas)
+def setv(self, value) -> None:
+    """Fake setter."""
+    pass
 
-with open(target) as f:
-    f.write(result)
+
+def deletev(self):
+    """Fake delete."""
+    pass
+
+
+pyavro_gen.schema_and_classes_container.SchemaAndClassesContainer.output_prefix = property(
+    getv, setv, deletev, "output_prefix"
+)
+
+
+def generate_schemas():
+    """Generate pythons files from avro."""
+    from avro_preprocessor.avro_paths import AvroPaths
+    from pyavro_gen.generator import AvroGenerator
+
+    root = pathlib.Path(__file__).parent.resolve()
+    schema_folder = root / "schemas"
+    models_folder = root / "avro_models"
+
+    AVRO_GENERATOR: AvroGenerator = AvroGenerator(
+        AvroPaths(
+            input_path=str(schema_folder),
+            output_path=str(models_folder),
+            base_namespace="io.renku",
+            types_namespace=None,
+            rpc_namespace=None,
+            input_schema_file_extension="avsc",
+        ),
+        verbose=True,
+    )
+
+    AVRO_GENERATOR.process(None)
+    # pyavro creates mock classes for tests that we don't need and that have broken imports anyways
+    os.rmdir(root / "models_test")
+
+
+generate_schemas()
