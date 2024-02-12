@@ -2,6 +2,7 @@
   "type": "record",
   "name": "Header",
   "namespace":"io.renku.v1",
+  "doc":"common headers for messages",
   "fields": [
     {
       "name": "source",

@@ -3,14 +3,17 @@ from datetime import datetime
 from typing import ClassVar, Dict, List, Optional
 
 from dataclasses_avroschema import AvroModel
+from renku_data_services.message_queue.avro_models.io.renku.v1 import \
+    Visibility
 from undictify import type_checked_constructor
-
-from renku_data_services.message_queue.avro_models.io.renku.v1 import Visibility
 
 
 @type_checked_constructor()
 @dataclass
 class ProjectCreated(AvroModel):
+    """
+    Event raised when a new project is created
+    """
     id: str
     name: str
     slug: str
@@ -22,12 +25,11 @@ class ProjectCreated(AvroModel):
     members: List[str]
 
     #: The Avro Schema associated to this class
-    _schema: ClassVar[
-        str
-    ] = """{
+    _schema: ClassVar[str] = """{
         "type": "record",
         "name": "ProjectCreated",
         "namespace": "io.renku.v1",
+        "doc": "Event raised when a new project is created",
         "fields": [
             {
                 "name": "id",
@@ -86,7 +88,7 @@ class ProjectCreated(AvroModel):
         """
         Returns an Avro-json representation of this instance.
         """
-        return self.serialize(serialization_type="avro-json").decode("ascii")
+        return self.serialize(serialization_type='avro-json').decode('ascii')
 
     def to_dict(self) -> Dict:
         """
@@ -95,7 +97,10 @@ class ProjectCreated(AvroModel):
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, the_dict: Dict) -> "ProjectCreated":
+    def from_dict(
+            cls,
+            the_dict: Dict
+    ) -> 'ProjectCreated':
         """
         Returns an instance of this class from a dictionary.
 

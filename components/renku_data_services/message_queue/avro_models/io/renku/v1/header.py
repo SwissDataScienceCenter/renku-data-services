@@ -9,6 +9,9 @@ from undictify import type_checked_constructor
 @type_checked_constructor()
 @dataclass
 class Header(AvroModel):
+    """
+    common headers for messages
+    """
     source: str
     type: str
     dataContentType: str
@@ -17,12 +20,11 @@ class Header(AvroModel):
     requestId: str
 
     #: The Avro Schema associated to this class
-    _schema: ClassVar[
-        str
-    ] = """{
+    _schema: ClassVar[str] = """{
         "type": "record",
         "name": "Header",
         "namespace": "io.renku.v1",
+        "doc": "common headers for messages",
         "fields": [
             {
                 "name": "source",
@@ -58,7 +60,7 @@ class Header(AvroModel):
         """
         Returns an Avro-json representation of this instance.
         """
-        return self.serialize(serialization_type="avro-json").decode("ascii")
+        return self.serialize(serialization_type='avro-json').decode('ascii')
 
     def to_dict(self) -> Dict:
         """
@@ -67,7 +69,10 @@ class Header(AvroModel):
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, the_dict: Dict) -> "Header":
+    def from_dict(
+            cls,
+            the_dict: Dict
+    ) -> 'Header':
         """
         Returns an instance of this class from a dictionary.
 
