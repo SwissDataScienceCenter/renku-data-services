@@ -1,6 +1,7 @@
 {
   "type": "record",
   "name": "Header",
+  "namespace":"io.renku.v1",
   "fields": [
     {
       "name": "source",
