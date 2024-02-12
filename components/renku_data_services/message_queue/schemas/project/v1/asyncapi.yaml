@@ -1,0 +1,33 @@
+asyncapi: 3.0.0
+info:
+  title: Project Events
+  version: 0.0.1
+servers:
+  redis:
+    url: renku-redis
+    protocol: redis
+    description: Renku Redis Instance
+channels:
+  project.created:
+    publish:
+      messages:
+        projectCreated:
+          schemaFormat: "application/vnd.apache.avro;version=1.9.0"
+          payload:
+            type: object
+            properties:
+              payload:
+              - $ref: './events/created.avsc#/ProjectCreated'
+          traits:
+          - $ref: '#/components/messageTraits/headers'
+        
+components:
+  messageTraits:
+    headers:
+      payload:
+        type: object
+        properties:
+          id:
+            type: string
+          headers:
+            - $ref: '../../common/v1/headers.avsc#/Header'

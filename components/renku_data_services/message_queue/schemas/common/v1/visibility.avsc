@@ -1,0 +1,8 @@
+{
+  "type": "enum",
+  "name": "Visibility",
+  "symbols": [
+    "PUBLIC",
+    "PRIVATE"
+  ]
+}

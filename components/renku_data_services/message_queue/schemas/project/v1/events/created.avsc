@@ -1,0 +1,56 @@
+{
+  "type": "record",
+  "name": "ProjectCreated",
+  "fields": [
+    {
+      "name":"id",
+      "type":"string"
+    },
+    {
+      "name": "name",
+      "type": "string"
+    },
+    {
+      "name": "slug",
+      "type": "string"
+    },
+    {
+      "name": "repositories",
+      "type": {
+        "type": "array",
+        "items": "string"
+      },
+      "default": []
+    },
+    {
+      "name": "visibility",
+      "type": "Visibility"
+    },
+    {
+      "name": "description",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "name": "createdBy",
+      "type": "string"
+    },
+    {
+      "name": "creationDate",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
+    },
+    {
+      "name": "members",
+      "type": {
+        "type": "array",
+        "items": "string"
+      },
+      "default": []
+    }
+  ]
+}
