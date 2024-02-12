@@ -1,6 +1,7 @@
 {
   "type": "record",
   "name": "ProjectCreated",
+  "namespace":"io.renku.v1",
   "fields": [
     {
       "name":"id",
@@ -24,7 +25,7 @@
     },
     {
       "name": "visibility",
-      "type": "Visibility"
+      "type": "io.renku.v1.Visibility"
     },
     {
       "name": "description",
