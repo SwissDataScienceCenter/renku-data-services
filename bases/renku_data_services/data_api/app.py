@@ -13,6 +13,7 @@ from renku_data_services.crc.blueprints import (
     UserResourcePoolsBP,
 )
 from renku_data_services.project.blueprints import ProjectsBP
+from renku_data_services.session.blueprints import SessionsBP
 from renku_data_services.storage.blueprints import StorageBP, StorageSchemaBP
 from renku_data_services.user_preferences.blueprints import UserPreferencesBP
 from renku_data_services.users.blueprints import KCUsersBP
@@ -73,6 +74,13 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         authenticator=config.authenticator,
         user_repo=config.kc_user_repo,
     )
+    sessions = SessionsBP(
+        name="sessions",
+        url_prefix=url_prefix,
+        session_repo=config.session_repo,
+        authenticator=config.authenticator,
+        user_repo=config.kc_user_repo,
+    )
     app.blueprint(
         [
             resource_pools.blueprint(),
@@ -86,6 +94,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
             user_preferences.blueprint(),
             misc.blueprint(),
             project.blueprint(),
+            sessions.blueprint(),
         ]
     )
 

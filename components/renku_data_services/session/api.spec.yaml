@@ -138,20 +138,16 @@ components:
           $ref: "#/components/schemas/EnvironmentId"
         project_id:
           $ref: "#/components/schemas/Ulid"
-        status:
-          $ref: "#/components/schemas/Status"
       required:
         - "id"
         - "name"
         - "creation_date"
         - "environment_id"
-        - "status"
       example:
         id: "01AN4Z79ZS5XN0F25N3DB94T4R"
         name: "Renku R Session"
         creation_date: "2023-11-01T17:32:28Z"
         description: "R compute session"
-        status: "running"
         environment_id: "01AN4Z79ZS6XX96588FDX0H099"
     SessionPost:
       description: Metadata to start a session
@@ -179,6 +175,8 @@ components:
           $ref: "#/components/schemas/Name"
         description:
           $ref: "#/components/schemas/Description"
+        environment_id:
+          $ref: "#/components/schemas/EnvironmentId"
     Ulid:
       description: ULID identifier
       type: string
@@ -209,16 +207,6 @@ components:
       description: A description for session
       type: string
       maxLength: 500
-    Status:
-      description: Session's status
-      type: string
-      enum:
-        - inactive
-        - launching
-        - running
-        - error
-        - paused
-        - stopping
     ErrorResponse:
       type: object
       properties:
