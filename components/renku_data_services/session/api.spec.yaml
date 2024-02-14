@@ -1,7 +1,7 @@
 openapi: 3.0.2
 info:
   title: Renku 1.0 Environment and Session Management Service
-  description: >
+  description: |
     Service that allows creating, deleting, and managing Renku 1.0 environments
     and sessions.
   version: 0.1.0
