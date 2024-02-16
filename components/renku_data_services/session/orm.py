@@ -42,7 +42,7 @@ class SessionEnvironmentORM(BaseORM):
     description: Mapped[Optional[str]] = mapped_column("description", String(500))
     """Human-readable description of the session environment."""
 
-    container_image: Mapped[Optional[str]] = mapped_column("container_image", String(500))
+    container_image: Mapped[str] = mapped_column("container_image", String(500))
     """Container image repository and tag."""
 
     @classmethod
@@ -58,7 +58,7 @@ class SessionEnvironmentORM(BaseORM):
 
     def dump(self) -> models.SessionEnvironment:
         """Create a session environment model from the SessionEnvironmentORM."""
-        return models.Project(
+        return models.SessionEnvironment(
             id=self.id,
             name=self.name,
             created_by=models.Member(id=self.created_by_id),
@@ -102,7 +102,7 @@ class SessionLauncherORM(BaseORM):
     )
     """Id of the project this session belongs to."""
 
-    environment_id: Mapped[Optional[int]] = mapped_column(
+    environment_id: Mapped[Optional[str]] = mapped_column(
         "environment_id", ForeignKey(SessionEnvironmentORM.id), default=None, nullable=True, index=True
     )
     """Id of the session environment."""
@@ -117,11 +117,13 @@ class SessionLauncherORM(BaseORM):
             description=launcher.description,
             environment_kind=launcher.environment_kind,
             container_image=launcher.container_image,
-            project_id=launcher.project.id,
-            environment_id=launcher.environment.id,
+            project=ProjectORM.load(launcher.project),
+            environment=SessionEnvironmentORM.load(launcher.environment) if launcher.environment else None,
+            project_id=launcher.project.id or "",
+            environment_id=launcher.environment.id if launcher.environment else None,
         )
 
-    def dump(self) -> models.Project:
+    def dump(self) -> models.SessionLauncher:
         """Create a session launcher model from the SessionLauncherORM."""
         return models.SessionLauncher(
             id=self.id,
@@ -131,6 +133,6 @@ class SessionLauncherORM(BaseORM):
             description=self.description,
             environment_kind=self.environment_kind,
             container_image=self.container_image,
-            project=self.project,
-            environment=self.environment,
+            project=self.project.dump(),
+            environment=self.environment.dump() if self.environment else None,
         )

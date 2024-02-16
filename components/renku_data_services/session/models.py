@@ -30,30 +30,30 @@ class SessionEnvironment(BaseModel):
     id: Optional[str]
     name: str
     created_by: Member
+    container_image: str
     creation_date: Optional[datetime] = None
     description: Optional[str] = None
-    container_image: Optional[str] = None
 
-    @classmethod
-    def from_dict(cls, data: Dict) -> "SessionEnvironment":
-        """Create the model from a plain dictionary."""
-        if "name" not in data:
-            raise errors.ValidationError(message="'name' not set")
-        if "created_by" not in data:
-            raise errors.ValidationError(message="'created_by' not set")
-        if not isinstance(data["created_by"], Member):
-            raise errors.ValidationError(message="'created_by' must be an instance of 'Member'")
-        if "container_image" not in data:
-            raise errors.ValidationError(message="'container_image' not set")
+    # @classmethod
+    # def from_dict(cls, data: Dict) -> "SessionEnvironment":
+    #     """Create the model from a plain dictionary."""
+    #     if "name" not in data:
+    #         raise errors.ValidationError(message="'name' not set")
+    #     if "created_by" not in data:
+    #         raise errors.ValidationError(message="'created_by' not set")
+    #     if not isinstance(data["created_by"], Member):
+    #         raise errors.ValidationError(message="'created_by' must be an instance of 'Member'")
+    #     if "container_image" not in data:
+    #         raise errors.ValidationError(message="'container_image' not set")
 
-        return cls(
-            id=data.get("id"),
-            name=data["name"],
-            created_by=data["created_by"],
-            creation_date=data.get("creation_date") or datetime.now(timezone.utc).replace(microsecond=0),
-            description=data.get("description"),
-            container_image=data["container_image"],
-        )
+    #     return cls(
+    #         id=data.get("id"),
+    #         name=data["name"],
+    #         created_by=data["created_by"],
+    #         creation_date=data.get("creation_date") or datetime.now(timezone.utc).replace(microsecond=0),
+    #         description=data.get("description"),
+    #         container_image=data["container_image"],
+    #     )
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -71,7 +71,7 @@ class SessionLauncher(BaseModel):
     container_image: Optional[str] = None
 
     @classmethod
-    def from_dict(cls, data: Dict) -> "SessionEnvironment":
+    def from_dict(cls, data: Dict) -> "SessionLauncher":
         """Create the model from a plain dictionary."""
         if "project" not in data:
             raise errors.ValidationError(message="'project' not set")
