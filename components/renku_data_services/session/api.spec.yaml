@@ -343,14 +343,18 @@ components:
           $ref: "#/components/schemas/CreationDate"
         description:
           $ref: "#/components/schemas/Description"
+        environment_kind:
+          $ref: "#/components/schemas/EnvironmentKind"
         environment_id:
           $ref: "#/components/schemas/EnvironmentId"
+        container_image:
+          $ref: "#/components/schemas/ContainerImage"
       required:
         - id
         - project_id
         - name
         - creation_date
-        - environment_id
+        - environment_kind
       example:
         id: 01AN4Z79ZS5XN0F25N3DB94T4R
         project_id: 01AN4Z79ZS5XN0F25N3DB94T4R
@@ -369,12 +373,16 @@ components:
           $ref: "#/components/schemas/Ulid"
         description:
           $ref: "#/components/schemas/Description"
+        environment_kind:
+          $ref: "#/components/schemas/EnvironmentKind"
         environment_id:
           $ref: "#/components/schemas/EnvironmentId"
+        container_image:
+          $ref: "#/components/schemas/ContainerImage"
       required:
         - name
         - project_id
-        - environment_id
+        - environment_kind
     LauncherPatch:
       type: object
       description: Update a session launcher
@@ -384,8 +392,12 @@ components:
           $ref: "#/components/schemas/Name"
         description:
           $ref: "#/components/schemas/Description"
+        environment_kind:
+          $ref: "#/components/schemas/EnvironmentKind"
         environment_id:
           $ref: "#/components/schemas/EnvironmentId"
+        container_image:
+          $ref: "#/components/schemas/ContainerImage"
     SessionStart:
       type: object
       description: Start a session
@@ -406,13 +418,18 @@ components:
       minLength: 1
       maxLength: 99
       example: My Renku Session :)
+    EnvironmentKind:
+      description: Kind of environment to use
+      type: string
+      enum:
+        - global_environment
+        - container_image
+      example: container_image
     EnvironmentId:
-      description: >-
-        Id of the environment to use, or a container image reference
+      description: Id of the environment to use
       type: string
       minLength: 1
-      example: |
-        renku/renkulab-py:3.10-0.18.1
+      example: 01AN4Z79ZS6XX96588FDX0H099
     CreationDate:
       description: The date and time the session was created (time is always in UTC)
       type: string

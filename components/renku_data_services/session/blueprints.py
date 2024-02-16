@@ -14,6 +14,8 @@ from renku_data_services.session import apispec, models
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.users.db import UserRepo
 
+# from renku_data_services.project.db import ProjectRepository
+
 
 @dataclass(kw_only=True)
 class SessionsBP(CustomBlueprint):
