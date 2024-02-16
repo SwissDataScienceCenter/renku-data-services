@@ -61,8 +61,9 @@ class SessionRepository:
         environment = schemas.SessionEnvironmentORM.load(new_environment)
 
         async with self.session_maker() as session:
-            session.add(environment)
-            return environment.dump()
+            async with session.begin():
+                session.add(environment)
+                return environment.dump()
 
     async def update_environment(
         self, user: base_models.APIUser, environment_id: str, **kwargs
