@@ -30,7 +30,7 @@ class SessionsBP(CustomBlueprint):
         async def _get_all(_: Request, *, user: base_models.APIUser):
             sessions = await self.session_repo.get_sessions(user=user)
             return json(
-                [apispec.Session.model_validate(p).model_dump(exclude_none=True, mode="json") for p in sessions], 201
+                [apispec.Session.model_validate(p).model_dump(exclude_none=True, mode="json") for p in sessions], 200
             )
 
         return "/sessions", ["GET"], _get_all

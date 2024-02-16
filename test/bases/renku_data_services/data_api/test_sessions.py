@@ -127,7 +127,7 @@ async def test_get_all_sessions(create_project, create_session, sanic_client, us
 
     _, response = await sanic_client.get("/api/data/sessions", headers=user_headers)
 
-    assert response.status_code == 201, response.text
+    assert response.status_code == 200, response.text
     sessions = response.json
 
     assert {p["name"] for p in sessions} == {"Session 1", "Session 2", "Session 3"}
@@ -155,7 +155,7 @@ async def test_delete_project(create_project, create_session, sanic_client, user
     # Get all sessions
     _, response = await sanic_client.get("/api/data/sessions", headers=user_headers)
 
-    assert response.status_code == 201, response.text
+    assert response.status_code == 200, response.text
     assert {p["name"] for p in response.json} == {"Session 1", "Session 2", "Session 4", "Session 5"}
 
 
