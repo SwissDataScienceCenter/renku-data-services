@@ -74,7 +74,6 @@ class SessionEnvironmentsBP(CustomBlueprint):
         """Delete a specific session environment."""
 
         @authenticate(self.authenticator)
-        @validate(json=apispec.EnvironmentPatch)
         async def _delete(_: Request, environment_id: str, user: base_models.APIUser):
             await self.session_repo.delete_environment(user=user, environment_id=environment_id)
             return HTTPResponse(status=204)
