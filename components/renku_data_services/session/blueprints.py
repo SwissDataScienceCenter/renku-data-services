@@ -10,7 +10,6 @@ from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.session import apispec
 from renku_data_services.session.db import SessionRepository
-from renku_data_services.users.db import UserRepo
 
 
 @dataclass(kw_only=True)
@@ -18,7 +17,6 @@ class SessionEnvironmentsBP(CustomBlueprint):
     """Handlers for manipulating session environments."""
 
     session_repo: SessionRepository
-    user_repo: UserRepo
     authenticator: base_models.Authenticator
 
     def get_all(self) -> BlueprintFactoryResponse:
@@ -82,7 +80,6 @@ class SessionLaunchersBP(CustomBlueprint):
     """Handlers for manipulating session launcher."""
 
     session_repo: SessionRepository
-    user_repo: UserRepo
     authenticator: base_models.Authenticator
 
     def get_all(self) -> BlueprintFactoryResponse:
