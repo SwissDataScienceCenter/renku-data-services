@@ -177,6 +177,19 @@ class SessionRepository:
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
 
+        launcher_model = models.NewSessionLauncher(
+            name=new_launcher.name,
+            project_id=new_launcher.project_id,
+            description=new_launcher.description,
+            environment_kind=new_launcher.environment_kind,
+            environment_id=new_launcher.environment_id,
+            container_image=new_launcher.container_image,
+            created_by=models.Member(id=user.id),
+            creation_date=datetime.now(timezone.utc).replace(microsecond=0),
+        )
+
+        models.NewSessionLauncher.model_validate(launcher_model)
+
         async with self.session_maker() as session:
             async with session.begin():
                 res = await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
@@ -198,20 +211,8 @@ class SessionRepository:
                                 does not exist or you do not have access to it."
                         )
 
-                launcher_model = models.NewSessionLauncher(
-                    name=new_launcher.name,
-                    project_id=new_launcher.project_id,
-                    description=new_launcher.description,
-                    environment_kind=new_launcher.environment_kind,
-                    environment_id=new_launcher.environment_id,
-                    container_image=new_launcher.container_image,
-                    created_by=models.Member(id=user.id),
-                    creation_date=datetime.now(timezone.utc).replace(microsecond=0),
-                )
-
-                models.NewSessionLauncher.model_validate(launcher_model)
-
                 launcher = schemas.SessionLauncherORM.load(launcher_model)
+                session.add(launcher)
                 return launcher.dump()
 
     async def update_launcher(self, user: base_models.APIUser, launcher_id: str, **kwargs) -> models.SessionLauncher:
