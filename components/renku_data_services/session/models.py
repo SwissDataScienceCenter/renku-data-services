@@ -6,7 +6,6 @@ from datetime import datetime
 from pydantic import BaseModel, model_validator
 
 from renku_data_services import errors
-from renku_data_services.session import apispec
 from renku_data_services.session.apispec import EnvironmentKind
 
 
@@ -17,25 +16,41 @@ class Member(BaseModel):
     id: str
 
 
-@dataclass(eq=True, kw_only=True)
-class SessionEnvironment(apispec.Environment):
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionEnvironment(BaseModel):
     """Session environment model."""
 
+    id: str
+    name: str
+    creation_date: datetime
+    description: str | None
+    container_image: str
     created_by: Member
 
 
-@dataclass(eq=True, kw_only=True)
-class NewSessionEnvironment(apispec.EnvironmentPost):
+@dataclass(frozen=True, eq=True, kw_only=True)
+class NewSessionEnvironment(BaseModel):
     """New session environment model."""
 
-    created_by: Member
+    name: str
     creation_date: datetime
+    description: str | None
+    container_image: str
+    created_by: Member
 
 
-@dataclass(eq=True, kw_only=True)
-class SessionLauncher(apispec.Launcher):
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLauncher(BaseModel):
     """Session launcher model."""
 
+    id: str
+    project_id: str
+    name: str
+    creation_date: datetime
+    description: str | None
+    environment_kind: EnvironmentKind
+    environment_id: str | None
+    container_image: str | None
     created_by: Member
 
     @model_validator(mode="after")
@@ -45,12 +60,18 @@ class SessionLauncher(apispec.Launcher):
         return self
 
 
-@dataclass(eq=True, kw_only=True)
-class NewSessionLauncher(apispec.LauncherPost):
+@dataclass(frozen=True, eq=True, kw_only=True)
+class NewSessionLauncher(BaseModel):
     """New session launcher model."""
 
-    created_by: Member
+    project_id: str
+    name: str
     creation_date: datetime
+    description: str | None
+    environment_kind: EnvironmentKind
+    environment_id: str | None
+    container_image: str | None
+    created_by: Member
 
     @model_validator(mode="after")
     def check_launcher_environment_kind(self):
