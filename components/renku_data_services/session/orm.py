@@ -130,6 +130,6 @@ class SessionLauncherORM(BaseORM):
             creation_date=self.creation_date,
             description=self.description,
             environment_kind=self.environment_kind,
-            environment_id=self.environment.id if self.environment is not None else None,
+            environment_id=self.environment_id if self.environment_id is not None else None,
             container_image=self.container_image,
         )
