@@ -2,7 +2,6 @@
 
 from datetime import datetime
 from typing import Optional
-from typing import List
 
 from sqlalchemy import DateTime, MetaData, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
@@ -36,7 +35,7 @@ class SessionEnvironmentORM(BaseORM):
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
     """Id of the user who created the session environment."""
 
-    creation_date: Mapped[Optional[datetime]] = mapped_column("creation_date", DateTime(timezone=True))
+    creation_date: Mapped[datetime] = mapped_column("creation_date", DateTime(timezone=True))
     """Creation date and time."""
 
     description: Mapped[Optional[str]] = mapped_column("description", String(500))
@@ -46,7 +45,7 @@ class SessionEnvironmentORM(BaseORM):
     """Container image repository and tag."""
 
     @classmethod
-    def load(cls, environment: models.SessionEnvironment):
+    def load(cls, environment: models.NewSessionEnvironment):
         """Create SessionEnvironmentORM from the session environment model."""
         return cls(
             name=environment.name,
@@ -82,7 +81,7 @@ class SessionLauncherORM(BaseORM):
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
     """Id of the user who created the session launcher."""
 
-    creation_date: Mapped[Optional[datetime]] = mapped_column("creation_date", DateTime(timezone=True))
+    creation_date: Mapped[datetime] = mapped_column("creation_date", DateTime(timezone=True))
     """Creation date and time."""
 
     description: Mapped[Optional[str]] = mapped_column("description", String(500))
@@ -94,8 +93,8 @@ class SessionLauncherORM(BaseORM):
     container_image: Mapped[Optional[str]] = mapped_column("container_image", String(500))
     """Container image repository and tag."""
 
-    project: Mapped[ProjectORM] = relationship()
-    environment: Mapped[Optional[SessionEnvironmentORM]] = relationship()
+    project: Mapped[ProjectORM] = relationship(init=False)
+    environment: Mapped[Optional[SessionEnvironmentORM]] = relationship(init=False)
 
     project_id: Mapped[str] = mapped_column(
         "project_id", ForeignKey(ProjectORM.id, ondelete="CASCADE"), default=None, index=True
@@ -108,7 +107,7 @@ class SessionLauncherORM(BaseORM):
     """Id of the session environment."""
 
     @classmethod
-    def load(cls, launcher: models.SessionLauncher):
+    def load(cls, launcher: models.NewSessionLauncher):
         """Create SessionLauncherORM from the session launcher model."""
         return cls(
             name=launcher.name,
@@ -117,22 +116,20 @@ class SessionLauncherORM(BaseORM):
             description=launcher.description,
             environment_kind=launcher.environment_kind,
             container_image=launcher.container_image,
-            project=ProjectORM.load(launcher.project),
-            environment=SessionEnvironmentORM.load(launcher.environment) if launcher.environment else None,
-            project_id=launcher.project.id or "",
-            environment_id=launcher.environment.id if launcher.environment else None,
+            project_id=launcher.project_id,
+            environment_id=launcher.environment_id,
         )
 
     def dump(self) -> models.SessionLauncher:
         """Create a session launcher model from the SessionLauncherORM."""
         return models.SessionLauncher(
             id=self.id,
+            project_id=self.project_id,
             name=self.name,
             created_by=models.Member(id=self.created_by_id),
             creation_date=self.creation_date,
             description=self.description,
             environment_kind=self.environment_kind,
+            environment_id=self.environment.id if self.environment is not None else None,
             container_image=self.container_image,
-            project=self.project.dump(),
-            environment=self.environment.dump() if self.environment else None,
         )

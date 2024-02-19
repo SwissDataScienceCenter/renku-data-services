@@ -12,8 +12,6 @@ from renku_data_services.session import apispec
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.users.db import UserRepo
 
-# from renku_data_services.project.db import ProjectRepository
-
 
 @dataclass(kw_only=True)
 class SessionEnvironmentsBP(CustomBlueprint):
@@ -49,9 +47,7 @@ class SessionEnvironmentsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @validate(json=apispec.EnvironmentPost)
         async def _post(_: Request, body: apispec.EnvironmentPost, user: base_models.APIUser):
-            environment = await self.session_repo.insert_environment(
-                user=user, name=body.name, container_image=body.container_image, description=body.description
-            )
+            environment = await self.session_repo.insert_environment(user=user, new_environment=body)
             return json(apispec.Environment.model_validate(environment).model_dump(exclude_none=True, mode="json"), 201)
 
         return "/environments", ["POST"], _post
@@ -79,6 +75,82 @@ class SessionEnvironmentsBP(CustomBlueprint):
             return HTTPResponse(status=204)
 
         return "/environments/<environment_id>", ["DELETE"], _delete
+
+
+@dataclass(kw_only=True)
+class SessionLaunchersBP(CustomBlueprint):
+    """Handlers for manipulating session launcher."""
+
+    session_repo: SessionRepository
+    user_repo: UserRepo
+    authenticator: base_models.Authenticator
+
+    def get_all(self) -> BlueprintFactoryResponse:
+        """List all session launcher visible to user."""
+
+        @authenticate(self.authenticator)
+        async def _get_all(_: Request, user: base_models.APIUser):
+            launchers = await self.session_repo.get_launchers(user=user)
+            return json(
+                [apispec.Launcher.model_validate(item).model_dump(exclude_none=True, mode="json") for item in launchers]
+            )
+
+        return "/session_launchers", ["GET"], _get_all
+
+    def get_one(self) -> BlueprintFactoryResponse:
+        """Get a specific session launcher."""
+
+        @authenticate(self.authenticator)
+        async def _get_one(_: Request, launcher_id: str, user: base_models.APIUser):
+            launcher = await self.session_repo.get_launcher(user=user, launcher_id=launcher_id)
+            return json(apispec.Launcher.model_validate(launcher).model_dump(exclude_none=True, mode="json"))
+
+        return "/session_launchers/<launcher_id>", ["GET"], _get_one
+
+    def post(self) -> BlueprintFactoryResponse:
+        """Create a new session launcher."""
+
+        @authenticate(self.authenticator)
+        @validate(json=apispec.LauncherPost)
+        async def _post(_: Request, body: apispec.LauncherPost, user: base_models.APIUser):
+            launcher = await self.session_repo.insert_launcher(user=user, new_launcher=body)
+            return json(apispec.Launcher.model_validate(launcher).model_dump(exclude_none=True, mode="json"), 201)
+
+        return "/session_launchers", ["POST"], _post
+
+    def patch(self) -> BlueprintFactoryResponse:
+        """Partially update a specific session launcher."""
+
+        @authenticate(self.authenticator)
+        @validate(json=apispec.LauncherPatch)
+        async def _patch(_: Request, launcher_id: str, body: apispec.LauncherPatch, user: base_models.APIUser):
+            body_dict = body.model_dump(exclude_none=True)
+            launcher = await self.session_repo.update_launcher(user=user, launcher_id=launcher_id, **body_dict)
+            return json(apispec.Launcher.model_validate(launcher).model_dump(exclude_none=True, mode="json"))
+
+        return "/session_launchers/<launcher_id>", ["PATCH"], _patch
+
+    def delete(self) -> BlueprintFactoryResponse:
+        """Delete a specific session launcher."""
+
+        @authenticate(self.authenticator)
+        async def _delete(_: Request, launcher_id: str, user: base_models.APIUser):
+            await self.session_repo.delete_launcher(user=user, launcher_id=launcher_id)
+            return HTTPResponse(status=204)
+
+        return "/session_launchers/<launcher_id>", ["DELETE"], _delete
+
+    def get_project_launchers(self) -> BlueprintFactoryResponse:
+        """Get all launchers belonging to a project."""
+
+        @authenticate(self.authenticator)
+        async def _get_launcher(_: Request, project_id: str, user: base_models.APIUser):
+            launchers = await self.session_repo.get_project_launchers(user=user, project_id=project_id)
+            return json(
+                [apispec.Launcher.model_validate(item).model_dump(exclude_none=True, mode="json") for item in launchers]
+            )
+
+        return "/projects/<project_id>/session_launchers", ["GET"], _get_launcher
 
 
 # @dataclass(kw_only=True)
