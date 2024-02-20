@@ -1,7 +1,7 @@
 {
   "type": "record",
   "name": "ProjectCreated",
-  "namespace":"io.renku.v1",
+  "namespace":"io.renku.events.v1",
   "doc":"Event raised when a new project is created",
   "fields": [
     {
@@ -26,7 +26,7 @@
     },
     {
       "name": "visibility",
-      "type": "io.renku.v1.Visibility"
+      "type": "io.renku.events.v1.Visibility"
     },
     {
       "name": "description",
