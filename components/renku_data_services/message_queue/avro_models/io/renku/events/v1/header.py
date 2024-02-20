@@ -23,7 +23,7 @@ class Header(AvroModel):
     _schema: ClassVar[str] = """{
         "type": "record",
         "name": "Header",
-        "namespace": "io.renku.v1",
+        "namespace": "io.renku.events.v1",
         "doc": "common headers for messages",
         "fields": [
             {

@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import ClassVar, Dict, List, Optional
 
 from dataclasses_avroschema import AvroModel
-from renku_data_services.message_queue.avro_models.io.renku.v1 import \
+from renku_data_services.message_queue.avro_models.io.renku.events.v1 import \
     Visibility
 from undictify import type_checked_constructor
 
@@ -28,7 +28,7 @@ class ProjectCreated(AvroModel):
     _schema: ClassVar[str] = """{
         "type": "record",
         "name": "ProjectCreated",
-        "namespace": "io.renku.v1",
+        "namespace": "io.renku.events.v1",
         "doc": "Event raised when a new project is created",
         "fields": [
             {
@@ -53,7 +53,7 @@ class ProjectCreated(AvroModel):
             },
             {
                 "name": "visibility",
-                "type": "io.renku.v1.Visibility"
+                "type": "io.renku.events.v1.Visibility"
             },
             {
                 "name": "description",

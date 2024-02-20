@@ -1,7 +1,7 @@
 """Interface for message queue client."""
 from typing import Protocol
 
-from renku_data_services.message_queue.avro_models.io.renku.v1.project_created import ProjectCreated
+from renku_data_services.message_queue.avro_models.io.renku.events.v1 import ProjectCreated
 
 
 class IMessageQueue(Protocol):
