@@ -74,6 +74,7 @@ pytest-asyncio = "^0.21.1"
 pytest-postgresql = "^5.0.0"
 types-urllib3 = "^1.26.25.14"
 pyavro-gen = "^0.3.3"
+fakeredis = "^2.21.1"
 
 [build-system]
 requires = ["poetry-core"]

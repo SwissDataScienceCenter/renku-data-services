@@ -1,4 +1,5 @@
 """Configuration for message queue client."""
+
 import os
 from dataclasses import dataclass, field
 from typing import Any, Dict
@@ -16,6 +17,8 @@ class RedisConfig:
     port: int = 6379
     datatbase: int = 0
     sentinel_master_set: str = "mymaster"
+
+    _connection: redis.Redis | None = None
 
     @classmethod
     def from_env(cls, prefix: str = ""):
@@ -42,24 +45,34 @@ class RedisConfig:
 
         return cls(**kwargs)
 
+    @classmethod
+    def fake(cls):
+        """Create a config using fake redis."""
+        import fakeredis
+
+        instance = cls(password="")
+        instance._connection = fakeredis.FakeRedis()
+        return instance
+
     def redis_connection(self) -> redis.Redis:
         """Get a redis connection."""
-        if self.is_sentinel:
-            sentinel = redis.Sentinel([(self.host, self.port)], sentinel_kwargs={"password": self.password})
-            client = sentinel.master_for(
-                self.sentinel_master_set,
-                db=self.datatbase,
-                password=self.password,
-                retry_on_timeout=True,
-                health_check_interval=60,
-            )
-        else:
-            client = redis.Redis(
-                host=self.host,
-                port=self.port,
-                db=self.datatbase,
-                password=self.password,
-                retry_on_timeout=True,
-                health_check_interval=60,
-            )
-        return client
+        if self._connection is None:
+            if self.is_sentinel:
+                sentinel = redis.Sentinel([(self.host, self.port)], sentinel_kwargs={"password": self.password})
+                self._connection = sentinel.master_for(
+                    self.sentinel_master_set,
+                    db=self.datatbase,
+                    password=self.password,
+                    retry_on_timeout=True,
+                    health_check_interval=60,
+                )
+            else:
+                self._connection = redis.Redis(
+                    host=self.host,
+                    port=self.port,
+                    db=self.datatbase,
+                    password=self.password,
+                    retry_on_timeout=True,
+                    health_check_interval=60,
+                )
+        return self._connection

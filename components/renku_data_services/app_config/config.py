@@ -13,6 +13,7 @@ instantiated multiple times without creating multiple database connections.
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from test.components.renku_data_services import message_queue
 from typing import Any, Dict, Optional
 
 import httpx
@@ -42,6 +43,8 @@ from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.message_queue.config import RedisConfig
+from renku_data_services.message_queue.interface import IMessageQueue
+from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.user_preferences.config import UserPreferencesConfig
@@ -100,6 +103,7 @@ class Config:
     redis: RedisConfig
     gitlab_client: base_models.GitlabAPIProtocol
     kc_api: IKeycloakAPI
+    message_queue = IMessageQueue
     spec: Dict[str, Any] = field(init=False, default_factory=dict)
     version: str = "0.0.1"
     app_name: str = "renku_crc"
@@ -179,7 +183,9 @@ class Config:
         """The DB adapter for Renku native projects."""
         if not self._project_repo:
             self._project_repo = ProjectRepository(
-                session_maker=self.db.async_session_maker, project_authz=self.project_authz
+                session_maker=self.db.async_session_maker,
+                project_authz=self.project_authz,
+                message_queue=self.message_queue,
             )
         return self._project_repo
 
@@ -233,7 +239,6 @@ class Config:
         max_pinned_projects = int(os.environ.get(f"{prefix}MAX_PINNED_PROJECTS", "10"))
         user_preferences_config = UserPreferencesConfig(max_pinned_projects=max_pinned_projects)
         db = DBConfig.from_env(prefix)
-        redis = RedisConfig.from_env(prefix)
         kc_api: IKeycloakAPI
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
@@ -244,6 +249,7 @@ class Config:
             user_store = DummyUserStore(user_always_exists=user_always_exists)
             gitlab_client = DummyGitlabAPI()
             kc_api = DummyKeycloakAPI()
+            redis = RedisConfig.fake()
         else:
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
             keycloak_url = os.environ.get(f"{prefix}KEYCLOAK_URL")
@@ -277,6 +283,9 @@ class Config:
                 client_secret=client_secret,
                 realm=keycloak_realm,
             )
+            redis = RedisConfig.from_env(prefix)
+
+        message_queue = RedisQueue(redis)
 
         return cls(
             version=version,
@@ -291,4 +300,5 @@ class Config:
             db=db,
             redis=redis,
             kc_api=kc_api,
+            message_queue=message_queue,
         )

@@ -13,6 +13,7 @@ from renku_data_services import errors
 from renku_data_services.authz import models as authz_models
 from renku_data_services.authz.authz import IProjectAuthorizer
 from renku_data_services.authz.models import MemberQualifier, Scope
+from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.project import models
 from renku_data_services.project import orm as schemas
 from renku_data_services.project.apispec import Role, Visibility
@@ -40,9 +41,15 @@ class PaginationResponse(NamedTuple):
 class ProjectRepository:
     """Repository for project."""
 
-    def __init__(self, session_maker: Callable[..., AsyncSession], project_authz: IProjectAuthorizer):
+    def __init__(
+        self,
+        session_maker: Callable[..., AsyncSession],
+        project_authz: IProjectAuthorizer,
+        message_queue: IMessageQueue,
+    ):
         self.session_maker = session_maker  # type: ignore[call-overload]
         self.project_authz: IProjectAuthorizer = project_authz
+        self.message_queue: IMessageQueue = message_queue
 
     async def get_projects(
         self, user: base_models.APIUser, page: int, per_page: int
@@ -111,6 +118,17 @@ class ProjectRepository:
                     raise errors.BaseError(detail="The created project does not have an ID but it should.")
                 await self.project_authz.create_project(
                     requested_by=user, project_id=project.id, public_project=public_project
+                )
+                self.message_queue.project_created(
+                    name=project_orm.name,
+                    slug=project_orm.slug,
+                    visibility=project_orm.visibility,
+                    id=project_orm.id,
+                    repositories=project_orm.repositories,
+                    description=project_orm.description,
+                    creation_date=project_orm.creation_date,
+                    created_by=project_orm.created_by_id,
+                    members=[project_orm.created_by_id],
                 )
 
         return project_orm.dump()
