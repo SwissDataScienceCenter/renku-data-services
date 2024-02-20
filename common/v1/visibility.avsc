@@ -1,7 +1,7 @@
 {
   "type": "enum",
   "name": "Visibility",
-  "namespace":"io.renku.v1",
+  "namespace":"io.renku.events.v1",
   "symbols": [
     "PUBLIC",
     "PRIVATE"
