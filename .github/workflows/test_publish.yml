@@ -15,6 +15,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+      - name: Update Avro Schemas
+        uses: devcontainers/ci@v0.3
+        with:
+          runCmd: make update_avro
+          push: never
+          skipContainerUserIdUpdate: false
       - name: Style checks
         uses: devcontainers/ci@v0.3
         with:
@@ -25,7 +31,6 @@ jobs:
         uses: devcontainers/ci@v0.3
         with:
           runCmd: |
-            make style_checks
             make tests
           push: never
           skipContainerUserIdUpdate: false

@@ -18,11 +18,19 @@ schemas:
 	poetry run datamodel-codegen --input components/renku_data_services/project/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/project/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.project.apispec_base.BaseAPISpec
 	poetry run datamodel-codegen --input components/renku_data_services/user_preferences/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/user_preferences/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.user_preferences.apispec_base.BaseAPISpec
 
-avro:
+pull_avro:
+	@echo "Pulling avro schema files (ensure that the repo isn't dirty otherwise git subtree pull doesn't work)"
+	git subtree pull --prefix components/renku_data_services/message_queue/schemas/ https://github.com/SwissDataScienceCenter/renku-schema.git main --squash
+
+check_avro:
+	@echo "checking if avro schemas are up to date"
+
+
+avro_models:
 	@echo "generating message queues classes from avro schemas"
-	@echo "ensure that the repo isn't dirty otherwise git subtree pull doesn't work"
-	#git subtree pull --prefix components/renku_data_services/message_queue/schemas/ https://github.com/SwissDataScienceCenter/renku-schema.git main --squash
 	poetry run python components/renku_data_services/message_queue/generate_models.py
+
+update_avro: pull_avro avro_models
 
 style_checks:
 	poetry check
