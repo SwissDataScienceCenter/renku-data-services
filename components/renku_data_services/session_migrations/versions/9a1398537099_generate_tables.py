@@ -1,8 +1,8 @@
 """generate_tables
 
-Revision ID: 77d6b6c1d356
-Revises: 
-Create Date: 2024-02-16 11:36:51.211426
+Revision ID: 9a1398537099
+Revises:
+Create Date: 2024-02-21 13:58:16.931361
 
 """
 
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = "77d6b6c1d356"
+revision = "9a1398537099"
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -24,9 +24,9 @@ def upgrade() -> None:
         sa.Column("id", sa.String(length=26), nullable=False),
         sa.Column("name", sa.String(length=99), nullable=False),
         sa.Column("created_by_id", sa.String(), nullable=False),
-        sa.Column("creation_date", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("creation_date", sa.DateTime(timezone=True), nullable=False),
         sa.Column("description", sa.String(length=500), nullable=True),
-        sa.Column("container_image", sa.String(length=500), nullable=True),
+        sa.Column("container_image", sa.String(length=500), nullable=False),
         sa.PrimaryKeyConstraint("id"),
         schema="sessions",
     )
@@ -35,7 +35,7 @@ def upgrade() -> None:
         sa.Column("id", sa.String(length=26), nullable=False),
         sa.Column("name", sa.String(length=99), nullable=False),
         sa.Column("created_by_id", sa.String(), nullable=False),
-        sa.Column("creation_date", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("creation_date", sa.DateTime(timezone=True), nullable=False),
         sa.Column("description", sa.String(length=500), nullable=True),
         sa.Column(
             "environment_kind", sa.Enum("global_environment", "container_image", name="environmentkind"), nullable=False
