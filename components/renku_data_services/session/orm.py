@@ -45,7 +45,7 @@ class SessionEnvironmentORM(BaseORM):
     """Container image repository and tag."""
 
     @classmethod
-    def load(cls, environment: models.NewSessionEnvironment):
+    def load(cls, environment: models.SessionEnvironment):
         """Create SessionEnvironmentORM from the session environment model."""
         return cls(
             name=environment.name,
@@ -107,7 +107,7 @@ class SessionLauncherORM(BaseORM):
     """Id of the session environment."""
 
     @classmethod
-    def load(cls, launcher: models.NewSessionLauncher):
+    def load(cls, launcher: models.SessionLauncher):
         """Create SessionLauncherORM from the session launcher model."""
         return cls(
             name=launcher.name,

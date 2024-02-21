@@ -53,7 +53,8 @@ class SessionRepository:
         if user.id is None or not user.is_admin:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
-        environment_model = models.NewSessionEnvironment(
+        environment_model = models.SessionEnvironment(
+            id=None,
             name=new_environment.name,
             description=new_environment.description,
             container_image=new_environment.container_image,
@@ -176,7 +177,8 @@ class SessionRepository:
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
 
-        launcher_model = models.NewSessionLauncher(
+        launcher_model = models.SessionLauncher(
+            id=None,
             name=new_launcher.name,
             project_id=new_launcher.project_id,
             description=new_launcher.description,
@@ -187,7 +189,7 @@ class SessionRepository:
             creation_date=datetime.now(timezone.utc).replace(microsecond=0),
         )
 
-        models.NewSessionLauncher.model_validate(launcher_model)
+        models.SessionLauncher.model_validate(launcher_model)
 
         async with self.session_maker() as session:
             async with session.begin():
