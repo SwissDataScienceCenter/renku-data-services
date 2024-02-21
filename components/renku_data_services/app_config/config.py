@@ -103,7 +103,7 @@ class Config:
     redis: RedisConfig
     gitlab_client: base_models.GitlabAPIProtocol
     kc_api: IKeycloakAPI
-    message_queue = IMessageQueue
+    message_queue :IMessageQueue
     spec: Dict[str, Any] = field(init=False, default_factory=dict)
     version: str = "0.0.1"
     app_name: str = "renku_crc"

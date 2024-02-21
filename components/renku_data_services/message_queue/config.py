@@ -54,6 +54,7 @@ class RedisConfig:
         instance._connection = fakeredis.FakeRedis()
         return instance
 
+    @property
     def redis_connection(self) -> redis.Redis:
         """Get a redis connection."""
         if self._connection is None:

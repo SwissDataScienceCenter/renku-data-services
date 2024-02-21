@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Mapping
 
 from ulid import ULID
 
@@ -61,4 +62,6 @@ class RedisQueue(IMessageQueue):
             creationDate=creation_date,
             members=members,
         )
-        message = {"id": message_id, "headers": headers.serialize_json(), "payload": body.serialize()}
+        message: dict[bytes|memoryview|str|int|float,bytes|memoryview|str|int|float] = {"id": message_id, "headers": headers.serialize_json(), "payload": body.serialize()}
+
+        self.config.redis_connection.xadd("project.created",message)
