@@ -266,7 +266,7 @@ class SessionRepository:
 
     async def delete_launcher(self, user: base_models.APIUser, launcher_id: str) -> None:
         """Delete a session launcher entry."""
-        if not user.is_admin:
+        if not user.is_authenticated or user.id is None:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session:
@@ -278,5 +278,11 @@ class SessionRepository:
 
                 if launcher is None:
                     return
+
+                authorized = await self.project_authz.has_permission(
+                    user=user, project_id=launcher.project_id, scope=Scope.WRITE
+                )
+                if not authorized:
+                    raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
                 await session.delete(launcher)
