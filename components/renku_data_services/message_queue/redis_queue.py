@@ -47,10 +47,12 @@ class RedisQueue(IMessageQueue):
         headers = self._create_header("project.created")
         message_id = ULID().hex
         match visibility:
-            case Visibility.private:
+            case Visibility.private|Visibility.private.value:
                 vis = MsgVisibility.PRIVATE
-            case Visibility.public:
+            case Visibility.public|Visibility.public.value:
                 vis = MsgVisibility.PUBLIC
+            case _:
+                raise NotImplementedError(f"unknown visibility:{visibility}")
         body = ProjectCreated(
             id=id,
             name=name,
@@ -62,6 +64,7 @@ class RedisQueue(IMessageQueue):
             creationDate=creation_date,
             members=members,
         )
+
         message: dict[bytes|memoryview|str|int|float,bytes|memoryview|str|int|float] = {"id": message_id, "headers": headers.serialize_json(), "payload": body.serialize()}
 
         self.config.redis_connection.xadd("project.created",message)

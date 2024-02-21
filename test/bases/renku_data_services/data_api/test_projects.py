@@ -2,6 +2,9 @@
 
 import json
 import time
+from components.renku_data_services.errors.errors import ConfigurationError
+from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.header import Header
+from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_created import ProjectCreated
 from test.bases.renku_data_services.keycloak_sync.test_sync import get_kc_users
 from typing import Any, Dict, List
 
@@ -83,7 +86,7 @@ def get_project(sanic_client, user_headers, admin_headers):
 
 
 @pytest.mark.asyncio
-async def test_project_creation(sanic_client, user_headers):
+async def test_project_creation(sanic_client, user_headers, app_config):
     payload = {
         "name": "Renku Native Project",
         "slug": "project-slug",
@@ -105,6 +108,14 @@ async def test_project_creation(sanic_client, user_headers):
         "http://renkulab.io/repository-1",
         "http://renkulab.io/repository-2",
     }
+    events = app_config.redis.redis_connection.xrange("project.created")
+    assert len(events) == 1
+    event = events[0][1]
+    headers = Header.deserialize(event.get(b'headers'),serialization_type="avro-json")
+    assert headers.source =="renku-data-services"
+    proj_event = ProjectCreated.deserialize(event[b"payload"])
+    assert proj_event .name == payload["name"]
+
 
     project_id = project["id"]
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
