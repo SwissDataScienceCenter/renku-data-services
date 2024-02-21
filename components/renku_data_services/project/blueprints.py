@@ -11,7 +11,6 @@ import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.errors import errors
-from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.project import apispec, models
 from renku_data_services.project.apispec import FullUserWithRole, UserWithId
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository

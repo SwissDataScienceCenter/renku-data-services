@@ -15,7 +15,7 @@ class RedisConfig:
     is_sentinel: bool = False
     host: str = "renku-redis"
     port: int = 6379
-    datatbase: int = 0
+    database: int = 0
     sentinel_master_set: str = "mymaster"
 
     _connection: redis.Redis | None = None
@@ -50,7 +50,7 @@ class RedisConfig:
         """Create a config using fake redis."""
         import fakeredis
 
-        instance = cls(password="")
+        instance = cls(password="")  # nosec B106
         instance._connection = fakeredis.FakeRedis()
         return instance
 
@@ -62,7 +62,7 @@ class RedisConfig:
                 sentinel = redis.Sentinel([(self.host, self.port)], sentinel_kwargs={"password": self.password})
                 self._connection = sentinel.master_for(
                     self.sentinel_master_set,
-                    db=self.datatbase,
+                    db=self.database,
                     password=self.password,
                     retry_on_timeout=True,
                     health_check_interval=60,
@@ -71,7 +71,7 @@ class RedisConfig:
                 self._connection = redis.Redis(
                     host=self.host,
                     port=self.port,
-                    db=self.datatbase,
+                    db=self.database,
                     password=self.password,
                     retry_on_timeout=True,
                     health_check_interval=60,

@@ -20,11 +20,13 @@ schemas:
 
 pull_avro:
 	@echo "Pulling avro schema files (ensure that the repo isn't dirty otherwise git subtree pull doesn't work)"
+	
+	-git subtree add --prefix components/renku_data_services/message_queue/schemas/ https://github.com/SwissDataScienceCenter/renku-schema.git main --squash
 	git subtree pull --prefix components/renku_data_services/message_queue/schemas/ https://github.com/SwissDataScienceCenter/renku-schema.git main --squash
 
-check_avro:
+check_avro: pull_avro avro_models
 	@echo "checking if avro schemas are up to date"
-
+	git diff --exit-code || (git diff && exit 1)
 
 avro_models:
 	@echo "generating message queues classes from avro schemas"

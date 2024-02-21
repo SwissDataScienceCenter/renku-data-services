@@ -84,6 +84,7 @@ build-backend = "poetry.core.masonry.api"
 line-length = 120
 target-version = ["py311"]
 include = '\.pyi?$'
+exclude = ".*/avro_models/.*"
 
 [tool.pydocstyle]
 add_ignore = ["D105", "D107", "D202", "D401"]
@@ -101,7 +102,7 @@ use_parentheses = true
 line_length = 120
 src_paths = ["bases", "components", "test"]
 known_first_party = ["renku_data_services"]
-skip_glob = ["migrations/*"]
+skip_glob = ["migrations/*", "avro_models/*"]
 
 [tool.flake8]
 max-line-length = 120

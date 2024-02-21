@@ -2,12 +2,12 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Mapping
 
 from ulid import ULID
 
-from renku_data_services.message_queue.avro_models.io.renku.events.v1 import Header, ProjectCreated
-from renku_data_services.message_queue.avro_models.io.renku.events.v1 import Visibility as MsgVisibility
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.header import Header
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_created import ProjectCreated
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.visibility import Visibility as MsgVisibility
 from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.project.apispec import Visibility
@@ -47,9 +47,9 @@ class RedisQueue(IMessageQueue):
         headers = self._create_header("project.created")
         message_id = ULID().hex
         match visibility:
-            case Visibility.private|Visibility.private.value:
+            case Visibility.private | Visibility.private.value:
                 vis = MsgVisibility.PRIVATE
-            case Visibility.public|Visibility.public.value:
+            case Visibility.public | Visibility.public.value:
                 vis = MsgVisibility.PUBLIC
             case _:
                 raise NotImplementedError(f"unknown visibility:{visibility}")
@@ -65,6 +65,10 @@ class RedisQueue(IMessageQueue):
             members=members,
         )
 
-        message: dict[bytes|memoryview|str|int|float,bytes|memoryview|str|int|float] = {"id": message_id, "headers": headers.serialize_json(), "payload": body.serialize()}
+        message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
+            "id": message_id,
+            "headers": headers.serialize_json(),
+            "payload": body.serialize(),
+        }
 
-        self.config.redis_connection.xadd("project.created",message)
+        self.config.redis_connection.xadd("project.created", message)
