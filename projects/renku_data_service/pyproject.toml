@@ -52,6 +52,8 @@ urllib3 = "^1.26.16"
 deepmerge = "^1.1.0"
 authlib = "^1.2.1"
 redis = "^5.0.1"
+dataclasses-avroschema = "^0.57.0"
+undictify = "^0.11.3"
 
 [tool.poetry.group.dev.dependencies]
 pyavro-gen = "^0.3.3"

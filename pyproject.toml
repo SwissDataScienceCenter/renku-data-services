@@ -53,6 +53,9 @@ urllib3 = "^1.26.16"
 deepmerge = "^1.1.0"
 authlib = "^1.2.1"
 redis = "^5.0.1"
+dataclasses-avroschema = "^0.57.0"
+undictify = "^0.11.3"
+types-redis = "^4.6.0.20240218"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.7.5"
@@ -141,7 +144,7 @@ exclude = [
   "components/renku_data_services/storage/apispec.py",
   "components/renku_data_services/users/apispec.py",
   "components/renku_data_services/user_preferences/apispec.py",
-  "components/renku_data_services/message_queue/avro_models/"
+  "components/renku_data_services/message_queue/avro_models/",
 ]
 
 [tool.pytest.ini_options]
@@ -184,7 +187,17 @@ module = [
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = ["sanic_testing.*", "asyncpg.*", "kubernetes.*", "deepmerge.*","pyavro_gen.*","avro_preprocessor.*"]
+module = [
+  "sanic_testing.*",
+  "asyncpg.*",
+  "kubernetes.*",
+  "deepmerge.*",
+  "pyavro_gen.*",
+  "avro_preprocessor.*",
+  "undictify.*",
+  "dataclasses_avroschema",
+  "urllib3.*",
+]
 ignore_missing_imports = true
 
 [tool.coverage.run]

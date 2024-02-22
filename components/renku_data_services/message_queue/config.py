@@ -2,7 +2,6 @@
 
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict
 
 import redis
 
@@ -23,27 +22,21 @@ class RedisConfig:
     @classmethod
     def from_env(cls, prefix: str = ""):
         """Create a config from environment variables."""
-        is_sentinel = os.environ.get(f"{prefix}REDIS_IS_SENTINEL")
-        host = os.environ.get(f"{prefix}REDIS_HOST")
-        port = os.environ.get(f"{prefix}REDIS_PORT")
-        database = os.environ.get(f"{prefix}REDIS_DATABASE")
-        sentinel_master_set = os.environ.get(f"{prefix}REDIS_MASTER_SET")
-        password = os.environ.get(f"{prefix}REDIS_PASSWORD")
-        kwargs: Dict[str, Any] = {}
-        if is_sentinel is not None:
-            kwargs["is_sentinel"] = bool(is_sentinel)
-        if host is not None:
-            kwargs["host"] = host
-        if port is not None:
-            kwargs["port"] = int(port)
-        if database is not None:
-            kwargs["database"] = int(database)
-        if sentinel_master_set is not None:
-            kwargs["sentinel_master_set"] = sentinel_master_set
-        if password is not None:
-            kwargs["password"] = password
+        is_sentinel = os.environ.get(f"{prefix}REDIS_IS_SENTINEL", "false")
+        host = os.environ.get(f"{prefix}REDIS_HOST", "localhost")
+        port = os.environ.get(f"{prefix}REDIS_PORT", 6379)
+        database = os.environ.get(f"{prefix}REDIS_DATABASE", 0)
+        sentinel_master_set = os.environ.get(f"{prefix}REDIS_MASTER_SET", "mymaster")
+        password = os.environ.get(f"{prefix}REDIS_PASSWORD", "")
 
-        return cls(**kwargs)
+        return cls(
+            host=host,
+            port=int(port),
+            database=int(database),
+            password=password,
+            sentinel_master_set=sentinel_master_set,
+            is_sentinel=is_sentinel.lower() == "true",
+        )
 
     @classmethod
     def fake(cls):

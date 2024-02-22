@@ -1,5 +1,6 @@
 """Message queue implementation for redis streams."""
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -44,31 +45,34 @@ class RedisQueue(IMessageQueue):
         members: list[str],
     ):
         """Event for when a new project is created."""
-        headers = self._create_header("project.created")
-        message_id = ULID().hex
-        match visibility:
-            case Visibility.private | Visibility.private.value:
-                vis = MsgVisibility.PRIVATE
-            case Visibility.public | Visibility.public.value:
-                vis = MsgVisibility.PUBLIC
-            case _:
-                raise NotImplementedError(f"unknown visibility:{visibility}")
-        body = ProjectCreated(
-            id=id,
-            name=name,
-            slug=slug,
-            repositories=[r.url for r in repositories],
-            visibility=vis,
-            description=description,
-            createdBy=created_by,
-            creationDate=creation_date,
-            members=members,
-        )
+        try:
+            headers = self._create_header("project.created")
+            message_id = ULID().hex
+            match visibility:
+                case Visibility.private | Visibility.private.value:
+                    vis = MsgVisibility.PRIVATE
+                case Visibility.public | Visibility.public.value:
+                    vis = MsgVisibility.PUBLIC
+                case _:
+                    raise NotImplementedError(f"unknown visibility:{visibility}")
+            body = ProjectCreated(
+                id=id,
+                name=name,
+                slug=slug,
+                repositories=[r.url for r in repositories],
+                visibility=vis,
+                description=description,
+                createdBy=created_by,
+                creationDate=creation_date,
+                members=members,
+            )
 
-        message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
-            "id": message_id,
-            "headers": headers.serialize_json(),
-            "payload": body.serialize(),
-        }
+            message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
+                "id": message_id,
+                "headers": headers.serialize_json(),
+                "payload": body.serialize(),
+            }
 
-        self.config.redis_connection.xadd("project.created", message)
+            self.config.redis_connection.xadd("project.created", message)
+        except Exception as e:
+            logging.error(f"an error occurred: {e}")

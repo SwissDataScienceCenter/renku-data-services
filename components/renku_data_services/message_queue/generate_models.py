@@ -114,7 +114,6 @@ class DependencyChecker(AvscSchemaDependenciesChecker):
                 elif "." in node[Avro.Name]:
                     dep = node[Avro.Name]
                 elif Avro.Fields in node or Avro.Symbols in node:
-                    breakpoint()
                     dep = namespace_name(self.current_schema_name) + "." + node[Avro.Name]
                 else:
                     return
