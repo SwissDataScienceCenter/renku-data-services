@@ -107,7 +107,7 @@ async def test_project_creation(sanic_client, user_headers, app_config):
         "http://renkulab.io/repository-1",
         "http://renkulab.io/repository-2",
     }
-    events = app_config.redis.redis_connection.xrange("project.created")
+    events = await app_config.redis.redis_connection.xrange("project.created")
     assert len(events) == 1
     event = events[0][1]
     headers = Header.deserialize(event.get(b"headers"), serialization_type="avro-json")

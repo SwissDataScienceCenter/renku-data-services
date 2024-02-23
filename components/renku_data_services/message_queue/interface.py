@@ -10,7 +10,7 @@ from renku_data_services.project.orm import ProjectRepositoryORM
 class IMessageQueue(Protocol):
     """Interface for message queue client."""
 
-    def project_created(
+    async def project_created(
         self,
         name: str,
         slug: str,

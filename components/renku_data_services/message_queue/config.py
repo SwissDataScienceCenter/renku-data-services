@@ -3,7 +3,7 @@
 import os
 from dataclasses import dataclass, field
 
-import redis
+import redis.asyncio as redis
 
 
 @dataclass
@@ -44,7 +44,7 @@ class RedisConfig:
         import fakeredis
 
         instance = cls(password="")  # nosec B106
-        instance._connection = fakeredis.FakeRedis()
+        instance._connection = fakeredis.FakeAsyncRedis()
         return instance
 
     @property

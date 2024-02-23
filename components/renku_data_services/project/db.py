@@ -119,7 +119,7 @@ class ProjectRepository:
                 await self.project_authz.create_project(
                     requested_by=user, project_id=project.id, public_project=public_project
                 )
-                self.message_queue.project_created(
+                await self.message_queue.project_created(
                     name=project_orm.name,
                     slug=project_orm.slug,
                     visibility=project_orm.visibility,
