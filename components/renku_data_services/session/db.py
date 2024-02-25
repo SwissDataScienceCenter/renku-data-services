@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Callable
+from typing import Callable, Optional
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,14 +15,39 @@ from renku_data_services.authz.authz import IProjectAuthorizer
 from renku_data_services.authz.models import MemberQualifier, Scope
 from renku_data_services.session import models
 from renku_data_services.session import orm as schemas
+from renku_data_services.session.config import SessionConfig
+from renku_data_services.utils.core import get_ssl_context
 
 
 class SessionRepository:
     """Repository for session."""
 
-    def __init__(self, session_maker: Callable[..., AsyncSession], project_authz: IProjectAuthorizer):
+    def __init__(
+        self,
+        session_maker: Callable[..., AsyncSession],
+        project_authz: IProjectAuthorizer,
+        session_config: Optional[SessionConfig],
+    ):
         self.session_maker = session_maker  # type: ignore[call-overload]
         self.project_authz: IProjectAuthorizer = project_authz
+        self.session_config = session_config
+
+    async def start_session(self, user: base_models.APIUser, session_id: str) -> int:
+        """Start a session and return the status code."""
+        session = await self.get_session(user, session_id)
+
+        async with httpx.AsyncClient(verify=get_ssl_context()) as client:
+            if not self.session_config or not self.session_config.notebooks_url:  # TODO: Remove this
+                return 500
+            notebooks_url = self.session_config.notebooks_url.rstrip("/")
+            url = f"{notebooks_url}/renku-1-servers"
+            payload = {
+                "image": session.environment_id,
+                "renku_1_environment_id": session.environment_id,
+                "renku_1_project_id": session.project_id,
+            }
+            result = await client.post(url=url, headers={"Authorization": f"Bearer {user.access_token}"}, json=payload)
+            return result.status_code
 
     async def get_sessions(self, user: base_models.APIUser) -> list[models.Session]:
         """Get all sessions from the database."""

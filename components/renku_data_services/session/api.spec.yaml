@@ -113,6 +113,25 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - sessions
+    post:
+      summary: Start a session
+      parameters:
+        - in: path
+          name: session_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "201":
+          description: The session was started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - sessions
 components:
   schemas:
     SessionsList:
@@ -150,7 +169,7 @@ components:
         description: "R compute session"
         environment_id: "01AN4Z79ZS6XX96588FDX0H099"
     SessionPost:
-      description: Metadata to start a session
+      description: Metadata to create a session
       type: object
       additionalProperties: false
       properties:

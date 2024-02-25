@@ -35,13 +35,13 @@ class SessionsBP(CustomBlueprint):
 
         return "/sessions", ["GET"], _get_all
 
-    def post(self) -> BlueprintFactoryResponse:
+    def create(self) -> BlueprintFactoryResponse:
         """Create a new session."""
 
         @authenticate(self.authenticator)
         @only_authenticated
         @validate(json=apispec.SessionPost)
-        async def _post(_: Request, *, user: base_models.APIUser, body: apispec.SessionPost):
+        async def _create(_: Request, *, user: base_models.APIUser, body: apispec.SessionPost):
             data = body.model_dump(exclude_none=True)
             user_id = user.id
             if not user_id:
@@ -53,7 +53,18 @@ class SessionsBP(CustomBlueprint):
             result = await self.session_repo.insert_session(user=user, session=session)
             return json(apispec.Session.model_validate(result).model_dump(exclude_none=True, mode="json"), 201)
 
-        return "/sessions", ["POST"], _post
+        return "/sessions", ["POST"], _create
+
+    def start(self) -> BlueprintFactoryResponse:
+        """Start a specific session."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _start(request: Request, *, user: base_models.APIUser, session_id: str):
+            result = await self.session_repo.start_session(user=user, session_id=session_id)
+            return HTTPResponse(status=result)
+
+        return "/sessions/<session_id>", ["POST"], _start
 
     def get_one(self) -> BlueprintFactoryResponse:
         """Get a specific session."""

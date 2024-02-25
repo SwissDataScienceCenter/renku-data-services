@@ -11,6 +11,7 @@ instantiated multiple times without creating multiple database connections.
 """
 
 import os
+import urllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -42,6 +43,7 @@ from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
+from renku_data_services.session.config import SessionConfig
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.user_preferences.config import UserPreferencesConfig
@@ -104,6 +106,7 @@ class Config:
     app_name: str = "renku_crc"
     default_resource_pool_file: Optional[str] = None
     default_resource_pool: models.ResourcePool = default_resource_pool
+    session_config: SessionConfig | None = field(default=None)
     server_options_file: Optional[str] = None
     server_defaults_file: Optional[str] = None
     _user_repo: UserRepository | None = field(default=None, repr=False, init=False)
@@ -142,6 +145,11 @@ class Config:
             sessions = safe_load(f)
 
         self.spec = merge_api_specs(crc_spec, storage_spec, user_preferences_spec, users, projects, sessions)
+
+        if self.session_config and not self.session_config.notebooks_url:
+            keycloak_url = getattr(self.kc_api, "keycloak_url", None)
+            notebooks_url = _get_notebooks_url_from_keycloak_url(keycloak_url) if keycloak_url else ""
+            self.session_config = SessionConfig(notebooks_url=notebooks_url)
 
         if self.default_resource_pool_file is not None:
             with open(self.default_resource_pool_file, "r") as f:
@@ -208,7 +216,9 @@ class Config:
         """The DB adapter for sessions."""
         if not self._session_repo:
             self._session_repo = SessionRepository(
-                session_maker=self.db.async_session_maker, project_authz=self.project_authz
+                session_maker=self.db.async_session_maker,
+                project_authz=self.project_authz,
+                session_config=self.session_config,
             )
         return self._session_repo
 
@@ -242,11 +252,12 @@ class Config:
         server_options_file = os.environ.get("SERVER_OPTIONS")
         server_defaults_file = os.environ.get("SERVER_DEFAULTS")
         k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
-        gitlab_url = None
+        gitlab_url: Optional[str]
         max_pinned_projects = int(os.environ.get(f"{prefix}MAX_PINNED_PROJECTS", "10"))
         user_preferences_config = UserPreferencesConfig(max_pinned_projects=max_pinned_projects)
         db = DBConfig.from_env(prefix)
         kc_api: IKeycloakAPI
+        session_config: SessionConfig
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
             authenticator = DummyAuthenticator()
@@ -256,6 +267,7 @@ class Config:
             user_store = DummyUserStore(user_always_exists=user_always_exists)
             gitlab_client = DummyGitlabAPI()
             kc_api = DummyKeycloakAPI()
+            session_config = SessionConfig(notebooks_url="")
         else:
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
             keycloak_url = os.environ.get(f"{prefix}KEYCLOAK_URL")
@@ -281,6 +293,7 @@ class Config:
             gitlab_authenticator = GitlabAuthenticator(gitlab_url=gitlab_url)
             user_store = KcUserStore(keycloak_url=keycloak_url, realm=keycloak_realm)
             gitlab_client = GitlabAPI(gitlab_url=gitlab_url)
+            session_config = SessionConfig(notebooks_url=_get_notebooks_url_from_keycloak_url(keycloak_url))
             client_id = os.environ[f"{prefix}KEYCLOAK_CLIENT_ID"]
             client_secret = os.environ[f"{prefix}KEYCLOAK_CLIENT_SECRET"]
             kc_api = KeycloakAPI(
@@ -302,4 +315,10 @@ class Config:
             user_preferences_config=user_preferences_config,
             db=db,
             kc_api=kc_api,
+            session_config=session_config,
         )
+
+
+def _get_notebooks_url_from_keycloak_url(keycloak_url) -> str:
+    parsed_url = urllib.parse.urlparse(keycloak_url)  # type: ignore
+    return parsed_url._replace(path="notebooks").geturl()
