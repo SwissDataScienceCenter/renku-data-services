@@ -146,8 +146,10 @@ class Config:
 
         self.spec = merge_api_specs(crc_spec, storage_spec, user_preferences_spec, users, projects, sessions)
 
-        notebooks_url = _get_notebooks_url_from_keycloak_url(self.kc_api.keycloak_url)  # type: ignore
-        self.session_config = SessionConfig(notebooks_url=notebooks_url)
+        if self.session_config and not self.session_config.notebooks_url:
+            keycloak_url = getattr(self.kc_api, "keycloak_url", None)
+            notebooks_url = _get_notebooks_url_from_keycloak_url(keycloak_url) if keycloak_url else ""
+            self.session_config = SessionConfig(notebooks_url=notebooks_url)
 
         if self.default_resource_pool_file is not None:
             with open(self.default_resource_pool_file, "r") as f:
