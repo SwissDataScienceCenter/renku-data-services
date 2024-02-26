@@ -72,7 +72,7 @@ class UserPreferencesRepository(_Base):
                     raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
 
                 if "pinned_projects" in kwargs:
-                    kwargs["pinned_projects"] = models.PinnedProjects.from_dict(kwargs["pinned_projects"])
+                    kwargs["pinned_projects"] = models.PinnedProjects.from_dict(kwargs["pinned_projects"]).model_dump()
 
                 for key, value in kwargs.items():
                     if key in ["pinned_projects"]:
