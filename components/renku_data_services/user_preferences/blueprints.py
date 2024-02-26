@@ -2,13 +2,13 @@
 
 from dataclasses import dataclass
 
-from sanic import Request, json
+from sanic import HTTPResponse, Request, json
 from sanic_ext import validate
-from sanic import HTTPResponse
+
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
-from renku_data_services.user_preferences import apispec, models
+from renku_data_services.user_preferences import apispec
 from renku_data_services.user_preferences.apispec_base import PinnedProjectFilter
 from renku_data_services.user_preferences.db import UserPreferencesRepository
 
@@ -25,7 +25,6 @@ class UserPreferencesBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _get(request: Request, user: base_models.APIUser):
-            user_preferences: models.UserPreferences | None
             user_preferences = await self.user_preferences_repo.get_user_preferences(user=user)
 
             etag = request.headers.get("If-None-Match")
@@ -39,6 +38,22 @@ class UserPreferencesBP(CustomBlueprint):
             )
 
         return "/user/preferences", ["GET"], _get
+
+    def patch(self) -> BlueprintFactoryResponse:
+        """Partially update the user preferences for the logged in user."""
+
+        @authenticate(self.authenticator)
+        @validate(json=apispec.UserPreferencesPatch)
+        async def _patch(request: Request, body: apispec.UserPreferencesPatch, user: base_models.APIUser):
+            etag = request.headers.get("If-None-Match")
+            body_dict = body.model_dump(exclude_none=True)
+            user_preferences = await self.user_preferences_repo.update_user_preferences(
+                user=user, etag=etag, **body_dict
+            )
+
+            return json(apispec.UserPreferences.model_validate(user_preferences).model_dump())
+
+        return "/user/preferences", ["PATCH"], _patch
 
     def post_pinned_projects(self) -> BlueprintFactoryResponse:
         """Add a pinned project to user preferences for the logged in user."""

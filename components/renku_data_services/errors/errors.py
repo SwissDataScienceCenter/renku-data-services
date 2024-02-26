@@ -1,4 +1,5 @@
 """Exceptions for the server."""
+
 from dataclasses import dataclass
 from typing import Optional
 
@@ -71,3 +72,12 @@ class ProgrammingError(BaseError):
     code: int = 1500
     message: str = "An unexpected error occurred."
     status_code: int = 500
+
+
+@dataclass
+class ConflictError(BaseError):
+    """Rased when a conflicting update occurs."""
+
+    code: int = 1409
+    message: str = "Conflicting update detected."
+    status_code: int = 409

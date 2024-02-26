@@ -2,9 +2,9 @@
 
 from datetime import datetime
 from hashlib import md5
-from typing import List
+from typing import List, MutableSet
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class PinnedProjects(BaseModel):
@@ -16,6 +16,16 @@ class PinnedProjects(BaseModel):
     def from_dict(cls, data: dict) -> "PinnedProjects":
         """Create model from a dict object."""
         return cls(project_slugs=data.get("project_slugs"))
+
+    @field_validator("project_slugs")
+    @classmethod
+    def pinned_projects_are_unique(cls, project_slugs: List[str] | None) -> List[str] | None:
+        """Validates that pinned projects are unique."""
+        seen: MutableSet[str] = set()
+        if project_slugs is None:
+            return None
+        project_slugs = [(seen.add(project), project)[1] for project in project_slugs if project not in seen]
+        return project_slugs
 
 
 class UserPreferences(BaseModel):
