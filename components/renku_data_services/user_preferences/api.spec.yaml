@@ -171,7 +171,7 @@ components:
     ETag:
       type: string
       description: Entity Tag
-      example: "abcd"
+      example: "9EE498F9D565D0C41E511377425F32F3"
 
   responses:
     Error:
@@ -191,19 +191,18 @@ components:
   parameters:
     If-Match:
       in: header
-      name: If-Match header
+      name: If-Match
       description: If-Match header, for avoiding mid-air collisions
       required: false
       schema:
         $ref: "#/components/schemas/ETag"
     If-None-Match:
       in: header
-      name: If-None-Match header
+      name: If-None-Match
       description: If-None-Match header, for caching entities
       required: false
       schema:
         $ref: "#/components/schemas/ETag"
-
 
   securitySchemes:
     oidc:

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from sanic import Request, json
 from sanic_ext import validate
-
+from sanic import HTTPResponse
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
@@ -24,9 +24,14 @@ class UserPreferencesBP(CustomBlueprint):
         """Get user preferences for the logged in user."""
 
         @authenticate(self.authenticator)
-        async def _get(_: Request, user: base_models.APIUser):
+        async def _get(request: Request, user: base_models.APIUser):
             user_preferences: models.UserPreferences | None
             user_preferences = await self.user_preferences_repo.get_user_preferences(user=user)
+
+            etag = request.headers.get("If-None-Match")
+            if user_preferences.etag is not None and user_preferences.etag == etag:
+                return HTTPResponse(status=304)
+
             headers = {"ETag": user_preferences.etag} if user_preferences.etag is not None else None
             return json(
                 apispec.UserPreferences.model_validate(user_preferences).model_dump(),
