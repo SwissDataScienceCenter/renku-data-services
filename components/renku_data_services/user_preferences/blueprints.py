@@ -45,7 +45,7 @@ class UserPreferencesBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @validate(json=apispec.UserPreferencesPatch)
         async def _patch(request: Request, body: apispec.UserPreferencesPatch, user: base_models.APIUser):
-            etag = request.headers.get("If-None-Match")
+            etag = request.headers.get("If-Match")
             body_dict = body.model_dump(exclude_none=True)
             user_preferences = await self.user_preferences_repo.update_user_preferences(
                 user=user, etag=etag, **body_dict
