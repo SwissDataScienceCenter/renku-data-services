@@ -1,5 +1,6 @@
 """Message queue implementation for redis streams."""
 
+import copy
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -20,12 +21,12 @@ class RedisQueue(IMessageQueue):
 
     config: RedisConfig
 
-    def _create_header(self, message_type: str) -> Header:
+    def _create_header(self, message_type: str, content_type: str = "application/avro+binary") -> Header:
         """Create a message header."""
         return Header(
             type=message_type,
             source="renku-data-services",
-            dataContentType="application/avro+binary",
+            dataContentType=content_type,
             schemaVersion="1",
             time=datetime.utcnow(),
             requestId=ULID().hex,
@@ -45,6 +46,8 @@ class RedisQueue(IMessageQueue):
     ):
         """Event for when a new project is created."""
         headers = self._create_header("project.created")
+        headers_json = copy.deepcopy(headers)
+        headers_json.dataContentType = "application/avro+json"
         message_id = ULID().hex
         match visibility:
             case Visibility.private | Visibility.private.value:
@@ -71,4 +74,10 @@ class RedisQueue(IMessageQueue):
             "payload": body.serialize(),
         }
 
+        await self.config.redis_connection.xadd("project.created", message)
+        message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
+            "id": message_id,
+            "headers": headers_json.serialize_json(),
+            "payload": body.serialize_json(),
+        }
         await self.config.redis_connection.xadd("project.created", message)
