@@ -99,7 +99,6 @@ class Config:
     quota_repo: QuotaRepository
     user_preferences_config: UserPreferencesConfig
     db: DBConfig
-    session_config: SessionConfig | None = field(default=None)
     gitlab_client: base_models.GitlabAPIProtocol
     kc_api: IKeycloakAPI
     spec: Dict[str, Any] = field(init=False, default_factory=dict)
@@ -107,6 +106,7 @@ class Config:
     app_name: str = "renku_crc"
     default_resource_pool_file: Optional[str] = None
     default_resource_pool: models.ResourcePool = default_resource_pool
+    session_config: SessionConfig | None = field(default=None)
     server_options_file: Optional[str] = None
     server_defaults_file: Optional[str] = None
     _user_repo: UserRepository | None = field(default=None, repr=False, init=False)
