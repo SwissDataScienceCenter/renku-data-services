@@ -1,9 +1,16 @@
 """Message queue implementation for redis streams."""
 
-import copy
+import glob
+import json
 from dataclasses import dataclass
 from datetime import datetime
+from io import BytesIO
+from pathlib import Path
+from typing import Type, TypeVar
 
+from dataclasses_avroschema.schema_generator import AvroModel
+from dataclasses_avroschema.utils import standardize_custom_type
+from fastavro import parse_schema, schemaless_reader, schemaless_writer
 from ulid import ULID
 
 from renku_data_services.message_queue.avro_models.io.renku.events.v1.header import Header
@@ -13,6 +20,42 @@ from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.project.apispec import Visibility
 from renku_data_services.project.orm import ProjectRepositoryORM
+
+_root = Path(__file__).parent.resolve()
+_filter = f"{_root}/schemas/**/*.avsc"
+_schemas = {}
+for file in glob.glob(_filter, recursive=True):
+    with open(file) as f:
+        _schema = json.load(f)
+        if "name" in _schema:
+            _name = _schema["name"]
+            _namespace = _schema.get("namespace")
+            if _namespace:
+                _name = f"{_namespace}.{_name}"
+            _schemas[_name] = _schema
+
+
+def serialize_binary(obj: AvroModel) -> bytes:
+    """Serialize a message with avro, making sure to use the original schema."""
+    schema = parse_schema(schema=json.loads(getattr(obj, "_schema", obj.avro_schema())), named_schemas=_schemas)
+    fo = BytesIO()
+    schemaless_writer(fo, schema, obj.asdict(standardize_factory=standardize_custom_type))
+    return fo.getvalue()
+
+
+T = TypeVar("T", bound=AvroModel)
+
+
+def deserialize_binary(data: bytes, model: Type[T]) -> T:
+    """Deserialize an avro binary message, using the original schema."""
+    input_stream = BytesIO(data)
+    schema = parse_schema(schema=json.loads(getattr(model, "_schema", model.avro_schema())), named_schemas=_schemas)
+
+    payload = schemaless_reader(input_stream, schema, schema)
+    input_stream.flush()
+    obj = model.parse_obj(payload)  # type: ignore
+
+    return obj
 
 
 @dataclass
@@ -46,8 +89,6 @@ class RedisQueue(IMessageQueue):
     ):
         """Event for when a new project is created."""
         headers = self._create_header("project.created")
-        headers_json = copy.deepcopy(headers)
-        headers_json.dataContentType = "application/avro+json"
         message_id = ULID().hex
         match visibility:
             case Visibility.private | Visibility.private.value:
@@ -71,13 +112,7 @@ class RedisQueue(IMessageQueue):
         message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
             "id": message_id,
             "headers": headers.serialize_json(),
-            "payload": body.serialize(),
+            "payload": serialize_binary(body),
         }
 
-        await self.config.redis_connection.xadd("project.created", message)
-        message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
-            "id": message_id,
-            "headers": headers_json.serialize_json(),
-            "payload": body.serialize_json(),
-        }
         await self.config.redis_connection.xadd("project.created", message)

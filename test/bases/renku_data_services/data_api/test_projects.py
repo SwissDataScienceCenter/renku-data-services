@@ -14,6 +14,7 @@ from components.renku_data_services.message_queue.avro_models.io.renku.events.v1
 from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_created import ProjectCreated
 from renku_data_services.app_config import Config
 from renku_data_services.data_api.app import register_all_handlers
+from renku_data_services.message_queue.redis_queue import deserialize_binary
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import UserInfo
 
@@ -112,7 +113,7 @@ async def test_project_creation(sanic_client, user_headers, app_config):
     event = events[0][1]
     headers = Header.deserialize(event.get(b"headers"), serialization_type="avro-json")
     assert headers.source == "renku-data-services"
-    proj_event = ProjectCreated.deserialize(event[b"payload"])
+    proj_event = deserialize_binary(event[b"payload"], ProjectCreated)
     assert proj_event.name == payload["name"]
 
     project_id = project["id"]
