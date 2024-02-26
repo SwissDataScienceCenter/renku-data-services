@@ -1,5 +1,7 @@
 """Models for user preferences."""
-from typing import List, Optional
+
+from datetime import datetime
+from typing import List
 
 from pydantic import BaseModel, Field
 
@@ -7,7 +9,7 @@ from pydantic import BaseModel, Field
 class PinnedProjects(BaseModel):
     """Pinned projects model."""
 
-    project_slugs: Optional[List[str]] = None
+    project_slugs: List[str] | None = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "PinnedProjects":
@@ -20,3 +22,5 @@ class UserPreferences(BaseModel):
 
     user_id: str = Field(min_length=3)
     pinned_projects: PinnedProjects
+    created_at: datetime | None = Field(default=None)
+    updated_at: datetime | None = Field(default=None)
