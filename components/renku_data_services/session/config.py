@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass
 class SessionConfig:
     """Session configuration."""
 
-    notebooks_url: str
+    notebooks_url: Optional[str]
 
     @classmethod
     def from_env(cls, prefix: str = ""):

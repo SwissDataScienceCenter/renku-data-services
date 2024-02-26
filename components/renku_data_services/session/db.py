@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Callable
+from typing import Callable, Optional
 
 import httpx
 from sqlalchemy import select
@@ -26,7 +26,7 @@ class SessionRepository:
         self,
         session_maker: Callable[..., AsyncSession],
         project_authz: IProjectAuthorizer,
-        session_config: SessionConfig,
+        session_config: Optional[SessionConfig],
     ):
         self.session_maker = session_maker  # type: ignore[call-overload]
         self.project_authz: IProjectAuthorizer = project_authz
@@ -37,6 +37,8 @@ class SessionRepository:
         session = await self.get_session(user, session_id)
 
         async with httpx.AsyncClient(verify=get_ssl_context()) as client:
+            if not self.session_config or not self.session_config.notebooks_url:  # TODO: Remove this
+                return 500
             notebooks_url = self.session_config.notebooks_url.rstrip("/")
             url = f"{notebooks_url}/renku-1-servers"
             payload = {

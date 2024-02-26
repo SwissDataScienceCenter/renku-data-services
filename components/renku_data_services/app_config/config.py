@@ -146,7 +146,8 @@ class Config:
 
         self.spec = merge_api_specs(crc_spec, storage_spec, user_preferences_spec, users, projects, sessions)
 
-        session_config = SessionConfig(notebooks_url=_get_notebooks_url_from_keycloak_url(self.kc_api.keycloak_url))
+        notebooks_url = _get_notebooks_url_from_keycloak_url(self.kc_api.keycloak_url)  # type: ignore
+        self.session_config = SessionConfig(notebooks_url=notebooks_url)
 
         if self.default_resource_pool_file is not None:
             with open(self.default_resource_pool_file, "r") as f:
@@ -249,7 +250,7 @@ class Config:
         server_options_file = os.environ.get("SERVER_OPTIONS")
         server_defaults_file = os.environ.get("SERVER_DEFAULTS")
         k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
-        gitlab_url: str
+        gitlab_url: Optional[str]
         max_pinned_projects = int(os.environ.get(f"{prefix}MAX_PINNED_PROJECTS", "10"))
         user_preferences_config = UserPreferencesConfig(max_pinned_projects=max_pinned_projects)
         db = DBConfig.from_env(prefix)
@@ -317,5 +318,5 @@ class Config:
 
 
 def _get_notebooks_url_from_keycloak_url(keycloak_url) -> str:
-    parsed_url = urllib3.parse.urlparse(keycloak_url)
+    parsed_url = urllib3.parse.urlparse(keycloak_url)  # type: ignore
     return parsed_url._replace(path="notebooks").geturl()
