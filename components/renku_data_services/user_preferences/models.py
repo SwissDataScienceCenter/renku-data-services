@@ -1,6 +1,7 @@
 """Models for user preferences."""
 
 from datetime import datetime
+from hashlib import md5
 from typing import List
 
 from pydantic import BaseModel, Field
@@ -24,3 +25,10 @@ class UserPreferences(BaseModel):
     pinned_projects: PinnedProjects
     created_at: datetime | None = Field(default=None)
     updated_at: datetime | None = Field(default=None)
+
+    @property
+    def etag(self) -> str | None:
+        """Entity tag value for this user preferences object."""
+        if self.updated_at is None:
+            return None
+        return md5(self.updated_at.isoformat().encode(), usedforsecurity=False).hexdigest().upper()

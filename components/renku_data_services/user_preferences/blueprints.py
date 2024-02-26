@@ -1,4 +1,5 @@
 """User preferences app."""
+
 from dataclasses import dataclass
 
 from sanic import Request, json
@@ -26,7 +27,11 @@ class UserPreferencesBP(CustomBlueprint):
         async def _get(_: Request, user: base_models.APIUser):
             user_preferences: models.UserPreferences | None
             user_preferences = await self.user_preferences_repo.get_user_preferences(user=user)
-            return json(apispec.UserPreferences.model_validate(user_preferences).model_dump())
+            headers = {"ETag": user_preferences.etag} if user_preferences.etag is not None else None
+            return json(
+                apispec.UserPreferences.model_validate(user_preferences).model_dump(),
+                headers=headers,
+            )
 
         return "/user/preferences", ["GET"], _get
 
