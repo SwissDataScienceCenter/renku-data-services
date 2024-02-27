@@ -1,0 +1,64 @@
+"""Adapters for project database classes."""
+
+from __future__ import annotations
+
+from typing import Any, Callable
+
+from sanic.log import logger
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from renku_data_services.message_queue import orm as schemas
+from renku_data_services.message_queue.interface import IMessageQueue
+
+
+class EventRepository:
+    """Repository for events."""
+
+    def __init__(
+        self,
+        session_maker: Callable[..., AsyncSession],
+        message_queue: IMessageQueue,
+    ):
+        self.session_maker = session_maker  # type: ignore[call-overload]
+        self.message_queue: IMessageQueue = message_queue
+
+    async def send_pending_events(self) -> None:
+        """Get all pending events and resend them.
+
+        This is to ensure that an event is sent at least once.
+        """
+        logger.info("resending missed events.")
+
+        async with self.session_maker() as session:
+            stmt = select(schemas.EventORM)
+            result = await session.execute(stmt)
+            events_orm = result.scalars().all()
+
+            num_events = len(events_orm)
+            if num_events == 0:
+                logger.info("no missed events to send")
+                return
+            for event in events_orm:
+                await self.message_queue.send_message(event.queue, event.payload)  # type:ignore
+
+                await self.delete_event(event.id)
+
+        logger.info(f"resent {num_events} events")
+
+    async def store_event(self, queue: str, message: dict[str, Any]) -> int:
+        """Store an event."""
+        event = schemas.EventORM(queue, message)
+
+        async with self.session_maker() as session:
+            async with session.begin():
+                session.add(event)
+
+                return event.id
+
+    async def delete_event(self, id: int):
+        """Delete an event."""
+        async with self.session_maker() as session:
+            async with session.begin():
+                stmt = delete(schemas.EventORM).where(schemas.EventORM.id == id)
+                await session.execute(stmt)

@@ -1,5 +1,6 @@
 """Message queue implementation for redis streams."""
 
+import base64
 import glob
 import json
 from dataclasses import dataclass
@@ -17,7 +18,7 @@ from renku_data_services.message_queue.avro_models.io.renku.events.v1.header imp
 from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_created import ProjectCreated
 from renku_data_services.message_queue.avro_models.io.renku.events.v1.visibility import Visibility as MsgVisibility
 from renku_data_services.message_queue.config import RedisConfig
-from renku_data_services.message_queue.interface import IMessageQueue
+from renku_data_services.message_queue.interface import IMessageQueue, MessageContext
 from renku_data_services.project.apispec import Visibility
 from renku_data_services.project.orm import ProjectRepositoryORM
 
@@ -75,7 +76,7 @@ class RedisQueue(IMessageQueue):
             requestId=ULID().hex,
         )
 
-    async def project_created(
+    def project_created_message(
         self,
         name: str,
         slug: str,
@@ -86,7 +87,7 @@ class RedisQueue(IMessageQueue):
         creation_date: datetime,
         created_by: str,
         members: list[str],
-    ):
+    ) -> MessageContext:
         """Event for when a new project is created."""
         headers = self._create_header("project.created")
         message_id = ULID().hex
@@ -112,7 +113,18 @@ class RedisQueue(IMessageQueue):
         message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
             "id": message_id,
             "headers": headers.serialize_json(),
-            "payload": serialize_binary(body),
+            "payload": base64.b64encode(serialize_binary(body)).decode(),
         }
 
-        await self.config.redis_connection.xadd("project.created", message)
+        return MessageContext(self, "project.created", message)  # type:ignore
+
+    async def send_message(
+        self,
+        channel: str,
+        message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float],
+    ):
+        """Send a message on a channel."""
+        if "payload" in message:
+            message["payload"] = base64.b64decode(message["payload"])  # type: ignore
+
+        await self.config.redis_connection.xadd(channel, message)
