@@ -89,7 +89,10 @@ class SessionLaunchersBP(CustomBlueprint):
         async def _get_all(_: Request, user: base_models.APIUser):
             launchers = await self.session_repo.get_launchers(user=user)
             return json(
-                [apispec.Launcher.model_validate(item).model_dump(exclude_none=True, mode="json") for item in launchers]
+                [
+                    apispec.SessionLauncher.model_validate(item).model_dump(exclude_none=True, mode="json")
+                    for item in launchers
+                ]
             )
 
         return "/session_launchers", ["GET"], _get_all
@@ -100,7 +103,7 @@ class SessionLaunchersBP(CustomBlueprint):
         @authenticate(self.authenticator)
         async def _get_one(_: Request, launcher_id: str, user: base_models.APIUser):
             launcher = await self.session_repo.get_launcher(user=user, launcher_id=launcher_id)
-            return json(apispec.Launcher.model_validate(launcher).model_dump(exclude_none=True, mode="json"))
+            return json(apispec.SessionLauncher.model_validate(launcher).model_dump(exclude_none=True, mode="json"))
 
         return "/session_launchers/<launcher_id>", ["GET"], _get_one
 
@@ -108,10 +111,12 @@ class SessionLaunchersBP(CustomBlueprint):
         """Create a new session launcher."""
 
         @authenticate(self.authenticator)
-        @validate(json=apispec.LauncherPost)
-        async def _post(_: Request, body: apispec.LauncherPost, user: base_models.APIUser):
+        @validate(json=apispec.SessionLauncherPost)
+        async def _post(_: Request, body: apispec.SessionLauncherPost, user: base_models.APIUser):
             launcher = await self.session_repo.insert_launcher(user=user, new_launcher=body)
-            return json(apispec.Launcher.model_validate(launcher).model_dump(exclude_none=True, mode="json"), 201)
+            return json(
+                apispec.SessionLauncher.model_validate(launcher).model_dump(exclude_none=True, mode="json"), 201
+            )
 
         return "/session_launchers", ["POST"], _post
 
@@ -119,11 +124,11 @@ class SessionLaunchersBP(CustomBlueprint):
         """Partially update a specific session launcher."""
 
         @authenticate(self.authenticator)
-        @validate(json=apispec.LauncherPatch)
-        async def _patch(_: Request, launcher_id: str, body: apispec.LauncherPatch, user: base_models.APIUser):
+        @validate(json=apispec.SessionLauncherPatch)
+        async def _patch(_: Request, launcher_id: str, body: apispec.SessionLauncherPatch, user: base_models.APIUser):
             body_dict = body.model_dump(exclude_none=True)
             launcher = await self.session_repo.update_launcher(user=user, launcher_id=launcher_id, **body_dict)
-            return json(apispec.Launcher.model_validate(launcher).model_dump(exclude_none=True, mode="json"))
+            return json(apispec.SessionLauncher.model_validate(launcher).model_dump(exclude_none=True, mode="json"))
 
         return "/session_launchers/<launcher_id>", ["PATCH"], _patch
 
@@ -144,7 +149,10 @@ class SessionLaunchersBP(CustomBlueprint):
         async def _get_launcher(_: Request, project_id: str, user: base_models.APIUser):
             launchers = await self.session_repo.get_project_launchers(user=user, project_id=project_id)
             return json(
-                [apispec.Launcher.model_validate(item).model_dump(exclude_none=True, mode="json") for item in launchers]
+                [
+                    apispec.SessionLauncher.model_validate(item).model_dump(exclude_none=True, mode="json")
+                    for item in launchers
+                ]
             )
 
         return "/projects/<project_id>/session_launchers", ["GET"], _get_launcher

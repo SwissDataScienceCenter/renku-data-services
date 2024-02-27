@@ -164,7 +164,7 @@ class SessionRepository:
             return launcher.dump()
 
     async def insert_launcher(
-        self, user: base_models.APIUser, new_launcher: apispec.LauncherPost
+        self, user: base_models.APIUser, new_launcher: apispec.SessionLauncherPost
     ) -> models.SessionLauncher:
         """Insert a new session launcher."""
         if not user.is_authenticated or user.id is None:

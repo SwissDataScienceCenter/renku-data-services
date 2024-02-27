@@ -125,7 +125,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LaunchersList"
+                $ref: "#/components/schemas/SessionLaunchersList"
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -137,14 +137,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/LauncherPost"
+              $ref: "#/components/schemas/SessionLauncherPost"
       responses:
         "201":
           description: The session launcher was created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Launcher"
+                $ref: "#/components/schemas/SessionLauncher"
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -164,7 +164,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Launcher"
+                $ref: "#/components/schemas/SessionLauncher"
         "404":
           description: The session launcher does not exist
           content:
@@ -188,14 +188,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/LauncherPatch"
+              $ref: "#/components/schemas/SessionLauncherPatch"
       responses:
         "200":
           description: The patched session launcher
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Launcher"
+                $ref: "#/components/schemas/SessionLauncher"
         "404":
           description: The session launcher does not exist
           content:
@@ -262,7 +262,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LaunchersList"
+                $ref: "#/components/schemas/SessionLaunchersList"
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -323,13 +323,13 @@ components:
           $ref: "#/components/schemas/Description"
         container_image:
           $ref: "#/components/schemas/ContainerImage"
-    LaunchersList:
+    SessionLaunchersList:
       description: A list of Renku session launchers
       type: array
       items:
-        $ref: "#/components/schemas/Launcher"
+        $ref: "#/components/schemas/SessionLauncher"
       minItems: 0
-    Launcher:
+    SessionLauncher:
       description: A Renku 1.0 session definition and metadata
       type: object
       properties:
@@ -363,7 +363,7 @@ components:
         description: R compute session
         environment_kind: global_environment
         environment_id: 01AN4Z79ZS6XX96588FDX0H099
-    LauncherPost:
+    SessionLauncherPost:
       description: Data required to create a session launcher
       type: object
       additionalProperties: false
@@ -384,7 +384,7 @@ components:
         - name
         - project_id
         - environment_kind
-    LauncherPatch:
+    SessionLauncherPatch:
       type: object
       description: Update a session launcher
       additionalProperties: false
