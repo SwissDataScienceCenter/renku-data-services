@@ -264,6 +264,7 @@ components:
       required:
         - "id"
         - "name"
+        - "slug"
         - "created_by"
         - "creation_date"
       example:
