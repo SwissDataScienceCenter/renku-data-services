@@ -51,7 +51,7 @@ class ProjectRepository:
         if page < 1:
             raise errors.ValidationError(message="Parameter 'page' must be a natural number")
         offset = (page - 1) * per_page
-        if offset > 2**63-1:
+        if offset > 2**63 - 1:
             raise errors.ValidationError(message="Parameter 'page' is too large")
         if per_page < 1 or per_page > 100:
             raise errors.ValidationError(message="Parameter 'per_page' must be between 1 and 100")
