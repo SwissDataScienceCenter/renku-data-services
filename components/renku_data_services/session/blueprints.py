@@ -13,7 +13,7 @@ from renku_data_services.session.db import SessionRepository
 
 
 @dataclass(kw_only=True)
-class SessionEnvironmentsBP(CustomBlueprint):
+class EnvironmentsBP(CustomBlueprint):
     """Handlers for manipulating session environments."""
 
     session_repo: SessionRepository
