@@ -100,7 +100,10 @@ class ProjectRepository:
     async def insert_project(self, user: base_models.APIUser, new_project=apispec.ProjectPost) -> models.Project:
         """Insert a new project entry."""
 
-        project_model = models.Project.from_dict(**new_project)
+        project_dict = new_project.model_dump(exclude_none=True)
+        user_id: str = cast(str, user.id)
+        project_dict['created_by'] = models.Member(id=user_id)
+        project_model = models.Project.from_dict(**project_dict)
         project = schemas.ProjectORM.load(project_model)
 
         async with self.session_maker() as session:
