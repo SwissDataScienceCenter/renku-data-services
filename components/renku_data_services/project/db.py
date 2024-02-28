@@ -118,7 +118,7 @@ class ProjectRepository:
                     requested_by=user, project_id=project_model.id, public_project=public_project
                 )
 
-        return project.dump()
+                return project.dump()
 
     async def update_project(
         self, user: base_models.APIUser, project_id: str, etag: str | None = None, **payload
