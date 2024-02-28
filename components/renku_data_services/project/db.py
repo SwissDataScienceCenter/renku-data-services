@@ -50,6 +50,9 @@ class ProjectRepository:
         """Get all projects from the database."""
         if page < 1:
             raise errors.ValidationError(message="Parameter 'page' must be a natural number")
+        offset = (page - 1) * per_page
+        if offset > 2**63 - 1:
+            raise errors.ValidationError(message="Parameter 'page' is too large")
         if per_page < 1 or per_page > 100:
             raise errors.ValidationError(message="Parameter 'per_page' must be between 1 and 100")
 
@@ -61,7 +64,7 @@ class ProjectRepository:
         async with self.session_maker() as session:
             stmt = select(schemas.ProjectORM)
             stmt = stmt.where(schemas.ProjectORM.id.in_(project_ids))
-            stmt = stmt.limit(per_page).offset((page - 1) * per_page)
+            stmt = stmt.limit(per_page).offset(offset)
             stmt = stmt.order_by(schemas.ProjectORM.created_at.desc())
             result = await session.execute(stmt)
             projects_orm = result.scalars().all()
