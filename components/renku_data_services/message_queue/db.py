@@ -23,6 +23,14 @@ class EventRepository:
         self.session_maker = session_maker  # type: ignore[call-overload]
         self.message_queue: IMessageQueue = message_queue
 
+    async def get_pending_events(self) -> list[schemas.EventORM]:
+        """Get all pending events."""
+        async with self.session_maker() as session:
+            stmt = select(schemas.EventORM)
+            result = await session.execute(stmt)
+            events_orm = result.scalars().all()
+            return list(events_orm)
+
     async def send_pending_events(self) -> None:
         """Get all pending events and resend them.
 

@@ -1,4 +1,4 @@
-.PHONY: schemas tests style_checks pre_commit_checks run
+.PHONY: schemas tests style_checks pre_commit_checks run pull_avro check_avro avro_models update_avro
 
 define test_apispec_up_to_date
 	$(eval $@_NAME=$(1))
