@@ -36,7 +36,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GroupsList"
+                $ref: "#/components/schemas/GroupResponseList"
           headers:
             page:
               description: The index of the current page (starting at 1).
@@ -69,14 +69,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/GroupPost"
+              $ref: "#/components/schemas/GroupPostRequest"
       responses:
         "201":
           description: The group was created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Group"
+                $ref: "#/components/schemas/GroupResponse"
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -89,14 +89,14 @@ paths:
           name: group_slug
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Slug"
       responses:
         "200":
           description: The group
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Group"
+                $ref: "#/components/schemas/GroupResponse"
         "404":
           description: The group does not exist
           content:
@@ -114,20 +114,20 @@ paths:
           name: group_slug
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Slug"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/GroupPatch"
+              $ref: "#/components/schemas/GroupPatchRequest"
       responses:
         "200":
           description: The patched group
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Group"
+                $ref: "#/components/schemas/GroupResponse"
         "404":
           description: The group does not exist
           content:
@@ -145,7 +145,7 @@ paths:
           name: group_slug
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Slug"
       responses:
         "204":
           description: The group was removed or did not exist in the first place
@@ -161,14 +161,14 @@ paths:
           name: group_slug
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Slug"
       responses:
         "200":
           description: The group's members
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/FullUsersWithRoles"
+                $ref: "#/components/schemas/GroupMemberResponseList"
         "404":
           description: The group does not exist
           content:
@@ -189,16 +189,20 @@ paths:
           name: group_slug
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Slug"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/MembersWithRoles"
+              $ref: "#/components/schemas/GroupMemberPatchRequestList"
       responses:
         "200":
           description: The group's members were updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupMemberPatchRequestList"
         "404":
           description: The group does not exist
           content:
@@ -209,7 +213,7 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - groups
-  /groups/{group_slug}/members/{member_id}:
+  /groups/{group_slug}/members/{user_id}:
     delete:
       summary: Remove a member from a group
       parameters:
@@ -217,9 +221,9 @@ paths:
           name: group_slug
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Slug"
         - in: path
-          name: member_id
+          name: user_id
           description: This is user's KeyCloak ID
           required: true
           schema:
@@ -239,26 +243,25 @@ paths:
         - groups
 components:
   schemas:
-    GroupsList:
+    GroupResponseList:
       description: A list of Renku groups
       type: array
       items:
-        $ref: "#/components/schemas/Group"
-      minItems: 0
-    Group:
-      description: A Renku v2 group definition and metadata
+        $ref: "#/components/schemas/GroupResponse"
+    GroupResponse:
+      description: A Renku group definition and metadata
       type: object
       properties:
         id:
           $ref: "#/components/schemas/Ulid"
         name:
-          $ref: "#/components/schemas/Name"
+          $ref: "#/components/schemas/GroupName"
         slug:
           $ref: "#/components/schemas/Slug"
         creation_date:
           $ref: "#/components/schemas/CreationDate"
         created_by:
-          $ref: "#/components/schemas/Member"
+          $ref: "#/components/schemas/KeycloakId"
         description:
           $ref: "#/components/schemas/Description"
       required:
@@ -271,28 +274,28 @@ components:
         id: "01AN4Z79ZS5XN0F25N3DB94T4R"
         name: "R-Project Group"
         slug: "r-project"
-        created_by:
-          id: "owner-KC-id"
-    GroupPost:
+        created_by: "owner-keycloak-id"
+    GroupPostRequest:
       description: Group metadata to be created in Renku
       type: object
       additionalProperties: false
       properties:
         name:
-          $ref: "#/components/schemas/Name"
+          $ref: "#/components/schemas/GroupName"
         slug:
           $ref: "#/components/schemas/Slug"
         description:
           $ref: "#/components/schemas/Description"
       required:
         - "name"
-    GroupPatch:
+        - "slug"
+    GroupPatchRequest:
       type: object
       description: Patch of a group
       additionalProperties: false
       properties:
         name:
-          $ref: "#/components/schemas/Name"
+          $ref: "#/components/schemas/GroupName"
         slug:
           $ref: "#/components/schemas/Slug"
         description:
@@ -304,7 +307,7 @@ components:
       maxLength: 26
       pattern: "^[A-Z0-9]{26}$"  # This is case-insensitive
       format: ulid
-    Name:
+    GroupName:
       description: Renku group name
       type: string
       minLength: 1
@@ -318,7 +321,7 @@ components:
       pattern: "^[a-z0-9]+[a-z0-9._-]*$"  # Cannot contain consecutive special characters or end in .git and .atom
       example: "my-renku-group"
     CreationDate:
-      description: The date and time the group was created (time is always in UTC)
+      description: The date and time the group was created (in UTC and ISO-8601 format)
       type: string
       format: date-time
       example: "2023-11-01T17:32:28Z"
@@ -326,77 +329,9 @@ components:
       description: A description for the group
       type: string
       maxLength: 500
-    Member:
-      description: A KeyCloak user
+    GroupMemberResponse:
+      description: A KeyCloak user that is member of a group
       type: object
-      additionalProperties: false
-      properties:
-        id:
-          $ref: "#/components/schemas/KeyCloakId"
-      required:
-        - "id"
-      example:
-        id: "some-keycloak-user-id"
-    KeyCloakId:
-      description: Member's KeyCloak ID
-      type: string
-      pattern: "^[A-Za-z0-9-]+$"
-      minLength: 1
-      example: "123-keycloak-user-id-456"
-    MembersWithRoles:
-      description: List of members and their access level to the group
-      type: array
-      items:
-        $ref: "#/components/schemas/MemberWithRole"
-      minItems: 0
-      example:
-        - id: "some-keycloak-user-id"
-          role: "owner"
-        - id: "another-keycloak-user-id"
-          role: "member"
-    MemberWithRole:
-      description: A member and the access level to the group
-      type: object
-      additionalProperties: false
-      properties:
-        member:
-          $ref: "#/components/schemas/Member"
-        role:
-          $ref: "#/components/schemas/Role"
-      required:
-        - "member"
-        - "role"
-      example:
-        member:
-          id: "some-keycloak-user-id"
-        role: "owner"
-    FullUsersWithRoles:
-      description: List of members with full info and their access level to the group
-      type: array
-      items:
-        $ref: "#/components/schemas/FullUserWithRole"
-      minItems: 0
-    FullUserWithRole:
-      description: A member with full info (email, name, ...) and the access level to the group
-      type: object
-      additionalProperties: false
-      properties:
-        member:
-          $ref: "#/components/schemas/UserWithId"
-        role:
-          $ref: "#/components/schemas/Role"
-      required:
-        - "member"
-        - "role"
-    Role:
-      description: Possible roles of members in a group
-      type: string
-      enum:
-        - member
-        - owner
-    UserWithId:
-      type: object
-      description: This is copied from ../users/api.spec.yaml
       additionalProperties: false
       properties:
         id:
@@ -407,10 +342,66 @@ components:
           $ref: "#/components/schemas/UserFirstLastName"
         last_name:
           $ref: "#/components/schemas/UserFirstLastName"
-      required: ["id"]
+        role:
+          $ref: "#/components/schemas/GroupRole"
+      required:
+        - "id"
+        - "role"
       example:
-        id: "some-random-keycloak-id"
-        email: "user@gmail.com"
+        id: "some-keycloak-user-id"
+        role: "owner"
+    GroupMemberPatchRequest:
+      description: A KeyCloak user that is member of a group
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/UserId"
+        role:
+          $ref: "#/components/schemas/GroupRole"
+      required:
+        - "id"
+        - "role"
+      example:
+        id: "some-keycloak-user-id"
+        role: "owner"
+    KeycloakId:
+      description: Member's KeyCloak ID
+      type: string
+      pattern: "^[A-Za-z0-9-]+$"
+      minLength: 1
+      example: "123-keycloak-user-id-456"
+    GroupMemberResponseList:
+      description: List of members and their access level to the group
+      type: array
+      items:
+        $ref: "#/components/schemas/GroupMemberResponse"
+      minItems: 0
+      example:
+        - id: "some-keycloak-user-id"
+          role: "owner"
+        - id: "another-keycloak-user-id"
+          role: "member"
+          email: "user@email.com"
+          first_name: "John"
+          last_name: "Doe"
+    GroupMemberPatchRequestList:
+      description: List of members and their access level to the group
+      type: array
+      items:
+        $ref: "#/components/schemas/GroupMemberPatchRequest"
+      minItems: 0
+      example:
+        - id: "some-keycloak-user-id"
+          role: "owner"
+        - id: "another-keycloak-user-id"
+          role: "member"
+    GroupRole:
+      description: Possible roles of members in a group
+      type: string
+      enum:
+        - member
+        - owner
     UserId:
       type: string
       description: Keycloak user ID
@@ -455,3 +446,4 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+
