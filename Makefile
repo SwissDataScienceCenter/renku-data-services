@@ -30,6 +30,8 @@ style_checks:
 	@$(call test_apispec_up_to_date,"users")
 	@echo "checking project apispec is up to date"
 	@$(call test_apispec_up_to_date,"project")
+	@echo "checking group apispec is up to date"
+	@$(call test_apispec_up_to_date,"group")
 	poetry run mypy
 	poetry run flake8 -v
 	poetry run bandit -c pyproject.toml -r .
