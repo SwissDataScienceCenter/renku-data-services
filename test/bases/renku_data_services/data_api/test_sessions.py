@@ -1,4 +1,4 @@
-"""Tests for sessions blueprint."""
+"""Tests for sessions blueprints."""
 
 import json
 from test.bases.renku_data_services.keycloak_sync.test_sync import get_kc_users
@@ -55,136 +55,273 @@ def unauthorized_headers() -> Dict[str, str]:
 
 
 @pytest.fixture
-def create_project(sanic_client, user_headers, admin_headers):
+def create_project(sanic_client: SanicASGITestClient, user_headers, admin_headers):
     async def create_project_helper(name: str, admin: bool = False, **payload) -> Dict[str, Any]:
         headers = admin_headers if admin else user_headers
         payload = payload.copy()
         payload.update({"name": name})
 
-        _, response = await sanic_client.post("/api/data/projects", headers=headers, json=payload)
+        _, res = await sanic_client.post("/api/data/projects", headers=headers, json=payload)
 
-        assert response.status_code == 201, response.text
-        return response.json
+        assert res.status_code == 201, res.text
+        return res.json
 
     return create_project_helper
 
 
 @pytest.fixture
-def create_session(sanic_client, user_headers, admin_headers):
-    async def create_session_helper(name: str, project_id: str, admin: bool = False, **payload) -> Dict[str, Any]:
-        headers = admin_headers if admin else user_headers
+def create_session_environment(sanic_client: SanicASGITestClient, admin_headers):
+    async def create_session_environment_helper(name: str, **payload) -> Dict[str, Any]:
+        payload = payload.copy()
+        payload.update({"name": name})
+        payload["description"] = payload.get("description") or "A session environment."
+        payload["container_image"] = payload.get("container_image") or "some_image:some_tag"
+
+        _, res = await sanic_client.post("/api/data/environments", headers=admin_headers, json=payload)
+
+        assert res.status_code == 201, res.text
+        assert res.json is not None
+        return res.json
+
+    return create_session_environment_helper
+
+
+@pytest.fixture
+def create_session_launcher(sanic_client: SanicASGITestClient, user_headers):
+    async def create_session_launcher_helper(name: str, project_id: str, **payload) -> Dict[str, Any]:
         payload = payload.copy()
         payload.update({"name": name, "project_id": project_id})
-        payload["environment_id"] = payload.get("environment_id") or "http://renkulab.io/repository-1/Dockerfile:0.0.1"
+        payload["description"] = payload.get("description") or "A session launcher."
+        payload["environment_kind"] = payload.get("environment_kind") or "container_image"
 
-        _, response = await sanic_client.post("/api/data/sessions", headers=headers, json=payload)
+        if payload["environment_kind"] == "container_image":
+            payload["container_image"] = payload.get("container_image") or "some_image:some_tag"
 
-        assert response.status_code == 201, response.text
-        return response.json
+        _, res = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
 
-    return create_session_helper
+        assert res.status_code == 201, res.text
+        assert res.json is not None
+        return res.json
+
+    return create_session_launcher_helper
 
 
 @pytest.mark.asyncio
-async def test_session_creation(sanic_client, user_headers, admin_headers, create_project):
-    await create_project("Project 1")
-    project = await create_project("Project 2")
-    await create_project("Project 3")
+async def test_get_all_session_environments(
+    sanic_client: SanicASGITestClient, unauthorized_headers, create_session_environment
+):
+    await create_session_environment("Environment 1")
+    await create_session_environment("Environment 2")
+    await create_session_environment("Environment 3")
 
+    _, res = await sanic_client.get("/api/data/environments", headers=unauthorized_headers)
+
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    environments = res.json
+    assert {env["name"] for env in environments} == {"Environment 1", "Environment 2", "Environment 3"}
+
+
+@pytest.mark.asyncio
+async def test_get_session_environment(
+    sanic_client: SanicASGITestClient, unauthorized_headers, create_session_environment
+):
+    env = await create_session_environment(
+        "Environment 1", description="Some environment.", container_image="test_image:latest"
+    )
+    environment_id = env["id"]
+
+    _, res = await sanic_client.get(f"/api/data/environments/{environment_id}", headers=unauthorized_headers)
+
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    assert res.json.get("name") == "Environment 1"
+    assert res.json.get("description") == "Some environment."
+    assert res.json.get("container_image") == "test_image:latest"
+
+
+@pytest.mark.asyncio
+async def test_post_session_environment(sanic_client: SanicASGITestClient, admin_headers):
     payload = {
-        "name": "Compute Session",
-        "description": "First Renku 1.0 compute session",
-        "environment_id": "http://renkulab.io/repository-1/Dockerfile:0.0.1",
+        "name": "Environment 1",
+        "description": "A session environment.",
+        "container_image": "some_image:some_tag",
+    }
+
+    _, res = await sanic_client.post("/api/data/environments", headers=admin_headers, json=payload)
+
+    assert res.status_code == 201, res.text
+    assert res.json is not None
+    assert res.json.get("name") == "Environment 1"
+    assert res.json.get("description") == "A session environment."
+    assert res.json.get("container_image") == "some_image:some_tag"
+
+
+@pytest.mark.asyncio
+async def test_post_session_environment_unauthorized(sanic_client: SanicASGITestClient, user_headers):
+    payload = {
+        "name": "Environment 1",
+        "description": "A session environment.",
+        "container_image": "some_image:some_tag",
+    }
+
+    _, res = await sanic_client.post("/api/data/environments", headers=user_headers, json=payload)
+
+    assert res.status_code == 401, res.text
+
+
+@pytest.mark.asyncio
+async def test_patch_session_environment(sanic_client: SanicASGITestClient, admin_headers, create_session_environment):
+    env = await create_session_environment("Environment 1")
+    environment_id = env["id"]
+
+    payload = {"name": "New name", "description": "New description.", "container_image": "new_image:new_tag"}
+
+    _, res = await sanic_client.patch(f"/api/data/environments/{environment_id}", headers=admin_headers, json=payload)
+
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    assert res.json.get("name") == "New name"
+    assert res.json.get("description") == "New description."
+    assert res.json.get("container_image") == "new_image:new_tag"
+
+
+@pytest.mark.asyncio
+async def test_patch_session_environment_unauthorized(
+    sanic_client: SanicASGITestClient, user_headers, create_session_environment
+):
+    env = await create_session_environment("Environment 1")
+    environment_id = env["id"]
+
+    payload = {"name": "New name", "description": "New description.", "container_image": "new_image:new_tag"}
+
+    _, res = await sanic_client.patch(f"/api/data/environments/{environment_id}", headers=user_headers, json=payload)
+
+    assert res.status_code == 401, res.text
+
+
+@pytest.mark.asyncio
+async def test_delete_session_environment(sanic_client: SanicASGITestClient, admin_headers, create_session_environment):
+    env = await create_session_environment("Environment 1")
+    environment_id = env["id"]
+
+    _, res = await sanic_client.delete(f"/api/data/environments/{environment_id}", headers=admin_headers)
+
+    assert res.status_code == 204, res.text
+
+
+@pytest.mark.asyncio
+async def test_delete_session_environment_unauthorized(
+    sanic_client: SanicASGITestClient, user_headers, create_session_environment
+):
+    env = await create_session_environment("Environment 1")
+    environment_id = env["id"]
+
+    _, res = await sanic_client.delete(f"/api/data/environments/{environment_id}", headers=user_headers)
+
+    assert res.status_code == 401, res.text
+
+
+@pytest.mark.asyncio
+async def test_get_all_session_launchers(
+    sanic_client: SanicASGITestClient, user_headers, create_project, create_session_launcher
+):
+    project_1 = await create_project("Project 1")
+    project_2 = await create_project("Project 2")
+
+    await create_session_launcher("Launcher 1", project_id=project_1["id"])
+    await create_session_launcher("Launcher 2", project_id=project_2["id"])
+    await create_session_launcher("Launcher 3", project_id=project_2["id"])
+
+    _, res = await sanic_client.get("/api/data/session_launchers", headers=user_headers)
+
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    launchers = res.json
+    assert {launcher["name"] for launcher in launchers} == {"Launcher 1", "Launcher 2", "Launcher 3"}
+
+
+@pytest.mark.asyncio
+async def test_get_session_launcher(
+    sanic_client: SanicASGITestClient,
+    unauthorized_headers,
+    create_project,
+    create_session_environment,
+    create_session_launcher,
+):
+    project = await create_project("Some project", visibility="public")
+    env = await create_session_environment("Some environment")
+    launcher = await create_session_launcher(
+        "Some launcher",
+        project_id=project["id"],
+        description="Some launcher.",
+        environment_kind="global_environment",
+        environment_id=env["id"],
+    )
+    launcher_id = launcher["id"]
+
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher_id}", headers=unauthorized_headers)
+
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    assert res.json.get("name") == "Some launcher"
+    assert res.json.get("project_id") == project["id"]
+    assert res.json.get("description") == "Some launcher."
+    assert res.json.get("environment_kind") == "global_environment"
+    assert res.json.get("environment_id") == env["id"]
+    assert res.json.get("container_image") is None
+
+
+@pytest.mark.asyncio
+async def test_get_project_launchers(
+    sanic_client: SanicASGITestClient, user_headers, create_project, create_session_launcher
+):
+    project_1 = await create_project("Project 1")
+    project_2 = await create_project("Project 2")
+
+    await create_session_launcher("Launcher 1", project_id=project_1["id"])
+    await create_session_launcher("Launcher 2", project_id=project_2["id"])
+    await create_session_launcher("Launcher 3", project_id=project_2["id"])
+
+    _, res = await sanic_client.get(f"/api/data/projects/{project_2['id']}/session_launchers", headers=user_headers)
+
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    launchers = res.json
+    assert {launcher["name"] for launcher in launchers} == {"Launcher 2", "Launcher 3"}
+
+
+@pytest.mark.asyncio
+async def test_post_session_launcher(sanic_client: SanicASGITestClient, user_headers, create_project):
+    project = await create_project("Some project")
+    payload = {
+        "name": "Launcher 1",
         "project_id": project["id"],
+        "description": "A session launcher.",
+        "environment_kind": "container_image",
+        "container_image": "some_image:some_tag",
     }
 
-    _, response = await sanic_client.post("/api/data/sessions", headers=admin_headers, json=payload)
+    _, res = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
 
-    assert response.status_code == 201, response.text
-    session = response.json
-    assert session["name"] == "Compute Session"
-    assert session["description"] == "First Renku 1.0 compute session"
-
-    session_id = session["id"]
-    _, response = await sanic_client.get(f"/api/data/sessions/{session_id}", headers=user_headers)
-
-    assert response.status_code == 200, response.text
-    session = response.json
-    assert session["name"] == "Compute Session"
-    assert session["description"] == "First Renku 1.0 compute session"
+    assert res.status_code == 201, res.text
+    assert res.json is not None
+    assert res.json.get("name") == "Launcher 1"
+    assert res.json.get("project_id") == project["id"]
+    assert res.json.get("description") == "A session launcher."
+    assert res.json.get("environment_kind") == "container_image"
+    assert res.json.get("container_image") == "some_image:some_tag"
+    assert res.json.get("environment_id") is None
 
 
 @pytest.mark.asyncio
-async def test_get_all_sessions(create_project, create_session, sanic_client, user_headers):
-    # Create some projects
-    await create_project("Project 1")
-    project = await create_project("Project 2")
-    await create_project("Project 3")
+async def test_delete_session_launcher(
+    sanic_client: SanicASGITestClient, user_headers, create_project, create_session_launcher
+):
+    project = await create_project("Some project")
+    launcher = await create_session_launcher("Launcher 1", project_id=project["id"])
+    launcher_id = launcher["id"]
 
-    await create_session(name="Session 1", project_id=project["id"])
-    await create_session(name="Session 2", project_id=project["id"])
-    await create_session(name="Session 3", project_id=project["id"])
+    _, res = await sanic_client.delete(f"/api/data/session_launchers/{launcher_id}", headers=user_headers)
 
-    _, response = await sanic_client.get("/api/data/sessions", headers=user_headers)
-
-    assert response.status_code == 200, response.text
-    sessions = response.json
-
-    assert {p["name"] for p in sessions} == {"Session 1", "Session 2", "Session 3"}
-
-
-@pytest.mark.asyncio
-async def test_delete_project(create_project, create_session, sanic_client, user_headers):
-    # Create some projects
-    await create_project("Project 1")
-    project = await create_project("Project 2")
-    await create_project("Project 3")
-
-    await create_session(name="Session 1", project_id=project["id"])
-    await create_session(name="Session 2", project_id=project["id"])
-    session = await create_session(name="Session 3", project_id=project["id"])
-    await create_session(name="Session 4", project_id=project["id"])
-    await create_session(name="Session 5", project_id=project["id"])
-
-    # Delete a session
-    session_id = session["id"]
-    _, response = await sanic_client.delete(f"/api/data/sessions/{session_id}", headers=user_headers)
-
-    assert response.status_code == 204, response.text
-
-    # Get all sessions
-    _, response = await sanic_client.get("/api/data/sessions", headers=user_headers)
-
-    assert response.status_code == 200, response.text
-    assert {p["name"] for p in response.json} == {"Session 1", "Session 2", "Session 4", "Session 5"}
-
-
-@pytest.mark.asyncio
-async def test_patch_session(create_project, create_session, sanic_client, user_headers):
-    # Create some projects
-    await create_project("Project 1")
-    project = await create_project("Project 2")
-    await create_project("Project 3")
-
-    session = await create_session(name="Session 1", project_id=project["id"], description="Old description")
-
-    # Patch a session
-    patch = {
-        "name": "New Name",
-        "description": "A patched session",
-        "environment_id": "http://renkulab.io/repository-2/Dockerfile:2.0.0",
-    }
-    session_id = session["id"]
-    _, response = await sanic_client.patch(f"/api/data/sessions/{session_id}", headers=user_headers, json=patch)
-
-    assert response.status_code == 200, response.text
-
-    # Get the session
-    session_id = session["id"]
-    _, response = await sanic_client.get(f"/api/data/sessions/{session_id}", headers=user_headers)
-
-    assert response.status_code == 200, response.text
-    session = response.json
-    assert session["name"] == "New Name"
-    assert session["description"] == "A patched session"
-    assert session["environment_id"] == "http://renkulab.io/repository-2/Dockerfile:2.0.0"
+    assert res.status_code == 204, res.text
