@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, NamedTuple, Tuple, cast
 
 from sqlalchemy import func, select
@@ -13,7 +12,7 @@ from renku_data_services import errors
 from renku_data_services.authz import models as authz_models
 from renku_data_services.authz.authz import IProjectAuthorizer
 from renku_data_services.authz.models import MemberQualifier, Scope
-from renku_data_services.project import models
+from renku_data_services.project import apispec, models
 from renku_data_services.project import orm as schemas
 from renku_data_services.project.apispec import Role, Visibility
 
@@ -98,25 +97,25 @@ class ProjectRepository:
 
             return project_orm.dump()
 
-    async def insert_project(self, user: base_models.APIUser, project: models.Project) -> models.Project:
+    async def insert_project(self, user: base_models.APIUser, new_project=apispec.ProjectPost) -> models.Project:
         """Insert a new project entry."""
-        project_orm = schemas.ProjectORM.load(project)
-        project_orm.creation_date = datetime.now(timezone.utc).replace(microsecond=0)
-        project_orm.created_by = user.id
+
+        project_model = models.Project.from_dict(**new_project)
+        project = schemas.ProjectORM.load(project_model)
 
         async with self.session_maker() as session:
             async with session.begin():
-                session.add(project_orm)
+                session.add(project)
 
-                project = project_orm.dump()
-                public_project = project.visibility == Visibility.public
-                if project.id is None:
+                project_model = project.dump()
+                public_project = project_model.visibility == Visibility.public
+                if project_model.id is None:
                     raise errors.BaseError(detail="The created project does not have an ID but it should.")
                 await self.project_authz.create_project(
-                    requested_by=user, project_id=project.id, public_project=public_project
+                    requested_by=user, project_id=project_model.id, public_project=public_project
                 )
 
-        return project_orm.dump()
+        return project.dump()
 
     async def update_project(
         self, user: base_models.APIUser, project_id: str, etag: str | None = None, **payload

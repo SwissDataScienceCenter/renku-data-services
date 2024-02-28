@@ -1,8 +1,6 @@
 """Project blueprint."""
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import cast
 
 from sanic import HTTPResponse, Request, json
 from sanic_ext import validate
@@ -11,7 +9,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.errors import errors
-from renku_data_services.project import apispec, models
+from renku_data_services.project import apispec
 from renku_data_services.project.apispec import FullUserWithRole, UserWithId
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
 from renku_data_services.users.db import UserRepo
@@ -66,13 +64,13 @@ class ProjectsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.ProjectPost)
         async def _post(_: Request, *, user: base_models.APIUser, body: apispec.ProjectPost):
-            data = body.model_dump(exclude_none=True)
-            user_id: str = cast(str, user.id)
-            data["created_by"] = models.Member(id=user_id)
+            # body_dict = body.model_dump(exclude_none=True)
+            # user_id: str = cast(str, user.id)
+            # data["created_by"] = models.Member(id=user_id)
             # NOTE: Set ``creation_date`` to override possible value set by users
-            data["creation_date"] = datetime.now(timezone.utc).replace(microsecond=0)
-            project = models.Project.from_dict(data)
-            result = await self.project_repo.insert_project(user=user, project=project)
+            # data["creation_date"] = datetime.now(timezone.utc).replace(microsecond=0)
+            # project = models.Project.from_dict(data)
+            result = await self.project_repo.insert_project(user=user, new_project=body)
             return json(apispec.Project.model_validate(result).model_dump(exclude_none=True, mode="json"), 201)
 
         return "/projects", ["POST"], _post

@@ -87,8 +87,10 @@ class Project(BaseModel):
             id=project_id,
             name=name,
             slug=slug,
-            created_by=created_by,
             visibility=data.get("visibility", Visibility.private),
+            created_by=created_by,
+            created_at=data.get("created_at"),
+            updated_at=data.get("updated_at"),
             repositories=[Repository(r) for r in data.get("repositories", [])],
             description=data.get("description"),
         )
