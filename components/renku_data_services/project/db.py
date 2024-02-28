@@ -62,7 +62,7 @@ class ProjectRepository:
             stmt = select(schemas.ProjectORM)
             stmt = stmt.where(schemas.ProjectORM.id.in_(project_ids))
             stmt = stmt.limit(per_page).offset((page - 1) * per_page)
-            stmt = stmt.order_by(schemas.ProjectORM.creation_date.desc())
+            stmt = stmt.order_by(schemas.ProjectORM.created_at.desc())
             result = await session.execute(stmt)
             projects_orm = result.scalars().all()
 
@@ -115,7 +115,9 @@ class ProjectRepository:
 
         return project_orm.dump()
 
-    async def update_project(self, user: base_models.APIUser, project_id: str, **payload) -> models.Project:
+    async def update_project(
+        self, user: base_models.APIUser, project_id: str, etag: str | None = None, **payload
+    ) -> models.Project:
         """Update a project entry."""
         authorized = await self.project_authz.has_permission(user=user, project_id=project_id, scope=Scope.WRITE)
         if not authorized:
@@ -125,13 +127,16 @@ class ProjectRepository:
 
         async with self.session_maker() as session:
             async with session.begin():
-                result = await session.execute(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
-                projects = result.one_or_none()
+                result = await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
+                project = result.one_or_none()
 
-                if projects is None:
+                if project is None:
                     raise errors.MissingResourceError(message=f"The project with id '{project_id}' cannot be found")
 
-                project = projects[0]
+                current_etag = project.dump().etag
+                if etag is not None and current_etag != etag:
+                    raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
+
                 visibility_before = project.visibility
 
                 if "repositories" in payload:

@@ -79,7 +79,10 @@ class ProjectsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         async def _get_one(_: Request, *, user: base_models.APIUser, project_id: str):
             project = await self.project_repo.get_project(user=user, project_id=project_id)
-            return json(apispec.Project.model_validate(project).model_dump(exclude_none=True, mode="json"))
+            headers = {"ETag": project.etag} if project.etag is not None else None
+            return json(
+                apispec.Project.model_validate(project).model_dump(exclude_none=True, mode="json"), headers=headers
+            )
 
         return "/projects/<project_id>", ["GET"], _get_one
 

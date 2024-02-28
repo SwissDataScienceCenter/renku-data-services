@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import DateTime, Integer, MetaData, String
+from sqlalchemy import DateTime, Integer, MetaData, String, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
 from ulid import ULID
@@ -30,8 +30,13 @@ class ProjectORM(BaseORM):
     slug: Mapped[str] = mapped_column("slug", String(99))
     visibility: Mapped[Visibility]
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
-    creation_date: Mapped[Optional[datetime]] = mapped_column("creation_date", DateTime(timezone=True))
-    description: Mapped[Optional[str]] = mapped_column("description", String(500))
+    description: Mapped[str | None] = mapped_column("description", String(500))
+    created_at: Mapped[datetime | None] = mapped_column(
+        "created_at", DateTime(timezone=True), default=None, server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        "updated_at", DateTime(timezone=True), default=None, server_default=func.now(), onupdate=func.now()
+    )
     repositories: Mapped[List["ProjectRepositoryORM"]] = relationship(
         back_populates="project",
         default_factory=list,
@@ -47,7 +52,6 @@ class ProjectORM(BaseORM):
             slug=project.slug,
             visibility=project.visibility,
             created_by_id=project.created_by.id,
-            creation_date=project.creation_date,
             repositories=[ProjectRepositoryORM(url=r) for r in project.repositories],
             description=project.description,
         )
@@ -60,7 +64,8 @@ class ProjectORM(BaseORM):
             slug=self.slug,
             visibility=self.visibility,
             created_by=models.Member(id=self.created_by_id),
-            creation_date=self.creation_date,
+            created_at=self.created_at,
+            updated_at=self.updated_at,
             repositories=[models.Repository(r.url) for r in self.repositories],
             description=self.description,
         )
