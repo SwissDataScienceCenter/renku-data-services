@@ -105,10 +105,10 @@ class ProjectRepository:
         user_id: str = cast(str, user.id)
         project_dict["created_by"] = models.Member(id=user_id)
         project_model = models.Project.from_dict(project_dict)
-        project = schemas.ProjectORM.load(project_model)
 
         async with self.session_maker() as session:
             async with session.begin():
+                project = schemas.ProjectORM.load(project_model)
                 session.add(project)
 
                 project_model = project.dump()
