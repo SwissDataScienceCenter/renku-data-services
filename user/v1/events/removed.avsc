@@ -7,7 +7,7 @@
   "fields":[
     {
       "name":"id",
-      "type":"string",
+      "type":"string"
     }
   ]
 }
