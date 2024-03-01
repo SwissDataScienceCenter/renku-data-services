@@ -56,7 +56,7 @@ class Project(BaseModel):
     slug: str
     visibility: Visibility
     created_by: Member
-    created_at: datetime | None = Field(default=None)
+    creation_date: datetime | None = Field(default=None)
     updated_at: datetime | None = Field(default=None)
     repositories: List[Repository] = Field(default_factory=list)
     description: Optional[str] = None
@@ -89,7 +89,7 @@ class Project(BaseModel):
             slug=slug,
             visibility=data.get("visibility", Visibility.private),
             created_by=created_by,
-            created_at=data.get("created_at"),
+            creation_date=data.get("creation_date"),
             updated_at=data.get("updated_at"),
             repositories=[Repository(r) for r in data.get("repositories", [])],
             description=data.get("description"),

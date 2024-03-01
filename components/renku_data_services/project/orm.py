@@ -31,8 +31,8 @@ class ProjectORM(BaseORM):
     visibility: Mapped[Visibility]
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
     description: Mapped[str | None] = mapped_column("description", String(500))
-    created_at: Mapped[datetime | None] = mapped_column(
-        "created_at", DateTime(timezone=True), default=None, server_default=func.now(), nullable=False
+    creation_date: Mapped[datetime | None] = mapped_column(
+        "creation_date", DateTime(timezone=True), default=None, server_default=func.now(), nullable=False
     )
     updated_at: Mapped[datetime | None] = mapped_column(
         "updated_at", DateTime(timezone=True), default=None, server_default=func.now(), onupdate=func.now()
@@ -64,7 +64,7 @@ class ProjectORM(BaseORM):
             slug=self.slug,
             visibility=self.visibility,
             created_by=models.Member(id=self.created_by_id),
-            created_at=self.created_at,
+            creation_date=self.creation_date,
             updated_at=self.updated_at,
             repositories=[models.Repository(r.url) for r in self.repositories],
             description=self.description,

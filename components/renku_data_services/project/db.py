@@ -64,7 +64,7 @@ class ProjectRepository:
             stmt = select(schemas.ProjectORM)
             stmt = stmt.where(schemas.ProjectORM.id.in_(project_ids))
             stmt = stmt.limit(per_page).offset(offset)
-            stmt = stmt.order_by(schemas.ProjectORM.created_at.desc())
+            stmt = stmt.order_by(schemas.ProjectORM.creation_date.desc())
             result = await session.execute(stmt)
             projects_orm = result.scalars().all()
 

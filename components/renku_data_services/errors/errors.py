@@ -76,8 +76,17 @@ class ProgrammingError(BaseError):
 
 @dataclass
 class ConflictError(BaseError):
-    """Rased when a conflicting update occurs."""
+    """Raised when a conflicting update occurs."""
 
     code: int = 1409
     message: str = "Conflicting update detected."
     status_code: int = 409
+
+
+@dataclass
+class PreconditionRequiredError(BaseError):
+    """Raised when a precondition is not met."""
+
+    code: int = 1428
+    message: str = "Conflicting update detected."
+    status_code: int = 428
