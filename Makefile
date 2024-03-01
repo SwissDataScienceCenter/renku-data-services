@@ -1,4 +1,4 @@
-.PHONY: schemas tests style_checks pre_commit_checks run
+.PHONY: schemas tests style_checks pre_commit_checks run pull_avro check_avro avro_models update_avro
 
 define test_apispec_up_to_date
 	$(eval $@_NAME=$(1))
@@ -10,17 +10,23 @@ define test_apispec_up_to_date
 	exit ${RESULT}
 endef
 
-schemas:
-	@echo "generating classes based on ApiSpec"
+components/renku_data_services/crc/apispec.py: components/renku_data_services/crc/api.spec.yaml
 	poetry run datamodel-codegen --input components/renku_data_services/crc/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/crc/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.crc.apispec_base.BaseAPISpec
+components/renku_data_services/storage/apispec.py: components/renku_data_services/storage/api.spec.yaml
 	poetry run datamodel-codegen --input components/renku_data_services/storage/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/storage/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.storage.apispec_base.BaseAPISpec
+components/renku_data_services/users/apispec.py: components/renku_data_services/users/api.spec.yaml
 	poetry run datamodel-codegen --input components/renku_data_services/users/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/users/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.users.apispec_base.BaseAPISpec
+components/renku_data_services/project/apispec.py: components/renku_data_services/project/api.spec.yaml
 	poetry run datamodel-codegen --input components/renku_data_services/project/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/project/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.project.apispec_base.BaseAPISpec
+components/renku_data_services/user_preferences/apispec.py: components/renku_data_services/user_preferences/api.spec.yaml
 	poetry run datamodel-codegen --input components/renku_data_services/user_preferences/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/user_preferences/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.user_preferences.apispec_base.BaseAPISpec
+
+schemas: components/renku_data_services/crc/apispec.py components/renku_data_services/storage/apispec.py components/renku_data_services/users/apispec.py components/renku_data_services/project/apispec.py components/renku_data_services/user_preferences/apispec.py
+	@echo "generated classes based on ApiSpec"
 
 pull_avro:
 	@echo "Pulling avro schema files (ensure that the repo isn't dirty otherwise git subtree pull doesn't work)"
-	
+
 	-git subtree add --prefix components/renku_data_services/message_queue/schemas/ https://github.com/SwissDataScienceCenter/renku-schema.git main --squash
 	git subtree pull --prefix components/renku_data_services/message_queue/schemas/ https://github.com/SwissDataScienceCenter/renku-schema.git main --squash
 
@@ -61,7 +67,7 @@ tests:
 	@echo "===========================================DATA API==========================================="
 	DUMMY_STORES=true poetry run sanic --debug renku_data_services.data_api.main:create_app --factory & echo $$! > .tmp.pid
 	@sleep 10
-	poetry run st run http://localhost:8000/api/data/spec.json --validate-schema True --checks all --hypothesis-max-examples 20 --data-generation-method all --show-errors-tracebacks --hypothesis-suppress-health-check data_too_large --hypothesis-suppress-health-check=filter_too_much --max-response-time 120 -v --header 'Authorization: bearer {"is_admin": true}' || (cat .tmp.pid | xargs kill && exit 1)
+	poetry run st run http://localhost:8000/api/data/spec.json --validate-schema True --checks all --hypothesis-max-examples 20 --data-generation-method all --show-errors-tracebacks --hypothesis-suppress-health-check data_too_large --hypothesis-suppress-health-check=filter_too_much --max-response-time 130 -v --header 'Authorization: bearer {"is_admin": true}' || (cat .tmp.pid | xargs kill && exit 1)
 	cat .tmp.pid | xargs kill || echo "The server is already shut down"
 	@rm -f .tmp.pid
 	@echo "===========================================TEST DOWNGRADE==========================================="

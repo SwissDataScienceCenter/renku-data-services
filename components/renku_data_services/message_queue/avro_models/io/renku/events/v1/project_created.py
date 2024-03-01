@@ -22,7 +22,6 @@ class ProjectCreated(AvroModel):
     description: Optional[str]
     createdBy: str
     creationDate: datetime  # logicalType: timestamp-millis
-    members: List[str]
 
     #: The Avro Schema associated to this class
     _schema: ClassVar[str] = """{
@@ -72,14 +71,6 @@ class ProjectCreated(AvroModel):
                     "type": "long",
                     "logicalType": "timestamp-millis"
                 }
-            },
-            {
-                "name": "members",
-                "type": {
-                    "type": "array",
-                    "items": "string"
-                },
-                "default": []
             }
         ]
     }"""

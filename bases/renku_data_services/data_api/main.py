@@ -27,6 +27,7 @@ def create_app() -> Sanic:
         run_migrations_for_app("projects")
         run_migrations_for_app("user_preferences")
         run_migrations_for_app("users")
+        run_migrations_for_app("events")
         config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
         asyncio.run(config.kc_user_repo.initialize(config.kc_api))
     app = register_all_handlers(app, config)
@@ -46,8 +47,10 @@ def create_app() -> Sanic:
         run_migrations_for_app("projects")
         run_migrations_for_app("user_preferences")
         run_migrations_for_app("users")
+        run_migrations_for_app("events")
         config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
         await config.kc_user_repo.initialize(config.kc_api)
+        await config.event_repo.send_pending_events()
 
     @app.before_server_start
     async def setup_rclone_validator(app, _):

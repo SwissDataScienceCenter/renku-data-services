@@ -115,8 +115,9 @@ async def test_project_creation(sanic_client, user_headers, app_config):
     assert headers.source == "renku-data-services"
     proj_event = deserialize_binary(event[b"payload"], ProjectCreated)
     assert proj_event.name == payload["name"]
-
     project_id = project["id"]
+    assert proj_event.id == project_id
+
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
 
     assert response.status_code == 200, response.text

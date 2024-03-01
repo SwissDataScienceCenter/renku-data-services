@@ -92,7 +92,7 @@ exclude = ".*/avro_models/.*"
 [tool.pydocstyle]
 add_ignore = ["D105", "D107", "D202", "D401"]
 match = '^(?!test_|apispec).*\.py'
-match_dir = '^(?!^test$|^crc_migrations$|^storage_migrations$|^user_preferences_migrations$|^project_migrations$|^authz_migrations$|^users_migrations$|avro_models|\..*).*'
+match_dir = '^(?!^test$|^crc_migrations$|^events_migrations$|^storage_migrations$|^user_preferences_migrations$|^project_migrations$|^authz_migrations$|^users_migrations$|avro_models|\..*).*'
 
 [tool.bandit]
 skips = ["B101", "B603", "B607", "B404"]
@@ -139,6 +139,7 @@ exclude = [
   "components/renku_data_services/crc_migrations/versions",
   "components/renku_data_services/authz_migrations/versions",
   "components/renku_data_services/project_migrations/versions",
+  "components/renku_data_services/events_migrations/versions",
   "components/renku_data_services/crc/apispec.py",
   "components/renku_data_services/project/apispec.py",
   "components/renku_data_services/storage/apispec.py",

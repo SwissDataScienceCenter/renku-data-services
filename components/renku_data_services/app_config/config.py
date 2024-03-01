@@ -42,6 +42,7 @@ from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.message_queue.config import RedisConfig
+from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
@@ -114,6 +115,7 @@ class Config:
     _rp_repo: ResourcePoolRepository | None = field(default=None, repr=False, init=False)
     _storage_repo: StorageRepository | None = field(default=None, repr=False, init=False)
     _project_repo: ProjectRepository | None = field(default=None, repr=False, init=False)
+    _event_repo: EventRepository | None = field(default=None, repr=False, init=False)
     _project_authz: IProjectAuthorizer | None = field(default=None, repr=False, init=False)
     _user_preferences_repo: UserPreferencesRepository | None = field(default=None, repr=False, init=False)
     _kc_user_repo: KcUserRepo | None = field(default=None, repr=False, init=False)
@@ -178,6 +180,15 @@ class Config:
         return self._storage_repo
 
     @property
+    def event_repo(self) -> EventRepository:
+        """The DB adapter for cloud event configs."""
+        if not self._event_repo:
+            self._event_repo = EventRepository(
+                session_maker=self.db.async_session_maker, message_queue=self.message_queue
+            )
+        return self._event_repo
+
+    @property
     def project_repo(self) -> ProjectRepository:
         """The DB adapter for Renku native projects."""
         if not self._project_repo:
@@ -185,6 +196,7 @@ class Config:
                 session_maker=self.db.async_session_maker,
                 project_authz=self.project_authz,
                 message_queue=self.message_queue,
+                event_repo=self.event_repo,
             )
         return self._project_repo
 
