@@ -10,15 +10,15 @@
     },
     {
       "name": "firstName",
-      "type":"string"
+      "type":["null","string"]
     },
     {
       "name":"lastName",
-      "type":"string"
+      "type":["null","string"]
     },
     {
       "name":"email",
-      "type":"string"
+      "type":["null","string"]
     }
   ]
 }
