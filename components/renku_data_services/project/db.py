@@ -113,6 +113,10 @@ class ProjectRepository:
 
                 logger.info(f"orm creation_date = {project.creation_date}")
                 logger.info(f"orm updated_at = {project.updated_at}")
+                project.creation_date = project.creation_date
+                project.updated_at = project.updated_at
+                logger.info(f"orm creation_date = {project.creation_date}")
+                logger.info(f"orm updated_at = {project.updated_at}")
                 project_model = project.dump()
                 logger.info(f"model creation_date = {project_model.creation_date}")
                 logger.info(f"model updated_at = {project_model.updated_at}")
