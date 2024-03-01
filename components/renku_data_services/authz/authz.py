@@ -1,4 +1,5 @@
 """Projects authorization adapter."""
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from typing import Callable, List, Protocol, Tuple, cast
 
@@ -9,6 +10,8 @@ from renku_data_services.authz.models import MemberQualifier, ProjectMember, Rol
 from renku_data_services.authz.orm import ProjectUserAuthz
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.errors import errors
+from renku_data_services.message_queue.db import EventRepository
+from renku_data_services.message_queue.interface import IMessageQueue
 
 
 class IProjectAuthorizer(Protocol):
@@ -68,6 +71,8 @@ class SQLProjectAuthorizer:
     """Adapter to store authorization data for projects in SQL."""
 
     session_maker: Callable[..., AsyncSession] = field(init=True)
+    message_queue: IMessageQueue = field(init=True)
+    event_repo: EventRepository = field(init=True)
 
     async def has_permission(self, user: APIUser, project_id: str, scope: Scope) -> bool:
         """Whether the permissions granted to the user for the project match the access level."""
@@ -180,17 +185,29 @@ class SQLProjectAuthorizer:
                     message=f"The user with ID {requested_by.id} cannot add users to project with ID {project_id}",
                     detail=f"Only users with role {Role.OWNER} can do this.",
                 )
-        async with self.session_maker() as session:
-            async with session.begin():
-                session.add(
-                    ProjectUserAuthz(
-                        project_id=project_id,
-                        role=role.value,
-                        user_id=None  # type: ignore[arg-type]
-                        if isinstance(user_id, MemberQualifier) and user_id == MemberQualifier.ALL
-                        else user_id,
+        user_id = (  # type: ignore[arg-type]
+            None  # type: ignore[assignment]
+            if isinstance(user_id, MemberQualifier) and user_id == MemberQualifier.ALL
+            else user_id
+        )
+        if user_id is not None and isinstance(user_id, MemberQualifier):
+            cm = self.message_queue.project_auth_added_message(
+                project_id=project_id, user_id=user_id, role=role  # type: ignore
+            )
+        else:
+            cm = nullcontext(None)  # type: ignore
+        async with cm as message:
+            async with self.session_maker() as session:
+                async with session.begin():
+                    session.add(
+                        ProjectUserAuthz(
+                            project_id=project_id,
+                            role=role.value,
+                            user_id=user_id,  # type: ignore
+                        )
                     )
-                )
+                    if user_id is not None and message:
+                        await message.persist(self.event_repo)
 
     async def update_or_add_user(
         self, requested_by: APIUser, user_id: str | MemberQualifier, project_id: str, role: Role
@@ -214,10 +231,23 @@ class SQLProjectAuthorizer:
                 )
                 result = await session.execute(stmt)
                 user_authz = result.scalars().first()
-                if user_authz:
-                    user_authz.role = role.value
-                else:
-                    session.add(ProjectUserAuthz(project_id=project_id, role=role.value, user_id=user_id))
+
+        if user_authz:
+            cm = self.message_queue.project_auth_updated_message(
+                project_id=project_id, user_id=user_id, role=role  # type: ignore
+            )
+        else:
+            cm = self.message_queue.project_auth_added_message(
+                project_id=project_id, user_id=user_id, role=role  # type: ignore
+            )
+        async with cm as message:
+            async with self.session_maker() as session:
+                async with session.begin():
+                    if user_authz:
+                        user_authz.role = role.value
+                    else:
+                        session.add(ProjectUserAuthz(project_id=project_id, role=role.value, user_id=user_id))
+                    await message.persist(self.event_repo)
 
     async def delete_user(self, requested_by: APIUser, user_id: str | MemberQualifier, project_id: str):
         """Delete a member from a project."""
@@ -232,30 +262,36 @@ class SQLProjectAuthorizer:
                     message=f"The user with ID {requested_by.id} cannot delete users of project with ID {project_id}",
                     detail=f"Only users with role {Role.OWNER} can do this.",
                 )
-        async with self.session_maker() as session:
-            async with session.begin():
-                stmt = delete(ProjectUserAuthz).where(
-                    and_(ProjectUserAuthz.project_id == project_id, ProjectUserAuthz.user_id == user_id)
-                )
-                await session.execute(stmt)
+        async with self.message_queue.project_auth_removed_message(project_id=project_id, user_id=user_id) as message:
+            async with self.session_maker() as session:
+                async with session.begin():
+                    stmt = delete(ProjectUserAuthz).where(
+                        and_(ProjectUserAuthz.project_id == project_id, ProjectUserAuthz.user_id == user_id)
+                    )
+                    await session.execute(stmt)
+                    await message.persist(self.event_repo)
 
     async def create_project(self, requested_by: APIUser, project_id: str, public_project: bool = False):
         """Insert the project in the authorization table."""
         if not requested_by.is_authenticated:
             raise errors.Unauthorized(message="Unauthenticated users cannot create projects.")
-        async with self.session_maker() as session:
-            async with session.begin():
-                res = await session.execute(
-                    select(ProjectUserAuthz.project_id).where(ProjectUserAuthz.project_id == project_id)
-                )
-                project_exists = res.scalars().first()
-                if project_exists:
-                    raise errors.ValidationError(
-                        message="Cannot create a project if it already exists in the permissions database"
+        async with self.message_queue.project_auth_added_message(
+            project_id=project_id, user_id=requested_by.id, role=Role.OWNER  # type: ignore
+        ) as message:
+            async with self.session_maker() as session:
+                async with session.begin():
+                    res = await session.execute(
+                        select(ProjectUserAuthz.project_id).where(ProjectUserAuthz.project_id == project_id)
                     )
-                if public_project:
-                    session.add(ProjectUserAuthz(project_id=project_id, role=Role.MEMBER.value, user_id=None))
-                session.add(ProjectUserAuthz(project_id=project_id, role=Role.OWNER.value, user_id=requested_by.id))
+                    project_exists = res.scalars().first()
+                    if project_exists:
+                        raise errors.ValidationError(
+                            message="Cannot create a project if it already exists in the permissions database"
+                        )
+                    if public_project:
+                        session.add(ProjectUserAuthz(project_id=project_id, role=Role.MEMBER.value, user_id=None))
+                    session.add(ProjectUserAuthz(project_id=project_id, role=Role.OWNER.value, user_id=requested_by.id))
+                    await message.persist(self.event_repo)
 
     async def update_project_visibility(self, requested_by: APIUser, project_id: str, public_project: bool):
         """Change project's qualifier accordingly."""

@@ -3,6 +3,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Protocol
 
+from renku_data_services.authz.models import Role
 from renku_data_services.errors.errors import BaseError
 from renku_data_services.project.apispec import Visibility
 from renku_data_services.project.orm import ProjectRepositoryORM
@@ -60,6 +61,68 @@ class IMessageQueue(Protocol):
         created_by: str,
     ) -> MessageContext:
         """Event for when a new project is created."""
+        ...
+
+    def project_updated_message(
+        self,
+        name: str,
+        slug: str,
+        visibility: Visibility,
+        id: str,
+        repositories: list[ProjectRepositoryORM],
+        description: str | None,
+    ) -> MessageContext:
+        """Event for when a new project is modified."""
+        ...
+
+    def project_removed_message(
+        self,
+        id: str,
+    ) -> MessageContext:
+        """Event for when a new project is removed."""
+        ...
+
+    def project_auth_added_message(self, project_id: str, user_id: str, role: Role) -> MessageContext:
+        """Event for when a new project authorization is created."""
+        ...
+
+    def project_auth_updated_message(self, project_id: str, user_id: str, role: Role) -> MessageContext:
+        """Event for when a new project authorization is modified."""
+        ...
+
+    def project_auth_removed_message(
+        self,
+        project_id: str,
+        user_id: str,
+    ) -> MessageContext:
+        """Event for when a new project authorization is removed."""
+        ...
+
+    def user_added_message(
+        self,
+        first_name: str | None,
+        last_name: str | None,
+        email: str | None,
+        id: str,
+    ) -> MessageContext:
+        """Event for when a new user is created."""
+        ...
+
+    def user_updated_message(
+        self,
+        first_name: str | None,
+        last_name: str | None,
+        email: str | None,
+        id: str,
+    ) -> MessageContext:
+        """Event for when a new user is modified."""
+        ...
+
+    def user_removed_message(
+        self,
+        id: str,
+    ) -> MessageContext:
+        """Event for when a new user is removed."""
         ...
 
     async def send_message(

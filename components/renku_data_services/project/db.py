@@ -157,25 +157,35 @@ class ProjectRepository:
 
                 project = projects[0]
                 visibility_before = project.visibility
+        async with self.message_queue.project_updated_message(
+            name=project.name,
+            slug=project.slug,
+            visibility=project.visibility,
+            id=project.id,
+            repositories=project.repositories,
+            description=project.description,
+        ) as message:
+            async with self.session_maker() as session:
+                async with session.begin():
+                    if "repositories" in payload:
+                        payload["repositories"] = [
+                            schemas.ProjectRepositoryORM(url=r, project_id=project_id, project=project)
+                            for r in payload["repositories"]
+                        ]
 
-                if "repositories" in payload:
-                    payload["repositories"] = [
-                        schemas.ProjectRepositoryORM(url=r, project_id=project_id, project=project)
-                        for r in payload["repositories"]
-                    ]
+                    for key, value in payload.items():
+                        # NOTE: ``slug``, ``id``, ``created_by``, and ``creation_date`` cannot be edited
+                        if key not in ["slug", "id", "created_by", "creation_date"]:
+                            setattr(project, key, value)
 
-                for key, value in payload.items():
-                    # NOTE: ``slug``, ``id``, ``created_by``, and ``creation_date`` cannot be edited
-                    if key not in ["slug", "id", "created_by", "creation_date"]:
-                        setattr(project, key, value)
+                    if visibility_before != project.visibility:
+                        public_project = project.visibility == Visibility.public
+                        await self.project_authz.update_project_visibility(
+                            requested_by=user, project_id=project_id, public_project=public_project
+                        )
+                    await message.persist(self.event_repo)
 
-                if visibility_before != project.visibility:
-                    public_project = project.visibility == Visibility.public
-                    await self.project_authz.update_project_visibility(
-                        requested_by=user, project_id=project_id, public_project=public_project
-                    )
-
-                return project.dump()  # NOTE: Triggers validation before the transaction saves data
+                    return project.dump()  # NOTE: Triggers validation before the transaction saves data
 
     async def delete_project(self, user: base_models.APIUser, project_id: str) -> None:
         """Delete a cloud project entry."""
@@ -185,17 +195,23 @@ class ProjectRepository:
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
 
-        async with self.session_maker() as session:
-            async with session.begin():
-                result = await session.execute(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
-                projects = result.one_or_none()
+        async with self.message_queue.project_removed_message(
+            id=project_id,
+        ) as message:
+            async with self.session_maker() as session:
+                async with session.begin():
+                    result = await session.execute(
+                        select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id)
+                    )
+                    projects = result.one_or_none()
 
-                if projects is None:
-                    return
+                    if projects is None:
+                        return
 
-                await session.delete(projects[0])
+                    await session.delete(projects[0])
 
-                await self.project_authz.delete_project(requested_by=user, project_id=project_id)
+                    await self.project_authz.delete_project(requested_by=user, project_id=project_id)
+                    await message.persist(self.event_repo)
 
 
 class ProjectMemberRepository:
