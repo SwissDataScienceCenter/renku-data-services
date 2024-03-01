@@ -45,14 +45,6 @@
         "type": "long",
         "logicalType": "timestamp-millis"
       }
-    },
-    {
-      "name": "members",
-      "type": {
-        "type": "array",
-        "items": "string"
-      },
-      "default": []
     }
   ]
 }
