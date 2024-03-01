@@ -1,0 +1,24 @@
+{
+  "type": "record",
+  "name":"UserAdded",
+  "namespace":"io.renku.events.v1",
+  "doc":"Event raised when a new user is added",
+  "fields":[
+    {
+      "name":"id",
+      "type":"string",
+    },
+    {
+      "name": "firstName",
+      "type":"string"
+    },
+    {
+      "name":"lastName",
+      "type":"string"
+    },
+    {
+      "name":"email",
+      "type":"string"
+    }
+  ]
+}

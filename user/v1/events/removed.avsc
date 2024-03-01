@@ -1,0 +1,13 @@
+
+{
+  "type": "record",
+  "name":"UserRemoved",
+  "namespace":"io.renku.events.v1",
+  "doc":"Event raised when a user is removed",
+  "fields":[
+    {
+      "name":"id",
+      "type":"string",
+    },
+  ]
+}
