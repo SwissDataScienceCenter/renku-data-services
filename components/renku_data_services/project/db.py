@@ -105,14 +105,17 @@ class ProjectRepository:
         user_id: str = cast(str, user.id)
         project_dict["created_by"] = models.Member(id=user_id)
         project_model = models.Project.from_dict(project_dict)
+        project = schemas.ProjectORM.load(project_model)
 
         async with self.session_maker() as session:
             async with session.begin():
-                project = schemas.ProjectORM.load(project_model)
                 session.add(project)
 
+                logger.info(f"orm creation_date = {project.creation_date}")
+                logger.info(f"orm updated_at = {project.updated_at}")
                 project_model = project.dump()
-                logger.info(f"creation_date = {project_model.creation_date}")
+                logger.info(f"model creation_date = {project_model.creation_date}")
+                logger.info(f"model updated_at = {project_model.updated_at}")
                 public_project = project_model.visibility == Visibility.public
                 if project_model.id is None:
                     raise errors.BaseError(detail="The created project does not have an ID but it should.")
