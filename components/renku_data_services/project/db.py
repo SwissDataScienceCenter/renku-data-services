@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, NamedTuple, Tuple, cast
 
+from sanic.log import logger
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -102,7 +103,7 @@ class ProjectRepository:
 
         project_dict = new_project.model_dump(exclude_none=True)
         user_id: str = cast(str, user.id)
-        project_dict['created_by'] = models.Member(id=user_id)
+        project_dict["created_by"] = models.Member(id=user_id)
         project_model = models.Project.from_dict(project_dict)
         project = schemas.ProjectORM.load(project_model)
 
@@ -111,6 +112,7 @@ class ProjectRepository:
                 session.add(project)
 
                 project_model = project.dump()
+                logger.info(f"creation_date = {project_model.creation_date}")
                 public_project = project_model.visibility == Visibility.public
                 if project_model.id is None:
                     raise errors.BaseError(detail="The created project does not have an ID but it should.")
@@ -118,7 +120,7 @@ class ProjectRepository:
                     requested_by=user, project_id=project_model.id, public_project=public_project
                 )
 
-                return project.dump()
+                return project_model
 
     async def update_project(
         self, user: base_models.APIUser, project_id: str, etag: str | None = None, **payload
