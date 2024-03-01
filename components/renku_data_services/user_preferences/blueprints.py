@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 from sanic import HTTPResponse, Request, json
+from sanic.log import logger
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
@@ -62,6 +63,8 @@ class UserPreferencesBP(CustomBlueprint):
         @validate(json=apispec.AddPinnedProject)
         async def _post(_: Request, body: apispec.AddPinnedProject, user: base_models.APIUser):
             res = await self.user_preferences_repo.add_pinned_project(user=user, project_slug=body.project_slug)
+            logger.info(f"model created_at = {res.created_at}")
+            logger.info(f"model updated_at = {res.updated_at}")
             return json(apispec.UserPreferences.model_validate(res).model_dump())
 
         return "/user/preferences/pinned_projects", ["POST"], _post

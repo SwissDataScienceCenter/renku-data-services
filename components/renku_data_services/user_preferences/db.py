@@ -2,6 +2,7 @@
 
 from typing import Callable, List, cast
 
+from sanic.log import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -115,6 +116,8 @@ class UserPreferencesRepository(_Base):
                     )
                     user_preferences = schemas.UserPreferencesORM.load(new_preferences)
                     session.add(user_preferences)
+                    logger.info(f"orm created_at = {user_preferences.created_at}")
+                    logger.info(f"orm updated_at = {user_preferences.updated_at}")
                     return user_preferences.dump()
 
                 project_slugs: List[str]
