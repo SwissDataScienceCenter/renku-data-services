@@ -9,9 +9,11 @@ Create Date: 2024-03-01 12:33:51.068133
 import sqlalchemy as sa
 from alembic import op
 
+# TODO: squash with previous revision
+
 # revision identifiers, used by Alembic.
-revision = "e0ce196a6022"
-down_revision = "7c08ed2fb79d"
+revision = "6aff84383f42"
+down_revision = "e0ce196a6022"
 branch_labels = None
 depends_on = None
 
@@ -22,11 +24,6 @@ def upgrade() -> None:
         "projects",
         column_name="creation_date",
         server_default=sa.text("now()"),
-        schema="projects",
-    )
-    op.add_column(
-        "projects",
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=True),
         schema="projects",
     )
     # ### end Alembic commands ###
@@ -40,5 +37,4 @@ def downgrade() -> None:
         server_default=None,
         schema="projects",
     )
-    op.drop_column("projects", "updated_at", schema="projects")
     # ### end Alembic commands ###
