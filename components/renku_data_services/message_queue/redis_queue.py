@@ -86,7 +86,6 @@ class RedisQueue(IMessageQueue):
         description: str | None,
         creation_date: datetime,
         created_by: str,
-        members: list[str],
     ) -> MessageContext:
         """Event for when a new project is created."""
         headers = self._create_header("project.created")
@@ -107,7 +106,6 @@ class RedisQueue(IMessageQueue):
             description=description,
             createdBy=created_by,
             creationDate=creation_date,
-            members=members,
         )
 
         message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {

@@ -58,7 +58,6 @@ class IMessageQueue(Protocol):
         description: str | None,
         creation_date: datetime,
         created_by: str,
-        members: list[str],
     ) -> MessageContext:
         """Event for when a new project is created."""
         ...

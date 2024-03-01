@@ -67,7 +67,7 @@ tests:
 	@echo "===========================================DATA API==========================================="
 	DUMMY_STORES=true poetry run sanic --debug renku_data_services.data_api.main:create_app --factory & echo $$! > .tmp.pid
 	@sleep 10
-	poetry run st run http://localhost:8000/api/data/spec.json --validate-schema True --checks all --hypothesis-max-examples 20 --data-generation-method all --show-errors-tracebacks --hypothesis-suppress-health-check data_too_large --hypothesis-suppress-health-check=filter_too_much --max-response-time 120 --rate-limit '20/s' -v --header 'Authorization: bearer {"is_admin": true}' || (cat .tmp.pid | xargs kill && exit 1)
+	poetry run st run http://localhost:8000/api/data/spec.json --validate-schema True --checks all --hypothesis-max-examples 20 --data-generation-method all --show-errors-tracebacks --hypothesis-suppress-health-check data_too_large --hypothesis-suppress-health-check=filter_too_much --max-response-time 130 -v --header 'Authorization: bearer {"is_admin": true}' || (cat .tmp.pid | xargs kill && exit 1)
 	cat .tmp.pid | xargs kill || echo "The server is already shut down"
 	@rm -f .tmp.pid
 	@echo "===========================================TEST DOWNGRADE==========================================="

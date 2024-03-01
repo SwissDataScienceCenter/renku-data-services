@@ -120,7 +120,6 @@ class ProjectRepository:
             description=project_orm.description,
             creation_date=project_orm.creation_date,
             created_by=project_orm.created_by_id,
-            members=[project_orm.created_by_id],
         ) as message:
             async with self.session_maker() as session:
                 async with session.begin():

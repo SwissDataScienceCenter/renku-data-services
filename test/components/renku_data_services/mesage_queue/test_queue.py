@@ -25,7 +25,6 @@ async def test_queue_resend(app_config):
             description="test",
             creation_date=datetime.utcnow(),
             created_by="user1",
-            members=["user1"],
         ) as message:
             # here we'd normally do changes to the database
             # and the context manager would send the message and clean up toward the end
