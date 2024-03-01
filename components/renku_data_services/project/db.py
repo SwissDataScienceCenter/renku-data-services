@@ -113,10 +113,6 @@ class ProjectRepository:
 
                 logger.info(f"orm creation_date = {project.creation_date}")
                 logger.info(f"orm updated_at = {project.updated_at}")
-                project.creation_date = project.creation_date
-                project.updated_at = project.updated_at
-                logger.info(f"orm creation_date = {project.creation_date}")
-                logger.info(f"orm updated_at = {project.updated_at}")
                 project_model = project.dump()
                 logger.info(f"model creation_date = {project_model.creation_date}")
                 logger.info(f"model updated_at = {project_model.updated_at}")
@@ -127,7 +123,11 @@ class ProjectRepository:
                     requested_by=user, project_id=project_model.id, public_project=public_project
                 )
 
-                return project_model
+                # Need to commit() to get the timestamps(?)
+                await session.commit()
+                logger.info(f"orm creation_date = {project.creation_date}")
+                logger.info(f"orm updated_at = {project.updated_at}")
+                return project.dump()
 
     async def update_project(
         self, user: base_models.APIUser, project_id: str, etag: str | None = None, **payload
