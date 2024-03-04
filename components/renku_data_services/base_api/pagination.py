@@ -71,6 +71,6 @@ def paginate(f: Callable[Concatenate[Request, ...], Awaitable[Tuple[Sequence[Any
             total_pages += 1
 
         pagination = PaginationResponse(page, per_page, db_count, total_pages)
-        return json(items, header=pagination.as_header())
+        return json(items, headers=pagination.as_header())
 
     return decorated_function

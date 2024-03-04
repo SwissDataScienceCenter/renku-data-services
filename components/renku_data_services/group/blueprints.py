@@ -14,7 +14,7 @@ from renku_data_services.group.db import GroupRepository
 
 
 @dataclass(kw_only=True)
-class ProjectsBP(CustomBlueprint):
+class GroupsBP(CustomBlueprint):
     """Handlers for manipulating groups."""
 
     group_repo: GroupRepository
@@ -89,7 +89,13 @@ class ProjectsBP(CustomBlueprint):
             members = await self.group_repo.get_group_members(user, slug)
             return json(
                 [
-                    apispec.GroupMemberResponse.model_validate(m).model_dump(exclude_none=True, mode="json")
+                    apispec.GroupMemberResponse(
+                        id=m.id,
+                        email=m.email,
+                        first_name=m.first_name,
+                        last_name=m.last_name,
+                        role=apispec.GroupRole(m.role.name),
+                    ).model_dump(exclude_none=True, mode="json")
                     for m in members
                 ]
             )
@@ -101,20 +107,26 @@ class ProjectsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        @validate(json=apispec.GroupMemberPatchRequestList)
         async def _update_members(
-            _: Request, *, user: base_models.APIUser, slug: str, body: apispec.GroupMemberPatchRequestList
+            request: Request, *, user: base_models.APIUser, slug: str,
         ):
+            body_validated = apispec.GroupMemberPatchRequestList.model_validate(request.json)
             res = await self.group_repo.update_group_members(
                 user=user,
                 slug=slug,
-                payload=body,
+                payload=body_validated,
             )
             return json(
-                [apispec.GroupMemberResponse.model_validate(i).model_dump(exclude_none=True, mode="json") for i in res]
+                [
+                    apispec.GroupMemberPatchRequest(
+                        id=m.user_id,
+                        role=apispec.GroupRole(m.role.name),
+                    ).model_dump(exclude_none=True, mode="json")
+                    for m in res
+                ]
             )
 
-        return "/group/<slug>/members", ["PATCH"], _update_members
+        return "/groups/<slug>/members", ["PATCH"], _update_members
 
     def delete_member(self) -> BlueprintFactoryResponse:
         """Delete a specific project."""
@@ -125,4 +137,4 @@ class ProjectsBP(CustomBlueprint):
             await self.group_repo.delete_group_member(user=user, slug=slug, user_id_to_delete=user_id)
             return HTTPResponse(status=204)
 
-        return "/group/<slug>/members/<user_id>", ["DELETE"], _delete_member
+        return "/groups/<slug>/members/<user_id>", ["DELETE"], _delete_member

@@ -32,7 +32,9 @@ class GroupORM(BaseORM):
     description: Mapped[Optional[str]] = mapped_column("description", String(500), default=None)
     members: Mapped[Dict[str, "GroupMemberORM"]] = relationship(
         # NOTE: the members of a group are keyed by the Keycloak ID
-        init=False, back_populates="group", collection_class=attribute_keyed_dict("user_id")
+        back_populates="group",
+        collection_class=attribute_keyed_dict("user_id"),
+        default_factory=dict,
     )
 
     @classmethod
@@ -66,8 +68,10 @@ class GroupMemberORM(BaseORM):
     id: Mapped[int] = mapped_column("id", Integer, primary_key=True, default=None, init=False)
     user_id: Mapped[str] = mapped_column(String(36), index=True)
     role: Mapped[int] = mapped_column("role", Integer)
-    group_id: Mapped[str] = mapped_column(ForeignKey("groups.id", ondelete="CASCADE"), index=True)
-    group: Mapped[Optional[GroupORM]] = relationship(init=False, back_populates="members")
+    group_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("groups.id", ondelete="CASCADE"), index=True, default=None
+    )
+    group: Mapped[Optional[GroupORM]] = relationship(back_populates="members", default=None)
 
     @classmethod
     def load(cls, member: models.GroupMember):

@@ -39,6 +39,7 @@ def init_db(**kwargs):
     run_migrations_for_app("authz")
     run_migrations_for_app("user_preferences")
     run_migrations_for_app("users")
+    run_migrations_for_app("groups")
 
     if dummy_stores:
         os.environ["DUMMY_STORES"] = dummy_stores

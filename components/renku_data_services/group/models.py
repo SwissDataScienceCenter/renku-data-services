@@ -18,11 +18,11 @@ class Group:
     id: str | None = None
 
 
-class GroupRole(Enum):
+class GroupRole(int, Enum):
     """Role for a group member."""
 
-    OWNER: int = 80
-    MEMBER: int = 40
+    owner: int = 80
+    member: int = 40
 
     @classmethod
     def from_str(cls, val: str):
@@ -42,7 +42,7 @@ class GroupMember:
 
     user_id: str
     role: GroupRole
-    group_id: str
+    group_id: str | None
 
 
 @dataclass

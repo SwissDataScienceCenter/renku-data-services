@@ -269,11 +269,13 @@ components:
         - "name"
         - "created_by"
         - "creation_date"
+        - "slug"
       example:
         id: "01AN4Z79ZS5XN0F25N3DB94T4R"
         name: "R-Project Group"
         slug: "r-project"
         created_by: "owner-keycloak-id"
+        creation_date: "2024-03-04T13:04:45Z"
     GroupPostRequest:
       description: Group metadata to be created in Renku
       type: object
