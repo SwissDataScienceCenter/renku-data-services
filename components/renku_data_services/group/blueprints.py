@@ -108,7 +108,10 @@ class GroupsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_authenticated
         async def _update_members(
-            request: Request, *, user: base_models.APIUser, slug: str,
+            request: Request,
+            *,
+            user: base_models.APIUser,
+            slug: str,
         ):
             body_validated = apispec.GroupMemberPatchRequestList.model_validate(request.json)
             res = await self.group_repo.update_group_members(

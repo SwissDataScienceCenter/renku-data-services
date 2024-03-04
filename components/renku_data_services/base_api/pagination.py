@@ -43,6 +43,7 @@ def paginate(f: Callable[Concatenate[Request, ...], Awaitable[Tuple[Sequence[Any
 
     The handler should return first the list of items and then the total count from the DB.
     """
+
     @wraps(f)
     async def decorated_function(request: Request, *args, **kwargs):
         default_page_number = 1

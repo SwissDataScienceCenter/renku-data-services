@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Tuple, cast
 
 from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -101,7 +102,10 @@ class GroupRepository:
             return group.dump()
 
     async def update_group_members(
-        self, user: base_models.APIUser, slug: str, payload: apispec.GroupMemberPatchRequestList,
+        self,
+        user: base_models.APIUser,
+        slug: str,
+        payload: apispec.GroupMemberPatchRequestList,
     ) -> List[models.GroupMember]:
         """Update group members."""
         async with self.session_maker() as session, session.begin():
@@ -158,4 +162,12 @@ class GroupRepository:
                 members={user_id: member},
             )
             session.add(group)
+            try:
+                await session.flush()
+            except IntegrityError as err:
+                if len(err.args) > 0 and "UniqueViolationError" in err.args[0] and "slug" in err.args[0]:
+                    raise errors.ValidationError(
+                        message="The slug for the group should be unique but it already exists in the database",
+                        detail="Please modify the slug field and then retry",
+                    )
             return group.dump()

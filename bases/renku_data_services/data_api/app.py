@@ -75,7 +75,10 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         user_repo=config.kc_user_repo,
     )
     group = GroupsBP(
-        name="groups", url_prefix=url_prefix, authenticator=config.authenticator, group_repo=config.group_repo,
+        name="groups",
+        url_prefix=url_prefix,
+        authenticator=config.authenticator,
+        group_repo=config.group_repo,
     )
     app.blueprint(
         [
