@@ -75,8 +75,13 @@ class ProjectsBP(CustomBlueprint):
         """Get a specific project."""
 
         @authenticate(self.authenticator)
-        async def _get_one(_: Request, *, user: base_models.APIUser, project_id: str):
+        async def _get_one(request: Request, *, user: base_models.APIUser, project_id: str):
             project = await self.project_repo.get_project(user=user, project_id=project_id)
+
+            etag = request.headers.get("If-None-Match")
+            if project.etag is not None and project.etag == etag:
+                return HTTPResponse(status=304)
+
             headers = {"ETag": project.etag} if project.etag is not None else None
             return json(
                 apispec.Project.model_validate(project).model_dump(exclude_none=True, mode="json"), headers=headers
@@ -101,10 +106,17 @@ class ProjectsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_authenticated
         @validate(json=apispec.ProjectPatch)
-        async def _patch(_: Request, *, user: base_models.APIUser, project_id: str, body: apispec.ProjectPatch):
+        async def _patch(request: Request, *, user: base_models.APIUser, project_id: str, body: apispec.ProjectPatch):
+            etag = request.headers.get("If-Match")
+
+            if etag is None:
+                raise errors.PreconditionRequiredError(message="If-Match header not provided.")
+
             body_dict = body.model_dump(exclude_none=True)
 
-            updated_project = await self.project_repo.update_project(user=user, project_id=project_id, **body_dict)
+            updated_project = await self.project_repo.update_project(
+                user=user, project_id=project_id, etag=etag, **body_dict
+            )
 
             return json(apispec.Project.model_validate(updated_project).model_dump(exclude_none=True, mode="json"))
 
