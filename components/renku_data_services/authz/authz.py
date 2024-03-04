@@ -10,6 +10,7 @@ from renku_data_services.authz.models import MemberQualifier, ProjectMember, Rol
 from renku_data_services.authz.orm import ProjectUserAuthz
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.errors import errors
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_member_role import ProjectMemberRole
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 
@@ -191,8 +192,9 @@ class SQLProjectAuthorizer:
             else user_id
         )
         if user_id is not None and isinstance(user_id, MemberQualifier):
+            msg_role = ProjectMemberRole.OWNER if role == Role.OWNER else ProjectMemberRole.MEMBER
             cm = self.message_queue.project_auth_added_message(
-                project_id=project_id, user_id=user_id, role=role  # type: ignore
+                project_id=project_id, user_id=user_id, role=msg_role  # type: ignore
             )
         else:
             cm = nullcontext(None)  # type: ignore
@@ -231,19 +233,21 @@ class SQLProjectAuthorizer:
                 )
                 result = await session.execute(stmt)
                 user_authz = result.scalars().first()
+        msg_role = ProjectMemberRole.OWNER if role == Role.OWNER else ProjectMemberRole.MEMBER
 
         if user_authz:
             cm = self.message_queue.project_auth_updated_message(
-                project_id=project_id, user_id=user_id, role=role  # type: ignore
+                project_id=project_id, user_id=user_id, role=msg_role  # type: ignore
             )
         else:
             cm = self.message_queue.project_auth_added_message(
-                project_id=project_id, user_id=user_id, role=role  # type: ignore
+                project_id=project_id, user_id=user_id, role=msg_role  # type: ignore
             )
         async with cm as message:
             async with self.session_maker() as session:
                 async with session.begin():
                     if user_authz:
+                        session.add(user_authz)  # reattach to session
                         user_authz.role = role.value
                     else:
                         session.add(ProjectUserAuthz(project_id=project_id, role=role.value, user_id=user_id))
@@ -276,7 +280,7 @@ class SQLProjectAuthorizer:
         if not requested_by.is_authenticated:
             raise errors.Unauthorized(message="Unauthenticated users cannot create projects.")
         async with self.message_queue.project_auth_added_message(
-            project_id=project_id, user_id=requested_by.id, role=Role.OWNER  # type: ignore
+            project_id=project_id, user_id=requested_by.id, role=ProjectMemberRole.OWNER  # type: ignore
         ) as message:
             async with self.session_maker() as session:
                 async with session.begin():

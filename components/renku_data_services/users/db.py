@@ -149,6 +149,7 @@ class UsersSync:
                     new_user = UserORM(keycloak_id=user_id, **kwargs)
                     session.add(new_user)
                 else:
+                    session.add(existing_user)  # reattach to session
                     for field_name, field_value in kwargs.items():
                         if getattr(existing_user, field_name, None) != field_value:
                             setattr(existing_user, field_name, field_value)

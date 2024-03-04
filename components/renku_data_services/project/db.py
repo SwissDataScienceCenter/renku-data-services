@@ -13,6 +13,7 @@ from renku_data_services import errors
 from renku_data_services.authz import models as authz_models
 from renku_data_services.authz.authz import IProjectAuthorizer
 from renku_data_services.authz.models import MemberQualifier, Scope
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.visibility import Visibility as MsgVisibility
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.project import models
@@ -113,13 +114,20 @@ class ProjectRepository:
         project_orm = schemas.ProjectORM.load(project)
         project_orm.creation_date = datetime.now(timezone.utc).replace(microsecond=0)
         project_orm.created_by = user.id
+        match project_orm.visibility:
+            case Visibility.private | Visibility.private.value:
+                vis = MsgVisibility.PRIVATE
+            case Visibility.public | Visibility.public.value:
+                vis = MsgVisibility.PUBLIC
+            case _:
+                raise NotImplementedError(f"unknown visibility:{project_orm.visibility}")
 
         async with self.message_queue.project_created_message(
             name=project_orm.name,
             slug=project_orm.slug,
-            visibility=project_orm.visibility,
+            visibility=vis,
             id=project_orm.id,
-            repositories=project_orm.repositories,
+            repositories=[r.url for r in project_orm.repositories],
             description=project_orm.description,
             creation_date=project_orm.creation_date,
             created_by=project_orm.created_by_id,
@@ -157,16 +165,24 @@ class ProjectRepository:
 
                 project = projects[0]
                 visibility_before = project.visibility
+        match project.visibility:
+            case Visibility.private | Visibility.private.value:
+                vis = MsgVisibility.PRIVATE
+            case Visibility.public | Visibility.public.value:
+                vis = MsgVisibility.PUBLIC
+            case _:
+                raise NotImplementedError(f"unknown visibility:{project.visibility}")
         async with self.message_queue.project_updated_message(
             name=project.name,
             slug=project.slug,
-            visibility=project.visibility,
+            visibility=vis,
             id=project.id,
-            repositories=project.repositories,
+            repositories=[r.url for r in project.repositories],
             description=project.description,
         ) as message:
             async with self.session_maker() as session:
                 async with session.begin():
+                    session.add(project)  # reattach to session
                     if "repositories" in payload:
                         payload["repositories"] = [
                             schemas.ProjectRepositoryORM(url=r, project_id=project_id, project=project)

@@ -3,12 +3,11 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Protocol
 
-from renku_data_services.authz.models import Role
 from renku_data_services.errors.errors import BaseError
-from renku_data_services.project.apispec import Visibility
-from renku_data_services.project.orm import ProjectRepositoryORM
 
 if TYPE_CHECKING:
+    from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_member_role import ProjectMemberRole
+    from renku_data_services.message_queue.avro_models.io.renku.events.v1.visibility import Visibility
     from renku_data_services.message_queue.db import EventRepository
 
 
@@ -53,9 +52,9 @@ class IMessageQueue(Protocol):
         self,
         name: str,
         slug: str,
-        visibility: Visibility,
+        visibility: "Visibility",
         id: str,
-        repositories: list[ProjectRepositoryORM],
+        repositories: list[str],
         description: str | None,
         creation_date: datetime,
         created_by: str,
@@ -67,9 +66,9 @@ class IMessageQueue(Protocol):
         self,
         name: str,
         slug: str,
-        visibility: Visibility,
+        visibility: "Visibility",
         id: str,
-        repositories: list[ProjectRepositoryORM],
+        repositories: list[str],
         description: str | None,
     ) -> MessageContext:
         """Event for when a new project is modified."""
@@ -82,11 +81,11 @@ class IMessageQueue(Protocol):
         """Event for when a new project is removed."""
         ...
 
-    def project_auth_added_message(self, project_id: str, user_id: str, role: Role) -> MessageContext:
+    def project_auth_added_message(self, project_id: str, user_id: str, role: "ProjectMemberRole") -> MessageContext:
         """Event for when a new project authorization is created."""
         ...
 
-    def project_auth_updated_message(self, project_id: str, user_id: str, role: Role) -> MessageContext:
+    def project_auth_updated_message(self, project_id: str, user_id: str, role: "ProjectMemberRole") -> MessageContext:
         """Event for when a new project authorization is modified."""
         ...
 

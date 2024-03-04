@@ -14,7 +14,6 @@ from dataclasses_avroschema.utils import standardize_custom_type
 from fastavro import parse_schema, schemaless_reader, schemaless_writer
 from ulid import ULID
 
-from renku_data_services.authz.models import Role
 from renku_data_services.message_queue.avro_models.io.renku.events.v1.header import Header
 from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_authorization_added import (
     ProjectAuthorizationAdded,
@@ -32,11 +31,9 @@ from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_up
 from renku_data_services.message_queue.avro_models.io.renku.events.v1.user_added import UserAdded
 from renku_data_services.message_queue.avro_models.io.renku.events.v1.user_removed import UserRemoved
 from renku_data_services.message_queue.avro_models.io.renku.events.v1.user_updated import UserUpdated
-from renku_data_services.message_queue.avro_models.io.renku.events.v1.visibility import Visibility as MsgVisibility
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.visibility import Visibility
 from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.message_queue.interface import IMessageQueue, MessageContext
-from renku_data_services.project.apispec import Visibility
-from renku_data_services.project.orm import ProjectRepositoryORM
 
 _root = Path(__file__).parent.resolve()
 _filter = f"{_root}/schemas/**/*.avsc"
@@ -98,7 +95,7 @@ class RedisQueue(IMessageQueue):
         slug: str,
         visibility: Visibility,
         id: str,
-        repositories: list[ProjectRepositoryORM],
+        repositories: list[str],
         description: str | None,
         creation_date: datetime,
         created_by: str,
@@ -106,19 +103,12 @@ class RedisQueue(IMessageQueue):
         """Event for when a new project is created."""
         headers = self._create_header("project.created")
         message_id = ULID().hex
-        match visibility:
-            case Visibility.private | Visibility.private.value:
-                vis = MsgVisibility.PRIVATE
-            case Visibility.public | Visibility.public.value:
-                vis = MsgVisibility.PUBLIC
-            case _:
-                raise NotImplementedError(f"unknown visibility:{visibility}")
         body = ProjectCreated(
             id=id,
             name=name,
             slug=slug,
-            repositories=[r.url for r in repositories],
-            visibility=vis,
+            repositories=repositories,
+            visibility=visibility,
             description=description,
             createdBy=created_by,
             creationDate=creation_date,
@@ -138,25 +128,18 @@ class RedisQueue(IMessageQueue):
         slug: str,
         visibility: Visibility,
         id: str,
-        repositories: list[ProjectRepositoryORM],
+        repositories: list[str],
         description: str | None,
     ) -> MessageContext:
         """Event for when a new project is modified."""
         headers = self._create_header("project.updated")
         message_id = ULID().hex
-        match visibility:
-            case Visibility.private | Visibility.private.value:
-                vis = MsgVisibility.PRIVATE
-            case Visibility.public | Visibility.public.value:
-                vis = MsgVisibility.PUBLIC
-            case _:
-                raise NotImplementedError(f"unknown visibility:{visibility}")
         body = ProjectUpdated(
             id=id,
             name=name,
             slug=slug,
-            repositories=[r.url for r in repositories],
-            visibility=vis,
+            repositories=repositories,
+            visibility=visibility,
             description=description,
         )
 
@@ -187,14 +170,14 @@ class RedisQueue(IMessageQueue):
 
         return MessageContext(self, "project.removed", message)  # type:ignore
 
-    def project_auth_added_message(self, project_id: str, user_id: str, role: Role) -> MessageContext:
+    def project_auth_added_message(self, project_id: str, user_id: str, role: ProjectMemberRole) -> MessageContext:
         """Event for when a new project authorization is created."""
         headers = self._create_header("projectAuth.added")
         message_id = ULID().hex
         body = ProjectAuthorizationAdded(
             projectId=project_id,
             userId=user_id,
-            role=ProjectMemberRole.MEMBER if role != Role.OWNER else ProjectMemberRole.OWNER,
+            role=role,
         )
 
         message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
@@ -205,14 +188,14 @@ class RedisQueue(IMessageQueue):
 
         return MessageContext(self, "projectAuth.added", message)  # type:ignore
 
-    def project_auth_updated_message(self, project_id: str, user_id: str, role: Role) -> MessageContext:
+    def project_auth_updated_message(self, project_id: str, user_id: str, role: ProjectMemberRole) -> MessageContext:
         """Event for when a new project authorization is modified."""
         headers = self._create_header("projectAuth.updated")
         message_id = ULID().hex
         body = ProjectAuthorizationUpdated(
             projectId=project_id,
             userId=user_id,
-            role=ProjectMemberRole.MEMBER if role != Role.OWNER else ProjectMemberRole.OWNER,
+            role=role,
         )
 
         message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
