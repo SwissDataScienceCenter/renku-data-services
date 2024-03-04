@@ -265,6 +265,8 @@ components:
           $ref: "#/components/schemas/Visibility"
         description:
           $ref: "#/components/schemas/Description"
+        etag:
+          $ref: "#/components/schemas/ETag"
       required:
         - "id"
         - "name"
@@ -461,6 +463,10 @@ components:
       format: email
       description: User email
       example: some-user@gmail.com
+    ETag:
+      type: string
+      description: Entity Tag
+      example: "9EE498F9D565D0C41E511377425F32F3"
     ErrorResponse:
       type: object
       properties:
