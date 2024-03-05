@@ -1,9 +1,9 @@
 openapi: 3.0.2
 info:
-  title: Renku Group Management Service
+  title: Renku User/Group Namespace Management Service
   description: |
-    Service that allows creating, updating, deleting, and managing Renku v2 groups.
-    All errors have the same format as the schema called ErrorResponse.
+    Service that allows creating, updating, deleting, and managing Renku v2 group namespaces,
+    and creating user namespaces. All errors have the same format as the schema called ErrorResponse.
   version: 0.1.0
 servers:
   - url: /api/data
@@ -241,15 +241,48 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - groups
+  /namespaces/user:
+    get:
+      summary: Get the user namespace
+      responses:
+        "200":
+          description: The user namespace or null
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserNamespaceResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - users
+    post:
+      summary: Create the user namespace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserNamespacePostRequest"
+      responses:
+        "201":
+          description: The namespace was created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserNamespaceResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - users
 components:
   schemas:
     GroupResponseList:
-      description: A list of Renku groups
+      description: A list of Renku group namespaces
       type: array
       items:
         $ref: "#/components/schemas/GroupResponse"
     GroupResponse:
-      description: A Renku group definition and metadata
+      description: A Renku group namespace definition and metadata
       type: object
       properties:
         id:
@@ -277,7 +310,7 @@ components:
         created_by: "owner-keycloak-id"
         creation_date: "2024-03-04T13:04:45Z"
     GroupPostRequest:
-      description: Group metadata to be created in Renku
+      description: Group namespace metadata to be created in Renku
       type: object
       additionalProperties: false
       properties:
@@ -292,7 +325,7 @@ components:
         - "slug"
     GroupPatchRequest:
       type: object
-      description: Patch of a group
+      description: Patch of a group namespace
       additionalProperties: false
       properties:
         name:
@@ -440,6 +473,35 @@ components:
             - "message"
       required:
         - "error"
+    UserNamespaceResponse:
+      description: A Renku user namespace definition and metadata
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        name:
+          $ref: "#/components/schemas/GroupName"
+        slug:
+          $ref: "#/components/schemas/Slug"
+        creation_date:
+          $ref: "#/components/schemas/CreationDate"
+        created_by:
+          $ref: "#/components/schemas/KeycloakId"
+      required:
+        - "id"
+        - "name"
+        - "slug"
+        - "created_by"
+        - "creation_date"
+      example:
+        id: "01AN4Z79ZS5XN0F25N3DB94T4R"
+        name: "user name"
+        slug: "username"
+        created_by: "owner-keycloak-id"
+    UserNamespacePostRequest:
+      description: User namespace metadata to be created in Renku
+      type: object
+      additionalProperties: false
   responses:
     Error:
       description: The schema for all 4xx and 5xx responses
@@ -447,4 +509,3 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
-
