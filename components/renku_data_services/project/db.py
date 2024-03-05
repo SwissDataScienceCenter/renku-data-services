@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, List, NamedTuple, Tuple, cast
 
 from sanic.log import logger
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import renku_data_services.base_models as base_models
@@ -158,6 +158,10 @@ class ProjectRepository:
                         schemas.ProjectRepositoryORM(url=r, project_id=project_id, project=project)
                         for r in payload["repositories"]
                     ]
+                    # Trigger update for ``updated_at`` column
+                    await session.execute(
+                        update(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id).values()
+                    )
 
                 for key, value in payload.items():
                     # NOTE: ``slug``, ``id``, ``created_by``, and ``creation_date`` cannot be edited
