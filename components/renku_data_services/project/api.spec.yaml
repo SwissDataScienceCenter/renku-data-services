@@ -115,6 +115,7 @@ paths:
           required: true
           schema:
             type: string
+        - $ref: "#/components/parameters/If-Match"
       requestBody:
         required: true
         content:
@@ -265,6 +266,8 @@ components:
           $ref: "#/components/schemas/Visibility"
         description:
           $ref: "#/components/schemas/Description"
+        etag:
+          $ref: "#/components/schemas/ETag"
       required:
         - "id"
         - "name"
@@ -293,7 +296,7 @@ components:
         repositories:
           $ref: "#/components/schemas/RepositoriesList"
         visibility:
-          $ref: "#/components/schemas/Visibility"  # Visibility is ``private`` if not passed at this point
+          $ref: "#/components/schemas/Visibility" # Visibility is ``private`` if not passed at this point
           default: "private"
         description:
           $ref: "#/components/schemas/Description"
@@ -317,7 +320,7 @@ components:
       type: string
       minLength: 26
       maxLength: 26
-      pattern: "^[A-Z0-9]{26}$"  # This is case-insensitive
+      pattern: "^[A-Z0-9]{26}$" # This is case-insensitive
       format: ulid
     Name:
       description: Renku project name
@@ -330,7 +333,7 @@ components:
       type: string
       minLength: 1
       maxLength: 99
-      pattern: "^[a-z0-9]+[a-z0-9._-]*$"  # Cannot contain consecutive special characters or end in .git and .atom
+      pattern: "^[a-z0-9]+[a-z0-9._-]*$" # Cannot contain consecutive special characters or end in .git and .atom
       example: "my-renku-project"
     CreationDate:
       description: The date and time the project was created (time is always in UTC)
@@ -370,8 +373,7 @@ components:
     Repository:
       description: A project's repository
       type: string
-      example:
-        git@github.com:SwissDataScienceCenter/project-1.git
+      example: git@github.com:SwissDataScienceCenter/project-1.git
     Visibility:
       description: Project's visibility levels
       type: string
@@ -461,6 +463,10 @@ components:
       format: email
       description: User email
       example: some-user@gmail.com
+    ETag:
+      type: string
+      description: Entity Tag
+      example: "9EE498F9D565D0C41E511377425F32F3"
     ErrorResponse:
       type: object
       properties:
@@ -490,3 +496,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+
+  parameters:
+    If-Match:
+      in: header
+      name: If-Match
+      description: If-Match header, for avoiding mid-air collisions
+      required: true
+      schema:
+        $ref: "#/components/schemas/ETag"

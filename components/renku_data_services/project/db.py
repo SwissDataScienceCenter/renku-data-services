@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, NamedTuple, Tuple, cast
 
-from sqlalchemy import func, select
+from sanic.log import logger
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import renku_data_services.base_models as base_models
@@ -13,7 +13,7 @@ from renku_data_services import errors
 from renku_data_services.authz import models as authz_models
 from renku_data_services.authz.authz import IProjectAuthorizer
 from renku_data_services.authz.models import MemberQualifier, Scope
-from renku_data_services.project import models
+from renku_data_services.project import apispec, models
 from renku_data_services.project import orm as schemas
 from renku_data_services.project.apispec import Role, Visibility
 
@@ -98,27 +98,40 @@ class ProjectRepository:
 
             return project_orm.dump()
 
-    async def insert_project(self, user: base_models.APIUser, project: models.Project) -> models.Project:
+    async def insert_project(self, user: base_models.APIUser, new_project=apispec.ProjectPost) -> models.Project:
         """Insert a new project entry."""
-        project_orm = schemas.ProjectORM.load(project)
-        project_orm.creation_date = datetime.now(timezone.utc).replace(microsecond=0)
-        project_orm.created_by = user.id
+
+        project_dict = new_project.model_dump(exclude_none=True)
+        user_id: str = cast(str, user.id)
+        project_dict["created_by"] = models.Member(id=user_id)
+        project_model = models.Project.from_dict(project_dict)
+        project = schemas.ProjectORM.load(project_model)
 
         async with self.session_maker() as session:
             async with session.begin():
-                session.add(project_orm)
+                session.add(project)
 
-                project = project_orm.dump()
-                public_project = project.visibility == Visibility.public
-                if project.id is None:
+                logger.info(f"orm creation_date = {project.creation_date}")
+                logger.info(f"orm updated_at = {project.updated_at}")
+                project_model = project.dump()
+                logger.info(f"model creation_date = {project_model.creation_date}")
+                logger.info(f"model updated_at = {project_model.updated_at}")
+                public_project = project_model.visibility == Visibility.public
+                if project_model.id is None:
                     raise errors.BaseError(detail="The created project does not have an ID but it should.")
                 await self.project_authz.create_project(
-                    requested_by=user, project_id=project.id, public_project=public_project
+                    requested_by=user, project_id=project_model.id, public_project=public_project
                 )
 
-        return project_orm.dump()
+                # Need to commit() to get the timestamps(?)
+                await session.commit()
+                logger.info(f"orm creation_date = {project.creation_date}")
+                logger.info(f"orm updated_at = {project.updated_at}")
+                return project.dump()
 
-    async def update_project(self, user: base_models.APIUser, project_id: str, **payload) -> models.Project:
+    async def update_project(
+        self, user: base_models.APIUser, project_id: str, etag: str | None = None, **payload
+    ) -> models.Project:
         """Update a project entry."""
         authorized = await self.project_authz.has_permission(user=user, project_id=project_id, scope=Scope.WRITE)
         if not authorized:
@@ -128,13 +141,16 @@ class ProjectRepository:
 
         async with self.session_maker() as session:
             async with session.begin():
-                result = await session.execute(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
-                projects = result.one_or_none()
+                result = await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
+                project = result.one_or_none()
 
-                if projects is None:
+                if project is None:
                     raise errors.MissingResourceError(message=f"The project with id '{project_id}' cannot be found")
 
-                project = projects[0]
+                current_etag = project.dump().etag
+                if etag is not None and current_etag != etag:
+                    raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
+
                 visibility_before = project.visibility
 
                 if "repositories" in payload:
@@ -142,6 +158,10 @@ class ProjectRepository:
                         schemas.ProjectRepositoryORM(url=r, project_id=project_id, project=project)
                         for r in payload["repositories"]
                     ]
+                    # Trigger update for ``updated_at`` column
+                    await session.execute(
+                        update(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id).values()
+                    )
 
                 for key, value in payload.items():
                     # NOTE: ``slug``, ``id``, ``created_by``, and ``creation_date`` cannot be edited

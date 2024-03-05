@@ -1,17 +1,16 @@
 """Project blueprint."""
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import cast
 
 from sanic import HTTPResponse, Request, json
+from sanic.log import logger
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.errors import errors
-from renku_data_services.project import apispec, models
+from renku_data_services.project import apispec
 from renku_data_services.project.apispec import FullUserWithRole, UserWithId
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
 from renku_data_services.users.db import UserRepo
@@ -66,14 +65,9 @@ class ProjectsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.ProjectPost)
         async def _post(_: Request, *, user: base_models.APIUser, body: apispec.ProjectPost):
-            data = body.model_dump(exclude_none=True)
-            user_id: str = cast(str, user.id)
-            data["created_by"] = models.Member(id=user_id)
-            # NOTE: Set ``creation_date`` to override possible value set by users
-            data["creation_date"] = datetime.now(timezone.utc).replace(microsecond=0)
-            project = models.Project.from_dict(data)
-            result = await self.project_repo.insert_project(user=user, project=project)
-            return json(apispec.Project.model_validate(result).model_dump(exclude_none=True, mode="json"), 201)
+            project = await self.project_repo.insert_project(user=user, new_project=body)
+            logger.info(f"creation_date = {project.creation_date}")
+            return json(apispec.Project.model_validate(project).model_dump(exclude_none=True, mode="json"), 201)
 
         return "/projects", ["POST"], _post
 
@@ -81,9 +75,17 @@ class ProjectsBP(CustomBlueprint):
         """Get a specific project."""
 
         @authenticate(self.authenticator)
-        async def _get_one(_: Request, *, user: base_models.APIUser, project_id: str):
+        async def _get_one(request: Request, *, user: base_models.APIUser, project_id: str):
             project = await self.project_repo.get_project(user=user, project_id=project_id)
-            return json(apispec.Project.model_validate(project).model_dump(exclude_none=True, mode="json"))
+
+            etag = request.headers.get("If-None-Match")
+            if project.etag is not None and project.etag == etag:
+                return HTTPResponse(status=304)
+
+            headers = {"ETag": project.etag} if project.etag is not None else None
+            return json(
+                apispec.Project.model_validate(project).model_dump(exclude_none=True, mode="json"), headers=headers
+            )
 
         return "/projects/<project_id>", ["GET"], _get_one
 
@@ -104,10 +106,17 @@ class ProjectsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_authenticated
         @validate(json=apispec.ProjectPatch)
-        async def _patch(_: Request, *, user: base_models.APIUser, project_id: str, body: apispec.ProjectPatch):
+        async def _patch(request: Request, *, user: base_models.APIUser, project_id: str, body: apispec.ProjectPatch):
+            etag = request.headers.get("If-Match")
+
+            if etag is None:
+                raise errors.PreconditionRequiredError(message="If-Match header not provided.")
+
             body_dict = body.model_dump(exclude_none=True)
 
-            updated_project = await self.project_repo.update_project(user=user, project_id=project_id, **body_dict)
+            updated_project = await self.project_repo.update_project(
+                user=user, project_id=project_id, etag=etag, **body_dict
+            )
 
             return json(apispec.Project.model_validate(updated_project).model_dump(exclude_none=True, mode="json"))
 
