@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Dict, Optional
 
-from sqlalchemy import DateTime, Integer, MetaData, String
+from sqlalchemy import CheckConstraint, DateTime, Index, Integer, MetaData, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, attribute_keyed_dict, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
 from ulid import ULID
@@ -26,7 +26,7 @@ class GroupORM(BaseORM):
 
     id: Mapped[str] = mapped_column("id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False)
     name: Mapped[str] = mapped_column("name", String(99), index=True)
-    slug: Mapped[str] = mapped_column("slug", String(99), index=True, unique=True)
+    namespace_id: Mapped[int] = mapped_column(ForeignKey("namespaces.id"), index=True, nullable=False)
     created_by: Mapped[str] = mapped_column("created_by", String())
     creation_date: Mapped[datetime] = mapped_column("creation_date", DateTime(timezone=True))
     description: Mapped[Optional[str]] = mapped_column("description", String(500), default=None)
@@ -89,3 +89,23 @@ class GroupMemberORM(BaseORM):
             user_id=self.user_id,
             group_id=self.group_id,
         )
+
+
+class NamespaceORM(BaseORM):
+    __tablename__ = "namespaces"
+    __table_args__ = (
+        Index("namespaces_one_slug_is_latest", "slug", "latest_id", unique=True, postgres_where="latest_id is NULL"),
+        CheckConstraint("num_nulls(user_id, group_id) == 1", name="only_one_null_in_group_user_id"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True, init=False)
+    slug: Mapped[str] = mapped_column(index=True, unique=True, nullable=False)
+    latest_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("namespaces.id", ondelete="CASCADE"), nullable=True, init=False, index=True
+    )
+    latest: Mapped[Optional["NamespaceORM"]] = relationship(remote_side=[id], lazy="joined", join_depth=1)
+    user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.users.id", ondelete="CASCADE"), index=True, default=None
+    )
+    group_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("groups.id", ondelete="CASCADE"), index=True, default=None
+    )
