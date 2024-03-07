@@ -275,6 +275,7 @@ components:
         name: "R-Project Group"
         slug: "r-project"
         created_by: "owner-keycloak-id"
+        creation_date: "2024-03-04T13:04:45Z"
     GroupPostRequest:
       description: Group metadata to be created in Renku
       type: object

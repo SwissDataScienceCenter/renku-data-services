@@ -107,7 +107,15 @@ class CustomErrorHandler(ErrorHandler):
                 )
             case SQLAlchemyError():
                 message = ", ".join([str(i) for i in exception.args])
-                formatted_exception = errors.BaseError(message=f"Database error occurred: {message}")
+                if "CharacterNotInRepertoireError" in message:
+                    # NOTE: This message is usually triggered if a string field for the database contains
+                    # NULL - i.e \u0000 or other invalid characters that are not UTF-8 compatible
+                    formatted_exception = errors.ValidationError(
+                        message="The payload contains characters that are incompatible with the database",
+                        detail=message,
+                    )
+                else:
+                    formatted_exception = errors.BaseError(message=f"Database error occurred: {message}")
             case PydanticValidationError():
                 parts = [".".join(str(i) for i in field["loc"]) + ": " + field["msg"] for field in exception.errors()]
                 message = f"There are errors in the following fields, {', '.join(parts)}"
