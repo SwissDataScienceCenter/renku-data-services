@@ -26,6 +26,7 @@ services:
       DB_PASSWORD: renku
       DB_HOST: db
       CORS_ALLOW_ALL_ORIGINS: "true"
+      ALEMBIC_CONFIG: /workspaces/renku-data-services/components/renku_data_services/migrations/alembic.ini
 
   db:
     image: postgres:latest
