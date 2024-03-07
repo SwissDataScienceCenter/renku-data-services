@@ -156,7 +156,7 @@ class RedisQueue(IMessageQueue):
         id: str,
     ) -> MessageContext:
         """Event for when a new project is removed."""
-        headers = self._create_header("project.updated")
+        headers = self._create_header("project.removed")
         message_id = ULID().hex
         body = ProjectRemoved(
             id=id,

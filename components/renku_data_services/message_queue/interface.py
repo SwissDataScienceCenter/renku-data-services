@@ -30,7 +30,7 @@ class MessageContext:
     async def persist(self, repo: "EventRepository"):
         """Persist the event to the database."""
         self._repo = repo
-        self.event_id = await self._repo.store_event("project.created", self.message)
+        self.event_id = await self._repo.store_event(self.queue_name, self.message)
         self._persisted = True
 
     async def __aexit__(self, exc_type, exc, tb):
