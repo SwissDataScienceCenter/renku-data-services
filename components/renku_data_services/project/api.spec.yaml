@@ -253,6 +253,8 @@ components:
           $ref: "#/components/schemas/Ulid"
         name:
           $ref: "#/components/schemas/Name"
+        namespace:
+          $ref: "#/components/schemas/Slug"
         slug:
           $ref: "#/components/schemas/Slug"
         creation_date:
@@ -268,12 +270,15 @@ components:
       required:
         - "id"
         - "name"
+        - "namespace"
+        - "slug"
         - "created_by"
         - "creation_date"
         - "visibility"
       example:
         id: "01AN4Z79ZS5XN0F25N3DB94T4R"
         name: "Renku R Project"
+        namespace: "our-projects"
         slug: "r-project"
         created_by:
           id: "owner-KC-id"
@@ -288,6 +293,8 @@ components:
       properties:
         name:
           $ref: "#/components/schemas/Name"
+        namespace:
+          $ref: "#/components/schemas/Slug"
         slug:
           $ref: "#/components/schemas/Slug"
         repositories:
@@ -299,6 +306,7 @@ components:
           $ref: "#/components/schemas/Description"
       required:
         - "name"
+        - "namespace"
     ProjectPatch:
       type: object
       description: Patch of a project
@@ -306,6 +314,8 @@ components:
       properties:
         name:
           $ref: "#/components/schemas/Name"
+        namespace:
+          $ref: "#/components/schemas/Slug"
         repositories:
           $ref: "#/components/schemas/RepositoriesList"
         visibility:
@@ -326,7 +336,7 @@ components:
       maxLength: 99
       example: "My Renku Project :)"
     Slug:
-      description: A command-line friendly name for a project
+      description: A command-line friendly name for a project or namespace
       type: string
       minLength: 1
       maxLength: 99
