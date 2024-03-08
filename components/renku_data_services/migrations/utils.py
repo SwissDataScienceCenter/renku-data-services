@@ -1,4 +1,6 @@
 """Custom migrations env file to support modular migrations."""
+from typing import Sequence
+
 from alembic import context
 from sqlalchemy import MetaData, NullPool, create_engine
 from sqlalchemy.schema import CreateSchema
@@ -6,19 +8,15 @@ from sqlalchemy.schema import CreateSchema
 from renku_data_services.db_config import DBConfig
 
 
-def include_object_factory(schema: str):
-    """Filter only objects for the current database schema to be included."""
-
-    def _include_object(object, name, type_, reflected, compare_to):
-        if type_ == "table" and object.schema != schema:
-            return False
-        else:
-            return True
-
-    return _include_object
+def include_object(obj, name, type_, reflected, compare_to):
+    if type_ == "table" and name == "alembic_version":
+        return False
+    return True
 
 
-def run_migrations_offline(target_metadata, sync_sqlalchemy_url: str, version_table_schema: str | None = None) -> None:
+def run_migrations_offline(
+    target_metadata: Sequence[MetaData], sync_sqlalchemy_url: str, version_table_schema: str | None = None
+) -> None:
     """Run migrations in 'offline' mode.
 
     This configures the context with just a URL
@@ -38,15 +36,19 @@ def run_migrations_offline(target_metadata, sync_sqlalchemy_url: str, version_ta
             literal_binds=True,
             dialect_opts={"paramstyle": "named"},
             include_schemas=True,
-            version_table_schema=version_table_schema if version_table_schema else target_metadata.schema,
+            include_object=include_object,
+            version_table_schema=version_table_schema if version_table_schema else target_metadata[0].schema,
         )
-        conn.execute(CreateSchema(target_metadata.schema, if_not_exists=True))
+        for m in target_metadata:
+            conn.execute(CreateSchema(m.schema, if_not_exists=True))
 
         with context.begin_transaction():
             context.run_migrations()
 
 
-def run_migrations_online(target_metadata, sync_sqlalchemy_url: str, version_table_schema: str | None = None) -> None:
+def run_migrations_online(
+    target_metadata: Sequence[MetaData], sync_sqlalchemy_url: str, version_table_schema: str | None = None
+) -> None:
     """Run migrations in 'online' mode.
 
     In this scenario we need to create an Engine
@@ -59,9 +61,11 @@ def run_migrations_online(target_metadata, sync_sqlalchemy_url: str, version_tab
             connection=conn,
             target_metadata=target_metadata,
             include_schemas=True,
-            version_table_schema=version_table_schema if version_table_schema else target_metadata.schema,
+            include_object=include_object,
+            version_table_schema=version_table_schema if version_table_schema else target_metadata[0].schema,
         )
-        conn.execute(CreateSchema(target_metadata.schema, if_not_exists=True))
+        for m in target_metadata:
+            conn.execute(CreateSchema(m.schema, if_not_exists=True))
 
         with context.begin_transaction():
             context.run_migrations()
