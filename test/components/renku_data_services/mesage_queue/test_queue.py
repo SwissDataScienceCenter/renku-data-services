@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pytest
 
-from renku_data_services.project.apispec import Visibility
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.visibility import Visibility
 
 
 @pytest.mark.asyncio
@@ -19,7 +19,7 @@ async def test_queue_resend(app_config):
         async with app_config.message_queue.project_created_message(
             name="project",
             slug="project",
-            visibility=Visibility.public,
+            visibility=Visibility.PUBLIC,
             id="abcdefg",
             repositories=[],
             description="test",

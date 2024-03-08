@@ -213,7 +213,9 @@ class Config:
     def project_authz(self) -> IProjectAuthorizer:
         """The DB adapter for authorization."""
         if not self._project_authz:
-            self._project_authz = SQLProjectAuthorizer(session_maker=self.db.async_session_maker)
+            self._project_authz = SQLProjectAuthorizer(
+                session_maker=self.db.async_session_maker, message_queue=self.message_queue, event_repo=self.event_repo
+            )
         return self._project_authz
 
     @property
@@ -230,7 +232,9 @@ class Config:
     def kc_user_repo(self) -> KcUserRepo:
         """The DB adapter for users."""
         if not self._kc_user_repo:
-            self._kc_user_repo = KcUserRepo(session_maker=self.db.async_session_maker)
+            self._kc_user_repo = KcUserRepo(
+                session_maker=self.db.async_session_maker, message_queue=self.message_queue, event_repo=self.event_repo
+            )
         return self._kc_user_repo
 
     @classmethod

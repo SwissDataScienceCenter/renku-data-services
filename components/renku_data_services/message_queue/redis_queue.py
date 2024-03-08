@@ -15,12 +15,25 @@ from fastavro import parse_schema, schemaless_reader, schemaless_writer
 from ulid import ULID
 
 from renku_data_services.message_queue.avro_models.io.renku.events.v1.header import Header
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_authorization_added import (
+    ProjectAuthorizationAdded,
+)
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_authorization_removed import (
+    ProjectAuthorizationRemoved,
+)
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_authorization_updated import (
+    ProjectAuthorizationUpdated,
+)
 from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_created import ProjectCreated
-from renku_data_services.message_queue.avro_models.io.renku.events.v1.visibility import Visibility as MsgVisibility
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_member_role import ProjectMemberRole
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_removed import ProjectRemoved
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_updated import ProjectUpdated
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.user_added import UserAdded
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.user_removed import UserRemoved
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.user_updated import UserUpdated
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.visibility import Visibility
 from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.message_queue.interface import IMessageQueue, MessageContext
-from renku_data_services.project.apispec import Visibility
-from renku_data_services.project.orm import ProjectRepositoryORM
 
 _root = Path(__file__).parent.resolve()
 _filter = f"{_root}/schemas/**/*.avsc"
@@ -82,7 +95,7 @@ class RedisQueue(IMessageQueue):
         slug: str,
         visibility: Visibility,
         id: str,
-        repositories: list[ProjectRepositoryORM],
+        repositories: list[str],
         description: str | None,
         creation_date: datetime,
         created_by: str,
@@ -90,19 +103,12 @@ class RedisQueue(IMessageQueue):
         """Event for when a new project is created."""
         headers = self._create_header("project.created")
         message_id = ULID().hex
-        match visibility:
-            case Visibility.private | Visibility.private.value:
-                vis = MsgVisibility.PRIVATE
-            case Visibility.public | Visibility.public.value:
-                vis = MsgVisibility.PUBLIC
-            case _:
-                raise NotImplementedError(f"unknown visibility:{visibility}")
         body = ProjectCreated(
             id=id,
             name=name,
             slug=slug,
-            repositories=[r.url for r in repositories],
-            visibility=vis,
+            repositories=repositories,
+            visibility=visibility,
             description=description,
             createdBy=created_by,
             creationDate=creation_date,
@@ -115,6 +121,168 @@ class RedisQueue(IMessageQueue):
         }
 
         return MessageContext(self, "project.created", message)  # type:ignore
+
+    def project_updated_message(
+        self,
+        name: str,
+        slug: str,
+        visibility: Visibility,
+        id: str,
+        repositories: list[str],
+        description: str | None,
+    ) -> MessageContext:
+        """Event for when a new project is modified."""
+        headers = self._create_header("project.updated")
+        message_id = ULID().hex
+        body = ProjectUpdated(
+            id=id,
+            name=name,
+            slug=slug,
+            repositories=repositories,
+            visibility=visibility,
+            description=description,
+        )
+
+        message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
+            "id": message_id,
+            "headers": headers.serialize_json(),
+            "payload": base64.b64encode(serialize_binary(body)).decode(),
+        }
+
+        return MessageContext(self, "project.updated", message)  # type:ignore
+
+    def project_removed_message(
+        self,
+        id: str,
+    ) -> MessageContext:
+        """Event for when a new project is removed."""
+        headers = self._create_header("project.removed")
+        message_id = ULID().hex
+        body = ProjectRemoved(
+            id=id,
+        )
+
+        message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
+            "id": message_id,
+            "headers": headers.serialize_json(),
+            "payload": base64.b64encode(serialize_binary(body)).decode(),
+        }
+
+        return MessageContext(self, "project.removed", message)  # type:ignore
+
+    def project_auth_added_message(self, project_id: str, user_id: str, role: ProjectMemberRole) -> MessageContext:
+        """Event for when a new project authorization is created."""
+        headers = self._create_header("projectAuth.added")
+        message_id = ULID().hex
+        body = ProjectAuthorizationAdded(
+            projectId=project_id,
+            userId=user_id,
+            role=role,
+        )
+
+        message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
+            "id": message_id,
+            "headers": headers.serialize_json(),
+            "payload": base64.b64encode(serialize_binary(body)).decode(),
+        }
+
+        return MessageContext(self, "projectAuth.added", message)  # type:ignore
+
+    def project_auth_updated_message(self, project_id: str, user_id: str, role: ProjectMemberRole) -> MessageContext:
+        """Event for when a new project authorization is modified."""
+        headers = self._create_header("projectAuth.updated")
+        message_id = ULID().hex
+        body = ProjectAuthorizationUpdated(
+            projectId=project_id,
+            userId=user_id,
+            role=role,
+        )
+
+        message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
+            "id": message_id,
+            "headers": headers.serialize_json(),
+            "payload": base64.b64encode(serialize_binary(body)).decode(),
+        }
+
+        return MessageContext(self, "projectAuth.updated", message)  # type:ignore
+
+    def project_auth_removed_message(
+        self,
+        project_id: str,
+        user_id: str,
+    ) -> MessageContext:
+        """Event for when a new project authorization is removed."""
+        headers = self._create_header("projectAuth.removed")
+        message_id = ULID().hex
+        body = ProjectAuthorizationRemoved(
+            projectId=project_id,
+            userId=user_id,
+        )
+
+        message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
+            "id": message_id,
+            "headers": headers.serialize_json(),
+            "payload": base64.b64encode(serialize_binary(body)).decode(),
+        }
+
+        return MessageContext(self, "projectAuth.removed", message)  # type:ignore
+
+    def user_added_message(
+        self,
+        first_name: str | None,
+        last_name: str | None,
+        email: str | None,
+        id: str,
+    ) -> MessageContext:
+        """Event for when a new user is created."""
+        headers = self._create_header("user.added")
+        message_id = ULID().hex
+        body = UserAdded(id=id, firstName=first_name, lastName=last_name, email=email)
+
+        message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
+            "id": message_id,
+            "headers": headers.serialize_json(),
+            "payload": base64.b64encode(serialize_binary(body)).decode(),
+        }
+
+        return MessageContext(self, "user.added", message)  # type:ignore
+
+    def user_updated_message(
+        self,
+        first_name: str | None,
+        last_name: str | None,
+        email: str | None,
+        id: str,
+    ) -> MessageContext:
+        """Event for when a new user is modified."""
+        headers = self._create_header("user.updated")
+        message_id = ULID().hex
+        body = UserUpdated(id=id, firstName=first_name, lastName=last_name, email=email)
+
+        message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
+            "id": message_id,
+            "headers": headers.serialize_json(),
+            "payload": base64.b64encode(serialize_binary(body)).decode(),
+        }
+
+        return MessageContext(self, "user.updated", message)  # type:ignore
+
+    def user_removed_message(
+        self,
+        id: str,
+    ) -> MessageContext:
+        """Event for when a new user is removed."""
+        headers = self._create_header("user.removed")
+        message_id = ULID().hex
+        body = UserRemoved(id=id)
+
+        message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
+            "id": message_id,
+            "headers": headers.serialize_json(),
+            "payload": base64.b64encode(serialize_binary(body)).decode(),
+        }
+
+        return MessageContext(self, "user.removed", message)  # type:ignore
 
     async def send_message(
         self,

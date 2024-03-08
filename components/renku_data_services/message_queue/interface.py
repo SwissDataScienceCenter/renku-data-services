@@ -4,10 +4,10 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, Protocol
 
 from renku_data_services.errors.errors import BaseError
-from renku_data_services.project.apispec import Visibility
-from renku_data_services.project.orm import ProjectRepositoryORM
 
 if TYPE_CHECKING:
+    from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_member_role import ProjectMemberRole
+    from renku_data_services.message_queue.avro_models.io.renku.events.v1.visibility import Visibility
     from renku_data_services.message_queue.db import EventRepository
 
 
@@ -30,7 +30,7 @@ class MessageContext:
     async def persist(self, repo: "EventRepository"):
         """Persist the event to the database."""
         self._repo = repo
-        self.event_id = await self._repo.store_event("project.created", self.message)
+        self.event_id = await self._repo.store_event(self.queue_name, self.message)
         self._persisted = True
 
     async def __aexit__(self, exc_type, exc, tb):
@@ -52,14 +52,76 @@ class IMessageQueue(Protocol):
         self,
         name: str,
         slug: str,
-        visibility: Visibility,
+        visibility: "Visibility",
         id: str,
-        repositories: list[ProjectRepositoryORM],
+        repositories: list[str],
         description: str | None,
         creation_date: datetime,
         created_by: str,
     ) -> MessageContext:
         """Event for when a new project is created."""
+        ...
+
+    def project_updated_message(
+        self,
+        name: str,
+        slug: str,
+        visibility: "Visibility",
+        id: str,
+        repositories: list[str],
+        description: str | None,
+    ) -> MessageContext:
+        """Event for when a new project is modified."""
+        ...
+
+    def project_removed_message(
+        self,
+        id: str,
+    ) -> MessageContext:
+        """Event for when a new project is removed."""
+        ...
+
+    def project_auth_added_message(self, project_id: str, user_id: str, role: "ProjectMemberRole") -> MessageContext:
+        """Event for when a new project authorization is created."""
+        ...
+
+    def project_auth_updated_message(self, project_id: str, user_id: str, role: "ProjectMemberRole") -> MessageContext:
+        """Event for when a new project authorization is modified."""
+        ...
+
+    def project_auth_removed_message(
+        self,
+        project_id: str,
+        user_id: str,
+    ) -> MessageContext:
+        """Event for when a new project authorization is removed."""
+        ...
+
+    def user_added_message(
+        self,
+        first_name: str | None,
+        last_name: str | None,
+        email: str | None,
+        id: str,
+    ) -> MessageContext:
+        """Event for when a new user is created."""
+        ...
+
+    def user_updated_message(
+        self,
+        first_name: str | None,
+        last_name: str | None,
+        email: str | None,
+        id: str,
+    ) -> MessageContext:
+        """Event for when a new user is modified."""
+        ...
+
+    def user_removed_message(
+        self,
+        id: str,
+    ) -> MessageContext:
+        """Event for when a new user is removed."""
         ...
 
     async def send_message(
