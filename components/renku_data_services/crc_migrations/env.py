@@ -3,4 +3,4 @@ from renku_data_services.crc.orm import BaseORM
 from renku_data_services.migrations.utils import run_migrations
 
 target_metadata = BaseORM.metadata
-run_migrations(target_metadata)
+run_migrations([target_metadata])
