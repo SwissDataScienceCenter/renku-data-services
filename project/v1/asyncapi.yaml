@@ -20,7 +20,66 @@ channels:
               - $ref: './events/created.avsc#/ProjectCreated'
           traits:
           - $ref: '#/components/messageTraits/headers'
-        
+  project.updated:
+    publish:
+      messages:
+        projectUpdated:
+          schemaFormat: "application/vnd.apache.avro;version=1.9.0"
+          payload:
+            type: object
+            properties:
+              payload:
+              - $ref: './events/updated.avsc#/ProjectUpdated'
+          traits:
+          - $ref: '#/components/messageTraits/headers'
+  project.removed:
+    publish:
+      messages:
+        projectRemoved:
+          schemaFormat: "application/vnd.apache.avro;version=1.9.0"
+          payload:
+            type: object
+            properties:
+              payload:
+              - $ref: './events/removed.avsc#/ProjectRemoved'
+          traits:
+          - $ref: '#/components/messageTraits/headers'
+  projectAuth.added:
+    publish:
+      messages:
+        projectAuthAdded:
+          schemaFormat: "application/vnd.apache.avro;version=1.9.0"
+          payload:
+            type: object
+            properties:
+              payload:
+              - $ref: './events/authorization_added.avsc#/ProjectAuthorizationAdded'
+          traits:
+          - $ref: '#/components/messageTraits/headers'
+  projectAuth.updated:
+    publish:
+      messages:
+        projectAuthUpdated:
+          schemaFormat: "application/vnd.apache.avro;version=1.9.0"
+          payload:
+            type: object
+            properties:
+              payload:
+              - $ref: './events/authorization_updated.avsc#/ProjectAuthorizationUpdated'
+          traits:
+          - $ref: '#/components/messageTraits/headers'
+  projectAuth.removed:
+    publish:
+      messages:
+        projectAuthRemoved:
+          schemaFormat: "application/vnd.apache.avro;version=1.9.0"
+          payload:
+            type: object
+            properties:
+              payload:
+              - $ref: './events/authorization_removed.avsc#/ProjectAuthorizationRemoved'
+          traits:
+          - $ref: '#/components/messageTraits/headers'
 components:
   messageTraits:
     headers:

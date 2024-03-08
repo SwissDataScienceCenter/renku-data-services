@@ -1,8 +1,8 @@
 {
   "type": "record",
-  "name": "ProjectCreated",
+  "name": "ProjectUpdated",
   "namespace":"io.renku.events.v1",
-  "doc":"Event raised when a new project is created",
+  "doc":"Event raised when a project is updated",
   "fields": [
     {
       "name":"id",
@@ -34,17 +34,6 @@
         "null",
         "string"
       ]
-    },
-    {
-      "name": "createdBy",
-      "type": "string"
-    },
-    {
-      "name": "creationDate",
-      "type": {
-        "type": "long",
-        "logicalType": "timestamp-millis"
-      }
     }
   ]
 }
