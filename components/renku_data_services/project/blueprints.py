@@ -7,6 +7,7 @@ from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
+from renku_data_services.base_api.etag import if_match_required
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.errors import errors
 from renku_data_services.project import apispec
@@ -103,13 +104,11 @@ class ProjectsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
+        @if_match_required
         @validate(json=apispec.ProjectPatch)
-        async def _patch(request: Request, *, user: base_models.APIUser, project_id: str, body: apispec.ProjectPatch):
-            etag = request.headers.get("If-Match")
-
-            if etag is None:
-                raise errors.PreconditionRequiredError(message="If-Match header not provided.")
-
+        async def _patch(
+            _: Request, *, user: base_models.APIUser, project_id: str, body: apispec.ProjectPatch, etag: str
+        ):
             body_dict = body.model_dump(exclude_none=True)
 
             updated_project = await self.project_repo.update_project(
