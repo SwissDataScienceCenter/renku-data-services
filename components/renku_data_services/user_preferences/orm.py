@@ -1,9 +1,7 @@
 """SQLAlchemy schemas for the user preferences database."""
-
-from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Integer, MetaData, String, func
+from sqlalchemy import JSON, Integer, MetaData, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 
@@ -34,14 +32,6 @@ class UserPreferencesORM(BaseORM):
     pinned_projects: Mapped[dict[str, Any]] = mapped_column("pinned_projects", JSONVariant)
     """Pinned projects."""
 
-    created_at: Mapped[datetime | None] = mapped_column(
-        "created_at", DateTime(timezone=True), default=None, server_default=func.now()
-    )
-
-    updated_at: Mapped[datetime | None] = mapped_column(
-        "updated_at", DateTime(timezone=True), default=None, server_default=func.now(), onupdate=func.now()
-    )
-
     @classmethod
     def load(cls, user_preferences: models.UserPreferences):
         """Create UserPreferencesORM from the user preferences model."""
@@ -53,8 +43,5 @@ class UserPreferencesORM(BaseORM):
     def dump(self):
         """Create a user preferences model from the ORM object."""
         return models.UserPreferences(
-            user_id=self.user_id,
-            pinned_projects=models.PinnedProjects.from_dict(self.pinned_projects),
-            created_at=self.created_at,
-            updated_at=self.updated_at,
+            user_id=self.user_id, pinned_projects=models.PinnedProjects.from_dict(self.pinned_projects)
         )

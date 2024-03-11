@@ -1,8 +1,6 @@
 """Adapters for user preferences database classes."""
-
 from typing import Callable, List, cast
 
-from sanic.log import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,42 +43,6 @@ class UserPreferencesRepository(_Base):
                 raise errors.MissingResourceError(message="Preferences not found for user.")
             return user_preferences.dump()
 
-    async def update_user_preferences(
-        self, user: base_models.APIUser, etag: str | None = None, **kwargs
-    ) -> models.UserPreferences:
-        """Update user preferences."""
-        if not user.is_authenticated or user.id is None:
-            raise errors.Unauthorized(message="Anonymous users cannot have user preferences.")
-
-        async with self.session_maker() as session:
-            async with session.begin():
-                res = await session.scalars(
-                    select(schemas.UserPreferencesORM).where(schemas.UserPreferencesORM.user_id == user.id)
-                )
-                user_preferences = res.one_or_none()
-
-                if user_preferences is None:
-                    project_slugs = kwargs.get("project_slugs", [])
-                    new_preferences = models.UserPreferences(
-                        user_id=user.id, pinned_projects=models.PinnedProjects(project_slugs=project_slugs)
-                    )
-                    user_preferences = schemas.UserPreferencesORM.load(new_preferences)
-                    session.add(user_preferences)
-                    return user_preferences.dump()
-
-                current_etag = user_preferences.dump().etag
-                if etag is not None and current_etag != etag:
-                    raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
-
-                if "pinned_projects" in kwargs:
-                    kwargs["pinned_projects"] = models.PinnedProjects.from_dict(kwargs["pinned_projects"]).model_dump()
-
-                for key, value in kwargs.items():
-                    if key in ["pinned_projects"]:
-                        setattr(user_preferences, key, value)
-
-                return user_preferences.dump()
-
     async def delete_user_preferences(self, user: base_models.APIUser) -> None:
         """Delete user preferences from the database."""
         async with self.session_maker() as session:
@@ -116,8 +78,6 @@ class UserPreferencesRepository(_Base):
                     )
                     user_preferences = schemas.UserPreferencesORM.load(new_preferences)
                     session.add(user_preferences)
-                    logger.info(f"orm created_at = {user_preferences.created_at}")
-                    logger.info(f"orm updated_at = {user_preferences.updated_at}")
                     return user_preferences.dump()
 
                 project_slugs: List[str]

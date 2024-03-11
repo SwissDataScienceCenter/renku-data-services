@@ -12,14 +12,9 @@ paths:
   "/user/preferences":
     get:
       summary: Get user preferences for the currently logged in user
-      parameters:
-        - $ref: "#/components/parameters/If-None-Match"
       responses:
         "200":
           description: The user preferences
-          headers:
-            ETag:
-              $ref: "#/components/headers/ETag"
           content:
             "application/json":
               schema:
@@ -34,35 +29,6 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - user_preferences
-    patch:
-      summary: Update specific fields of a user preferences object
-      parameters:
-        - $ref: "#/components/parameters/If-Match"
-      requestBody:
-        required: true
-        content:
-          "application/json":
-            schema:
-              $ref: "#/components/schemas/UserPreferencesPatch"
-      responses:
-        "200":
-          description: The updated user preferences
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/UserPreferences"
-        "409":
-          description: The update conflicts with the current state on the server
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        default:
-          $ref: "#/components/responses/Error"
-      tags:
-        - user_preferences
-
-
   "/user/preferences/pinned_projects":
     post:
       summary: Add a pinned project
@@ -114,13 +80,6 @@ components:
         pinned_projects:
           $ref: "#/components/schemas/PinnedProjects"
       required: ["user_id", "pinned_projects"]
-    UserPreferencesPatch:
-      type: object
-      description: Update user preferences
-      additionalProperties: false
-      properties:
-        pinned_projects:
-          $ref: "#/components/schemas/PinnedProjects"
     UserId:
       type: string
       description: The unique identifier for a user
@@ -168,10 +127,6 @@ components:
               example: "Something went wrong - please try again later"
           required: ["code", "message"]
       required: ["error"]
-    ETag:
-      type: string
-      description: Entity Tag
-      example: "9EE498F9D565D0C41E511377425F32F3"
 
   responses:
     Error:
@@ -180,30 +135,6 @@ components:
         "application/json":
           schema:
             $ref: "#/components/schemas/ErrorResponse"
-
-  headers:
-    ETag:
-      description: Entity Tag header
-      required: true
-      schema:
-        $ref: "#/components/schemas/ETag"
-
-  parameters:
-    If-Match:
-      in: header
-      name: If-Match
-      description: If-Match header, for avoiding mid-air collisions
-      required: false
-      schema:
-        $ref: "#/components/schemas/ETag"
-    If-None-Match:
-      in: header
-      name: If-None-Match
-      description: If-None-Match header, for caching entities
-      required: false
-      schema:
-        $ref: "#/components/schemas/ETag"
-
   securitySchemes:
     oidc:
       type: openIdConnect
