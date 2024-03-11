@@ -39,7 +39,6 @@ from renku_data_services.data_api.server_options import (
 )
 from renku_data_services.db_config import DBConfig
 from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
-from renku_data_services.group.db import GroupRepository
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.message_queue.config import RedisConfig
@@ -143,11 +142,7 @@ class Config:
         with open(spec_file, "r") as f:
             projects = safe_load(f)
 
-        spec_file = Path(renku_data_services.group.__file__).resolve().parent / "api.spec.yaml"
-        with open(spec_file, "r") as f:
-            groups = safe_load(f)
-
-        self.spec = merge_api_specs(crc_spec, storage_spec, user_preferences_spec, users, projects, groups)
+        self.spec = merge_api_specs(crc_spec, storage_spec, user_preferences_spec, users, projects)
 
         if self.default_resource_pool_file is not None:
             with open(self.default_resource_pool_file, "r") as f:
@@ -213,13 +208,6 @@ class Config:
                 session_maker=self.db.async_session_maker, project_authz=self.project_authz
             )
         return self._project_member_repo
-
-    @property
-    def group_repo(self) -> GroupRepository:
-        """The DB adapter for Renku groups."""
-        if not self._group_repo:
-            self._group_repo = GroupRepository(session_maker=self.db.async_session_maker)
-        return self._group_repo
 
     @property
     def project_authz(self) -> IProjectAuthorizer:
