@@ -41,6 +41,10 @@ from renku_data_services.db_config import DBConfig
 from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
+from renku_data_services.message_queue.config import RedisConfig
+from renku_data_services.message_queue.db import EventRepository
+from renku_data_services.message_queue.interface import IMessageQueue
+from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.user_preferences.config import UserPreferencesConfig
@@ -96,8 +100,10 @@ class Config:
     quota_repo: QuotaRepository
     user_preferences_config: UserPreferencesConfig
     db: DBConfig
+    redis: RedisConfig
     gitlab_client: base_models.GitlabAPIProtocol
     kc_api: IKeycloakAPI
+    message_queue: IMessageQueue
     spec: Dict[str, Any] = field(init=False, default_factory=dict)
     version: str = "0.0.1"
     app_name: str = "renku_crc"
@@ -109,6 +115,7 @@ class Config:
     _rp_repo: ResourcePoolRepository | None = field(default=None, repr=False, init=False)
     _storage_repo: StorageRepository | None = field(default=None, repr=False, init=False)
     _project_repo: ProjectRepository | None = field(default=None, repr=False, init=False)
+    _event_repo: EventRepository | None = field(default=None, repr=False, init=False)
     _project_authz: IProjectAuthorizer | None = field(default=None, repr=False, init=False)
     _user_preferences_repo: UserPreferencesRepository | None = field(default=None, repr=False, init=False)
     _kc_user_repo: KcUserRepo | None = field(default=None, repr=False, init=False)
@@ -173,11 +180,23 @@ class Config:
         return self._storage_repo
 
     @property
+    def event_repo(self) -> EventRepository:
+        """The DB adapter for cloud event configs."""
+        if not self._event_repo:
+            self._event_repo = EventRepository(
+                session_maker=self.db.async_session_maker, message_queue=self.message_queue
+            )
+        return self._event_repo
+
+    @property
     def project_repo(self) -> ProjectRepository:
         """The DB adapter for Renku native projects."""
         if not self._project_repo:
             self._project_repo = ProjectRepository(
-                session_maker=self.db.async_session_maker, project_authz=self.project_authz
+                session_maker=self.db.async_session_maker,
+                project_authz=self.project_authz,
+                message_queue=self.message_queue,
+                event_repo=self.event_repo,
             )
         return self._project_repo
 
@@ -194,7 +213,9 @@ class Config:
     def project_authz(self) -> IProjectAuthorizer:
         """The DB adapter for authorization."""
         if not self._project_authz:
-            self._project_authz = SQLProjectAuthorizer(session_maker=self.db.async_session_maker)
+            self._project_authz = SQLProjectAuthorizer(
+                session_maker=self.db.async_session_maker, message_queue=self.message_queue, event_repo=self.event_repo
+            )
         return self._project_authz
 
     @property
@@ -211,7 +232,9 @@ class Config:
     def kc_user_repo(self) -> KcUserRepo:
         """The DB adapter for users."""
         if not self._kc_user_repo:
-            self._kc_user_repo = KcUserRepo(session_maker=self.db.async_session_maker)
+            self._kc_user_repo = KcUserRepo(
+                session_maker=self.db.async_session_maker, message_queue=self.message_queue, event_repo=self.event_repo
+            )
         return self._kc_user_repo
 
     @classmethod
@@ -241,6 +264,7 @@ class Config:
             user_store = DummyUserStore(user_always_exists=user_always_exists)
             gitlab_client = DummyGitlabAPI()
             kc_api = DummyKeycloakAPI()
+            redis = RedisConfig.fake()
         else:
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
             keycloak_url = os.environ.get(f"{prefix}KEYCLOAK_URL")
@@ -274,6 +298,9 @@ class Config:
                 client_secret=client_secret,
                 realm=keycloak_realm,
             )
+            redis = RedisConfig.from_env(prefix)
+
+        message_queue = RedisQueue(redis)
 
         return cls(
             version=version,
@@ -286,5 +313,7 @@ class Config:
             server_options_file=server_options_file,
             user_preferences_config=user_preferences_config,
             db=db,
+            redis=redis,
             kc_api=kc_api,
+            message_queue=message_queue,
         )

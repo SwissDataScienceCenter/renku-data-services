@@ -13,6 +13,7 @@ packages = [
   { include = "renku_data_services/base_api", from = "../../components" },
   { include = "renku_data_services/base_models", from = "../../components" },
   { include = "renku_data_services/migrations", from = "../../components" },
+  { include = "renku_data_services/message_queue", from = "../../components" },
   { include = "renku_data_services/db_config", from = "../../components" },
 ]
 
@@ -27,6 +28,13 @@ sanic-ext = "^23.6.0"
 psycopg = {extras = ["binary"], version = "^3.1.13"}
 authlib = "^1.2.1"
 sanic = "^23.6.0"
+redis = "^5.0.1"
+dataclasses-avroschema = "^0.57.0"
+undictify = "^0.11.3"
+
+[tool.poetry.group.dev.dependencies]
+pyavro-gen = "^0.3.3"
+fakeredis = "^2.21.1"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

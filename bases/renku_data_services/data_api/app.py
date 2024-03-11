@@ -1,4 +1,5 @@
 """Data service app."""
+
 from sanic import Sanic
 
 from renku_data_services.app_config import Config
