@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.INFO)
 async def main():
     """Synchronize data from Keycloak and the user database."""
     config = SyncConfig.from_env()
-    run_migrations_for_app("common", "users")
+    run_migrations_for_app("common")
     if config.total_user_sync:
         await config.syncer.users_sync(config.kc_api)
     else:

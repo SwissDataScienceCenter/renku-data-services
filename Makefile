@@ -20,7 +20,6 @@ components/renku_data_services/project/apispec.py: components/renku_data_service
 	poetry run datamodel-codegen --input components/renku_data_services/project/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/project/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.project.apispec_base.BaseAPISpec
 components/renku_data_services/user_preferences/apispec.py: components/renku_data_services/user_preferences/api.spec.yaml
 	poetry run datamodel-codegen --input components/renku_data_services/user_preferences/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/user_preferences/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.user_preferences.apispec_base.BaseAPISpec
-	poetry run datamodel-codegen --input components/renku_data_services/group/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/group/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.group.apispec_base.BaseAPISpec
 
 schemas: components/renku_data_services/crc/apispec.py components/renku_data_services/storage/apispec.py components/renku_data_services/users/apispec.py components/renku_data_services/project/apispec.py components/renku_data_services/user_preferences/apispec.py
 	@echo "generated classes based on ApiSpec"
@@ -53,8 +52,6 @@ style_checks:
 	@$(call test_apispec_up_to_date,"users")
 	@echo "checking project apispec is up to date"
 	@$(call test_apispec_up_to_date,"project")
-	@echo "checking group apispec is up to date"
-	@$(call test_apispec_up_to_date,"group")
 	poetry run mypy
 	poetry run flake8 -v
 	poetry run bandit -c pyproject.toml -r .
@@ -73,14 +70,9 @@ tests:
 	poetry run st run http://localhost:8000/api/data/spec.json --validate-schema True --checks all --hypothesis-max-examples 20 --data-generation-method all --show-errors-tracebacks --hypothesis-suppress-health-check data_too_large --hypothesis-suppress-health-check=filter_too_much --max-response-time 130 -v --header 'Authorization: bearer {"is_admin": true}' || (cat .tmp.pid | xargs kill && exit 1)
 	cat .tmp.pid | xargs kill || echo "The server is already shut down"
 	@rm -f .tmp.pid
-	@echo "===========================================TEST DOWNGRADE==========================================="
-	DUMMY_STORES=true poetry run coverage run -a -m alembic -c components/renku_data_services/migrations/alembic.ini --name=storage downgrade base
-	DUMMY_STORES=true poetry run coverage run -a -m alembic -c components/renku_data_services/migrations/alembic.ini --name=resource_pools downgrade base
-	DUMMY_STORES=true poetry run coverage run -a -m alembic -c components/renku_data_services/migrations/alembic.ini --name=user_preferences downgrade base
-	DUMMY_STORES=true poetry run coverage run -a -m alembic -c components/renku_data_services/migrations/alembic.ini --name=projects downgrade base
-	DUMMY_STORES=true poetry run coverage run -a -m alembic -c components/renku_data_services/migrations/alembic.ini --name=groups downgrade base
-	DUMMY_STORES=true poetry run coverage run -a -m alembic -c components/renku_data_services/migrations/alembic.ini --name=users downgrade base
-	DUMMY_STORES=true poetry run coverage run -a -m alembic -c components/renku_data_services/migrations/alembic.ini --name=authz downgrade base
+	@echo "===========================================TEST DOWNGRADE/UPGRADE==========================================="
+	DUMMY_STORES=true poetry run coverage run -a -m alembic -c components/renku_data_services/migrations/alembic.ini --name=common downgrade base
+	DUMMY_STORES=true poetry run alembic -c components/renku_data_services/migrations/alembic.ini --name=common upgrade heads 
 	@echo "===========================================FINAL COMBINED COVERAGE FOR ALL TESTS==========================================="
 	poetry run coverage report --show-missing
 	poetry run coverage lcov -o coverage.lcov
