@@ -26,6 +26,7 @@ def combine_version_tables(conn: Connection, metadata_schema: str):
         "storage": "61a4d72981cf",
         "users": "3b30da432a76",
         "user_preferences": "6eccd7d4e3ed",
+        "events": "4c425d8889b6",
     }
     rev = schemas.get(metadata_schema)
     if not rev:
