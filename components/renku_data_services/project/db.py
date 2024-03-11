@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, NamedTuple, Tuple, cast
 
-from sanic.log import logger
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +19,7 @@ from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.project import models
 from renku_data_services.project import orm as schemas
 from renku_data_services.project.apispec import Role, Visibility
+from renku_data_services.utils.etag import compute_etag_from_timestamp
 
 
 def convert_to_authz_role(role: Role) -> authz_models.Role:
@@ -112,10 +112,11 @@ class ProjectRepository:
 
     async def insert_project(self, user: base_models.APIUser, new_project=apispec.ProjectPost) -> models.Project:
         """Insert a new project entry."""
+        if user.id is None:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
         project_dict = new_project.model_dump(exclude_none=True)
-        user_id: str = cast(str, user.id)
-        project_dict["created_by"] = models.Member(id=user_id)
+        project_dict["created_by"] = models.Member(id=user.id)
         project_model = models.Project.from_dict(project_dict)
         project = schemas.ProjectORM.load(project_model)
 
@@ -123,11 +124,7 @@ class ProjectRepository:
             async with session.begin():
                 session.add(project)
 
-                logger.info(f"orm creation_date = {project.creation_date}")
-                logger.info(f"orm updated_at = {project.updated_at}")
                 project_model = project.dump()
-                logger.info(f"model creation_date = {project_model.creation_date}")
-                logger.info(f"model updated_at = {project_model.updated_at}")
                 public_project = project_model.visibility == Visibility.public
                 if project_model.id is None:
                     raise errors.BaseError(detail="The created project does not have an ID but it should.")
@@ -135,10 +132,8 @@ class ProjectRepository:
                     requested_by=user, project_id=project_model.id, public_project=public_project
                 )
 
-                # Need to commit() to get the timestamps(?)
+                # Need to commit() to get the timestamps
                 await session.commit()
-                logger.info(f"orm creation_date = {project.creation_date}")
-                logger.info(f"orm updated_at = {project.updated_at}")
                 return project.dump()
 
     async def update_project(

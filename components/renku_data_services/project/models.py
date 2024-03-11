@@ -8,7 +8,7 @@ from hashlib import md5
 from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
-
+from renku_data_services.utils.etag import compute_etag_from_timestamp
 from renku_data_services import errors
 from renku_data_services.project.apispec import Role, Visibility
 
@@ -66,7 +66,7 @@ class Project(BaseModel):
         """Entity tag value for this project object."""
         if self.updated_at is None:
             return None
-        return md5(self.updated_at.isoformat().encode(), usedforsecurity=False).hexdigest().upper()
+        return compute_etag_from_timestamp(self.updated_at)
 
     @classmethod
     def from_dict(cls, data: Dict) -> "Project":

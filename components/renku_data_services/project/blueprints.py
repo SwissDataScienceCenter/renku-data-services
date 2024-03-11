@@ -3,7 +3,6 @@
 from dataclasses import dataclass
 
 from sanic import HTTPResponse, Request, json
-from sanic.log import logger
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
@@ -66,7 +65,6 @@ class ProjectsBP(CustomBlueprint):
         @validate(json=apispec.ProjectPost)
         async def _post(_: Request, *, user: base_models.APIUser, body: apispec.ProjectPost):
             project = await self.project_repo.insert_project(user=user, new_project=body)
-            logger.info(f"creation_date = {project.creation_date}")
             return json(apispec.Project.model_validate(project).model_dump(exclude_none=True, mode="json"), 201)
 
         return "/projects", ["POST"], _post
