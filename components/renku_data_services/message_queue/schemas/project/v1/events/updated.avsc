@@ -1,0 +1,39 @@
+{
+  "type": "record",
+  "name": "ProjectUpdated",
+  "namespace":"io.renku.events.v1",
+  "doc":"Event raised when a project is updated",
+  "fields": [
+    {
+      "name":"id",
+      "type":"string"
+    },
+    {
+      "name": "name",
+      "type": "string"
+    },
+    {
+      "name": "slug",
+      "type": "string"
+    },
+    {
+      "name": "repositories",
+      "type": {
+        "type": "array",
+        "items": "string"
+      },
+      "default": []
+    },
+    {
+      "name": "visibility",
+      "type": "io.renku.events.v1.Visibility"
+    },
+    {
+      "name": "description",
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  ]
+}
