@@ -1,4 +1,4 @@
-.PHONY: schemas tests style_checks pre_commit_checks run pull_avro check_avro avro_models update_avro
+.PHONY: schemas tests style_checks pre_commit_checks run download_avro check_avro avro_models update_avro
 
 define test_apispec_up_to_date
 	$(eval $@_NAME=$(1))
@@ -24,13 +24,13 @@ components/renku_data_services/user_preferences/apispec.py: components/renku_dat
 schemas: components/renku_data_services/crc/apispec.py components/renku_data_services/storage/apispec.py components/renku_data_services/users/apispec.py components/renku_data_services/project/apispec.py components/renku_data_services/user_preferences/apispec.py
 	@echo "generated classes based on ApiSpec"
 
-pull_avro:
-	@echo "Pulling avro schema files (ensure that the repo isn't dirty otherwise git subtree pull doesn't work)"
+download_avro:
+	@echo "Downloading avro schema files"
+	curl -L -o schemas.tar.gz https://github.com/SwissDataScienceCenter/renku-schema/tarball/main
+	tar xf schemas.tar.gz --directory=components/renku_data_services/message_queue/schemas/ --strip-components=1
+	rm schemas.tar.gz
 
-	-git subtree add --prefix components/renku_data_services/message_queue/schemas/ https://github.com/SwissDataScienceCenter/renku-schema.git main --squash
-	git subtree pull --prefix components/renku_data_services/message_queue/schemas/ https://github.com/SwissDataScienceCenter/renku-schema.git main --squash
-
-check_avro: pull_avro avro_models
+check_avro: download_avro avro_models
 	@echo "checking if avro schemas are up to date"
 	git diff --exit-code || (git diff && exit 1)
 
@@ -38,7 +38,7 @@ avro_models:
 	@echo "generating message queues classes from avro schemas"
 	poetry run python components/renku_data_services/message_queue/generate_models.py
 
-update_avro: pull_avro avro_models
+update_avro: download_avro avro_models
 
 style_checks:
 	poetry check
