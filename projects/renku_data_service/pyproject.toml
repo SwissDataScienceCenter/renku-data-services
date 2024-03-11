@@ -27,8 +27,10 @@ packages = [
   { include = "renku_data_services/users_migrations", from = "../../components" },
   { include = "renku_data_services/authz", from = "../../components" },
   { include = "renku_data_services/authz_migrations", from = "../../components" },
+  { include = "renku_data_services/events_migrations", from = "../../components" },
   { include = "renku_data_services/project_migrations", from = "../../components" },
   { include = "renku_data_services/project", from = "../../components" },
+  { include = "renku_data_services/message_queue", from = "../../components" },
 ]
 
 [tool.poetry.dependencies]
@@ -50,7 +52,13 @@ psycopg = { version = "^3.1.10", extras = ["binary"] }
 urllib3 = "^1.26.16"
 deepmerge = "^1.1.0"
 authlib = "^1.2.1"
+redis = "^5.0.1"
+dataclasses-avroschema = "^0.57.0"
+undictify = "^0.11.3"
+
 [tool.poetry.group.dev.dependencies]
+pyavro-gen = "^0.3.3"
+fakeredis = "^2.21.1"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

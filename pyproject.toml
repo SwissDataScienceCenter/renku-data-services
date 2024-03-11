@@ -30,6 +30,8 @@ packages = [
   { include = "renku_data_services/users_migrations", from = "components" },
   { include = "renku_data_services/project", from = "components" },
   { include = "renku_data_services/project_migrations", from = "components" },
+  { include = "renku_data_services/events_migrations", from = "components" },
+  { include = "renku_data_services/message_queue", from = "components" },
 ]
 
 [tool.poetry.dependencies]
@@ -51,6 +53,10 @@ psycopg = { version = "^3.1.10", extras = ["binary"] }
 urllib3 = "^1.26.16"
 deepmerge = "^1.1.0"
 authlib = "^1.2.1"
+redis = "^5.0.1"
+dataclasses-avroschema = "^0.57.0"
+undictify = "^0.11.3"
+types-redis = "^4.6.0.20240218"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.7.5"
@@ -71,6 +77,8 @@ schemathesis = "^3.19.0"
 pytest-asyncio = "^0.21.1"
 pytest-postgresql = "^5.0.0"
 types-urllib3 = "^1.26.25.14"
+pyavro-gen = "^0.3.3"
+fakeredis = "^2.21.1"
 
 [build-system]
 requires = ["poetry-core"]
@@ -80,11 +88,12 @@ build-backend = "poetry.core.masonry.api"
 line-length = 120
 target-version = ["py311"]
 include = '\.pyi?$'
+exclude = ".*/avro_models/.*"
 
 [tool.pydocstyle]
 add_ignore = ["D105", "D107", "D202", "D401"]
 match = '^(?!test_|apispec).*\.py'
-match_dir = '^(?!^test$|^crc_migrations$|^storage_migrations$|^user_preferences_migrations$|^project_migrations$|^authz_migrations$|^users_migrations$|\..*).*'
+match_dir = '^(?!^test$|^crc_migrations$|^events_migrations$|^storage_migrations$|^user_preferences_migrations$|^project_migrations$|^authz_migrations$|^users_migrations$|avro_models|\..*).*'
 
 [tool.bandit]
 skips = ["B101", "B603", "B607", "B404"]
@@ -97,7 +106,7 @@ use_parentheses = true
 line_length = 120
 src_paths = ["bases", "components", "test"]
 known_first_party = ["renku_data_services"]
-skip_glob = ["migrations/*"]
+skip_glob = ["migrations/*", "avro_models/*"]
 
 [tool.flake8]
 max-line-length = 120
@@ -131,11 +140,13 @@ exclude = [
   "components/renku_data_services/crc_migrations/versions",
   "components/renku_data_services/authz_migrations/versions",
   "components/renku_data_services/project_migrations/versions",
+  "components/renku_data_services/events_migrations/versions",
   "components/renku_data_services/crc/apispec.py",
   "components/renku_data_services/project/apispec.py",
   "components/renku_data_services/storage/apispec.py",
   "components/renku_data_services/users/apispec.py",
   "components/renku_data_services/user_preferences/apispec.py",
+  "components/renku_data_services/message_queue/avro_models/",
 ]
 
 [tool.pytest.ini_options]
@@ -178,7 +189,17 @@ module = [
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = ["sanic_testing.*", "asyncpg.*", "kubernetes.*", "deepmerge.*"]
+module = [
+  "sanic_testing.*",
+  "asyncpg.*",
+  "kubernetes.*",
+  "deepmerge.*",
+  "pyavro_gen.*",
+  "avro_preprocessor.*",
+  "undictify.*",
+  "dataclasses_avroschema",
+  "urllib3.*",
+]
 ignore_missing_imports = true
 
 [tool.coverage.run]

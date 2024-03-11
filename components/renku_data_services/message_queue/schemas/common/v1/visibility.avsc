@@ -1,0 +1,10 @@
+{
+  "type": "enum",
+  "name": "Visibility",
+  "doc": "Visibility setting",
+  "namespace":"io.renku.events.v1",
+  "symbols": [
+    "PUBLIC",
+    "PRIVATE"
+  ]
+}
