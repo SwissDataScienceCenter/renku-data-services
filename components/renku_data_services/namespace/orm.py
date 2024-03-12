@@ -8,15 +8,14 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, attribute
 from sqlalchemy.schema import ForeignKey
 from ulid import ULID
 
-from renku_data_services.group import models
-
-metadata_obj = MetaData(schema="groups")  # Has to match alembic ini section name
+from renku_data_services.namespace import models
+from renku_data_services.users.orm import UserORM
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
     """Base class for all ORM classes."""
 
-    metadata = metadata_obj
+    metadata = MetaData(schema="common")
 
 
 class GroupORM(BaseORM):
@@ -26,7 +25,7 @@ class GroupORM(BaseORM):
 
     id: Mapped[str] = mapped_column("id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False)
     name: Mapped[str] = mapped_column("name", String(99), index=True)
-    namespace_id: Mapped[int] = mapped_column(ForeignKey("namespaces.id"), index=True, nullable=False)
+    namespace_id: Mapped[int] = mapped_column(ForeignKey(UserORM.id), index=True, nullable=False)
     created_by: Mapped[str] = mapped_column("created_by", String())
     creation_date: Mapped[datetime] = mapped_column("creation_date", DateTime(timezone=True))
     description: Mapped[Optional[str]] = mapped_column("description", String(500), default=None)
@@ -94,8 +93,8 @@ class GroupMemberORM(BaseORM):
 class NamespaceORM(BaseORM):
     __tablename__ = "namespaces"
     __table_args__ = (
-        Index("namespaces_one_slug_is_latest", "slug", "latest_id", unique=True, postgres_where="latest_id is NULL"),
-        CheckConstraint("num_nulls(user_id, group_id) == 1", name="only_one_null_in_group_user_id"),
+        Index("namespaces_one_slug_is_latest", "slug", "latest_id", unique=True, postgresql_where="latest_id is NULL"),
+        CheckConstraint("num_nulls(user_id, group_id) = 1", name="only_one_null_in_group_user_id"),
     )
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
     slug: Mapped[str] = mapped_column(index=True, unique=True, nullable=False)
@@ -104,7 +103,7 @@ class NamespaceORM(BaseORM):
     )
     latest: Mapped[Optional["NamespaceORM"]] = relationship(remote_side=[id], lazy="joined", join_depth=1)
     user_id: Mapped[Optional[str]] = mapped_column(
-        ForeignKey("users.users.id", ondelete="CASCADE"), index=True, default=None
+        ForeignKey(UserORM.id, ondelete="CASCADE"), index=True, default=None
     )
     group_id: Mapped[Optional[str]] = mapped_column(
         ForeignKey("groups.id", ondelete="CASCADE"), index=True, default=None

@@ -13,7 +13,7 @@ from renku_data_services.crc.blueprints import (
     ResourcePoolUsersBP,
     UserResourcePoolsBP,
 )
-from renku_data_services.group.blueprints import GroupsBP
+from renku_data_services.namespace.blueprints import GroupsBP
 from renku_data_services.project.blueprints import ProjectsBP
 from renku_data_services.storage.blueprints import StorageBP, StorageSchemaBP
 from renku_data_services.user_preferences.blueprints import UserPreferencesBP

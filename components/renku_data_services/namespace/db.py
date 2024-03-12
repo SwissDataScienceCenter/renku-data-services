@@ -13,8 +13,8 @@ from sqlalchemy.orm import selectinload
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.base_api.pagination import PaginationRequest
-from renku_data_services.group import apispec, models
-from renku_data_services.group import orm as schemas
+from renku_data_services.namespace import apispec, models
+from renku_data_services.namespace import orm as schemas
 from renku_data_services.users import orm as user_schemas
 
 

@@ -7,6 +7,7 @@ from renku_data_services.storage.orm import BaseORM as storage
 from renku_data_services.user_preferences.orm import BaseORM as user_preferences
 from renku_data_services.users.orm import BaseORM as users
 from renku_data_services.message_queue.orm import BaseORM as events
+from renku_data_services.namespace.orm import BaseORM as namespaces
 from renku_data_services.migrations.utils import run_migrations
 from alembic import context
 from logging.config import fileConfig
@@ -28,5 +29,6 @@ all_metadata = [
     user_preferences.metadata,
     users.metadata,
     events.metadata,
+    namespaces.metadata,
 ]
 run_migrations(all_metadata)

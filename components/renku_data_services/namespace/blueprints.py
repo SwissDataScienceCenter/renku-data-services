@@ -9,8 +9,8 @@ import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
-from renku_data_services.group import apispec
-from renku_data_services.group.db import GroupRepository
+from renku_data_services.namespace import apispec
+from renku_data_services.namespace.db import GroupRepository
 
 
 @dataclass(kw_only=True)

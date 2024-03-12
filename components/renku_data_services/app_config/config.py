@@ -39,7 +39,7 @@ from renku_data_services.data_api.server_options import (
 )
 from renku_data_services.db_config import DBConfig
 from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
-from renku_data_services.group.db import GroupRepository
+from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.message_queue.config import RedisConfig
@@ -144,7 +144,7 @@ class Config:
         with open(spec_file, "r") as f:
             projects = safe_load(f)
 
-        spec_file = Path(renku_data_services.group.__file__).resolve().parent / "api.spec.yaml"
+        spec_file = Path(renku_data_services.namespace.__file__).resolve().parent / "api.spec.yaml"
         with open(spec_file, "r") as f:
             groups = safe_load(f)
 

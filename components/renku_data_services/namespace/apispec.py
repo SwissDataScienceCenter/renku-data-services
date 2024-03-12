@@ -10,7 +10,7 @@ from typing import List, Optional
 
 from pydantic import ConfigDict, EmailStr, Field, RootModel
 
-from renku_data_services.group.apispec_base import BaseAPISpec
+from renku_data_services.namespace.apispec_base import BaseAPISpec
 
 
 class GroupRole(Enum):
