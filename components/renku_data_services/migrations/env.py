@@ -1,3 +1,5 @@
+"""Database migrations for Alembic."""
+
 from renku_data_services.authz.orm import BaseORM as authz
 from renku_data_services.crc.orm import BaseORM as crc
 from renku_data_services.project.orm import BaseORM as project
