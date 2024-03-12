@@ -12,7 +12,7 @@ from alembic import op
 # revision identifiers, used by Alembic.
 revision = "7c08ed2fb79d"
 down_revision = None
-branch_labels = ('projects',)
+branch_labels = ("projects",)
 depends_on = None
 
 
@@ -61,4 +61,5 @@ def downgrade() -> None:
     )
     op.drop_table("projects_repositories", schema="projects")
     op.drop_table("projects", schema="projects")
+    op.execute("DROP TYPE visibility CASCADE")
     # ### end Alembic commands ###

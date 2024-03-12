@@ -37,9 +37,21 @@ The container image can be built to be used as a local development service (for 
 It can then be run as daemon: `docker run -d -e DUMMY_STORES=true --name renku-crc renku-data-service`
 
 ## Migrations
-to create migrations locally, run alembic like
-`DUMMY_STORES=true alembic -c components/renku_data_services/migrations/alembic.ini --name=<app> revision --message="<message>" --head=head --autogenerate`
-where `app` is the name of the app from the `alembic.ini` file (e.g. `storage` or `resource_pools`)
 
-To run migrations locally, run
-`DUMMY_STORES=true alembic -c components/renku_data_services/migrations/alembic.ini --name=<app> upgrade head`
+We use Alembic for migrations and we have a single version table for all schemas. This version table 
+is used by Alembic to determine what migrations have been applied or not and it resides in the `common`
+schema. That is why all the Alembic commands include the `--name common` argument. 
+
+Our Alembic setup is such that we have multiple schemas. Most use cases will probably simply use 
+the `common` schema. However, if you add a new schema, you have to make sure to add the 
+metadata for it in the `components/renku_data_services/migrations/env.py` file.
+
+**To create a new migration:**
+
+`DUMMY_STORES=true alembic -c components/renku_data_services/migrations/alembic.ini --name common revision -m "<message>" --autogenerate --version-path components/renku_data_services/migrations/versions`
+
+You can specify a different version path if you wish to, just make sure it is listed in `alembic.ini` under 
+`version_locations`.
+
+**To run all migrations:** 
+`DUMMY_STORES=true alembic -c components/renku_data_services/migrations/alembic.ini --name=common upgrade heads`

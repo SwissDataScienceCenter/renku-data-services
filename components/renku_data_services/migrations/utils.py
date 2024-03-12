@@ -10,12 +10,13 @@ from renku_data_services.db_config import DBConfig
 
 
 def include_object(obj, name, type_, reflected, compare_to):
+    """Prevents from alembic migrating the alembic_version tables."""
     if type_ == "table" and name == "alembic_version":
         return False
     return True
 
 
-def combine_version_tables(conn: Connection, metadata_schema: str):
+def combine_version_tables(conn: Connection, metadata_schema: str | None):
     """Used to combine all alembic version tables into one."""
     schemas = {
         # NOTE: These are the revisions that each schema will be when the version table is moved
@@ -28,33 +29,46 @@ def combine_version_tables(conn: Connection, metadata_schema: str):
         "user_preferences": "6eccd7d4e3ed",
         "events": "4c425d8889b6",
     }
-    rev = schemas.get(metadata_schema)
-    if not rev:
+    if not metadata_schema:
         return
-    version_table_exists_row = conn.execute(text(f"SELECT to_regclass('{metadata_schema}.alembic_version')")).fetchone()
-    if not version_table_exists_row:
-        return
-    version_table_exists = version_table_exists_row[0]
-    if not version_table_exists:
-        return
-    last_migration_row = conn.execute(text(f"SELECT version_num from {metadata_schema}.alembic_version")).fetchone()
-    if not last_migration_row:
-        return
-    last_migration_rev = last_migration_row[0]
-    if last_migration_rev != rev:
-        return
-    conn.execute(
-        text(
-            f"CREATE TABLE IF NOT EXISTS common.alembic_version (LIKE {metadata_schema}.alembic_version INCLUDING ALL)"
+    with conn.begin_nested():
+        rev = schemas.get(metadata_schema)
+        if not rev:
+            # The table revision is not the correct for merging version tables
+            return
+        version_table_exists_row = conn.execute(
+            text(f"SELECT to_regclass('{metadata_schema}.alembic_version')")
+        ).fetchone()
+        if not version_table_exists_row:
+            # The old version table or schema does not exist
+            return
+        version_table_exists = version_table_exists_row[0]
+        if not version_table_exists:
+            # The old version table or schema does not exist
+            return
+        last_migration_row = conn.execute(
+            text(f"SELECT version_num from {metadata_schema}.alembic_version")  # nosec B608
+        ).fetchone()
+        if not last_migration_row:
+            # The version table exists but it has not data
+            return
+        last_migration_rev = last_migration_row[0]
+        if last_migration_rev != rev:
+            # The version table has data but it does not match the revision required for migration
+            return
+        conn.execute(text(f"LOCK TABLE {metadata_schema}.alembic_version IN ACCESS EXCLUSIVE MODE"))
+        conn.execute(text("LOCK TABLE common.alembic_version IN ACCESS EXCLUSIVE MODE"))
+        conn.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS common.alembic_version "
+                f"(LIKE {metadata_schema}.alembic_version INCLUDING ALL)"
+            )
         )
-    )
-    conn.execute(text(f"INSERT INTO common.alembic_version(version_num) VALUES ('{rev}')"))
-    conn.execute(text(f"DROP TABLE IF EXISTS {metadata_schema}.alembic_version"))
+        conn.execute(text("INSERT INTO common.alembic_version(version_num) VALUES (:rev)").bindparams(rev=rev))
+        conn.execute(text(f"DROP TABLE IF EXISTS {metadata_schema}.alembic_version"))
 
 
-def run_migrations_offline(
-    target_metadata: Sequence[MetaData], sync_sqlalchemy_url: str, version_table_schema: str | None = None
-) -> None:
+def run_migrations_offline(target_metadata: Sequence[MetaData], sync_sqlalchemy_url: str) -> None:
     """Run migrations in 'offline' mode.
 
     This configures the context with just a URL
@@ -75,22 +89,20 @@ def run_migrations_offline(
             dialect_opts={"paramstyle": "named"},
             include_schemas=True,
             include_object=include_object,
-            version_table_schema=version_table_schema if version_table_schema else target_metadata[0].schema,
+            version_table_schema="common",
         )
-        if version_table_schema is not None:
-            conn.execute(CreateSchema(version_table_schema, if_not_exists=True))
+        conn.execute(CreateSchema("common", if_not_exists=True))
         for m in target_metadata:
             conn.execute(CreateSchema(m.schema, if_not_exists=True))
-            if version_table_schema == "common":
-                combine_version_tables(conn, m.schema)
+            combine_version_tables(conn, m.schema)
 
         with context.begin_transaction():
+            context.get_context()._ensure_version_table()
+            conn.execute(text("LOCK TABLE common.alembic_version IN ACCESS EXCLUSIVE MODE"))
             context.run_migrations()
 
 
-def run_migrations_online(
-    target_metadata: Sequence[MetaData], sync_sqlalchemy_url: str, version_table_schema: str | None = None
-) -> None:
+def run_migrations_online(target_metadata: Sequence[MetaData], sync_sqlalchemy_url: str) -> None:
     """Run migrations in 'online' mode.
 
     In this scenario we need to create an Engine
@@ -104,26 +116,26 @@ def run_migrations_online(
             target_metadata=target_metadata,
             include_schemas=True,
             include_object=include_object,
-            version_table_schema=version_table_schema if version_table_schema else target_metadata[0].schema,
+            version_table_schema="common",
         )
-        if version_table_schema is not None:
-            conn.execute(CreateSchema(version_table_schema, if_not_exists=True))
+        conn.execute(CreateSchema("common", if_not_exists=True))
         for m in target_metadata:
             conn.execute(CreateSchema(m.schema, if_not_exists=True))
-            if version_table_schema == "common":
-                combine_version_tables(conn, m.schema)
+            combine_version_tables(conn, m.schema)
 
         with context.begin_transaction():
+            context.get_context()._ensure_version_table()
+            conn.execute(text("LOCK TABLE common.alembic_version IN ACCESS EXCLUSIVE MODE"))
             context.run_migrations()
 
 
-def run_migrations(metadata: MetaData, version_table_schema: str | None = None):
+def run_migrations(metadata: Sequence[MetaData]):
     """Run migrations for a specific base model class."""
     # this is the Alembic Config object, which provides
     # access to the values within the .ini file in use.
     db_config = DBConfig.from_env()
     sync_sqlalchemy_url = db_config.conn_url(async_client=False)
     if context.is_offline_mode():
-        run_migrations_offline(metadata, sync_sqlalchemy_url, version_table_schema)
+        run_migrations_offline(metadata, sync_sqlalchemy_url)
     else:
-        run_migrations_online(metadata, sync_sqlalchemy_url, version_table_schema)
+        run_migrations_online(metadata, sync_sqlalchemy_url)

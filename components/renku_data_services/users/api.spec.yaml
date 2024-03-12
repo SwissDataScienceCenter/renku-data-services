@@ -19,6 +19,8 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/UserWithId"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - users
   /users:
@@ -38,6 +40,8 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/UsersWithId"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - users
   /users/{user_id}:
