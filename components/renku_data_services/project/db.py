@@ -13,6 +13,9 @@ from renku_data_services import errors
 from renku_data_services.authz import models as authz_models
 from renku_data_services.authz.authz import IProjectAuthorizer
 from renku_data_services.authz.models import MemberQualifier, Scope
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.visibility import Visibility as MsgVisibility
+from renku_data_services.message_queue.db import EventRepository
+from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.project import models
 from renku_data_services.project import orm as schemas
 from renku_data_services.project.apispec import Role, Visibility
@@ -40,9 +43,17 @@ class PaginationResponse(NamedTuple):
 class ProjectRepository:
     """Repository for project."""
 
-    def __init__(self, session_maker: Callable[..., AsyncSession], project_authz: IProjectAuthorizer):
+    def __init__(
+        self,
+        session_maker: Callable[..., AsyncSession],
+        project_authz: IProjectAuthorizer,
+        message_queue: IMessageQueue,
+        event_repo: EventRepository,
+    ):
         self.session_maker = session_maker  # type: ignore[call-overload]
         self.project_authz: IProjectAuthorizer = project_authz
+        self.message_queue: IMessageQueue = message_queue
+        self.event_repo: EventRepository = event_repo
 
     async def get_projects(
         self, user: base_models.APIUser, page: int, per_page: int
@@ -50,6 +61,9 @@ class ProjectRepository:
         """Get all projects from the database."""
         if page < 1:
             raise errors.ValidationError(message="Parameter 'page' must be a natural number")
+        offset = (page - 1) * per_page
+        if offset > 2**63 - 1:
+            raise errors.ValidationError(message="Parameter 'page' is too large")
         if per_page < 1 or per_page > 100:
             raise errors.ValidationError(message="Parameter 'per_page' must be between 1 and 100")
 
@@ -61,7 +75,7 @@ class ProjectRepository:
         async with self.session_maker() as session:
             stmt = select(schemas.ProjectORM)
             stmt = stmt.where(schemas.ProjectORM.id.in_(project_ids))
-            stmt = stmt.limit(per_page).offset((page - 1) * per_page)
+            stmt = stmt.limit(per_page).offset(offset)
             stmt = stmt.order_by(schemas.ProjectORM.creation_date.desc())
             result = await session.execute(stmt)
             projects_orm = result.scalars().all()
@@ -100,18 +114,36 @@ class ProjectRepository:
         project_orm = schemas.ProjectORM.load(project)
         project_orm.creation_date = datetime.now(timezone.utc).replace(microsecond=0)
         project_orm.created_by = user.id
+        match project_orm.visibility:
+            case Visibility.private | Visibility.private.value:
+                vis = MsgVisibility.PRIVATE
+            case Visibility.public | Visibility.public.value:
+                vis = MsgVisibility.PUBLIC
+            case _:
+                raise NotImplementedError(f"unknown visibility:{project_orm.visibility}")
 
-        async with self.session_maker() as session:
-            async with session.begin():
-                session.add(project_orm)
+        async with self.message_queue.project_created_message(
+            name=project_orm.name,
+            slug=project_orm.slug,
+            visibility=vis,
+            id=project_orm.id,
+            repositories=[r.url for r in project_orm.repositories],
+            description=project_orm.description,
+            creation_date=project_orm.creation_date,
+            created_by=project_orm.created_by_id,
+        ) as message:
+            async with self.session_maker() as session:
+                async with session.begin():
+                    session.add(project_orm)
 
-                project = project_orm.dump()
-                public_project = project.visibility == Visibility.public
-                if project.id is None:
-                    raise errors.BaseError(detail="The created project does not have an ID but it should.")
-                await self.project_authz.create_project(
-                    requested_by=user, project_id=project.id, public_project=public_project
-                )
+                    project = project_orm.dump()
+                    public_project = project.visibility == Visibility.public
+                    if project.id is None:
+                        raise errors.BaseError(detail="The created project does not have an ID but it should.")
+                    await self.project_authz.create_project(
+                        requested_by=user, project_id=project.id, public_project=public_project
+                    )
+                    await message.persist(self.event_repo)
 
         return project_orm.dump()
 
@@ -133,25 +165,43 @@ class ProjectRepository:
 
                 project = projects[0]
                 visibility_before = project.visibility
+        match project.visibility:
+            case Visibility.private | Visibility.private.value:
+                vis = MsgVisibility.PRIVATE
+            case Visibility.public | Visibility.public.value:
+                vis = MsgVisibility.PUBLIC
+            case _:
+                raise NotImplementedError(f"unknown visibility:{project.visibility}")
+        async with self.message_queue.project_updated_message(
+            name=project.name,
+            slug=project.slug,
+            visibility=vis,
+            id=project.id,
+            repositories=[r.url for r in project.repositories],
+            description=project.description,
+        ) as message:
+            async with self.session_maker() as session:
+                async with session.begin():
+                    session.add(project)  # reattach to session
+                    if "repositories" in payload:
+                        payload["repositories"] = [
+                            schemas.ProjectRepositoryORM(url=r, project_id=project_id, project=project)
+                            for r in payload["repositories"]
+                        ]
 
-                if "repositories" in payload:
-                    payload["repositories"] = [
-                        schemas.ProjectRepositoryORM(url=r, project_id=project_id, project=project)
-                        for r in payload["repositories"]
-                    ]
+                    for key, value in payload.items():
+                        # NOTE: ``slug``, ``id``, ``created_by``, and ``creation_date`` cannot be edited
+                        if key not in ["slug", "id", "created_by", "creation_date"]:
+                            setattr(project, key, value)
 
-                for key, value in payload.items():
-                    # NOTE: ``slug``, ``id``, ``created_by``, and ``creation_date`` cannot be edited
-                    if key not in ["slug", "id", "created_by", "creation_date"]:
-                        setattr(project, key, value)
+                    if visibility_before != project.visibility:
+                        public_project = project.visibility == Visibility.public
+                        await self.project_authz.update_project_visibility(
+                            requested_by=user, project_id=project_id, public_project=public_project
+                        )
+                    await message.persist(self.event_repo)
 
-                if visibility_before != project.visibility:
-                    public_project = project.visibility == Visibility.public
-                    await self.project_authz.update_project_visibility(
-                        requested_by=user, project_id=project_id, public_project=public_project
-                    )
-
-                return project.dump()  # NOTE: Triggers validation before the transaction saves data
+                    return project.dump()  # NOTE: Triggers validation before the transaction saves data
 
     async def delete_project(self, user: base_models.APIUser, project_id: str) -> None:
         """Delete a cloud project entry."""
@@ -161,17 +211,23 @@ class ProjectRepository:
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
 
-        async with self.session_maker() as session:
-            async with session.begin():
-                result = await session.execute(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
-                projects = result.one_or_none()
+        async with self.message_queue.project_removed_message(
+            id=project_id,
+        ) as message:
+            async with self.session_maker() as session:
+                async with session.begin():
+                    result = await session.execute(
+                        select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id)
+                    )
+                    projects = result.one_or_none()
 
-                if projects is None:
-                    return
+                    if projects is None:
+                        return
 
-                await session.delete(projects[0])
+                    await session.delete(projects[0])
 
-                await self.project_authz.delete_project(requested_by=user, project_id=project_id)
+                    await self.project_authz.delete_project(requested_by=user, project_id=project_id)
+                    await message.persist(self.event_repo)
 
 
 class ProjectMemberRepository:

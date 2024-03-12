@@ -1,0 +1,20 @@
+{
+  "type":"record",
+  "name":"ProjectAuthorizationUpdated",
+  "namespace":"io.renku.events.v1",
+  "doc":"Event raised when an authorization for a project is modified",
+  "fields":[
+    {
+      "name":"projectId",
+      "type":"string"
+    },
+    {
+      "name":"userId",
+      "type":"string"
+    },
+    {
+      "name": "role",
+      "type": "io.renku.events.v1.ProjectMemberRole"
+    }
+  ]
+}

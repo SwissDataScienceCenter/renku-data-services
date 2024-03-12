@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from sqlalchemy import DateTime, Index, Integer, MetaData, String
+from sqlalchemy import DateTime, Integer, MetaData, String, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
 from ulid import ULID
@@ -37,7 +38,6 @@ class ProjectORM(BaseORM):
     name: Mapped[str] = mapped_column("name", String(99))
     visibility: Mapped[Visibility]
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
-    creation_date: Mapped[Optional[datetime]] = mapped_column("creation_date", DateTime(timezone=True))
     description: Mapped[Optional[str]] = mapped_column("description", String(500))
     namespace_id: Mapped[Optional[int]] = mapped_column(ForeignKey("groups.namespaces.id"), index=True, nullable=False)
     slug_id: Mapped[int] = mapped_column(ForeignKey("groups.project_slugs"), index=True, nullable=False)
@@ -46,6 +46,9 @@ class ProjectORM(BaseORM):
         default_factory=list,
         cascade="save-update, merge, delete",
         lazy="selectin",
+    )
+    creation_date: Mapped[Optional[datetime]] = mapped_column(
+        "creation_date", DateTime(timezone=True), default=func.now(), nullable=False
     )
 
     @classmethod

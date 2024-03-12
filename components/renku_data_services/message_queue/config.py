@@ -1,0 +1,72 @@
+"""Configuration for message queue client."""
+
+import os
+from dataclasses import dataclass, field
+
+import redis.asyncio as redis
+
+
+@dataclass
+class RedisConfig:
+    """Message queue configuration."""
+
+    password: str = field(repr=False)
+    is_sentinel: bool = False
+    host: str = "renku-redis"
+    port: int = 6379
+    database: int = 0
+    sentinel_master_set: str = "mymaster"
+
+    _connection: redis.Redis | None = None
+
+    @classmethod
+    def from_env(cls, prefix: str = ""):
+        """Create a config from environment variables."""
+        is_sentinel = os.environ.get(f"{prefix}REDIS_IS_SENTINEL", "false")
+        host = os.environ.get(f"{prefix}REDIS_HOST", "localhost")
+        port = os.environ.get(f"{prefix}REDIS_PORT", 6379)
+        database = os.environ.get(f"{prefix}REDIS_DATABASE", 0)
+        sentinel_master_set = os.environ.get(f"{prefix}REDIS_MASTER_SET", "mymaster")
+        password = os.environ.get(f"{prefix}REDIS_PASSWORD", "")
+
+        return cls(
+            host=host,
+            port=int(port),
+            database=int(database),
+            password=password,
+            sentinel_master_set=sentinel_master_set,
+            is_sentinel=is_sentinel.lower() == "true",
+        )
+
+    @classmethod
+    def fake(cls):
+        """Create a config using fake redis."""
+        import fakeredis
+
+        instance = cls(password="")  # nosec B106
+        instance._connection = fakeredis.FakeAsyncRedis()
+        return instance
+
+    @property
+    def redis_connection(self) -> redis.Redis:
+        """Get a redis connection."""
+        if self._connection is None:
+            if self.is_sentinel:
+                sentinel = redis.Sentinel([(self.host, self.port)], sentinel_kwargs={"password": self.password})
+                self._connection = sentinel.master_for(
+                    self.sentinel_master_set,
+                    db=self.database,
+                    password=self.password,
+                    retry_on_timeout=True,
+                    health_check_interval=60,
+                )
+            else:
+                self._connection = redis.Redis(
+                    host=self.host,
+                    port=self.port,
+                    db=self.database,
+                    password=self.password,
+                    retry_on_timeout=True,
+                    health_check_interval=60,
+                )
+        return self._connection

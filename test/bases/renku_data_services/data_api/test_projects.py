@@ -10,8 +10,11 @@ import pytest_asyncio
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 
+from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.header import Header
+from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_created import ProjectCreated
 from renku_data_services.app_config import Config
 from renku_data_services.data_api.app import register_all_handlers
+from renku_data_services.message_queue.redis_queue import deserialize_binary
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import UserInfo
 
@@ -83,7 +86,7 @@ def get_project(sanic_client, user_headers, admin_headers):
 
 
 @pytest.mark.asyncio
-async def test_project_creation(sanic_client, user_headers):
+async def test_project_creation(sanic_client, user_headers, app_config):
     payload = {
         "name": "Renku Native Project",
         "slug": "project-slug",
@@ -105,8 +108,16 @@ async def test_project_creation(sanic_client, user_headers):
         "http://renkulab.io/repository-1",
         "http://renkulab.io/repository-2",
     }
-
+    events = await app_config.redis.redis_connection.xrange("project.created")
+    assert len(events) == 1
+    event = events[0][1]
+    headers = Header.deserialize(event.get(b"headers"), serialization_type="avro-json")
+    assert headers.source == "renku-data-services"
+    proj_event = deserialize_binary(event[b"payload"], ProjectCreated)
+    assert proj_event.name == payload["name"]
     project_id = project["id"]
+    assert proj_event.id == project_id
+
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
 
     assert response.status_code == 200, response.text
