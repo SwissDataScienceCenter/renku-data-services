@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import logging
+import random
 from datetime import datetime, timezone
+import string
+from types import new_class
 from typing import Any, Callable, Dict, List, Tuple, cast
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -24,6 +28,59 @@ class GroupRepository:
     def __init__(self, session_maker: Callable[..., AsyncSession], group_authz=None):
         self.session_maker = session_maker  # type: ignore[call-overload]
         self.group_authz: None | Any = group_authz
+
+    async def generate_user_namespaces(self):
+        """Generate user namespaces if the user table has data and the namespaces table is empty."""
+        async with self.session_maker() as session, session.begin():
+            # NOTE: lock to make sure another instance of the data service cannot insert/update but can read
+            await session.execute(text("LOCK TABLE common.namespaces IN EXCLUSIVE MODE"))
+            at_least_one_namespace = (await session.execute(select(schemas.NamespaceORM).limit(1))).one_or_none()
+            if at_least_one_namespace:
+                logging.info("Found at least one user namespace, skipping creation")
+                return
+            logging.info("Found zero user namespaces, will try to create them from users table")
+            res = await session.execute(select(user_schemas.UserORM))
+            used_slugs = set()
+            count = 0
+            for user in res.scalars():
+                slug = ""
+                if user.email:
+                    slug = user.email.split("@")[0]
+                elif user.first_name and user.last_name:
+                    slug = user.first_name + "_" + user.last_name
+                elif user.last_name:
+                    slug = user.last_name
+                elif user.first_name:
+                    slug = user.first_name
+                else:
+                    slug = "user_" + user.keycloak_id
+                    logging.warn(
+                        f"Could not find email, first name or last name for user"
+                        f" with Keycloak ID {user.keycloak_id}, using slug {slug} based on Keycloak ID"
+                    )
+                # Check the new slug has not been used already
+                if slug in used_slugs:
+                    logging.warn(
+                        f"Slug {slug} for user with Keycloak ID {user.keycloak_id} "
+                        "is already used, adding a count at the end to make unique"
+                    )
+                    for inc in range(1, 11):
+                        new_slug = f"{slug}_{inc}"
+                        if new_slug not in used_slugs:
+                            slug = new_slug
+                            break
+                    if slug in used_slugs:
+                        logging.warn(
+                            f"Cannot generate a new slug by counting, for slug {slug} will append a small random string"
+                        )
+                        slug += "_" + "".join([random.choice(string.ascii_letters) for _ in range(6)])
+                # Insert namespace in the db
+                ns = schemas.NamespaceORM(slug=slug, user_id=user.keycloak_id)
+                session.add(ns)
+                used_slugs.add(slug)
+                logging.info(f"Creating user namespace {ns}")
+                count += 1
+        logging.info(f"Created {count} user namespaces")
 
     async def get_groups(
         self,
@@ -184,3 +241,26 @@ class GroupRepository:
                         detail="Please modify the slug field and then retry",
                     )
             return group.dump()
+
+    async def get_namespaces(self, user: base_models.APIUser) -> List[models.Namespace]:
+        async with self.session_maker() as session, session.begin():
+            personal_ns_stmt = select(schemas.NamespaceORM).where(schemas.NamespaceORM.user_id == user.id)
+            group_nss_stmt = (
+                select(schemas.NamespaceORM, schemas.GroupORM)
+                .join(
+                    schemas.GroupORM,
+                    or_(
+                        schemas.GroupORM.ltst_ns_slug_id == schemas.NamespaceORM.id,
+                        schemas.GroupORM.ltst_ns_slug_id == schemas.NamespaceORM.ltst_ns_slug_id,
+                    ),
+                )
+                .where(schemas.GroupORM.members.any(schemas.GroupMemberORM.user_id == user.id))
+            )
+            output = []
+            personal_ns = (await session.execute(personal_ns_stmt)).scalar_one_or_none()
+            if personal_ns:
+                output.append(personal_ns.dump())
+            group_nss = (await session.execute(group_nss_stmt)).tuples()
+            for ns_orm, _ in group_nss:
+                output.append(ns_orm.dump())
+            return output
