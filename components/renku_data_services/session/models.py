@@ -25,6 +25,7 @@ class SessionEnvironment(BaseModel):
     creation_date: datetime
     description: str | None
     container_image: str
+    default_url: str | None
     created_by: Member
 
 
@@ -40,6 +41,7 @@ class SessionLauncher(BaseModel):
     environment_kind: EnvironmentKind
     environment_id: str | None
     container_image: str | None
+    default_url: str | None
     created_by: Member
 
     @model_validator(mode="after")

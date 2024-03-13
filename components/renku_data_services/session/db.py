@@ -58,6 +58,7 @@ class SessionRepository:
             name=new_environment.name,
             description=new_environment.description,
             container_image=new_environment.container_image,
+            default_url=new_environment.default_url,
             created_by=models.Member(id=user.id),
             creation_date=datetime.now(timezone.utc).replace(microsecond=0),
         )
@@ -87,8 +88,8 @@ class SessionRepository:
                     )
 
                 for key, value in kwargs.items():
-                    # NOTE: Only ``name``, ``description``, and ``container_image`` can be edited
-                    if key in ["name", "description", "container_image"]:
+                    # NOTE: Only ``name``, ``description``, ``container_image`` and ``default_url`` can be edited
+                    if key in ["name", "description", "container_image", "default_url"]:
                         setattr(environment, key, value)
 
                 return environment.dump()
@@ -185,6 +186,7 @@ class SessionRepository:
             environment_kind=new_launcher.environment_kind,
             environment_id=new_launcher.environment_id,
             container_image=new_launcher.container_image,
+            default_url=new_launcher.default_url,
             created_by=models.Member(id=user.id),
             creation_date=datetime.now(timezone.utc).replace(microsecond=0),
         )
@@ -250,8 +252,15 @@ class SessionRepository:
 
                 for key, value in kwargs.items():
                     # NOTE: Only ``name``, ``description``, ``environment_kind``,
-                    #       ``environment_id`` and ``container_image`` can be edited.
-                    if key in ["name", "description", "environment_kind", "environment_id", "container_image"]:
+                    #       ``environment_id``, ``container_image`` and ``default_url`` can be edited.
+                    if key in [
+                        "name",
+                        "description",
+                        "environment_kind",
+                        "environment_id",
+                        "container_image",
+                        "default_url",
+                    ]:
                         setattr(launcher, key, value)
 
                 if launcher.environment_kind == EnvironmentKind.global_environment:

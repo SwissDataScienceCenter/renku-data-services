@@ -1,8 +1,6 @@
 """SQLAlchemy's schemas for the sessions database."""
 
 from datetime import datetime
-from typing import Optional
-
 from sqlalchemy import DateTime, MetaData, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
@@ -38,11 +36,14 @@ class SessionEnvironmentORM(BaseORM):
     creation_date: Mapped[datetime] = mapped_column("creation_date", DateTime(timezone=True))
     """Creation date and time."""
 
-    description: Mapped[Optional[str]] = mapped_column("description", String(500))
+    description: Mapped[str | None] = mapped_column("description", String(500))
     """Human-readable description of the session environment."""
 
     container_image: Mapped[str] = mapped_column("container_image", String(500))
     """Container image repository and tag."""
+
+    default_url: Mapped[str | None] = mapped_column("default_url", String(200))
+    """Default URL path to open in a session."""
 
     @classmethod
     def load(cls, environment: models.SessionEnvironment):
@@ -53,6 +54,7 @@ class SessionEnvironmentORM(BaseORM):
             creation_date=environment.creation_date,
             description=environment.description,
             container_image=environment.container_image,
+            default_url=environment.default_url,
         )
 
     def dump(self) -> models.SessionEnvironment:
@@ -64,6 +66,7 @@ class SessionEnvironmentORM(BaseORM):
             creation_date=self.creation_date,
             description=self.description,
             container_image=self.container_image,
+            default_url=self.default_url,
         )
 
 
@@ -84,24 +87,27 @@ class SessionLauncherORM(BaseORM):
     creation_date: Mapped[datetime] = mapped_column("creation_date", DateTime(timezone=True))
     """Creation date and time."""
 
-    description: Mapped[Optional[str]] = mapped_column("description", String(500))
+    description: Mapped[str | None] = mapped_column("description", String(500))
     """Human-readable description of the session launcher."""
 
     environment_kind: Mapped[EnvironmentKind]
     """The kind of environment definition to use."""
 
-    container_image: Mapped[Optional[str]] = mapped_column("container_image", String(500))
+    container_image: Mapped[str | None] = mapped_column("container_image", String(500))
     """Container image repository and tag."""
 
+    default_url: Mapped[str | None] = mapped_column("default_url", String(200))
+    """Default URL path to open in a session."""
+
     project: Mapped[ProjectORM] = relationship(init=False)
-    environment: Mapped[Optional[SessionEnvironmentORM]] = relationship(init=False)
+    environment: Mapped[SessionEnvironmentORM | None] = relationship(init=False)
 
     project_id: Mapped[str] = mapped_column(
         "project_id", ForeignKey(ProjectORM.id, ondelete="CASCADE"), default=None, index=True
     )
     """Id of the project this session belongs to."""
 
-    environment_id: Mapped[Optional[str]] = mapped_column(
+    environment_id: Mapped[str | None] = mapped_column(
         "environment_id", ForeignKey(SessionEnvironmentORM.id), default=None, nullable=True, index=True
     )
     """Id of the session environment."""
@@ -118,6 +124,7 @@ class SessionLauncherORM(BaseORM):
             container_image=launcher.container_image,
             project_id=launcher.project_id,
             environment_id=launcher.environment_id,
+            default_url=launcher.default_url,
         )
 
     def dump(self) -> models.SessionLauncher:
@@ -132,4 +139,5 @@ class SessionLauncherORM(BaseORM):
             environment_kind=self.environment_kind,
             environment_id=self.environment_id if self.environment_id is not None else None,
             container_image=self.container_image,
+            default_url=self.default_url,
         )
