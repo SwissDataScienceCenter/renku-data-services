@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import logging
 import random
-from datetime import datetime, timezone
 import string
-from types import new_class
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Tuple, cast
 
 from sqlalchemy import delete, func, or_, select, text
@@ -73,7 +72,7 @@ class GroupRepository:
                         logging.warn(
                             f"Cannot generate a new slug by counting, for slug {slug} will append a small random string"
                         )
-                        slug += "_" + "".join([random.choice(string.ascii_letters) for _ in range(6)])
+                        slug += "_" + "".join([random.choice(string.ascii_letters) for _ in range(6)])  # nosec: B311
                 # Insert namespace in the db
                 ns = schemas.NamespaceORM(slug=slug, user_id=user.keycloak_id)
                 session.add(ns)
@@ -243,6 +242,7 @@ class GroupRepository:
             return group.dump()
 
     async def get_namespaces(self, user: base_models.APIUser) -> List[models.Namespace]:
+        """Get all namespaces."""
         async with self.session_maker() as session, session.begin():
             personal_ns_stmt = select(schemas.NamespaceORM).where(schemas.NamespaceORM.user_id == user.id)
             group_nss_stmt = (
@@ -264,3 +264,30 @@ class GroupRepository:
             for ns_orm, _ in group_nss:
                 output.append(ns_orm.dump())
             return output
+
+    async def get_namespace(self, user: base_models.APIUser, slug: str) -> models.Namespace | None:
+        """Get the namespace for a slug."""
+        async with self.session_maker() as session, session.begin():
+            stmt = (
+                select(schemas.NamespaceORM, schemas.GroupORM)
+                .join(
+                    schemas.GroupORM,
+                    or_(
+                        schemas.GroupORM.ltst_ns_slug_id == schemas.NamespaceORM.id,
+                        schemas.GroupORM.ltst_ns_slug_id == schemas.NamespaceORM.ltst_ns_slug_id,
+                    ),
+                    isouter=True,  # NOTE: if ommitted it will only return groups, without user namespaces
+                )
+                .where(
+                    or_(
+                        schemas.GroupORM.members.any(schemas.GroupMemberORM.user_id == user.id),
+                        schemas.NamespaceORM.user_id == user.id,
+                    )
+                )
+                .where(schemas.NamespaceORM.slug == slug)
+            )
+            nss = (await session.execute(stmt)).all()
+            if len(nss) != 1:
+                return None
+            ns, _ = nss[0].tuple()
+            return ns.dump()

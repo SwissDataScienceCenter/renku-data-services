@@ -9,6 +9,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
+from renku_data_services.errors import errors
 from renku_data_services.namespace import apispec
 from renku_data_services.namespace.db import GroupRepository
 
@@ -141,3 +142,48 @@ class GroupsBP(CustomBlueprint):
             return HTTPResponse(status=204)
 
         return "/groups/<slug>/members/<user_id>", ["DELETE"], _delete_member
+
+    def get_namespaces(self) -> BlueprintFactoryResponse:
+        """Get all all namespaces."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _get_namespaces(_: Request, *, user: base_models.APIUser):
+            nss = await self.group_repo.get_namespaces(user=user)
+            return json(
+                [
+                    apispec.NamespaceResponse(
+                        id=ns.id,
+                        name=ns.name,
+                        slug=ns.latest_slug if ns.latest_slug else ns.slug,
+                        created_by=ns.created_by,
+                        creation_date=ns.creation_date,
+                        namespace_kind=apispec.NamespaceKind(ns.kind.value),
+                    ).model_dump(exclude_none=True, mode="json")
+                    for ns in nss
+                ]
+            )
+
+        return "/namespaces", ["GET"], _get_namespaces
+
+    def get_namespace(self) -> BlueprintFactoryResponse:
+        """Get namespace by slug."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _get_namespace(_: Request, *, user: base_models.APIUser, slug: str):
+            ns = await self.group_repo.get_namespace(user=user, slug=slug)
+            if not ns:
+                raise errors.MissingResourceError(message=f"The namespace with slug {slug} does not exist")
+            return json(
+                apispec.NamespaceResponse(
+                    id=ns.id,
+                    name=ns.name,
+                    slug=ns.latest_slug if ns.latest_slug else ns.slug,
+                    created_by=ns.created_by,
+                    creation_date=ns.creation_date,
+                    namespace_kind=apispec.NamespaceKind(ns.kind.value),
+                ).model_dump(exclude_none=True, mode="json")
+            )
+
+        return "/namespaces/<slug>", ["GET"], _get_namespace

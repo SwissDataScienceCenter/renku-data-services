@@ -20,6 +20,7 @@ packages = [
   { include = "renku_data_services/project", from = "../../components" },
   { include = "renku_data_services/authz", from = "../../components" },
   { include = "renku_data_services/storage", from = "../../components" },
+  { include = "renku_data_services/namespace", from = "../../components" },
 ]
 
 [tool.poetry.dependencies]

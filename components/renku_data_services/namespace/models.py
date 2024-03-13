@@ -54,3 +54,23 @@ class GroupMemberDetails:
     email: str | None = None
     first_name: str | None = None
     last_name: str | None = None
+
+
+class NamespaceKind(str, Enum):
+    """Allowed kinds of namespaces."""
+
+    group: str = "group"
+    user: str = "user"
+
+
+@dataclass
+class Namespace:
+    """A renku namespace."""
+
+    id: str
+    slug: str
+    kind: NamespaceKind
+    name: str | None = None
+    creation_date: datetime | None = None
+    created_by: str | None = None
+    latest_slug: str | None = None

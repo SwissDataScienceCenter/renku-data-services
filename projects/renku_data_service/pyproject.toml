@@ -24,6 +24,7 @@ packages = [
   { include = "renku_data_services/k8s", from = "../../components" },
   { include = "renku_data_services/message_queue", from = "../../components" },
   { include = "renku_data_services/migrations", from = "../../components" },
+  { include = "renku_data_services/namespace", from = "../../components" },
 ]
 
 [tool.poetry.dependencies]

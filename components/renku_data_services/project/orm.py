@@ -95,7 +95,7 @@ class ProjectSlug(BaseORM):
 
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
     slug: Mapped[str] = mapped_column(String(99), index=True, nullable=False)
-    ltst_ns_slug_id: Mapped[Optional[int]] = mapped_column(
+    ltst_ns_slug_id: Mapped[Optional[str]] = mapped_column(
         ForeignKey(NamespaceORM.id, ondelete="CASCADE"),
         nullable=True,
         init=False,

@@ -151,5 +151,6 @@ async def test_group_members(sanic_client, user_headers):
     assert response.status_code == 200, response.text
     res_json = response.json
     assert len(res_json) == 2
-    assert res_json[1]["id"] == "member-1"
-    assert res_json[1]["role"] == "member"
+    find_member = list(filter(lambda x: x["id"] == "member-1", res_json))
+    assert len(find_member) == 1
+    assert find_member[0]["role"] == "member"

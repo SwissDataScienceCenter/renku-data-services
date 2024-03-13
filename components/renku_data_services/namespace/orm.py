@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Dict, Optional
 
-from sqlalchemy import CheckConstraint, DateTime, Index, Integer, MetaData, String
+from sqlalchemy import DateTime, Integer, MetaData, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, attribute_keyed_dict, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
 from ulid import ULID
@@ -28,7 +28,7 @@ class GroupORM(BaseORM):
     created_by: Mapped[str] = mapped_column(ForeignKey(UserORM.keycloak_id), index=True, nullable=False)
     creation_date: Mapped[datetime] = mapped_column("creation_date", DateTime(timezone=True))
     ltst_ns_slug: Mapped["NamespaceORM"] = relationship(lazy="joined", join_depth=1)
-    ltst_ns_slug_id: Mapped[int] = mapped_column(ForeignKey("namespaces.id"), init=False, nullable=False)
+    ltst_ns_slug_id: Mapped[str] = mapped_column(ForeignKey("namespaces.id"), init=False, nullable=False)
     description: Mapped[Optional[str]] = mapped_column("description", String(500), default=None)
     members: Mapped[Dict[str, "GroupMemberORM"]] = relationship(
         # NOTE: the members of a group are keyed by the Keycloak ID
@@ -95,9 +95,9 @@ class NamespaceORM(BaseORM):
 
     __tablename__ = "namespaces"
 
-    id: Mapped[int] = mapped_column(primary_key=True, init=False)
+    id: Mapped[str] = mapped_column("id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False)
     slug: Mapped[str] = mapped_column(String(99), index=True, unique=True, nullable=False)
-    ltst_ns_slug_id: Mapped[Optional[int]] = mapped_column(
+    ltst_ns_slug_id: Mapped[Optional[str]] = mapped_column(
         ForeignKey("namespaces.id", ondelete="CASCADE"),
         nullable=True,
         init=False,
@@ -111,4 +111,33 @@ class NamespaceORM(BaseORM):
         default=None,
     )
     user_id: Mapped[Optional[str]] = mapped_column(ForeignKey(UserORM.keycloak_id), index=True, default=None)
-    user: Mapped[Optional[UserORM]] = relationship(default=None)
+    user: Mapped[Optional[UserORM]] = relationship(init=False)
+
+    @classmethod
+    def load(cls, namespace: models.Namespace):
+        """Create NamespaceORM from the model."""
+        if models.Namespace.kind == models.NamespaceKind.user:
+            return cls(
+                slug=namespace.slug,
+                user_id=namespace.created_by,
+                ltst_ns_slug=cls(slug=namespace.latest_slug, user_id=namespace.created_by)
+                if namespace.latest_slug
+                else None,
+            )
+        else:
+            return cls(
+                slug=namespace.slug,
+                ltst_ns_slug=cls(slug=namespace.latest_slug)
+                if namespace.latest_slug
+                else None,
+            )
+
+    def dump(self) -> models.Namespace:
+        """Create a namespace model from the ORM."""
+        return models.Namespace(
+            id=self.id,
+            slug=self.slug,
+            latest_slug=self.ltst_ns_slug.slug if self.ltst_ns_slug else None,
+            created_by=self.user_id,
+            kind=models.NamespaceKind.user if self.user_id else models.NamespaceKind.group,
+        )
