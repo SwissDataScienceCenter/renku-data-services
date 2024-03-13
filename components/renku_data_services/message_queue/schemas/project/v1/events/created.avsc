@@ -1,12 +1,12 @@
 {
   "type": "record",
   "name": "ProjectCreated",
-  "namespace":"io.renku.events.v1",
-  "doc":"Event raised when a new project is created",
+  "namespace": "io.renku.events.v1",
+  "doc": "Event raised when a new project is created",
   "fields": [
     {
-      "name":"id",
-      "type":"string"
+      "name": "id",
+      "type": "string"
     },
     {
       "name": "name",
