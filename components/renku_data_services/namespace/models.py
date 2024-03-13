@@ -42,7 +42,7 @@ class GroupMember:
 
     user_id: str
     role: GroupRole
-    group_id: str | None
+    group_id: str
 
 
 @dataclass

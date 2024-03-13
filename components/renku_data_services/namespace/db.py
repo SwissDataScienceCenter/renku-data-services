@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Tuple, cast
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -43,7 +43,17 @@ class GroupRepository:
             return [g.dump() for g in groups_orm], n_total_elements
 
     async def _get_group(self, session: AsyncSession, slug: str, load_members: bool = False) -> schemas.GroupORM:
-        stmt = select(schemas.GroupORM).where(schemas.GroupORM.slug == slug)
+        stmt = (
+            select(schemas.NamespaceORM, schemas.GroupORM)
+            .join(
+                schemas.GroupORM,
+                or_(
+                    schemas.GroupORM.ltst_ns_slug_id == schemas.NamespaceORM.id,
+                    schemas.GroupORM.ltst_ns_slug_id == schemas.NamespaceORM.ltst_ns_slug_id,
+                ),
+            )
+            .where(schemas.NamespaceORM.slug == slug)
+        )
         if load_members:
             stmt = stmt.options(selectinload(schemas.GroupORM.members))
         if not session.in_transaction():
@@ -51,9 +61,10 @@ class GroupRepository:
                 result = await session.execute(stmt)
         else:
             result = await session.execute(stmt)
-        group_orm = result.scalar_one_or_none()
-        if not group_orm:
+        row = result.one_or_none()
+        if not row:
             raise errors.MissingResourceError(message=f"The group with slug {slug} does not exist")
+        _, group_orm = row.tuple()
         return group_orm
 
     async def get_group(self, slug: str) -> models.Group:
@@ -70,7 +81,7 @@ class GroupRepository:
                 raise errors.Unauthorized(message="Only the owner and admins can modify groups")
             stmt = (
                 select(schemas.GroupMemberORM, user_schemas.UserORM)
-                .where(schemas.GroupMemberORM.group.has(schemas.GroupORM.slug == slug))
+                .where(schemas.GroupMemberORM.group.has(schemas.GroupORM.id == group.id))
                 .join(user_schemas.UserORM, schemas.GroupMemberORM.user_id == user_schemas.UserORM.keycloak_id)
             )
             result = await session.execute(stmt)
@@ -94,7 +105,9 @@ class GroupRepository:
             for k, v in payload.items():
                 match k:
                     case "slug":
-                        group.slug = v
+                        old_slug = schemas.NamespaceORM(slug=group.ltst_ns_slug.slug, ltst_ns_slug=group.ltst_ns_slug)
+                        group.ltst_ns_slug.slug = v
+                        session.add(old_slug)
                     case "description":
                         group.description = v
                     case "name":
@@ -117,7 +130,6 @@ class GroupRepository:
                 new_member_orm = schemas.GroupMemberORM(
                     user_id=new_member.id,
                     role=models.GroupRole.from_str(new_member.role.value).value,
-                    group_id=group.id,
                 )
                 group.members[new_member.id] = new_member_orm
                 output.append(new_member_orm.dump())
@@ -132,7 +144,7 @@ class GroupRepository:
                 return
             if user.id != group.created_by and not user.is_admin:
                 raise errors.Unauthorized(message="Only the owner and admins can modify groups")
-            stmt = delete(schemas.GroupORM).where(schemas.GroupORM.slug == slug)
+            stmt = delete(schemas.GroupORM).where(schemas.GroupORM.id == group.id)
             await session.execute(stmt)
 
     async def delete_group_member(self, user: base_models.APIUser, slug: str, user_id_to_delete: str):
@@ -150,17 +162,18 @@ class GroupRepository:
             if not user.id:
                 raise errors.Unauthorized(message="Users need to be authenticated in order to create groups.")
             creation_date = datetime.now(timezone.utc).replace(microsecond=0)
-            user_id = cast(str, user.id)
             member = schemas.GroupMemberORM(user.id, models.GroupRole.owner.value)
-            session.add(member)
+            ns = schemas.NamespaceORM(slug=payload.slug)
+            session.add(ns)
             group = schemas.GroupORM(
                 name=payload.name,
-                slug=payload.slug,
                 description=payload.description,
-                created_by=user_id,
+                created_by=user.id,
                 creation_date=creation_date,
-                members={user_id: member},
+                members={user.id: member},
+                ltst_ns_slug=ns,
             )
+
             session.add(group)
             try:
                 await session.flush()

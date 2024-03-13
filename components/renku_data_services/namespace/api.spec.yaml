@@ -1,9 +1,9 @@
 openapi: 3.0.2
 info:
-  title: Renku User/Group Namespace Management Service
+  title: Renku Group Management Service
   description: |
-    Service that allows creating, updating, deleting, and managing Renku v2 group namespaces,
-    and creating user namespaces. All errors have the same format as the schema called ErrorResponse.
+    Service that allows creating, updating, deleting, and managing Renku v2 groups.
+    All errors have the same format as the schema called ErrorResponse.
   version: 0.1.0
 servers:
   - url: /api/data
@@ -241,54 +241,100 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - groups
-  /namespaces/user:
+  /namespaces:
     get:
-      summary: Get the user namespace
+      summary: Get all namespaces
+      parameters:
+        - in: query
+          description: Result's page number starting from 1
+          name: page
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          description: The number of results per page
+          name: per_page
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
       responses:
         "200":
-          description: The user namespace or null
+          description: List of namespaces
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UserNamespaceResponse"
+                $ref: "#/components/schemas/NamespaceResponseList"
+          headers:
+            page:
+              description: The index of the current page (starting at 1).
+              required: true
+              schema:
+                type: integer
+            per-page:
+              description: The number of items per page.
+              required: true
+              schema:
+                type: integer
+            total:
+              description: The total number of items.
+              required: true
+              schema:
+                type: integer
+            total-pages:
+              description: The total number of pages.
+              required: true
+              schema:
+                type: integer
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - users
-    post:
-      summary: Create the user namespace
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UserNamespacePostRequest"
+        - namespaces
+  /namespaces/{group_slug}:
+    get:
+      summary: Get a namespace
+      parameters:
+        - in: path
+          name: group_slug
+          required: true
+          schema:
+            $ref: "#/components/schemas/Slug"
       responses:
-        "201":
-          description: The namespace was created
+        "200":
+          description: The namespace
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UserNamespaceResponse"
+                $ref: "#/components/schemas/NamespaceResponse"
+        "404":
+          description: The namespace does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - users
+        - namespaces
 components:
   schemas:
     GroupResponseList:
-      description: A list of Renku group namespaces
+      description: A list of Renku groups
       type: array
       items:
         $ref: "#/components/schemas/GroupResponse"
     GroupResponse:
-      description: A Renku group namespace definition and metadata
+      description: A Renku group definition and metadata
       type: object
       properties:
         id:
           $ref: "#/components/schemas/Ulid"
         name:
-          $ref: "#/components/schemas/GroupName"
+          $ref: "#/components/schemas/NamespaceName"
         slug:
           $ref: "#/components/schemas/Slug"
         creation_date:
@@ -310,12 +356,12 @@ components:
         created_by: "owner-keycloak-id"
         creation_date: "2024-03-04T13:04:45Z"
     GroupPostRequest:
-      description: Group namespace metadata to be created in Renku
+      description: Group metadata to be created in Renku
       type: object
       additionalProperties: false
       properties:
         name:
-          $ref: "#/components/schemas/GroupName"
+          $ref: "#/components/schemas/NamespaceName"
         slug:
           $ref: "#/components/schemas/Slug"
         description:
@@ -325,11 +371,11 @@ components:
         - "slug"
     GroupPatchRequest:
       type: object
-      description: Patch of a group namespace
+      description: Patch of a group
       additionalProperties: false
       properties:
         name:
-          $ref: "#/components/schemas/GroupName"
+          $ref: "#/components/schemas/NamespaceName"
         slug:
           $ref: "#/components/schemas/Slug"
         description:
@@ -341,21 +387,21 @@ components:
       maxLength: 26
       pattern: "^[A-Z0-9]{26}$"  # This is case-insensitive
       format: ulid
-    GroupName:
+    NamespaceName:
       description: Renku group name
       type: string
       minLength: 1
       maxLength: 99
       example: "My Renku Group :)"
     Slug:
-      description: A command-line/url friendly name for a group
+      description: A command-line/url friendly name for a namespace
       type: string
       minLength: 1
       maxLength: 99
       pattern: "^[a-z0-9]+[a-z0-9._-]*$"  # Cannot contain consecutive special characters or end in .git and .atom
-      example: "my-renku-group"
+      example: "my-renku-namespace"
     CreationDate:
-      description: The date and time the group was created (in UTC and ISO-8601 format)
+      description: The date and time the namespace was created (in UTC and ISO-8601 format)
       type: string
       format: date-time
       example: "2023-11-01T17:32:28Z"
@@ -436,6 +482,44 @@ components:
       enum:
         - member
         - owner
+    NamespaceKind:
+      description: Possible kinds of namespaces
+      type: string
+      enum:
+        - group
+        - user
+    NamespaceResponseList:
+      description: A list of Renku groups
+      type: array
+      items:
+        $ref: "#/components/schemas/NamespaceResponse"
+    NamespaceResponse:
+      description: A Renku namespace definition and metadata
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        name:
+          $ref: "#/components/schemas/NamespaceName"
+        slug:
+          $ref: "#/components/schemas/Slug"
+        creation_date:
+          $ref: "#/components/schemas/CreationDate"
+        created_by:
+          $ref: "#/components/schemas/KeycloakId"
+        namespace_kind:
+          $ref: "#/components/schemas/NamespaceKind"
+      required:
+        - "id"
+        - "namespace_kind"
+        - "slug"
+      example:
+        id: "01AN4Z79ZS5XN0F25N3DB94T4R"
+        name: "R-Project Group"
+        slug: "r-project"
+        created_by: "owner-keycloak-id"
+        creation_date: "2024-03-04T13:04:45Z"
+        namespace_kind: "group"
     UserId:
       type: string
       description: Keycloak user ID
@@ -473,35 +557,6 @@ components:
             - "message"
       required:
         - "error"
-    UserNamespaceResponse:
-      description: A Renku user namespace definition and metadata
-      type: object
-      properties:
-        id:
-          $ref: "#/components/schemas/Ulid"
-        name:
-          $ref: "#/components/schemas/GroupName"
-        slug:
-          $ref: "#/components/schemas/Slug"
-        creation_date:
-          $ref: "#/components/schemas/CreationDate"
-        created_by:
-          $ref: "#/components/schemas/KeycloakId"
-      required:
-        - "id"
-        - "name"
-        - "slug"
-        - "created_by"
-        - "creation_date"
-      example:
-        id: "01AN4Z79ZS5XN0F25N3DB94T4R"
-        name: "user name"
-        slug: "username"
-        created_by: "owner-keycloak-id"
-    UserNamespacePostRequest:
-      description: User namespace metadata to be created in Renku
-      type: object
-      additionalProperties: false
   responses:
     Error:
       description: The schema for all 4xx and 5xx responses

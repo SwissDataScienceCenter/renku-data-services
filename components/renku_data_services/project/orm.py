@@ -25,24 +25,18 @@ class ProjectORM(BaseORM):
     """A Renku native project."""
 
     __tablename__ = "projects"
-    __table_args__ = (
-        Index(
-            "projects_unique_namespace_slug",
-            "namespace_id",
-            "slug_id",
-            unique=True,
-        ),
-    )
-
     id: Mapped[str] = mapped_column("id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False)
     name: Mapped[str] = mapped_column("name", String(99))
     visibility: Mapped[Visibility]
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
     description: Mapped[Optional[str]] = mapped_column("description", String(500))
-    namespace_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey(NamespaceORM.id, name="projects_projects_namespace_id_fk"), index=True, nullable=False
+    ltst_prj_slug_id: Mapped[int] = mapped_column(
+        ForeignKey("project_slugs.id", name="projects_latest_project_slug_id_fk"),
+        index=True,
+        nullable=False,
+        init=False,
     )
-    slug_id: Mapped[int] = mapped_column(ForeignKey("project_slugs.id", name="projects_projects_slug_id_fk"), index=True, nullable=False)
+    ltst_prj_slug: Mapped["ProjectSlug"] = relationship(lazy="joined", join_depth=1)
     repositories: Mapped[List["ProjectRepositoryORM"]] = relationship(
         back_populates="project",
         default_factory=list,
@@ -63,6 +57,7 @@ class ProjectORM(BaseORM):
             creation_date=project.creation_date,
             repositories=[ProjectRepositoryORM(url=r) for r in project.repositories],
             description=project.description,
+            ltst_prj_slug=ProjectSlug(project.slug),
         )
 
     def dump(self) -> models.Project:
@@ -70,7 +65,7 @@ class ProjectORM(BaseORM):
         return models.Project(
             id=self.id,
             name=self.name,
-            slug=self.slug,
+            slug=self.ltst_prj_slug.slug,
             visibility=self.visibility,
             created_by=models.Member(id=self.created_by_id),
             creation_date=self.creation_date,
@@ -93,15 +88,34 @@ class ProjectRepositoryORM(BaseORM):
 
 
 class ProjectSlug(BaseORM):
-    """Stores all project slugs."""
+    """Project and namespace slugs."""
 
     __tablename__ = "project_slugs"
-    __table_args__ = (
-        Index("project_slugs_one_is_latest", "slug", "latest_id", unique=True, postgresql_where="latest_id is NULL"),
-    )
+    __table_args__ = (Index("project_slugs_unique_slugs", "ltst_ns_slug_id", "slug", unique=True),)
+
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
-    slug: Mapped[str] = mapped_column(index=True, unique=True, nullable=False)
-    latest_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("project_slugs.id", ondelete="CASCADE"), nullable=True, init=False, index=True
+    slug: Mapped[str] = mapped_column(String(99), index=True, nullable=False)
+    ltst_ns_slug_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey(NamespaceORM.id, ondelete="CASCADE"),
+        nullable=True,
+        init=False,
+        index=True,
+        default=None,
     )
-    latest: Mapped[Optional["ProjectSlug"]] = relationship(remote_side=[id], lazy="joined", join_depth=1)
+    ltst_ns_slug: Mapped[Optional[NamespaceORM]] = relationship(
+        lazy="joined",
+        default=None,
+    )
+    ltst_prj_slug_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("project_slugs.id", ondelete="CASCADE"),
+        nullable=True,
+        init=False,
+        index=True,
+        default=None,
+    )
+    ltst_prj_slug: Mapped[Optional["ProjectSlug"]] = relationship(
+        remote_side=[id],
+        lazy="joined",
+        join_depth=1,
+        default=None,
+    )

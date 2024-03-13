@@ -20,9 +20,11 @@ components/renku_data_services/project/apispec.py: components/renku_data_service
 	poetry run datamodel-codegen --input components/renku_data_services/project/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/project/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.project.apispec_base.BaseAPISpec
 components/renku_data_services/user_preferences/apispec.py: components/renku_data_services/user_preferences/api.spec.yaml
 	poetry run datamodel-codegen --input components/renku_data_services/user_preferences/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/user_preferences/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.user_preferences.apispec_base.BaseAPISpec
-	poetry run datamodel-codegen --input components/renku_data_services/group/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/group/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.group.apispec_base.BaseAPISpec
 
-schemas: components/renku_data_services/crc/apispec.py components/renku_data_services/storage/apispec.py components/renku_data_services/users/apispec.py components/renku_data_services/project/apispec.py components/renku_data_services/user_preferences/apispec.py
+components/renku_data_services/namespace/apispec.py: components/renku_data_services/namespace/api.spec.yaml
+	poetry run datamodel-codegen --input components/renku_data_services/namespace/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/namespace/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.namespace.apispec_base.BaseAPISpec
+
+schemas: components/renku_data_services/crc/apispec.py components/renku_data_services/storage/apispec.py components/renku_data_services/users/apispec.py components/renku_data_services/project/apispec.py components/renku_data_services/user_preferences/apispec.py components/renku_data_services/namespace/apispec.py 
 	@echo "generated classes based on ApiSpec"
 
 download_avro:
@@ -53,8 +55,8 @@ style_checks:
 	@$(call test_apispec_up_to_date,"users")
 	@echo "checking project apispec is up to date"
 	@$(call test_apispec_up_to_date,"project")
-	@echo "checking group apispec is up to date"
-	@$(call test_apispec_up_to_date,"group")
+	@echo "checking namespace apispec is up to date"
+	@$(call test_apispec_up_to_date,"namespace")
 	poetry run mypy
 	poetry run flake8 -v
 	poetry run bandit -c pyproject.toml -r .
