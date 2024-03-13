@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import DateTime, Integer, MetaData, String
+from sqlalchemy import DateTime, Integer, MetaData, String, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
 from ulid import ULID
@@ -30,13 +30,15 @@ class ProjectORM(BaseORM):
     slug: Mapped[str] = mapped_column("slug", String(99))
     visibility: Mapped[Visibility]
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
-    creation_date: Mapped[Optional[datetime]] = mapped_column("creation_date", DateTime(timezone=True))
     description: Mapped[Optional[str]] = mapped_column("description", String(500))
     repositories: Mapped[List["ProjectRepositoryORM"]] = relationship(
         back_populates="project",
         default_factory=list,
         cascade="save-update, merge, delete",
         lazy="selectin",
+    )
+    creation_date: Mapped[Optional[datetime]] = mapped_column(
+        "creation_date", DateTime(timezone=True), default=func.now(), nullable=False
     )
 
     @classmethod

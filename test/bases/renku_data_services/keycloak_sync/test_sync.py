@@ -8,6 +8,9 @@ import pytest
 from bases.renku_data_services.keycloak_sync.config import SyncConfig
 from renku_data_services.base_models import APIUser
 from renku_data_services.db_config import DBConfig
+from renku_data_services.message_queue.config import RedisConfig
+from renku_data_services.message_queue.db import EventRepository
+from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.users.db import UserRepo, UsersSync
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import KeycloakAdminEvent, UserInfo, UserInfoUpdate
@@ -30,9 +33,12 @@ def db_config(postgresql, monkeypatch) -> SyncConfig:
 @pytest.fixture
 def get_app_configs(db_config: DBConfig):
     def _get_app_configs(kc_api: DummyKeycloakAPI, total_user_sync: bool = False) -> Tuple[SyncConfig, UserRepo]:
-        users_sync = UsersSync(db_config.async_session_maker)
+        redis = RedisConfig.fake()
+        message_queue = RedisQueue(redis)
+        event_repo = EventRepository(db_config.async_session_maker, message_queue=message_queue)
+        users_sync = UsersSync(db_config.async_session_maker, message_queue=message_queue, event_repo=event_repo)
         config = SyncConfig(syncer=users_sync, kc_api=kc_api, total_user_sync=total_user_sync)
-        user_repo = UserRepo(db_config.async_session_maker)
+        user_repo = UserRepo(db_config.async_session_maker, message_queue=message_queue, event_repo=event_repo)
         return config, user_repo
 
     yield _get_app_configs
