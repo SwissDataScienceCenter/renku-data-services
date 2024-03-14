@@ -14,6 +14,7 @@ from renku_data_services.crc.blueprints import (
     UserResourcePoolsBP,
 )
 from renku_data_services.project.blueprints import ProjectsBP
+from renku_data_services.session.blueprints import EnvironmentsBP, SessionLaunchersBP
 from renku_data_services.storage.blueprints import StorageBP, StorageSchemaBP
 from renku_data_services.user_preferences.blueprints import UserPreferencesBP
 from renku_data_services.users.blueprints import KCUsersBP
@@ -74,6 +75,18 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         authenticator=config.authenticator,
         user_repo=config.kc_user_repo,
     )
+    session_environments = EnvironmentsBP(
+        name="session_environments",
+        url_prefix=url_prefix,
+        session_repo=config.session_repo,
+        authenticator=config.authenticator,
+    )
+    session_launchers = SessionLaunchersBP(
+        name="sessions_launchers",
+        url_prefix=url_prefix,
+        session_repo=config.session_repo,
+        authenticator=config.authenticator,
+    )
     app.blueprint(
         [
             resource_pools.blueprint(),
@@ -87,6 +100,8 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
             user_preferences.blueprint(),
             misc.blueprint(),
             project.blueprint(),
+            session_environments.blueprint(),
+            session_launchers.blueprint(),
         ]
     )
 
