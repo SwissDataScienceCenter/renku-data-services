@@ -69,9 +69,7 @@ class SessionRepository:
                 session.add(environment)
                 return environment.dump()
 
-    async def update_environment(
-        self, user: base_models.APIUser, environment_id: str, **kwargs
-    ) -> models.Environment:
+    async def update_environment(self, user: base_models.APIUser, environment_id: str, **kwargs) -> models.Environment:
         """Update a session environment entry."""
         if not user.is_admin:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
