@@ -1,8 +1,8 @@
 openapi: 3.0.2
 info:
-  title: Renku 1.0 Environment and Session Management Service
+  title: Renku 2.0 Environment and Session Management Service
   description: |
-    Service that allows creating, deleting, and managing Renku 1.0 environments
+    Service that allows creating, deleting, and managing Renku 2.0 environments
     and sessions.
   version: 0.1.0
 servers:
@@ -275,7 +275,7 @@ components:
       items:
         $ref: "#/components/schemas/Environment"
     Environment:
-      description: A Renku 1.0 session environment
+      description: A Renku 2.0 session environment
       type: object
       properties:
         id:
@@ -337,7 +337,7 @@ components:
         $ref: "#/components/schemas/SessionLauncher"
       minItems: 0
     SessionLauncher:
-      description: A Renku 1.0 session definition and metadata
+      description: A Renku 2.0 session definition and metadata
       type: object
       properties:
         id:

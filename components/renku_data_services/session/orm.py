@@ -19,8 +19,8 @@ class BaseORM(MappedAsDataclass, DeclarativeBase):
     metadata = metadata_obj
 
 
-class SessionEnvironmentORM(BaseORM):
-    """A Renku 1.0 session environment."""
+class EnvironmentORM(BaseORM):
+    """A Renku 2.0 session environment."""
 
     __tablename__ = "environments"
 
@@ -46,8 +46,8 @@ class SessionEnvironmentORM(BaseORM):
     """Default URL path to open in a session."""
 
     @classmethod
-    def load(cls, environment: models.SessionEnvironment):
-        """Create SessionEnvironmentORM from the session environment model."""
+    def load(cls, environment: models.Environment):
+        """Create EnvironmentORM from the session environment model."""
         return cls(
             name=environment.name,
             created_by_id=environment.created_by.id,
@@ -57,9 +57,9 @@ class SessionEnvironmentORM(BaseORM):
             default_url=environment.default_url,
         )
 
-    def dump(self) -> models.SessionEnvironment:
-        """Create a session environment model from the SessionEnvironmentORM."""
-        return models.SessionEnvironment(
+    def dump(self) -> models.Environment:
+        """Create a session environment model from the EnvironmentORM."""
+        return models.Environment(
             id=self.id,
             name=self.name,
             created_by=models.Member(id=self.created_by_id),
@@ -71,7 +71,7 @@ class SessionEnvironmentORM(BaseORM):
 
 
 class SessionLauncherORM(BaseORM):
-    """A Renku 1.0 session launcher."""
+    """A Renku 2.0 session launcher."""
 
     __tablename__ = "launchers"
 
@@ -100,7 +100,7 @@ class SessionLauncherORM(BaseORM):
     """Default URL path to open in a session."""
 
     project: Mapped[ProjectORM] = relationship(init=False)
-    environment: Mapped[SessionEnvironmentORM | None] = relationship(init=False)
+    environment: Mapped[EnvironmentORM | None] = relationship(init=False)
 
     project_id: Mapped[str] = mapped_column(
         "project_id", ForeignKey(ProjectORM.id, ondelete="CASCADE"), default=None, index=True
@@ -108,7 +108,7 @@ class SessionLauncherORM(BaseORM):
     """Id of the project this session belongs to."""
 
     environment_id: Mapped[str | None] = mapped_column(
-        "environment_id", ForeignKey(SessionEnvironmentORM.id), default=None, nullable=True, index=True
+        "environment_id", ForeignKey(EnvironmentORM.id), default=None, nullable=True, index=True
     )
     """Id of the session environment."""
 

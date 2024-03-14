@@ -17,7 +17,7 @@ class Member(BaseModel):
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class SessionEnvironment(BaseModel):
+class Environment(BaseModel):
     """Session environment model."""
 
     id: str | None

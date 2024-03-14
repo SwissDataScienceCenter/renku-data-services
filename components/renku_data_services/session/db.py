@@ -24,18 +24,18 @@ class SessionRepository:
         self.session_maker = session_maker
         self.project_authz: IProjectAuthorizer = project_authz
 
-    async def get_environments(self) -> list[models.SessionEnvironment]:
+    async def get_environments(self) -> list[models.Environment]:
         """Get all session environments from the database."""
         async with self.session_maker() as session:
-            res = await session.scalars(select(schemas.SessionEnvironmentORM))
+            res = await session.scalars(select(schemas.EnvironmentORM))
             environments = res.all()
             return [e.dump() for e in environments]
 
-    async def get_environment(self, environment_id: str) -> models.SessionEnvironment:
+    async def get_environment(self, environment_id: str) -> models.Environment:
         """Get one session environment from the database."""
         async with self.session_maker() as session:
             res = await session.scalars(
-                select(schemas.SessionEnvironmentORM).where(schemas.SessionEnvironmentORM.id == environment_id)
+                select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == environment_id)
             )
             environment = res.one_or_none()
             if environment is None:
@@ -48,12 +48,12 @@ class SessionRepository:
         self,
         user: base_models.APIUser,
         new_environment: apispec.EnvironmentPost,
-    ) -> models.SessionEnvironment:
+    ) -> models.Environment:
         """Insert a new session environment."""
         if user.id is None or not user.is_admin:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
-        environment_model = models.SessionEnvironment(
+        environment_model = models.Environment(
             id=None,
             name=new_environment.name,
             description=new_environment.description,
@@ -62,7 +62,7 @@ class SessionRepository:
             created_by=models.Member(id=user.id),
             creation_date=datetime.now(timezone.utc).replace(microsecond=0),
         )
-        environment = schemas.SessionEnvironmentORM.load(environment_model)
+        environment = schemas.EnvironmentORM.load(environment_model)
 
         async with self.session_maker() as session:
             async with session.begin():
@@ -71,7 +71,7 @@ class SessionRepository:
 
     async def update_environment(
         self, user: base_models.APIUser, environment_id: str, **kwargs
-    ) -> models.SessionEnvironment:
+    ) -> models.Environment:
         """Update a session environment entry."""
         if not user.is_admin:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
@@ -79,7 +79,7 @@ class SessionRepository:
         async with self.session_maker() as session:
             async with session.begin():
                 res = await session.scalars(
-                    select(schemas.SessionEnvironmentORM).where(schemas.SessionEnvironmentORM.id == environment_id)
+                    select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == environment_id)
                 )
                 environment = res.one_or_none()
                 if environment is None:
@@ -102,7 +102,7 @@ class SessionRepository:
         async with self.session_maker() as session:
             async with session.begin():
                 res = await session.scalars(
-                    select(schemas.SessionEnvironmentORM).where(schemas.SessionEnvironmentORM.id == environment_id)
+                    select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == environment_id)
                 )
                 environment = res.one_or_none()
 
@@ -205,7 +205,7 @@ class SessionRepository:
                 environment_id = new_launcher.environment_id
                 if environment_id is not None:
                     res = await session.scalars(
-                        select(schemas.SessionEnvironmentORM).where(schemas.SessionEnvironmentORM.id == environment_id)
+                        select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == environment_id)
                     )
                     environment = res.one_or_none()
                     if environment is None:
@@ -242,7 +242,7 @@ class SessionRepository:
                 environment_id = kwargs.get("environment_id")
                 if environment_id is not None:
                     res = await session.scalars(
-                        select(schemas.SessionEnvironmentORM).where(schemas.SessionEnvironmentORM.id == environment_id)
+                        select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == environment_id)
                     )
                     environment = res.one_or_none()
                     if environment is None:
