@@ -1,8 +1,8 @@
 """update datetime fields
 
-Revision ID: e0ce196a6022
+Revision ID: bcf9e5049127
 Revises: 7c08ed2fb79d
-Create Date: 2024-03-01 12:33:51.068133
+Create Date: 2024-03-14 14:48:04.667314
 
 """
 
@@ -10,10 +10,10 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision = "e0ce196a6022"
+revision = "bcf9e5049127"
 down_revision = "7c08ed2fb79d"
 branch_labels = None
-depends_on = None
+depends_on = "bfdf48f5ed85"
 
 
 def upgrade() -> None:
