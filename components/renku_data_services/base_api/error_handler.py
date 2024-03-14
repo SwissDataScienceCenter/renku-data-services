@@ -114,6 +114,12 @@ class CustomErrorHandler(ErrorHandler):
                         message="The payload contains characters that are incompatible with the database",
                         detail=message,
                     )
+                elif "value out of int32 range" in message:
+                    formatted_exception = errors.ValidationError(
+                        message="The payload contains integers with values that are "
+                        "too large or small for the database",
+                        detail=message,
+                    )
                 else:
                     formatted_exception = errors.BaseError(message=f"Database error occurred: {message}")
             case PydanticValidationError():

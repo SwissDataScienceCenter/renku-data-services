@@ -1,0 +1,16 @@
+{
+  "type":"record",
+  "name":"ProjectAuthorizationRemoved",
+  "namespace":"io.renku.events.v1",
+  "doc":"Event raised when an authorization for a project is removed for a user",
+  "fields":[
+    {
+      "name":"projectId",
+      "type":"string"
+    },
+    {
+      "name":"userId",
+      "type":"string"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+name: Run CI
+on:
+  pull_request:
+    branches:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - name: Setup Avrodisiac
+      run: |
+        curl -L -o avrodisiac.tar.gz https://github.com/SwissDataScienceCenter/avrodisiac/releases/download/v0.1.3/avrodisiac-x86_64-unknown-linux-gnu.tar.gz
+        tar xf avrodisiac.tar.gz --directory=/tmp/
+    - name: Check formatting
+      run: /tmp/avrodisiac lint .
+    - name: Check compatibility
+      run: |
+        git worktree add /tmp/old ${{ github.event.pull_request.base.ref }}
+        /tmp/avrodisiac compat /tmp/old .
+
