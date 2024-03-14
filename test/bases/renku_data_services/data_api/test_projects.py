@@ -396,6 +396,27 @@ async def test_cannot_patch_reserved_fields(create_project, get_project, sanic_c
 
 
 @pytest.mark.asyncio
+async def test_cannot_patch_without_if_match_header(create_project, get_project, sanic_client, user_headers):
+    project = await create_project("Project 1")
+    original_value = project["name"]
+
+    # Try to patch the project
+    patch = {
+        "name": "New Name",
+    }
+    project_id = project["id"]
+    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=user_headers, json=patch)
+
+    assert response.status_code == 428
+    assert "If-Match header not provided" in response.text
+
+    # Check that the field's value didn't change
+    project = await get_project(project_id=project_id)
+
+    assert project["name"] == original_value
+
+
+@pytest.mark.asyncio
 async def test_get_all_projects_for_specific_user(
     create_project, sanic_client, user_headers, admin_headers, unauthorized_headers
 ):
