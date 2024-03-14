@@ -46,6 +46,7 @@ from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
+from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.user_preferences.config import UserPreferencesConfig
 from renku_data_services.user_preferences.db import UserPreferencesRepository
@@ -117,6 +118,7 @@ class Config:
     _project_repo: ProjectRepository | None = field(default=None, repr=False, init=False)
     _event_repo: EventRepository | None = field(default=None, repr=False, init=False)
     _project_authz: IProjectAuthorizer | None = field(default=None, repr=False, init=False)
+    _session_repo: SessionRepository | None = field(default=None, repr=False, init=False)
     _user_preferences_repo: UserPreferencesRepository | None = field(default=None, repr=False, init=False)
     _kc_user_repo: KcUserRepo | None = field(default=None, repr=False, init=False)
     _project_member_repo: ProjectMemberRepository | None = field(default=None, repr=False, init=False)
@@ -142,7 +144,11 @@ class Config:
         with open(spec_file, "r") as f:
             projects = safe_load(f)
 
-        self.spec = merge_api_specs(crc_spec, storage_spec, user_preferences_spec, users, projects)
+        spec_file = Path(renku_data_services.session.__file__).resolve().parent / "api.spec.yaml"
+        with open(spec_file, "r") as f:
+            sessions = safe_load(f)
+
+        self.spec = merge_api_specs(crc_spec, storage_spec, user_preferences_spec, users, projects, sessions)
 
         if self.default_resource_pool_file is not None:
             with open(self.default_resource_pool_file, "r") as f:
@@ -217,6 +223,15 @@ class Config:
                 session_maker=self.db.async_session_maker, message_queue=self.message_queue, event_repo=self.event_repo
             )
         return self._project_authz
+
+    @property
+    def session_repo(self) -> SessionRepository:
+        """The DB adapter for sessions."""
+        if not self._session_repo:
+            self._session_repo = SessionRepository(
+                session_maker=self.db.async_session_maker, project_authz=self.project_authz
+            )
+        return self._session_repo
 
     @property
     def user_preferences_repo(self) -> UserPreferencesRepository:
