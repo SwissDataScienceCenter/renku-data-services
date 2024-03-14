@@ -2,6 +2,7 @@
 
 import json
 import time
+from test.bases.renku_data_services.data_api.utils import merge_headers
 from test.bases.renku_data_services.keycloak_sync.test_sync import get_kc_users
 from typing import Any, Dict, List
 
@@ -306,6 +307,7 @@ async def test_patch_project(create_project, get_project, sanic_client, user_hea
     await create_project("Project 3")
 
     # Patch a project
+    headers = merge_headers(user_headers, {"If-Match": project["etag"]})
     patch = {
         "name": "New Name",
         "description": "A patched Renku native project",
@@ -313,7 +315,7 @@ async def test_patch_project(create_project, get_project, sanic_client, user_hea
         "repositories": ["http://renkulab.io/repository-1", "http://renkulab.io/repository-2"],
     }
     project_id = project["id"]
-    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=user_headers, json=patch)
+    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=headers, json=patch)
 
     assert response.status_code == 200, response.text
 
@@ -337,11 +339,12 @@ async def test_patch_visibility_to_private_hides_project(create_project, admin_h
     _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
     assert response.json[0]["name"] == "Project 1"
 
+    headers = merge_headers(admin_headers, {"If-Match": project["etag"]})
     patch = {
         "visibility": "private",
     }
     project_id = project["id"]
-    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=admin_headers, json=patch)
+    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=headers, json=patch)
     assert response.status_code == 200, response.text
 
     _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
@@ -356,11 +359,12 @@ async def test_patch_visibility_to_public_shows_project(create_project, admin_he
     _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
     assert len(response.json) == 0
 
+    headers = merge_headers(admin_headers, {"If-Match": project["etag"]})
     patch = {
         "visibility": "public",
     }
     project_id = project["id"]
-    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=admin_headers, json=patch)
+    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=headers, json=patch)
     assert response.status_code == 200, response.text
 
     _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
@@ -375,11 +379,12 @@ async def test_cannot_patch_reserved_fields(create_project, get_project, sanic_c
     original_value = project[field]
 
     # Try to patch the project
+    headers = merge_headers(user_headers, {"If-Match": project["etag"]})
     patch = {
         field: "new-value",
     }
     project_id = project["id"]
-    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=user_headers, json=patch)
+    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=headers, json=patch)
 
     assert response.status_code == 422
     assert f"{field}: Extra inputs are not permitted" in response.text
