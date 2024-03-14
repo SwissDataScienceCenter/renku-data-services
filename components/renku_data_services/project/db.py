@@ -165,7 +165,7 @@ class ProjectRepository:
 
                 project = projects[0]
                 visibility_before = project.visibility
-        match project.visibility:
+        match payload.get("visibility", project.visibility):
             case Visibility.private | Visibility.private.value:
                 vis = MsgVisibility.PRIVATE
             case Visibility.public | Visibility.public.value:
@@ -173,12 +173,12 @@ class ProjectRepository:
             case _:
                 raise NotImplementedError(f"unknown visibility:{project.visibility}")
         async with self.message_queue.project_updated_message(
-            name=project.name,
+            name=payload.get("name", project.name),
             slug=project.slug,
             visibility=vis,
             id=project.id,
-            repositories=[r.url for r in project.repositories],
-            description=project.description,
+            repositories=payload.get("repositories", [r.url for r in project.repositories]),
+            description=payload.get("description", project.description),
         ) as message:
             async with self.session_maker() as session:
                 async with session.begin():
