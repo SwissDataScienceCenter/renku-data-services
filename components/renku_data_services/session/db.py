@@ -170,7 +170,7 @@ class SessionRepository:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
         project_id = new_launcher.project_id
-        authorized = await self.project_authz.has_permission(user=user, project_id=project_id, scope=Scope.READ)
+        authorized = await self.project_authz.has_permission(user=user, project_id=project_id, scope=Scope.WRITE)
         if not authorized:
             raise errors.MissingResourceError(
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
