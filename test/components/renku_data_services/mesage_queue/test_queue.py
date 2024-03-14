@@ -10,7 +10,6 @@ from renku_data_services.message_queue.avro_models.io.renku.events.v1.visibility
 @pytest.mark.asyncio
 async def test_queue_resend(app_config):
     """Test that resending failed requests works."""
-    num_events = len(await app_config.redis.redis_connection.xrange("project.created"))
 
     class FakeException(Exception):
         pass
@@ -34,13 +33,13 @@ async def test_queue_resend(app_config):
         pass
 
     events = await app_config.redis.redis_connection.xrange("project.created")
-    assert len(events) == num_events
+    assert len(events) == 0
     pending_events = await app_config.event_repo.get_pending_events()
     assert len(pending_events) == 1
 
     await app_config.event_repo.send_pending_events()
 
     events = await app_config.redis.redis_connection.xrange("project.created")
-    assert len(events) == num_events + 1
+    assert len(events) == 1
     pending_events = await app_config.event_repo.get_pending_events()
     assert len(pending_events) == 0

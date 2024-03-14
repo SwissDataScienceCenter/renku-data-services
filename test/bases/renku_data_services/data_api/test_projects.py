@@ -12,7 +12,15 @@ from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 
 from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.header import Header
+from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_authorization_added import (
+    ProjectAuthorizationAdded,
+)
+from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_authorization_removed import (
+    ProjectAuthorizationRemoved,
+)
 from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_created import ProjectCreated
+from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_removed import ProjectRemoved
+from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_updated import ProjectUpdated
 from renku_data_services.app_config import Config
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.message_queue.redis_queue import deserialize_binary
@@ -278,7 +286,7 @@ async def test_result_is_sorted_by_creation_date(create_project, sanic_client, u
 
 
 @pytest.mark.asyncio
-async def test_delete_project(create_project, sanic_client, user_headers):
+async def test_delete_project(create_project, sanic_client, user_headers, app_config):
     # Create some projects
     await create_project("Project 1")
     await create_project("Project 2")
@@ -292,6 +300,12 @@ async def test_delete_project(create_project, sanic_client, user_headers):
 
     assert response.status_code == 204, response.text
 
+    events = await app_config.redis.redis_connection.xrange("project.removed")
+    assert len(events) == 1
+    event = events[0][1]
+    proj_event = deserialize_binary(event[b"payload"], ProjectRemoved)
+    assert proj_event.id == project_id
+
     # Get all projects
     _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
 
@@ -300,7 +314,7 @@ async def test_delete_project(create_project, sanic_client, user_headers):
 
 
 @pytest.mark.asyncio
-async def test_patch_project(create_project, get_project, sanic_client, user_headers):
+async def test_patch_project(create_project, get_project, sanic_client, user_headers, app_config):
     # Create some projects
     await create_project("Project 1")
     project = await create_project("Project 2", repositories=["http://renkulab.io/repository-0"])
@@ -318,6 +332,13 @@ async def test_patch_project(create_project, get_project, sanic_client, user_hea
     _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=headers, json=patch)
 
     assert response.status_code == 200, response.text
+
+    events = await app_config.redis.redis_connection.xrange("project.updated")
+    assert len(events) == 1
+    event = events[0][1]
+    proj_event = deserialize_binary(event[b"payload"], ProjectUpdated)
+    assert proj_event.id == project_id
+    assert proj_event.name == patch["name"]
 
     # Get the project
     project = await get_project(project_id=project_id)
@@ -496,7 +517,7 @@ async def test_creator_is_added_as_owner_members(sanic_client, user_headers):
 
 
 @pytest.mark.asyncio
-async def test_add_project_members(create_project, sanic_client, user_headers, admin_headers):
+async def test_add_project_members(create_project, sanic_client, user_headers, admin_headers, app_config):
     project = await create_project("Project 1")
     project_id = project["id"]
 
@@ -507,6 +528,19 @@ async def test_add_project_members(create_project, sanic_client, user_headers, a
     )
 
     assert response.status_code == 200, response.text
+
+    events = await app_config.redis.redis_connection.xrange("projectAuth.added")
+    assert len(events) == 3
+    event = events[1][1]
+    auth_event = deserialize_binary(event[b"payload"], ProjectAuthorizationAdded)
+    assert auth_event.projectId == project_id
+    assert auth_event.userId == members[0]["member"]["id"]
+    assert auth_event.role.value.lower() == members[0]["role"]
+    event = events[2][1]
+    auth_event = deserialize_binary(event[b"payload"], ProjectAuthorizationAdded)
+    assert auth_event.projectId == project_id
+    assert auth_event.userId == members[1]["member"]["id"]
+    assert auth_event.role.value.lower() == members[1]["role"]
 
     # TODO: Should project owner be able to see the project members -> Replace the header with ``user_headers``
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}/members", headers=admin_headers)
@@ -523,8 +557,7 @@ async def test_add_project_members(create_project, sanic_client, user_headers, a
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(reason="Project owner cannot query project members.")
-async def test_delete_project_members(create_project, sanic_client, user_headers):
+async def test_delete_project_members(create_project, sanic_client, user_headers, app_config):
     project = await create_project("Project 1")
     project_id = project["id"]
 
@@ -535,11 +568,18 @@ async def test_delete_project_members(create_project, sanic_client, user_headers
 
     assert response.status_code == 204, response.text
 
+    events = await app_config.redis.redis_connection.xrange("projectAuth.removed")
+    assert len(events) == 1
+    event = events[0][1]
+    auth_event = deserialize_binary(event[b"payload"], ProjectAuthorizationRemoved)
+    assert auth_event.projectId == project_id
+    assert auth_event.userId == "member-1"
+
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}/members", headers=user_headers)
 
     assert response.status_code == 200, response.text
 
-    assert len(response.json) == 1
-    member = response.json[0]
+    assert len(response.json) == 2
+    member = response.json[1]
     assert member["member"] == {"id": "user", "email": "user.doe@gmail.com", "first_name": "User", "last_name": "Doe"}
     assert member["role"] == "owner"
