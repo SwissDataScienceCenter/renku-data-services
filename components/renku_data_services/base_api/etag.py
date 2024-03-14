@@ -16,7 +16,6 @@ def if_match_required(f):
         if etag is None:
             raise errors.PreconditionRequiredError(message="If-Match header not provided.")
 
-        # the user is authenticated
         response = await f(request, *args, **kwargs, etag=etag)
         return response
 
