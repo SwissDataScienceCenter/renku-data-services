@@ -1,6 +1,7 @@
 """Configuration for message queue client."""
 
 import os
+import random
 from dataclasses import dataclass, field
 
 import redis.asyncio as redis
@@ -44,7 +45,9 @@ class RedisConfig:
         import fakeredis
 
         instance = cls(password="")  # nosec B106
-        instance._connection = fakeredis.FakeAsyncRedis()
+        # by default, fake redis shares instances across instantiations. We want a new instance per test,
+        # so we change the port.
+        instance._connection = fakeredis.FakeAsyncRedis(port=random.randint(1000, 65535))  # nosec: B311
         return instance
 
     @property
