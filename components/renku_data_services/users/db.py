@@ -10,11 +10,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.base_api.auth import APIUser, only_authenticated
 from renku_data_services.errors import errors
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.user_added import UserAdded
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.user_removed import UserRemoved
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.user_updated import UserUpdated
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
+from renku_data_services.message_queue.redis_queue import dispatch_message
 from renku_data_services.users.kc_api import IKeycloakAPI
 from renku_data_services.users.models import KeycloakAdminEvent, UserInfo, UserInfoUpdate
 from renku_data_services.users.orm import LastKeycloakEventTimestamp, UserORM
+from renku_data_services.utils.core import with_db_transaction
 
 
 class UserRepo:
@@ -101,6 +106,21 @@ class UserRepo:
             return [orm.dump() for orm in orms]
 
 
+def create_user_added_message(result: UserInfo, **_) -> UserAdded:
+    """Transform user to message queue message."""
+    return UserAdded(id=result.id, firstName=result.first_name, lastName=result.last_name, email=result.email)
+
+
+def create_user_updated_message(result: UserInfo, **_) -> UserUpdated:
+    """Transform user to message queue message."""
+    return UserUpdated(id=result.id, firstName=result.first_name, lastName=result.last_name, email=result.email)
+
+
+def create_user_removed_message(result, user_id: str) -> UserRemoved:
+    """Transform user removal to message queue message."""
+    return UserRemoved(id=user_id)
+
+
 class UsersSync:
     """Sync users from Keycloak to the database."""
 
@@ -128,41 +148,46 @@ class UsersSync:
             res = await session.execute(select(UserORM).where(UserORM.keycloak_id == user_id))
             existing_user = res.scalar_one_or_none()
         if existing_user:
-            cm = self.message_queue.user_updated_message(
-                id=user_id,
-                first_name=kwargs.get("first_name", existing_user.first_name),
-                last_name=kwargs.get("last_name", existing_user.last_name),
-                email=kwargs.get("email", existing_user.email),
-            )
+            return await self.update_user(user_id=user_id, existing_user=existing_user, **kwargs)
         else:
-            cm = self.message_queue.user_added_message(
-                id=user_id,
-                first_name=kwargs.get("first_name"),
-                last_name=kwargs.get("last_name"),
-                email=kwargs.get("email"),
-            )
-        async with cm as message:
-            async with self.session_maker() as session, session.begin():
-                kwargs.pop("keycloak_id", None)
-                kwargs.pop("id", None)
-                if not existing_user:
-                    new_user = UserORM(keycloak_id=user_id, **kwargs)
-                    session.add(new_user)
-                else:
-                    session.add(existing_user)  # reattach to session
-                    for field_name, field_value in kwargs.items():
-                        if getattr(existing_user, field_name, None) != field_value:
-                            setattr(existing_user, field_name, field_value)
-                await message.persist(self.event_repo)
+            return await self.insert_user(user_id=user_id, **kwargs)
 
-    async def _remove_user(self, user_id: str):
-        """Remove a user from the database."""
-        async with self.message_queue.user_removed_message(id=user_id) as message:
+    @with_db_transaction
+    @dispatch_message(create_user_added_message)
+    async def insert_user(self, session: AsyncSession, user_id: str, **kwargs):
+        """Insert a user."""
+        kwargs.pop("keycloak_id", None)
+        kwargs.pop("id", None)
+        new_user = UserORM(keycloak_id=user_id, **kwargs)
+        session.add(new_user)
+        return new_user.dump()
+
+    @with_db_transaction
+    @dispatch_message(create_user_updated_message)
+    async def update_user(self, session: AsyncSession, user_id: str, existing_user: UserORM | None, **kwargs):
+        """Update a user."""
+        if not existing_user:
             async with self.session_maker() as session, session.begin():
-                logging.info(f"Removing user with ID {user_id}")
-                stmt = delete(UserORM).where(UserORM.keycloak_id == user_id)
-                await session.execute(stmt)
-                await message.persist(self.event_repo)
+                res = await session.execute(select(UserORM).where(UserORM.keycloak_id == user_id))
+                existing_user = res.scalar_one_or_none()
+        if not existing_user:
+            raise errors.MissingResourceError(message=f"The user with id '{user_id}' cannot be found")
+
+        kwargs.pop("keycloak_id", None)
+        kwargs.pop("id", None)
+        session.add(existing_user)  # reattach to session
+        for field_name, field_value in kwargs.items():
+            if getattr(existing_user, field_name, None) != field_value:
+                setattr(existing_user, field_name, field_value)
+        return existing_user.dump()
+
+    @with_db_transaction
+    @dispatch_message(create_user_removed_message)
+    async def _remove_user(self, session: AsyncSession, user_id: str):
+        """Remove a user from the database."""
+        logging.info(f"Removing user with ID {user_id}")
+        stmt = delete(UserORM).where(UserORM.keycloak_id == user_id)
+        await session.execute(stmt)
 
     async def users_sync(self, kc_api: IKeycloakAPI):
         """Sync all users from Keycloak into the users database."""

@@ -2,14 +2,6 @@
 
 import json
 import time
-from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_authorization_added import (
-    ProjectAuthorizationAdded,
-)
-from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_authorization_removed import (
-    ProjectAuthorizationRemoved,
-)
-from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_removed import ProjectRemoved
-from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_updated import ProjectUpdated
 from test.bases.renku_data_services.keycloak_sync.test_sync import get_kc_users
 from typing import Any, Dict, List
 
@@ -19,7 +11,15 @@ from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 
 from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.header import Header
+from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_authorization_added import (
+    ProjectAuthorizationAdded,
+)
+from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_authorization_removed import (
+    ProjectAuthorizationRemoved,
+)
 from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_created import ProjectCreated
+from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_removed import ProjectRemoved
+from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_updated import ProjectUpdated
 from renku_data_services.app_config import Config
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.message_queue.redis_queue import deserialize_binary

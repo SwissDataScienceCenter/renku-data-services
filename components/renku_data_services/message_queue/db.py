@@ -54,15 +54,12 @@ class EventRepository:
 
         logger.info(f"resent {num_events} events")
 
-    async def store_event(self, queue: str, message: dict[str, Any]) -> int:
+    async def store_event(self, session: AsyncSession, queue: str, message: dict[str, Any]) -> int:
         """Store an event."""
         event = schemas.EventORM(queue, message)
+        session.add(event)
 
-        async with self.session_maker() as session:
-            async with session.begin():
-                session.add(event)
-
-                return event.id
+        return event.id
 
     async def delete_event(self, id: int):
         """Delete an event."""

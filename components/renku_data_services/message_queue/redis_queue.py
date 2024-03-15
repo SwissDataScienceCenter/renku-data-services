@@ -1,13 +1,17 @@
 """Message queue implementation for redis streams."""
 
 import base64
+import copy
 import glob
+import inspect
 import json
 from dataclasses import dataclass
 from datetime import datetime
+from functools import wraps
 from io import BytesIO
 from pathlib import Path
-from typing import Type, TypeVar
+from types import NoneType, UnionType
+from typing import Callable, Optional, Type, TypeVar, Union
 
 from dataclasses_avroschema.schema_generator import AvroModel
 from dataclasses_avroschema.utils import standardize_custom_type
@@ -25,15 +29,13 @@ from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_au
     ProjectAuthorizationUpdated,
 )
 from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_created import ProjectCreated
-from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_member_role import ProjectMemberRole
 from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_removed import ProjectRemoved
 from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_updated import ProjectUpdated
 from renku_data_services.message_queue.avro_models.io.renku.events.v1.user_added import UserAdded
 from renku_data_services.message_queue.avro_models.io.renku.events.v1.user_removed import UserRemoved
 from renku_data_services.message_queue.avro_models.io.renku.events.v1.user_updated import UserUpdated
-from renku_data_services.message_queue.avro_models.io.renku.events.v1.visibility import Visibility
 from renku_data_services.message_queue.config import RedisConfig
-from renku_data_services.message_queue.interface import IMessageQueue, MessageContext
+from renku_data_services.message_queue.interface import IMessageQueue
 
 _root = Path(__file__).parent.resolve()
 _filter = f"{_root}/schemas/**/*.avsc"
@@ -72,217 +74,102 @@ def deserialize_binary(data: bytes, model: Type[T]) -> T:
     return obj
 
 
+def create_header(message_type: str, content_type: str = "application/avro+binary") -> Header:
+    """Create a message header."""
+    return Header(
+        type=message_type,
+        source="renku-data-services",
+        dataContentType=content_type,
+        schemaVersion="1",
+        time=datetime.utcnow(),
+        requestId=ULID().hex,
+    )
+
+
+def dispatch_message(transform: Callable[..., Union[AvroModel, Optional[AvroModel]]]):
+    """Sends a message on the message queue.
+
+    The transform method is called with the arguments and result of the wrapped method. It is responsible for
+    creating the message type to dispatch. The message is sent based on the return type of the transform method.
+    This wrapper takes care of guaranteed at-least-once delivery of messages by using a backup 'events' table that
+    stores messages for redelivery shold sending fail.
+    """
+
+    def decorator(f):
+        @wraps(f)
+        async def message_wrapper(self, session, *args, **kwargs):
+            result = await f(self, session, *args, **kwargs)
+            payload = transform(result, *args, **kwargs)
+
+            if payload is None:
+                # don't send message if transform returned None
+                return result
+
+            signature = inspect.signature(transform).return_annotation
+
+            # Handle type unions
+            non_none_types = None
+            if isinstance(signature, UnionType):
+                non_none_types = [t for t in signature.__args__ if t != NoneType]
+            elif isinstance(signature, str) and " | " in signature:
+                non_none_types = [t for t in signature.split(" | ") if t != "None"]
+
+            if non_none_types is not None:
+                if len(non_none_types) != 1:
+                    raise NotImplementedError(f"Only optional types are supported, got {signature}")
+                signature = non_none_types[0]
+            if not isinstance(signature, str):
+                # depending on 'from _future_ import annotations' this can be a string or a type
+                signature = signature.__qualname__
+
+            match signature:
+                case ProjectCreated.__qualname__:
+                    queue_name = "project.created"
+                case ProjectUpdated.__qualname__:
+                    queue_name = "project.updated"
+                case ProjectRemoved.__qualname__:
+                    queue_name = "project.removed"
+                case UserAdded.__qualname__:
+                    queue_name = "user.added"
+                case UserUpdated.__qualname__:
+                    queue_name = "user.updated"
+                case UserRemoved.__qualname__:
+                    queue_name = "user.removed"
+                case ProjectAuthorizationAdded.__qualname__:
+                    queue_name = "projectAuth.added"
+                case ProjectAuthorizationUpdated.__qualname__:
+                    queue_name = "projectAuth.updated"
+                case ProjectAuthorizationRemoved.__qualname__:
+                    queue_name = "projectAuth.removed"
+                case _:
+                    raise NotImplementedError(f"Can't create message using transform {transform}:{signature}")
+            headers = create_header(queue_name)
+            message_id = ULID().hex
+            message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
+                "id": message_id,
+                "headers": headers.serialize_json(),
+                "payload": base64.b64encode(serialize_binary(payload)).decode(),
+            }
+            event_id = await self.event_repo.store_event(session, queue_name, message)
+            session.commit()
+
+            try:
+                await self.message_queue.send_message(queue_name, message)
+            except:  # noqa:E722
+                return result
+            await self.event_repo.delete_event(event_id)
+            return result
+
+        return message_wrapper
+
+    return decorator
+
+
 @dataclass
 class RedisQueue(IMessageQueue):
     """Redis streams queue implementation."""
 
     config: RedisConfig
-
-    def _create_header(self, message_type: str, content_type: str = "application/avro+binary") -> Header:
-        """Create a message header."""
-        return Header(
-            type=message_type,
-            source="renku-data-services",
-            dataContentType=content_type,
-            schemaVersion="1",
-            time=datetime.utcnow(),
-            requestId=ULID().hex,
-        )
-
-    def project_created_message(
-        self,
-        name: str,
-        slug: str,
-        visibility: Visibility,
-        id: str,
-        repositories: list[str],
-        description: str | None,
-        creation_date: datetime,
-        created_by: str,
-    ) -> MessageContext:
-        """Event for when a new project is created."""
-        headers = self._create_header("project.created")
-        message_id = ULID().hex
-        body = ProjectCreated(
-            id=id,
-            name=name,
-            slug=slug,
-            repositories=repositories,
-            visibility=visibility,
-            description=description,
-            createdBy=created_by,
-            creationDate=creation_date,
-        )
-
-        message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
-            "id": message_id,
-            "headers": headers.serialize_json(),
-            "payload": base64.b64encode(serialize_binary(body)).decode(),
-        }
-
-        return MessageContext(self, "project.created", message)  # type:ignore
-
-    def project_updated_message(
-        self,
-        name: str,
-        slug: str,
-        visibility: Visibility,
-        id: str,
-        repositories: list[str],
-        description: str | None,
-    ) -> MessageContext:
-        """Event for when a new project is modified."""
-        headers = self._create_header("project.updated")
-        message_id = ULID().hex
-        body = ProjectUpdated(
-            id=id,
-            name=name,
-            slug=slug,
-            repositories=repositories,
-            visibility=visibility,
-            description=description,
-        )
-
-        message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
-            "id": message_id,
-            "headers": headers.serialize_json(),
-            "payload": base64.b64encode(serialize_binary(body)).decode(),
-        }
-
-        return MessageContext(self, "project.updated", message)  # type:ignore
-
-    def project_removed_message(
-        self,
-        id: str,
-    ) -> MessageContext:
-        """Event for when a new project is removed."""
-        headers = self._create_header("project.removed")
-        message_id = ULID().hex
-        body = ProjectRemoved(
-            id=id,
-        )
-
-        message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
-            "id": message_id,
-            "headers": headers.serialize_json(),
-            "payload": base64.b64encode(serialize_binary(body)).decode(),
-        }
-
-        return MessageContext(self, "project.removed", message)  # type:ignore
-
-    def project_auth_added_message(self, project_id: str, user_id: str, role: ProjectMemberRole) -> MessageContext:
-        """Event for when a new project authorization is created."""
-        headers = self._create_header("projectAuth.added")
-        message_id = ULID().hex
-        body = ProjectAuthorizationAdded(
-            projectId=project_id,
-            userId=user_id,
-            role=role,
-        )
-
-        message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
-            "id": message_id,
-            "headers": headers.serialize_json(),
-            "payload": base64.b64encode(serialize_binary(body)).decode(),
-        }
-
-        return MessageContext(self, "projectAuth.added", message)  # type:ignore
-
-    def project_auth_updated_message(self, project_id: str, user_id: str, role: ProjectMemberRole) -> MessageContext:
-        """Event for when a new project authorization is modified."""
-        headers = self._create_header("projectAuth.updated")
-        message_id = ULID().hex
-        body = ProjectAuthorizationUpdated(
-            projectId=project_id,
-            userId=user_id,
-            role=role,
-        )
-
-        message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
-            "id": message_id,
-            "headers": headers.serialize_json(),
-            "payload": base64.b64encode(serialize_binary(body)).decode(),
-        }
-
-        return MessageContext(self, "projectAuth.updated", message)  # type:ignore
-
-    def project_auth_removed_message(
-        self,
-        project_id: str,
-        user_id: str,
-    ) -> MessageContext:
-        """Event for when a new project authorization is removed."""
-        headers = self._create_header("projectAuth.removed")
-        message_id = ULID().hex
-        body = ProjectAuthorizationRemoved(
-            projectId=project_id,
-            userId=user_id,
-        )
-
-        message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
-            "id": message_id,
-            "headers": headers.serialize_json(),
-            "payload": base64.b64encode(serialize_binary(body)).decode(),
-        }
-
-        return MessageContext(self, "projectAuth.removed", message)  # type:ignore
-
-    def user_added_message(
-        self,
-        first_name: str | None,
-        last_name: str | None,
-        email: str | None,
-        id: str,
-    ) -> MessageContext:
-        """Event for when a new user is created."""
-        headers = self._create_header("user.added")
-        message_id = ULID().hex
-        body = UserAdded(id=id, firstName=first_name, lastName=last_name, email=email)
-
-        message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
-            "id": message_id,
-            "headers": headers.serialize_json(),
-            "payload": base64.b64encode(serialize_binary(body)).decode(),
-        }
-
-        return MessageContext(self, "user.added", message)  # type:ignore
-
-    def user_updated_message(
-        self,
-        first_name: str | None,
-        last_name: str | None,
-        email: str | None,
-        id: str,
-    ) -> MessageContext:
-        """Event for when a new user is modified."""
-        headers = self._create_header("user.updated")
-        message_id = ULID().hex
-        body = UserUpdated(id=id, firstName=first_name, lastName=last_name, email=email)
-
-        message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
-            "id": message_id,
-            "headers": headers.serialize_json(),
-            "payload": base64.b64encode(serialize_binary(body)).decode(),
-        }
-
-        return MessageContext(self, "user.updated", message)  # type:ignore
-
-    def user_removed_message(
-        self,
-        id: str,
-    ) -> MessageContext:
-        """Event for when a new user is removed."""
-        headers = self._create_header("user.removed")
-        message_id = ULID().hex
-        body = UserRemoved(id=id)
-
-        message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
-            "id": message_id,
-            "headers": headers.serialize_json(),
-            "payload": base64.b64encode(serialize_binary(body)).decode(),
-        }
-
-        return MessageContext(self, "user.removed", message)  # type:ignore
 
     async def send_message(
         self,
@@ -290,6 +177,7 @@ class RedisQueue(IMessageQueue):
         message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float],
     ):
         """Send a message on a channel."""
+        message = copy.copy(message)
         if "payload" in message:
             message["payload"] = base64.b64decode(message["payload"])  # type: ignore
 
