@@ -1,7 +1,8 @@
 """SQLAlchemy schemas for the CRC database."""
+from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, MetaData, String
+from sqlalchemy import JSON, DateTime, MetaData, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 
@@ -30,6 +31,8 @@ class EventORM(BaseORM):
 
     id: Mapped[int] = mapped_column(primary_key=True, default=None, init=False)
     """Unique id of the event."""
+
+    timestamp: Mapped[datetime] = mapped_column("timestamp", DateTime())
 
     queue: Mapped[str] = mapped_column("queue", String())
     """The name of the queue to send the event to."""
