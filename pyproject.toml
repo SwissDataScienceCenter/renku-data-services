@@ -56,7 +56,7 @@ urllib3 = "^1.26.16"
 deepmerge = "^1.1.0"
 authlib = "^1.2.1"
 redis = "^5.0.1"
-dataclasses-avroschema = "^0.57.0"
+dataclasses-avroschema = "^0.57.4"
 undictify = "^0.11.3"
 types-redis = "^4.6.0.20240218"
 
@@ -80,6 +80,7 @@ pytest-asyncio = "^0.21.1"
 pytest-postgresql = "^5.0.0"
 types-urllib3 = "^1.26.25.14"
 pyavro-gen = "^0.3.3"
+avro-preprocessor = "^0.3.0"
 fakeredis = "^2.21.1"
 
 [build-system]
