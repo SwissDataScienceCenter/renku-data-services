@@ -148,21 +148,20 @@ class GroupsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _get_namespaces(_: Request, *, user: base_models.APIUser):
-            nss = await self.group_repo.get_namespaces(user=user)
-            return json(
-                [
-                    apispec.NamespaceResponse(
-                        id=ns.id,
-                        name=ns.name,
-                        slug=ns.latest_slug if ns.latest_slug else ns.slug,
-                        created_by=ns.created_by,
-                        creation_date=ns.creation_date,
-                        namespace_kind=apispec.NamespaceKind(ns.kind.value),
-                    ).model_dump(exclude_none=True, mode="json")
-                    for ns in nss
-                ]
-            )
+        @paginate
+        async def _get_namespaces(_: Request, *, user: base_models.APIUser, pagination: PaginationRequest):
+            nss, total_count = await self.group_repo.get_namespaces(user=user, pagination=pagination)
+            return [
+                apispec.NamespaceResponse(
+                    id=ns.id,
+                    name=ns.name,
+                    slug=ns.latest_slug if ns.latest_slug else ns.slug,
+                    created_by=ns.created_by,
+                    creation_date=ns.creation_date,
+                    namespace_kind=apispec.NamespaceKind(ns.kind.value),
+                ).model_dump(exclude_none=True, mode="json")
+                for ns in nss
+            ], total_count
 
         return "/namespaces", ["GET"], _get_namespaces
 

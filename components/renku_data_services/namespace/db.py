@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import random
+import re
 import string
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Tuple, cast
@@ -46,7 +47,7 @@ class GroupRepository:
                 if user.email:
                     slug = user.email.split("@")[0]
                 elif user.first_name and user.last_name:
-                    slug = user.first_name + "_" + user.last_name
+                    slug = user.first_name + "-" + user.last_name
                 elif user.last_name:
                     slug = user.last_name
                 elif user.first_name:
@@ -57,14 +58,27 @@ class GroupRepository:
                         f"Could not find email, first name or last name for user"
                         f" with Keycloak ID {user.keycloak_id}, using slug {slug} based on Keycloak ID"
                     )
+                if len(slug) > 80:
+                    # The length limit is 99 but leave some space for some modifications we add down the line
+                    # to filter out invalid characters or to generate a unique name
+                    slug = slug[:80]
+                if slug.startswith(("-", "_", ".")):
+                    slug = "user" + slug
+                # Replace any non-allowed characters
+                slug = re.sub(r"[^a-zA-Z0-9-_.]", "-", slug)
+                # Replace consecutive special characters
+                slug = re.sub(r"[-_.]{2,}", "-", slug)
                 # Check the new slug has not been used already
                 if slug in used_slugs:
+                    sep = "-"
+                    if slug.endswith((".", "_", "-")):
+                        sep = ""
                     logging.warn(
                         f"Slug {slug} for user with Keycloak ID {user.keycloak_id} "
                         "is already used, adding a count at the end to make unique"
                     )
                     for inc in range(1, 11):
-                        new_slug = f"{slug}_{inc}"
+                        new_slug = f"{slug}{sep}{inc}"
                         if new_slug not in used_slugs:
                             slug = new_slug
                             break
@@ -72,7 +86,7 @@ class GroupRepository:
                         logging.warn(
                             f"Cannot generate a new slug by counting, for slug {slug} will append a small random string"
                         )
-                        slug += "_" + "".join([random.choice(string.ascii_letters) for _ in range(6)])  # nosec: B311
+                        slug += sep + "".join([random.choice(string.ascii_letters) for _ in range(6)])  # nosec: B311
                 # Insert namespace in the db
                 ns = schemas.NamespaceORM(slug=slug, user_id=user.keycloak_id)
                 session.add(ns)
@@ -108,7 +122,7 @@ class GroupRepository:
                     schemas.GroupORM.ltst_ns_slug_id == schemas.NamespaceORM.ltst_ns_slug_id,
                 ),
             )
-            .where(schemas.NamespaceORM.slug == slug)
+            .where(func.lower(schemas.NamespaceORM.slug) == func.lower(slug))
         )
         if load_members:
             stmt = stmt.options(selectinload(schemas.GroupORM.members))
@@ -162,7 +176,7 @@ class GroupRepository:
                 match k:
                     case "slug":
                         old_slug = schemas.NamespaceORM(slug=group.ltst_ns_slug.slug, ltst_ns_slug=group.ltst_ns_slug)
-                        group.ltst_ns_slug.slug = v
+                        group.ltst_ns_slug.slug = v.lower()
                         session.add(old_slug)
                     case "description":
                         group.description = v
@@ -219,7 +233,7 @@ class GroupRepository:
                 raise errors.Unauthorized(message="Users need to be authenticated in order to create groups.")
             creation_date = datetime.now(timezone.utc).replace(microsecond=0)
             member = schemas.GroupMemberORM(user.id, models.GroupRole.owner.value)
-            ns = schemas.NamespaceORM(slug=payload.slug)
+            ns = schemas.NamespaceORM(slug=payload.slug.lower())
             session.add(ns)
             group = schemas.GroupORM(
                 name=payload.name,
@@ -241,10 +255,11 @@ class GroupRepository:
                     )
             return group.dump()
 
-    async def get_namespaces(self, user: base_models.APIUser) -> List[models.Namespace]:
+    async def get_namespaces(
+        self, user: base_models.APIUser, pagination: PaginationRequest
+    ) -> Tuple[List[models.Namespace], int]:
         """Get all namespaces."""
         async with self.session_maker() as session, session.begin():
-            personal_ns_stmt = select(schemas.NamespaceORM).where(schemas.NamespaceORM.user_id == user.id)
             group_nss_stmt = (
                 select(schemas.NamespaceORM, schemas.GroupORM)
                 .join(
@@ -257,16 +272,27 @@ class GroupRepository:
                 .where(schemas.GroupORM.members.any(schemas.GroupMemberORM.user_id == user.id))
             )
             output = []
-            personal_ns = (await session.execute(personal_ns_stmt)).scalar_one_or_none()
-            if personal_ns:
-                output.append(personal_ns.dump())
-            group_nss = (await session.execute(group_nss_stmt)).tuples()
+            if pagination.page == 1:
+                personal_ns_stmt = select(schemas.NamespaceORM).where(schemas.NamespaceORM.user_id == user.id)
+                personal_ns = (await session.execute(personal_ns_stmt)).scalar_one_or_none()
+                if personal_ns:
+                    output.append(personal_ns.dump())
+            # NOTE: in the first page the personal namespace is added, so the offset and per page params are modified
+            group_per_page = pagination.per_page - len(output) if pagination.page == 1 else pagination.per_page
+            group_offset = 0 if pagination.page == 1 else pagination.offset - len(output)
+            group_nss = (await session.execute(group_nss_stmt.limit(group_per_page).offset(group_offset))).tuples()
+            group_count = (
+                await session.execute(group_nss_stmt.with_only_columns(func.count(schemas.NamespaceORM.id)))
+            ).scalar() or 0
+            group_count += len(output)
             for ns_orm, _ in group_nss:
                 output.append(ns_orm.dump())
-            return output
+            return output, group_count
 
-    async def get_namespace(self, user: base_models.APIUser, slug: str) -> models.Namespace | None:
-        """Get the namespace for a slug."""
+    async def get_ns_group_orm(
+        self, user: base_models.APIUser, slug: str
+    ) -> Tuple[schemas.NamespaceORM | None, schemas.GroupORM | None]:
+        """Get the namespace and group ORM for a slug."""
         async with self.session_maker() as session, session.begin():
             stmt = (
                 select(schemas.NamespaceORM, schemas.GroupORM)
@@ -284,10 +310,30 @@ class GroupRepository:
                         schemas.NamespaceORM.user_id == user.id,
                     )
                 )
-                .where(schemas.NamespaceORM.slug == slug)
+                .where(func.lower(schemas.NamespaceORM.slug) == func.lower(slug))
             )
             nss = (await session.execute(stmt)).all()
             if len(nss) != 1:
-                return None
-            ns, _ = nss[0].tuple()
-            return ns.dump()
+                return None, None
+            return nss[0].tuple()
+
+    async def get_namespace(self, user: base_models.APIUser, slug: str) -> models.Namespace | None:
+        """Get the namespace for a slug."""
+        ns, grp = await self.get_ns_group_orm(user, slug)
+        if not ns:
+            return None
+        ns_dump = ns.dump()
+        if grp:
+            ns_dump.name = grp.name
+            ns_dump.created_by = grp.created_by
+            ns_dump.creation_date = grp.creation_date
+        elif ns.user:
+            if ns.user.first_name or ns.user.last_name:
+                if ns.user.first_name:
+                    ns_dump.name = ns.user.first_name
+                if ns.user.last_name and not ns_dump.name:
+                    ns_dump.name = ns.user.last_name
+                elif ns.user.last_name and ns_dump.name:
+                    ns_dump.name += f" {ns.user.last_name}"
+            ns_dump.created_by = ns.user_id
+        return ns_dump

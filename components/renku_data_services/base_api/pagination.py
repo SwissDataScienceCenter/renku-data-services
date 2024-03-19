@@ -13,10 +13,17 @@ class PaginationRequest(NamedTuple):
     page: int
     per_page: int
 
+    def __post_init__(self):
+        if self.page > 2**63 - 1:
+            raise errors.ValidationError(message="Parameter 'page' is too large")
+
     @property
     def offset(self) -> int:
         """Calculate an item offset required for pagination."""
-        return (self.page - 1) * self.per_page
+        output = (self.page - 1) * self.per_page
+        if output > 2**63 - 1:
+            raise errors.ValidationError(message="Parameter 'page' is too large")
+        return output
 
 
 class PaginationResponse(NamedTuple):
@@ -39,7 +46,7 @@ class PaginationResponse(NamedTuple):
 
 def paginate(f: Callable[Concatenate[Request, ...], Awaitable[Tuple[Sequence[Any], int]]]):
     """
-    Deserializes the response to JSON and adds the required pagination headers to the response.
+    Serializes the response to JSON and adds the required pagination headers to the response.
 
     The handler should return first the list of items and then the total count from the DB.
     """

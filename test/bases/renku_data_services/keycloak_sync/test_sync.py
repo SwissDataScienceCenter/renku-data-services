@@ -47,26 +47,7 @@ def get_app_configs(db_config: DBConfig):
 def get_kc_users(updates: List[UserInfo]) -> List[Dict[str, Any]]:
     output: List[Dict[str, Any]] = []
     for update in updates:
-        output.append(
-            {
-                "id": update.id,
-                "createdTimestamp": int(datetime.utcnow().timestamp() * 1000),
-                "username": update.email,
-                "enabled": True,
-                "emailVerified": False,
-                "firstName": update.first_name,
-                "lastName": update.last_name,
-                "email": update.email,
-                "access": {
-                    "manageGroupMembership": True,
-                    "view": True,
-                    "mapRoles": True,
-                    "impersonate": True,
-                    "manage": True,
-                },
-                "bruteForceStatus": {"numFailures": 0, "disabled": False, "lastIPFailure": "n/a", "lastFailure": 0},
-            }
-        )
+        output.append(update._to_keycloak_dict())
     return output
 
 

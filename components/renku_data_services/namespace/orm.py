@@ -111,7 +111,7 @@ class NamespaceORM(BaseORM):
         default=None,
     )
     user_id: Mapped[Optional[str]] = mapped_column(ForeignKey(UserORM.keycloak_id), index=True, default=None)
-    user: Mapped[Optional[UserORM]] = relationship(init=False)
+    user: Mapped[Optional[UserORM]] = relationship(init=False, lazy="joined")
 
     @classmethod
     def load(cls, namespace: models.Namespace):
@@ -127,9 +127,7 @@ class NamespaceORM(BaseORM):
         else:
             return cls(
                 slug=namespace.slug,
-                ltst_ns_slug=cls(slug=namespace.latest_slug)
-                if namespace.latest_slug
-                else None,
+                ltst_ns_slug=cls(slug=namespace.latest_slug) if namespace.latest_slug else None,
             )
 
     def dump(self) -> models.Namespace:

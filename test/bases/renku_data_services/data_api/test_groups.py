@@ -54,7 +54,7 @@ def unauthorized_headers() -> Dict[str, str]:
 
 
 @pytest.mark.asyncio
-async def test_group_creation(sanic_client, user_headers):
+async def test_group_creation_basic(sanic_client, user_headers):
     payload = {
         "name": "Group1",
         "slug": "group-1",

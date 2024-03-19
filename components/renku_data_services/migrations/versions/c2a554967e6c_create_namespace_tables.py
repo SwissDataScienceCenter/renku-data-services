@@ -75,7 +75,7 @@ def upgrade() -> None:
         "project_slugs",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("slug", sa.String(length=99), nullable=False),
-        sa.Column("ltst_ns_slug_id", sa.String(length=26), nullable=True),
+        sa.Column("ltst_ns_slug_id", sa.String(length=26), nullable=False),
         sa.Column("ltst_prj_slug_id", sa.Integer(), nullable=True),
         sa.ForeignKeyConstraint(["ltst_ns_slug_id"], ["common.namespaces.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["ltst_prj_slug_id"], ["projects.project_slugs.id"], ondelete="CASCADE"),

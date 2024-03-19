@@ -43,22 +43,9 @@ class ProjectORM(BaseORM):
         cascade="save-update, merge, delete",
         lazy="selectin",
     )
-    creation_date: Mapped[Optional[datetime]] = mapped_column(
+    creation_date: Mapped[datetime] = mapped_column(
         "creation_date", DateTime(timezone=True), default=func.now(), nullable=False
     )
-
-    @classmethod
-    def load(cls, project: models.Project):
-        """Create ProjectORM from the project model."""
-        return cls(
-            name=project.name,
-            visibility=project.visibility,
-            created_by_id=project.created_by.id,
-            creation_date=project.creation_date,
-            repositories=[ProjectRepositoryORM(url=r) for r in project.repositories],
-            description=project.description,
-            ltst_prj_slug=ProjectSlug(project.slug),
-        )
 
     def dump(self) -> models.Project:
         """Create a project model from the ProjectORM."""
@@ -66,8 +53,9 @@ class ProjectORM(BaseORM):
             id=self.id,
             name=self.name,
             slug=self.ltst_prj_slug.slug,
+            namespace=self.ltst_prj_slug.ltst_ns_slug.slug,
             visibility=self.visibility,
-            created_by=models.Member(id=self.created_by_id),
+            created_by=self.created_by_id,
             creation_date=self.creation_date,
             repositories=[models.Repository(r.url) for r in self.repositories],
             description=self.description,
@@ -95,16 +83,14 @@ class ProjectSlug(BaseORM):
 
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
     slug: Mapped[str] = mapped_column(String(99), index=True, nullable=False)
-    ltst_ns_slug_id: Mapped[Optional[str]] = mapped_column(
+    ltst_ns_slug_id: Mapped[str] = mapped_column(
         ForeignKey(NamespaceORM.id, ondelete="CASCADE"),
-        nullable=True,
+        nullable=False,
         init=False,
         index=True,
-        default=None,
     )
-    ltst_ns_slug: Mapped[Optional[NamespaceORM]] = relationship(
+    ltst_ns_slug: Mapped[NamespaceORM] = relationship(
         lazy="joined",
-        default=None,
     )
     ltst_prj_slug_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("project_slugs.id", ondelete="CASCADE"),
