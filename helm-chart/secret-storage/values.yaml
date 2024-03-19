@@ -1,0 +1,4 @@
+secretStorage:
+  image:
+    repository: renku/secret-storage
+    tag: "0.1.0"

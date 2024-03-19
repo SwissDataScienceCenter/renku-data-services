@@ -56,7 +56,8 @@ from renku_data_services.utils.core import get_ssl_context, merge_api_specs
 
 
 @retry(stop=(stop_after_attempt(20) | stop_after_delay(300)), wait=wait_fixed(2), reraise=True)
-def _oidc_discovery(url: str, realm: str) -> Dict[str, Any]:
+def oidc_discovery(url: str, realm: str) -> Dict[str, Any]:
+    """Get OIDC configuration."""
     url = f"{url}/realms/{realm}/.well-known/openid-configuration"
     res = httpx.get(url, verify=get_ssl_context())
     if res.status_code == 200:
@@ -307,7 +308,7 @@ class Config:
                 raise errors.ConfigurationError(message="The Keycloak URL has to be specified.")
             keycloak_url = keycloak_url.rstrip("/")
             keycloak_realm = os.environ.get(f"{prefix}KEYCLOAK_REALM", "Renku")
-            oidc_disc_data = _oidc_discovery(keycloak_url, keycloak_realm)
+            oidc_disc_data = oidc_discovery(keycloak_url, keycloak_realm)
             jwks_url = oidc_disc_data.get("jwks_uri")
             if jwks_url is None:
                 raise errors.ConfigurationError(
