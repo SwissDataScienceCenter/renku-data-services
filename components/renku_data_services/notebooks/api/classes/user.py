@@ -31,6 +31,10 @@ class User(ABC):
                 f"Cannot get project: {namespace_project} for user: {self.username}, error: {e}"
             )
 
+    @property
+    def anonymous(self) -> bool:
+        return False
+
 
 class AnonymousUser(User):
     auth_header = "Renku-Auth-Anon-Id"
@@ -61,6 +65,10 @@ class AnonymousUser(User):
 
     def __str__(self):
         return f"<Anonymous user id:{self.username[:5]}****>"
+
+    @property
+    def anonymous(self) -> bool:
+        return True
 
 
 class RegisteredUser(User):

@@ -17,6 +17,8 @@
 # limitations under the License.
 """Kubernetes helper functions."""
 
+from __future__ import annotations
+
 from hashlib import md5
 from typing import Tuple
 
@@ -51,7 +53,7 @@ def make_server_name(
 ) -> str:
     """Form a unique server name.
 
-    This is used in naming all of the k8s resources created by amalthea.
+    This is used in naming all the k8s resources created by amalthea.
     """
     server_string_for_hashing = f"{safe_username}-{namespace}-{project}-{branch}-{commit_sha}"
     safe_username_lowercase = safe_username.lower()
@@ -73,6 +75,16 @@ def make_server_name(
     )
 
 
+def renku_2_make_server_name(safe_username: str, project_id: str, launcher_id: str) -> str:
+    """Form a unique server name."""
+    all_hash = md5(f"{safe_username}{project_id}{launcher_id}".encode()).hexdigest().lower()
+
+    # NOTE: A K8s object name can only contain lowercase alphanumeric characters, hyphens, or dots.
+    # Must be less than 253 characters long and start and end with an alphanumeric.
+    # NOTE: We use server name as a label value, so, server name must be less than 63 characters.
+    return f"renku-2-{all_hash[:40]}"
+
+
 def find_env_var(container: V1Container, env_name: str) -> Tuple[int, str] | None:
     """Find the index and value of a specific environment variable by name
     from a Kubernetes container."""
@@ -87,4 +99,4 @@ def find_env_var(container: V1Container, env_name: str) -> Tuple[int, str] | Non
         return None
     ind = env_var[0]
     val = env_var[1].value
-    return (ind, val)
+    return ind, val

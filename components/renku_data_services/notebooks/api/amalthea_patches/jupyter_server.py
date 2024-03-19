@@ -12,13 +12,15 @@ if TYPE_CHECKING:
 
 def env(server: "UserServer"):
     # amalthea always makes the jupyter server the first container in the statefulset
+    gl_project_path = server.gl_project_path or ""
+
     patch_list = [
         {
             "op": "add",
             "path": "/statefulset/spec/template/spec/containers/0/env/-",
             "value": {
                 "name": "RENKU_USERNAME",
-                "value": server._user.username,
+                "value": server.user.username,
             },
         },
         {
@@ -41,7 +43,7 @@ def env(server: "UserServer"):
             # relative to $HOME.
             "value": {
                 "name": "MOUNT_PATH",
-                "value": f"/work/{server.gl_project.path}",
+                "value": f"/work/{gl_project_path}",
             },
         },
         {
@@ -106,8 +108,8 @@ def image_pull_secret(server: "UserServer"):
             "auths": {
                 config.git.registry: {
                     "Username": "oauth2",
-                    "Password": server._user.git_token,
-                    "Email": server._user.gitlab_user.email,
+                    "Password": server.user.git_token,
+                    "Email": server.user.gitlab_user.email,
                 }
             }
         }

@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -5,7 +6,6 @@ from typing import TYPE_CHECKING
 from kubernetes import client
 
 from ...config import config
-from ..classes.user import RegisteredUser
 from .utils import get_certificates_volume_mounts
 
 if TYPE_CHECKING:
@@ -18,11 +18,25 @@ def git_clone(server: "UserServer"):
         etc_certs=True,
         read_only_etc_certs=True,
     )
+
+    gl_project_path = server.gl_project_path or ""
+
     env = [
-        {"name": "GIT_CLONE_MOUNT_PATH", "value": server.work_dir.absolute().as_posix()},
+        {
+            "name": "GIT_CLONE_REPOSITORIES",
+            "value": json.dumps(server.repositories),
+        },
+        {
+            "name": "GIT_CLONE_WORKSPACE_MOUNT_PATH",
+            "value": server.workspace_mount_path.absolute().as_posix(),
+        },
         {
             "name": "GIT_CLONE_REPOSITORY_URL",
-            "value": server.gl_project.http_url_to_repo,
+            "value": server.gl_project.http_url_to_repo if server.gl_project else None,
+        },
+        {
+            "name": "GIT_CLONE_MOUNT_PATH",
+            "value": (server.workspace_mount_path / gl_project_path).absolute().as_posix(),
         },
         {
             "name": "GIT_CLONE_LFS_AUTO_FETCH",
@@ -62,7 +76,7 @@ def git_clone(server: "UserServer"):
             "value": str(Path(etc_cert_volume_mount[0]["mountPath"]) / "ca-certificates.crt"),
         },
     ]
-    if type(server.user) is RegisteredUser:
+    if not server.user.anonymous:
         env += [
             {"name": "GIT_CLONE_USER__EMAIL", "value": server.user.gitlab_user.email},
             {

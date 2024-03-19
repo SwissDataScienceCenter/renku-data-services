@@ -84,28 +84,27 @@ class _NotebooksConfig:
         username_label = (
             self.session_get_endpoint_annotations.renku_annotation_prefix + "safe-username"
         )
-        if self.k8s.enabled:
-            renku_ns_client = NamespacedK8sClient(
-                self.k8s.renku_namespace,
+        renku_ns_client = NamespacedK8sClient(
+            self.k8s.renku_namespace,
+            self.amalthea.group,
+            self.amalthea.version,
+            self.amalthea.plural,
+        )
+        session_ns_client = None
+        if self.k8s.sessions_namespace:
+            session_ns_client = NamespacedK8sClient(
+                self.k8s.sessions_namespace,
                 self.amalthea.group,
                 self.amalthea.version,
                 self.amalthea.plural,
             )
-            session_ns_client = None
-            if self.k8s.sessions_namespace:
-                session_ns_client = NamespacedK8sClient(
-                    self.k8s.sessions_namespace,
-                    self.amalthea.group,
-                    self.amalthea.version,
-                    self.amalthea.plural,
-                )
-            js_cache = JsServerCache(self.amalthea.cache_url)
-            self.k8s.client = K8sClient(
-                js_cache=js_cache,
-                renku_ns_client=renku_ns_client,
-                session_ns_client=session_ns_client,
-                username_label=username_label,
-            )
+        js_cache = JsServerCache(self.amalthea.cache_url)
+        self.k8s.client = K8sClient(
+            js_cache=js_cache,
+            renku_ns_client=renku_ns_client,
+            session_ns_client=session_ns_client,
+            username_label=username_label,
+        )
         self._crc_validator = None
         self._storage_validator = None
 
@@ -147,8 +146,8 @@ def get_config(default_config: str) -> _NotebooksConfig:
     config = dataconf.multi.string(default_config)
     if config_file:
         config = config.file(config_file)
-    config: _NotebooksConfig = config.env("NB_").on(_NotebooksConfig)
-    return config
+    notebooks_config: _NotebooksConfig = config.env("NB_").on(_NotebooksConfig)
+    return notebooks_config
 
 
 default_config = """

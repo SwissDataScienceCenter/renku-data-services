@@ -60,11 +60,11 @@ def session_affinity(server: "UserServer"):
     )
     preferred_match_expressions: List[Dict[str, str]] = []
     required_match_expressions: List[Dict[str, str]] = []
-    for affintiy in server.server_options.node_affinities:
-        if affintiy.required_during_scheduling:
-            required_match_expressions.append(affintiy.json_match_expression())
+    for affinity in server.server_options.node_affinities:
+        if affinity.required_during_scheduling:
+            required_match_expressions.append(affinity.json_match_expression())
         else:
-            preferred_match_expressions.append(affintiy.json_match_expression())
+            preferred_match_expressions.append(affinity.json_match_expression())
     return [
         {
             "type": "application/json-patch+json",
@@ -142,12 +142,12 @@ def test(server: "UserServer"):
     order of containers in the amalthea manifests is what the notebook service expects.
     """
     patches = []
-    # NOTE: Only the first 1 or 2 containers come "included" from Amalthea, the rest are patched in
-    # This tests checks whether the expected number and order is received from Amalthea and
+    # NOTE: Only the first 1 or 2 containers come "included" from Amalthea, the rest are patched
+    # in. This test checks whether the expected number and order is received from Amalthea and
     # does not use all containers.
     container_names = (
         config.sessions.containers.registered[:2]
-        if type(server._user) is RegisteredUser
+        if isinstance(server.user, RegisteredUser)
         else config.sessions.containers.anonymous[:1]
     )
     for container_ind, container_name in enumerate(container_names):
@@ -158,7 +158,7 @@ def test(server: "UserServer"):
                     {
                         "op": "test",
                         "path": (
-                            "/statefulset/spec/template/spec" f"/containers/{container_ind}/name"
+                            f"/statefulset/spec/template/spec/containers/{container_ind}/name"
                         ),
                         "value": container_name,
                     }
@@ -170,7 +170,7 @@ def test(server: "UserServer"):
 
 def oidc_unverified_email(server: "UserServer"):
     patches = []
-    if type(server._user) is RegisteredUser:
+    if isinstance(server.user, RegisteredUser):
         # modify oauth2 proxy to accept users whose email has not been verified
         # usually enabled for dev purposes
         patches.append(

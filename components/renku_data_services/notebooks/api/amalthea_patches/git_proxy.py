@@ -1,7 +1,6 @@
 from typing import TYPE_CHECKING
 
 from ...config import config
-from ..classes.user import RegisteredUser
 from .utils import get_certificates_volume_mounts
 
 if TYPE_CHECKING:
@@ -15,6 +14,7 @@ def main(server: "UserServer"):
         read_only_etc_certs=True,
     )
     patches = []
+
     patches.append(
         {
             "type": "application/json-patch+json",
@@ -35,7 +35,7 @@ def main(server: "UserServer"):
                         "env": [
                             {
                                 "name": "REPOSITORY_URL",
-                                "value": server.gl_project.http_url_to_repo,
+                                "value": server.gl_project_url,
                             },
                             {
                                 "name": "GIT_PROXY_PORT",
@@ -47,19 +47,19 @@ def main(server: "UserServer"):
                             },
                             {
                                 "name": "GITLAB_OAUTH_TOKEN",
-                                "value": str(server._user.git_token),
+                                "value": str(server.user.git_token),
                             },
                             {
                                 "name": "GITLAB_OAUTH_TOKEN_EXPIRES_AT",
-                                "value": str(server._user.git_token_expires_at),
+                                "value": str(server.user.git_token_expires_at),
                             },
                             {
                                 "name": "RENKU_ACCESS_TOKEN",
-                                "value": str(server._user.access_token),
+                                "value": str(server.user.access_token),
                             },
                             {
                                 "name": "RENKU_REFRESH_TOKEN",
-                                "value": str(server._user.refresh_token),
+                                "value": str(server.user.refresh_token),
                             },
                             {
                                 "name": "RENKU_REALM",
@@ -79,9 +79,7 @@ def main(server: "UserServer"):
                             },
                             {
                                 "name": "ANONYMOUS_SESSION",
-                                "value": (
-                                    "false" if type(server._user) is RegisteredUser else "true"
-                                ),
+                                "value": "true" if server.user.anonymous else "false",
                             },
                         ],
                         "livenessProbe": {

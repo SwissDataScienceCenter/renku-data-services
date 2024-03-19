@@ -68,6 +68,10 @@ class _ServersGetEndpointAnnotations:
             "renku.io/resourceClassId",
             "jupyter.org/servername",
             "jupyter.org/username",
+            # Renku 2.0 annotations
+            "renku.io/renkuVersion",
+            "renku.io/launcherId",
+            "renku.io/projectId",
         ]
     )
 

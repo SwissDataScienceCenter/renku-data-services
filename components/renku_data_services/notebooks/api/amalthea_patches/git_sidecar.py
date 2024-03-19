@@ -13,6 +13,8 @@ def main(server: "UserServer"):
     if not isinstance(server.user, RegisteredUser):
         return []
 
+    gl_project_path = server.gl_project_path or "."
+
     patches = [
         {
             "type": "application/json-patch+json",
@@ -36,7 +38,7 @@ def main(server: "UserServer"):
                         "env": [
                             {
                                 "name": "GIT_RPC_MOUNT_PATH",
-                                "value": f"/work/{server.gl_project.path}",
+                                "value": f"/work/{gl_project_path}",
                             },
                             {
                                 "name": "GIT_RPC_PORT",
@@ -92,9 +94,9 @@ def main(server: "UserServer"):
                         },
                         "volumeMounts": [
                             {
-                                "mountPath": f"/work/{server.gl_project.path}/",
+                                "mountPath": f"/work/{gl_project_path}/",
                                 "name": "workspace",
-                                "subPath": f"{server.gl_project.path}/",
+                                "subPath": f"{gl_project_path}",
                             }
                         ],
                         "livenessProbe": {
