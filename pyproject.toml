@@ -80,6 +80,7 @@ pytest-postgresql = "^5.0.0"
 types-urllib3 = "^1.26.25.14"
 pyavro-gen = "^0.3.3"
 fakeredis = "^2.21.1"
+debugpy = "^1.8.1"
 
 [build-system]
 requires = ["poetry-core"]
@@ -160,7 +161,7 @@ filterwarnings = [
   "ignore:<class 'pytest_black.BlackItem'> is not using a cooperative constructor:pytest.PytestDeprecationWarning",
   "ignore:distutils Version classes are deprecated. Use packaging.version instead:DeprecationWarning",
 ]
-postgresql_host = "db"
+postgresql_host = "localhost"
 postgresql_user = "renku"
 postgresql_password = "renku"
 

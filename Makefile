@@ -87,3 +87,6 @@ pre_commit_checks:
 
 run:
 	DUMMY_STORES=true poetry run python bases/renku_data_services/data_api/main.py --dev --debug
+
+debug:
+	DUMMY_STORES=true poetry run python -Xfrozen_modules=off -m debugpy --listen 0.0.0.0:5678 --wait-for-client -m sanic renku_data_services.data_api.main:create_app --debug --single-process --port 8000 --host 0.0.0.0
