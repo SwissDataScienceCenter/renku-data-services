@@ -41,7 +41,9 @@ class EventRepository:
 
         async with self.session_maker() as session:
             # we only consider events older than 5 seconds so we don't accidentally interfere with an ongoing operation
-            stmt = select(schemas.EventORM).where(schemas.EventORM.timestamp < datetime.utcnow() - timedelta(seconds=5))
+            stmt = select(schemas.EventORM).where(
+                schemas.EventORM.timestamp_utc < datetime.utcnow() - timedelta(seconds=5)
+            )
             result = await session.execute(stmt)
             events_orm = result.scalars().all()
 

@@ -32,7 +32,7 @@ class EventORM(BaseORM):
     id: Mapped[int] = mapped_column(primary_key=True, default=None, init=False)
     """Unique id of the event."""
 
-    timestamp: Mapped[datetime] = mapped_column("timestamp", DateTime())
+    timestamp_utc: Mapped[datetime] = mapped_column("timestamp_utc", DateTime(timezone=False), nullable=False)
 
     queue: Mapped[str] = mapped_column("queue", String())
     """The name of the queue to send the event to."""
