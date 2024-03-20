@@ -178,7 +178,8 @@ class GroupRepository:
                         new_slug_str = v.lower()
                         if new_slug_str == slug.lower():
                             # The slug has not changed at all
-                            break
+                            # NOTE that the continue will work only because of the enclosing loop over the payload
+                            continue
                         new_slug_exists = (
                             await session.execute(
                                 select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == new_slug_str)
