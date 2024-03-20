@@ -175,8 +175,37 @@ class GroupRepository:
             for k, v in payload.items():
                 match k:
                     case "slug":
-                        old_slug = schemas.NamespaceORM(slug=group.ltst_ns_slug.slug, ltst_ns_slug=group.ltst_ns_slug)
-                        group.ltst_ns_slug.slug = v.lower()
+                        new_slug_str = v.lower()
+                        if new_slug_str == slug.lower():
+                            # The slug has not changed at all
+                            break
+                        new_slug_exists = (
+                            await session.execute(
+                                select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == new_slug_str)
+                            )
+                        ).scalar_one_or_none()
+                        if new_slug_exists and not new_slug_exists.ltst_ns_slug:
+                            # The slug exists in the database and it is marked as the latest/current slug
+                            # for a group or a user namespace
+                            raise errors.ValidationError(
+                                message=f"The slug {v} is already in use, please try a different one"
+                            )
+                        old_slug_str = group.ltst_ns_slug.slug.lower()
+                        if new_slug_exists and new_slug_exists.ltst_ns_slug:
+                            # NOTE: The new slug exists from another project or user, but this slug has already
+                            # been replaced in this other project by a newer slug so this means we can reclaim the
+                            # the slug from the other group or user to use it in this group
+                            new_slug_exists.ltst_ns_slug = None
+                            # Make sure the slug does not point to another user
+                            new_slug_exists.user_id = None
+                            new_slug_exists.user = None
+                            # Assign the slug to the requested group
+                            group.ltst_ns_slug = new_slug_exists
+                        else:
+                            # The slug is brand new so we replace the value of the latest slug with it
+                            # and then make a new version of the old slug that points to the latest version
+                            group.ltst_ns_slug.slug = new_slug_str
+                        old_slug = schemas.NamespaceORM(slug=old_slug_str, ltst_ns_slug=group.ltst_ns_slug)
                         session.add(old_slug)
                     case "description":
                         group.description = v
@@ -197,12 +226,17 @@ class GroupRepository:
                 raise errors.Unauthorized(message="Only the owner and admins can modify groups")
             output = []
             for new_member in payload.root:
-                new_member_orm = schemas.GroupMemberORM(
-                    user_id=new_member.id,
-                    role=models.GroupRole.from_str(new_member.role.value).value,
-                )
-                group.members[new_member.id] = new_member_orm
-                output.append(new_member_orm.dump())
+                role = models.GroupRole.from_str(new_member.role.value)
+                if new_member.id in group.members:
+                    # The member exists in the group already, check if properties should be updated
+                    if group.members[new_member.id].role != role.value:
+                        group.members[new_member.id].role = role.value
+                    output.append(group.members[new_member.id].dump())
+                else:
+                    # The memeber does not exist in the group at all, make a new entry and add it to the group
+                    member_orm = schemas.GroupMemberORM(user_id=new_member.id, role=role)
+                    group.members[new_member.id] = member_orm
+                    output.append(member_orm.dump())
             return output
 
     async def delete_group(self, user: base_models.APIUser, slug: str):

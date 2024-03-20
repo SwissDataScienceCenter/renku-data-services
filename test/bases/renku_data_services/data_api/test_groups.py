@@ -15,10 +15,20 @@ from renku_data_services.users.models import UserInfo
 
 
 @pytest.fixture
-def users() -> List[UserInfo]:
+def admin_user() -> UserInfo:
+    return UserInfo("admin", "Admin", "Doe", "admin.doe@gmail.com")
+
+
+@pytest.fixture
+def regular_user() -> UserInfo:
+    return UserInfo("user", "User", "Doe", "user.doe@gmail.com")
+
+
+@pytest.fixture
+def users(regular_user, admin_user) -> List[UserInfo]:
     return [
-        UserInfo("admin", "Admin", "Doe", "admin.doe@gmail.com"),
-        UserInfo("user", "User", "Doe", "user.doe@gmail.com"),
+        regular_user,
+        admin_user,
         UserInfo("member-1", "Member-1", "Doe", "member-1.doe@gmail.com"),
         UserInfo("member-2", "Member-2", "Doe", "member-2.doe@gmail.com"),
     ]
@@ -30,20 +40,25 @@ async def sanic_client(app_config: Config, users: List[UserInfo]) -> SanicASGITe
     app = Sanic(app_config.app_name)
     app = register_all_handlers(app, app_config)
     await app_config.kc_user_repo.initialize(app_config.kc_api)
+    await app_config.group_repo.generate_user_namespaces()
     return SanicASGITestClient(app)
 
 
 @pytest.fixture
-def admin_headers() -> Dict[str, str]:
+def admin_headers(admin_user) -> Dict[str, str]:
     """Authentication headers for an admin user."""
-    access_token = json.dumps({"is_admin": True, "id": "admin", "name": "Admin User"})
+    access_token = json.dumps(
+        {"is_admin": True, "id": admin_user.id, "name": f"{admin_user.first_name} {admin_user.last_name}"}
+    )
     return {"Authorization": f"Bearer {access_token}"}
 
 
 @pytest.fixture
-def user_headers() -> Dict[str, str]:
+def user_headers(regular_user: UserInfo) -> Dict[str, str]:
     """Authentication headers for a normal user."""
-    access_token = json.dumps({"is_admin": False, "id": "user", "name": "Normal User"})
+    access_token = json.dumps(
+        {"is_admin": False, "id": regular_user.id, "name": f"{regular_user.first_name} {regular_user.last_name}"}
+    )
     return {"Authorization": f"Bearer {access_token}"}
 
 
@@ -73,15 +88,26 @@ async def test_group_creation_basic(sanic_client, user_headers):
 
     _, response = await sanic_client.get("/api/data/groups", headers=user_headers)
     res_json = response.json
-    print(response.text)
     assert response.status_code == 200
     assert len(res_json) == 1
     assert res_json[0]["name"] == payload["name"]
 
+    payload = {
+        "name": "New group",
+        "slug": "group-1",
+        "description": "Try to reuse a taken slug",
+    }
+    _, response = await sanic_client.post("/api/data/groups", headers=user_headers, json=payload)
+    assert response.status_code == 422, response.text
+
 
 @pytest.mark.asyncio
-async def test_group_pagination(sanic_client, user_headers):
-    for i in range(15):
+async def test_group_pagination(sanic_client, user_headers, admin_headers):
+    for i in range(5):
+        payload = {"name": f"group{i}", "slug": f"group{i}"}
+        _, response = await sanic_client.post("/api/data/groups", headers=admin_headers, json=payload)
+        assert response.status_code == 201
+    for i in range(5, 15):
         payload = {"name": f"group{i}", "slug": f"group{i}"}
         _, response = await sanic_client.post("/api/data/groups", headers=user_headers, json=payload)
         assert response.status_code == 201
@@ -97,10 +123,22 @@ async def test_group_pagination(sanic_client, user_headers):
     assert res1_json[-1]["name"] == "group11"
     assert res2_json[0]["name"] == "group12"
     assert res2_json[-1]["name"] == "group14"
+    _, res3 = await sanic_client.get("/api/data/groups", headers=admin_headers, params={"per_page": 20, "page": 1})
+    res3_json = res3.json
+    assert len(res3_json) == 15
+    assert res3_json[0]["name"] == "group0"
+    assert res3_json[-1]["name"] == "group14"
 
 
 @pytest.mark.asyncio
 async def test_group_patch_delete(sanic_client, user_headers):
+    payload = {
+        "name": "GroupOther",
+        "slug": "group-other",
+        "description": "Group Other Description",
+    }
+    _, response = await sanic_client.post("/api/data/groups", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
     payload = {
         "name": "Group1",
         "slug": "group-1",
@@ -123,6 +161,9 @@ async def test_group_patch_delete(sanic_client, user_headers):
     assert res_json["name"] == new_payload["name"]
     assert res_json["slug"] == new_payload["slug"]
     assert res_json["description"] == new_payload["description"]
+    new_payload = {"slug": "group-other"}
+    _, response = await sanic_client.patch("/api/data/groups/group-1", headers=user_headers, json=new_payload)
+    assert response.status_code == 422
     _, response = await sanic_client.delete("/api/data/groups/group-1", headers=user_headers)
     assert response.status_code == 204
     _, response = await sanic_client.get("/api/data/groups/group-1", headers=user_headers)
