@@ -1,0 +1,508 @@
+openapi: 3.0.2
+info:
+  title: Renku 2.0 Environment and Session Management Service
+  description: |
+    Service that allows creating, deleting, and managing Renku 2.0 environments
+    and sessions.
+  version: 0.1.0
+servers:
+  - url: /api/data
+  - url: /ui-server/api/data
+paths:
+  /environments:
+    get:
+      summary: Get all environments
+      responses:
+        "200":
+          description: List of environments
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvironmentList"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - environments
+    post:
+      summary: Create a new session environment
+      description: Requires admin permissions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnvironmentPost"
+      responses:
+        "201":
+          description: The session environment was created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Environment"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - environments
+  /environments/{environment_id}:
+    get:
+      summary: Get a session environment
+      parameters:
+        - in: path
+          name: environment_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The session environment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Environment"
+        "404":
+          description: The session environment does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - environments
+    patch:
+      summary: Update specific fields of an existing session environment
+      description: Requires admin permissions
+      parameters:
+        - in: path
+          name: environment_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnvironmentPatch"
+      responses:
+        "200":
+          description: The patched session environment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Environment"
+        "404":
+          description: The session environment does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - environments
+    delete:
+      summary: Remove a session environment
+      parameters:
+        - in: path
+          name: environment_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: The session environment was removed or did not exist in the first place
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - environments
+  /session_launchers:
+    get:
+      summary: Get all user's session launchers
+      responses:
+        "200":
+          description: List of sessions launchers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionLaunchersList"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_launchers
+    post:
+      summary: Create a new session launcher
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionLauncherPost"
+      responses:
+        "201":
+          description: The session launcher was created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionLauncher"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_launchers
+  /session_launchers/{launcher_id}:
+    get:
+      summary: Get a session launcher
+      parameters:
+        - in: path
+          name: launcher_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The session launcher
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionLauncher"
+        "404":
+          description: The session launcher does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_launchers
+    patch:
+      summary: Update specific fields of an existing session
+      parameters:
+        - in: path
+          name: launcher_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionLauncherPatch"
+      responses:
+        "200":
+          description: The patched session launcher
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionLauncher"
+        "404":
+          description: The session launcher does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_launchers
+    delete:
+      summary: Remove a session launcher
+      parameters:
+        - in: path
+          name: launcher_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: The session was removed or did not exist in the first place
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_launchers
+  /session_launchers/{launcher_id}/start:
+    post:
+      summary: Use a session launcher to start a session
+      parameters:
+        - in: path
+          name: launcher_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionStart"
+      responses:
+        "201":
+          description: The started session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - sessions
+  /projects/{project_id}/session_launchers:
+    get:
+      summary: Get a project's session launchers
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of sessions launchers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionLaunchersList"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_launchers
+components:
+  schemas:
+    EnvironmentList:
+      description: A list of session environments
+      type: array
+      items:
+        $ref: "#/components/schemas/Environment"
+    Environment:
+      description: A Renku 2.0 session environment
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        name:
+          $ref: "#/components/schemas/Name"
+        creation_date:
+          $ref: "#/components/schemas/CreationDate"
+        description:
+          $ref: "#/components/schemas/Description"
+        container_image:
+          $ref: "#/components/schemas/ContainerImage"
+        default_url:
+          $ref: "#/components/schemas/DefaultUrl"
+      required:
+        - id
+        - name
+        - creation_date
+        - container_image
+      example:
+        id: 01AN4Z79ZS6XX96588FDX0H099
+        name: JupyterLab environment
+        creation_date: "2023-11-01T17:32:28Z"
+        description: JupyterLab session environment
+        container_image: renku-jupyter:latest
+        default_url: "/lab"
+    EnvironmentPost:
+      description: Data required to create a session environment
+      type: object
+      properties:
+        name:
+          $ref: "#/components/schemas/Name"
+        description:
+          $ref: "#/components/schemas/Description"
+        container_image:
+          $ref: "#/components/schemas/ContainerImage"
+        default_url:
+          $ref: "#/components/schemas/DefaultUrl"
+      required:
+        - name
+        - container_image
+    EnvironmentPatch:
+      type: object
+      description: Update a session environment
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/Name"
+        description:
+          $ref: "#/components/schemas/Description"
+        container_image:
+          $ref: "#/components/schemas/ContainerImage"
+        default_url:
+          $ref: "#/components/schemas/DefaultUrl"
+    SessionLaunchersList:
+      description: A list of Renku session launchers
+      type: array
+      items:
+        $ref: "#/components/schemas/SessionLauncher"
+      minItems: 0
+    SessionLauncher:
+      description: A Renku 2.0 session definition and metadata
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        project_id:
+          $ref: "#/components/schemas/Ulid"
+        name:
+          $ref: "#/components/schemas/Name"
+        creation_date:
+          $ref: "#/components/schemas/CreationDate"
+        description:
+          $ref: "#/components/schemas/Description"
+        environment_kind:
+          $ref: "#/components/schemas/EnvironmentKind"
+        environment_id:
+          $ref: "#/components/schemas/EnvironmentId"
+        container_image:
+          $ref: "#/components/schemas/ContainerImage"
+        default_url:
+          $ref: "#/components/schemas/DefaultUrl"
+      required:
+        - id
+        - project_id
+        - name
+        - creation_date
+        - environment_kind
+      example:
+        id: 01AN4Z79ZS5XN0F25N3DB94T4R
+        project_id: 01AN4Z79ZS5XN0F25N3DB94T4R
+        name: Renku R Session
+        creation_date: "2023-11-01T17:32:28Z"
+        description: R compute session
+        environment_kind: global_environment
+        environment_id: 01AN4Z79ZS6XX96588FDX0H099
+    SessionLauncherPost:
+      description: Data required to create a session launcher
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/Name"
+        project_id:
+          $ref: "#/components/schemas/Ulid"
+        description:
+          $ref: "#/components/schemas/Description"
+        environment_kind:
+          $ref: "#/components/schemas/EnvironmentKind"
+        environment_id:
+          $ref: "#/components/schemas/EnvironmentId"
+        container_image:
+          $ref: "#/components/schemas/ContainerImage"
+        default_url:
+          $ref: "#/components/schemas/DefaultUrl"
+      required:
+        - name
+        - project_id
+        - environment_kind
+    SessionLauncherPatch:
+      type: object
+      description: Update a session launcher
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/Name"
+        description:
+          $ref: "#/components/schemas/Description"
+        environment_kind:
+          $ref: "#/components/schemas/EnvironmentKind"
+        environment_id:
+          $ref: "#/components/schemas/EnvironmentId"
+        container_image:
+          $ref: "#/components/schemas/ContainerImage"
+        default_url:
+          $ref: "#/components/schemas/DefaultUrl"
+    SessionStart:
+      type: object
+      description: Start a session
+      additionalProperties: true
+      properties:
+        resource_class_id:
+          $ref: "#/components/schemas/ResourceClassId"
+    Ulid:
+      description: ULID identifier
+      type: string
+      minLength: 26
+      maxLength: 26
+      pattern: "^[A-Z0-9]{26}$" # This is case-insensitive
+      format: ulid
+    Name:
+      description: Renku session name
+      type: string
+      minLength: 1
+      maxLength: 99
+      example: My Renku Session :)
+    EnvironmentKind:
+      description: Kind of environment to use
+      type: string
+      enum:
+        - global_environment
+        - container_image
+      example: container_image
+    EnvironmentId:
+      description: Id of the environment to use
+      type: string
+      minLength: 1
+      example: 01AN4Z79ZS6XX96588FDX0H099
+    CreationDate:
+      description: The date and time the session was created (time is always in UTC)
+      type: string
+      format: date-time
+      example: "2023-11-01T17:32:28Z"
+    Description:
+      description: A description for session
+      type: string
+      maxLength: 500
+    ContainerImage:
+      description: A container image
+      type: string
+      maxLength: 500
+      example: renku/renkulab-py:3.10-0.18.1
+    DefaultUrl:
+      description: The default path to open in a session
+      type: string
+      maxLength: 200
+      example: "/lab"
+    ResourceClassId:
+      description: The identifier of a resource class
+      type: integer
+      default: null
+      nullable: true
+    Session:
+      description: A Renku session
+      type: object
+      additionalProperties: true
+      properties:
+        name:
+          $ref: "#/components/schemas/Name"
+        url:
+          type: string
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: integer
+              minimum: 0
+              exclusiveMinimum: true
+              example: 1404
+            detail:
+              type: string
+              example: A more detailed optional message showing what the problem was
+            message:
+              type: string
+              example: Something went wrong - please try again later
+          required:
+            - code
+            - message
+      required:
+        - error
+  responses:
+    Error:
+      description: The schema for all 4xx and 5xx responses
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
