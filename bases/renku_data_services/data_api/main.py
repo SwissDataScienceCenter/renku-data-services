@@ -1,4 +1,5 @@
 """The entrypoint for the data service application."""
+
 import argparse
 import asyncio
 from os import environ

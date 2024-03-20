@@ -18,6 +18,8 @@ packages = [
   { include = "renku_data_services/crc", from = "../../components" },
   { include = "renku_data_services/authz", from = "../../components" },
   { include = "renku_data_services/project", from = "../../components" },
+  { include = "renku_data_services/session_migrations", from = "../../components" },
+  { include = "renku_data_services/session", from = "../../components" },
   { include = "renku_data_services/base_models", from = "../../components" },
   { include = "renku_data_services/utils", from = "../../components" },
   { include = "renku_data_services/users", from = "../../components" },
@@ -25,6 +27,16 @@ packages = [
   { include = "renku_data_services/message_queue", from = "../../components" },
   { include = "renku_data_services/migrations", from = "../../components" },
   { include = "renku_data_services/namespace", from = "../../components" },
+  { include = "renku_data_services/group", from = "../../components" },
+  # Note: poetry poly does not detect the migrations as dependencies, but they are. Don't remove these!
+  { include = "renku_data_services/storage_migrations", from = "../../components" },
+  { include = "renku_data_services/crc_migrations", from = "../../components" },
+  { include = "renku_data_services/user_preferences_migrations", from = "../../components" },
+  { include = "renku_data_services/users_migrations", from = "../../components" },
+  { include = "renku_data_services/authz_migrations", from = "../../components" },
+  { include = "renku_data_services/events_migrations", from = "../../components" },
+  { include = "renku_data_services/project_migrations", from = "../../components" },
+  { include = "renku_data_services/session_migrations", from = "../../components" },
 ]
 
 [tool.poetry.dependencies]

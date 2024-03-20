@@ -75,6 +75,14 @@ class Project(BaseAPISpec):
         example="my-renku-project",
         max_length=99,
         min_length=1,
+        pattern="^[a-z0-9]+[a-z0-9._-]*$",
+    )
+    slug: str = Field(
+        ...,
+        description="A command-line friendly name for a project or namespace",
+        example="my-renku-project",
+        max_length=99,
+        min_length=1,
         pattern="^(?!.*\\.git$|.*\\.atom$|.*[\\-._][\\-._].*)[a-zA-Z0-9][a-zA-Z0-9\\-_.]*$",
     )
     slug: str = Field(
@@ -111,6 +119,14 @@ class ProjectPost(BaseAPISpec):
     name: str = Field(..., description="Renku project name", example="My Renku Project :)", max_length=99, min_length=1)
     namespace: str = Field(
         ...,
+        description="A command-line friendly name for a project or namespace",
+        example="my-renku-project",
+        max_length=99,
+        min_length=1,
+        pattern="^[a-z0-9]+[a-z0-9._-]*$",
+    )
+    slug: Optional[str] = Field(
+        None,
         description="A command-line friendly name for a project or namespace",
         example="my-renku-project",
         max_length=99,

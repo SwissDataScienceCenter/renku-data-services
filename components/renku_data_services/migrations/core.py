@@ -42,6 +42,12 @@ class ProjectBaseORM(MappedAsDataclass, DeclarativeBase):
     metadata = MetaData(schema="projects")
 
 
+class SessionBaseORM(MappedAsDataclass, DeclarativeBase):
+    """Base class for all session ORM classes."""
+
+    metadata = MetaData(schema="sessions")
+
+
 class UserBaseORM(MappedAsDataclass, DeclarativeBase):
     """Base class for all users ORM classes."""
 

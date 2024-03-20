@@ -3,7 +3,6 @@ import asyncio
 import logging
 
 from renku_data_services.keycloak_sync.config import SyncConfig
-from renku_data_services.migrations.core import run_migrations_for_app
 
 logging.basicConfig(level=logging.INFO)
 

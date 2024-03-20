@@ -33,6 +33,12 @@ packages = [
   { include = "renku_data_services/events_migrations", from = "components" },
   { include = "renku_data_services/message_queue", from = "components" },
   { include = "renku_data_services/namespace", from = "components" },
+  { include = "renku_data_services/group", from = "components" },
+  { include = "renku_data_services/group_migrations", from = "components" },
+  { include = "renku_data_services/session", from = "components" },
+  { include = "renku_data_services/session_migrations", from = "components" },
+  { include = "renku_data_services/events_migrations", from = "components" },
+  { include = "renku_data_services/message_queue", from = "components" },
 ]
 
 [tool.poetry.dependencies]
@@ -96,6 +102,7 @@ exclude = ".*/avro_models/.*"
 add_ignore = ["D105", "D107", "D202", "D401"]
 match = '^(?!test_|apispec).*\.py'
 match_dir = '^(?!^test$|^crc_migrations$|^events_migrations$|^storage_migrations$|^user_preferences_migrations$|^project_migrations$|^authz_migrations$|^users_migrations$|^versions$|^avro_models).*'
+match_dir = '^(?!^test$|^crc_migrations$|^events_migrations$|^storage_migrations$|^user_preferences_migrations$|^project_migrations$|^session_migrations$|^authz_migrations$|^users_migrations$|^group_migrations$|^versions$|^avro_models).*'
 
 [tool.bandit]
 skips = ["B101", "B603", "B607", "B404"]
@@ -142,13 +149,17 @@ exclude = [
   "components/renku_data_services/crc_migrations/versions",
   "components/renku_data_services/authz_migrations/versions",
   "components/renku_data_services/project_migrations/versions",
+  "components/renku_data_services/group_migrations/versions",
+  "components/renku_data_services/session_migrations/versions",
   "components/renku_data_services/events_migrations/versions",
   "components/renku_data_services/migrations/versions",
   "components/renku_data_services/crc/apispec.py",
   "components/renku_data_services/project/apispec.py",
+  "components/renku_data_services/session/apispec.py",
   "components/renku_data_services/storage/apispec.py",
   "components/renku_data_services/users/apispec.py",
   "components/renku_data_services/user_preferences/apispec.py",
+  "components/renku_data_services/group/apispec.py",
   "components/renku_data_services/message_queue/avro_models/",
 ]
 
@@ -185,6 +196,7 @@ module = [
   "renku_data_services.crc.apispec",
   "renku_data_services.storage.apispec",
   "renku_data_services.project.apispec",
+  "renku_data_services.session.apispec",
   "renku_data_services.user_preferences.apispec",
   "renku_data_services.users.apispec",
   "renku_data_services.data_api.error_handler",
