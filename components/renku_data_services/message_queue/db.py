@@ -44,8 +44,8 @@ class EventRepository:
             stmt = select(schemas.EventORM).where(
                 schemas.EventORM.timestamp_utc < datetime.utcnow() - timedelta(seconds=5)
             )
-            result = await session.execute(stmt)
-            events_orm = result.scalars().all()
+            result = await session.scalars(stmt)
+            events_orm = result.all()
 
             num_events = len(events_orm)
             if num_events == 0:
