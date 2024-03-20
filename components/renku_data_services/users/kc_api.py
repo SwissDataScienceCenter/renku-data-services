@@ -1,4 +1,5 @@
 """Keycloak API."""
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Dict, Iterable, List, Protocol, cast
@@ -69,30 +70,41 @@ class KeycloakAPI:
         )
         self._http_client = session
 
-    def get_users(self) -> Iterable[Dict[str, Any]]:
-        """Get all users from Keycloak."""
-        url = self.keycloak_url + f"/admin/realms/{self.realm}/users"
-        query_args = {
-            "max": self.result_per_request_limit + 1,
-        }
+    def _paginated_requests_iter(self, path: str, query_args: Dict[str, Any] | None = None) -> Iterable[Dict[str, Any]]:
+        url = self.keycloak_url + path
+        if query_args:
+            req_query_args = deepcopy(query_args)
+        else:
+            req_query_args = {}
+        # Request one extra item to see if there is a need to request the next page or not
+        req_query_args["max"] = self.result_per_request_limit + 1
         first = 0
         while True:
-            res = self._http_client.get(url, params={**query_args, "first": first})
+            res = self._http_client.get(url, params={**req_query_args, "first": first})
             output = res.json()
             if not isinstance(output, list):
-                raise ValueError("Received unexpected response from Keycloak for users")
+                raise ValueError(f"Received unexpected response from Keycloak for path {path}")
             output = cast(List[Dict[str, Any]], output)
+            # Do not display the extra item unless we are on the last page
             yield from output[:-1]
             if len(output) < self.result_per_request_limit + 1:
+                # Since we got less elements than requested there are no more pages to request
+                # Display the last element which was omitted above
                 yield output[-1]
                 return
+            # Increment the offset so that the last (extra item) of the previous page is now first
             first += self.result_per_request_limit
+
+    def get_users(self) -> Iterable[Dict[str, Any]]:
+        """Get all users from Keycloak."""
+        path = f"/admin/realms/{self.realm}/users"
+        yield from self._paginated_requests_iter(path)
 
     def get_user_events(
         self, start_date: date, end_date: date | None = None, event_types: List[KeycloakEvent] | None = None
     ) -> Iterable[Dict[str, Any]]:
         """Get user events from Keycloak."""
-        url = self.keycloak_url + f"/admin/realms/{self.realm}/events"
+        path = f"/admin/realms/{self.realm}/events"
         query_event_types = event_types or [
             KeycloakEvent.UPDATE_PROFILE,
             KeycloakEvent.REGISTER,
@@ -100,28 +112,16 @@ class KeycloakAPI:
         query_args = {
             "dateFrom": start_date.isoformat(),
             "type": [e.value for e in query_event_types],
-            "max": self.result_per_request_limit + 1,
         }
         if end_date:
             query_args["dateTo"] = end_date.isoformat()
-        first = 0
-        while True:
-            res = self._http_client.get(url, params={**query_args, "first": first})
-            output = res.json()
-            if not isinstance(output, list):
-                raise ValueError("Received unexpected response from Keycloak for events")
-            output = cast(List[Dict[str, Any]], output)
-            yield from output[:-1]
-            if len(output) < self.result_per_request_limit + 1:
-                yield output[-1]
-                return
-            first += self.result_per_request_limit
+        yield from self._paginated_requests_iter(path, query_args)
 
     def get_admin_events(
         self, start_date: date, end_date: date | None = None, event_types: List[KeycloakAdminEvent] | None = None
     ) -> Iterable[Dict[str, Any]]:
         """Get admin events from Keycloak."""
-        url = self.keycloak_url + f"/admin/realms/{self.realm}/admin-events"
+        path = f"/admin/realms/{self.realm}/admin-events"
         query_event_types = event_types or [
             KeycloakAdminEvent.CREATE,
             KeycloakAdminEvent.UPDATE,
@@ -130,20 +130,8 @@ class KeycloakAPI:
         query_args = {
             "dateFrom": start_date.isoformat(),
             "operationTypes": [e.value for e in query_event_types],
-            "max": self.result_per_request_limit + 1,
             "resourceTypes": "USER",
         }
         if end_date:
             query_args["dateTo"] = end_date.isoformat()
-        first = 0
-        while True:
-            res = self._http_client.get(url, params={**query_args, "first": first})
-            output = res.json()
-            if not isinstance(output, list):
-                raise ValueError("Received unexpected response from Keycloak for events")
-            output = cast(List[Dict[str, Any]], output)
-            yield from output[:-1]
-            if len(output) < self.result_per_request_limit + 1:
-                yield output[-1]
-                return
-            first += self.result_per_request_limit
+        yield from self._paginated_requests_iter(path, query_args)
