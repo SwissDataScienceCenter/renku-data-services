@@ -81,6 +81,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         url_prefix=url_prefix,
         authenticator=config.authenticator,
         group_repo=config.group_repo,
+    )
     session_environments = EnvironmentsBP(
         name="session_environments",
         url_prefix=url_prefix,

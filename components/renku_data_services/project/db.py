@@ -184,7 +184,7 @@ class ProjectRepository:
             case _:
                 raise NotImplementedError(f"unknown visibility:{project.visibility}")
         async with self.message_queue.project_updated_message(
-            name=project.name,
+            name=payload.get("name", project.name),
             slug=project.ltst_prj_slug.slug,
             visibility=vis,
             id=project.id,

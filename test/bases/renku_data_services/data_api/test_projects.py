@@ -2,14 +2,6 @@
 
 import json
 import time
-from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_authorization_added import (
-    ProjectAuthorizationAdded,
-)
-from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_authorization_removed import (
-    ProjectAuthorizationRemoved,
-)
-from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_removed import ProjectRemoved
-from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_updated import ProjectUpdated
 from test.bases.renku_data_services.keycloak_sync.test_sync import get_kc_users
 from typing import Any, Dict, List
 
@@ -19,7 +11,15 @@ from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 
 from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.header import Header
+from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_authorization_added import (
+    ProjectAuthorizationAdded,
+)
+from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_authorization_removed import (
+    ProjectAuthorizationRemoved,
+)
 from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_created import ProjectCreated
+from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_removed import ProjectRemoved
+from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_updated import ProjectUpdated
 from renku_data_services.app_config import Config
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.message_queue.redis_queue import deserialize_binary
@@ -526,12 +526,12 @@ async def test_add_project_members(create_project, sanic_client, user_headers, a
     event = events[1][1]
     auth_event = deserialize_binary(event[b"payload"], ProjectAuthorizationAdded)
     assert auth_event.projectId == project_id
-    assert auth_event.userId == members[0]["member"]["id"]
+    assert auth_event.userId == members[0]["id"]
     assert auth_event.role.value.lower() == members[0]["role"]
     event = events[2][1]
     auth_event = deserialize_binary(event[b"payload"], ProjectAuthorizationAdded)
     assert auth_event.projectId == project_id
-    assert auth_event.userId == members[1]["member"]["id"]
+    assert auth_event.userId == members[1]["id"]
     assert auth_event.role.value.lower() == members[1]["role"]
 
     # TODO: Should project owner be able to see the project members -> Replace the header with ``user_headers``
@@ -573,5 +573,10 @@ async def test_delete_project_members(create_project, sanic_client, user_headers
 
     assert len(response.json) == 2
     member = response.json[1]
-    assert member["member"] == {"id": "user", "email": "user.doe@gmail.com", "first_name": "User", "last_name": "Doe"}
-    assert member["role"] == "owner"
+    assert member == {
+        "id": "user",
+        "email": "user.doe@gmail.com",
+        "first_name": "User",
+        "last_name": "Doe",
+        "role": "owner",
+    }
