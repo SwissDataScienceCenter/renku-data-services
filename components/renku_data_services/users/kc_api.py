@@ -76,15 +76,17 @@ class KeycloakAPI:
             "max": self.result_per_request_limit + 1,
         }
         first = 0
-        res = self._http_client.get(url, params={**query_args, "first": first})
-        output = res.json()
-        if not isinstance(output, list):
-            raise ValueError("Received unexpected response from Keycloak for users")
-        output = cast(List[Dict[str, Any]], output)
-        yield from output
-        if len(output) < self.result_per_request_limit + 1:
-            return
-        first += self.result_per_request_limit
+        while True:
+            res = self._http_client.get(url, params={**query_args, "first": first})
+            output = res.json()
+            if not isinstance(output, list):
+                raise ValueError("Received unexpected response from Keycloak for users")
+            output = cast(List[Dict[str, Any]], output)
+            yield from output[:-1]
+            if len(output) < self.result_per_request_limit + 1:
+                yield output[-1]
+                return
+            first += self.result_per_request_limit
 
     def get_user_events(
         self, start_date: date, end_date: date | None = None, event_types: List[KeycloakEvent] | None = None
@@ -103,16 +105,17 @@ class KeycloakAPI:
         if end_date:
             query_args["dateTo"] = end_date.isoformat()
         first = 0
-        res = self._http_client.get(url, params={**query_args, "first": first})
-        output = res.json()
-        if not isinstance(output, list):
-            raise ValueError("Received unexpected response from Keycloak for events")
-        output = cast(List[Dict[str, Any]], output)
-        yield from output
-        # TODO: What happens if the output is not a list
-        if isinstance(output, list) and len(output) < self.result_per_request_limit + 1:
-            return
-        first += self.result_per_request_limit
+        while True:
+            res = self._http_client.get(url, params={**query_args, "first": first})
+            output = res.json()
+            if not isinstance(output, list):
+                raise ValueError("Received unexpected response from Keycloak for events")
+            output = cast(List[Dict[str, Any]], output)
+            yield from output[:-1]
+            if len(output) < self.result_per_request_limit + 1:
+                yield output[-1]
+                return
+            first += self.result_per_request_limit
 
     def get_admin_events(
         self, start_date: date, end_date: date | None = None, event_types: List[KeycloakAdminEvent] | None = None
@@ -133,13 +136,14 @@ class KeycloakAPI:
         if end_date:
             query_args["dateTo"] = end_date.isoformat()
         first = 0
-        res = self._http_client.get(url, params={**query_args, "first": first})
-        output = res.json()
-        if not isinstance(output, list):
-            raise ValueError("Received unexpected response from Keycloak for events")
-        output = cast(List[Dict[str, Any]], output)
-        yield from output
-        # TODO: What happens if the output is not a list
-        if isinstance(output, list) and len(output) < self.result_per_request_limit + 1:
-            return
-        first += self.result_per_request_limit
+        while True:
+            res = self._http_client.get(url, params={**query_args, "first": first})
+            output = res.json()
+            if not isinstance(output, list):
+                raise ValueError("Received unexpected response from Keycloak for events")
+            output = cast(List[Dict[str, Any]], output)
+            yield from output[:-1]
+            if len(output) < self.result_per_request_limit + 1:
+                yield output[-1]
+                return
+            first += self.result_per_request_limit

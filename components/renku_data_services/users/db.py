@@ -197,6 +197,7 @@ class UsersSync:
 
             async def _do_update(raw_kc_user: Dict[str, Any]):
                 kc_user = UserInfo.from_kc_user_payload(raw_kc_user)
+                logging.info(f"Checking user with Keycloak ID {kc_user.id}")
                 db_user = await self._get_user(kc_user.id)
                 if db_user != kc_user:
                     logging.info(f"Inserting or updating user {db_user} -> {kc_user}")
