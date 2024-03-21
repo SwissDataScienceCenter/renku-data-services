@@ -3,7 +3,6 @@ import os
 from dataclasses import dataclass
 from typing import Callable
 
-from sqlalchemy import NullPool
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -36,7 +35,7 @@ class SyncConfig:
                 message="Please provide a database password in the 'DB_PASSWORD' environment variable."
             )
         async_sqlalchemy_url = f"postgresql+asyncpg://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{db_name}"
-        engine = create_async_engine(async_sqlalchemy_url, poolclass=NullPool)
+        engine = create_async_engine(async_sqlalchemy_url, pool_size=2, max_overflow=0)
         session_maker: Callable[..., AsyncSession] = sessionmaker(
             engine, class_=AsyncSession, expire_on_commit=False
         )  # type: ignore[call-overload]
