@@ -15,8 +15,6 @@ from renku_data_services.authz import models as authz_models
 from renku_data_services.authz.authz import IProjectAuthorizer
 from renku_data_services.authz.models import MemberQualifier, Scope
 from renku_data_services.base_api.pagination import PaginationRequest
-from renku_data_services.namespace.db import GroupRepository
-from renku_data_services.project.apispec import ProjectPost, Role, Visibility
 from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_created import ProjectCreated
 from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_removed import ProjectRemoved
 from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_updated import ProjectUpdated
@@ -24,8 +22,10 @@ from renku_data_services.message_queue.avro_models.io.renku.events.v1.visibility
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import dispatch_message
+from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project import models
 from renku_data_services.project import orm as schemas
+from renku_data_services.project.apispec import Role, Visibility
 from renku_data_services.utils.core import with_db_transaction
 
 
@@ -68,7 +68,7 @@ def create_project_created_message(result: models.Project, *_, **__) -> ProjectC
         repositories=result.repositories,
         visibility=vis,
         description=result.description,
-        createdBy=result.created_by.id,
+        createdBy=result.created_by,
         creationDate=result.creation_date,
     )
 
@@ -162,59 +162,6 @@ class ProjectRepository:
 
             return project_orm.dump()
 
-    async def insert_project(self, user: base_models.APIUser, project: ProjectPost) -> models.Project:
-        """Insert a new project entry."""
-        ns, _ = await self.group_repo.get_ns_group_orm(user, project.namespace)
-        if not ns:
-            raise errors.MissingResourceError(
-                message=f"The project cannot be created because the namespace {project.namespace} does not exist"
-            )
-        user_id = cast(str, user.id)
-        repos = [schemas.ProjectRepositoryORM(url) for url in (project.repositories or [])]
-        slug = project.slug or models.get_slug(project.name)
-        if isinstance(project.visibility, str):
-            project.visibility = models.Visibility(project.visibility)
-        project_orm = schemas.ProjectORM(
-            name=project.name,
-            visibility=project.visibility,
-            created_by_id=user_id,
-            description=project.description,
-            ltst_prj_slug=schemas.ProjectSlug(slug, ltst_ns_slug=ns.ltst_ns_slug or ns),
-            repositories=repos,
-            creation_date=datetime.now(timezone.utc).replace(microsecond=0),
-        )
-
-        match project_orm.visibility:
-            case Visibility.private | Visibility.private.value:
-                vis = MsgVisibility.PRIVATE
-            case Visibility.public | Visibility.public.value:
-                vis = MsgVisibility.PUBLIC
-            case _:
-                raise NotImplementedError(f"unknown visibility:{project_orm.visibility}")
-
-        async with self.message_queue.project_created_message(
-            name=project_orm.name,
-            slug=project_orm.ltst_prj_slug.slug,
-            visibility=vis,
-            id=project_orm.id,
-            repositories=[r.url for r in project_orm.repositories],
-            description=project_orm.description,
-            creation_date=project_orm.creation_date,
-            created_by=project_orm.created_by_id,
-        ) as message:
-            async with self.session_maker() as session:
-                async with session.begin():
-                    session.add(project_orm)
-                    await session.flush()
-                    if project_orm.id is None:
-                        raise errors.BaseError(detail="The created project does not have an ID but it should.")
-                    await self.project_authz.create_project(
-                        requested_by=user,
-                        project_id=project_orm.id,
-                        public_project=project_orm.visibility.value == models.Visibility.public.value,
-                    )
-                    await message.persist(self.event_repo)
-
     @with_db_transaction
     @dispatch_message(create_project_created_message)
     async def insert_project(
@@ -229,11 +176,11 @@ class ProjectRepository:
         user_id = cast(str, user.id)
         repos = [schemas.ProjectRepositoryORM(url) for url in (project.repositories or [])]
         slug = project.slug or models.get_slug(project.name)
-        if isinstance(project.visibility, str):
-            project.visibility = models.Visibility(project.visibility)
         project_orm = schemas.ProjectORM(
             name=project.name,
-            visibility=project.visibility,
+            visibility=models.Visibility(project.visibility)
+            if isinstance(project.visibility, str)
+            else project.visibility,
             created_by_id=user_id,
             description=project.description,
             ltst_prj_slug=schemas.ProjectSlug(slug, ltst_ns_slug=ns.ltst_ns_slug or ns),
@@ -247,7 +194,9 @@ class ProjectRepository:
         public_project = project_dump.visibility == Visibility.public
         if project_dump.id is None:
             raise errors.BaseError(detail="The created project does not have an ID but it should.")
-        await self.project_authz.create_project(requested_by=user, project_id=project_dump.id, public_project=public_project)
+        await self.project_authz.create_project(
+            requested_by=user, project_id=project_dump.id, public_project=public_project
+        )
 
         return project_dump
 
