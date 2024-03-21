@@ -85,6 +85,8 @@ class KeycloakAPI:
             if not isinstance(output, list):
                 raise ValueError(f"Received unexpected response from Keycloak for path {path}")
             output = cast(List[Dict[str, Any]], output)
+            if len(output) == 0:
+                return
             # Do not display the extra item unless we are on the last page
             yield from output[:-1]
             if len(output) < self.result_per_request_limit + 1:
