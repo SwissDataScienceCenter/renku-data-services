@@ -4,6 +4,7 @@ import argparse
 import asyncio
 from os import environ
 
+from prometheus_sanic import monitor
 from sanic import Sanic
 from sanic.log import logger
 from sanic.worker.loader import AppLoader
@@ -26,6 +27,7 @@ def create_app() -> Sanic:
         config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
         asyncio.run(config.kc_user_repo.initialize(config.kc_api))
     app = register_all_handlers(app, config)
+    monitor(app, endpoint_type="url", multiprocess_mode="all", is_middleware=True).expose_endpoint()
 
     if environ.get("CORS_ALLOW_ALL_ORIGINS", "false").lower() == "true":
         from sanic_ext import Extend
