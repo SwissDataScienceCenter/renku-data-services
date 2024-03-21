@@ -2,9 +2,10 @@
 import functools
 import os
 import ssl
-from typing import Any
+from typing import Any, Callable, Protocol
 
 from deepmerge import Merger
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @functools.lru_cache(1)
@@ -29,3 +30,21 @@ def merge_api_specs(*args):
     merged_spec = functools.reduce(merger.merge, args, dict())
 
     return merged_spec
+
+
+class WithSessionMaker(Protocol):
+    """Protocol for classes that wrap a session maker."""
+
+    session_maker: Callable[..., AsyncSession]
+
+
+def with_db_transaction(f):
+    """Initializes a transaction and commits it on successful exit of the wrapped function."""
+
+    @functools.wraps(f)
+    async def transaction_wrapper(self: WithSessionMaker, *args, **kwargs):
+        async with self.session_maker() as session:
+            async with session.begin():
+                return await f(self, session, *args, **kwargs)
+
+    return transaction_wrapper

@@ -47,6 +47,17 @@ def create_app() -> Sanic:
         validator = RCloneValidator()
         app.ext.dependency(validator)
 
+    async def send_pending_events(app):
+        """Send pending messages in case sending in a handler failed."""
+        while True:
+            try:
+                await asyncio.sleep(30)
+                await config.event_repo.send_pending_events()
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                logger.warning(f"Background task failed: {e}")
+
     return app
 
 
