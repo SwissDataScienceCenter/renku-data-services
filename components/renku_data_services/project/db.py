@@ -191,7 +191,8 @@ class ProjectRepository:
         )
 
         # Need to commit() to get the timestamps
-        await session.commit()
+        async with session.begin_nested() as nested:
+            await nested.commit()
 
         return project.dump()
 
