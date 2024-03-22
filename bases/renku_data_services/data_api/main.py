@@ -4,9 +4,12 @@ import argparse
 import asyncio
 from os import environ
 
+import sentry_sdk
 from sanic import Sanic
 from sanic.log import logger
 from sanic.worker.loader import AppLoader
+from sentry_sdk.integrations.asyncio import AsyncioIntegration
+from sentry_sdk.integrations.sanic import SanicIntegration
 
 from renku_data_services.app_config import Config
 from renku_data_services.data_api.app import register_all_handlers
@@ -45,6 +48,18 @@ def create_app() -> Sanic:
     async def setup_rclone_validator(app, _):
         validator = RCloneValidator()
         app.ext.dependency(validator)
+
+    if config.sentry.enabled:
+
+        @app.before_server_start
+        async def setup_sentry(app, _):
+            sentry_sdk.init(
+                dsn=config.sentry.dsn,
+                environment=config.sentry.environment,
+                integrations=[AsyncioIntegration(), SanicIntegration(unsampled_statuses={404, 403})],
+                enable_tracing=config.sentry.sample_rate > 0,
+                traces_sample_rate=config.sentry.sample_rate,
+            )
 
     async def send_pending_events(app):
         """Send pending messages in case sending in a handler failed."""
