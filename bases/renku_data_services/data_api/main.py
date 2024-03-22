@@ -13,6 +13,12 @@ from sentry_sdk.integrations.sanic import SanicIntegration
 
 from renku_data_services.app_config import Config
 from renku_data_services.data_api.app import register_all_handlers
+from renku_data_services.errors.errors import (
+    MissingResourceError,
+    NoDefaultPoolAccessError,
+    Unauthorized,
+    ValidationError,
+)
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.storage.rclone import RCloneValidator
 
@@ -51,14 +57,25 @@ def create_app() -> Sanic:
 
     if config.sentry.enabled:
 
+        def filter_error(event, hint):
+            if "exc_info" in hint:
+                exc_type, exc_value, tb = hint["exc_info"]
+                if isinstance(
+                    exc_value, (MissingResourceError, Unauthorized, ValidationError, NoDefaultPoolAccessError)
+                ):
+                    return None
+            return event
+
         @app.before_server_start
         async def setup_sentry(app, _):
             sentry_sdk.init(
                 dsn=config.sentry.dsn,
                 environment=config.sentry.environment,
-                integrations=[AsyncioIntegration(), SanicIntegration(unsampled_statuses={404, 403})],
+                integrations=[AsyncioIntegration(), SanicIntegration(unsampled_statuses={404, 403, 401})],
                 enable_tracing=config.sentry.sample_rate > 0,
                 traces_sample_rate=config.sentry.sample_rate,
+                before_send=filter_error,
+                debug=True,
             )
 
     async def send_pending_events(app):
