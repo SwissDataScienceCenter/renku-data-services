@@ -75,7 +75,6 @@ def create_app() -> Sanic:
                 enable_tracing=config.sentry.sample_rate > 0,
                 traces_sample_rate=config.sentry.sample_rate,
                 before_send=filter_error,
-                debug=True,
             )
 
     async def send_pending_events(app):
