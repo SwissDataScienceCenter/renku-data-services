@@ -461,7 +461,7 @@ class ResourcePoolRepository(_Base):
                             if put:
                                 # REMOVE an affinity
                                 for existing_affinity_key, existing_affinity in existing_affinities.items():
-                                    if existing_affinity_key not in new_affinities.keys():
+                                    if existing_affinity_key not in new_affinities:
                                         cls.node_affinities.remove(existing_affinity)
                         case "tolerations":
                             v = cast(List[str], v)
@@ -472,13 +472,13 @@ class ResourcePoolRepository(_Base):
                                 tol: schemas.TolerationORM(key=tol) for tol in v
                             }
                             for new_tol_key, new_tol in new_tolerations.items():
-                                if new_tol_key not in existing_tolerations.keys():
+                                if new_tol_key not in existing_tolerations:
                                     # CREATE a brand new toleration
                                     cls.tolerations.append(new_tol)
                             if put:
                                 # REMOVE a toleration
                                 for existing_tol_key, existing_tol in existing_tolerations.items():
-                                    if existing_tol_key not in new_tolerations.keys():
+                                    if existing_tol_key not in new_tolerations:
                                         cls.tolerations.remove(existing_tol)
                         case _:
                             setattr(cls, k, v)

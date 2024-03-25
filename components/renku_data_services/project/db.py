@@ -33,7 +33,7 @@ def convert_to_authz_role(role: Role) -> authz_models.Role:
 
 def convert_from_authz_role(role: authz_models.Role) -> Role:
     """Covert from authz Role to project member Role."""
-    return Role.owner if authz_models.Role.OWNER == role else Role.member
+    return Role.owner if role == authz_models.Role.OWNER else Role.member
 
 
 class PaginationResponse(NamedTuple):

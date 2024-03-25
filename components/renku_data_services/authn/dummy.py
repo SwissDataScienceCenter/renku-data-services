@@ -31,8 +31,7 @@ class DummyUserStore:
 
 @dataclass
 class DummyAuthenticator:
-    """
-    Dummy authenticator that pretends to call Keycloak, not suitable for production.
+    """Dummy authenticator that pretends to call Keycloak, not suitable for production.
 
     Will try to parse the access token as json and assign any values that match to the ApiUser returned.
     """

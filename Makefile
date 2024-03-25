@@ -55,10 +55,8 @@ style_checks:
 	@echo "checking project apispec is up to date"
 	@$(call test_apispec_up_to_date,"project")
 	poetry run mypy
-	poetry run flake8 -v
+	poetry run ruff check .
 	poetry run bandit -c pyproject.toml -r .
-	poetry run isort --diff --verbose .
-	poetry run pydocstyle -v
 	poetry poly check
 	poetry poly libs
 
@@ -74,7 +72,7 @@ tests:
 	@rm -f .tmp.pid
 	@echo "===========================================TEST DOWNGRADE/UPGRADE==========================================="
 	DUMMY_STORES=true poetry run coverage run -a -m alembic -c components/renku_data_services/migrations/alembic.ini --name=common downgrade base
-	DUMMY_STORES=true poetry run alembic -c components/renku_data_services/migrations/alembic.ini --name=common upgrade heads 
+	DUMMY_STORES=true poetry run alembic -c components/renku_data_services/migrations/alembic.ini --name=common upgrade heads
 	@echo "===========================================FINAL COMBINED COVERAGE FOR ALL TESTS==========================================="
 	poetry run coverage report --show-missing
 	poetry run coverage lcov -o coverage.lcov
