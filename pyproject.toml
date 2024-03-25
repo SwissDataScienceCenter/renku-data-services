@@ -60,6 +60,7 @@ dataclasses-avroschema = "^0.57.4"
 undictify = "^0.11.3"
 types-redis = "^4.6.0.20240218"
 prometheus-sanic = "^3.0.0"
+sentry-sdk = {version = "^1.43.0", extras = ["sanic"]}
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.7.5"
