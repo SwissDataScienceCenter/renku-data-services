@@ -4,12 +4,21 @@ import argparse
 import asyncio
 from os import environ
 
+import sentry_sdk
 from sanic import Sanic
 from sanic.log import logger
 from sanic.worker.loader import AppLoader
+from sentry_sdk.integrations.asyncio import AsyncioIntegration
+from sentry_sdk.integrations.sanic import SanicIntegration, _hub_enter, _hub_exit, _set_transaction
 
 from renku_data_services.app_config import Config
 from renku_data_services.data_api.app import register_all_handlers
+from renku_data_services.errors.errors import (
+    MissingResourceError,
+    NoDefaultPoolAccessError,
+    Unauthorized,
+    ValidationError,
+)
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.storage.rclone import RCloneValidator
 
@@ -25,6 +34,35 @@ def create_app() -> Sanic:
         run_migrations_for_app("common")
         config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
         asyncio.run(config.kc_user_repo.initialize(config.kc_api))
+    if config.sentry.enabled:
+        logger.info("enabling sentry")
+
+        def filter_error(event, hint):
+            if "exc_info" in hint:
+                exc_type, exc_value, tb = hint["exc_info"]
+                if isinstance(
+                    exc_value, (MissingResourceError, Unauthorized, ValidationError, NoDefaultPoolAccessError)
+                ):
+                    return None
+            return event
+
+        @app.before_server_start
+        async def setup_sentry(_):
+            sentry_sdk.init(
+                dsn=config.sentry.dsn,
+                environment=config.sentry.environment,
+                integrations=[AsyncioIntegration(), SanicIntegration(unsampled_statuses={404, 403, 401})],
+                enable_tracing=config.sentry.sample_rate > 0,
+                traces_sample_rate=config.sentry.sample_rate,
+                before_send=filter_error,
+            )
+
+        # we manually need to set the signals because sentry sanic integration doesn't work with using
+        # an app factory. See https://github.com/getsentry/sentry-python/issues/2902
+        app.signal("http.lifecycle.request")(_hub_enter)
+        app.signal("http.lifecycle.response")(_hub_exit)
+        app.signal("http.routing.after")(_set_transaction)
+
     app = register_all_handlers(app, config)
 
     if environ.get("CORS_ALLOW_ALL_ORIGINS", "false").lower() == "true":
@@ -61,7 +99,7 @@ def create_app() -> Sanic:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(prog="Renku Compute Resource Access Control")
+    parser = argparse.ArgumentParser(prog="Renku Data Services")
     # NOTE: K8s probes will fail if listening only on 127.0.0.1 - so we listen on 0.0.0.0
     parser.add_argument("-H", "--host", default="0.0.0.0", help="Host to listen on")  # nosec B104
     parser.add_argument("-p", "--port", default=8000, type=int, help="Port to listen on")

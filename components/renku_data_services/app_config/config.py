@@ -92,6 +92,26 @@ default_resource_pool = models.ResourcePool(
 
 
 @dataclass
+class SentryConfig:
+    """Configuration for sentry."""
+
+    enabled: bool
+    dsn: str
+    environment: str
+    sample_rate: float = 0.2
+
+    @classmethod
+    def from_env(cls, prefix: str = ""):
+        """Create a config from environment variables."""
+        enabled = os.environ.get(f"{prefix}SENTRY_ENABLED", "false").lower() == "true"
+        dsn = os.environ.get(f"{prefix}SENTRY_DSN", "")
+        environment = os.environ.get(f"{prefix}SENTRY_ENVIRONMENT", "")
+        sample_rate = float(os.environ.get(f"{prefix}SENTRY_SAMPLE_RATE", "0.2"))
+
+        return cls(enabled, dsn=dsn, environment=environment, sample_rate=sample_rate)
+
+
+@dataclass
 class Config:
     """Configuration for the Data service."""
 
@@ -102,6 +122,7 @@ class Config:
     user_preferences_config: UserPreferencesConfig
     db: DBConfig
     redis: RedisConfig
+    sentry: SentryConfig
     gitlab_client: base_models.GitlabAPIProtocol
     kc_api: IKeycloakAPI
     message_queue: IMessageQueue
@@ -315,6 +336,7 @@ class Config:
             )
             redis = RedisConfig.from_env(prefix)
 
+        sentry = SentryConfig.from_env(prefix)
         message_queue = RedisQueue(redis)
 
         return cls(
@@ -324,6 +346,7 @@ class Config:
             gitlab_client=gitlab_client,
             user_store=user_store,
             quota_repo=quota_repo,
+            sentry=sentry,
             server_defaults_file=server_defaults_file,
             server_options_file=server_options_file,
             user_preferences_config=user_preferences_config,
