@@ -26,6 +26,8 @@ RUN env/bin/pip --no-cache-dir install projects/renku_data_service/dist/*.whl
 FROM python:3.11-slim-bullseye
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
+ENV PROMETHEUS_MULTIPROC_DIR=/prometheus
+RUN mkdir /prometheus
 RUN apt-get update && apt-get install -y \
     tini && \
     rm -rf /var/lib/apt/lists/* && \
