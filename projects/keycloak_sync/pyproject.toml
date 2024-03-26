@@ -28,7 +28,7 @@ packages = [
 [tool.poetry.dependencies]
 python = "^3.11"
 alembic = "^1.12.1"
-pydantic = "^2.5.2"
+pydantic = {extras = ["email"], version = "^2.6.4"}
 requests = "^2.31.0"
 sqlalchemy = "^2.0.23"
 asyncpg = "^0.29.0"
