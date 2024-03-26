@@ -1,4 +1,6 @@
 """Dummy adapter for communicating with Keycloak to be used for testing."""
+
+import contextlib
 import json
 from asyncio import Lock
 from dataclasses import dataclass
@@ -42,10 +44,8 @@ class DummyAuthenticator:
     async def authenticate(access_token: str, request: Request) -> base_models.APIUser:
         """Indicates whether the user has successfully logged in."""
         user_props = {}
-        try:
+        with contextlib.suppress(Exception):
             user_props = json.loads(access_token)
-        except:  # noqa: E722 # nosec: B110
-            pass
 
         is_set = bool(
             user_props.get("id")

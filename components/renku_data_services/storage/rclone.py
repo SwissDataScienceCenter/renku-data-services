@@ -1,6 +1,5 @@
 """Apispec schemas for storage service."""
 
-
 import asyncio
 import json
 import tempfile
@@ -327,9 +326,12 @@ class RCloneOption(BaseModel):
                         message=f"Value '{value}' for field '{self.name}' is not of type string"
                     )
 
-        if self.examples and self.exclusive:
-            if not any(e.value == str(value) and (not e.provider or e.provider == provider) for e in self.examples):
-                raise errors.ValidationError(message=f"Value '{value}' is not valid for field {self.name}")
+        if (
+            self.examples
+            and self.exclusive
+            and not any(e.value == str(value) and (not e.provider or e.provider == provider) for e in self.examples)
+        ):
+            raise errors.ValidationError(message=f"Value '{value}' is not valid for field {self.name}")
         return value
 
 
@@ -394,10 +396,9 @@ class RCloneProviderSchema(BaseModel):
         for key in keys:
             value = configuration[key]
 
-            if isinstance(value, str):
+            if isinstance(value, str) and "\x00" in value:
                 # validate strings for Postgresql compatibility
-                if "\x00" in value:
-                    raise errors.ValidationError(message=f"Null byte found in value '{value}' for key '{key}'")
+                raise errors.ValidationError(message=f"Null byte found in value '{value}' for key '{key}'")
 
             option: RCloneOption | None = self.get_option_for_provider(key, provider)
 

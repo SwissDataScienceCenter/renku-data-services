@@ -88,61 +88,58 @@ class StorageRepository(_Base):
                 message=f"A storage with name {storage.name} already exists for project {storage.project_id}"
             )
         orm = schemas.CloudStorageORM.load(storage)
-        async with self.session_maker() as session:
-            async with session.begin():
-                session.add(orm)
+        async with self.session_maker() as session, session.begin():
+            session.add(orm)
         return orm.dump()
 
     async def update_storage(self, storage_id: str, user: base_models.APIUser, **kwargs) -> models.CloudStorage:
         """Update a cloud storage entry."""
-        async with self.session_maker() as session:
-            async with session.begin():
-                res = await session.execute(
-                    select(schemas.CloudStorageORM).where(schemas.CloudStorageORM.storage_id == storage_id)
-                )
-                storage = res.scalars().one_or_none()
+        async with self.session_maker() as session, session.begin():
+            res = await session.execute(
+                select(schemas.CloudStorageORM).where(schemas.CloudStorageORM.storage_id == storage_id)
+            )
+            storage = res.scalars().one_or_none()
 
-                if storage is None:
-                    raise errors.MissingResourceError(message=f"The storage with id '{storage_id}' cannot be found")
-                if not await self.gitlab_client.filter_projects_by_access_level(
-                    user, [storage.project_id], base_models.GitlabAccessLevel.ADMIN
-                ):
-                    raise errors.Unauthorized(message="User does not have access to this project")
-                if "project_id" in kwargs and kwargs["project_id"] != storage.project_id:
-                    raise errors.ValidationError(message="Cannot change project id of existing storage.")
-                name = kwargs.get("name", storage.name)
-                if storage.name != name:
-                    existing_storage = await self.get_storage(user, project_id=storage.project_id, name=name)
-                    if existing_storage:
-                        raise errors.ValidationError(
-                            message=f"A storage with name {storage.name} already exists for project "
-                            f"{storage.project_id}"
-                        )
+            if storage is None:
+                raise errors.MissingResourceError(message=f"The storage with id '{storage_id}' cannot be found")
+            if not await self.gitlab_client.filter_projects_by_access_level(
+                user, [storage.project_id], base_models.GitlabAccessLevel.ADMIN
+            ):
+                raise errors.Unauthorized(message="User does not have access to this project")
+            if "project_id" in kwargs and kwargs["project_id"] != storage.project_id:
+                raise errors.ValidationError(message="Cannot change project id of existing storage.")
+            name = kwargs.get("name", storage.name)
+            if storage.name != name:
+                existing_storage = await self.get_storage(user, project_id=storage.project_id, name=name)
+                if existing_storage:
+                    raise errors.ValidationError(
+                        message=f"A storage with name {storage.name} already exists for project "
+                        f"{storage.project_id}"
+                    )
 
-                for key, value in kwargs.items():
-                    setattr(storage, key, value)
+            for key, value in kwargs.items():
+                setattr(storage, key, value)
 
-                if "configuration" in kwargs and "type" in kwargs["configuration"]:
-                    storage.storage_type = kwargs["configuration"]["type"]
+            if "configuration" in kwargs and "type" in kwargs["configuration"]:
+                storage.storage_type = kwargs["configuration"]["type"]
 
-                result = storage.dump()  # triggers validation before the transaction saves data
+            result = storage.dump()  # triggers validation before the transaction saves data
 
         return result
 
     async def delete_storage(self, storage_id: str, user: base_models.APIUser) -> None:
         """Delete a cloud storage entry."""
-        async with self.session_maker() as session:
-            async with session.begin():
-                res = await session.execute(
-                    select(schemas.CloudStorageORM).where(schemas.CloudStorageORM.storage_id == storage_id)
-                )
-                storage = res.one_or_none()
+        async with self.session_maker() as session, session.begin():
+            res = await session.execute(
+                select(schemas.CloudStorageORM).where(schemas.CloudStorageORM.storage_id == storage_id)
+            )
+            storage = res.one_or_none()
 
-                if storage is None:
-                    return
-                if not await self.gitlab_client.filter_projects_by_access_level(
-                    user, [storage[0].project_id], base_models.GitlabAccessLevel.ADMIN
-                ):
-                    raise errors.Unauthorized(message="User does not have access to this project")
+            if storage is None:
+                return
+            if not await self.gitlab_client.filter_projects_by_access_level(
+                user, [storage[0].project_id], base_models.GitlabAccessLevel.ADMIN
+            ):
+                raise errors.Unauthorized(message="User does not have access to this project")
 
-                await session.delete(storage[0])
+            await session.delete(storage[0])

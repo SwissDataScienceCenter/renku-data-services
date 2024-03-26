@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from pydantic import ConfigDict, Field, RootModel
+
 from renku_data_services.crc.apispec_base import BaseAPISpec
 
 
@@ -66,9 +67,7 @@ class NodeAffinity(BaseAPISpec):
 
 class Error(BaseAPISpec):
     code: int = Field(..., example=1404, gt=0)
-    detail: Optional[str] = Field(
-        None, example="A more detailed optional message showing what the problem was"
-    )
+    detail: Optional[str] = Field(None, example="A more detailed optional message showing what the problem was")
     message: str = Field(..., example="Something went wrong - please try again later")
 
 
@@ -109,18 +108,14 @@ class Quota(BaseAPISpec):
         gt=0,
         le=9223372036854775807,
     )
-    gpu: int = Field(
-        ..., description="Number of GPUs", example=8, ge=0, le=9223372036854775807
-    )
+    gpu: int = Field(..., description="Number of GPUs", example=8, ge=0, le=9223372036854775807)
 
 
 class QuotaPatch(BaseAPISpec):
     model_config = ConfigDict(
         extra="forbid",
     )
-    cpu: Optional[float] = Field(
-        None, description="Number of cpu cores", example=10, gt=0.0
-    )
+    cpu: Optional[float] = Field(None, description="Number of cpu cores", example=10, gt=0.0)
     memory: Optional[int] = Field(
         None,
         description="Number of gigabytes of memory",
@@ -128,9 +123,7 @@ class QuotaPatch(BaseAPISpec):
         gt=0,
         le=9223372036854775807,
     )
-    gpu: Optional[int] = Field(
-        None, description="Number of GPUs", example=8, ge=0, le=9223372036854775807
-    )
+    gpu: Optional[int] = Field(None, description="Number of GPUs", example=8, ge=0, le=9223372036854775807)
 
 
 class QuotaWithId(BaseAPISpec):
@@ -145,9 +138,7 @@ class QuotaWithId(BaseAPISpec):
         gt=0,
         le=9223372036854775807,
     )
-    gpu: int = Field(
-        ..., description="Number of GPUs", example=8, ge=0, le=9223372036854775807
-    )
+    gpu: int = Field(..., description="Number of GPUs", example=8, ge=0, le=9223372036854775807)
     id: str = Field(
         ...,
         description="A name for a specific resource",
@@ -174,9 +165,7 @@ class ResourceClass(BaseAPISpec):
         gt=0,
         le=9223372036854775807,
     )
-    gpu: int = Field(
-        ..., description="Number of GPUs", example=8, ge=0, le=9223372036854775807
-    )
+    gpu: int = Field(..., description="Number of GPUs", example=8, ge=0, le=9223372036854775807)
     max_storage: int = Field(
         ...,
         description="Number of gigabytes of storage",
@@ -220,9 +209,7 @@ class ResourceClassPatch(BaseAPISpec):
         example="the name of a resource",
         min_length=5,
     )
-    cpu: Optional[float] = Field(
-        None, description="Number of cpu cores", example=10, gt=0.0
-    )
+    cpu: Optional[float] = Field(None, description="Number of cpu cores", example=10, gt=0.0)
     memory: Optional[int] = Field(
         None,
         description="Number of gigabytes of memory",
@@ -230,9 +217,7 @@ class ResourceClassPatch(BaseAPISpec):
         gt=0,
         le=9223372036854775807,
     )
-    gpu: Optional[int] = Field(
-        None, description="Number of GPUs", example=8, ge=0, le=9223372036854775807
-    )
+    gpu: Optional[int] = Field(None, description="Number of GPUs", example=8, ge=0, le=9223372036854775807)
     max_storage: Optional[int] = Field(
         None,
         description="Number of gigabytes of storage",
@@ -276,9 +261,7 @@ class ResourceClassPatchWithId(BaseAPISpec):
         example="the name of a resource",
         min_length=5,
     )
-    cpu: Optional[float] = Field(
-        None, description="Number of cpu cores", example=10, gt=0.0
-    )
+    cpu: Optional[float] = Field(None, description="Number of cpu cores", example=10, gt=0.0)
     memory: Optional[int] = Field(
         None,
         description="Number of gigabytes of memory",
@@ -286,9 +269,7 @@ class ResourceClassPatchWithId(BaseAPISpec):
         gt=0,
         le=9223372036854775807,
     )
-    gpu: Optional[int] = Field(
-        None, description="Number of GPUs", example=8, ge=0, le=9223372036854775807
-    )
+    gpu: Optional[int] = Field(None, description="Number of GPUs", example=8, ge=0, le=9223372036854775807)
     max_storage: Optional[int] = Field(
         None,
         description="Number of gigabytes of storage",
@@ -346,9 +327,7 @@ class ResourceClassWithId(BaseAPISpec):
         gt=0,
         le=9223372036854775807,
     )
-    gpu: int = Field(
-        ..., description="Number of GPUs", example=8, ge=0, le=9223372036854775807
-    )
+    gpu: int = Field(..., description="Number of GPUs", example=8, ge=0, le=9223372036854775807)
     max_storage: int = Field(
         ...,
         description="Number of gigabytes of storage",
@@ -406,9 +385,7 @@ class ResourceClassWithIdFiltered(BaseAPISpec):
         gt=0,
         le=9223372036854775807,
     )
-    gpu: int = Field(
-        ..., description="Number of GPUs", example=8, ge=0, le=9223372036854775807
-    )
+    gpu: int = Field(..., description="Number of GPUs", example=8, ge=0, le=9223372036854775807)
     max_storage: int = Field(
         ...,
         description="Number of gigabytes of storage",
