@@ -19,6 +19,8 @@ class DBConfig:
     user: str = "renku"
     port: str = "5432"
     db_name: str = "renku"
+    _pool_timeout: int = field(default=30, init=False, repr=False)
+    _pool_size: int = field(default=10, init=False, repr=False)
     _async_engine: ClassVar[AsyncEngine | None] = field(default=None, repr=False, init=False)
 
     @classmethod
@@ -35,7 +37,10 @@ class DBConfig:
                 message=f"Please provide a database password in the '{prefix}DB_PASSWORD' environment variable."
             )
         kwargs = {"host": pg_host, "password": pg_password, "port": pg_port, "db_name": db_name, "user": pg_user}
-        return cls(**{k: v for (k, v) in kwargs.items() if v is not None})
+        config = cls(**{k: v for (k, v) in kwargs.items() if v is not None})
+        config._pool_timeout = int(os.environ.get(f"{prefix}DB_POOL_TIMEOUT", "30"))
+        config._pool_size = int(os.environ.get(f"{prefix}DB_POOL_SIZE", "10"))
+        return config
 
     def conn_url(self, async_client: bool = True) -> str:
         """Return an asynchronous or synchronous database connection url."""
@@ -49,8 +54,9 @@ class DBConfig:
         if not DBConfig._async_engine:
             DBConfig._async_engine = create_async_engine(
                 self.conn_url(),
-                pool_size=10,
+                pool_size=self._pool_size,
                 max_overflow=0,
+                pool_timeout=self._pool_timeout,
             )
         return async_sessionmaker(DBConfig._async_engine, expire_on_commit=False)
 
