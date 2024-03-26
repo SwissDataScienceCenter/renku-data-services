@@ -30,13 +30,13 @@ class ProjectORM(BaseORM):
     visibility: Mapped[Visibility]
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
     description: Mapped[Optional[str]] = mapped_column("description", String(500))
-    ltst_prj_slug_id: Mapped[int] = mapped_column(
+    latest_prj_slug_id: Mapped[int] = mapped_column(
         ForeignKey("project_slugs.id", name="projects_latest_project_slug_id_fk"),
         index=True,
         nullable=False,
         init=False,
     )
-    ltst_prj_slug: Mapped["ProjectSlug"] = relationship(lazy="joined", join_depth=1)
+    latest_prj_slug: Mapped["ProjectSlug"] = relationship(lazy="joined", join_depth=1)
     repositories: Mapped[List["ProjectRepositoryORM"]] = relationship(
         back_populates="project",
         default_factory=list,
@@ -52,8 +52,8 @@ class ProjectORM(BaseORM):
         return models.Project(
             id=self.id,
             name=self.name,
-            slug=self.ltst_prj_slug.slug,
-            namespace=self.ltst_prj_slug.ltst_ns_slug.slug,
+            slug=self.latest_prj_slug.slug,
+            namespace=self.latest_prj_slug.latest_ns_slug.slug,
             visibility=self.visibility,
             created_by=self.created_by_id,
             creation_date=self.creation_date,
@@ -79,27 +79,27 @@ class ProjectSlug(BaseORM):
     """Project and namespace slugs."""
 
     __tablename__ = "project_slugs"
-    __table_args__ = (Index("project_slugs_unique_slugs", "ltst_ns_slug_id", "slug", unique=True),)
+    __table_args__ = (Index("project_slugs_unique_slugs", "latest_ns_slug_id", "slug", unique=True),)
 
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
     slug: Mapped[str] = mapped_column(String(99), index=True, nullable=False)
-    ltst_ns_slug_id: Mapped[str] = mapped_column(
+    latest_ns_slug_id: Mapped[str] = mapped_column(
         ForeignKey(NamespaceORM.id, ondelete="CASCADE"),
         nullable=False,
         init=False,
         index=True,
     )
-    ltst_ns_slug: Mapped[NamespaceORM] = relationship(
+    latest_ns_slug: Mapped[NamespaceORM] = relationship(
         lazy="joined",
     )
-    ltst_prj_slug_id: Mapped[Optional[int]] = mapped_column(
+    latest_prj_slug_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("project_slugs.id", ondelete="CASCADE"),
         nullable=True,
         init=False,
         index=True,
         default=None,
     )
-    ltst_prj_slug: Mapped[Optional["ProjectSlug"]] = relationship(
+    latest_prj_slug: Mapped[Optional["ProjectSlug"]] = relationship(
         remote_side=[id],
         lazy="joined",
         join_depth=1,

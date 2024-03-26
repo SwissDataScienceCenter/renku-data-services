@@ -27,8 +27,8 @@ class GroupORM(BaseORM):
     name: Mapped[str] = mapped_column("name", String(99), index=True)
     created_by: Mapped[str] = mapped_column(ForeignKey(UserORM.keycloak_id), index=True, nullable=False)
     creation_date: Mapped[datetime] = mapped_column("creation_date", DateTime(timezone=True))
-    ltst_ns_slug: Mapped["NamespaceORM"] = relationship(lazy="joined", join_depth=1)
-    ltst_ns_slug_id: Mapped[str] = mapped_column(ForeignKey("namespaces.id"), init=False, nullable=False)
+    latest_ns_slug: Mapped["NamespaceORM"] = relationship(lazy="joined", join_depth=1)
+    latest_ns_slug_id: Mapped[str] = mapped_column(ForeignKey("namespaces.id"), init=False, nullable=False)
     description: Mapped[Optional[str]] = mapped_column("description", String(500), default=None)
     members: Mapped[Dict[str, "GroupMemberORM"]] = relationship(
         # NOTE: the members of a group are keyed by the Keycloak ID
@@ -42,7 +42,7 @@ class GroupORM(BaseORM):
         """Create GroupORM from the project model."""
         return cls(
             name=group.name,
-            ltst_ns_slug=NamespaceORM(group.slug),
+            latest_ns_slug=NamespaceORM(group.slug),
             created_by=group.created_by,
             creation_date=group.creation_date,
             description=group.description,
@@ -53,7 +53,7 @@ class GroupORM(BaseORM):
         return models.Group(
             id=self.id,
             name=self.name,
-            slug=self.ltst_ns_slug.slug,
+            slug=self.latest_ns_slug.slug,
             created_by=self.created_by,
             creation_date=self.creation_date,
             description=self.description,
@@ -97,14 +97,14 @@ class NamespaceORM(BaseORM):
 
     id: Mapped[str] = mapped_column("id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False)
     slug: Mapped[str] = mapped_column(String(99), index=True, unique=True, nullable=False)
-    ltst_ns_slug_id: Mapped[Optional[str]] = mapped_column(
+    latest_ns_slug_id: Mapped[Optional[str]] = mapped_column(
         ForeignKey("namespaces.id", ondelete="CASCADE"),
         nullable=True,
         init=False,
         index=True,
         default=None,
     )
-    ltst_ns_slug: Mapped[Optional["NamespaceORM"]] = relationship(
+    latest_ns_slug: Mapped[Optional["NamespaceORM"]] = relationship(
         remote_side=[id],
         lazy="joined",
         join_depth=1,
@@ -122,14 +122,14 @@ class NamespaceORM(BaseORM):
             return cls(
                 slug=namespace.slug,
                 user_id=namespace.created_by,
-                ltst_ns_slug=cls(slug=namespace.latest_slug, user_id=namespace.created_by)
+                latest_ns_slug=cls(slug=namespace.latest_slug, user_id=namespace.created_by)
                 if namespace.latest_slug
                 else None,
             )
         else:
             return cls(
                 slug=namespace.slug,
-                ltst_ns_slug=cls(slug=namespace.latest_slug) if namespace.latest_slug else None,
+                latest_ns_slug=cls(slug=namespace.latest_slug) if namespace.latest_slug else None,
             )
 
     def dump(self) -> models.Namespace:
@@ -137,7 +137,7 @@ class NamespaceORM(BaseORM):
         return models.Namespace(
             id=self.id,
             slug=self.slug,
-            latest_slug=self.ltst_ns_slug.slug if self.ltst_ns_slug else None,
+            latest_slug=self.latest_ns_slug.slug if self.latest_ns_slug else None,
             created_by=self.user_id,
             kind=models.NamespaceKind.user if self.user_id else models.NamespaceKind.group,
         )

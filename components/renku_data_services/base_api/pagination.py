@@ -1,6 +1,7 @@
 """Classes and decorators used for paginating long responses."""
 
 from functools import wraps
+from math import ceil
 from typing import Any, Awaitable, Callable, Concatenate, Dict, NamedTuple, Sequence, Tuple, cast
 
 from sanic import Request, json
@@ -79,9 +80,7 @@ def paginate(f: Callable[Concatenate[Request, ...], Awaitable[Tuple[Sequence[Any
 
         pagination_req = PaginationRequest(page, per_page)
         items, db_count = await f(request, *args, **kwargs, pagination=pagination_req)
-        total_pages, remainder = divmod(db_count, per_page)
-        if remainder:
-            total_pages += 1
+        total_pages = ceil(db_count/per_page)
 
         pagination = PaginationResponse(page, per_page, db_count, total_pages)
         return json(items, headers=pagination.as_header())

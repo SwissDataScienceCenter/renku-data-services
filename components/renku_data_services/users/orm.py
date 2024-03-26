@@ -56,10 +56,9 @@ class UserORM(BaseORM):
             slug = self.first_name
         else:
             slug = "user_" + self.keycloak_id
-        if len(slug) > 80:
-            # The length limit is 99 but leave some space for modifications that may be added down the line
-            # to filter out invalid characters or to generate a unique name
-            slug = slug[:80]
+        # The length limit is 99 but leave some space for modifications that may be added down the line
+        # to filter out invalid characters or to generate a unique name
+        slug = slug[:80]
         return Slug.from_name(slug)
 
 

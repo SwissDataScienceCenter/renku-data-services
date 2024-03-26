@@ -34,6 +34,5 @@ all_metadata = [
     users.metadata,
     events.metadata,
     namespaces.metadata,
-    sessions.metadata,
 ]
 run_migrations(all_metadata)

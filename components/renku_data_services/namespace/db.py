@@ -70,8 +70,8 @@ class GroupRepository:
             .join(
                 schemas.GroupORM,
                 or_(
-                    schemas.GroupORM.ltst_ns_slug_id == schemas.NamespaceORM.id,
-                    schemas.GroupORM.ltst_ns_slug_id == schemas.NamespaceORM.ltst_ns_slug_id,
+                    schemas.GroupORM.latest_ns_slug_id == schemas.NamespaceORM.id,
+                    schemas.GroupORM.latest_ns_slug_id == schemas.NamespaceORM.latest_ns_slug_id,
                 ),
             )
             .where(func.lower(schemas.NamespaceORM.slug) == func.lower(slug))
@@ -100,7 +100,8 @@ class GroupRepository:
         async with self.session_maker() as session, session.begin():
             group = await self._get_group(session, slug)
             if user.id != group.created_by and not user.is_admin:
-                raise errors.Unauthorized(message="Only the owner and admins can modify groups")
+                # TODO: implement a more fine-grained authorization scheme
+                raise errors.Unauthorized(message="Only the owner and admins can list the members of a group")
             stmt = (
                 select(schemas.GroupMemberORM, user_schemas.UserORM)
                 .where(schemas.GroupMemberORM.group.has(schemas.GroupORM.id == group.id))
@@ -137,28 +138,28 @@ class GroupRepository:
                                 select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == new_slug_str)
                             )
                         ).scalar_one_or_none()
-                        if new_slug_exists and not new_slug_exists.ltst_ns_slug:
+                        if new_slug_exists and not new_slug_exists.latest_ns_slug:
                             # The slug exists in the database and it is marked as the latest/current slug
                             # for a group or a user namespace
                             raise errors.ValidationError(
                                 message=f"The slug {v} is already in use, please try a different one"
                             )
-                        old_slug_str = group.ltst_ns_slug.slug.lower()
-                        if new_slug_exists and new_slug_exists.ltst_ns_slug:
+                        old_slug_str = group.latest_ns_slug.slug.lower()
+                        if new_slug_exists and new_slug_exists.latest_ns_slug:
                             # NOTE: The new slug exists from another project or user, but this slug has already
                             # been replaced in this other project by a newer slug so this means we can reclaim the
                             # the slug from the other group or user to use it in this group
-                            new_slug_exists.ltst_ns_slug = None
+                            new_slug_exists.latest_ns_slug = None
                             # Make sure the slug does not point to another user
                             new_slug_exists.user_id = None
                             new_slug_exists.user = None
                             # Assign the slug to the requested group
-                            group.ltst_ns_slug = new_slug_exists
+                            group.latest_ns_slug = new_slug_exists
                         else:
                             # The slug is brand new so we replace the value of the latest slug with it
                             # and then make a new version of the old slug that points to the latest version
-                            group.ltst_ns_slug.slug = new_slug_str
-                        old_slug = schemas.NamespaceORM(slug=old_slug_str, ltst_ns_slug=group.ltst_ns_slug)
+                            group.latest_ns_slug.slug = new_slug_str
+                        old_slug = schemas.NamespaceORM(slug=old_slug_str, latest_ns_slug=group.latest_ns_slug)
                         session.add(old_slug)
                     case "description":
                         group.description = v
@@ -203,10 +204,10 @@ class GroupRepository:
                 raise errors.Unauthorized(message="Only the owner and admins can modify groups")
             stmt = delete(schemas.GroupORM).where(schemas.GroupORM.id == group.id)
             await session.execute(stmt)
-            if not group.ltst_ns_slug.ltst_ns_slug:
+            if not group.latest_ns_slug.latest_ns_slug:
                 # NOTE: the latest group is deleted, delete all projects in the group
                 stmt = delete(ProjectORM).where(
-                    ProjectORM.ltst_prj_slug.has(ProjectSlug.ltst_ns_slug_id == group.ltst_ns_slug_id)
+                    ProjectORM.latest_prj_slug.has(ProjectSlug.latest_ns_slug_id == group.latest_ns_slug_id)
                 )
                 await session.execute(stmt)
 
@@ -234,7 +235,7 @@ class GroupRepository:
                 created_by=user.id,
                 creation_date=creation_date,
                 members={user.id: member},
-                ltst_ns_slug=ns,
+                latest_ns_slug=ns,
             )
 
             session.add(group)
@@ -253,17 +254,17 @@ class GroupRepository:
     ) -> Tuple[List[models.Namespace], int]:
         """Get all namespaces."""
         async with self.session_maker() as session, session.begin():
-            group_nss_stmt = (
+            group_ns_stmt = (
                 select(schemas.NamespaceORM, schemas.GroupORM)
                 .join(
                     schemas.GroupORM,
                     or_(
-                        schemas.GroupORM.ltst_ns_slug_id == schemas.NamespaceORM.id,
-                        schemas.GroupORM.ltst_ns_slug_id == schemas.NamespaceORM.ltst_ns_slug_id,
+                        schemas.GroupORM.latest_ns_slug_id == schemas.NamespaceORM.id,
+                        schemas.GroupORM.latest_ns_slug_id == schemas.NamespaceORM.latest_ns_slug_id,
                     ),
                 )
                 .where(schemas.GroupORM.members.any(schemas.GroupMemberORM.user_id == user.id))
-                .where(schemas.NamespaceORM.ltst_ns_slug_id.is_(None))  # get only latest namespaces
+                .where(schemas.NamespaceORM.latest_ns_slug_id.is_(None))  # get only latest namespaces
             )
             output = []
             if pagination.page == 1:
@@ -274,12 +275,12 @@ class GroupRepository:
             # NOTE: in the first page the personal namespace is added, so the offset and per page params are modified
             group_per_page = pagination.per_page - len(output) if pagination.page == 1 else pagination.per_page
             group_offset = 0 if pagination.page == 1 else pagination.offset - len(output)
-            group_nss = (await session.execute(group_nss_stmt.limit(group_per_page).offset(group_offset))).tuples()
+            group_ns = (await session.execute(group_ns_stmt.limit(group_per_page).offset(group_offset))).tuples()
             group_count = (
-                await session.execute(group_nss_stmt.with_only_columns(func.count(schemas.NamespaceORM.id)))
+                await session.execute(group_ns_stmt.with_only_columns(func.count(schemas.NamespaceORM.id)))
             ).scalar() or 0
             group_count += len(output)
-            for ns_orm, _ in group_nss:
+            for ns_orm, _ in group_ns:
                 output.append(ns_orm.dump())
             return output, group_count
 
@@ -293,8 +294,8 @@ class GroupRepository:
                 .join(
                     schemas.GroupORM,
                     or_(
-                        schemas.GroupORM.ltst_ns_slug_id == schemas.NamespaceORM.id,
-                        schemas.GroupORM.ltst_ns_slug_id == schemas.NamespaceORM.ltst_ns_slug_id,
+                        schemas.GroupORM.latest_ns_slug_id == schemas.NamespaceORM.id,
+                        schemas.GroupORM.latest_ns_slug_id == schemas.NamespaceORM.latest_ns_slug_id,
                     ),
                     isouter=True,  # NOTE: if ommitted it will only return groups, without user namespaces
                 )

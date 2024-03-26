@@ -21,9 +21,9 @@ def upgrade() -> None:
         "namespaces",
         sa.Column("id", sa.String(length=26), nullable=False),
         sa.Column("slug", sa.String(length=99), nullable=False),
-        sa.Column("ltst_ns_slug_id", sa.String(length=26), nullable=True),
+        sa.Column("latest_ns_slug_id", sa.String(length=26), nullable=True),
         sa.Column("user_id", sa.String(length=36), nullable=True),
-        sa.ForeignKeyConstraint(["ltst_ns_slug_id"], ["common.namespaces.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["latest_ns_slug_id"], ["common.namespaces.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(
             ["user_id"],
             ["users.users.keycloak_id"],
@@ -33,7 +33,7 @@ def upgrade() -> None:
         schema="common",
     )
     op.create_index(
-        op.f("ix_common_namespaces_ltst_ns_slug_id"), "namespaces", ["ltst_ns_slug_id"], unique=False, schema="common"
+        op.f("ix_common_namespaces_latest_ns_slug_id"), "namespaces", ["latest_ns_slug_id"], unique=False, schema="common"
     )
     op.create_index(op.f("ix_common_namespaces_slug"), "namespaces", ["slug"], unique=True, schema="common")
     op.create_index(op.f("ix_common_namespaces_user_id"), "namespaces", ["user_id"], unique=False, schema="common")
@@ -43,14 +43,14 @@ def upgrade() -> None:
         sa.Column("name", sa.String(length=99), nullable=False),
         sa.Column("created_by", sa.String(length=36), nullable=False),
         sa.Column("creation_date", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("ltst_ns_slug_id", sa.String(length=26), nullable=False),
+        sa.Column("latest_ns_slug_id", sa.String(length=26), nullable=False),
         sa.Column("description", sa.String(length=500), nullable=True),
         sa.ForeignKeyConstraint(
             ["created_by"],
             ["users.users.keycloak_id"],
         ),
         sa.ForeignKeyConstraint(
-            ["ltst_ns_slug_id"],
+            ["latest_ns_slug_id"],
             ["common.namespaces.id"],
         ),
         sa.PrimaryKeyConstraint("id"),
@@ -76,40 +76,40 @@ def upgrade() -> None:
         "project_slugs",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("slug", sa.String(length=99), nullable=False),
-        sa.Column("ltst_ns_slug_id", sa.String(length=26), nullable=False),
-        sa.Column("ltst_prj_slug_id", sa.Integer(), nullable=True),
-        sa.ForeignKeyConstraint(["ltst_ns_slug_id"], ["common.namespaces.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["ltst_prj_slug_id"], ["projects.project_slugs.id"], ondelete="CASCADE"),
+        sa.Column("latest_ns_slug_id", sa.String(length=26), nullable=False),
+        sa.Column("latest_prj_slug_id", sa.Integer(), nullable=True),
+        sa.ForeignKeyConstraint(["latest_ns_slug_id"], ["common.namespaces.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["latest_prj_slug_id"], ["projects.project_slugs.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         schema="projects",
     )
     op.create_index(
-        op.f("ix_projects_project_slugs_ltst_ns_slug_id"),
+        op.f("ix_projects_project_slugs_latest_ns_slug_id"),
         "project_slugs",
-        ["ltst_ns_slug_id"],
+        ["latest_ns_slug_id"],
         unique=False,
         schema="projects",
     )
     op.create_index(
-        op.f("ix_projects_project_slugs_ltst_prj_slug_id"),
+        op.f("ix_projects_project_slugs_latest_prj_slug_id"),
         "project_slugs",
-        ["ltst_prj_slug_id"],
+        ["latest_prj_slug_id"],
         unique=False,
         schema="projects",
     )
     op.create_index(op.f("ix_projects_project_slugs_slug"), "project_slugs", ["slug"], unique=False, schema="projects")
     op.create_index(
-        "project_slugs_unique_slugs", "project_slugs", ["ltst_ns_slug_id", "slug"], unique=True, schema="projects"
+        "project_slugs_unique_slugs", "project_slugs", ["latest_ns_slug_id", "slug"], unique=True, schema="projects"
     )
-    op.add_column("projects", sa.Column("ltst_prj_slug_id", sa.Integer(), nullable=False), schema="projects")
+    op.add_column("projects", sa.Column("latest_prj_slug_id", sa.Integer(), nullable=False), schema="projects")
     op.create_index(
-        op.f("ix_projects_projects_ltst_prj_slug_id"), "projects", ["ltst_prj_slug_id"], unique=False, schema="projects"
+        op.f("ix_projects_projects_latest_prj_slug_id"), "projects", ["latest_prj_slug_id"], unique=False, schema="projects"
     )
     op.create_foreign_key(
         "projects_latest_project_slug_id_fk",
         "projects",
         "project_slugs",
-        ["ltst_prj_slug_id"],
+        ["latest_prj_slug_id"],
         ["id"],
         source_schema="projects",
         referent_schema="projects",
@@ -125,13 +125,13 @@ def downgrade() -> None:
     )
     op.execute(
         "MERGE INTO projects.projects pr USING projects.project_slugs sl "
-        "ON pr.ltst_prj_slug_id = sl.id WHEN MATCHED THEN UPDATE SET slug = sl.slug"
+        "ON pr.latest_prj_slug_id = sl.id WHEN MATCHED THEN UPDATE SET slug = sl.slug"
     )
     op.alter_column("projects", "slug", schema="projects", nullable=False)
 
     op.drop_constraint("projects_latest_project_slug_id_fk", "projects", schema="projects", type_="foreignkey")
-    op.drop_index(op.f("ix_projects_projects_ltst_prj_slug_id"), table_name="projects", schema="projects")
-    op.drop_column("projects", "ltst_prj_slug_id", schema="projects")
+    op.drop_index(op.f("ix_projects_projects_latest_prj_slug_id"), table_name="projects", schema="projects")
+    op.drop_column("projects", "latest_prj_slug_id", schema="projects")
     op.drop_index(op.f("ix_common_group_members_group_id"), table_name="group_members", schema="common")
     op.drop_table("group_members", schema="common")
     op.drop_index(op.f("ix_common_groups_name"), table_name="groups", schema="common")
@@ -139,11 +139,11 @@ def downgrade() -> None:
     op.drop_table("groups", schema="common")
     op.drop_index(op.f("ix_common_namespaces_user_id"), table_name="namespaces", schema="common")
     op.drop_index(op.f("ix_common_namespaces_slug"), table_name="namespaces", schema="common")
-    op.drop_index(op.f("ix_common_namespaces_ltst_ns_slug_id"), table_name="namespaces", schema="common")
+    op.drop_index(op.f("ix_common_namespaces_latest_ns_slug_id"), table_name="namespaces", schema="common")
     op.drop_index("project_slugs_unique_slugs", table_name="project_slugs", schema="projects")
     op.drop_index(op.f("ix_projects_project_slugs_slug"), table_name="project_slugs", schema="projects")
-    op.drop_index(op.f("ix_projects_project_slugs_ltst_prj_slug_id"), table_name="project_slugs", schema="projects")
-    op.drop_index(op.f("ix_projects_project_slugs_ltst_ns_slug_id"), table_name="project_slugs", schema="projects")
+    op.drop_index(op.f("ix_projects_project_slugs_latest_prj_slug_id"), table_name="project_slugs", schema="projects")
+    op.drop_index(op.f("ix_projects_project_slugs_latest_ns_slug_id"), table_name="project_slugs", schema="projects")
     op.drop_table("project_slugs", schema="projects")
     op.drop_table("namespaces", schema="common")
     # ### end Alembic commands ###

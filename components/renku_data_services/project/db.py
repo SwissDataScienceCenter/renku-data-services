@@ -140,9 +140,9 @@ class ProjectRepository:
 
             results = await gather(session.execute(stmt), session.execute(stmt_count))
             projects_orm = results[0].scalars().all()
-            n_total_elements = cast(int, results[1].scalar() or 0)
+            total_elements = cast(int, results[1].scalar() or 0)
 
-            return [p.dump() for p in projects_orm], n_total_elements
+            return [p.dump() for p in projects_orm], total_elements
 
     async def get_project(self, user: base_models.APIUser, project_id: str) -> models.Project:
         """Get one project from the database."""
@@ -183,7 +183,7 @@ class ProjectRepository:
             else project.visibility,
             created_by_id=user_id,
             description=project.description,
-            ltst_prj_slug=schemas.ProjectSlug(slug, ltst_ns_slug=ns.ltst_ns_slug or ns),
+            latest_prj_slug=schemas.ProjectSlug(slug, latest_ns_slug=ns.latest_ns_slug or ns),
             repositories=repos,
             creation_date=datetime.now(timezone.utc).replace(microsecond=0),
         )

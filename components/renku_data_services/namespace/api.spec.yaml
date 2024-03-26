@@ -388,7 +388,7 @@ components:
       pattern: "^[A-Z0-9]{26}$"  # This is case-insensitive
       format: ulid
     NamespaceName:
-      description: Renku group name
+      description: Renku group or namespace name
       type: string
       minLength: 1
       maxLength: 99
@@ -416,7 +416,7 @@ components:
       type: string
       maxLength: 500
     GroupMemberResponse:
-      description: A KeyCloak user that is member of a group
+      description: A group member response
       type: object
       additionalProperties: false
       properties:
@@ -437,7 +437,7 @@ components:
         id: "some-keycloak-user-id"
         role: "owner"
     GroupMemberPatchRequest:
-      description: A KeyCloak user that is member of a group
+      description: Request to add a specific user as member of a group 
       type: object
       additionalProperties: false
       properties:
@@ -495,7 +495,7 @@ components:
         - group
         - user
     NamespaceResponseList:
-      description: A list of Renku groups
+      description: A list of Renku namespaces
       type: array
       items:
         $ref: "#/components/schemas/NamespaceResponse"

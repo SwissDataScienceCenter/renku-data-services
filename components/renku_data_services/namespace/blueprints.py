@@ -133,7 +133,7 @@ class GroupsBP(CustomBlueprint):
         return "/groups/<slug>/members", ["PATCH"], _update_members
 
     def delete_member(self) -> BlueprintFactoryResponse:
-        """Delete a specific project."""
+        """Remove a specific user from the list of members of a group."""
 
         @authenticate(self.authenticator)
         @only_authenticated
