@@ -99,27 +99,25 @@ class DependencyChecker(AvscSchemaDependenciesChecker):
     def store_dependencies_of_field(self, node: Avro.Node) -> None:
         """Store external_dependencies of other records in a node in a private dict."""
 
-        if isinstance(node, str):
-            if self.ancestors and "." in node:
-                anc = self.ancestors[-1].key
-                if anc == Avro.Type or isinstance(anc, int):
-                    dependent_ancestor = self._find_ancestor()
-                    if dependent_ancestor:
-                        self.record_dependencies_graph.add_edge(dependent_ancestor, node)
-
-        if isinstance(node, OrderedDict):
-            if Avro.Name in node:
-                if Avro.Namespace in node:
-                    dep = node[Avro.Namespace] + "." + node[Avro.Name]
-                elif "." in node[Avro.Name]:
-                    dep = node[Avro.Name]
-                elif Avro.Fields in node or Avro.Symbols in node:
-                    dep = namespace_name(self.current_schema_name) + "." + node[Avro.Name]
-                else:
-                    return
-
+        if isinstance(node, str) and self.ancestors and "." in node:
+            anc = self.ancestors[-1].key
+            if anc == Avro.Type or isinstance(anc, int):
                 dependent_ancestor = self._find_ancestor()
-                self.record_dependencies_graph.add_edge(dependent_ancestor, dep)
+                if dependent_ancestor:
+                    self.record_dependencies_graph.add_edge(dependent_ancestor, node)
+
+        if isinstance(node, OrderedDict) and Avro.Name in node:
+            if Avro.Namespace in node:
+                dep = node[Avro.Namespace] + "." + node[Avro.Name]
+            elif "." in node[Avro.Name]:
+                dep = node[Avro.Name]
+            elif Avro.Fields in node or Avro.Symbols in node:
+                dep = namespace_name(self.current_schema_name) + "." + node[Avro.Name]
+            else:
+                return
+
+            dependent_ancestor = self._find_ancestor()
+            self.record_dependencies_graph.add_edge(dependent_ancestor, dep)
 
     def process(self) -> None:
         """Detects all dependencies among schemas."""

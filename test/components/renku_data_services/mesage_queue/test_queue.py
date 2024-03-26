@@ -1,7 +1,7 @@
 """Test for the message queue."""
 
-
 import asyncio
+import contextlib
 
 import pytest
 
@@ -37,10 +37,8 @@ async def test_queue_resend(app_config, monkeypatch):
             return "abcdefg"
 
     fakerepo = FakeRepo()
-    try:
+    with contextlib.suppress(FakeException):
         await fakerepo.fake_db_method("test")
-    except FakeException:
-        pass
 
     events = await app_config.redis.redis_connection.xrange("project.removed")
     assert len(events) == 0

@@ -26,7 +26,7 @@ components/renku_data_services/user_preferences/apispec.py: components/renku_dat
 components/renku_data_services/namespace/apispec.py: components/renku_data_services/namespace/api.spec.yaml
 	poetry run datamodel-codegen --input components/renku_data_services/namespace/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/namespace/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.namespace.apispec_base.BaseAPISpec
 
-schemas: components/renku_data_services/crc/apispec.py components/renku_data_services/storage/apispec.py components/renku_data_services/users/apispec.py components/renku_data_services/project/apispec.py components/renku_data_services/user_preferences/apispec.py components/renku_data_services/namespace/apispec.py 
+schemas: components/renku_data_services/crc/apispec.py components/renku_data_services/storage/apispec.py components/renku_data_services/users/apispec.py components/renku_data_services/project/apispec.py components/renku_data_services/user_preferences/apispec.py components/renku_data_services/namespace/apispec.py
 	@echo "generated classes based on ApiSpec"
 
 download_avro:
@@ -60,10 +60,8 @@ style_checks:
 	@echo "checking namespace apispec is up to date"
 	@$(call test_apispec_up_to_date,"namespace")
 	poetry run mypy
-	poetry run flake8 -v
+	poetry run ruff check .
 	poetry run bandit -c pyproject.toml -r .
-	poetry run isort --diff --verbose .
-	poetry run pydocstyle -v
 	poetry poly check
 	poetry poly libs
 
@@ -79,7 +77,7 @@ tests:
 	@rm -f .tmp.pid
 	@echo "===========================================TEST DOWNGRADE/UPGRADE==========================================="
 	DUMMY_STORES=true poetry run coverage run -a -m alembic -c components/renku_data_services/migrations/alembic.ini --name=common downgrade base
-	DUMMY_STORES=true poetry run alembic -c components/renku_data_services/migrations/alembic.ini --name=common upgrade heads 
+	DUMMY_STORES=true poetry run alembic -c components/renku_data_services/migrations/alembic.ini --name=common upgrade heads
 	@echo "===========================================FINAL COMBINED COVERAGE FOR ALL TESTS==========================================="
 	poetry run coverage report --show-missing
 	poetry run coverage lcov -o coverage.lcov

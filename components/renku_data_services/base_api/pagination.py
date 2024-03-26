@@ -1,4 +1,5 @@
 """Classes and decorators used for paginating long responses."""
+
 from functools import wraps
 from typing import Any, Awaitable, Callable, Concatenate, Dict, NamedTuple, Sequence, Tuple, cast
 
@@ -50,8 +51,7 @@ class PaginationResponse(NamedTuple):
 
 
 def paginate(f: Callable[Concatenate[Request, ...], Awaitable[Tuple[Sequence[Any], int]]]):
-    """
-    Serializes the response to JSON and adds the required pagination headers to the response.
+    """Serializes the response to JSON and adds the required pagination headers to the response.
 
     The handler should return first the list of items and then the total count from the DB.
     """

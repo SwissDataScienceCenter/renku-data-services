@@ -64,50 +64,47 @@ class SessionRepository:
         )
         environment = schemas.EnvironmentORM.load(environment_model)
 
-        async with self.session_maker() as session:
-            async with session.begin():
-                session.add(environment)
-                return environment.dump()
+        async with self.session_maker() as session, session.begin():
+            session.add(environment)
+            return environment.dump()
 
     async def update_environment(self, user: base_models.APIUser, environment_id: str, **kwargs) -> models.Environment:
         """Update a session environment entry."""
         if not user.is_admin:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
-        async with self.session_maker() as session:
-            async with session.begin():
-                res = await session.scalars(
-                    select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == environment_id)
+        async with self.session_maker() as session, session.begin():
+            res = await session.scalars(
+                select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == environment_id)
+            )
+            environment = res.one_or_none()
+            if environment is None:
+                raise errors.MissingResourceError(
+                    message=f"Session environment with id '{environment_id}' does not exist."
                 )
-                environment = res.one_or_none()
-                if environment is None:
-                    raise errors.MissingResourceError(
-                        message=f"Session environment with id '{environment_id}' does not exist."
-                    )
 
-                for key, value in kwargs.items():
-                    # NOTE: Only ``name``, ``description``, ``container_image`` and ``default_url`` can be edited
-                    if key in ["name", "description", "container_image", "default_url"]:
-                        setattr(environment, key, value)
+            for key, value in kwargs.items():
+                # NOTE: Only ``name``, ``description``, ``container_image`` and ``default_url`` can be edited
+                if key in ["name", "description", "container_image", "default_url"]:
+                    setattr(environment, key, value)
 
-                return environment.dump()
+            return environment.dump()
 
     async def delete_environment(self, user: base_models.APIUser, environment_id: str) -> None:
         """Delete a session environment entry."""
         if not user.is_admin:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
-        async with self.session_maker() as session:
-            async with session.begin():
-                res = await session.scalars(
-                    select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == environment_id)
-                )
-                environment = res.one_or_none()
+        async with self.session_maker() as session, session.begin():
+            res = await session.scalars(
+                select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == environment_id)
+            )
+            environment = res.one_or_none()
 
-                if environment is None:
-                    return
+            if environment is None:
+                return
 
-                await session.delete(environment)
+            await session.delete(environment)
 
     async def get_launchers(self, user: base_models.APIUser) -> list[models.SessionLauncher]:
         """Get all session launchers visible for a specific user from the database."""
@@ -191,105 +188,102 @@ class SessionRepository:
 
         models.SessionLauncher.model_validate(launcher_model)
 
-        async with self.session_maker() as session:
-            async with session.begin():
-                res = await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
-                project = res.one_or_none()
-                if project is None:
+        async with self.session_maker() as session, session.begin():
+            res = await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
+            project = res.one_or_none()
+            if project is None:
+                raise errors.MissingResourceError(
+                    message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+                )
+
+            environment_id = new_launcher.environment_id
+            if environment_id is not None:
+                res = await session.scalars(
+                    select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == environment_id)
+                )
+                environment = res.one_or_none()
+                if environment is None:
                     raise errors.MissingResourceError(
-                        message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+                        message=f"Session environment with id '{environment_id}' does not exist or you do not have access to it."  # noqa: E501
                     )
 
-                environment_id = new_launcher.environment_id
-                if environment_id is not None:
-                    res = await session.scalars(
-                        select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == environment_id)
-                    )
-                    environment = res.one_or_none()
-                    if environment is None:
-                        raise errors.MissingResourceError(
-                            message=f"Session environment with id '{environment_id}' does not exist or you do not have access to it."  # noqa: E501
-                        )
-
-                launcher = schemas.SessionLauncherORM.load(launcher_model)
-                session.add(launcher)
-                return launcher.dump()
+            launcher = schemas.SessionLauncherORM.load(launcher_model)
+            session.add(launcher)
+            return launcher.dump()
 
     async def update_launcher(self, user: base_models.APIUser, launcher_id: str, **kwargs) -> models.SessionLauncher:
         """Update a session launcher entry."""
         if not user.is_authenticated or user.id is None:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
-        async with self.session_maker() as session:
-            async with session.begin():
+        async with self.session_maker() as session, session.begin():
+            res = await session.scalars(
+                select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.id == launcher_id)
+            )
+            launcher = res.one_or_none()
+            if launcher is None:
+                raise errors.MissingResourceError(
+                    message=f"Session launcher with id '{launcher_id}' does not exist or you do not have access to it."  # noqa: E501
+                )
+
+            authorized = await self.project_authz.has_permission(
+                user=user, project_id=launcher.project_id, scope=Scope.WRITE
+            )
+            if not authorized:
+                raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+
+            environment_id = kwargs.get("environment_id")
+            if environment_id is not None:
                 res = await session.scalars(
-                    select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.id == launcher_id)
+                    select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == environment_id)
                 )
-                launcher = res.one_or_none()
-                if launcher is None:
+                environment = res.one_or_none()
+                if environment is None:
                     raise errors.MissingResourceError(
-                        message=f"Session launcher with id '{launcher_id}' does not exist or you do not have access to it."  # noqa: E501
+                        message=f"Session environment with id '{environment_id}' does not exist or you do not have access to it."  # noqa: E501
                     )
 
-                authorized = await self.project_authz.has_permission(
-                    user=user, project_id=launcher.project_id, scope=Scope.WRITE
-                )
-                if not authorized:
-                    raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+            for key, value in kwargs.items():
+                # NOTE: Only ``name``, ``description``, ``environment_kind``,
+                #       ``environment_id``, ``container_image`` and ``default_url`` can be edited.
+                if key in [
+                    "name",
+                    "description",
+                    "environment_kind",
+                    "environment_id",
+                    "container_image",
+                    "default_url",
+                ]:
+                    setattr(launcher, key, value)
 
-                environment_id = kwargs.get("environment_id")
-                if environment_id is not None:
-                    res = await session.scalars(
-                        select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == environment_id)
-                    )
-                    environment = res.one_or_none()
-                    if environment is None:
-                        raise errors.MissingResourceError(
-                            message=f"Session environment with id '{environment_id}' does not exist or you do not have access to it."  # noqa: E501
-                        )
+            if launcher.environment_kind == EnvironmentKind.global_environment:
+                launcher.container_image = None
+            if launcher.environment_kind == EnvironmentKind.container_image:
+                launcher.environment = None
 
-                for key, value in kwargs.items():
-                    # NOTE: Only ``name``, ``description``, ``environment_kind``,
-                    #       ``environment_id``, ``container_image`` and ``default_url`` can be edited.
-                    if key in [
-                        "name",
-                        "description",
-                        "environment_kind",
-                        "environment_id",
-                        "container_image",
-                        "default_url",
-                    ]:
-                        setattr(launcher, key, value)
+            launcher_model = launcher.dump()
+            models.SessionLauncher.model_validate(launcher_model)
 
-                if launcher.environment_kind == EnvironmentKind.global_environment:
-                    launcher.container_image = None
-                if launcher.environment_kind == EnvironmentKind.container_image:
-                    launcher.environment = None
-
-                launcher_model = launcher.dump()
-                models.SessionLauncher.model_validate(launcher_model)
-
-                return launcher_model
+            return launcher_model
 
     async def delete_launcher(self, user: base_models.APIUser, launcher_id: str) -> None:
         """Delete a session launcher entry."""
         if not user.is_authenticated or user.id is None:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
-        async with self.session_maker() as session:
-            async with session.begin():
-                res = await session.scalars(
-                    select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.id == launcher_id)
-                )
-                launcher = res.one_or_none()
+        async with self.session_maker() as session, session.begin():
+            res = await session.scalars(
+                select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.id == launcher_id)
+            )
+            launcher = res.one_or_none()
 
-                if launcher is None:
-                    return
+            if launcher is None:
+                return
 
-                authorized = await self.project_authz.has_permission(
-                    user=user, project_id=launcher.project_id, scope=Scope.WRITE
-                )
-                if not authorized:
-                    raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+            authorized = await self.project_authz.has_permission(
+                user=user, project_id=launcher.project_id, scope=Scope.WRITE
+            )
+            if not authorized:
+                raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
-                await session.delete(launcher)
+            await session.delete(launcher)
