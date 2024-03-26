@@ -79,7 +79,6 @@ pyavro-gen = "^0.3.3"
 avro-preprocessor = "^0.3.0"
 fakeredis = "^2.21.1"
 ruff = "^0.3.4"
-pytest-ruff = "^0.3.1"
 
 [build-system]
 requires = ["poetry-core"]
@@ -143,7 +142,7 @@ convention = "google"
 skips = ["B101", "B603", "B607", "B404"]
 
 [tool.pytest.ini_options]
-addopts = "--ruff --ruff-format --cov components/ --cov bases/ --cov-report=term-missing -v"
+addopts = "--cov components/ --cov bases/ --cov-report=term-missing -v"
 doctest_optionflags = "ALLOW_UNICODE"
 testpaths = ["bases", "components", "test"]
 markers = ["integration: mark a test as a integration."]
