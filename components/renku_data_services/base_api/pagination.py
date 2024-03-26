@@ -14,15 +14,20 @@ class PaginationRequest(NamedTuple):
     per_page: int
 
     def __post_init__(self):
+        # NOTE: Postgres will fail if a value higher than what can fit in signed int64 is present in the query
         if self.page > 2**63 - 1:
-            raise errors.ValidationError(message="Parameter 'page' is too large")
+            raise errors.ValidationError(message="Pagination parameter 'page' is too large")
 
     @property
     def offset(self) -> int:
         """Calculate an item offset required for pagination."""
         output = (self.page - 1) * self.per_page
+        # NOTE: Postgres will fail if a value higher than what can fit in signed int64 is present in the query
         if output > 2**63 - 1:
-            raise errors.ValidationError(message="Parameter 'page' is too large")
+            raise errors.ValidationError(
+                message="Calculated pagination offset value is too large because "
+                "the pagination parameter 'page' in the request is too large"
+            )
         return output
 
 

@@ -27,6 +27,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["user_id"],
             ["users.users.keycloak_id"],
+            ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id"),
         schema="common",

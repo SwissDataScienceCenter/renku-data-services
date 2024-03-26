@@ -175,7 +175,7 @@ class ProjectRepository:
             )
         user_id = cast(str, user.id)
         repos = [schemas.ProjectRepositoryORM(url) for url in (project.repositories or [])]
-        slug = project.slug or models.get_slug(project.name)
+        slug = project.slug or base_models.Slug.from_name(project.name).value
         project_orm = schemas.ProjectORM(
             name=project.name,
             visibility=models.Visibility(project.visibility)

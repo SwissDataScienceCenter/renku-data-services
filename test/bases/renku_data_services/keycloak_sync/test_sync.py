@@ -1,16 +1,19 @@
 import json
+import re
 from dataclasses import asdict
 from datetime import datetime
-from typing import Any, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Tuple
 
 import pytest
 
 from bases.renku_data_services.keycloak_sync.config import SyncConfig
+from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models import APIUser
 from renku_data_services.db_config import DBConfig
 from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.redis_queue import RedisQueue
+from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.users.db import UserRepo, UsersSync
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import KeycloakAdminEvent, UserInfo, UserInfoUpdate
@@ -36,9 +39,14 @@ def get_app_configs(db_config: DBConfig):
         redis = RedisConfig.fake()
         message_queue = RedisQueue(redis)
         event_repo = EventRepository(db_config.async_session_maker, message_queue=message_queue)
-        users_sync = UsersSync(db_config.async_session_maker, message_queue=message_queue, event_repo=event_repo)
+        group_repo = GroupRepository(db_config.async_session_maker)
+        users_sync = UsersSync(
+            db_config.async_session_maker, message_queue=message_queue, event_repo=event_repo, group_repo=group_repo
+        )
         config = SyncConfig(syncer=users_sync, kc_api=kc_api, total_user_sync=total_user_sync)
-        user_repo = UserRepo(db_config.async_session_maker, message_queue=message_queue, event_repo=event_repo)
+        user_repo = UserRepo(
+            db_config.async_session_maker, message_queue=message_queue, event_repo=event_repo, group_repo=group_repo
+        )
         return config, user_repo
 
     yield _get_app_configs
@@ -130,10 +138,11 @@ def get_kc_admin_events(updates: List[Tuple[UserInfo, KeycloakAdminEvent]]) -> L
 
 
 @pytest.mark.asyncio
-async def test_total_users_sync(get_app_configs, admin_user: APIUser):
+async def test_total_users_sync(get_app_configs: Callable[..., Tuple[SyncConfig, UserRepo]], admin_user: APIUser):
     kc_api = DummyKeycloakAPI()
     user1 = UserInfo("user-1-id", "John", "Doe", "john.doe@gmail.com")
     user2 = UserInfo("user-2-id", "Jane", "Doe", "jane.doe@gmail.com")
+    assert admin_user.id
     admin_user_info = UserInfo(
         id=admin_user.id,
         first_name=admin_user.first_name,
@@ -160,12 +169,26 @@ async def test_total_users_sync(get_app_configs, admin_user: APIUser):
     await sync_config.syncer.users_sync(kc_api)
     db_users = await user_repo.get_users(admin_user)
     assert set(kc_users) == set(db_users)
+    # Make sure that the addition of the users resulted in the creation of namespaces
+    nss, _ = await sync_config.syncer.group_repo.get_namespaces(
+        user=APIUser(id=user1.id), pagination=PaginationRequest(1, 100)
+    )
+    assert len(nss) == 1
+    assert user1.email
+    assert nss[0].slug == user1.email.split("@")[0]
+    nss, _ = await sync_config.syncer.group_repo.get_namespaces(
+        user=APIUser(id=user2.id), pagination=PaginationRequest(1, 100)
+    )
+    assert len(nss) == 1
+    assert user2.email
+    assert nss[0].slug == user2.email.split("@")[0]
 
 
 @pytest.mark.asyncio
 async def test_user_events_update(get_app_configs, admin_user: APIUser):
     kc_api = DummyKeycloakAPI()
     user1 = UserInfo("user-1-id", "John", "Doe", "john.doe@gmail.com")
+    assert admin_user.id
     admin_user_info = UserInfo(
         id=admin_user.id,
         first_name=admin_user.first_name,
@@ -198,6 +221,13 @@ async def test_user_events_update(get_app_configs, admin_user: APIUser):
     await sync_config.syncer.events_sync(kc_api)
     db_users = await user_repo.get_users(admin_user)
     assert set(db_users) == {user1_updated, user2, admin_user_info}
+    # Make sure that the addition of the user resulted in the creation of namespaces
+    nss, _ = await sync_config.syncer.group_repo.get_namespaces(
+        user=APIUser(id=user2.id), pagination=PaginationRequest(1, 100)
+    )
+    assert len(nss) == 1
+    assert user2.email
+    assert nss[0].slug == user2.email.split("@")[0]
 
 
 @pytest.mark.asyncio
@@ -205,6 +235,7 @@ async def test_admin_events(get_app_configs, admin_user: APIUser):
     kc_api = DummyKeycloakAPI()
     user1 = UserInfo("user-1-id", "John", "Doe", "john.doe@gmail.com")
     user2 = UserInfo("user-2-id", "Jane", "Doe", "jane.doe@gmail.com")
+    assert admin_user.id
     admin_user_info = UserInfo(
         id=admin_user.id,
         first_name=admin_user.first_name,
@@ -220,6 +251,13 @@ async def test_admin_events(get_app_configs, admin_user: APIUser):
     assert set(kc_users) == {user1, user2, admin_user_info}
     assert len(db_users) == 1  # listing users add the requesting user if not present
     await sync_config.syncer.users_sync(kc_api)
+    # Make sure that the addition of the users resulted in the creation of namespaces
+    nss, _ = await sync_config.syncer.group_repo.get_namespaces(
+        user=APIUser(id=user2.id), pagination=PaginationRequest(1, 100)
+    )
+    assert len(nss) == 1
+    assert user2.email
+    assert nss[0].slug == user2.email.split("@")[0]
     db_users = await user_repo.get_users(admin_user)
     assert set(kc_users) == set(db_users)
     # Add admin events
@@ -230,6 +268,11 @@ async def test_admin_events(get_app_configs, admin_user: APIUser):
     await sync_config.syncer.events_sync(kc_api)
     db_users = await user_repo.get_users(admin_user)
     assert {user1_updated, admin_user_info} == set(db_users)
+    # Make sure that the removal of a user removes the namespace
+    nss, _ = await sync_config.syncer.group_repo.get_namespaces(
+        user=APIUser(id=user2.id), pagination=PaginationRequest(1, 100)
+    )
+    assert len(nss) == 0
 
 
 @pytest.mark.asyncio
@@ -237,6 +280,7 @@ async def test_events_update_error(get_app_configs, admin_user: APIUser):
     kc_api = DummyKeycloakAPI()
     user1 = UserInfo("user-1-id", "John", "Doe", "john.doe@gmail.com")
     user2 = UserInfo("user-2-id", "Jane", "Doe", "jane.doe@gmail.com")
+    assert admin_user.id
     admin_user_info = UserInfo(
         id=admin_user.id,
         first_name=admin_user.first_name,
@@ -284,6 +328,7 @@ async def test_removing_non_existent_user(get_app_configs, admin_user: APIUser):
     kc_api = DummyKeycloakAPI()
     user1 = UserInfo("user-1-id", "John", "Doe", "john.doe@gmail.com")
     non_existent_user = UserInfo("user-2-id", "Jane", "Doe", "jane.doe@gmail.com")
+    assert admin_user.id
     admin_user_info = UserInfo(
         id=admin_user.id,
         first_name=admin_user.first_name,
@@ -307,3 +352,41 @@ async def test_removing_non_existent_user(get_app_configs, admin_user: APIUser):
     await sync_config.syncer.events_sync(kc_api)
     db_users = await user_repo.get_users(admin_user)
     assert set(db_users) == {user1, admin_user_info}
+
+
+@pytest.mark.asyncio
+async def test_avoiding_namespace_slug_duplicates(
+    get_app_configs: Callable[..., Tuple[SyncConfig, UserRepo]], admin_user: APIUser
+):
+    kc_api = DummyKeycloakAPI()
+    num_users = 10
+    users = [UserInfo(f"user-{i}-id", "John", "Doe", "john.doe@gmail.com") for i in range(1, num_users + 1)]
+    assert admin_user.id
+    admin_user_info = UserInfo(
+        id=admin_user.id,
+        first_name=admin_user.first_name,
+        last_name=admin_user.last_name,
+        email=admin_user.email,
+    )
+    kc_api.users = get_kc_users(users + [admin_user_info])
+    sync_config, _ = get_app_configs(kc_api)
+    original_count = 0
+    enumerated_count = 0
+    random_count = 0
+    await sync_config.syncer.users_sync(kc_api)
+    for user in users:
+        api_user = APIUser(id=user.id)
+        nss, _ = await sync_config.syncer.group_repo.get_namespaces(api_user, PaginationRequest(1, 100))
+        assert len(nss) == 1
+        ns = nss[0]
+        assert user.email
+        prefix = user.email.split("@")[0]
+        if re.match(rf"^{re.escape(prefix)}-[a-z0-9]{{8}}$", ns.slug):
+            random_count += 1
+        elif re.match(rf"^{re.escape(prefix)}-[1-5]$", ns.slug):
+            enumerated_count += 1
+        elif ns.slug == prefix:
+            original_count += 1
+    assert original_count == 1
+    assert enumerated_count == 5
+    assert random_count == num_users - enumerated_count - original_count

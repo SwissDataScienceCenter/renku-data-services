@@ -10,7 +10,7 @@ from renku_data_services.errors import errors
 from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.redis_queue import RedisQueue
-from renku_data_services.users.db import UsersSync
+from renku_data_services.users.db import GroupRepository, UsersSync
 from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
 
 
@@ -43,7 +43,8 @@ class SyncConfig:
         message_queue = RedisQueue(redis)
 
         event_repo = EventRepository(session_maker=session_maker, message_queue=message_queue)
-        syncer = UsersSync(session_maker, message_queue=message_queue, event_repo=event_repo)
+        group_repo = GroupRepository(session_maker)
+        syncer = UsersSync(session_maker, message_queue=message_queue, event_repo=event_repo, group_repo=group_repo)
         keycloak_url = os.environ[f"{prefix}KEYCLOAK_URL"]
         client_id = os.environ[f"{prefix}KEYCLOAK_CLIENT_ID"]
         client_secret = os.environ[f"{prefix}KEYCLOAK_CLIENT_SECRET"]

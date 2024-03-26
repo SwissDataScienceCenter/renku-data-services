@@ -263,7 +263,10 @@ class Config:
         """The DB adapter for users."""
         if not self._kc_user_repo:
             self._kc_user_repo = KcUserRepo(
-                session_maker=self.db.async_session_maker, message_queue=self.message_queue, event_repo=self.event_repo
+                session_maker=self.db.async_session_maker,
+                message_queue=self.message_queue,
+                event_repo=self.event_repo,
+                group_repo=self.group_repo,
             )
         return self._kc_user_repo
 

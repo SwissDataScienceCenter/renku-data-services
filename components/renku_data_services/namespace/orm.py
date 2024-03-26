@@ -110,7 +110,9 @@ class NamespaceORM(BaseORM):
         join_depth=1,
         default=None,
     )
-    user_id: Mapped[Optional[str]] = mapped_column(ForeignKey(UserORM.keycloak_id), index=True, default=None)
+    user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey(UserORM.keycloak_id, ondelete="CASCADE"), index=True, default=None
+    )
     user: Mapped[Optional[UserORM]] = relationship(init=False, lazy="joined")
 
     @classmethod

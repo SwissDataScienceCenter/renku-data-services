@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import random
-import re
 import string
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Tuple, cast
@@ -19,6 +18,7 @@ from renku_data_services import errors
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.namespace import apispec, models
 from renku_data_services.namespace import orm as schemas
+from renku_data_services.project.orm import ProjectORM, ProjectSlug
 from renku_data_services.users import orm as user_schemas
 
 
@@ -40,57 +40,9 @@ class GroupRepository:
                 return
             logging.info("Found zero user namespaces, will try to create them from users table")
             res = await session.execute(select(user_schemas.UserORM))
-            used_slugs = set()
             count = 0
             for user in res.scalars():
-                slug = ""
-                if user.email:
-                    slug = user.email.split("@")[0]
-                elif user.first_name and user.last_name:
-                    slug = user.first_name + "-" + user.last_name
-                elif user.last_name:
-                    slug = user.last_name
-                elif user.first_name:
-                    slug = user.first_name
-                else:
-                    slug = "user_" + user.keycloak_id
-                    logging.warn(
-                        f"Could not find email, first name or last name for user"
-                        f" with Keycloak ID {user.keycloak_id}, using slug {slug} based on Keycloak ID"
-                    )
-                if len(slug) > 80:
-                    # The length limit is 99 but leave some space for some modifications we add down the line
-                    # to filter out invalid characters or to generate a unique name
-                    slug = slug[:80]
-                if slug.startswith(("-", "_", ".")):
-                    slug = "user" + slug
-                # Replace any non-allowed characters
-                slug = re.sub(r"[^a-zA-Z0-9-_.]", "-", slug)
-                # Replace consecutive special characters
-                slug = re.sub(r"[-_.]{2,}", "-", slug)
-                # Check the new slug has not been used already
-                if slug in used_slugs:
-                    sep = "-"
-                    if slug.endswith((".", "_", "-")):
-                        sep = ""
-                    logging.warn(
-                        f"Slug {slug} for user with Keycloak ID {user.keycloak_id} "
-                        "is already used, adding a count at the end to make unique"
-                    )
-                    for inc in range(1, 11):
-                        new_slug = f"{slug}{sep}{inc}"
-                        if new_slug not in used_slugs:
-                            slug = new_slug
-                            break
-                    if slug in used_slugs:
-                        logging.warn(
-                            f"Cannot generate a new slug by counting, for slug {slug} will append a small random string"
-                        )
-                        slug += sep + "".join([random.choice(string.ascii_letters) for _ in range(6)])  # nosec: B311
-                # Insert namespace in the db
-                ns = schemas.NamespaceORM(slug=slug, user_id=user.keycloak_id)
-                session.add(ns)
-                used_slugs.add(slug)
+                ns = await self.insert_user_namespace(user, session, retry_enumerate=10, retry_random=True)
                 logging.info(f"Creating user namespace {ns}")
                 count += 1
         logging.info(f"Created {count} user namespaces")
@@ -251,6 +203,12 @@ class GroupRepository:
                 raise errors.Unauthorized(message="Only the owner and admins can modify groups")
             stmt = delete(schemas.GroupORM).where(schemas.GroupORM.id == group.id)
             await session.execute(stmt)
+            if not group.ltst_ns_slug.ltst_ns_slug:
+                # NOTE: the latest group is deleted, delete all projects in the group
+                stmt = delete(ProjectORM).where(
+                    ProjectORM.ltst_prj_slug.has(ProjectSlug.ltst_ns_slug_id == group.ltst_ns_slug_id)
+                )
+                await session.execute(stmt)
 
     async def delete_group_member(self, user: base_models.APIUser, slug: str, user_id_to_delete: str):
         """Delete a specific group member."""
@@ -305,6 +263,7 @@ class GroupRepository:
                     ),
                 )
                 .where(schemas.GroupORM.members.any(schemas.GroupMemberORM.user_id == user.id))
+                .where(schemas.NamespaceORM.ltst_ns_slug_id.is_(None))  # get only latest namespaces
             )
             output = []
             if pagination.page == 1:
@@ -372,3 +331,37 @@ class GroupRepository:
                     ns_dump.name += f" {ns.user.last_name}"
             ns_dump.created_by = ns.user_id
         return ns_dump
+
+    async def insert_user_namespace(
+        self, user: schemas.UserORM, session: AsyncSession, retry_enumerate: int = 0, retry_random: bool = False
+    ) -> schemas.NamespaceORM:
+        """Insert a new namespace for the user and optionally retry different variatioins to avoid collisions."""
+        # session.add(user)  # reattach the user to the session
+        original_slug = user.to_slug()
+        for inc in range(0, retry_enumerate + 1):
+            # NOTE: on iteration 0 we try with the optimal slug value derived from the user data without any suffix.
+            suffix = ""
+            if inc > 0:
+                suffix = f"-{inc}"
+            slug = base_models.Slug.from_name(original_slug.value.lower() + suffix)
+            ns = schemas.NamespaceORM(slug.value, user_id=user.keycloak_id)
+            try:
+                async with session.begin_nested():
+                    session.add(ns)
+            except IntegrityError:
+                if retry_enumerate == 0:
+                    raise errors.ValidationError(message=f"The user namespace slug {slug.value} already exists")
+                continue
+            else:
+                return ns
+        if not retry_random:
+            raise errors.ValidationError(
+                message=f"Cannot create generate a unique namespace slug for the user with ID {user.keycloak_id}"
+            )
+        # NOTE: At this point the attempts to generate unique ID have ended and the only option is
+        # to add a small random suffix to avoid uniqueness constraints problems
+        suffix = "-" + "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(8)])  # nosec: B311
+        slug = base_models.Slug.from_name(original_slug.value.lower() + suffix)
+        ns = schemas.NamespaceORM(slug.value, user_id=user.keycloak_id)
+        session.add(ns)
+        return ns
