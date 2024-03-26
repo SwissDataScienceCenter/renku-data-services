@@ -2,10 +2,11 @@
 import json
 import logging
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Iterable, List
+from typing import Any
 
 
 class KeycloakEvent(Enum):
@@ -34,9 +35,9 @@ class UserInfoUpdate:
     old_value: str | None = None
 
     @classmethod
-    def from_json_user_events(self, val: Iterable[Dict[str, Any]]) -> List["UserInfoUpdate"]:
+    def from_json_user_events(self, val: Iterable[dict[str, Any]]) -> list["UserInfoUpdate"]:
         """Generate a list of updates from a json response from Keycloak."""
-        output: List["UserInfoUpdate"] = []
+        output: list["UserInfoUpdate"] = []
         for event in val:
             details = event.get("details")
             user_id = event.get("userId")
@@ -122,9 +123,9 @@ class UserInfoUpdate:
         return output
 
     @classmethod
-    def from_json_admin_events(self, val: Iterable[Dict[str, Any]]) -> List["UserInfoUpdate"]:
+    def from_json_admin_events(self, val: Iterable[dict[str, Any]]) -> list["UserInfoUpdate"]:
         """Generate a list of updates from a json response from Keycloak."""
-        output: List["UserInfoUpdate"] = []
+        output: list["UserInfoUpdate"] = []
         for event in val:
             timestamp_epoch = event.get("time")
             if not timestamp_epoch:
@@ -199,7 +200,7 @@ class UserInfo:
     email: str | None = None
 
     @classmethod
-    def from_kc_user_payload(self, payload: Dict[str, Any]):
+    def from_kc_user_payload(self, payload: dict[str, Any]):
         """Create a user object from the user payload from the Keycloak admin API."""
         return UserInfo(
             id=payload["id"],

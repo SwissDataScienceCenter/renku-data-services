@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, NamedTuple, Tuple, cast
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any, NamedTuple, cast
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -115,7 +116,7 @@ class ProjectRepository:
 
     async def get_projects(
         self, user: base_models.APIUser, page: int, per_page: int
-    ) -> Tuple[list[models.Project], PaginationResponse]:
+    ) -> tuple[list[models.Project], PaginationResponse]:
         """Get all projects from the database."""
         if page < 1:
             raise errors.ValidationError(message="Parameter 'page' must be a natural number")
@@ -174,7 +175,7 @@ class ProjectRepository:
     ) -> models.Project:
         """Insert a new project entry."""
         project_orm = schemas.ProjectORM.load(project)
-        project_orm.creation_date = datetime.now(timezone.utc).replace(microsecond=0)
+        project_orm.creation_date = datetime.now(UTC).replace(microsecond=0)
         project_orm.created_by = user.id
         session.add(project_orm)
 
@@ -255,7 +256,7 @@ class ProjectMemberRepository:
         self.session_maker = session_maker  # type: ignore[call-overload]
         self.project_authz: IProjectAuthorizer = project_authz
 
-    async def get_members(self, user: base_models.APIUser, project_id: str) -> List[models.MemberWithRole]:
+    async def get_members(self, user: base_models.APIUser, project_id: str) -> list[models.MemberWithRole]:
         """Get all members of a project."""
         authorized = await self.project_authz.has_permission(user=user, project_id=project_id, scope=Scope.READ)
         if not authorized:
@@ -270,7 +271,7 @@ class ProjectMemberRepository:
             for m in members
         ]
 
-    async def update_members(self, user: base_models.APIUser, project_id: str, members: List[Dict[str, Any]]) -> None:
+    async def update_members(self, user: base_models.APIUser, project_id: str, members: list[dict[str, Any]]) -> None:
         """Update project's members."""
         authorized = await self.project_authz.has_permission(user=user, project_id=project_id, scope=Scope.WRITE)
         if not authorized:

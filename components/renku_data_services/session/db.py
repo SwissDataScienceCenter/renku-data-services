@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Callable
+from collections.abc import Callable
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,7 +60,7 @@ class SessionRepository:
             container_image=new_environment.container_image,
             default_url=new_environment.default_url,
             created_by=models.Member(id=user.id),
-            creation_date=datetime.now(timezone.utc).replace(microsecond=0),
+            creation_date=datetime.now(UTC).replace(microsecond=0),
         )
         environment = schemas.EnvironmentORM.load(environment_model)
 
@@ -183,7 +183,7 @@ class SessionRepository:
             container_image=new_launcher.container_image,
             default_url=new_launcher.default_url,
             created_by=models.Member(id=user.id),
-            creation_date=datetime.now(timezone.utc).replace(microsecond=0),
+            creation_date=datetime.now(UTC).replace(microsecond=0),
         )
 
         models.SessionLauncher.model_validate(launcher_model)

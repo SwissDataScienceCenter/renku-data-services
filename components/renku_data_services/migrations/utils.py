@@ -1,5 +1,5 @@
 """Custom migrations env file to support modular migrations."""
-from typing import Sequence
+from collections.abc import Sequence
 
 from alembic import context
 from sqlalchemy import Connection, MetaData, NullPool, create_engine

@@ -1,6 +1,6 @@
 """Keycloak user store."""
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Optional, cast
 
 import httpx
 import jwt
@@ -27,7 +27,7 @@ class KcUserStore:
         url = f"{self.keycloak_url}/admin/realms/{self.realm}/users/{id}"
         async with httpx.AsyncClient(verify=get_ssl_context()) as client:
             res = await client.get(url=url, headers={"Authorization": f"bearer {access_token}"})
-        if res.status_code == 200 and cast(Dict, res.json()).get("id") == id:
+        if res.status_code == 200 and cast(dict, res.json()).get("id") == id:
             return base_models.User(keycloak_id=id)
         return None
 
@@ -37,7 +37,7 @@ class KeycloakAuthenticator:
     """Authenticator for JWT access tokens from Keycloak."""
 
     jwks: PyJWKClient
-    algorithms: List[str]
+    algorithms: list[str]
     admin_role: str = "renku-admin"
     token_field: str = "Authorization"
 
@@ -45,7 +45,7 @@ class KeycloakAuthenticator:
         if len(self.algorithms) == 0:
             raise errors.ConfigurationError(message="At least one algorithm for token validation has to be specified.")
 
-    def _validate(self, token: str) -> Dict[str, Any]:
+    def _validate(self, token: str) -> dict[str, Any]:
         sk = self.jwks.get_signing_key_from_jwt(token)
         return jwt.decode(
             token,

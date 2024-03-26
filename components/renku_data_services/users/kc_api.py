@@ -1,9 +1,10 @@
 """Keycloak API."""
 
+from collections.abc import Iterable
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Any, Dict, Iterable, List, Protocol, cast
+from typing import Any, Protocol, cast
 
 import requests  # type: ignore[import-untyped, import]
 from authlib.integrations.requests_client import OAuth2Session  # type: ignore[import-untyped, import]
@@ -17,19 +18,19 @@ from renku_data_services.users.models import KeycloakAdminEvent, KeycloakEvent
 class IKeycloakAPI(Protocol):
     """Protocol for the Keycloak API."""
 
-    def get_users(self) -> Iterable[Dict[str, Any]]:
+    def get_users(self) -> Iterable[dict[str, Any]]:
         """Get all users."""
         ...
 
     def get_user_events(
-        self, start_date: date, end_date: date | None = None, event_types: List[KeycloakEvent] | None = None
-    ) -> Iterable[Dict[str, Any]]:
+        self, start_date: date, end_date: date | None = None, event_types: list[KeycloakEvent] | None = None
+    ) -> Iterable[dict[str, Any]]:
         """Get user events."""
         ...
 
     def get_admin_events(
-        self, start_date: date, end_date: date | None = None, event_types: List[KeycloakAdminEvent] | None = None
-    ) -> Iterable[Dict[str, Any]]:
+        self, start_date: date, end_date: date | None = None, event_types: list[KeycloakAdminEvent] | None = None
+    ) -> Iterable[dict[str, Any]]:
         """Get admin events."""
         ...
 
@@ -71,7 +72,7 @@ class KeycloakAPI:
         )
         self._http_client = session
 
-    def _paginated_requests_iter(self, path: str, query_args: Dict[str, Any] | None = None) -> Iterable[Dict[str, Any]]:
+    def _paginated_requests_iter(self, path: str, query_args: dict[str, Any] | None = None) -> Iterable[dict[str, Any]]:
         url = self.keycloak_url + path
         req_query_args = deepcopy(query_args) if query_args else {}
         # Request one extra item to see if there is a need to request the next page or not
@@ -82,7 +83,7 @@ class KeycloakAPI:
             output = res.json()
             if not isinstance(output, list):
                 raise ValueError(f"Received unexpected response from Keycloak for path {path}")
-            output = cast(List[Dict[str, Any]], output)
+            output = cast(list[dict[str, Any]], output)
             if len(output) == 0:
                 return
             # Do not display the extra item unless we are on the last page
@@ -95,14 +96,14 @@ class KeycloakAPI:
             # Increment the offset so that the last (extra item) of the previous page is now first
             first += self.result_per_request_limit
 
-    def get_users(self) -> Iterable[Dict[str, Any]]:
+    def get_users(self) -> Iterable[dict[str, Any]]:
         """Get all users from Keycloak."""
         path = f"/admin/realms/{self.realm}/users"
         yield from self._paginated_requests_iter(path)
 
     def get_user_events(
-        self, start_date: date, end_date: date | None = None, event_types: List[KeycloakEvent] | None = None
-    ) -> Iterable[Dict[str, Any]]:
+        self, start_date: date, end_date: date | None = None, event_types: list[KeycloakEvent] | None = None
+    ) -> Iterable[dict[str, Any]]:
         """Get user events from Keycloak."""
         path = f"/admin/realms/{self.realm}/events"
         query_event_types = event_types or [
@@ -118,8 +119,8 @@ class KeycloakAPI:
         yield from self._paginated_requests_iter(path, query_args)
 
     def get_admin_events(
-        self, start_date: date, end_date: date | None = None, event_types: List[KeycloakAdminEvent] | None = None
-    ) -> Iterable[Dict[str, Any]]:
+        self, start_date: date, end_date: date | None = None, event_types: list[KeycloakAdminEvent] | None = None
+    ) -> Iterable[dict[str, Any]]:
         """Get admin events from Keycloak."""
         path = f"/admin/realms/{self.realm}/admin-events"
         query_event_types = event_types or [

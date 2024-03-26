@@ -1,5 +1,5 @@
 import json
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 from sanic import Sanic
@@ -29,7 +29,7 @@ def valid_storage_payload() -> dict[str, Any]:
 
 
 @pytest.fixture
-def admin_user_headers() -> Dict[str, str]:
+def admin_user_headers() -> dict[str, str]:
     return {"Authorization": 'Bearer {"is_admin": true}'}
 
 
@@ -247,7 +247,7 @@ async def test_storage_creation(
     payload: dict[str, Any],
     expected_status_code: int,
     expected_storage_type: str,
-    admin_user_headers: Dict[str, str],
+    admin_user_headers: dict[str, str],
 ):
     storage_test_client, _ = storage_test_client
     _, res = await storage_test_client.post(

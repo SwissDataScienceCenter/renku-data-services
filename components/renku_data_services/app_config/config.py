@@ -12,7 +12,7 @@ instantiated multiple times without creating multiple database connections.
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import httpx
 from jwt import PyJWKClient
@@ -56,7 +56,7 @@ from renku_data_services.utils.core import get_ssl_context, merge_api_specs
 
 
 @retry(stop=(stop_after_attempt(20) | stop_after_delay(300)), wait=wait_fixed(2), reraise=True)
-def _oidc_discovery(url: str, realm: str) -> Dict[str, Any]:
+def _oidc_discovery(url: str, realm: str) -> dict[str, Any]:
     url = f"{url}/realms/{realm}/.well-known/openid-configuration"
     res = httpx.get(url, verify=get_ssl_context())
     if res.status_code == 200:
@@ -125,7 +125,7 @@ class Config:
     gitlab_client: base_models.GitlabAPIProtocol
     kc_api: IKeycloakAPI
     message_queue: IMessageQueue
-    spec: Dict[str, Any] = field(init=False, default_factory=dict)
+    spec: dict[str, Any] = field(init=False, default_factory=dict)
     version: str = "0.0.1"
     app_name: str = "renku_crc"
     default_resource_pool_file: Optional[str] = None
@@ -145,38 +145,38 @@ class Config:
 
     def __post_init__(self):
         spec_file = Path(renku_data_services.crc.__file__).resolve().parent / "api.spec.yaml"
-        with open(spec_file, "r") as f:
+        with open(spec_file) as f:
             crc_spec = safe_load(f)
 
         spec_file = Path(renku_data_services.storage.__file__).resolve().parent / "api.spec.yaml"
-        with open(spec_file, "r") as f:
+        with open(spec_file) as f:
             storage_spec = safe_load(f)
 
         spec_file = Path(renku_data_services.user_preferences.__file__).resolve().parent / "api.spec.yaml"
-        with open(spec_file, "r") as f:
+        with open(spec_file) as f:
             user_preferences_spec = safe_load(f)
 
         spec_file = Path(renku_data_services.users.__file__).resolve().parent / "api.spec.yaml"
-        with open(spec_file, "r") as f:
+        with open(spec_file) as f:
             users = safe_load(f)
 
         spec_file = Path(renku_data_services.project.__file__).resolve().parent / "api.spec.yaml"
-        with open(spec_file, "r") as f:
+        with open(spec_file) as f:
             projects = safe_load(f)
 
         spec_file = Path(renku_data_services.session.__file__).resolve().parent / "api.spec.yaml"
-        with open(spec_file, "r") as f:
+        with open(spec_file) as f:
             sessions = safe_load(f)
 
         self.spec = merge_api_specs(crc_spec, storage_spec, user_preferences_spec, users, projects, sessions)
 
         if self.default_resource_pool_file is not None:
-            with open(self.default_resource_pool_file, "r") as f:
+            with open(self.default_resource_pool_file) as f:
                 self.default_resource_pool = models.ResourcePool.from_dict(safe_load(f))
         if self.server_defaults_file is not None and self.server_options_file is not None:
-            with open(self.server_options_file, "r") as f:
+            with open(self.server_options_file) as f:
                 options = ServerOptions.model_validate(safe_load(f))
-            with open(self.server_defaults_file, "r") as f:
+            with open(self.server_defaults_file) as f:
                 defaults = ServerOptionsDefaults.model_validate(safe_load(f))
             self.default_resource_pool = generate_default_resource_pool(options, defaults)
 

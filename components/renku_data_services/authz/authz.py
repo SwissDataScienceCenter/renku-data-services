@@ -1,7 +1,8 @@
 """Projects authorization adapter."""
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, List, Protocol, Tuple, cast
+from typing import Protocol, cast
 
 from sqlalchemy import and_, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,15 +40,15 @@ class IProjectAuthorizer(Protocol):
 
     async def get_project_qualifier_and_users(
         self, requested_by: APIUser, project_id: str, scope: Scope
-    ) -> Tuple[MemberQualifier, List[str]]:
+    ) -> tuple[MemberQualifier, list[str]]:
         """Which users have the specific permission on a project considering member qualifier."""
         ...
 
-    async def get_project_users(self, requested_by: APIUser, project_id: str, scope: Scope) -> List[ProjectMember]:
+    async def get_project_users(self, requested_by: APIUser, project_id: str, scope: Scope) -> list[ProjectMember]:
         """Get users that have explicit access to a project."""
         ...
 
-    async def get_user_projects(self, requested_by: APIUser, user_id: str | MemberQualifier, scope: Scope) -> List[str]:
+    async def get_user_projects(self, requested_by: APIUser, user_id: str | MemberQualifier, scope: Scope) -> list[str]:
         """The projects to which the user has specific permission."""
         ...
 
@@ -148,7 +149,7 @@ class SQLProjectAuthorizer:
 
     async def get_project_qualifier_and_users(
         self, requested_by: APIUser, project_id: str, scope: Scope
-    ) -> Tuple[MemberQualifier, List[str]]:
+    ) -> tuple[MemberQualifier, list[str]]:
         """Which users have the specific permission on a project considering member qualifier."""
         users = await self._get_project_users_full(requested_by=requested_by, project_id=project_id, scope=scope)
         users_list = [u.user_id for u in users]
@@ -160,7 +161,7 @@ class SQLProjectAuthorizer:
         else:
             return MemberQualifier.SOME, users_list  # type: ignore[return-value]
 
-    async def get_project_users(self, requested_by: APIUser, project_id: str, scope: Scope) -> List[ProjectMember]:
+    async def get_project_users(self, requested_by: APIUser, project_id: str, scope: Scope) -> list[ProjectMember]:
         """Get users that have explicit access to a project."""
         users = await self._get_project_users_full(requested_by=requested_by, project_id=project_id, scope=scope)
 
@@ -168,7 +169,7 @@ class SQLProjectAuthorizer:
 
     async def _get_project_users_full(
         self, requested_by: APIUser, project_id: str, scope: Scope
-    ) -> List[ProjectUserAuthz]:
+    ) -> list[ProjectUserAuthz]:
         """Get all users of a project."""
         async with self.session_maker() as session:
             if not requested_by.is_authenticated:
@@ -186,9 +187,9 @@ class SQLProjectAuthorizer:
             res = await session.execute(stmt)
             users = res.scalars().all()
 
-            return cast(List[ProjectUserAuthz], users)
+            return cast(list[ProjectUserAuthz], users)
 
-    async def get_user_projects(self, requested_by: APIUser, user_id: str | MemberQualifier, scope: Scope) -> List[str]:
+    async def get_user_projects(self, requested_by: APIUser, user_id: str | MemberQualifier, scope: Scope) -> list[str]:
         """Which project IDs can a specific user access at the designated access level."""
         if not requested_by.is_authenticated and user_id != MemberQualifier.ALL:
             raise errors.Unauthorized(message="Unauthenticated users cannot query permissions of specific users.")

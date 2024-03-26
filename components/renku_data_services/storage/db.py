@@ -1,6 +1,6 @@
 """Adapters for storage database classes."""
 
-from typing import Callable
+from collections.abc import Callable
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession

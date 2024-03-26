@@ -1,6 +1,5 @@
 """Gitlab API."""
 from dataclasses import dataclass, field
-from typing import List
 
 import httpx
 
@@ -28,8 +27,8 @@ class GitlabAPI:
         self.gitlab_graphql_url = f"{gitlab_url}/api/graphql"
 
     async def filter_projects_by_access_level(
-        self, user: APIUser, project_ids: List[str], min_access_level: GitlabAccessLevel
-    ) -> List[str]:
+        self, user: APIUser, project_ids: list[str], min_access_level: GitlabAccessLevel
+    ) -> list[str]:
         """Filter projects this user can access in gitlab with at least access level."""
 
         if not user.access_token or not user.full_name:
@@ -76,7 +75,7 @@ class GitlabAPI:
             return result
 
         resp_body = await _query_gitlab_graphql(body, header)
-        result: List[str] = []
+        result: list[str] = []
 
         def _process_projects(resp_body, min_access_level, result):
             for project in resp_body["data"]["projects"]["nodes"]:
@@ -127,8 +126,8 @@ class DummyGitlabAPI:
     }
 
     async def filter_projects_by_access_level(
-        self, user: APIUser, project_ids: List[str], min_access_level: GitlabAccessLevel
-    ) -> List[str]:
+        self, user: APIUser, project_ids: list[str], min_access_level: GitlabAccessLevel
+    ) -> list[str]:
         """Filter projects this user can access in gitlab with at least access level."""
         if not user.access_token or not user.full_name:
             return []

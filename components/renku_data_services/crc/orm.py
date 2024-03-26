@@ -1,6 +1,6 @@
 """SQLAlchemy schemas for the CRC database."""
 import logging
-from typing import List, Optional
+from typing import Optional
 
 from sqlalchemy import BigInteger, Column, Integer, MetaData, String, Table
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
@@ -42,7 +42,7 @@ class RPUserORM(BaseORM):
     __tablename__ = "users"
     keycloak_id: Mapped[str] = mapped_column(String(50), unique=True, index=True)
     no_default_access: Mapped[bool] = mapped_column(default=False, insert_default=False)
-    resource_pools: Mapped[List["ResourcePoolORM"]] = relationship(
+    resource_pools: Mapped[list["ResourcePoolORM"]] = relationship(
         secondary=resource_pools_users,
         back_populates="users",
         default_factory=list,
@@ -76,13 +76,13 @@ class ResourceClassORM(BaseORM):
     )
     resource_pool: Mapped[Optional["ResourcePoolORM"]] = relationship(back_populates="classes", default=None)
     id: Mapped[int] = mapped_column(primary_key=True, default=None, init=False)
-    tolerations: Mapped[List["TolerationORM"]] = relationship(
+    tolerations: Mapped[list["TolerationORM"]] = relationship(
         back_populates="resource_class",
         default_factory=list,
         cascade="save-update, merge, delete",
         lazy="selectin",
     )
-    node_affinities: Mapped[List["NodeAffintyORM"]] = relationship(
+    node_affinities: Mapped[list["NodeAffintyORM"]] = relationship(
         back_populates="resource_class",
         default_factory=list,
         cascade="save-update, merge, delete",
@@ -135,10 +135,10 @@ class ResourcePoolORM(BaseORM):
     __tablename__ = "resource_pools"
     name: Mapped[str] = mapped_column(String(40), index=True)
     quota: Mapped[Optional[str]] = mapped_column(String(63), index=True, default=None)
-    users: Mapped[List["RPUserORM"]] = relationship(
+    users: Mapped[list["RPUserORM"]] = relationship(
         secondary=resource_pools_users, back_populates="resource_pools", default_factory=list
     )
-    classes: Mapped[List["ResourceClassORM"]] = relationship(
+    classes: Mapped[list["ResourceClassORM"]] = relationship(
         back_populates="resource_pool",
         default_factory=list,
         cascade="save-update, merge, delete",
@@ -166,7 +166,7 @@ class ResourcePoolORM(BaseORM):
         self, quota: models.Quota | None, class_match_criteria: models.ResourceClass | None = None
     ) -> models.ResourcePool:
         """Create a resource pool model from the ORM object and a quota."""
-        classes: List[ResourceClassORM] = self.classes
+        classes: list[ResourceClassORM] = self.classes
         if quota and quota.id != self.quota:
             raise errors.BaseError(
                 message="Unexpected error when dumping a resource pool ORM.",

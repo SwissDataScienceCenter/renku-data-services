@@ -1,6 +1,7 @@
 """Adapters for user preferences database classes."""
 
-from typing import Callable, List, cast
+from collections.abc import Callable
+from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -79,7 +80,7 @@ class UserPreferencesRepository(_Base):
                 session.add(user_preferences)
                 return user_preferences.dump()
 
-            project_slugs: List[str]
+            project_slugs: list[str]
             project_slugs = user_preferences.pinned_projects.get("project_slugs", [])
 
             # Do nothing if the project is already listed
@@ -116,7 +117,7 @@ class UserPreferencesRepository(_Base):
             if user_preferences is None:
                 raise errors.MissingResourceError(message="Preferences not found for user.")
 
-            project_slugs: List[str]
+            project_slugs: list[str]
             project_slugs = user_preferences.pinned_projects.get("project_slugs", [])
 
             # Remove all projects if `project_slug` is None

@@ -1,7 +1,8 @@
 """Domain models for the application."""
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
-from typing import Callable, List, Optional, Protocol
+from typing import Optional, Protocol
 from uuid import uuid4
 
 from renku_data_services.errors import ValidationError
@@ -88,8 +89,8 @@ class ResourceClass(ResourcesCompareMixin):
     default: bool = False
     default_storage: int = 1
     matching: Optional[bool] = None
-    node_affinities: List[NodeAffinity] = field(default_factory=list)
-    tolerations: List[str] = field(default_factory=list)
+    node_affinities: list[NodeAffinity] = field(default_factory=list)
+    tolerations: list[str] = field(default_factory=list)
 
     def __post_init__(self):
         if "\x00" in self.name:
@@ -107,8 +108,8 @@ class ResourceClass(ResourcesCompareMixin):
     @classmethod
     def from_dict(cls, data: dict) -> "ResourceClass":
         """Create the model from a plain dictionary."""
-        node_affinities: List[NodeAffinity] = []
-        tolerations: List[str] = []
+        node_affinities: list[NodeAffinity] = []
+        tolerations: list[str] = []
         if data.get("node_affinities"):
             node_affinities = [
                 NodeAffinity.from_dict(affinity) if isinstance(affinity, dict) else affinity
@@ -170,7 +171,7 @@ class ResourcePool:
     """Resource pool model."""
 
     name: str
-    classes: List["ResourceClass"]
+    classes: list["ResourceClass"]
     quota: Optional[Quota] = None
     id: Optional[int] = None
     default: bool = False

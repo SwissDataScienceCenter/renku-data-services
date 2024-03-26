@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import List
 
 from sqlalchemy.sql import ColumnExpressionArgument
 
@@ -33,7 +32,7 @@ class MemberQualifier(Enum):
     SOME: str = "some"
     NONE: str = "none"
 
-    def sql_access_test(self, user_ids: List[str]) -> ColumnExpressionArgument[bool]:
+    def sql_access_test(self, user_ids: list[str]) -> ColumnExpressionArgument[bool]:
         """Get the SQL logical tests to enforce the permissions."""
         match self:
             case MemberQualifier.ALL:

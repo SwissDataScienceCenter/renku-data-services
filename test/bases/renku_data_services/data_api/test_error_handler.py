@@ -1,5 +1,6 @@
 import inspect
-from typing import Any, Awaitable, Callable, Dict
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 import pytest
 from sanic import Request, Sanic, SanicException
@@ -103,7 +104,7 @@ def _generate_pydantic_error():
         ),
     ],
 )
-def test_error_handler(err: Exception | Callable, expected_response: Dict[str, Any], expected_status_code: int):
+def test_error_handler(err: Exception | Callable, expected_response: dict[str, Any], expected_status_code: int):
     app = Sanic("test-error-handler")
     app.error_handler = CustomErrorHandler(apispec)
     app.get("/")(_trigger_error(err))  # type: ignore[unused-coroutine]

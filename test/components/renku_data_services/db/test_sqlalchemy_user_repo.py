@@ -6,7 +6,6 @@ from test.components.renku_data_services.crc_models.hypothesis import (
     user_strat,
 )
 from test.utils import create_rp
-from typing import List
 
 import pytest
 from hypothesis import HealthCheck, given, settings
@@ -54,7 +53,7 @@ async def test_delete_user(app_config: Config, user: base_models.User, admin_use
 async def test_resource_pool_add_users(
     rp: models.ResourcePool,
     app_config: Config,
-    users: List[base_models.User],
+    users: list[base_models.User],
     admin_user: base_models.APIUser,
 ):
     user_repo = app_config.user_repo
@@ -92,7 +91,7 @@ async def test_resource_pool_add_users(
 async def test_resource_pool_remove_users(
     rp: models.ResourcePool,
     app_config: Config,
-    users: List[base_models.User],
+    users: list[base_models.User],
     admin_user: base_models.APIUser,
 ):
     user_repo = app_config.user_repo
@@ -128,7 +127,7 @@ async def test_resource_pool_remove_users(
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_get_update_user_resource_pools(
-    rps: List[models.ResourcePool],
+    rps: list[models.ResourcePool],
     app_config: Config,
     user: base_models.User,
     admin_user: base_models.APIUser,
@@ -178,13 +177,13 @@ async def test_get_update_user_resource_pools(
 @pytest.mark.asyncio
 async def test_update_user(
     app_config: Config,
-    users: List[base_models.User],
+    users: list[base_models.User],
     admin_user: base_models.APIUser,
 ):
     user_repo = app_config.user_repo
     try:
-        inserted_users: List[base_models.User] = []
-        updated_users: List[base_models.User] = []
+        inserted_users: list[base_models.User] = []
+        updated_users: list[base_models.User] = []
         for user in users:
             inserted_users.append(await user_repo.insert_user(admin_user, user))
         assert len(users) == len(inserted_users)

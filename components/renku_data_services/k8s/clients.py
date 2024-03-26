@@ -2,7 +2,7 @@
 from copy import deepcopy
 from multiprocessing import Lock
 from multiprocessing.synchronize import Lock as LockType
-from typing import Any, Dict
+from typing import Any
 from uuid import uuid4
 
 from kubernetes import client, config
@@ -74,7 +74,7 @@ class DummyCoreClient(K8sCoreClientInterface):
     Not suitable for production - to be used only for testing and development.
     """
 
-    def __init__(self, quotas: Dict[str, client.V1ResourceQuota]):
+    def __init__(self, quotas: dict[str, client.V1ResourceQuota]):
         self.quotas = quotas
         self.__lock: LockType | None = None
 
@@ -141,7 +141,7 @@ class DummySchedulingClient(K8sSchedudlingClientInterface):
     Not suitable for production - to be used only for testing and development.
     """
 
-    def __init__(self, pcs: Dict[str, client.V1PriorityClass]):
+    def __init__(self, pcs: dict[str, client.V1PriorityClass]):
         self.pcs = pcs
         self.__lock: LockType | None = None
 
