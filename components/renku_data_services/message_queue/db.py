@@ -70,7 +70,6 @@ class EventRepository:
 
     async def delete_event(self, id: int):
         """Delete an event."""
-        async with self.session_maker() as session:
-            async with session.begin():
-                stmt = delete(schemas.EventORM).where(schemas.EventORM.id == id)
-                await session.execute(stmt)
+        async with self.session_maker() as session, session.begin():
+            stmt = delete(schemas.EventORM).where(schemas.EventORM.id == id)
+            await session.execute(stmt)

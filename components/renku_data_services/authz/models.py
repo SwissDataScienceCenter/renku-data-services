@@ -10,8 +10,7 @@ from renku_data_services.authz.orm import ProjectUserAuthz
 
 
 class Role(Enum):
-    """
-    Project membership role.
+    """Project membership role.
 
     Higher values have more access than lower values and
     all higher values include the permissions from lower access levels.

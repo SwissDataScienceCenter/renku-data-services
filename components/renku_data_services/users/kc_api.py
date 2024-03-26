@@ -1,4 +1,5 @@
 """Keycloak API."""
+
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import date
@@ -72,10 +73,7 @@ class KeycloakAPI:
 
     def _paginated_requests_iter(self, path: str, query_args: Dict[str, Any] | None = None) -> Iterable[Dict[str, Any]]:
         url = self.keycloak_url + path
-        if query_args:
-            req_query_args = deepcopy(query_args)
-        else:
-            req_query_args = {}
+        req_query_args = deepcopy(query_args) if query_args else {}
         # Request one extra item to see if there is a need to request the next page or not
         req_query_args["max"] = self.result_per_request_limit + 1
         first = 0

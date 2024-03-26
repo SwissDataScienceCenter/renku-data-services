@@ -30,8 +30,7 @@ resource_pools_users = Table(
 
 
 class RPUserORM(BaseORM):
-    """
-    Stores the Keycloak user ID for controlling user access to resource pools.
+    """Stores the Keycloak user ID for controlling user access to resource pools.
 
     Used in combination with the `resource_pool_users` table this table provides information
     about which user ID (based on Keycloak IDs) has access to which resource pools.

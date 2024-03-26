@@ -1,5 +1,4 @@
-"""
-Configurations.
+"""Configurations.
 
 An important thing to note here is that the configuration classes in here
 contain some getters (i.e. @property decorators) intentionally. This is done for

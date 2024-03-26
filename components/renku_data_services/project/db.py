@@ -33,7 +33,7 @@ def convert_to_authz_role(role: Role) -> authz_models.Role:
 
 def convert_from_authz_role(role: authz_models.Role) -> Role:
     """Covert from authz Role to project member Role."""
-    return Role.owner if authz_models.Role.OWNER == role else Role.member
+    return Role.owner if role == authz_models.Role.OWNER else Role.member
 
 
 class PaginationResponse(NamedTuple):
@@ -278,20 +278,19 @@ class ProjectMemberRepository:
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
 
-        async with self.session_maker() as session:
-            async with session.begin():
-                result = await session.execute(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
-                project = result.one_or_none()
-                if project is None:
-                    raise errors.MissingResourceError(message=f"The project with id '{project_id}' cannot be found")
+        async with self.session_maker() as session, session.begin():
+            result = await session.execute(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
+            project = result.one_or_none()
+            if project is None:
+                raise errors.MissingResourceError(message=f"The project with id '{project_id}' cannot be found")
 
-                for member in members:
-                    await self.project_authz.update_or_add_user(
-                        requested_by=user,
-                        project_id=project_id,
-                        user_id=member["member"]["id"],
-                        role=convert_to_authz_role(Role(member["role"])),
-                    )
+            for member in members:
+                await self.project_authz.update_or_add_user(
+                    requested_by=user,
+                    project_id=project_id,
+                    user_id=member["member"]["id"],
+                    role=convert_to_authz_role(Role(member["role"])),
+                )
 
     async def delete_member(self, user: base_models.APIUser, project_id: str, member_id: str) -> None:
         """Delete a single member from a project."""
@@ -301,11 +300,10 @@ class ProjectMemberRepository:
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
 
-        async with self.session_maker() as session:
-            async with session.begin():
-                result = await session.execute(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
-                project = result.one_or_none()
-                if project is None:
-                    raise errors.MissingResourceError(message=f"The project with id '{project_id}' cannot be found")
+        async with self.session_maker() as session, session.begin():
+            result = await session.execute(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
+            project = result.one_or_none()
+            if project is None:
+                raise errors.MissingResourceError(message=f"The project with id '{project_id}' cannot be found")
 
-                await self.project_authz.delete_user(requested_by=user, project_id=project_id, user_id=member_id)
+            await self.project_authz.delete_user(requested_by=user, project_id=project_id, user_id=member_id)

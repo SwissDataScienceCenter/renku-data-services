@@ -114,8 +114,7 @@ class GitlabAPI:
 
 @dataclass(kw_only=True)
 class DummyGitlabAPI:
-    """
-    Dummy gitlab API.
+    """Dummy gitlab API.
 
     The user with name John Doe has admin access to project 123456 and member access to 999999.
     """
