@@ -35,7 +35,10 @@ class SyncConfig:
                 message="Please provide a database password in the 'DB_PASSWORD' environment variable."
             )
         async_sqlalchemy_url = f"postgresql+asyncpg://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{db_name}"
-        engine = create_async_engine(async_sqlalchemy_url, pool_size=2, max_overflow=0)
+        # NOTE: the pool here is not used to serve HTTP requests, it is only used in background jobs.
+        # Therefore, we want to consume very few connections and we can wait for an available connection
+        # much longer than the default 30 seconds. In our tests syncing 15 users times out with the default.
+        engine = create_async_engine(async_sqlalchemy_url, pool_size=2, max_overflow=0, pool_timeout=600)
         session_maker: Callable[..., AsyncSession] = sessionmaker(
             engine, class_=AsyncSession, expire_on_commit=False
         )  # type: ignore[call-overload]
