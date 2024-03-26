@@ -1,7 +1,7 @@
 import json
 from dataclasses import asdict
 from datetime import datetime
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import pytest
 
@@ -32,7 +32,7 @@ def db_config(postgresql, monkeypatch) -> SyncConfig:
 
 @pytest.fixture
 def get_app_configs(db_config: DBConfig):
-    def _get_app_configs(kc_api: DummyKeycloakAPI, total_user_sync: bool = False) -> Tuple[SyncConfig, UserRepo]:
+    def _get_app_configs(kc_api: DummyKeycloakAPI, total_user_sync: bool = False) -> tuple[SyncConfig, UserRepo]:
         redis = RedisConfig.fake()
         message_queue = RedisQueue(redis)
         event_repo = EventRepository(db_config.async_session_maker, message_queue=message_queue)
@@ -44,8 +44,8 @@ def get_app_configs(db_config: DBConfig):
     yield _get_app_configs
 
 
-def get_kc_users(updates: List[UserInfo]) -> List[Dict[str, Any]]:
-    output: List[Dict[str, Any]] = []
+def get_kc_users(updates: list[UserInfo]) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
     for update in updates:
         output.append(
             {
@@ -70,8 +70,8 @@ def get_kc_users(updates: List[UserInfo]) -> List[Dict[str, Any]]:
     return output
 
 
-def get_kc_user_update_events(updates: List[UserInfoUpdate]) -> List[Dict[str, Any]]:
-    output: List[Dict[str, Any]] = []
+def get_kc_user_update_events(updates: list[UserInfoUpdate]) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
     for update in updates:
         output.append(
             {
@@ -91,8 +91,8 @@ def get_kc_user_update_events(updates: List[UserInfoUpdate]) -> List[Dict[str, A
     return output
 
 
-def get_kc_user_create_events(updates: List[UserInfo]) -> List[Dict[str, Any]]:
-    output: List[Dict[str, Any]] = []
+def get_kc_user_create_events(updates: list[UserInfo]) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
     for update in updates:
         output.append(
             {
@@ -118,8 +118,8 @@ def get_kc_user_create_events(updates: List[UserInfo]) -> List[Dict[str, Any]]:
     return output
 
 
-def get_kc_admin_events(updates: List[Tuple[UserInfo, KeycloakAdminEvent]]) -> List[Dict[str, Any]]:
-    output: List[Dict[str, Any]] = []
+def get_kc_admin_events(updates: list[tuple[UserInfo, KeycloakAdminEvent]]) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
     for user, event_type in updates:
         update = {
             "time": int(datetime.utcnow().timestamp() / 1000),

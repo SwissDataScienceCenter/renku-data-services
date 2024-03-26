@@ -1,7 +1,7 @@
 """Project blueprint."""
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import cast
 
 from sanic import HTTPResponse, Request, json
@@ -70,7 +70,7 @@ class ProjectsBP(CustomBlueprint):
             user_id: str = cast(str, user.id)
             data["created_by"] = models.Member(id=user_id)
             # NOTE: Set ``creation_date`` to override possible value set by users
-            data["creation_date"] = datetime.now(timezone.utc).replace(microsecond=0)
+            data["creation_date"] = datetime.now(UTC).replace(microsecond=0)
             project = models.Project.from_dict(data)
             result = await self.project_repo.insert_project(user=user, project=project)
             return json(apispec.Project.model_validate(result).model_dump(exclude_none=True, mode="json"), 201)

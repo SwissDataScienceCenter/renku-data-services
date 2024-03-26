@@ -1,7 +1,7 @@
 """Common blueprints."""
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Dict
+from typing import Any
 
 from sanic import Request, json
 
@@ -13,7 +13,7 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 class MiscBP(CustomBlueprint):
     """Server contains all handlers for CRC and the configuration."""
 
-    apispec: Dict[str, Any]
+    apispec: dict[str, Any]
     version: str
 
     def get_apispec(self) -> BlueprintFactoryResponse:

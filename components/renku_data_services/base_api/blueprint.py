@@ -1,7 +1,8 @@
 """Custom blueprint wrapper for Sanic."""
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from inspect import getmembers, ismethod
-from typing import Callable, List, Optional, Tuple, cast
+from typing import Optional, cast
 
 from sanic import Blueprint
 from sanic.models.handler_types import RequestMiddlewareType, ResponseMiddlewareType, RouteHandler
@@ -20,8 +21,8 @@ class CustomBlueprint:
 
     name: str
     url_prefix: Optional[str] = None
-    request_middlewares: List[RequestMiddlewareType] = field(default_factory=list, repr=False)
-    response_middlewares: List[ResponseMiddlewareType] = field(default_factory=list, repr=False)
+    request_middlewares: list[RequestMiddlewareType] = field(default_factory=list, repr=False)
+    response_middlewares: list[ResponseMiddlewareType] = field(default_factory=list, repr=False)
 
     def blueprint(self) -> Blueprint:
         """Generates the Sanic blueprint from all public methods."""
@@ -39,5 +40,5 @@ class CustomBlueprint:
         return bp
 
 
-BlueprintFactoryResponse = Tuple[str, List[str], RouteHandler]
+BlueprintFactoryResponse = tuple[str, list[str], RouteHandler]
 BlueprintFactory = Callable[..., BlueprintFactoryResponse]

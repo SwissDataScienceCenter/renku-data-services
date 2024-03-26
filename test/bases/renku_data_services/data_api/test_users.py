@@ -1,7 +1,6 @@
 import json
 from dataclasses import asdict
 from test.bases.renku_data_services.keycloak_sync.test_sync import get_kc_users
-from typing import List
 from uuid import uuid4
 
 import pytest
@@ -16,7 +15,7 @@ from renku_data_services.users.models import UserInfo
 
 
 @pytest.fixture
-def users() -> List[UserInfo]:
+def users() -> list[UserInfo]:
     return [
         UserInfo("user-1-id", "John", "Doe", "john.doe@gmail.com"),
         UserInfo("user-2-id", "Jane", "Doe", "jane.doe@gmail.com"),
@@ -24,7 +23,7 @@ def users() -> List[UserInfo]:
 
 
 @pytest_asyncio.fixture
-async def users_test_client(app_config: DataConfig, users: List[UserInfo]) -> SanicASGITestClient:
+async def users_test_client(app_config: DataConfig, users: list[UserInfo]) -> SanicASGITestClient:
     app_config.kc_api = DummyKeycloakAPI(users=get_kc_users(users))
     app = Sanic(app_config.app_name)
     app = register_all_handlers(app, app_config)
