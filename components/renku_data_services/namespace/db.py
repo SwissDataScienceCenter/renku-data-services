@@ -324,12 +324,10 @@ class GroupRepository:
             ns_dump.creation_date = grp.creation_date
         elif ns.user:
             if ns.user.first_name or ns.user.last_name:
-                if ns.user.first_name:
-                    ns_dump.name = ns.user.first_name
-                if ns.user.last_name and not ns_dump.name:
-                    ns_dump.name = ns.user.last_name
-                elif ns.user.last_name and ns_dump.name:
-                    ns_dump.name += f" {ns.user.last_name}"
+            if ns.user.first_name and ns.user.last_name:
+                ns_dump.name = f"{ns.user.first_name} {ns.user.last_name}"
+            else:
+                ns_dump.name = ns.user.first_name or ns.user.last_name
             ns_dump.created_by = ns.user_id
         return ns_dump
 
