@@ -57,13 +57,13 @@ def combine_version_tables(conn: Connection, metadata_schema: str | None):
             # The version table has data but it does not match the revision required for migration
             return
         conn.execute(text(f"LOCK TABLE {metadata_schema}.alembic_version IN ACCESS EXCLUSIVE MODE"))
-        conn.execute(text("LOCK TABLE common.alembic_version IN ACCESS EXCLUSIVE MODE"))
         conn.execute(
             text(
                 "CREATE TABLE IF NOT EXISTS common.alembic_version "
                 f"(LIKE {metadata_schema}.alembic_version INCLUDING ALL)"
             )
         )
+        conn.execute(text("LOCK TABLE common.alembic_version IN ACCESS EXCLUSIVE MODE"))
         conn.execute(text("INSERT INTO common.alembic_version(version_num) VALUES (:rev)").bindparams(rev=rev))
         conn.execute(text(f"DROP TABLE IF EXISTS {metadata_schema}.alembic_version"))
 

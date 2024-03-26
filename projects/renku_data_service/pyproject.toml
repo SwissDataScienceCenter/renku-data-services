@@ -60,6 +60,8 @@ authlib = "^1.2.1"
 redis = "^5.0.1"
 dataclasses-avroschema = "^0.57.0"
 undictify = "^0.11.3"
+prometheus-sanic = "^3.0.0"
+sentry-sdk = {version = "^1.43.0", extras = ["sanic"]}
 
 [tool.poetry.group.dev.dependencies]
 pyavro-gen = "^0.3.3"
