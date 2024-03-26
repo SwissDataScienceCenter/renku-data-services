@@ -60,7 +60,7 @@ dataclasses-avroschema = "^0.57.4"
 undictify = "^0.11.3"
 types-redis = "^4.6.0.20240218"
 prometheus-sanic = "^3.0.0"
-sentry-sdk = {version = "^1.43.0", extras = ["sanic"]}
+sentry-sdk = { version = "^1.43.0", extras = ["sanic"] }
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.7.5"
@@ -89,7 +89,7 @@ build-backend = "poetry.core.masonry.api"
 line-length = 120
 target-version = "py311"
 output-format = "full"
-include = ["*.py","*.pyi"]
+include = ["*.py", "*.pyi"]
 exclude = ["*/avro_models/*"]
 
 [tool.ruff.lint]
@@ -106,7 +106,7 @@ select = [
   # pyupgrade
   # "UP",
   # flake8-simplify
-  "SIM"
+  "SIM",
 ]
 ignore = [
   "D105",
@@ -130,8 +130,8 @@ ignore = [
 "*/session_migrations/*" = ["D", "I"]
 "*/authz_migrations/*" = ["D", "I"]
 "*/users_migrations/*" = ["D", "I"]
-"*/versions/*" = ["D","E","W"]
-"apispec.py" = ["D","E","W"]
+"*/versions/*" = ["D", "E", "W"]
+"apispec.py" = ["D", "E", "W", "I"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["renku_data_services"]
