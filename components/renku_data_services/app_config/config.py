@@ -39,13 +39,13 @@ from renku_data_services.data_api.server_options import (
 )
 from renku_data_services.db_config import DBConfig
 from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
-from renku_data_services.group.db import GroupRepository
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import RedisQueue
+from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository
@@ -54,6 +54,7 @@ from renku_data_services.user_preferences.db import UserPreferencesRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
+from renku_data_services.users.models import UserInfo
 from renku_data_services.utils.core import get_ssl_context, merge_api_specs
 
 
@@ -146,7 +147,7 @@ class Config:
         with open(spec_file, "r") as f:
             projects = safe_load(f)
 
-        spec_file = Path(renku_data_services.group.__file__).resolve().parent / "api.spec.yaml"
+        spec_file = Path(renku_data_services.namespace.__file__).resolve().parent / "api.spec.yaml"
         with open(spec_file, "r") as f:
             groups = safe_load(f)
 
@@ -209,6 +210,7 @@ class Config:
                 project_authz=self.project_authz,
                 message_queue=self.message_queue,
                 event_repo=self.event_repo,
+                group_repo=self.group_repo,
             )
         return self._project_repo
 
@@ -261,7 +263,10 @@ class Config:
         """The DB adapter for users."""
         if not self._kc_user_repo:
             self._kc_user_repo = KcUserRepo(
-                session_maker=self.db.async_session_maker, message_queue=self.message_queue, event_repo=self.event_repo
+                session_maker=self.db.async_session_maker,
+                message_queue=self.message_queue,
+                event_repo=self.event_repo,
+                group_repo=self.group_repo,
             )
         return self._kc_user_repo
 
@@ -291,7 +296,11 @@ class Config:
             user_always_exists = os.environ.get("DUMMY_USERSTORE_USER_ALWAYS_EXISTS", "true").lower() == "true"
             user_store = DummyUserStore(user_always_exists=user_always_exists)
             gitlab_client = DummyGitlabAPI()
-            kc_api = DummyKeycloakAPI()
+            dummy_users = [
+                UserInfo("user1", "user1", "doe", "user1@doe.com"),
+                UserInfo("user2", "user2", "doe", "user2@doe.com"),
+            ]
+            kc_api = DummyKeycloakAPI(users=[i._to_keycloak_dict() for i in dummy_users])
             redis = RedisConfig.fake()
         else:
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)

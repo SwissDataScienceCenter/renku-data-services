@@ -13,7 +13,7 @@ from renku_data_services.crc.blueprints import (
     ResourcePoolUsersBP,
     UserResourcePoolsBP,
 )
-from renku_data_services.group.blueprints import GroupsBP
+from renku_data_services.namespace.blueprints import GroupsBP
 from renku_data_services.project.blueprints import ProjectsBP
 from renku_data_services.session.blueprints import EnvironmentsBP, SessionLaunchersBP
 from renku_data_services.storage.blueprints import StorageBP, StorageSchemaBP
@@ -81,6 +81,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         url_prefix=url_prefix,
         authenticator=config.authenticator,
         group_repo=config.group_repo,
+    )
     session_environments = EnvironmentsBP(
         name="session_environments",
         url_prefix=url_prefix,

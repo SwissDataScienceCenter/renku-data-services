@@ -16,6 +16,7 @@ from renku_data_services.message_queue.avro_models.io.renku.events.v1.user_updat
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import dispatch_message
+from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.users.kc_api import IKeycloakAPI
 from renku_data_services.users.models import KeycloakAdminEvent, UserInfo, UserInfoUpdate
 from renku_data_services.users.orm import LastKeycloakEventTimestamp, UserORM
@@ -30,9 +31,10 @@ class UserRepo:
         session_maker: Callable[..., AsyncSession],
         message_queue: IMessageQueue,
         event_repo: EventRepository,
+        group_repo: GroupRepository,
     ):
         self.session_maker = session_maker
-        self._users_sync = UsersSync(self.session_maker, message_queue, event_repo)
+        self._users_sync = UsersSync(self.session_maker, message_queue, event_repo, group_repo)
 
     async def initialize(self, kc_api: IKeycloakAPI):
         """Do a total sync of users from Keycloak if there is nothing in the DB."""
@@ -129,10 +131,12 @@ class UsersSync:
         session_maker: Callable[..., AsyncSession],
         message_queue: IMessageQueue,
         event_repo: EventRepository,
+        group_repo: GroupRepository,
     ):
         self.session_maker = session_maker
         self.message_queue: IMessageQueue = message_queue
         self.event_repo: EventRepository = event_repo
+        self.group_repo = group_repo
 
     async def _get_user(self, id) -> UserInfo | None:
         """Get a specific user."""
@@ -142,7 +146,7 @@ class UsersSync:
             orm = res.scalar_one_or_none()
             return orm.dump() if orm else None
 
-    async def update_or_insert_user(self, user_id: str, **kwargs):
+    async def update_or_insert_user(self, user_id: str, **kwargs) -> UserORM:
         """Update a user or insert it if it does not exist."""
         async with self.session_maker() as session, session.begin():
             res = await session.execute(select(UserORM).where(UserORM.keycloak_id == user_id))
@@ -154,17 +158,21 @@ class UsersSync:
 
     @with_db_transaction
     @dispatch_message(create_user_added_message)
-    async def insert_user(self, session: AsyncSession, user_id: str, **kwargs):
+    async def insert_user(self, session: AsyncSession, user_id: str, **kwargs) -> UserInfo:
         """Insert a user."""
         kwargs.pop("keycloak_id", None)
         kwargs.pop("id", None)
         new_user = UserORM(keycloak_id=user_id, **kwargs)
         session.add(new_user)
+        await session.flush()
+        await self.group_repo.insert_user_namespace(new_user, session, retry_enumerate=5, retry_random=True)
         return new_user.dump()
 
     @with_db_transaction
     @dispatch_message(create_user_updated_message)
-    async def update_user(self, session: AsyncSession, user_id: str, existing_user: UserORM | None, **kwargs):
+    async def update_user(
+        self, session: AsyncSession, user_id: str, existing_user: UserORM | None, **kwargs
+    ) -> UserInfo:
         """Update a user."""
         if not existing_user:
             async with self.session_maker() as session, session.begin():

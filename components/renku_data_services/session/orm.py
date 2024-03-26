@@ -1,6 +1,7 @@
 """SQLAlchemy's schemas for the sessions database."""
 
 from datetime import datetime
+
 from sqlalchemy import DateTime, MetaData, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
