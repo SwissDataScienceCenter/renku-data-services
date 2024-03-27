@@ -22,7 +22,7 @@ RUN if $DEV_BUILD ; then \
 RUN /home/renku/.local/bin/poetry build-project -f wheel -C projects/keycloak_sync
 RUN env/bin/pip --no-cache-dir install projects/keycloak_sync/dist/*.whl
 
-FROM python:3.11-slim-bullseye
+FROM python:3.11-slim-bookworm
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 RUN apt-get update && apt-get install -y \
