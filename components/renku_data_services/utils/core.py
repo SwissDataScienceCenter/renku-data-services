@@ -1,4 +1,5 @@
 """Shared utility functions."""
+
 import functools
 import os
 import ssl
@@ -43,8 +44,7 @@ def with_db_transaction(f):
 
     @functools.wraps(f)
     async def transaction_wrapper(self: WithSessionMaker, *args, **kwargs):
-        async with self.session_maker() as session:
-            async with session.begin():
-                return await f(self, session, *args, **kwargs)
+        async with self.session_maker() as session, session.begin():
+            return await f(self, session, *args, **kwargs)
 
     return transaction_wrapper

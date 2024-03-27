@@ -1,4 +1,6 @@
 """Gitlab authenticator."""
+
+import contextlib
 import urllib.parse as parse
 from dataclasses import dataclass
 
@@ -62,10 +64,8 @@ class GitlabAuthenticator:
         email: str | None = user.email
         if full_name:
             name_parts = full_name.split()
-            try:
+            with contextlib.suppress(IndexError):
                 first_name = name_parts.pop(0)
-            except IndexError:
-                pass
             if len(name_parts) >= 1:
                 last_name = " ".join(name_parts)
 

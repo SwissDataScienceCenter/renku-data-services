@@ -1,7 +1,7 @@
 """Entity tag utility functions."""
 
-from hashlib import md5
 from datetime import datetime
+from hashlib import md5
 
 
 def compute_etag_from_timestamp(updated_at: datetime) -> str:

@@ -1,3 +1,4 @@
+import contextlib
 from test.components.renku_data_services.storage_models.hypothesis import (
     a_path,
     azure_configuration,
@@ -44,10 +45,8 @@ def get_user(storage, valid=True):
 @pytest.mark.asyncio
 async def test_storage_insert_get(storage: dict[str, Any], app_config: Config):
     storage_repo = app_config.storage_repo
-    try:
+    with contextlib.suppress(ValidationError, errors.ValidationError):
         await create_storage(storage, storage_repo, user=get_user(storage))
-    except (ValidationError, errors.ValidationError):
-        pass
 
 
 @given(storage=storage_strat(), new_source_path=a_path, new_target_path=a_path)

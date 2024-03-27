@@ -1,4 +1,5 @@
 """Projects authorization adapter."""
+
 from dataclasses import dataclass, field
 from typing import Callable, List, Protocol, Tuple, cast
 
@@ -220,11 +221,8 @@ class SQLProjectAuthorizer:
         """Add a user to the project."""
         if not requested_by.is_authenticated:
             raise errors.Unauthorized(message="Unauthenticated users cannot add users.")
-        if isinstance(user_id, MemberQualifier):
-            if user_id != MemberQualifier.ALL:
-                raise errors.ValidationError(
-                    message=f"Valid qualifier for adding users is only ALL, received {user_id}."
-                )
+        if isinstance(user_id, MemberQualifier) and user_id != MemberQualifier.ALL:
+            raise errors.ValidationError(message=f"Valid qualifier for adding users is only ALL, received {user_id}.")
         if not requested_by.is_admin:
             can_add_users = await self.has_role(requested_by, project_id, Role.OWNER)
             if not can_add_users:
@@ -319,45 +317,43 @@ class SQLProjectAuthorizer:
 
     async def update_project_visibility(self, requested_by: APIUser, project_id: str, public_project: bool):
         """Change project's qualifier accordingly."""
-        async with self.session_maker() as session:
-            async with session.begin():
-                if not requested_by.is_authenticated:
-                    raise errors.Unauthorized(message="Unauthenticated users cannot update projects.")
-                if not requested_by.is_admin:
-                    requested_by_owner = await self.has_role(requested_by, project_id, Role.OWNER)
-                    if not requested_by_owner:
-                        raise errors.Unauthorized(message="Only the owner of the project can update a project.")
+        async with self.session_maker() as session, session.begin():
+            if not requested_by.is_authenticated:
+                raise errors.Unauthorized(message="Unauthenticated users cannot update projects.")
+            if not requested_by.is_admin:
+                requested_by_owner = await self.has_role(requested_by, project_id, Role.OWNER)
+                if not requested_by_owner:
+                    raise errors.Unauthorized(message="Only the owner of the project can update a project.")
 
-                if public_project:
-                    stmt = (
-                        select(ProjectUserAuthz.user_id)
-                        .where(ProjectUserAuthz.project_id == project_id)
-                        .where(ProjectUserAuthz.user_id.is_(None))
-                    )
-                    result = await session.execute(stmt)
-                    rows = result.scalars().all()
-                    if rows:
-                        # There already exists a row that shows the project is public
-                        return
+            if public_project:
+                stmt = (
+                    select(ProjectUserAuthz.user_id)
+                    .where(ProjectUserAuthz.project_id == project_id)
+                    .where(ProjectUserAuthz.user_id.is_(None))
+                )
+                result = await session.execute(stmt)
+                rows = result.scalars().all()
+                if rows:
+                    # There already exists a row that shows the project is public
+                    return
 
-                    session.add(ProjectUserAuthz(project_id=project_id, role=Role.MEMBER.value, user_id=None))
-                else:
-                    del_stmt = delete(ProjectUserAuthz).where(
-                        and_(ProjectUserAuthz.project_id == project_id, ProjectUserAuthz.user_id.is_(None))
-                    )
-                    await session.execute(del_stmt)
+                session.add(ProjectUserAuthz(project_id=project_id, role=Role.MEMBER.value, user_id=None))
+            else:
+                del_stmt = delete(ProjectUserAuthz).where(
+                    and_(ProjectUserAuthz.project_id == project_id, ProjectUserAuthz.user_id.is_(None))
+                )
+                await session.execute(del_stmt)
 
     async def delete_project(self, requested_by: APIUser, project_id: str):
         """Delete all instances of the project in the authorization table."""
         if not requested_by.is_authenticated:
             raise errors.Unauthorized(message="Unauthenticated users cannot delete projects.")
-        async with self.session_maker() as session:
-            async with session.begin():
-                del_stmt = delete(ProjectUserAuthz).where(ProjectUserAuthz.project_id == project_id)
-                if not requested_by.is_admin:
-                    user_is_owner = self.has_role(requested_by, project_id, Role.OWNER)
-                    if not user_is_owner:
-                        raise errors.Unauthorized(
-                            message="Only the owner or admin can remove a project from the permissions."
-                        )
-                await session.execute(del_stmt)
+        async with self.session_maker() as session, session.begin():
+            del_stmt = delete(ProjectUserAuthz).where(ProjectUserAuthz.project_id == project_id)
+            if not requested_by.is_admin:
+                user_is_owner = self.has_role(requested_by, project_id, Role.OWNER)
+                if not user_is_owner:
+                    raise errors.Unauthorized(
+                        message="Only the owner or admin can remove a project from the permissions."
+                    )
+            await session.execute(del_stmt)
