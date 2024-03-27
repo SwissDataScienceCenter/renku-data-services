@@ -33,4 +33,15 @@ all_metadata = [
     users.metadata,
     events.metadata,
 ]
-run_migrations(all_metadata)
+schemas = {
+    # NOTE: These are the revisions that each schema will be when the version table is moved
+    "authz": "748ed0f3439f",
+    "projects": "7c08ed2fb79d",
+    "resource_pools": "5403953f654f",
+    "storage": "61a4d72981cf",
+    "users": "3b30da432a76",
+    "user_preferences": "6eccd7d4e3ed",
+    "events": "4c425d8889b6",
+}
+
+run_migrations(schemas=schemas, metadata=all_metadata)
