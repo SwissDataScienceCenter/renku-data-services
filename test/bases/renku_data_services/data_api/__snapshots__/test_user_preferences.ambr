@@ -1,0 +1,10 @@
+# serializer version: 1
+# name: test_get_user_preferences
+  dict({
+    'pinned_projects': dict({
+      'project_slugs': list([
+        'user.1/first-project',
+      ]),
+    }),
+  })
+# ---
