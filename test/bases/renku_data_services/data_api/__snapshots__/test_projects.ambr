@@ -1,0 +1,14 @@
+# serializer version: 1
+# name: test_get_all_projects_with_pagination
+  list([
+    dict({
+      'created_by': dict({
+      }),
+      'name': 'Project 1',
+      'repositories': list([
+      ]),
+      'slug': 'project-1',
+      'visibility': 'private',
+    }),
+  ])
+# ---

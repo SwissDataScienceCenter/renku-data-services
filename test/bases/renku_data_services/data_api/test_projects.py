@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 from httpx import Response
 from sqlalchemy import select
+from syrupy.filters import props
 from ulid import ULID
 
 from components.renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
@@ -232,7 +233,7 @@ async def test_get_a_project(create_project, get_project) -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_all_projects_with_pagination(create_project, sanic_client, user_headers) -> None:
+async def test_get_all_projects_with_pagination(create_project, sanic_client, user_headers, snapshot) -> None:
     # Create some projects
     for i in range(1, 10):
         await create_project(f"Project {i}")
@@ -262,6 +263,7 @@ async def test_get_all_projects_with_pagination(create_project, sanic_client, us
     assert response.headers["per-page"] == "4"
     assert response.headers["total"] == "9"
     assert response.headers["total-pages"] == "3"
+    assert response.json == snapshot(exclude=props("id", "creation_date"))
 
 
 @pytest.mark.asyncio
