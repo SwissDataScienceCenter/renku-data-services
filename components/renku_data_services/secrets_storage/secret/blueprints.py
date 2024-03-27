@@ -5,12 +5,12 @@ from datetime import datetime, timezone
 
 from sanic import HTTPResponse, Request, json
 from sanic_ext import validate
-from secret_storage.secret import apispec, models
-from secret_storage.secret.db import SecretRepository
 
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.secrets_storage.secret import apispec, models
+from renku_data_services.secrets_storage.secret.db import SecretRepository
 
 
 @dataclass(kw_only=True)

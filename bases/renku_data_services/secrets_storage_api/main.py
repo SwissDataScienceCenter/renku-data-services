@@ -1,4 +1,4 @@
-"""The entrypoint for the secret storage application."""
+"""The entrypoint for the secrets storage application."""
 
 import argparse
 import asyncio
@@ -7,9 +7,10 @@ from os import environ
 from sanic import Sanic
 from sanic.log import logger
 from sanic.worker.loader import AppLoader
-from secret_storage.app_config import Config
-from secret_storage.data_api.app import register_all_handlers
-from secret_storage.migrations.core import run_migrations_for_app
+
+from renku_data_services.secrets_storage.app_config import Config
+from renku_data_services.secrets_storage.migrations.core import run_migrations_for_app
+from renku_data_services.secrets_storage_api.app import register_all_handlers
 
 
 def create_app() -> Sanic:
@@ -42,7 +43,7 @@ def create_app() -> Sanic:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(prog="Renku Secret Storage")
+    parser = argparse.ArgumentParser(prog="Renku Secrets Storage")
     # NOTE: K8s probes will fail if listening only on 127.0.0.1 - so we listen on 0.0.0.0
     parser.add_argument("-H", "--host", default="0.0.0.0", help="Host to listen on")  # nosec B104
     parser.add_argument("-p", "--port", default=8100, type=int, help="Port to listen on")

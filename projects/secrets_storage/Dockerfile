@@ -19,8 +19,8 @@ RUN if $DEV_BUILD ; then \
     /home/renku/.local/bin/poetry export -o requirements.txt --with dev; \
     env/bin/pip install -r requirements.txt; \
   fi
-RUN /home/renku/.local/bin/poetry build-project -f wheel -C projects/secret_storage
-RUN env/bin/pip --no-cache-dir install projects/secret_storage/dist/*.whl
+RUN /home/renku/.local/bin/poetry build-project -f wheel -C projects/secrets_storage_api
+RUN env/bin/pip --no-cache-dir install projects/secrets_storage_api/dist/*.whl
 
 FROM python:3.11-slim-bullseye
 ARG USER_UID=1000
@@ -34,4 +34,4 @@ COPY --from=builder /usr/bin/rclone /usr/bin
 USER $USER_UID:$USER_GID
 WORKDIR /app
 COPY --from=builder /app/env ./env
-ENTRYPOINT ["tini", "-g", "--", "env/bin/python", "-m", "secret_storage.data_api.main"]
+ENTRYPOINT ["tini", "-g", "--", "env/bin/python", "-m", "renku_data_services.secrets_storage_api.main"]

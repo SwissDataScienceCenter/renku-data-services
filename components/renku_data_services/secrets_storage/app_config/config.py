@@ -11,21 +11,16 @@ instantiated multiple times without creating multiple database connections.
 
 import os
 from dataclasses import dataclass, field
-from pathlib import Path
 
-import secret_storage
 from cryptography.fernet import Fernet
 from jwt import PyJWKClient
-from secret_storage.db_config import SecretStorageDBConfig
-from secret_storage.secret.db import SecretRepository
-from yaml import safe_load
 
-import renku_data_services.base_models as base_models
-from renku_data_services import errors
+from renku_data_services import base_models, errors
 from renku_data_services.app_config.config import oidc_discovery
 from renku_data_services.authn.dummy import DummyAuthenticator
 from renku_data_services.authn.keycloak import KeycloakAuthenticator
-from renku_data_services.utils.core import merge_api_specs
+from renku_data_services.secrets_storage.db_config import SecretStorageDBConfig
+from renku_data_services.secrets_storage.secret.db import SecretRepository
 
 
 @dataclass
@@ -36,17 +31,8 @@ class Config:
     encryption_key: str
     db: SecretStorageDBConfig
     version: str = "0.1.0"
-    app_name: str = "secret_storage"
+    app_name: str = "secrets_storage_api"
     _secret_repo: SecretRepository | None = field(default=None, repr=False, init=False)
-
-    def __post_init__(self):
-        spec_file = (
-            Path(secret_storage.secret.__file__).resolve().parent / "api.spec.yaml"
-        )
-        with open(spec_file, "r") as f:
-            secrets = safe_load(f)
-
-        self.spec = merge_api_specs(secrets)
 
     @property
     def secret_repo(self) -> SecretRepository:

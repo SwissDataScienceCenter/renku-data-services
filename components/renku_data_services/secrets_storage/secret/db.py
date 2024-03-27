@@ -5,13 +5,13 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Callable
 
-from secret_storage.secret import models
-from secret_storage.secret import orm as schemas
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from renku_data_services.secrets_storage.secret import models
+from renku_data_services.secrets_storage.secret import orm as schemas
 
 
 class SecretRepository:

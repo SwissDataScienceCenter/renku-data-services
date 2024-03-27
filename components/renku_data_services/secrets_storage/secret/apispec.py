@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from pydantic import ConfigDict, Field, RootModel
-from secret_storage.secret.apispec_base import BaseAPISpec
+from renku_data_services.secrets_storage.secret.apispec_base import BaseAPISpec
 
 
 class Error(BaseAPISpec):

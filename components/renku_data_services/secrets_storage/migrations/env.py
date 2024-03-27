@@ -3,9 +3,9 @@
 from logging.config import fileConfig
 
 from alembic import context
-from secret_storage.secret.orm import BaseORM as secrets
 
 from renku_data_services.migrations.utils import run_migrations
+from renku_data_services.secrets_storage.secret.orm import BaseORM as secrets
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

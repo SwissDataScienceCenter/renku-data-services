@@ -4,10 +4,11 @@ from datetime import datetime
 from typing import Optional
 
 from cryptography.fernet import Fernet
-from secret_storage.secret import models
 from sqlalchemy import DateTime, MetaData, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 from ulid import ULID
+
+from renku_data_services.secrets_storage.secret import models
 
 metadata_obj = MetaData(schema="secrets")  # Has to match alembic ini section name
 

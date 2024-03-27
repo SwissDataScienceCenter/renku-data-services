@@ -6,12 +6,14 @@ from typing import Iterator
 import pytest
 from hypothesis import settings
 from pytest_postgresql import factories
-from secret_storage.app_config import Config as SecretConfig
-from secret_storage.migrations.core import run_migrations_for_app as run_secret_storage_migrations_for_app
 
 import renku_data_services.base_models as base_models
 from renku_data_services.app_config import Config as DataConfig
 from renku_data_services.migrations.core import run_migrations_for_app as run_data_service_migrations_for_app
+from renku_data_services.secrets_storage.app_config import Config as SecretsConfig
+from renku_data_services.secrets_storage.migrations.core import (
+    run_migrations_for_app as run_secrets_storage_migrations_for_app,
+)
 
 settings.register_profile("ci", deadline=400, max_examples=5)
 settings.register_profile("dev", deadline=200, max_examples=5)
@@ -38,8 +40,8 @@ def get_init_db(component):
 
         if component == "renku-data-service":
             run_data_service_migrations_for_app("common")
-        elif component == "secret-storage":
-            run_secret_storage_migrations_for_app("common")
+        elif component == "secrets-storage":
+            run_secrets_storage_migrations_for_app("common")
         else:
             raise ValueError("Invalid component name")
 
@@ -90,19 +92,19 @@ def app_config(postgresql, monkeypatch) -> Iterator[DataConfig]:
     config.db.dispose_connection()
 
 
-secret_storage_postgresql_in_docker = factories.postgresql_noproc(
-    dbname="secret_storage", load=[get_init_db("secret-storage")]
+secrets_storage_postgresql_in_docker = factories.postgresql_noproc(
+    dbname="secrets-storage", load=[get_init_db("secrets-storage")]
 )
-secret_storage_postgresql = factories.postgresql("secret_storage_postgresql_in_docker")
+secrets_storage_postgresql = factories.postgresql("secrets_storage_postgresql_in_docker")
 
 
 @pytest.fixture
-def secret_storage_app_config(secret_storage_postgresql, monkeypatch) -> Iterator[DataConfig]:
+def secrets_storage_app_config(secrets_storage_postgresql, monkeypatch) -> Iterator[DataConfig]:
     monkeypatch.setenv("DUMMY_STORES", "true")
-    monkeypatch.setenv("DB_NAME", secret_storage_postgresql.info.dbname)
+    monkeypatch.setenv("DB_NAME", secrets_storage_postgresql.info.dbname)
     monkeypatch.setenv("MAX_PINNED_PROJECTS", "5")
 
-    config = SecretConfig.from_env()
+    config = SecretsConfig.from_env()
     yield config
     monkeypatch.delenv("DUMMY_STORES", raising=False)
     # NOTE: This is necessary because the postgresql pytest extension does not close
