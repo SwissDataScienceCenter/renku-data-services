@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, NamedTuple, Tuple, cast
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import renku_data_services.base_models as base_models
@@ -20,7 +19,7 @@ from renku_data_services.message_queue.avro_models.io.renku.events.v1.visibility
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import dispatch_message
-from renku_data_services.project import models
+from renku_data_services.project import apispec, models
 from renku_data_services.project import orm as schemas
 from renku_data_services.project.apispec import Role, Visibility
 from renku_data_services.utils.core import with_db_transaction
@@ -170,26 +169,37 @@ class ProjectRepository:
     @with_db_transaction
     @dispatch_message(create_project_created_message)
     async def insert_project(
-        self, session: AsyncSession, user: base_models.APIUser, project: models.Project
+        self, session: AsyncSession, user: base_models.APIUser, new_project=apispec.ProjectPost
     ) -> models.Project:
         """Insert a new project entry."""
-        project_orm = schemas.ProjectORM.load(project)
-        project_orm.creation_date = datetime.now(timezone.utc).replace(microsecond=0)
-        project_orm.created_by = user.id
-        session.add(project_orm)
+        if user.id is None:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
-        project = project_orm.dump()
-        public_project = project.visibility == Visibility.public
-        if project.id is None:
+        project_dict = new_project.model_dump(exclude_none=True)
+        project_dict["created_by"] = models.Member(id=user.id)
+        project_model = models.Project.from_dict(project_dict)
+        project = schemas.ProjectORM.load(project_model)
+
+        session.add(project)
+
+        project_model = project.dump()
+        public_project = project_model.visibility == Visibility.public
+        if project_model.id is None:
             raise errors.BaseError(detail="The created project does not have an ID but it should.")
-        await self.project_authz.create_project(requested_by=user, project_id=project.id, public_project=public_project)
+        await self.project_authz.create_project(
+            requested_by=user, project_id=project_model.id, public_project=public_project
+        )
 
-        return project
+        # Need to commit() to get the timestamps
+        async with session.begin_nested() as nested:
+            await nested.commit()
+
+        return project.dump()
 
     @with_db_transaction
     @dispatch_message(create_project_update_message)
     async def update_project(
-        self, session: AsyncSession, user: base_models.APIUser, project_id: str, **payload
+        self, session: AsyncSession, user: base_models.APIUser, project_id: str, etag: str | None = None, **payload
     ) -> models.Project:
         """Update a project entry."""
         authorized = await self.project_authz.has_permission(user=user, project_id=project_id, scope=Scope.WRITE)
@@ -198,20 +208,25 @@ class ProjectRepository:
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
 
-        result = await session.execute(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
-        projects = result.one_or_none()
+        result = await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
+        project = result.one_or_none()
 
-        if projects is None:
+        if project is None:
             raise errors.MissingResourceError(message=f"The project with id '{project_id}' cannot be found")
 
-        project = projects[0]
+        current_etag = project.dump().etag
+        if etag is not None and current_etag != etag:
+            raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
+
         visibility_before = project.visibility
-        session.add(project)  # reattach to session
+
         if "repositories" in payload:
             payload["repositories"] = [
                 schemas.ProjectRepositoryORM(url=r, project_id=project_id, project=project)
                 for r in payload["repositories"]
             ]
+            # Trigger update for ``updated_at`` column
+            await session.execute(update(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id).values())
 
         for key, value in payload.items():
             # NOTE: ``slug``, ``id``, ``created_by``, and ``creation_date`` cannot be edited

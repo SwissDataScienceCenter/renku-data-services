@@ -2,14 +2,15 @@
 
 import re
 import unicodedata
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from renku_data_services import errors
 from renku_data_services.project.apispec import Role, Visibility
+from renku_data_services.utils.etag import compute_etag_from_timestamp
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -55,9 +56,17 @@ class Project(BaseModel):
     slug: str
     visibility: Visibility
     created_by: Member
-    creation_date: Optional[datetime] = None
-    repositories: List[Repository] = field(default_factory=list)
+    creation_date: datetime | None = Field(default=None)
+    updated_at: datetime | None = Field(default=None)
+    repositories: List[Repository] = Field(default_factory=list)
     description: Optional[str] = None
+
+    @property
+    def etag(self) -> str | None:
+        """Entity tag value for this project object."""
+        if self.updated_at is None:
+            return None
+        return compute_etag_from_timestamp(self.updated_at)
 
     @classmethod
     def from_dict(cls, data: Dict) -> "Project":
@@ -73,15 +82,15 @@ class Project(BaseModel):
         name = data["name"]
         slug = data.get("slug") or get_slug(name)
         created_by = data["created_by"]
-        creation_date = data.get("creation_date") or datetime.now(timezone.utc).replace(microsecond=0)
 
         return cls(
             id=project_id,
             name=name,
             slug=slug,
-            created_by=created_by,
             visibility=data.get("visibility", Visibility.private),
-            creation_date=creation_date,
+            created_by=created_by,
+            creation_date=data.get("creation_date"),
+            updated_at=data.get("updated_at"),
             repositories=[Repository(r) for r in data.get("repositories", [])],
             description=data.get("description"),
         )
