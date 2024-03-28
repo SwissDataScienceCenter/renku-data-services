@@ -214,15 +214,35 @@ class GroupRepository:
     async def delete_group_member(self, user: base_models.APIUser, slug: str, user_id_to_delete: str):
         """Delete a specific group member."""
         async with self.session_maker() as session, session.begin():
-            group = await self._get_group(session, slug)
-            if user.id != group.created_by and not user.is_admin:
+            if not user.id:
+                raise errors.Unauthorized(message="Users need to be authenticated in order to remove group members.")
+            group = await self._get_group(session, slug, load_members=True)
+            if not group:
+                raise errors.MissingResourceError(message=f"The group with slug {slug} does not exist")
+            group_member = group.members.get(user.id)
+            user_is_owner = group_member is not None and group_member.role == models.GroupRole.owner.value
+            if not user_is_owner and not user.is_admin:
                 raise errors.Unauthorized(message="Only the owner and admins can modify groups")
             if group.namespace.slug != slug.lower():
                 raise errors.UpdatingWithStaleContentError(
                     message=f"You cannot remove a group member by using an old group slug {slug}.",
                     detail=f"The latest slug is {group.namespace.slug}, please retry the request with it.",
                 )
-            stmt = delete(schemas.GroupMemberORM).where(schemas.GroupMemberORM.user_id == user_id_to_delete)
+            total_owners = sum([member.role == models.GroupRole.owner.value for member in group.members.values()])
+            user_to_remove = group.members.get(user_id_to_delete)
+            if not user_to_remove:
+                return
+            user_to_remove_is_owner = user_to_remove.role == models.GroupRole.owner
+            if user_to_remove_is_owner and total_owners == 1:
+                raise errors.GeneralBadRequest(
+                    message="You cannot remove the single group owner, "
+                    "please designate an additional user as owner and then retry the removal."
+                )
+            stmt = (
+                delete(schemas.GroupMemberORM)
+                .where(schemas.GroupMemberORM.user_id == user_id_to_delete)
+                .where(schemas.GroupMemberORM.group.has(schemas.GroupORM.id == group.id))
+            )
             await session.execute(stmt)
 
     async def insert_group(self, user: base_models.APIUser, payload: apispec.GroupPostRequest) -> models.Group:
