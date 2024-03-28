@@ -30,7 +30,7 @@ class ProjectORM(BaseORM):
     visibility: Mapped[Visibility]
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
     description: Mapped[Optional[str]] = mapped_column("description", String(500))
-    slug: Mapped["ProjectSlug"] = relationship(lazy="joined")
+    slug: Mapped["ProjectSlug"] = relationship(lazy="joined", init=False)
     repositories: Mapped[List["ProjectRepositoryORM"]] = relationship(
         back_populates="project",
         default_factory=list,
@@ -46,8 +46,8 @@ class ProjectORM(BaseORM):
         return models.Project(
             id=self.id,
             name=self.name,
-            slug=self.latest_prj_slug.slug,
-            namespace=self.latest_prj_slug.latest_ns_slug.slug,
+            slug=self.slug.slug,
+            namespace=self.slug.namespace.slug,
             visibility=self.visibility,
             created_by=self.created_by_id,
             creation_date=self.creation_date,
@@ -83,6 +83,7 @@ class ProjectSlug(BaseORM):
     namespace_id: Mapped[str] = mapped_column(
         ForeignKey(NamespaceORM.id, ondelete="CASCADE", name="project_slugs_namespace_id_fk"), index=True
     )
+    namespace: Mapped[NamespaceORM] = relationship(lazy="joined", init=False)
 
 
 class ProjectSlugOld(BaseORM):

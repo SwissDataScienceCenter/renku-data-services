@@ -6,7 +6,7 @@ from asyncio import gather
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, NamedTuple, Tuple, cast
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import renku_data_services.base_models as base_models
@@ -168,7 +168,7 @@ class ProjectRepository:
         self, session: AsyncSession, user: base_models.APIUser, project: models.Project
     ) -> models.Project:
         """Insert a new project entry."""
-        ns, _ = await self.group_repo.get_ns_group_orm(user, project.namespace)
+        ns = await self.group_repo.get_namespace(user, project.namespace)
         if not ns:
             raise errors.MissingResourceError(
                 message=f"The project cannot be created because the namespace {project.namespace} does not exist"
@@ -183,12 +183,14 @@ class ProjectRepository:
             else project.visibility,
             created_by_id=user_id,
             description=project.description,
-            latest_prj_slug=schemas.ProjectSlug(slug, latest_ns_slug=ns.latest_ns_slug or ns),
             repositories=repos,
             creation_date=datetime.now(timezone.utc).replace(microsecond=0),
         )
+        slug=schemas.ProjectSlug(slug, project_id=project_orm.id, namespace_id=ns.id)
+        session.add(slug)
         session.add(project_orm)
         await session.flush()
+        await session.refresh(project_orm)
 
         project_dump = project_orm.dump()
         public_project = project_dump.visibility == Visibility.public
@@ -255,7 +257,7 @@ class ProjectRepository:
         if projects is None:
             return None
 
-        await session.delete(projects[0])
+        await session.execute(delete(schemas.ProjectORM).where(schemas.ProjectORM.id == projects[0].id))
 
         await self.project_authz.delete_project(requested_by=user, project_id=project_id)
         return project_id

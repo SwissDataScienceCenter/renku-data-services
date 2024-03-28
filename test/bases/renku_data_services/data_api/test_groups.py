@@ -163,10 +163,10 @@ async def test_group_patch_delete(sanic_client, user_headers):
     assert res_json["description"] == new_payload["description"]
     new_payload = {"slug": "group-other"}
     _, response = await sanic_client.patch("/api/data/groups/group-1", headers=user_headers, json=new_payload)
-    assert response.status_code == 422
-    _, response = await sanic_client.delete("/api/data/groups/group-1", headers=user_headers)
+    assert response.status_code == 409  # The latest slug must be used to patch it is now group-2
+    _, response = await sanic_client.delete("/api/data/groups/group-2", headers=user_headers)
     assert response.status_code == 204
-    _, response = await sanic_client.get("/api/data/groups/group-1", headers=user_headers)
+    _, response = await sanic_client.get("/api/data/groups/group-2", headers=user_headers)
     assert response.status_code == 404
 
 

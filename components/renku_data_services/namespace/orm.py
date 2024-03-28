@@ -26,8 +26,8 @@ class GroupORM(BaseORM):
     id: Mapped[str] = mapped_column("id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False)
     name: Mapped[str] = mapped_column("name", String(99), index=True)
     created_by: Mapped[str] = mapped_column(ForeignKey(UserORM.keycloak_id), index=True, nullable=False)
-    creation_date: Mapped[datetime] = mapped_column("creation_date", DateTime(timezone=True))
-    latest_ns_slug: Mapped["NamespaceORM"] = relationship(lazy="joined")
+    creation_date: Mapped[datetime] = mapped_column("creation_date", DateTime(timezone=True), server_default=func.now())
+    namespace: Mapped["NamespaceORM"] = relationship(lazy="joined", init=False)
     description: Mapped[Optional[str]] = mapped_column("description", String(500), default=None)
     members: Mapped[Dict[str, "GroupMemberORM"]] = relationship(
         # NOTE: the members of a group are keyed by the Keycloak ID
@@ -41,7 +41,7 @@ class GroupORM(BaseORM):
         return models.Group(
             id=self.id,
             name=self.name,
-            slug=self.latest_ns_slug.slug,
+            slug=self.namespace.slug,
             created_by=self.created_by,
             creation_date=self.creation_date,
             description=self.description,
@@ -94,20 +94,25 @@ class NamespaceORM(BaseORM):
         nullable=True,
         index=True,
     )
+    group: Mapped[GroupORM | None] = relationship(lazy="joined", init=False)
     user_id: Mapped[str | None] = mapped_column(
         ForeignKey(UserORM.keycloak_id, ondelete="CASCADE", name="namespaces_user_keycloak_id_fk"),
         default=None,
         nullable=True,
         index=True,
     )
+    user: Mapped[UserORM | None] = relationship(lazy="joined", init=False)
 
     def dump(self) -> models.Namespace:
         """Create a namespace model from the ORM."""
+        created_by = self.user_id
+        if self.group:
+            created_by = self.group.created_by
         return models.Namespace(
             id=self.id,
             slug=self.slug,
-            latest_slug=self.latest_ns_slug.slug if self.latest_ns_slug else None,
-            created_by=self.user_id,
+            latest_slug=self.slug,
+            created_by=created_by,
             kind=models.NamespaceKind.user if self.user_id else models.NamespaceKind.group,
         )
 
@@ -120,17 +125,20 @@ class NamespaceOldORM(BaseORM):
     id: Mapped[str] = mapped_column("id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False)
     slug: Mapped[str] = mapped_column(String(99), index=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(nullable=False, index=True, init=False, server_default=func.now())
-    latest_slug_id: Mapped[int] = mapped_column(
+    latest_slug_id: Mapped[str] = mapped_column(
         ForeignKey(NamespaceORM.id, ondelete="CASCADE"), nullable=False, index=True
     )
     latest_slug: Mapped[NamespaceORM] = relationship(lazy="joined", init=False)
 
     def dump(self) -> models.Namespace:
         """Create an namespace model from the ORM."""
+        created_by = self.latest_slug.user_id
+        if self.latest_slug.group:
+            created_by = self.latest_slug.group.created_by
         return models.Namespace(
             id=self.id,
             slug=self.slug,
-            latest_slug=self.latest_ns_slug.slug if self.latest_ns_slug else None,
-            created_by=self.latest_slug.user_id,
+            latest_slug=self.latest_slug.slug,
+            created_by=created_by,
             kind=models.NamespaceKind.user if self.latest_slug.user_id else models.NamespaceKind.group,
         )
