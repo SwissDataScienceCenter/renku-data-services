@@ -27,13 +27,14 @@ class GroupORM(BaseORM):
     name: Mapped[str] = mapped_column("name", String(99), index=True)
     created_by: Mapped[str] = mapped_column(ForeignKey(UserORM.keycloak_id), index=True, nullable=False)
     creation_date: Mapped[datetime] = mapped_column("creation_date", DateTime(timezone=True), server_default=func.now())
-    namespace: Mapped["NamespaceORM"] = relationship(lazy="joined", init=False)
+    namespace: Mapped["NamespaceORM"] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
     description: Mapped[Optional[str]] = mapped_column("description", String(500), default=None)
     members: Mapped[Dict[str, "GroupMemberORM"]] = relationship(
         # NOTE: the members of a group are keyed by the Keycloak ID
         back_populates="group",
         collection_class=attribute_keyed_dict("user_id"),
         default_factory=dict,
+        repr=False,
     )
 
     def dump(self) -> models.Group:
@@ -59,7 +60,7 @@ class GroupMemberORM(BaseORM):
     group_id: Mapped[str] = mapped_column(
         ForeignKey("groups.id", ondelete="CASCADE"), index=True, nullable=False, init=False
     )
-    group: Mapped[GroupORM] = relationship(back_populates="members", init=False)
+    group: Mapped[GroupORM] = relationship(back_populates="members", init=False, repr=False)
 
     @classmethod
     def load(cls, member: models.GroupMember):
@@ -94,14 +95,14 @@ class NamespaceORM(BaseORM):
         nullable=True,
         index=True,
     )
-    group: Mapped[GroupORM | None] = relationship(lazy="joined", init=False)
+    group: Mapped[GroupORM | None] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
     user_id: Mapped[str | None] = mapped_column(
         ForeignKey(UserORM.keycloak_id, ondelete="CASCADE", name="namespaces_user_keycloak_id_fk"),
         default=None,
         nullable=True,
         index=True,
     )
-    user: Mapped[UserORM | None] = relationship(lazy="joined", init=False)
+    user: Mapped[UserORM | None] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
 
     def dump(self) -> models.Namespace:
         """Create a namespace model from the ORM."""
@@ -128,7 +129,7 @@ class NamespaceOldORM(BaseORM):
     latest_slug_id: Mapped[str] = mapped_column(
         ForeignKey(NamespaceORM.id, ondelete="CASCADE"), nullable=False, index=True
     )
-    latest_slug: Mapped[NamespaceORM] = relationship(lazy="joined", init=False)
+    latest_slug: Mapped[NamespaceORM] = relationship(lazy="joined", init=False, viewonly=True, repr=False)
 
     def dump(self) -> models.Namespace:
         """Create an namespace model from the ORM."""

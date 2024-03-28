@@ -30,12 +30,13 @@ class ProjectORM(BaseORM):
     visibility: Mapped[Visibility]
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
     description: Mapped[Optional[str]] = mapped_column("description", String(500))
-    slug: Mapped["ProjectSlug"] = relationship(lazy="joined", init=False)
+    slug: Mapped["ProjectSlug"] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
     repositories: Mapped[List["ProjectRepositoryORM"]] = relationship(
         back_populates="project",
         default_factory=list,
         cascade="save-update, merge, delete",
         lazy="selectin",
+        repr=False,
     )
     creation_date: Mapped[datetime] = mapped_column(
         "creation_date", DateTime(timezone=True), default=func.now(), nullable=False
@@ -66,7 +67,7 @@ class ProjectRepositoryORM(BaseORM):
     project_id: Mapped[Optional[str]] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"), default=None, index=True
     )
-    project: Mapped[Optional[ProjectORM]] = relationship(back_populates="repositories", default=None)
+    project: Mapped[Optional[ProjectORM]] = relationship(back_populates="repositories", default=None, repr=False)
 
 
 class ProjectSlug(BaseORM):
@@ -83,7 +84,7 @@ class ProjectSlug(BaseORM):
     namespace_id: Mapped[str] = mapped_column(
         ForeignKey(NamespaceORM.id, ondelete="CASCADE", name="project_slugs_namespace_id_fk"), index=True
     )
-    namespace: Mapped[NamespaceORM] = relationship(lazy="joined", init=False)
+    namespace: Mapped[NamespaceORM] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
 
 
 class ProjectSlugOld(BaseORM):
@@ -102,4 +103,4 @@ class ProjectSlugOld(BaseORM):
         init=False,
         index=True,
     )
-    latest_slug: Mapped[ProjectSlug] = relationship(lazy="joined")
+    latest_slug: Mapped[ProjectSlug] = relationship(lazy="joined", repr=False, viewonly=True)
