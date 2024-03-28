@@ -1,4 +1,4 @@
-FROM python:3.11-bullseye as builder
+FROM python:3.11-bookworm as builder
 ARG DEV_BUILD=false
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
@@ -23,7 +23,7 @@ RUN if $DEV_BUILD ; then \
 RUN /home/renku/.local/bin/poetry build-project -f wheel -C projects/renku_data_service
 RUN env/bin/pip --no-cache-dir install projects/renku_data_service/dist/*.whl
 
-FROM python:3.11-slim-bullseye
+FROM python:3.11-slim-bookworm
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 ENV PROMETHEUS_MULTIPROC_DIR=/prometheus
