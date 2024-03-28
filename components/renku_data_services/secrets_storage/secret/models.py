@@ -1,6 +1,6 @@
 """Models for secrets."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, Optional
 
@@ -15,7 +15,7 @@ class Secret(BaseModel):
 
     id: Optional[str]
     name: str
-    value: str
+    value: str = field(repr=False)
     modification_date: Optional[datetime] = None
 
     @classmethod

@@ -4,6 +4,7 @@ import os
 from typing import Iterator
 
 import pytest
+from cryptography.fernet import Fernet
 from hypothesis import settings
 from pytest_postgresql import factories
 
@@ -99,7 +100,11 @@ secrets_storage_postgresql = factories.postgresql("secrets_storage_postgresql_in
 
 
 @pytest.fixture
-def secrets_storage_app_config(secrets_storage_postgresql, monkeypatch) -> Iterator[DataConfig]:
+def secrets_storage_app_config(secrets_storage_postgresql, monkeypatch, tmp_path) -> Iterator[DataConfig]:
+    encryption_key_path = tmp_path / "encryption-key"
+    encryption_key_path.write_bytes(Fernet.generate_key())
+
+    monkeypatch.setenv("ENCRYPTION_KEY_PATH", encryption_key_path.as_posix())
     monkeypatch.setenv("DUMMY_STORES", "true")
     monkeypatch.setenv("DB_NAME", secrets_storage_postgresql.info.dbname)
     monkeypatch.setenv("MAX_PINNED_PROJECTS", "5")

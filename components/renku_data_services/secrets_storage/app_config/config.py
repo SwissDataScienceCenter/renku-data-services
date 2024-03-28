@@ -11,6 +11,7 @@ instantiated multiple times without creating multiple database connections.
 
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from cryptography.fernet import Fernet
 from jwt import PyJWKClient
@@ -28,7 +29,7 @@ class Config:
     """Configuration for the Data service."""
 
     authenticator: base_models.Authenticator
-    encryption_key: str
+    encryption_key: bytes = field(repr=False)
     db: SecretStorageDBConfig
     version: str = "0.1.0"
     app_name: str = "secrets_storage_api"
@@ -50,11 +51,13 @@ class Config:
         authenticator: base_models.Authenticator
         db = SecretStorageDBConfig.from_env(prefix)
 
+        encryption_key_path = os.getenv("ENCRYPTION_KEY_PATH", "/encryption-key")
+        encryption_key = Path(encryption_key_path).read_bytes()
+
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
-            encryption_key = Fernet.generate_key().decode()
             authenticator = DummyAuthenticator()
         else:
-            encryption_key = os.environ.get(f"{prefix}ENCRYPTION_KEY", "")
+
             if not encryption_key:
                 raise errors.ConfigurationError(
                     message="The encryption key must be provided."

@@ -3,24 +3,14 @@
 from datetime import datetime
 from typing import Optional
 
-from cryptography.fernet import Fernet
 from sqlalchemy import DateTime, MetaData, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 from ulid import ULID
 
 from renku_data_services.secrets_storage.secret import models
+from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
 
 metadata_obj = MetaData(schema="secrets")  # Has to match alembic ini section name
-
-
-def encrypt_string(key: bytes, data: str) -> str:
-    """Encrypt a given string."""
-    return Fernet(key).encrypt(data.encode()).decode()
-
-
-def decrypt_string(key: bytes, data: str) -> str:
-    """Decrypt a given string."""
-    return Fernet(key).decrypt(data.encode()).decode()
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
@@ -49,20 +39,20 @@ class SecretORM(BaseORM):
     user_id: Mapped[str] = mapped_column("user_id", String(36), index=True)
 
     @classmethod
-    def load(cls, secret: models.Secret, user_id: str, key: bytes):
+    def load(cls, secret: models.Secret, user_id: str, password: bytes, salt: str):
         """Create an instance from the secret model."""
         return cls(
             name=secret.name,
-            value=encrypt_string(key=key, data=secret.value),
+            value=encrypt_string(password=password, salt=salt, data=secret.value),
             modification_date=secret.modification_date,
             user_id=user_id,
         )
 
-    def dump(self, key: bytes) -> models.Secret:
+    def dump(self, password: bytes, salt: str) -> models.Secret:
         """Create a secret model."""
         return models.Secret(
             id=self.id,
             name=self.name,
-            value=decrypt_string(key=key, data=self.value),
+            value=decrypt_string(password=password, salt=salt, data=self.value),
             modification_date=self.modification_date,
         )
