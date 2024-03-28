@@ -1,5 +1,4 @@
 """Database adapters and helpers for users."""
-import asyncio
 import logging
 from dataclasses import asdict
 from datetime import datetime, timedelta
@@ -211,7 +210,10 @@ class UsersSync:
                     logging.info(f"Inserting or updating user {db_user} -> {kc_user}")
                     await self.update_or_insert_user(kc_user.id, **asdict(kc_user))
 
-            await asyncio.gather(*[_do_update(u) for u in kc_users])
+            # NOTE: If asyncio.gather is used here you quickly exhaust all DB connections
+            # or timeout on waiting for available connections
+            for user in kc_users:
+                await _do_update(user)
 
     async def events_sync(self, kc_api: IKeycloakAPI):
         """Use the events from Keycloak to update the users database."""

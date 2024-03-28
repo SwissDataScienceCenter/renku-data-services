@@ -22,19 +22,11 @@ from renku_data_services.users.models import KeycloakAdminEvent, UserInfo, UserI
 @pytest.fixture
 def db_config(postgresql, monkeypatch) -> Generator[Any, Any, SyncConfig]:
     monkeypatch.setenv("DB_NAME", postgresql.info.dbname)
-    monkeypatch.setenv("DB_POOL_SIZE", "2")
-    monkeypatch.setenv("DB_POOL_TIMEOUT", "600")
     db_config = DBConfig.from_env()
-    # NOTE: This creates the session make instance with the above env variables
-    db_config.async_session_maker()
     monkeypatch.delenv("DB_NAME", raising=False)
-    monkeypatch.delenv("DB_POOL_SIZE", raising=False)
-    monkeypatch.delenv("DB_POOL_TIMEOUT", raising=False)
 
     yield db_config
     monkeypatch.delenv("DB_NAME", raising=False)
-    monkeypatch.delenv("DB_POOL_SIZE", raising=False)
-    monkeypatch.delenv("DB_POOL_TIMEOUT", raising=False)
     # NOTE: This is necessary because the postgresql pytest extension does not close
     # the async connection/pool we use in the config and the connection will succeed in the first
     # test but fail in all others if the connection is not disposed at the end of every test.
