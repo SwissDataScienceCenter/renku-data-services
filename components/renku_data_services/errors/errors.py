@@ -65,6 +65,15 @@ class NoDefaultPoolAccessError(BaseError):
 
 
 @dataclass
+class GeneralBadRequest(BaseError):
+    """Raised for a 400 status code - when the server cannot or will not process the request."""
+
+    code: int = 1400
+    message: str = "The request is invalid, malformed or non-sensical and cannot be fulfilled."
+    status_code: int = 400
+
+
+@dataclass
 class UpdatingWithStaleContentError(BaseError):
     """Raised when the request content for an update is old or outdated.
 

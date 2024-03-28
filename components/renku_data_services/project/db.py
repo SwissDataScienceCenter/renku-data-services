@@ -229,9 +229,18 @@ class ProjectRepository:
             ]
 
         for key, value in payload.items():
-            # NOTE: ``slug``, ``id``, ``created_by``, and ``creation_date`` cannot be edited
-            if key not in ["slug", "id", "created_by", "creation_date"]:
+            # NOTE: ``slug``, ``id``, ``created_by``, and ``creation_date`` cannot be edited or cannot
+            # be edited by setting a property on the ORM object instance.
+            if key not in ["slug", "id", "created_by", "creation_date", "namespace"]:
                 setattr(project, key, value)
+
+        if "namespace" in payload:
+            ns_slug = payload["namespace"]
+            ns = await self.group_repo.get_namespace(user, ns_slug)
+            if not ns:
+                raise errors.MissingResourceError(message=f"The namespace with slug {ns_slug} does not exist")
+            project.slug.namespace_id = ns.id
+            await session.refresh(project)
 
         if visibility_before != project.visibility:
             public_project = project.visibility == Visibility.public
