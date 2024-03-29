@@ -1,5 +1,5 @@
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
 from difflib import unified_diff
 from pathlib import Path
 from typing import Any

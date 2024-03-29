@@ -82,9 +82,8 @@ components:
       required: ["user_id", "pinned_projects"]
     UserId:
       type: string
-      description: The unique identifier for a user
-      minLength: 3
-      example: "user-id-example"
+      description: Keycloak user ID
+      example: f74a228b-1790-4276-af5f-25c2424e9b0c
     PinnedProjects:
       type: object
       description: The list of projects a user has pinned on their dashboard
