@@ -23,7 +23,10 @@ components/renku_data_services/session/apispec.py: components/renku_data_service
 components/renku_data_services/user_preferences/apispec.py: components/renku_data_services/user_preferences/api.spec.yaml
 	poetry run datamodel-codegen --input components/renku_data_services/user_preferences/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/user_preferences/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.user_preferences.apispec_base.BaseAPISpec
 
-schemas: components/renku_data_services/crc/apispec.py components/renku_data_services/storage/apispec.py components/renku_data_services/users/apispec.py components/renku_data_services/project/apispec.py components/renku_data_services/user_preferences/apispec.py
+components/renku_data_services/namespace/apispec.py: components/renku_data_services/namespace/api.spec.yaml
+	poetry run datamodel-codegen --input components/renku_data_services/namespace/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/namespace/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.namespace.apispec_base.BaseAPISpec
+
+schemas: components/renku_data_services/crc/apispec.py components/renku_data_services/storage/apispec.py components/renku_data_services/users/apispec.py components/renku_data_services/project/apispec.py components/renku_data_services/user_preferences/apispec.py components/renku_data_services/namespace/apispec.py
 	@echo "generated classes based on ApiSpec"
 	poetry run datamodel-codegen --input components/renku_data_services/crc/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/crc/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.crc.apispec_base.BaseAPISpec
 	poetry run datamodel-codegen --input components/renku_data_services/storage/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/storage/apispec.py --use-double-quotes --target-python-version 3.11 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.storage.apispec_base.BaseAPISpec
@@ -60,6 +63,8 @@ style_checks:
 	@$(call test_apispec_up_to_date,"users")
 	@echo "checking project apispec is up to date"
 	@$(call test_apispec_up_to_date,"project")
+	@echo "checking namespace apispec is up to date"
+	@$(call test_apispec_up_to_date,"namespace")
 	poetry run mypy
 	poetry run ruff check .
 	poetry run bandit -c pyproject.toml -r .
@@ -73,7 +78,7 @@ tests:
 	@echo "===========================================DATA API==========================================="
 	DUMMY_STORES=true poetry run sanic --debug renku_data_services.data_api.main:create_app --factory & echo $$! > .tmp.pid
 	@sleep 10
-	poetry run st run http://localhost:8000/api/data/spec.json --validate-schema True --checks all --hypothesis-max-examples 20 --data-generation-method all --show-errors-tracebacks --hypothesis-suppress-health-check data_too_large --hypothesis-suppress-health-check=filter_too_much --max-response-time 180 -v --header 'Authorization: bearer {"is_admin": true}' || (cat .tmp.pid | xargs kill && exit 1)
+	poetry run st run http://localhost:8000/api/data/spec.json --validate-schema True --checks all --hypothesis-max-examples 20 --data-generation-method all --show-errors-tracebacks --hypothesis-suppress-health-check data_too_large --hypothesis-suppress-health-check=filter_too_much --max-response-time 140 -v --header 'Authorization: bearer {"is_admin": true}' || (cat .tmp.pid | xargs kill && exit 1)
 	cat .tmp.pid | xargs kill || echo "The server is already shut down"
 	@rm -f .tmp.pid
 	@echo "===========================================TEST DOWNGRADE/UPGRADE==========================================="
@@ -88,3 +93,6 @@ pre_commit_checks:
 
 run:
 	DUMMY_STORES=true poetry run python bases/renku_data_services/data_api/main.py --dev --debug
+
+debug:
+	DUMMY_STORES=true poetry run python -Xfrozen_modules=off -m debugpy --listen 0.0.0.0:5678 --wait-for-client -m sanic renku_data_services.data_api.main:create_app --debug --single-process --port 8000 --host 0.0.0.0

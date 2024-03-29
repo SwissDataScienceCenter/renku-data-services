@@ -26,6 +26,7 @@ packages = [
   { include = "renku_data_services/k8s", from = "../../components" },
   { include = "renku_data_services/message_queue", from = "../../components" },
   { include = "renku_data_services/migrations", from = "../../components" },
+  { include = "renku_data_services/namespace", from = "../../components" },
   # Note: poetry poly does not detect the migrations as dependencies, but they are. Don't remove these!
   { include = "renku_data_services/storage_migrations", from = "../../components" },
   { include = "renku_data_services/crc_migrations", from = "../../components" },
@@ -40,7 +41,7 @@ packages = [
 [tool.poetry.dependencies]
 python = "^3.11"
 sanic = { extras = ["ext"], version = "^23.3.0" }
-pydantic = "^2.1.1"
+pydantic = {extras = ["email"], version = "^2.6.4"}
 datamodel-code-generator = "^0.25.1"
 sqlalchemy = { extras = ["asyncio"], version = "^2.0.9" }
 alembic = "^1.10.3"

@@ -60,7 +60,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-      - name: Docker meta
+      - name: Docker meta data services
         id: meta
         uses: docker/metadata-action@v4
         with:
@@ -83,7 +83,7 @@ jobs:
         with:
           username: ${{ secrets.RENKU_DOCKER_USERNAME }}
           password: ${{ secrets.RENKU_DOCKER_PASSWORD }}
-      - name: Build and push
+      - name: Build and push data services
         uses: docker/build-push-action@v4
         with:
           context: .
@@ -94,3 +94,28 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=registry,ref=renku/renku-data-service:buildcache
           cache-to: type=registry,ref=renku/renku-data-service:buildcache,mode=max
+      - name: Docker meta keycloak sync
+        id: meta-keycloak-sync
+        uses: docker/metadata-action@v4
+        with:
+          # list of Docker images to use as base name for tags
+          images: |
+            renku/keycloak-sync
+          # generate Docker tags based on the following events/attributes
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+      - name: Build and push keycloak sync
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./projects/keycloak_sync/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta-keycloak-sync.outputs.tags }}
+          labels: ${{ steps.meta-keycloak-sync.outputs.labels }}
+          cache-from: type=registry,ref=renku/keycloak-sync:buildcache
+          cache-to: type=registry,ref=renku/keycloak-sync:buildcache,mode=max
