@@ -252,7 +252,7 @@ components:
         id:
           $ref: "#/components/schemas/Ulid"
         name:
-          $ref: "#/components/schemas/Name"
+          $ref: "#/components/schemas/ProjectName"
         slug:
           $ref: "#/components/schemas/Slug"
         creation_date:
@@ -287,7 +287,7 @@ components:
       additionalProperties: false
       properties:
         name:
-          $ref: "#/components/schemas/Name"
+          $ref: "#/components/schemas/ProjectName"
         slug:
           $ref: "#/components/schemas/Slug"
         repositories:
@@ -305,7 +305,7 @@ components:
       additionalProperties: false
       properties:
         name:
-          $ref: "#/components/schemas/Name"
+          $ref: "#/components/schemas/ProjectName"
         repositories:
           $ref: "#/components/schemas/RepositoriesList"
         visibility:
@@ -319,7 +319,7 @@ components:
       maxLength: 26
       pattern: "^[A-Z0-9]{26}$"  # This is case-insensitive
       format: ulid
-    Name:
+    ProjectName:
       description: Renku project name
       type: string
       minLength: 1
