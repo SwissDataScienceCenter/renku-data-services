@@ -83,6 +83,7 @@ avro-preprocessor = "^0.3.0"
 fakeredis = "^2.21.1"
 ruff = "^0.3.4"
 debugpy = "^1.8.1"
+syrupy = "^4.6.1"
 
 [build-system]
 requires = ["poetry-core"]

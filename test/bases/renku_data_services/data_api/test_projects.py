@@ -9,6 +9,7 @@ import pytest
 import pytest_asyncio
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
+from syrupy.filters import props
 
 from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.header import Header
 from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_authorization_added import (
@@ -201,7 +202,7 @@ async def test_get_a_project(create_project, get_project):
 
 
 @pytest.mark.asyncio
-async def test_get_all_projects_with_pagination(create_project, sanic_client, user_headers):
+async def test_get_all_projects_with_pagination(create_project, sanic_client, user_headers, snapshot):
     # Create some projects
     for i in range(1, 10):
         await create_project(f"Project {i}")
@@ -231,6 +232,7 @@ async def test_get_all_projects_with_pagination(create_project, sanic_client, us
     assert response.headers["per-page"] == "4"
     assert response.headers["total"] == "9"
     assert response.headers["total-pages"] == "3"
+    assert response.json == snapshot(exclude=props("id", "creation_date"))
 
 
 @pytest.mark.asyncio

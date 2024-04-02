@@ -1,0 +1,42 @@
+# serializer version: 1
+# name: test_get_all_session_environments
+  list([
+    dict({
+      'container_image': 'some_image:some_tag',
+      'description': 'A session environment.',
+      'name': 'Environment 1',
+    }),
+    dict({
+      'container_image': 'some_image:some_tag',
+      'description': 'A session environment.',
+      'name': 'Environment 2',
+    }),
+    dict({
+      'container_image': 'some_image:some_tag',
+      'description': 'A session environment.',
+      'name': 'Environment 3',
+    }),
+  ])
+# ---
+# name: test_get_all_session_launchers
+  list([
+    dict({
+      'container_image': 'some_image:some_tag',
+      'description': 'A session launcher.',
+      'environment_kind': 'container_image',
+      'name': 'Launcher 1',
+    }),
+    dict({
+      'container_image': 'some_image:some_tag',
+      'description': 'A session launcher.',
+      'environment_kind': 'container_image',
+      'name': 'Launcher 2',
+    }),
+    dict({
+      'container_image': 'some_image:some_tag',
+      'description': 'A session launcher.',
+      'environment_kind': 'container_image',
+      'name': 'Launcher 3',
+    }),
+  ])
+# ---
