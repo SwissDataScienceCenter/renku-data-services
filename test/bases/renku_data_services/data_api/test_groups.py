@@ -194,3 +194,72 @@ async def test_group_members(sanic_client, user_headers):
     find_member = list(filter(lambda x: x["id"] == "member-1", res_json))
     assert len(find_member) == 1
     assert find_member[0]["role"] == "member"
+
+
+@pytest.mark.asyncio
+async def test_removing_single_group_owner_not_allowed(sanic_client, user_headers):
+    payload = {
+        "name": "Group1",
+        "slug": "group-1",
+        "description": "Group 1 Description",
+    }
+    # Create a group
+    _, response = await sanic_client.post("/api/data/groups", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    _, response = await sanic_client.get("/api/data/groups/group-1/members", headers=user_headers)
+    assert response.status_code == 200, response.text
+    res_json = response.json
+    assert len(res_json) == 1
+    # Add a member
+    new_members = [{"id": "member-1", "role": "member"}]
+    _, response = await sanic_client.patch("/api/data/groups/group-1/members", headers=user_headers, json=new_members)
+    assert response.status_code == 200
+    _, response = await sanic_client.get("/api/data/groups/group-1/members", headers=user_headers)
+    assert response.status_code == 200, response.text
+    res_json = response.json
+    assert len(res_json) == 2
+    # Trying to remove the single owner from the group will fail
+    _, response = await sanic_client.delete("/api/data/groups/group-1/members/user", headers=user_headers)
+    assert response.status_code == 400
+    # Make the other member owner
+    new_members = [{"id": "member-1", "role": "owner"}]
+    _, response = await sanic_client.patch("/api/data/groups/group-1/members", headers=user_headers, json=new_members)
+    assert response.status_code == 200
+    # Removing the original owner now works
+    _, response = await sanic_client.delete("/api/data/groups/group-1/members/user", headers=user_headers)
+    assert response.status_code == 204
+    # Check that only one member remains
+    _, response = await sanic_client.get("/api/data/groups/group-1/members", headers=user_headers)
+    assert response.status_code == 200, response.text
+    assert len(response.json) == 1
+    assert response.json[0]["id"] == "member-1"
+    assert response.json[0]["role"] == "owner"
+
+
+@pytest.mark.asyncio
+async def test_moving_project_across_groups(sanic_client, user_headers, regular_user: UserInfo):
+    payload = {
+        "name": "Group1",
+        "slug": "group-1",
+        "description": "Group 1 Description",
+    }
+    _, response = await sanic_client.post("/api/data/groups", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    assert regular_user.email
+    user_namespace = regular_user.email.split("@")[0]
+    project_payload = {"name": "project-1", "slug": "project-1", "namespace": user_namespace}
+    _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=project_payload)
+    assert response.status_code == 201, response.text
+    assert response.json["namespace"] == user_namespace
+    project_id = response.json["id"]
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
+    assert response.status_code == 200, response.text
+    assert response.json["namespace"] == user_namespace
+    _, response = await sanic_client.patch(
+        f"/api/data/projects/{project_id}", headers=user_headers, json={"namespace": "group-1"}
+    )
+    assert response.status_code == 200, response.text
+    assert response.json["namespace"] == "group-1"
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
+    assert response.status_code == 200, response.text
+    assert response.json["namespace"] == "group-1"
