@@ -15,8 +15,12 @@ services:
     # Overrides default command so things don't shut down after the process ends.
     entrypoint: sleep infinity
 
-    # Runs app on the same network as the database container, allows "forwardPorts" in devcontainer.json function.
-    network_mode: service:db
+
+    ports:
+      - "8000:8000"
+      - "5432:5432"
+      - "8080:8080"
+      - "5678:5678"
 
     # Use "forwardPorts" in **devcontainer.json** to forward an app port locally.
     # (Adding the "ports" property to this file will not forward from a Codespace.)
@@ -24,7 +28,7 @@ services:
       DB_USER: renku
       DB_NAME: renku
       DB_PASSWORD: renku
-      DB_HOST: db
+      DB_HOST: localhost 
       CORS_ALLOW_ALL_ORIGINS: "true"
       ALEMBIC_CONFIG: /workspaces/renku-data-services/components/renku_data_services/migrations/alembic.ini
 
@@ -37,16 +41,18 @@ services:
       POSTGRES_USER: renku
       POSTGRES_DB: renku
       POSTGRES_PASSWORD: renku
-
+    # Runs on the same network as the main app 
+    network_mode: service:data_service
     # Add "forwardPorts": ["5432"] to **devcontainer.json** to forward PostgreSQL locally.
     # (Adding the "ports" property to this file will not forward from a Codespace.)
 
   swagger:
     image: swaggerapi/swagger-ui
-    network_mode: service:db
     environment:
       SWAGGER_JSON_URL: http://localhost:8000/api/data/spec.json
       PORT: "8080"
+    # Runs on the same network as the main app 
+    network_mode: service:data_service
 
 volumes:
   postgres-data:

@@ -8,6 +8,7 @@ from renku_data_services.authz.orm import BaseORM as authz
 from renku_data_services.crc.orm import BaseORM as crc
 from renku_data_services.message_queue.orm import BaseORM as events
 from renku_data_services.migrations.utils import run_migrations
+from renku_data_services.namespace.orm import BaseORM as namespaces
 from renku_data_services.project.orm import BaseORM as project
 from renku_data_services.session.orm import BaseORM as sessions
 from renku_data_services.storage.orm import BaseORM as storage
@@ -32,5 +33,6 @@ all_metadata = [
     user_preferences.metadata,
     users.metadata,
     events.metadata,
+    namespaces.metadata,
 ]
 run_migrations(all_metadata)

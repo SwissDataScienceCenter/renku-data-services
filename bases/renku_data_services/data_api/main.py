@@ -79,6 +79,7 @@ def create_app() -> Sanic:
         run_migrations_for_app("common")
         config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
         await config.kc_user_repo.initialize(config.kc_api)
+        await config.group_repo.generate_user_namespaces()
         await config.event_repo.send_pending_events()
 
     @app.before_server_start

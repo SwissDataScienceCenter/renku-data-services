@@ -17,11 +17,7 @@
 	},
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
 	// This can be used to network with other containers or the host.
-	"forwardPorts": [
-		8000,
-		8080,
-		"db:5432"
-	],
+	//"forwardPorts": [8000, 8080, 5432],
 	// Use 'postCreateCommand' to run commands after the container is created.
 	"postCreateCommand": "poetry self add poetry-polylith-plugin && poetry install --with dev && echo 'cd /workspaces/renku-data-services/'>~/.bashrc",
 	// Configure tool-specific properties.

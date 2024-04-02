@@ -4,7 +4,7 @@ ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 
 RUN groupadd --gid $USER_GID renku && \
-    adduser --gid $USER_GID --uid $USER_UID renku
+    DEBIAN_FRONTEND=noninteractive adduser --gid $USER_GID --uid $USER_UID renku
 USER $USER_UID:$USER_GID
 WORKDIR /app
 RUN python3 -m pip install --user pipx && \

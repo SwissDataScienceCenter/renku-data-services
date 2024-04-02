@@ -207,3 +207,25 @@ class UserInfo:
             last_name=payload.get("lastName"),
             email=payload.get("email"),
         )
+
+    def _to_keycloak_dict(self) -> Dict[str, Any]:
+        """Create a payload that would have been created by Keycloak for this user, used only for testing."""
+
+        return {
+            "id": self.id,
+            "createdTimestamp": int(datetime.utcnow().timestamp() * 1000),
+            "username": self.email,
+            "enabled": True,
+            "emailVerified": False,
+            "firstName": self.first_name,
+            "lastName": self.last_name,
+            "email": self.email,
+            "access": {
+                "manageGroupMembership": True,
+                "view": True,
+                "mapRoles": True,
+                "impersonate": True,
+                "manage": True,
+            },
+            "bruteForceStatus": {"numFailures": 0, "disabled": False, "lastIPFailure": "n/a", "lastFailure": 0},
+        }

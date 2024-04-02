@@ -168,7 +168,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/FullUsersWithRoles"
+                $ref: "#/components/schemas/ProjectMemberListResponse"
         "404":
           description: The project does not exist
           content:
@@ -195,7 +195,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/MembersWithRoles"
+              $ref: "#/components/schemas/ProjectMemberListPatchRequest"
       responses:
         "200":
           description: The project's members were updated
@@ -253,12 +253,14 @@ components:
           $ref: "#/components/schemas/Ulid"
         name:
           $ref: "#/components/schemas/Name"
+        namespace:
+          $ref: "#/components/schemas/Slug"
         slug:
           $ref: "#/components/schemas/Slug"
         creation_date:
           $ref: "#/components/schemas/CreationDate"
         created_by:
-          $ref: "#/components/schemas/Member"
+          $ref: "#/components/schemas/UserId"
         repositories:
           $ref: "#/components/schemas/RepositoriesList"
         visibility:
@@ -268,12 +270,15 @@ components:
       required:
         - "id"
         - "name"
+        - "namespace"
+        - "slug"
         - "created_by"
         - "creation_date"
         - "visibility"
       example:
         id: "01AN4Z79ZS5XN0F25N3DB94T4R"
         name: "Renku R Project"
+        namespace: "our-projects"
         slug: "r-project"
         created_by:
           id: "owner-KC-id"
@@ -288,6 +293,8 @@ components:
       properties:
         name:
           $ref: "#/components/schemas/Name"
+        namespace:
+          $ref: "#/components/schemas/Slug"
         slug:
           $ref: "#/components/schemas/Slug"
         repositories:
@@ -299,6 +306,7 @@ components:
           $ref: "#/components/schemas/Description"
       required:
         - "name"
+        - "namespace"
     ProjectPatch:
       type: object
       description: Patch of a project
@@ -306,6 +314,8 @@ components:
       properties:
         name:
           $ref: "#/components/schemas/Name"
+        namespace:
+          $ref: "#/components/schemas/Slug"
         repositories:
           $ref: "#/components/schemas/RepositoriesList"
         visibility:
@@ -326,11 +336,17 @@ components:
       maxLength: 99
       example: "My Renku Project :)"
     Slug:
-      description: A command-line friendly name for a project
+      description: A command-line friendly name for a project or namespace
       type: string
       minLength: 1
       maxLength: 99
-      pattern: "^[a-z0-9]+[a-z0-9._-]*$"  # Cannot contain consecutive special characters or end in .git and .atom
+      # Slug regex rules 
+      # from https://docs.gitlab.com/ee/user/reserved_names.html#limitations-on-usernames-project-and-group-names
+      # - cannot end in .git
+      # - cannot end in .atom
+      # - cannot contain any combination of two or more consecutive -._
+      # - has to start with letter or number
+      pattern: '^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-zA-Z0-9][a-zA-Z0-9\-_.]*$'  
       example: "my-renku-project"
     CreationDate:
       description: The date and time the project was created (time is always in UTC)
@@ -341,17 +357,6 @@ components:
       description: A description for project
       type: string
       maxLength: 500
-    Member:
-      description: A KeyCloak user
-      type: object
-      additionalProperties: false
-      properties:
-        id:
-          $ref: "#/components/schemas/KeyCloakId"
-      required:
-        - "id"
-      example:
-        id: "some-keycloak-user-id"
     KeyCloakId:
       description: Member's KeyCloak ID
       type: string
@@ -378,60 +383,41 @@ components:
       enum:
         - private
         - public
-    MembersWithRoles:
+    ProjectMemberListPatchRequest:
       description: List of members and their access level to the project
       type: array
       items:
-        $ref: "#/components/schemas/MemberWithRole"
+        $ref: "#/components/schemas/ProjectMemberPatchRequest"
       minItems: 0
       example:
         - id: "some-keycloak-user-id"
           role: "owner"
         - id: "another-keycloak-user-id"
           role: "member"
-    MemberWithRole:
+    ProjectMemberPatchRequest:
       description: A member and the access level to the project
       type: object
       additionalProperties: false
       properties:
-        member:
-          $ref: "#/components/schemas/Member"
+        id:
+          $ref: "#/components/schemas/UserId"
         role:
           $ref: "#/components/schemas/Role"
       required:
-        - "member"
+        - "id"
         - "role"
       example:
-        member:
-          id: "some-keycloak-user-id"
+        id: "some-keycloak-user-id"
         role: "owner"
-    FullUsersWithRoles:
+    ProjectMemberListResponse:
       description: List of members with full info and their access level to the project
       type: array
       items:
-        $ref: "#/components/schemas/FullUserWithRole"
+        $ref: "#/components/schemas/ProjectMemberResponse"
       minItems: 0
-    FullUserWithRole:
+    ProjectMemberResponse:
       description: A member with full info (email, name, ...) and the access level to the project
       type: object
-      additionalProperties: false
-      properties:
-        member:
-          $ref: "#/components/schemas/UserWithId"
-        role:
-          $ref: "#/components/schemas/Role"
-      required:
-        - "member"
-        - "role"
-    Role:
-      description: Possible roles of members in a project
-      type: string
-      enum:
-        - member
-        - owner
-    UserWithId:
-      type: object
-      description: This is copied from ../users/api.spec.yaml
       additionalProperties: false
       properties:
         id:
@@ -442,10 +428,17 @@ components:
           $ref: "#/components/schemas/UserFirstLastName"
         last_name:
           $ref: "#/components/schemas/UserFirstLastName"
-      required: ["id"]
-      example:
-        id: "some-random-keycloak-id"
-        email: "user@gmail.com"
+        role:
+          $ref: "#/components/schemas/Role"
+      required:
+        - "id"
+        - "role"
+    Role:
+      description: Possible roles of members in a project
+      type: string
+      enum:
+        - member
+        - owner
     UserId:
       type: string
       description: Keycloak user ID

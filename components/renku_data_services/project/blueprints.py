@@ -1,8 +1,6 @@
 """Project blueprint."""
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import cast
 
 from sanic import HTTPResponse, Request, json
 from sanic_ext import validate
@@ -10,9 +8,9 @@ from sanic_ext import validate
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.errors import errors
-from renku_data_services.project import apispec, models
-from renku_data_services.project.apispec import FullUserWithRole, UserWithId
+from renku_data_services.project import apispec
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
 from renku_data_services.users.db import UserRepo
 
@@ -30,32 +28,12 @@ class ProjectsBP(CustomBlueprint):
         """List all projects."""
 
         @authenticate(self.authenticator)
-        async def _get_all(request: Request, *, user: base_models.APIUser):
-            default_page_number = 1
-            default_number_of_elements_per_page = 20
-
-            args = request.args if request.args else {}
-            page_parameter = args.get("page", default_page_number)
-            try:
-                page = int(page_parameter)
-            except ValueError:
-                raise errors.ValidationError(message=f"Invalid value for parameter 'page': {page_parameter}")
-            per_page_parameter = args.get("per_page", default_number_of_elements_per_page)
-            try:
-                per_page = int(per_page_parameter)
-            except ValueError:
-                raise errors.ValidationError(message=f"Invalid value for parameter 'per_page': {per_page_parameter}")
-
-            projects, pagination = await self.project_repo.get_projects(user=user, page=page, per_page=per_page)
-            return json(
-                [apispec.Project.model_validate(p).model_dump(exclude_none=True, mode="json") for p in projects],
-                headers={
-                    "page": str(pagination.page),
-                    "per-page": str(pagination.per_page),
-                    "total": str(pagination.total),
-                    "total-pages": str(pagination.total_pages),
-                },
-            )
+        @paginate
+        async def _get_all(_: Request, *, user: base_models.APIUser, pagination: PaginationRequest):
+            projects, total_num = await self.project_repo.get_projects(user=user, pagination=pagination)
+            return [
+                apispec.Project.model_validate(p).model_dump(exclude_none=True, mode="json") for p in projects
+            ], total_num
 
         return "/projects", ["GET"], _get_all
 
@@ -66,13 +44,7 @@ class ProjectsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.ProjectPost)
         async def _post(_: Request, *, user: base_models.APIUser, body: apispec.ProjectPost):
-            data = body.model_dump(exclude_none=True)
-            user_id: str = cast(str, user.id)
-            data["created_by"] = models.Member(id=user_id)
-            # NOTE: Set ``creation_date`` to override possible value set by users
-            data["creation_date"] = datetime.now(timezone.utc).replace(microsecond=0)
-            project = models.Project.from_dict(data)
-            result = await self.project_repo.insert_project(user=user, project=project)
+            result = await self.project_repo.insert_project(user=user, project=body)
             return json(apispec.Project.model_validate(result).model_dump(exclude_none=True, mode="json"), 201)
 
         return "/projects", ["POST"], _post
@@ -123,20 +95,21 @@ class ProjectsBP(CustomBlueprint):
             users = []
 
             for member in members:
-                user_id = member.member.id
+                user_id = member.member
                 user_info = await self.user_repo.get_user(requested_by=user, id=user_id)
                 if not user_info:
                     raise errors.MissingResourceError(message=f"The user with ID {user_id} cannot be found.")
 
-                user_with_id = UserWithId(
-                    id=user_id, email=user_info.email, first_name=user_info.first_name, last_name=user_info.last_name
-                )
-                full_user = FullUserWithRole(member=user_with_id, role=member.role)
-                users.append(full_user)
+                user_with_id = apispec.ProjectMemberResponse(
+                    id=user_id,
+                    email=user_info.email,
+                    first_name=user_info.first_name,
+                    last_name=user_info.last_name,
+                    role=apispec.Role(member.role.value),
+                ).model_dump(exclude_none=True, mode="json")
+                users.append(user_with_id)
 
-            return json(
-                [apispec.FullUserWithRole.model_validate(u).model_dump(exclude_none=True, mode="json") for u in users]
-            )
+            return json(users)
 
         return "/projects/<project_id>/members", ["GET"], _get_all_members
 
@@ -145,7 +118,7 @@ class ProjectsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _update_members(request: Request, *, user: base_models.APIUser, project_id: str):
-            body_dump = apispec.MembersWithRoles.model_validate(request.json).model_dump(exclude_none=True)
+            body_dump = apispec.ProjectMemberListPatchRequest.model_validate(request.json).model_dump(exclude_none=True)
             await self.project_member_repo.update_members(
                 user=user,
                 project_id=project_id,
