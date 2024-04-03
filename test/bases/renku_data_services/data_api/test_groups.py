@@ -264,3 +264,43 @@ async def test_moving_project_across_groups(sanic_client, user_headers, regular_
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
     assert response.status_code == 200, response.text
     assert response.json["namespace"] == "group-1"
+
+
+@pytest.mark.asyncio
+async def test_removing_group_removes_projects(sanic_client, user_headers, regular_user: UserInfo):
+    payload = {
+        "name": "Group1",
+        "slug": "group-1",
+        "description": "Group 1 Description",
+    }
+    # Create a group
+    _, response = await sanic_client.post("/api/data/groups", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    assert regular_user.email
+    # Create a project in the group
+    project1_payload = {"name": "project-1", "slug": "project-1", "namespace": "group-1"}
+    _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=project1_payload)
+    assert response.status_code == 201, response.text
+    project_id = response.json["id"]
+    user_namespace = regular_user.email.split("@")[0]
+    # Create a project in the user namespace
+    project2_payload = {"name": "project-2", "slug": "project-2", "namespace": user_namespace}
+    _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=project2_payload)
+    assert response.status_code == 201, response.text
+    # Ensure both projects show up when listing all projects
+    _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
+    assert response.status_code == 200, response.text
+    assert len(response.json) == 2
+    # Delete the group that contains one project
+    _, response = await sanic_client.delete("/api/data/groups/group-1", headers=user_headers)
+    assert response.status_code == 204
+    # The project in the group should be also deleted
+    _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
+    assert response.status_code == 200, response.text
+    assert len(response.json) == 1
+    assert response.json[0]["namespace"] == user_namespace
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
+    assert response.status_code == 404
+    # The group should not exist
+    _, response = await sanic_client.get("/api/data/groups/group-1", headers=user_headers)
+    assert response.status_code == 404
