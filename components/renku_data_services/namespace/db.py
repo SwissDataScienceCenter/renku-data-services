@@ -209,6 +209,10 @@ class GroupRepository:
                     message=f"You cannot delete a group by using an old group slug {slug}.",
                     detail=f"The latest slug is {group.namespace.slug}, please use this for deletions.",
                 )
+            # NOTE: We have a stored procedure that gets triggered when a project slug is removed to remove the project.
+            # This is required because the slug has a foreign key pointing to the project, so when a project is removed
+            # the slug is removed but the converse is not true. The stored procedure in migration 89aa4573cfa9 has the
+            # trigger and procedure that does the cleanup when a slug is removed.
             stmt = delete(schemas.GroupORM).where(schemas.GroupORM.id == group.id)
             await session.execute(stmt)
 
