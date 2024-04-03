@@ -1,4 +1,4 @@
-FROM python:3.11-bookworm as builder
+FROM python:3.12-bookworm as builder
 ARG DEV_BUILD=false
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
@@ -22,7 +22,7 @@ RUN if $DEV_BUILD ; then \
 RUN /home/renku/.local/bin/poetry build-project -f wheel -C projects/keycloak_sync
 RUN env/bin/pip --no-cache-dir install projects/keycloak_sync/dist/*.whl
 
-FROM python:3.11-slim-bookworm
+FROM python:3.12-slim-bookworm
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 RUN apt-get update && apt-get install -y \
