@@ -191,7 +191,9 @@ class Config:
     def user_repo(self) -> UserRepository:
         """The DB adapter for users."""
         if not self._user_repo:
-            self._user_repo = UserRepository(session_maker=self.db.async_session_maker, quotas_repo=self.quota_repo)
+            self._user_repo = UserRepository(
+                session_maker=self.db.async_session_maker, quotas_repo=self.quota_repo, user_repo=self.kc_user_repo
+            )
         return self._user_repo
 
     @property

@@ -426,7 +426,7 @@ async def test_private_resource_pool_access(
 
 @pytest.mark.asyncio
 async def test_remove_resource_pool_users(
-    test_client: SanicASGITestClient, admin_user_headers: Dict[str, str], valid_resource_pool_payload: Dict[str, Any]
+    test_client: SanicASGITestClient, admin_user_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
 ):
     valid_resource_pool_payload["default"] = False
     valid_resource_pool_payload["public"] = False
@@ -490,6 +490,69 @@ async def test_remove_resource_pool_users(
         f"/api/data/resource_pools/{rp_private['id']}", headers=user2_headers,
     )
     assert res.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_user_resource_pools(
+    test_client: SanicASGITestClient, admin_user_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
+):
+    # Create private resource pool
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, test_client)
+    assert res.status_code == 201
+    rp_private = res.json
+    # Create a public default resource pool
+    valid_resource_pool_payload["default"] = True
+    valid_resource_pool_payload["public"] = True
+    del valid_resource_pool_payload["quota"]
+    _, res = await create_rp(valid_resource_pool_payload, test_client)
+    rp_public = res.json
+    assert res.status_code == 201
+    # Get existing users and pick 1 regular user to test with
+    _, res = await test_client.get("/api/data/users", headers=admin_user_headers)
+    existing_users = res.json
+    assert res.status_code == 200
+    assert len(existing_users) >= 1
+    user = existing_users[0]
+    user_id = user["id"]
+    user_access_token = json.dumps({"id": user_id})
+    user_headers = {"Authorization": f"Bearer {user_access_token}"}
+    # Check that only the public default resource pool appears in the list of pools for the user
+    _, res = await test_client.get(f"/api/data/users/{user_id}/resource_pools", headers=admin_user_headers)
+    assert res.status_code == 200
+    assert len(res.json) == 1
+    assert res.json[0] == rp_public
+    # Give access to the user to the private pool
+    _, res = await test_client.post(
+        f"/api/data/users/{user_id}/resource_pools", headers=admin_user_headers, json=[rp_private["id"]],
+    )
+    res.status_code == 201
+    # Check the user can see the private pool
+    _, res = await test_client.get(f"/api/data/resource_pools/{rp_private['id']}", headers=user_headers)
+    assert res.status_code == 200
+    assert res.json == rp_private
+    # Check the resource pool appears in the list of pools for the user
+    _, res = await test_client.get(f"/api/data/users/{user_id}/resource_pools", headers=admin_user_headers)
+    assert res.status_code == 200
+    assert len(res.json) == 2
+    added_pool = [i for i in res.json if not i["public"]][0]
+    assert added_pool == rp_private
+    # Set the resource pools the user has access to with a put request
+    _, res = await test_client.put(
+        f"/api/data/users/{user_id}/resource_pools", headers=admin_user_headers, json=[rp_public["id"]],
+    )
+    res.status_code == 200
+    # Check only the public pool appears in the list of pools for the user
+    _, res = await test_client.get(f"/api/data/users/{user_id}/resource_pools", headers=admin_user_headers)
+    assert res.status_code == 200
+    assert len(res.json) == 1
+    assert res.json[0] == rp_public
+    # Check the user can only see the public pool
+    _, res = await test_client.get("/api/data/resource_pools", headers=user_headers)
+    assert res.status_code == 200
+    assert len(res.json) == 1
+    assert res.json[0]["id"] == rp_public["id"]
 
 
 @pytest.mark.asyncio
