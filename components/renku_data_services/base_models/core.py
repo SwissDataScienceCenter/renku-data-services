@@ -3,7 +3,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import ClassVar, List, Optional, Protocol
+from typing import ClassVar, Optional, Protocol
 
 from sanic import Request
 
@@ -53,8 +53,8 @@ class GitlabAPIProtocol(Protocol):
     """The interface for interacting with the Gitlab API."""
 
     async def filter_projects_by_access_level(
-        self, user: APIUser, project_ids: List[str], min_access_level: GitlabAccessLevel
-    ) -> List[str]:
+        self, user: APIUser, project_ids: list[str], min_access_level: GitlabAccessLevel
+    ) -> list[str]:
         """Get a list of projects of which the user is a member with a specific access level."""
         ...
 

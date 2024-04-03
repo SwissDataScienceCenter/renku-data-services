@@ -1,6 +1,5 @@
 import json
 from datetime import datetime
-from typing import Dict, List
 
 import pytest
 
@@ -18,7 +17,7 @@ def regular_user() -> UserInfo:
 
 
 @pytest.fixture
-def users(regular_user, admin_user) -> List[UserInfo]:
+def users(regular_user, admin_user) -> list[UserInfo]:
     return [
         regular_user,
         admin_user,
@@ -28,7 +27,7 @@ def users(regular_user, admin_user) -> List[UserInfo]:
 
 
 @pytest.fixture
-def admin_headers(admin_user) -> Dict[str, str]:
+def admin_headers(admin_user) -> dict[str, str]:
     """Authentication headers for an admin user."""
     access_token = json.dumps(
         {"is_admin": True, "id": admin_user.id, "name": f"{admin_user.first_name} {admin_user.last_name}"}
@@ -37,7 +36,7 @@ def admin_headers(admin_user) -> Dict[str, str]:
 
 
 @pytest.fixture
-def user_headers(regular_user: UserInfo) -> Dict[str, str]:
+def user_headers(regular_user: UserInfo) -> dict[str, str]:
     """Authentication headers for a normal user."""
     access_token = json.dumps(
         {"is_admin": False, "id": regular_user.id, "name": f"{regular_user.first_name} {regular_user.last_name}"}
@@ -46,7 +45,7 @@ def user_headers(regular_user: UserInfo) -> Dict[str, str]:
 
 
 @pytest.fixture
-def unauthorized_headers() -> Dict[str, str]:
+def unauthorized_headers() -> dict[str, str]:
     """Authentication headers for an anonymous user (did not log in)."""
     return {"Authorization": "Bearer {}"}
 

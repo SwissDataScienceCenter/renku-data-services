@@ -1,11 +1,13 @@
 """Base models for users."""
+
 import json
 import logging
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Iterable, List
+from typing import Any
 
 
 class KeycloakEvent(Enum):
@@ -34,9 +36,9 @@ class UserInfoUpdate:
     old_value: str | None = None
 
     @classmethod
-    def from_json_user_events(self, val: Iterable[Dict[str, Any]]) -> List["UserInfoUpdate"]:
+    def from_json_user_events(self, val: Iterable[dict[str, Any]]) -> list["UserInfoUpdate"]:
         """Generate a list of updates from a json response from Keycloak."""
-        output: List["UserInfoUpdate"] = []
+        output: list["UserInfoUpdate"] = []
         for event in val:
             details = event.get("details")
             user_id = event.get("userId")
@@ -59,7 +61,10 @@ class UserInfoUpdate:
                     if email:
                         output.append(
                             UserInfoUpdate(
-                                field_name="email", new_value=email, timestamp_utc=timestamp_utc, user_id=user_id
+                                field_name="email",
+                                new_value=email,
+                                timestamp_utc=timestamp_utc,
+                                user_id=user_id,
                             )
                         )
                     if first_name:
@@ -122,9 +127,9 @@ class UserInfoUpdate:
         return output
 
     @classmethod
-    def from_json_admin_events(self, val: Iterable[Dict[str, Any]]) -> List["UserInfoUpdate"]:
+    def from_json_admin_events(self, val: Iterable[dict[str, Any]]) -> list["UserInfoUpdate"]:
         """Generate a list of updates from a json response from Keycloak."""
-        output: List["UserInfoUpdate"] = []
+        output: list["UserInfoUpdate"] = []
         for event in val:
             timestamp_epoch = event.get("time")
             if not timestamp_epoch:
@@ -177,12 +182,20 @@ class UserInfoUpdate:
                     if email:
                         output.append(
                             UserInfoUpdate(
-                                field_name="email", new_value=email, timestamp_utc=timestamp_utc, user_id=user_id
+                                field_name="email",
+                                new_value=email,
+                                timestamp_utc=timestamp_utc,
+                                user_id=user_id,
                             )
                         )
                 case KeycloakAdminEvent.DELETE.value:
                     output.append(
-                        UserInfoUpdate(field_name="email", new_value="", timestamp_utc=timestamp_utc, user_id=user_id)
+                        UserInfoUpdate(
+                            field_name="email",
+                            new_value="",
+                            timestamp_utc=timestamp_utc,
+                            user_id=user_id,
+                        )
                     )
                 case _:
                     logging.warning(f"Skipping unknown admin event operation when parsing Keycloak events: {operation}")
@@ -199,7 +212,7 @@ class UserInfo:
     email: str | None = None
 
     @classmethod
-    def from_kc_user_payload(self, payload: Dict[str, Any]):
+    def from_kc_user_payload(self, payload: dict[str, Any]):
         """Create a user object from the user payload from the Keycloak admin API."""
         return UserInfo(
             id=payload["id"],
@@ -208,7 +221,7 @@ class UserInfo:
             email=payload.get("email"),
         )
 
-    def _to_keycloak_dict(self) -> Dict[str, Any]:
+    def _to_keycloak_dict(self) -> dict[str, Any]:
         """Create a payload that would have been created by Keycloak for this user, used only for testing."""
 
         return {
@@ -227,5 +240,10 @@ class UserInfo:
                 "impersonate": True,
                 "manage": True,
             },
-            "bruteForceStatus": {"numFailures": 0, "disabled": False, "lastIPFailure": "n/a", "lastFailure": 0},
+            "bruteForceStatus": {
+                "numFailures": 0,
+                "disabled": False,
+                "lastIPFailure": "n/a",
+                "lastFailure": 0,
+            },
         }

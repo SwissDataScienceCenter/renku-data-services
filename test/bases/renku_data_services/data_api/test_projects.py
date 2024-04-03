@@ -2,7 +2,7 @@
 
 import json
 import time
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
 
@@ -31,7 +31,7 @@ def regular_user() -> UserInfo:
 
 
 @pytest.fixture
-def users(admin_user, regular_user) -> List[UserInfo]:
+def users(admin_user, regular_user) -> list[UserInfo]:
     return [
         admin_user,
         regular_user,
@@ -41,7 +41,7 @@ def users(admin_user, regular_user) -> List[UserInfo]:
 
 
 @pytest.fixture
-def admin_headers(admin_user) -> Dict[str, str]:
+def admin_headers(admin_user) -> dict[str, str]:
     """Authentication headers for an admin user."""
     access_token = json.dumps(
         {"is_admin": True, "id": admin_user.id, "name": f"{admin_user.first_name} {admin_user.last_name}"}
@@ -50,7 +50,7 @@ def admin_headers(admin_user) -> Dict[str, str]:
 
 
 @pytest.fixture
-def user_headers(regular_user) -> Dict[str, str]:
+def user_headers(regular_user) -> dict[str, str]:
     """Authentication headers for a normal user."""
     access_token = json.dumps(
         {"is_admin": False, "id": regular_user.id, "name": f"{regular_user.first_name} {regular_user.last_name}"}
@@ -59,14 +59,14 @@ def user_headers(regular_user) -> Dict[str, str]:
 
 
 @pytest.fixture
-def unauthorized_headers() -> Dict[str, str]:
+def unauthorized_headers() -> dict[str, str]:
     """Authentication headers for an anonymous user (did not log in)."""
     return {"Authorization": "Bearer {}"}
 
 
 @pytest.fixture
 def create_project(sanic_client, user_headers, admin_headers, regular_user, admin_user):
-    async def create_project_helper(name: str, admin: bool = False, **payload) -> Dict[str, Any]:
+    async def create_project_helper(name: str, admin: bool = False, **payload) -> dict[str, Any]:
         headers = admin_headers if admin else user_headers
         user = admin_user if admin else regular_user
         payload = payload.copy()
@@ -82,7 +82,7 @@ def create_project(sanic_client, user_headers, admin_headers, regular_user, admi
 
 @pytest.fixture
 def get_project(sanic_client, user_headers, admin_headers):
-    async def get_project_helper(project_id: str, admin: bool = False) -> Dict[str, Any]:
+    async def get_project_helper(project_id: str, admin: bool = False) -> dict[str, Any]:
         headers = admin_headers if admin else user_headers
         _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=headers)
 

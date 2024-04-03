@@ -1,7 +1,7 @@
 """Tests for sessions blueprints."""
 
 import json
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
 from sanic_testing.testing import SanicASGITestClient
@@ -20,7 +20,7 @@ def regular_user() -> UserInfo:
 
 
 @pytest.fixture
-def users(admin_user, regular_user) -> List[UserInfo]:
+def users(admin_user, regular_user) -> list[UserInfo]:
     return [
         admin_user,
         regular_user,
@@ -30,32 +30,40 @@ def users(admin_user, regular_user) -> List[UserInfo]:
 
 
 @pytest.fixture
-def admin_headers(admin_user) -> Dict[str, str]:
+def admin_headers(admin_user) -> dict[str, str]:
     """Authentication headers for an admin user."""
     access_token = json.dumps(
-        {"is_admin": True, "id": admin_user.id, "name": f"{admin_user.first_name} {admin_user.last_name}"}
+        {
+            "is_admin": True,
+            "id": admin_user.id,
+            "name": f"{admin_user.first_name} {admin_user.last_name}",
+        }
     )
     return {"Authorization": f"Bearer {access_token}"}
 
 
 @pytest.fixture
-def user_headers(regular_user) -> Dict[str, str]:
+def user_headers(regular_user) -> dict[str, str]:
     """Authentication headers for a normal user."""
     access_token = json.dumps(
-        {"is_admin": False, "id": regular_user.id, "name": f"{regular_user.first_name} {regular_user.last_name}"}
+        {
+            "is_admin": False,
+            "id": regular_user.id,
+            "name": f"{regular_user.first_name} {regular_user.last_name}",
+        }
     )
     return {"Authorization": f"Bearer {access_token}"}
 
 
 @pytest.fixture
-def unauthorized_headers() -> Dict[str, str]:
+def unauthorized_headers() -> dict[str, str]:
     """Authentication headers for an anonymous user (did not log in)."""
     return {"Authorization": "Bearer {}"}
 
 
 @pytest.fixture
 def create_project(sanic_client, user_headers, admin_headers, regular_user, admin_user):
-    async def create_project_helper(name: str, admin: bool = False, **payload) -> Dict[str, Any]:
+    async def create_project_helper(name: str, admin: bool = False, **payload) -> dict[str, Any]:
         headers = admin_headers if admin else user_headers
         user = admin_user if admin else regular_user
         payload = payload.copy()
@@ -71,7 +79,7 @@ def create_project(sanic_client, user_headers, admin_headers, regular_user, admi
 
 @pytest.fixture
 def create_session_environment(sanic_client: SanicASGITestClient, admin_headers):
-    async def create_session_environment_helper(name: str, **payload) -> Dict[str, Any]:
+    async def create_session_environment_helper(name: str, **payload) -> dict[str, Any]:
         payload = payload.copy()
         payload.update({"name": name})
         payload["description"] = payload.get("description") or "A session environment."
@@ -88,7 +96,7 @@ def create_session_environment(sanic_client: SanicASGITestClient, admin_headers)
 
 @pytest.fixture
 def create_session_launcher(sanic_client: SanicASGITestClient, user_headers):
-    async def create_session_launcher_helper(name: str, project_id: str, **payload) -> Dict[str, Any]:
+    async def create_session_launcher_helper(name: str, project_id: str, **payload) -> dict[str, Any]:
         payload = payload.copy()
         payload.update({"name": name, "project_id": project_id})
         payload["description"] = payload.get("description") or "A session launcher."
@@ -119,7 +127,11 @@ async def test_get_all_session_environments(
     assert res.status_code == 200, res.text
     assert res.json is not None
     environments = res.json
-    assert {env["name"] for env in environments} == {"Environment 1", "Environment 2", "Environment 3"}
+    assert {env["name"] for env in environments} == {
+        "Environment 1",
+        "Environment 2",
+        "Environment 3",
+    }
 
 
 @pytest.mark.asyncio
@@ -127,7 +139,9 @@ async def test_get_session_environment(
     sanic_client: SanicASGITestClient, unauthorized_headers, create_session_environment
 ):
     env = await create_session_environment(
-        "Environment 1", description="Some environment.", container_image="test_image:latest"
+        "Environment 1",
+        description="Some environment.",
+        container_image="test_image:latest",
     )
     environment_id = env["id"]
 
@@ -175,7 +189,11 @@ async def test_patch_session_environment(sanic_client: SanicASGITestClient, admi
     env = await create_session_environment("Environment 1")
     environment_id = env["id"]
 
-    payload = {"name": "New name", "description": "New description.", "container_image": "new_image:new_tag"}
+    payload = {
+        "name": "New name",
+        "description": "New description.",
+        "container_image": "new_image:new_tag",
+    }
 
     _, res = await sanic_client.patch(f"/api/data/environments/{environment_id}", headers=admin_headers, json=payload)
 
@@ -193,7 +211,11 @@ async def test_patch_session_environment_unauthorized(
     env = await create_session_environment("Environment 1")
     environment_id = env["id"]
 
-    payload = {"name": "New name", "description": "New description.", "container_image": "new_image:new_tag"}
+    payload = {
+        "name": "New name",
+        "description": "New description.",
+        "container_image": "new_image:new_tag",
+    }
 
     _, res = await sanic_client.patch(f"/api/data/environments/{environment_id}", headers=user_headers, json=payload)
 
@@ -224,7 +246,10 @@ async def test_delete_session_environment_unauthorized(
 
 @pytest.mark.asyncio
 async def test_get_all_session_launchers(
-    sanic_client: SanicASGITestClient, user_headers, create_project, create_session_launcher
+    sanic_client: SanicASGITestClient,
+    user_headers,
+    create_project,
+    create_session_launcher,
 ):
     project_1 = await create_project("Project 1")
     project_2 = await create_project("Project 2")
@@ -238,7 +263,11 @@ async def test_get_all_session_launchers(
     assert res.status_code == 200, res.text
     assert res.json is not None
     launchers = res.json
-    assert {launcher["name"] for launcher in launchers} == {"Launcher 1", "Launcher 2", "Launcher 3"}
+    assert {launcher["name"] for launcher in launchers} == {
+        "Launcher 1",
+        "Launcher 2",
+        "Launcher 3",
+    }
 
 
 @pytest.mark.asyncio
@@ -274,7 +303,10 @@ async def test_get_session_launcher(
 
 @pytest.mark.asyncio
 async def test_get_project_launchers(
-    sanic_client: SanicASGITestClient, user_headers, create_project, create_session_launcher
+    sanic_client: SanicASGITestClient,
+    user_headers,
+    create_project,
+    create_session_launcher,
 ):
     project_1 = await create_project("Project 1")
     project_2 = await create_project("Project 2")
@@ -316,7 +348,10 @@ async def test_post_session_launcher(sanic_client: SanicASGITestClient, user_hea
 
 @pytest.mark.asyncio
 async def test_delete_session_launcher(
-    sanic_client: SanicASGITestClient, user_headers, create_project, create_session_launcher
+    sanic_client: SanicASGITestClient,
+    user_headers,
+    create_project,
+    create_session_launcher,
 ):
     project = await create_project("Some project")
     launcher = await create_session_launcher("Launcher 1", project_id=project["id"])

@@ -1,8 +1,8 @@
 """Models for project."""
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Optional
 
 from pydantic import BaseModel
 
@@ -41,12 +41,12 @@ class Project(BaseModel):
     namespace: str
     visibility: Visibility
     created_by: str
-    creation_date: datetime = field(default_factory=lambda: datetime.now(timezone.utc).replace(microsecond=0))
-    repositories: List[Repository] = field(default_factory=list)
+    creation_date: datetime = field(default_factory=lambda: datetime.now(UTC).replace(microsecond=0))
+    repositories: list[Repository] = field(default_factory=list)
     description: Optional[str] = None
 
     @classmethod
-    def from_dict(cls, data: Dict) -> "Project":
+    def from_dict(cls, data: dict) -> "Project":
         """Create the model from a plain dictionary."""
         if "name" not in data:
             raise errors.ValidationError(message="'name' not set")
@@ -59,7 +59,7 @@ class Project(BaseModel):
         name = data["name"]
         slug = base_models.Slug.from_name(data.get("slug") or name).value
         created_by = data["created_by"]
-        creation_date = data.get("creation_date") or datetime.now(timezone.utc).replace(microsecond=0)
+        creation_date = data.get("creation_date") or datetime.now(UTC).replace(microsecond=0)
         namespace = data["namespace"]
 
         return cls(

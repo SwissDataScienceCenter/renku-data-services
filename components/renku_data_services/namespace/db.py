@@ -5,9 +5,10 @@ from __future__ import annotations
 import logging
 import random
 import string
+from collections.abc import Callable
 from contextlib import nullcontext
-from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Tuple, cast
+from datetime import UTC, datetime
+from typing import Any, cast
 
 from sqlalchemy import delete, func, or_, select, text
 from sqlalchemy.exc import IntegrityError
@@ -51,7 +52,7 @@ class GroupRepository:
         self,
         user: base_models.APIUser,
         pagination: PaginationRequest,
-    ) -> Tuple[list[models.Group], int]:
+    ) -> tuple[list[models.Group], int]:
         """Get all groups from the database."""
         async with self.session_maker() as session, session.begin():
             stmt = select(schemas.GroupORM).limit(pagination.per_page).offset(pagination.offset)
@@ -103,7 +104,7 @@ class GroupRepository:
             group_orm = await self._get_group(session, slug)
         return group_orm.dump()
 
-    async def get_group_members(self, user: base_models.APIUser, slug: str) -> List[models.GroupMemberDetails]:
+    async def get_group_members(self, user: base_models.APIUser, slug: str) -> list[models.GroupMemberDetails]:
         """Get all the users that are direct members of a group."""
         async with self.session_maker() as session, session.begin():
             group = await self._get_group(session, slug)
@@ -127,7 +128,7 @@ class GroupRepository:
                 for member, details in result.all()
             ]
 
-    async def update_group(self, user: base_models.APIUser, slug: str, payload: Dict[str, str]) -> models.Group:
+    async def update_group(self, user: base_models.APIUser, slug: str, payload: dict[str, str]) -> models.Group:
         """Update a group in the DB."""
         async with self.session_maker() as session, session.begin():
             group = await self._get_group(session, slug)
@@ -168,7 +169,7 @@ class GroupRepository:
         user: base_models.APIUser,
         slug: str,
         payload: apispec.GroupMemberPatchRequestList,
-    ) -> List[models.GroupMember]:
+    ) -> list[models.GroupMember]:
         """Update group members."""
         async with self.session_maker() as session, session.begin():
             group = await self._get_group(session, slug, True)
@@ -254,7 +255,7 @@ class GroupRepository:
         async with self.session_maker() as session, session.begin():
             if not user.id:
                 raise errors.Unauthorized(message="Users need to be authenticated in order to create groups.")
-            creation_date = datetime.now(timezone.utc).replace(microsecond=0)
+            creation_date = datetime.now(UTC).replace(microsecond=0)
             member = schemas.GroupMemberORM(user.id, models.GroupRole.owner.value)
             group = schemas.GroupORM(
                 name=payload.name,
@@ -280,7 +281,7 @@ class GroupRepository:
 
     async def get_namespaces(
         self, user: base_models.APIUser, pagination: PaginationRequest
-    ) -> Tuple[List[models.Namespace], int]:
+    ) -> tuple[list[models.Namespace], int]:
         """Get all namespaces."""
         async with self.session_maker() as session, session.begin():
             group_ns_stmt = select(schemas.NamespaceORM).where(

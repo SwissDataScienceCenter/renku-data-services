@@ -1,7 +1,7 @@
 """SQLAlchemy's schemas for the group database."""
 
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Optional
 
 from sqlalchemy import CheckConstraint, DateTime, Integer, MetaData, String, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, attribute_keyed_dict, mapped_column, relationship
@@ -29,7 +29,7 @@ class GroupORM(BaseORM):
     creation_date: Mapped[datetime] = mapped_column("creation_date", DateTime(timezone=True), server_default=func.now())
     namespace: Mapped["NamespaceORM"] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
     description: Mapped[Optional[str]] = mapped_column("description", String(500), default=None)
-    members: Mapped[Dict[str, "GroupMemberORM"]] = relationship(
+    members: Mapped[dict[str, "GroupMemberORM"]] = relationship(
         # NOTE: the members of a group are keyed by the Keycloak ID
         back_populates="group",
         collection_class=attribute_keyed_dict("user_id"),

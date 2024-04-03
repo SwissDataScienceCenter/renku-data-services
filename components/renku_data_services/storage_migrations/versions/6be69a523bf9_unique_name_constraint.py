@@ -5,7 +5,7 @@ Revises: 18d11d77ff15
 Create Date: 2023-08-31 07:01:25.113476
 
 """
-from typing import Sequence
+from collections.abc import Sequence
 
 from alembic import op
 

@@ -1,7 +1,7 @@
 """Fixtures for testing."""
 
 import os
-from typing import Iterator
+from collections.abc import Iterator
 
 import pytest
 from hypothesis import settings
@@ -95,9 +95,7 @@ def admin_user() -> base_models.APIUser:
 
 @pytest.fixture
 def loggedin_user() -> base_models.APIUser:
-    return base_models.APIUser(
-        is_admin=False, id="some-random-id-123456", access_token="some-access-token"
-    )  # nosec B106
+    return base_models.APIUser(is_admin=False, id="some-random-id-123456", access_token="some-access-token")  # nosec B106
 
 
 def only(iterable, default=None, too_long=None):
@@ -110,9 +108,7 @@ def only(iterable, default=None, too_long=None):
     except StopIteration:
         pass
     else:
-        msg = "Expected exactly one item in iterable, but got {!r}, {!r}, " "and perhaps more.".format(
-            first_value, second_value
-        )
+        msg = f"Expected exactly one item in iterable, but got {first_value!r}, {second_value!r}, and perhaps more."
         raise too_long or ValueError(msg)
 
     return first_value
