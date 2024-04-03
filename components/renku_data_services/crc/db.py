@@ -606,41 +606,6 @@ class UserRepository(_Base):
                 allowed = [user.dump() for user in rp.users]
             return RespositoryUsers(rp.id, allowed, disallowed)
 
-    @_only_admins
-    async def get_users(
-        self,
-        *,
-        api_user: base_models.APIUser,
-        id: str | None = None,
-    ) -> List[base_models.User]:
-        """Get users from the users-resource pools access lists."""
-        async with self.session_maker() as session, session.begin():
-            stmt = select(schemas.RPUserORM)
-            if id:
-                stmt.where(schemas.RPUserORM.keycloak_id == id)
-            res = await session.execute(stmt)
-            return [user.dump() for user in res.scalars().all()]
-
-    @_only_admins
-    async def insert_user(self, api_user: base_models.APIUser, user: base_models.User) -> base_models.User:
-        """Insert a user in the resource pool access lists."""
-        orm = schemas.RPUserORM.load(user)
-        async with self.session_maker() as session, session.begin():
-            session.add(orm)
-        return orm.dump()
-
-    @_only_admins
-    async def delete_user(self, api_user: base_models.APIUser, id: str):
-        """Remove a user from the resource pool access lists."""
-        async with self.session_maker() as session, session.begin():
-            stmt = select(schemas.RPUserORM).where(schemas.RPUserORM.keycloak_id == id)
-            res = await session.execute(stmt)
-            user = res.scalars().first()
-            if user is None:
-                return None
-            await session.delete(user)
-        return None
-
     async def get_user_resource_pools(
         self,
         api_user: base_models.APIUser,
