@@ -30,6 +30,8 @@ class ProjectORM(BaseORM):
     visibility: Mapped[Visibility]
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
     description: Mapped[Optional[str]] = mapped_column("description", String(500))
+    # NOTE: The project slugs table has a foreign key from the projects table, but there is a stored procedure
+    # triggered by the deletion of slugs to remove the project used by the slug. See migration 89aa4573cfa9.
     slug: Mapped["ProjectSlug"] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
     repositories: Mapped[list["ProjectRepositoryORM"]] = relationship(
         back_populates="project",
