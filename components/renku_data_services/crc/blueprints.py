@@ -1,4 +1,5 @@
 """Compute resource control (CRC) app."""
+
 import asyncio
 from dataclasses import asdict, dataclass
 from typing import List
@@ -238,7 +239,9 @@ class ResourcePoolUsersBP(CustomBlueprint):
             user_exists = await self.kc_user_repo.get_user(requested_by=user, id=user_id)
             if not user_exists:
                 raise errors.MissingResourceError(message=f"The user with id {user_id} cannot be found.")
-            resource_pools = await self.repo.get_user_resource_pools(api_user=user, keycloak_id=user_id)
+            resource_pools = await self.repo.get_user_resource_pools(
+                api_user=user, keycloak_id=user_id, resource_pool_id=resource_pool_id
+            )
             if len(resource_pools) == 0:
                 return HTTPResponse(status=204)
             resource_pool = resource_pools[0]
