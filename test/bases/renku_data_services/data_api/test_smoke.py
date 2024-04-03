@@ -61,11 +61,11 @@ def test_apispec_conflicts():
     apispec_files = list(Path(".").glob("**/api.spec.yaml"))
     if len(apispec_files) < 2:
         return
-    with open(apispec_files[0], "r") as f:
+    with open(apispec_files[0]) as f:
         base_dict = safe_load(f)
     for input_file in apispec_files[1:]:
         logging.info(f"Testing merge on {input_file}")
-        with open(input_file, "r") as f:
+        with open(input_file) as f:
             to_merge = safe_load(f)
         try:
             merger.merge(base_dict, to_merge)
