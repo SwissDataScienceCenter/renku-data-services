@@ -403,10 +403,6 @@ class RCloneProviderSchema(BaseModel):
         for key in keys:
             value = configuration[key]
 
-            if isinstance(value, str) and "\x00" in value:
-                # validate strings for Postgresql compatibility
-                raise errors.ValidationError(message=f"Null byte found in value '{value}' for key '{key}'")
-
             option: RCloneOption | None = self.get_option_for_provider(key, provider)
 
             if option is None:
