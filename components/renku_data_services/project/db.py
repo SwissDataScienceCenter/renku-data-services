@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from asyncio import gather
-from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, NamedTuple, Tuple, cast
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any, NamedTuple, cast
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -122,7 +123,7 @@ class ProjectRepository:
         self,
         user: base_models.APIUser,
         pagination: PaginationRequest,
-    ) -> Tuple[list[models.Project], int]:
+    ) -> tuple[list[models.Project], int]:
         """Get all projects from the database."""
         user_id = user.id if user.is_authenticated else MemberQualifier.ALL
         # NOTE: without the line below mypy thinks user_id can be None
@@ -178,15 +179,15 @@ class ProjectRepository:
         slug = project.slug or base_models.Slug.from_name(project.name).value
         project_orm = schemas.ProjectORM(
             name=project.name,
-            visibility=models.Visibility(project.visibility)
-            if isinstance(project.visibility, str)
-            else project.visibility,
+            visibility=(
+                models.Visibility(project.visibility) if isinstance(project.visibility, str) else project.visibility
+            ),
             created_by_id=user_id,
             description=project.description,
             repositories=repos,
-            creation_date=datetime.now(timezone.utc).replace(microsecond=0),
+            creation_date=datetime.now(UTC).replace(microsecond=0),
         )
-        slug=schemas.ProjectSlug(slug, project_id=project_orm.id, namespace_id=ns.id)
+        slug = schemas.ProjectSlug(slug, project_id=project_orm.id, namespace_id=ns.id)
         session.add(slug)
         session.add(project_orm)
         await session.flush()
@@ -205,7 +206,11 @@ class ProjectRepository:
     @with_db_transaction
     @dispatch_message(create_project_update_message)
     async def update_project(
-        self, session: AsyncSession, user: base_models.APIUser, project_id: str, **payload
+        self,
+        session: AsyncSession,
+        user: base_models.APIUser,
+        project_id: str,
+        **payload,
     ) -> models.Project:
         """Update a project entry."""
         authorized = await self.project_authz.has_permission(user=user, project_id=project_id, scope=Scope.WRITE)
@@ -229,9 +234,18 @@ class ProjectRepository:
             ]
 
         for key, value in payload.items():
-            # NOTE: ``slug``, ``id``, ``created_by``, and ``creation_date`` cannot be edited
-            if key not in ["slug", "id", "created_by", "creation_date"]:
+            # NOTE: ``slug``, ``id``, ``created_by``, and ``creation_date`` cannot be edited or cannot
+            # be edited by setting a property on the ORM object instance.
+            if key not in ["slug", "id", "created_by", "creation_date", "namespace"]:
                 setattr(project, key, value)
+
+        if "namespace" in payload:
+            ns_slug = payload["namespace"]
+            ns = await self.group_repo.get_namespace(user, ns_slug)
+            if not ns:
+                raise errors.MissingResourceError(message=f"The namespace with slug {ns_slug} does not exist")
+            project.slug.namespace_id = ns.id
+            await session.refresh(project)
 
         if visibility_before != project.visibility:
             public_project = project.visibility == Visibility.public
@@ -266,11 +280,15 @@ class ProjectRepository:
 class ProjectMemberRepository:
     """Repository for project members."""
 
-    def __init__(self, session_maker: Callable[..., AsyncSession], project_authz: IProjectAuthorizer):
+    def __init__(
+        self,
+        session_maker: Callable[..., AsyncSession],
+        project_authz: IProjectAuthorizer,
+    ):
         self.session_maker = session_maker  # type: ignore[call-overload]
         self.project_authz: IProjectAuthorizer = project_authz
 
-    async def get_members(self, user: base_models.APIUser, project_id: str) -> List[models.MemberWithRole]:
+    async def get_members(self, user: base_models.APIUser, project_id: str) -> list[models.MemberWithRole]:
         """Get all members of a project."""
         authorized = await self.project_authz.has_permission(user=user, project_id=project_id, scope=Scope.READ)
         if not authorized:
@@ -282,7 +300,7 @@ class ProjectMemberRepository:
 
         return [models.MemberWithRole(member=m.user_id, role=convert_from_authz_role(m.role)) for m in members]
 
-    async def update_members(self, user: base_models.APIUser, project_id: str, members: List[Dict[str, Any]]) -> None:
+    async def update_members(self, user: base_models.APIUser, project_id: str, members: list[dict[str, Any]]) -> None:
         """Update project's members."""
         authorized = await self.project_authz.has_permission(user=user, project_id=project_id, scope=Scope.WRITE)
         if not authorized:

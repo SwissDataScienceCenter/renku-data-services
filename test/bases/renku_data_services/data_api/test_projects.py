@@ -2,13 +2,9 @@
 
 import json
 import time
-from test.bases.renku_data_services.keycloak_sync.test_sync import get_kc_users
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
-import pytest_asyncio
-from sanic import Sanic
-from sanic_testing.testing import SanicASGITestClient
 
 from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.header import Header
 from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_authorization_added import (
@@ -20,10 +16,7 @@ from components.renku_data_services.message_queue.avro_models.io.renku.events.v1
 from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_created import ProjectCreated
 from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_removed import ProjectRemoved
 from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_updated import ProjectUpdated
-from renku_data_services.app_config import Config
-from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.message_queue.redis_queue import deserialize_binary
-from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import UserInfo
 
 
@@ -38,7 +31,7 @@ def regular_user() -> UserInfo:
 
 
 @pytest.fixture
-def users(admin_user, regular_user) -> List[UserInfo]:
+def users(admin_user, regular_user) -> list[UserInfo]:
     return [
         admin_user,
         regular_user,
@@ -47,18 +40,8 @@ def users(admin_user, regular_user) -> List[UserInfo]:
     ]
 
 
-@pytest_asyncio.fixture
-async def sanic_client(app_config: Config, users: List[UserInfo]) -> SanicASGITestClient:
-    app_config.kc_api = DummyKeycloakAPI(users=get_kc_users(users))
-    app = Sanic(app_config.app_name)
-    app = register_all_handlers(app, app_config)
-    await app_config.kc_user_repo.initialize(app_config.kc_api)
-    await app_config.group_repo.generate_user_namespaces()
-    return SanicASGITestClient(app)
-
-
 @pytest.fixture
-def admin_headers(admin_user) -> Dict[str, str]:
+def admin_headers(admin_user) -> dict[str, str]:
     """Authentication headers for an admin user."""
     access_token = json.dumps(
         {"is_admin": True, "id": admin_user.id, "name": f"{admin_user.first_name} {admin_user.last_name}"}
@@ -67,7 +50,7 @@ def admin_headers(admin_user) -> Dict[str, str]:
 
 
 @pytest.fixture
-def user_headers(regular_user) -> Dict[str, str]:
+def user_headers(regular_user) -> dict[str, str]:
     """Authentication headers for a normal user."""
     access_token = json.dumps(
         {"is_admin": False, "id": regular_user.id, "name": f"{regular_user.first_name} {regular_user.last_name}"}
@@ -76,14 +59,14 @@ def user_headers(regular_user) -> Dict[str, str]:
 
 
 @pytest.fixture
-def unauthorized_headers() -> Dict[str, str]:
+def unauthorized_headers() -> dict[str, str]:
     """Authentication headers for an anonymous user (did not log in)."""
     return {"Authorization": "Bearer {}"}
 
 
 @pytest.fixture
 def create_project(sanic_client, user_headers, admin_headers, regular_user, admin_user):
-    async def create_project_helper(name: str, admin: bool = False, **payload) -> Dict[str, Any]:
+    async def create_project_helper(name: str, admin: bool = False, **payload) -> dict[str, Any]:
         headers = admin_headers if admin else user_headers
         user = admin_user if admin else regular_user
         payload = payload.copy()
@@ -99,7 +82,7 @@ def create_project(sanic_client, user_headers, admin_headers, regular_user, admi
 
 @pytest.fixture
 def get_project(sanic_client, user_headers, admin_headers):
-    async def get_project_helper(project_id: str, admin: bool = False) -> Dict[str, Any]:
+    async def get_project_helper(project_id: str, admin: bool = False) -> dict[str, Any]:
         headers = admin_headers if admin else user_headers
         _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=headers)
 

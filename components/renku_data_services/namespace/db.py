@@ -5,9 +5,10 @@ from __future__ import annotations
 import logging
 import random
 import string
+from collections.abc import Callable
 from contextlib import nullcontext
-from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Tuple, cast
+from datetime import UTC, datetime
+from typing import Any, cast
 
 from sqlalchemy import delete, func, or_, select, text
 from sqlalchemy.exc import IntegrityError
@@ -51,7 +52,7 @@ class GroupRepository:
         self,
         user: base_models.APIUser,
         pagination: PaginationRequest,
-    ) -> Tuple[list[models.Group], int]:
+    ) -> tuple[list[models.Group], int]:
         """Get all groups from the database."""
         async with self.session_maker() as session, session.begin():
             stmt = select(schemas.GroupORM).limit(pagination.per_page).offset(pagination.offset)
@@ -103,7 +104,7 @@ class GroupRepository:
             group_orm = await self._get_group(session, slug)
         return group_orm.dump()
 
-    async def get_group_members(self, user: base_models.APIUser, slug: str) -> List[models.GroupMemberDetails]:
+    async def get_group_members(self, user: base_models.APIUser, slug: str) -> list[models.GroupMemberDetails]:
         """Get all the users that are direct members of a group."""
         async with self.session_maker() as session, session.begin():
             group = await self._get_group(session, slug)
@@ -127,7 +128,7 @@ class GroupRepository:
                 for member, details in result.all()
             ]
 
-    async def update_group(self, user: base_models.APIUser, slug: str, payload: Dict[str, str]) -> models.Group:
+    async def update_group(self, user: base_models.APIUser, slug: str, payload: dict[str, str]) -> models.Group:
         """Update a group in the DB."""
         async with self.session_maker() as session, session.begin():
             group = await self._get_group(session, slug)
@@ -168,7 +169,7 @@ class GroupRepository:
         user: base_models.APIUser,
         slug: str,
         payload: apispec.GroupMemberPatchRequestList,
-    ) -> List[models.GroupMember]:
+    ) -> list[models.GroupMember]:
         """Update group members."""
         async with self.session_maker() as session, session.begin():
             group = await self._get_group(session, slug, True)
@@ -208,21 +209,45 @@ class GroupRepository:
                     message=f"You cannot delete a group by using an old group slug {slug}.",
                     detail=f"The latest slug is {group.namespace.slug}, please use this for deletions.",
                 )
+            # NOTE: We have a stored procedure that gets triggered when a project slug is removed to remove the project.
+            # This is required because the slug has a foreign key pointing to the project, so when a project is removed
+            # the slug is removed but the converse is not true. The stored procedure in migration 89aa4573cfa9 has the
+            # trigger and procedure that does the cleanup when a slug is removed.
             stmt = delete(schemas.GroupORM).where(schemas.GroupORM.id == group.id)
             await session.execute(stmt)
 
     async def delete_group_member(self, user: base_models.APIUser, slug: str, user_id_to_delete: str):
         """Delete a specific group member."""
         async with self.session_maker() as session, session.begin():
-            group = await self._get_group(session, slug)
-            if user.id != group.created_by and not user.is_admin:
+            if not user.id:
+                raise errors.Unauthorized(message="Users need to be authenticated in order to remove group members.")
+            group = await self._get_group(session, slug, load_members=True)
+            if not group:
+                raise errors.MissingResourceError(message=f"The group with slug {slug} does not exist")
+            group_member = group.members.get(user.id)
+            user_is_owner = group_member is not None and group_member.role == models.GroupRole.owner.value
+            if not user_is_owner and not user.is_admin:
                 raise errors.Unauthorized(message="Only the owner and admins can modify groups")
             if group.namespace.slug != slug.lower():
                 raise errors.UpdatingWithStaleContentError(
                     message=f"You cannot remove a group member by using an old group slug {slug}.",
                     detail=f"The latest slug is {group.namespace.slug}, please retry the request with it.",
                 )
-            stmt = delete(schemas.GroupMemberORM).where(schemas.GroupMemberORM.user_id == user_id_to_delete)
+            total_owners = sum([member.role == models.GroupRole.owner.value for member in group.members.values()])
+            user_to_remove = group.members.get(user_id_to_delete)
+            if not user_to_remove:
+                return
+            user_to_remove_is_owner = user_to_remove.role == models.GroupRole.owner
+            if user_to_remove_is_owner and total_owners == 1:
+                raise errors.GeneralBadRequest(
+                    message="You cannot remove the single group owner, "
+                    "please designate an additional user as owner and then retry the removal."
+                )
+            stmt = (
+                delete(schemas.GroupMemberORM)
+                .where(schemas.GroupMemberORM.user_id == user_id_to_delete)
+                .where(schemas.GroupMemberORM.group.has(schemas.GroupORM.id == group.id))
+            )
             await session.execute(stmt)
 
     async def insert_group(self, user: base_models.APIUser, payload: apispec.GroupPostRequest) -> models.Group:
@@ -230,7 +255,7 @@ class GroupRepository:
         async with self.session_maker() as session, session.begin():
             if not user.id:
                 raise errors.Unauthorized(message="Users need to be authenticated in order to create groups.")
-            creation_date = datetime.now(timezone.utc).replace(microsecond=0)
+            creation_date = datetime.now(UTC).replace(microsecond=0)
             member = schemas.GroupMemberORM(user.id, models.GroupRole.owner.value)
             group = schemas.GroupORM(
                 name=payload.name,
@@ -256,7 +281,7 @@ class GroupRepository:
 
     async def get_namespaces(
         self, user: base_models.APIUser, pagination: PaginationRequest
-    ) -> Tuple[List[models.Namespace], int]:
+    ) -> tuple[list[models.Namespace], int]:
         """Get all namespaces."""
         async with self.session_maker() as session, session.begin():
             group_ns_stmt = select(schemas.NamespaceORM).where(

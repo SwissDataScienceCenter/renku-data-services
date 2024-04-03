@@ -2,7 +2,6 @@
 
 import asyncio
 from dataclasses import asdict, dataclass
-from typing import List
 
 from sanic import HTTPResponse, Request, empty, json
 from sanic_ext import validate
@@ -60,7 +59,7 @@ class ResourcePoolsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @validate_db_ids
         async def _get_one(request: Request, resource_pool_id: int, user: base_models.APIUser):
-            rps: List[models.ResourcePool]
+            rps: list[models.ResourcePool]
             rps = await self.rp_repo.get_resource_pools(
                 api_user=user, id=resource_pool_id, name=request.args.get("name")
             )
@@ -185,7 +184,7 @@ class ResourcePoolUsersBP(CustomBlueprint):
         self, api_user: base_models.APIUser, resource_pool_id: int, body: apispec.PoolUsersWithId, post: bool = True
     ):
         user_ids_to_add = set([user.id for user in body.root])
-        users_checks: List[UserInfo | None] = await asyncio.gather(
+        users_checks: list[UserInfo | None] = await asyncio.gather(
             *[self.kc_user_repo.get_user(requested_by=api_user, id=id) for id in user_ids_to_add]
         )
         existing_user_ids = set([user.id for user in users_checks if user is not None])

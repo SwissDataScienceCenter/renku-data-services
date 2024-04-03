@@ -1,6 +1,6 @@
 """The adapter used to create/delete/update/get resource quotas and priority classes in k8s."""
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Optional
 
 from kubernetes import client
 from kubernetes.utils.quantity import parse_quantity
@@ -78,7 +78,7 @@ class QuotaRepository:
             raise
         return self._quota_from_manifest(res_quota)
 
-    def get_quotas(self, name: Optional[str] = None) -> List[models.Quota]:
+    def get_quotas(self, name: Optional[str] = None) -> list[models.Quota]:
         """Get a specific resource quota."""
         if name is not None:
             quota = self.get_quota(name)

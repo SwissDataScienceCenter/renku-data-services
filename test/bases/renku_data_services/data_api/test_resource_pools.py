@@ -2,7 +2,7 @@ import json
 from copy import deepcopy
 from test.bases.renku_data_services.data_api.utils import create_rp
 from test.bases.renku_data_services.keycloak_sync.test_sync import get_kc_users
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -14,7 +14,7 @@ from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import UserInfo
 
-_valid_resource_pool_payload: Dict[str, Any] = {
+_valid_resource_pool_payload: dict[str, Any] = {
     "name": "test-name",
     "classes": [
         {
@@ -36,12 +36,12 @@ _valid_resource_pool_payload: Dict[str, Any] = {
 
 
 @pytest.fixture
-def valid_resource_pool_payload() -> Dict[str, Any]:
+def valid_resource_pool_payload() -> dict[str, Any]:
     return deepcopy(_valid_resource_pool_payload)
 
 
 @pytest.fixture
-def users() -> List[UserInfo]:
+def users() -> list[UserInfo]:
     return [
         UserInfo("user-1-id", "John", "Doe", "john.doe@gmail.com"),
         UserInfo("user-2-id", "Jane", "Doe", "jane.doe@gmail.com"),
@@ -49,7 +49,7 @@ def users() -> List[UserInfo]:
 
 
 @pytest_asyncio.fixture
-async def test_client(app_config: DataConfig, users: List[UserInfo]) -> SanicASGITestClient:
+async def test_client(app_config: DataConfig, users: list[UserInfo]) -> SanicASGITestClient:
     app_config.kc_api = DummyKeycloakAPI(users=get_kc_users(users))
     app = Sanic(app_config.app_name)
     app = register_all_handlers(app, app_config)
@@ -58,7 +58,7 @@ async def test_client(app_config: DataConfig, users: List[UserInfo]) -> SanicASG
 
 
 @pytest.fixture
-def admin_user_headers() -> Dict[str, str]:
+def admin_user_headers() -> dict[str, str]:
     return {"Authorization": 'Bearer {"is_admin": true}'}
 
 
@@ -94,7 +94,7 @@ def admin_user_headers() -> Dict[str, str]:
 @pytest.mark.asyncio
 async def test_resource_pool_creation(
     test_client: SanicASGITestClient,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     expected_status_code: int,
 ):
     _, res = await create_rp(payload, test_client)
@@ -104,7 +104,7 @@ async def test_resource_pool_creation(
 @pytest.mark.asyncio
 async def test_resource_class_filtering(
     test_client: SanicASGITestClient,
-    admin_user_headers: Dict[str, str],
+    admin_user_headers: dict[str, str],
 ):
     new_classes = [
         {
@@ -173,7 +173,7 @@ async def test_resource_class_filtering(
 
 @pytest.mark.asyncio
 async def test_get_single_pool_quota(
-    test_client: SanicASGITestClient, valid_resource_pool_payload: Dict[str, Any], admin_user_headers: Dict[str, str]
+    test_client: SanicASGITestClient, valid_resource_pool_payload: dict[str, Any], admin_user_headers: dict[str, str]
 ):
     _, res = await create_rp(valid_resource_pool_payload, test_client)
     assert res.status_code == 201
@@ -196,7 +196,7 @@ async def test_get_single_pool_quota(
 
 @pytest.mark.asyncio
 async def test_patch_quota(
-    test_client: SanicASGITestClient, valid_resource_pool_payload: Dict[str, Any], admin_user_headers: Dict[str, str]
+    test_client: SanicASGITestClient, valid_resource_pool_payload: dict[str, Any], admin_user_headers: dict[str, str]
 ):
     _, res = await create_rp(valid_resource_pool_payload, test_client)
     assert res.status_code == 201
@@ -209,7 +209,7 @@ async def test_patch_quota(
 
 @pytest.mark.asyncio
 async def test_put_quota(
-    test_client: SanicASGITestClient, valid_resource_pool_payload: Dict[str, Any], admin_user_headers: Dict[str, str]
+    test_client: SanicASGITestClient, valid_resource_pool_payload: dict[str, Any], admin_user_headers: dict[str, str]
 ):
     _, res = await create_rp(valid_resource_pool_payload, test_client)
     assert res.status_code == 201
@@ -229,7 +229,7 @@ async def test_put_quota(
 
 @pytest.mark.asyncio
 async def test_patch_resource_class(
-    test_client: SanicASGITestClient, valid_resource_pool_payload: Dict[str, Any], admin_user_headers: Dict[str, str]
+    test_client: SanicASGITestClient, valid_resource_pool_payload: dict[str, Any], admin_user_headers: dict[str, str]
 ):
     _, res = await create_rp(valid_resource_pool_payload, test_client)
     assert res.status_code == 201
@@ -242,7 +242,7 @@ async def test_patch_resource_class(
 
 @pytest.mark.asyncio
 async def test_put_resource_class(
-    test_client: SanicASGITestClient, valid_resource_pool_payload: Dict[str, Any], admin_user_headers: Dict[str, str]
+    test_client: SanicASGITestClient, valid_resource_pool_payload: dict[str, Any], admin_user_headers: dict[str, str]
 ):
     _, res = await create_rp(valid_resource_pool_payload, test_client)
     assert res.status_code == 201
@@ -261,7 +261,7 @@ async def test_put_resource_class(
 
 @pytest.mark.asyncio
 async def test_restriced_default_resource_pool_access(
-    test_client: SanicASGITestClient, admin_user_headers: Dict[str, str], valid_resource_pool_payload: Dict[str, Any]
+    test_client: SanicASGITestClient, admin_user_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
 ):
     valid_resource_pool_payload["default"] = True
     valid_resource_pool_payload["public"] = True
@@ -332,7 +332,7 @@ async def test_restriced_default_resource_pool_access(
 
 @pytest.mark.asyncio
 async def test_restriced_default_resource_pool_access_changes(
-    test_client: SanicASGITestClient, admin_user_headers: Dict[str, str], valid_resource_pool_payload: Dict[str, Any]
+    test_client: SanicASGITestClient, admin_user_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
 ):
     valid_resource_pool_payload["default"] = True
     valid_resource_pool_payload["public"] = True
@@ -376,7 +376,7 @@ async def test_restriced_default_resource_pool_access_changes(
 
 @pytest.mark.asyncio
 async def test_private_resource_pool_access(
-    test_client: SanicASGITestClient, admin_user_headers: Dict[str, str], valid_resource_pool_payload: Dict[str, Any]
+    test_client: SanicASGITestClient, admin_user_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
 ):
     valid_resource_pool_payload["default"] = False
     valid_resource_pool_payload["public"] = False
@@ -494,7 +494,7 @@ async def test_remove_resource_pool_users(
 
 @pytest.mark.asyncio
 async def test_patch_tolerations(
-    test_client: SanicASGITestClient, admin_user_headers: Dict[str, str], valid_resource_pool_payload: Dict[str, Any]
+    test_client: SanicASGITestClient, admin_user_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
 ):
     valid_resource_pool_payload["classes"][0]["tolerations"] = ["toleration1"]
     _, res = await create_rp(valid_resource_pool_payload, test_client)
@@ -534,7 +534,7 @@ async def test_patch_tolerations(
 
 @pytest.mark.asyncio
 async def test_patch_affinities(
-    test_client: SanicASGITestClient, admin_user_headers: Dict[str, str], valid_resource_pool_payload: Dict[str, Any]
+    test_client: SanicASGITestClient, admin_user_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
 ):
     valid_resource_pool_payload["classes"][0]["node_affinities"] = [{"key": "affinity1"}]
     _, res = await create_rp(valid_resource_pool_payload, test_client)
@@ -588,7 +588,7 @@ async def test_patch_affinities(
 
 @pytest.mark.asyncio
 async def test_remove_all_tolerations_put(
-    test_client: SanicASGITestClient, admin_user_headers: Dict[str, str], valid_resource_pool_payload: Dict[str, Any]
+    test_client: SanicASGITestClient, admin_user_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
 ):
     valid_resource_pool_payload["classes"][0]["tolerations"] = ["toleration1"]
     _, res = await create_rp(valid_resource_pool_payload, test_client)
@@ -620,7 +620,7 @@ async def test_remove_all_tolerations_put(
 
 @pytest.mark.asyncio
 async def test_remove_all_affinities_put(
-    test_client: SanicASGITestClient, admin_user_headers: Dict[str, str], valid_resource_pool_payload: Dict[str, Any]
+    test_client: SanicASGITestClient, admin_user_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
 ):
     valid_resource_pool_payload["classes"][0]["node_affinities"] = [{"key": "affinity1"}]
     _, res = await create_rp(valid_resource_pool_payload, test_client)
@@ -652,7 +652,7 @@ async def test_remove_all_affinities_put(
 
 @pytest.mark.asyncio
 async def test_put_tolerations(
-    test_client: SanicASGITestClient, admin_user_headers: Dict[str, str], valid_resource_pool_payload: Dict[str, Any]
+    test_client: SanicASGITestClient, admin_user_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
 ):
     valid_resource_pool_payload["classes"][0]["tolerations"] = ["toleration1"]
     _, res = await create_rp(valid_resource_pool_payload, test_client)
@@ -684,7 +684,7 @@ async def test_put_tolerations(
 
 @pytest.mark.asyncio
 async def test_put_affinities(
-    test_client: SanicASGITestClient, admin_user_headers: Dict[str, str], valid_resource_pool_payload: Dict[str, Any]
+    test_client: SanicASGITestClient, admin_user_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
 ):
     valid_resource_pool_payload["classes"][0]["node_affinities"] = [{"key": "affinity1"}]
     _, res = await create_rp(valid_resource_pool_payload, test_client)
@@ -722,7 +722,7 @@ async def test_put_affinities(
 
 @pytest.mark.asyncio
 async def test_get_all_tolerations(
-    test_client: SanicASGITestClient, admin_user_headers: Dict[str, str], valid_resource_pool_payload: Dict[str, Any]
+    test_client: SanicASGITestClient, admin_user_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
 ):
     valid_resource_pool_payload["classes"][0]["tolerations"] = ["toleration1"]
     _, res = await create_rp(valid_resource_pool_payload, test_client)
@@ -742,7 +742,7 @@ async def test_get_all_tolerations(
 
 @pytest.mark.asyncio
 async def test_get_all_affinities(
-    test_client: SanicASGITestClient, admin_user_headers: Dict[str, str], valid_resource_pool_payload: Dict[str, Any]
+    test_client: SanicASGITestClient, admin_user_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
 ):
     valid_resource_pool_payload["classes"][0]["node_affinities"] = [{"key": "affinity1"}]
     _, res = await create_rp(valid_resource_pool_payload, test_client)
@@ -762,7 +762,7 @@ async def test_get_all_affinities(
 
 @pytest.mark.asyncio
 async def test_delete_all_affinities(
-    test_client: SanicASGITestClient, admin_user_headers: Dict[str, str], valid_resource_pool_payload: Dict[str, Any]
+    test_client: SanicASGITestClient, admin_user_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
 ):
     valid_resource_pool_payload["classes"][0]["node_affinities"] = [{"key": "affinity1"}]
     _, res = await create_rp(valid_resource_pool_payload, test_client)
@@ -787,7 +787,7 @@ async def test_delete_all_affinities(
 
 @pytest.mark.asyncio
 async def test_delete_all_tolerations(
-    test_client: SanicASGITestClient, admin_user_headers: Dict[str, str], valid_resource_pool_payload: Dict[str, Any]
+    test_client: SanicASGITestClient, admin_user_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
 ):
     valid_resource_pool_payload["classes"][0]["tolerations"] = ["toleration1"]
     _, res = await create_rp(valid_resource_pool_payload, test_client)

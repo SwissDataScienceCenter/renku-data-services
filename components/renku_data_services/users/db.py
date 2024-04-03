@@ -1,8 +1,9 @@
 """Database adapters and helpers for users."""
 import logging
+from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime, timedelta
-from typing import Any, Callable, Dict, List
+from typing import Any
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -84,7 +85,7 @@ class UserRepo:
             return user
 
     @only_authenticated
-    async def get_users(self, requested_by: APIUser, email: str | None = None) -> List[UserInfo]:
+    async def get_users(self, requested_by: APIUser, email: str | None = None) -> list[UserInfo]:
         """Get users from the database."""
         if not email and not requested_by.is_admin:
             raise errors.Unauthorized(message="Non-admin users cannot list all users.")
@@ -97,7 +98,7 @@ class UserRepo:
             users.append(api_user_info)
         return users
 
-    async def _get_users(self, email: str | None = None) -> List[UserInfo]:
+    async def _get_users(self, email: str | None = None) -> list[UserInfo]:
         async with self.session_maker() as session:
             stmt = select(UserORM)
             if email:
@@ -202,7 +203,7 @@ class UsersSync:
             logging.info("Starting a total user database sync.")
             kc_users = kc_api.get_users()
 
-            async def _do_update(raw_kc_user: Dict[str, Any]):
+            async def _do_update(raw_kc_user: dict[str, Any]):
                 kc_user = UserInfo.from_kc_user_payload(raw_kc_user)
                 logging.info(f"Checking user with Keycloak ID {kc_user.id}")
                 db_user = await self._get_user(kc_user.id)

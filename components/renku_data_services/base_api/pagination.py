@@ -1,8 +1,9 @@
 """Classes and decorators used for paginating long responses."""
 
+from collections.abc import Awaitable, Callable, Sequence
 from functools import wraps
 from math import ceil
-from typing import Any, Awaitable, Callable, Concatenate, Dict, NamedTuple, Sequence, Tuple, cast
+from typing import Any, Concatenate, NamedTuple, cast
 
 from sanic import Request, json
 
@@ -41,7 +42,7 @@ class PaginationResponse(NamedTuple):
     total: int
     total_pages: int
 
-    def as_header(self) -> Dict[str, str]:
+    def as_header(self) -> dict[str, str]:
         """Convert the instance into a dictionary that can be inserted into a HTTP header."""
         return {
             "page": str(self.page),
@@ -51,7 +52,7 @@ class PaginationResponse(NamedTuple):
         }
 
 
-def paginate(f: Callable[Concatenate[Request, ...], Awaitable[Tuple[Sequence[Any], int]]]):
+def paginate(f: Callable[Concatenate[Request, ...], Awaitable[tuple[Sequence[Any], int]]]):
     """Serializes the response to JSON and adds the required pagination headers to the response.
 
     The handler should return first the list of items and then the total count from the DB.
@@ -61,7 +62,7 @@ def paginate(f: Callable[Concatenate[Request, ...], Awaitable[Tuple[Sequence[Any
     async def decorated_function(request: Request, *args, **kwargs):
         default_page_number = 1
         default_number_of_elements_per_page = 20
-        query_args: Dict[str, str] = request.get_args() or {}
+        query_args: dict[str, str] = request.get_args() or {}
         page_parameter = cast(int | str, query_args.get("page", default_page_number))
         try:
             page = int(page_parameter)

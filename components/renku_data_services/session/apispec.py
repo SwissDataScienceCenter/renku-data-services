@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import Optional
 
 from pydantic import ConfigDict, Field, RootModel
 from renku_data_services.session.apispec_base import BaseAPISpec
@@ -270,11 +270,9 @@ class SessionStart(BaseAPISpec):
     )
 
 
-class EnvironmentList(RootModel[List[Environment]]):
-    root: List[Environment] = Field(..., description="A list of session environments")
+class EnvironmentList(RootModel[list[Environment]]):
+    root: list[Environment] = Field(..., description="A list of session environments")
 
 
-class SessionLaunchersList(RootModel[List[SessionLauncher]]):
-    root: List[SessionLauncher] = Field(
-        ..., description="A list of Renku session launchers", min_length=0
-    )
+class SessionLaunchersList(RootModel[list[SessionLauncher]]):
+    root: list[SessionLauncher] = Field(..., description="A list of Renku session launchers", min_length=0)

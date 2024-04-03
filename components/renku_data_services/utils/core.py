@@ -3,7 +3,8 @@
 import functools
 import os
 import ssl
-from typing import Any, Callable, Protocol
+from collections.abc import Callable
+from typing import Any, Protocol
 
 from deepmerge import Merger
 from sqlalchemy.ext.asyncio import AsyncSession

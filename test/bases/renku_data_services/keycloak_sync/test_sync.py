@@ -1,8 +1,9 @@
 import json
 import re
+from collections.abc import Callable, Generator
 from dataclasses import asdict
 from datetime import datetime
-from typing import Any, Callable, Dict, Generator, List, Tuple
+from typing import Any
 
 import pytest
 
@@ -35,32 +36,38 @@ def db_config(postgresql, monkeypatch) -> Generator[Any, Any, SyncConfig]:
 
 @pytest.fixture
 def get_app_configs(db_config: DBConfig):
-    def _get_app_configs(kc_api: DummyKeycloakAPI, total_user_sync: bool = False) -> Tuple[SyncConfig, UserRepo]:
+    def _get_app_configs(kc_api: DummyKeycloakAPI, total_user_sync: bool = False) -> tuple[SyncConfig, UserRepo]:
         redis = RedisConfig.fake()
         message_queue = RedisQueue(redis)
         event_repo = EventRepository(db_config.async_session_maker, message_queue=message_queue)
         group_repo = GroupRepository(db_config.async_session_maker)
         users_sync = UsersSync(
-            db_config.async_session_maker, message_queue=message_queue, event_repo=event_repo, group_repo=group_repo
+            db_config.async_session_maker,
+            message_queue=message_queue,
+            event_repo=event_repo,
+            group_repo=group_repo,
         )
         config = SyncConfig(syncer=users_sync, kc_api=kc_api, total_user_sync=total_user_sync)
         user_repo = UserRepo(
-            db_config.async_session_maker, message_queue=message_queue, event_repo=event_repo, group_repo=group_repo
+            db_config.async_session_maker,
+            message_queue=message_queue,
+            event_repo=event_repo,
+            group_repo=group_repo,
         )
         return config, user_repo
 
     yield _get_app_configs
 
 
-def get_kc_users(updates: List[UserInfo]) -> List[Dict[str, Any]]:
-    output: List[Dict[str, Any]] = []
+def get_kc_users(updates: list[UserInfo]) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
     for update in updates:
         output.append(update._to_keycloak_dict())
     return output
 
 
-def get_kc_user_update_events(updates: List[UserInfoUpdate]) -> List[Dict[str, Any]]:
-    output: List[Dict[str, Any]] = []
+def get_kc_user_update_events(updates: list[UserInfoUpdate]) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
     for update in updates:
         output.append(
             {
@@ -80,8 +87,8 @@ def get_kc_user_update_events(updates: List[UserInfoUpdate]) -> List[Dict[str, A
     return output
 
 
-def get_kc_user_create_events(updates: List[UserInfo]) -> List[Dict[str, Any]]:
-    output: List[Dict[str, Any]] = []
+def get_kc_user_create_events(updates: list[UserInfo]) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
     for update in updates:
         output.append(
             {
@@ -107,8 +114,8 @@ def get_kc_user_create_events(updates: List[UserInfo]) -> List[Dict[str, Any]]:
     return output
 
 
-def get_kc_admin_events(updates: List[Tuple[UserInfo, KeycloakAdminEvent]]) -> List[Dict[str, Any]]:
-    output: List[Dict[str, Any]] = []
+def get_kc_admin_events(updates: list[tuple[UserInfo, KeycloakAdminEvent]]) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
     for user, event_type in updates:
         update = {
             "time": int(datetime.utcnow().timestamp() / 1000),
@@ -138,7 +145,7 @@ def get_kc_admin_events(updates: List[Tuple[UserInfo, KeycloakAdminEvent]]) -> L
 
 
 @pytest.mark.asyncio
-async def test_total_users_sync(get_app_configs: Callable[..., Tuple[SyncConfig, UserRepo]], admin_user: APIUser):
+async def test_total_users_sync(get_app_configs: Callable[..., tuple[SyncConfig, UserRepo]], admin_user: APIUser):
     kc_api = DummyKeycloakAPI()
     user1 = UserInfo("user-1-id", "John", "Doe", "john.doe@gmail.com")
     user2 = UserInfo("user-2-id", "Jane", "Doe", "jane.doe@gmail.com")
@@ -157,7 +164,10 @@ async def test_total_users_sync(get_app_configs: Callable[..., Tuple[SyncConfig,
     kc_users = [UserInfo.from_kc_user_payload(user) for user in sync_config.kc_api.get_users()]
     kc_users.append(
         UserInfo(
-            id=admin_user.id, first_name=admin_user.first_name, last_name=admin_user.last_name, email=admin_user.email
+            id=admin_user.id,
+            first_name=admin_user.first_name,
+            last_name=admin_user.last_name,
+            email=admin_user.email,
         )
     )
     assert set(kc_users) == {user1, user2, admin_user_info}
@@ -356,7 +366,7 @@ async def test_removing_non_existent_user(get_app_configs, admin_user: APIUser):
 
 @pytest.mark.asyncio
 async def test_avoiding_namespace_slug_duplicates(
-    get_app_configs: Callable[..., Tuple[SyncConfig, UserRepo]], admin_user: APIUser
+    get_app_configs: Callable[..., tuple[SyncConfig, UserRepo]], admin_user: APIUser
 ):
     kc_api = DummyKeycloakAPI()
     num_users = 10
