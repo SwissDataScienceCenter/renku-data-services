@@ -1,8 +1,9 @@
 """DB Configuration."""
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, ClassVar
+from typing import ClassVar
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 

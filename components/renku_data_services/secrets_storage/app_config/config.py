@@ -13,7 +13,6 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from cryptography.fernet import Fernet
 from jwt import PyJWKClient
 
 from renku_data_services import base_models, errors

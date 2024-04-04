@@ -1,8 +1,8 @@
 """Models for secrets."""
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Dict, Optional
+from datetime import UTC, datetime
+from typing import Optional
 
 from pydantic import BaseModel
 
@@ -19,7 +19,7 @@ class Secret(BaseModel):
     modification_date: Optional[datetime] = None
 
     @classmethod
-    def from_dict(cls, data: Dict) -> "Secret":
+    def from_dict(cls, data: dict) -> "Secret":
         """Create the model from a plain dictionary."""
         if "name" not in data:
             raise errors.ValidationError(message="'name' not set")
@@ -29,6 +29,6 @@ class Secret(BaseModel):
         id = data.get("id")
         name = data["name"]
         value = data["value"]
-        modification_date = data.get("modification_date") or datetime.now(timezone.utc).replace(microsecond=0)
+        modification_date = data.get("modification_date") or datetime.now(UTC).replace(microsecond=0)
 
         return cls(id=id, name=name, modification_date=modification_date, value=value)

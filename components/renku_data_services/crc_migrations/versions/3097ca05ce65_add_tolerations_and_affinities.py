@@ -5,7 +5,7 @@ Revises: 0044b54a89b9
 Create Date: 2023-09-11 20:01:15.830659
 
 """
-from typing import Sequence
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op

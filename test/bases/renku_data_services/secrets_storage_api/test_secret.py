@@ -2,7 +2,7 @@
 
 import json
 from test.bases.renku_data_services.keycloak_sync.test_sync import get_kc_users
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -16,7 +16,7 @@ from renku_data_services.users.models import UserInfo
 
 
 @pytest.fixture
-def users() -> List[UserInfo]:
+def users() -> list[UserInfo]:
     return [
         UserInfo("admin", "Admin", "Doe", "admin.doe@gmail.com"),
         UserInfo("user", "User", "Doe", "user.doe@gmail.com"),
@@ -27,7 +27,7 @@ def users() -> List[UserInfo]:
 
 @pytest_asyncio.fixture
 async def sanic_client(
-    secrets_storage_app_config: Config, users: List[UserInfo]
+    secrets_storage_app_config: Config, users: list[UserInfo]
 ) -> SanicASGITestClient:
     secrets_storage_app_config.kc_api = DummyKeycloakAPI(users=get_kc_users(users))
     app = Sanic(secrets_storage_app_config.app_name)
@@ -37,28 +37,28 @@ async def sanic_client(
 
 
 @pytest.fixture
-def admin_headers() -> Dict[str, str]:
+def admin_headers() -> dict[str, str]:
     """Authentication headers for an admin user."""
     access_token = json.dumps({"is_admin": True, "id": "admin", "name": "Admin User"})
     return {"Authorization": f"Bearer {access_token}"}
 
 
 @pytest.fixture
-def user_headers() -> Dict[str, str]:
+def user_headers() -> dict[str, str]:
     """Authentication headers for a normal user."""
     access_token = json.dumps({"is_admin": False, "id": "user", "name": "Normal User"})
     return {"Authorization": f"Bearer {access_token}"}
 
 
 @pytest.fixture
-def unauthorized_headers() -> Dict[str, str]:
+def unauthorized_headers() -> dict[str, str]:
     """Authentication headers for an anonymous user (did not log in)."""
     return {"Authorization": "Bearer {}"}
 
 
 @pytest.fixture
 def create_secret(sanic_client: SanicASGITestClient, user_headers):
-    async def create_secret_helper(name: str, value: str) -> Dict[str, Any]:
+    async def create_secret_helper(name: str, value: str) -> dict[str, Any]:
         payload = {"name": name, "value": value}
 
         _, response = await sanic_client.post(

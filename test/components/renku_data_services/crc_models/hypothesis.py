@@ -1,4 +1,3 @@
-from typing import Dict
 
 from hypothesis import assume
 from hypothesis import strategies as st
@@ -8,7 +7,7 @@ from renku_data_services import errors
 from renku_data_services.crc import models
 
 
-def make_cpu_float(data) -> Dict[str, int | float]:
+def make_cpu_float(data) -> dict[str, int | float]:
     if "cpu" in data:
         data["cpu"] = float(data["cpu"])
     return data

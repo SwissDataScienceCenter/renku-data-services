@@ -2,13 +2,9 @@
 
 import json
 import time
-from test.bases.renku_data_services.keycloak_sync.test_sync import get_kc_users
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
-import pytest_asyncio
-from sanic import Sanic
-from sanic_testing.testing import SanicASGITestClient
 
 from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.header import Header
 from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_authorization_added import (
@@ -20,58 +16,61 @@ from components.renku_data_services.message_queue.avro_models.io.renku.events.v1
 from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_created import ProjectCreated
 from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_removed import ProjectRemoved
 from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_updated import ProjectUpdated
-from renku_data_services.app_config import Config
-from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.message_queue.redis_queue import deserialize_binary
-from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import UserInfo
 
 
 @pytest.fixture
-def users() -> List[UserInfo]:
+def admin_user() -> UserInfo:
+    return UserInfo("admin", "Admin", "Doe", "admin.doe@gmail.com")
+
+
+@pytest.fixture
+def regular_user() -> UserInfo:
+    return UserInfo("user", "User", "Doe", "user.doe@gmail.com")
+
+
+@pytest.fixture
+def users(admin_user, regular_user) -> list[UserInfo]:
     return [
-        UserInfo("admin", "Admin", "Doe", "admin.doe@gmail.com"),
-        UserInfo("user", "User", "Doe", "user.doe@gmail.com"),
+        admin_user,
+        regular_user,
         UserInfo("member-1", "Member-1", "Doe", "member-1.doe@gmail.com"),
         UserInfo("member-2", "Member-2", "Doe", "member-2.doe@gmail.com"),
     ]
 
 
-@pytest_asyncio.fixture
-async def sanic_client(app_config: Config, users: List[UserInfo]) -> SanicASGITestClient:
-    app_config.kc_api = DummyKeycloakAPI(users=get_kc_users(users))
-    app = Sanic(app_config.app_name)
-    app = register_all_handlers(app, app_config)
-    await app_config.kc_user_repo.initialize(app_config.kc_api)
-    return SanicASGITestClient(app)
-
-
 @pytest.fixture
-def admin_headers() -> Dict[str, str]:
+def admin_headers(admin_user) -> dict[str, str]:
     """Authentication headers for an admin user."""
-    access_token = json.dumps({"is_admin": True, "id": "admin", "name": "Admin User"})
+    access_token = json.dumps(
+        {"is_admin": True, "id": admin_user.id, "name": f"{admin_user.first_name} {admin_user.last_name}"}
+    )
     return {"Authorization": f"Bearer {access_token}"}
 
 
 @pytest.fixture
-def user_headers() -> Dict[str, str]:
+def user_headers(regular_user) -> dict[str, str]:
     """Authentication headers for a normal user."""
-    access_token = json.dumps({"is_admin": False, "id": "user", "name": "Normal User"})
+    access_token = json.dumps(
+        {"is_admin": False, "id": regular_user.id, "name": f"{regular_user.first_name} {regular_user.last_name}"}
+    )
     return {"Authorization": f"Bearer {access_token}"}
 
 
 @pytest.fixture
-def unauthorized_headers() -> Dict[str, str]:
+def unauthorized_headers() -> dict[str, str]:
     """Authentication headers for an anonymous user (did not log in)."""
     return {"Authorization": "Bearer {}"}
 
 
 @pytest.fixture
-def create_project(sanic_client, user_headers, admin_headers):
-    async def create_project_helper(name: str, admin: bool = False, **payload) -> Dict[str, Any]:
+def create_project(sanic_client, user_headers, admin_headers, regular_user, admin_user):
+    async def create_project_helper(name: str, admin: bool = False, **payload) -> dict[str, Any]:
         headers = admin_headers if admin else user_headers
+        user = admin_user if admin else regular_user
         payload = payload.copy()
-        payload.update({"name": name})
+        payload.update({"name": name, "namespace": f"{user.first_name}.{user.last_name}"})
 
         _, response = await sanic_client.post("/api/data/projects", headers=headers, json=payload)
 
@@ -83,7 +82,7 @@ def create_project(sanic_client, user_headers, admin_headers):
 
 @pytest.fixture
 def get_project(sanic_client, user_headers, admin_headers):
-    async def get_project_helper(project_id: str, admin: bool = False) -> Dict[str, Any]:
+    async def get_project_helper(project_id: str, admin: bool = False) -> dict[str, Any]:
         headers = admin_headers if admin else user_headers
         _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=headers)
 
@@ -94,13 +93,14 @@ def get_project(sanic_client, user_headers, admin_headers):
 
 
 @pytest.mark.asyncio
-async def test_project_creation(sanic_client, user_headers, app_config):
+async def test_project_creation(sanic_client, user_headers, regular_user, app_config):
     payload = {
         "name": "Renku Native Project",
         "slug": "project-slug",
         "description": "First Renku native project",
         "visibility": "public",
         "repositories": ["http://renkulab.io/repository-1", "http://renkulab.io/repository-2"],
+        "namespace": f"{regular_user.first_name}.{regular_user.last_name}",
     }
 
     _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
@@ -111,7 +111,7 @@ async def test_project_creation(sanic_client, user_headers, app_config):
     assert project["slug"] == "project-slug"
     assert project["description"] == "First Renku native project"
     assert project["visibility"] == "public"
-    assert project["created_by"] == {"id": "user"}
+    assert project["created_by"] == "user"
     assert {r for r in project["repositories"]} == {
         "http://renkulab.io/repository-1",
         "http://renkulab.io/repository-2",
@@ -134,7 +134,7 @@ async def test_project_creation(sanic_client, user_headers, app_config):
     assert project["slug"] == "project-slug"
     assert project["description"] == "First Renku native project"
     assert project["visibility"] == "public"
-    assert project["created_by"] == {"id": "user"}
+    assert project["created_by"] == "user"
     assert {r for r in project["repositories"]} == {
         "http://renkulab.io/repository-1",
         "http://renkulab.io/repository-2",
@@ -142,9 +142,10 @@ async def test_project_creation(sanic_client, user_headers, app_config):
 
 
 @pytest.mark.asyncio
-async def test_project_creation_with_default_values(sanic_client, user_headers, get_project):
+async def test_project_creation_with_default_values(sanic_client, user_headers, regular_user, get_project):
     payload = {
         "name": "Project with Default Values",
+        "namespace": f"{regular_user.first_name}.{regular_user.last_name}",
     }
 
     _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
@@ -157,7 +158,7 @@ async def test_project_creation_with_default_values(sanic_client, user_headers, 
     assert project["slug"] == "project-with-default-values"
     assert "description" not in project or project["description"] is None
     assert project["visibility"] == "private"
-    assert project["created_by"] == {"id": "user"}
+    assert project["created_by"] == "user"
     assert len(project["repositories"]) == 0
 
 
@@ -471,14 +472,9 @@ async def test_unauthorized_user_cannot_create_delete_or_modify_projects(
 
 
 @pytest.mark.asyncio
-async def test_creator_is_added_as_owner_members(sanic_client, user_headers):
-    payload = {
-        "name": "Project with Default Values",
-    }
-
-    _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
-
-    project_id = response.json["id"]
+async def test_creator_is_added_as_owner_members(sanic_client, create_project, user_headers):
+    project = await create_project("project-name")
+    project_id = project["id"]
 
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}/members", headers=user_headers)
 
@@ -486,8 +482,13 @@ async def test_creator_is_added_as_owner_members(sanic_client, user_headers):
 
     assert len(response.json) == 1
     member = response.json[0]
-    assert member["member"] == {"id": "user", "email": "user.doe@gmail.com", "first_name": "User", "last_name": "Doe"}
-    assert member["role"] == "owner"
+    assert member == {
+        "id": "user",
+        "email": "user.doe@gmail.com",
+        "first_name": "User",
+        "last_name": "Doe",
+        "role": "owner",
+    }
 
 
 @pytest.mark.asyncio
@@ -495,7 +496,7 @@ async def test_add_project_members(create_project, sanic_client, user_headers, a
     project = await create_project("Project 1")
     project_id = project["id"]
 
-    members = [{"member": {"id": "member-1"}, "role": "member"}, {"member": {"id": "member-2"}, "role": "owner"}]
+    members = [{"id": "member-1", "role": "member"}, {"id": "member-2", "role": "owner"}]
 
     _, response = await sanic_client.patch(
         f"/api/data/projects/{project_id}/members", headers=user_headers, json=members
@@ -508,25 +509,25 @@ async def test_add_project_members(create_project, sanic_client, user_headers, a
     event = events[1][1]
     auth_event = deserialize_binary(event[b"payload"], ProjectAuthorizationAdded)
     assert auth_event.projectId == project_id
-    assert auth_event.userId == members[0]["member"]["id"]
+    assert auth_event.userId == members[0]["id"]
     assert auth_event.role.value.lower() == members[0]["role"]
     event = events[2][1]
     auth_event = deserialize_binary(event[b"payload"], ProjectAuthorizationAdded)
     assert auth_event.projectId == project_id
-    assert auth_event.userId == members[1]["member"]["id"]
+    assert auth_event.userId == members[1]["id"]
     assert auth_event.role.value.lower() == members[1]["role"]
 
     # TODO: Should project owner be able to see the project members -> Replace the header with ``user_headers``
-    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/members", headers=admin_headers)
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/members", headers=user_headers)
 
     assert response.status_code == 200, response.text
 
     assert len(response.json) == 3
-    member = next(m for m in response.json if m["member"]["id"] == "user")
+    member = next(m for m in response.json if m["id"] == "user")
     assert member["role"] == "owner"
-    member = next(m for m in response.json if m["member"]["id"] == "member-1")
+    member = next(m for m in response.json if m["id"] == "member-1")
     assert member["role"] == "member"
-    member = next(m for m in response.json if m["member"]["id"] == "member-2")
+    member = next(m for m in response.json if m["id"] == "member-2")
     assert member["role"] == "owner"
 
 
@@ -535,7 +536,7 @@ async def test_delete_project_members(create_project, sanic_client, user_headers
     project = await create_project("Project 1")
     project_id = project["id"]
 
-    members = [{"member": {"id": "member-1"}, "role": "member"}, {"member": {"id": "member-2"}, "role": "owner"}]
+    members = [{"id": "member-1", "role": "member"}, {"id": "member-2", "role": "owner"}]
     await sanic_client.patch(f"/api/data/projects/{project_id}/members", headers=user_headers, json=members)
 
     _, response = await sanic_client.delete(f"/api/data/projects/{project_id}/members/member-1", headers=user_headers)
@@ -555,5 +556,10 @@ async def test_delete_project_members(create_project, sanic_client, user_headers
 
     assert len(response.json) == 2
     member = response.json[1]
-    assert member["member"] == {"id": "user", "email": "user.doe@gmail.com", "first_name": "User", "last_name": "Doe"}
-    assert member["role"] == "owner"
+    assert member == {
+        "id": "user",
+        "email": "user.doe@gmail.com",
+        "first_name": "User",
+        "last_name": "Doe",
+        "role": "owner",
+    }

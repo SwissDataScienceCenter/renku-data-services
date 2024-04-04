@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Callable
+from collections.abc import Callable
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,7 +60,7 @@ class SecretRepository:
         secret_orm = schemas.SecretORM.load(
             secret, user_id=user_id, password=self.encryption_key, salt=user_id
         )
-        secret_orm.modification_date = datetime.now(timezone.utc).replace(microsecond=0)
+        secret_orm.modification_date = datetime.now(UTC).replace(microsecond=0)
 
         async with self.session_maker() as session, session.begin():
             session.add(secret_orm)
@@ -93,7 +93,7 @@ class SecretRepository:
                 secret_orm.value = encrypt_string(
                     password=self.encryption_key, salt=user_id, data=payload["value"]
                 )
-            secret_orm.modification_date = datetime.now(timezone.utc).replace(
+            secret_orm.modification_date = datetime.now(UTC).replace(
                 microsecond=0
             )
 

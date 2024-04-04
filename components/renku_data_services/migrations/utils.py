@@ -1,5 +1,5 @@
 """Custom migrations env file to support modular migrations."""
-from typing import Dict, Sequence
+from collections.abc import Sequence
 
 from alembic import context
 from sqlalchemy import Connection, MetaData, NullPool, create_engine
@@ -16,7 +16,7 @@ def include_object(obj, name, type_, reflected, compare_to):
     return True
 
 
-def combine_version_tables(schemas: Dict[str, str], conn: Connection, metadata_schema: str | None):
+def combine_version_tables(schemas: dict[str, str], conn: Connection, metadata_schema: str | None):
     """Used to combine all alembic version tables into one."""
     # NOTE: ``schemas`` are the revisions that each schema will be when the version table is moved
     # in all other cases this function will do nothing.
@@ -60,7 +60,7 @@ def combine_version_tables(schemas: Dict[str, str], conn: Connection, metadata_s
 
 
 def run_migrations_offline(
-    schemas: Dict[str, str], target_metadata: Sequence[MetaData], sync_sqlalchemy_url: str
+    schemas: dict[str, str], target_metadata: Sequence[MetaData], sync_sqlalchemy_url: str
 ) -> None:
     """Run migrations in 'offline' mode.
 
@@ -96,7 +96,7 @@ def run_migrations_offline(
 
 
 def run_migrations_online(
-    schemas: Dict[str, str], target_metadata: Sequence[MetaData], sync_sqlalchemy_url: str
+    schemas: dict[str, str], target_metadata: Sequence[MetaData], sync_sqlalchemy_url: str
 ) -> None:
     """Run migrations in 'online' mode.
 
@@ -124,7 +124,7 @@ def run_migrations_online(
             context.run_migrations()
 
 
-def run_migrations(schemas: Dict[str, str], metadata: Sequence[MetaData]):
+def run_migrations(schemas: dict[str, str], metadata: Sequence[MetaData]):
     """Run migrations for a specific base model class."""
     # this is the Alembic Config object, which provides
     # access to the values within the .ini file in use.

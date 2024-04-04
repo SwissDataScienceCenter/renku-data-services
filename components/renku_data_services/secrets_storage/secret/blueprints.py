@@ -1,7 +1,7 @@
 """Secrets blueprint."""
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sanic import HTTPResponse, Request, json
 from sanic_ext import validate
@@ -29,7 +29,7 @@ class SecretsBP(CustomBlueprint):
         async def _post(_: Request, *, user: base_models.APIUser, body: apispec.SecretPost):
             data = body.model_dump(exclude_none=True)
             # NOTE: Set ``modification_date`` to override possible value set by users
-            data["modification_date"] = datetime.now(timezone.utc).replace(microsecond=0)
+            data["modification_date"] = datetime.now(UTC).replace(microsecond=0)
             secret = models.Secret.from_dict(data)
             result = await self.secret_repo.insert_secret(user=user, secret=secret)
             return json(apispec.Secret.model_validate(result).model_dump(exclude_none=True, mode="json"), 201)

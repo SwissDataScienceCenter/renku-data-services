@@ -1,7 +1,8 @@
 """The error handler for the application."""
 
+from collections.abc import Mapping, Set
 from sqlite3 import Error as SqliteError
-from typing import AbstractSet, Any, Dict, Mapping, Optional, Protocol, TypeVar, Union
+from typing import Any, Optional, Protocol, TypeVar, Union
 
 from asyncpg import exceptions as postgres_exceptions
 from pydantic import ValidationError as PydanticValidationError
@@ -31,14 +32,14 @@ class BaseErrorResponse(Protocol):
     def dict(
         self,
         *,
-        include: Optional[Union[AbstractSet[Union[int, str]], Mapping[Union[int, str], Any]]] = None,
-        exclude: Optional[Union[AbstractSet[Union[int, str]], Mapping[Union[int, str], Any]]] = None,
+        include: Optional[Union[Set[Union[int, str]], Mapping[Union[int, str], Any]]] = None,
+        exclude: Optional[Union[Set[Union[int, str]], Mapping[Union[int, str], Any]]] = None,
         by_alias: bool = False,
         skip_defaults: Optional[bool] = None,
         exclude_unset: bool = False,
         exclude_defaults: bool = False,
         exclude_none: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Turn the response to dict."""
         ...
 

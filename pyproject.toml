@@ -31,6 +31,9 @@ packages = [
   { include = "renku_data_services/users_migrations", from = "components" },
   { include = "renku_data_services/project", from = "components" },
   { include = "renku_data_services/project_migrations", from = "components" },
+  { include = "renku_data_services/events_migrations", from = "components" },
+  { include = "renku_data_services/message_queue", from = "components" },
+  { include = "renku_data_services/namespace", from = "components" },
   { include = "renku_data_services/session", from = "components" },
   { include = "renku_data_services/session_migrations", from = "components" },
   { include = "renku_data_services/events_migrations", from = "components" },
@@ -39,9 +42,9 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.12"
 sanic = { extras = ["ext"], version = "^23.3.0" }
-pydantic = "^2.1.1"
+pydantic = {extras = ["email"], version = "^2.6.4"}
 datamodel-code-generator = "^0.24.2"
 sqlalchemy = { extras = ["asyncio"], version = "^2.0.9" }
 alembic = "^1.10.3"
@@ -53,8 +56,7 @@ kubernetes = "^26.1.0"
 python-ulid = "^1.1.0"
 python-gitlab = "^3.15.0"
 psycopg = { version = "^3.1.10", extras = ["binary"] }
-# urllib3 v2 has some breaking changes that libraries haven't caught up yet (08.2023)
-urllib3 = "^1.26.16"
+urllib3 = "^2.2.1"
 deepmerge = "^1.1.0"
 authlib = "^1.2.1"
 redis = "^5.0.1"
@@ -82,6 +84,7 @@ pyavro-gen = "^0.3.3"
 avro-preprocessor = "^0.3.0"
 fakeredis = "^2.21.1"
 ruff = "^0.3.4"
+debugpy = "^1.8.1"
 
 [build-system]
 requires = ["poetry-core"]
@@ -106,7 +109,7 @@ select = [
   "E",
   "W",
   # pyupgrade
-  # "UP",
+  "UP",
   # flake8-simplify
   "SIM",
 ]
@@ -120,6 +123,8 @@ ignore = [
   "E202",
   "E226",
   "E231",
+  "UP007",
+  "UP038"
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -133,7 +138,7 @@ ignore = [
 "*/authz_migrations/*" = ["D", "I"]
 "*/users_migrations/*" = ["D", "I"]
 "*/versions/*" = ["D", "E", "W"]
-"apispec.py" = ["D", "E", "W", "I"]
+"apispec.py" = ["D", "E", "W", "I", "UP"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["renku_data_services"]
@@ -153,12 +158,12 @@ filterwarnings = [
   "ignore:<class 'pytest_black.BlackItem'> is not using a cooperative constructor:pytest.PytestDeprecationWarning",
   "ignore:distutils Version classes are deprecated. Use packaging.version instead:DeprecationWarning",
 ]
-postgresql_host = "db"
+postgresql_host = "localhost"
 postgresql_user = "renku"
 postgresql_password = "renku"
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 mypy_path = ["components", "bases"]
 files = ["bases/**/*.py", "components/**/*.py"]
 namespace_packages = true
@@ -181,6 +186,7 @@ module = [
   "renku_data_services.user_preferences.apispec",
   "renku_data_services.users.apispec",
   "renku_data_services.data_api.error_handler",
+  "renku_data_services.namespace.apispec",
   "renku_data_services.secrets_storage.secret.apispec",
 ]
 ignore_errors = true

@@ -2,8 +2,9 @@
 
 import asyncio
 import os
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, ClassVar
+from typing import ClassVar
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
@@ -35,7 +36,8 @@ class DBConfig:
                 message=f"Please provide a database password in the '{prefix}DB_PASSWORD' environment variable."
             )
         kwargs = {"host": pg_host, "password": pg_password, "port": pg_port, "db_name": db_name, "user": pg_user}
-        return cls(**{k: v for (k, v) in kwargs.items() if v is not None})
+        config = cls(**{k: v for (k, v) in kwargs.items() if v is not None})
+        return config
 
     def conn_url(self, async_client: bool = True) -> str:
         """Return an asynchronous or synchronous database connection url."""
