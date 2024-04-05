@@ -1,4 +1,5 @@
 """Compute resource control (CRC) app."""
+
 import asyncio
 from dataclasses import asdict, dataclass
 
@@ -146,7 +147,7 @@ class ResourcePoolUsersBP(CustomBlueprint):
             res = await self.repo.get_resource_pool_users(api_user=user, resource_pool_id=resource_pool_id)
             return json(
                 [
-                    apispec.UserWithId(id=r.keycloak_id, no_default_access=r.no_default_access).model_dump(
+                    apispec.PoolUserWithId(id=r.keycloak_id, no_default_access=r.no_default_access).model_dump(
                         exclude_none=True
                     )
                     for r in res.allowed
@@ -162,7 +163,7 @@ class ResourcePoolUsersBP(CustomBlueprint):
         @only_admins
         @validate_db_ids
         async def _post(request: Request, resource_pool_id: int, user: base_models.APIUser):
-            users = apispec.UsersWithId.model_validate(request.json)  # validation
+            users = apispec.PoolUsersWithId.model_validate(request.json)  # validation
             return await self._put_post(api_user=user, resource_pool_id=resource_pool_id, body=users, post=True)
 
         return "/resource_pools/<resource_pool_id>/users", ["POST"], _post
@@ -174,13 +175,13 @@ class ResourcePoolUsersBP(CustomBlueprint):
         @only_admins
         @validate_db_ids
         async def _put(request: Request, resource_pool_id: int, user: base_models.APIUser):
-            users = apispec.UsersWithId.model_validate(request.json)  # validation
+            users = apispec.PoolUsersWithId.model_validate(request.json)  # validation
             return await self._put_post(api_user=user, resource_pool_id=resource_pool_id, body=users, post=False)
 
         return "/resource_pools/<resource_pool_id>/users", ["PUT"], _put
 
     async def _put_post(
-        self, api_user: base_models.APIUser, resource_pool_id: int, body: apispec.UsersWithId, post: bool = True
+        self, api_user: base_models.APIUser, resource_pool_id: int, body: apispec.PoolUsersWithId, post: bool = True
     ):
         user_ids_to_add = set([user.id for user in body.root])
         users_checks: list[UserInfo | None] = await asyncio.gather(
@@ -198,7 +199,7 @@ class ResourcePoolUsersBP(CustomBlueprint):
         )
         return json(
             [
-                apispec.UserWithId(id=r.keycloak_id, no_default_access=r.no_default_access).model_dump(
+                apispec.PoolUserWithId(id=r.keycloak_id, no_default_access=r.no_default_access).model_dump(
                     exclude_none=True
                 )
                 for r in updated_users
@@ -217,7 +218,7 @@ class ResourcePoolUsersBP(CustomBlueprint):
             )
             if len(res.allowed) > 0:
                 return json(
-                    apispec.UserWithId(
+                    apispec.PoolUserWithId(
                         id=res.allowed[0].keycloak_id, no_default_access=res.allowed[0].no_default_access
                     ).model_dump(exclude_none=True)
                 )
@@ -237,7 +238,9 @@ class ResourcePoolUsersBP(CustomBlueprint):
             user_exists = await self.kc_user_repo.get_user(requested_by=user, id=user_id)
             if not user_exists:
                 raise errors.MissingResourceError(message=f"The user with id {user_id} cannot be found.")
-            resource_pools = await self.repo.get_user_resource_pools(api_user=user, keycloak_id=user_id)
+            resource_pools = await self.repo.get_user_resource_pools(
+                api_user=user, keycloak_id=user_id, resource_pool_id=resource_pool_id
+            )
             if len(resource_pools) == 0:
                 return HTTPResponse(status=204)
             resource_pool = resource_pools[0]
