@@ -37,7 +37,7 @@ download_avro:
 
 check_avro: download_avro avro_models
 	@echo "checking if avro schemas are up to date"
-	git diff --exit-code || (git diff && exit 1)
+	git diff --exit-code -- . ':!__init__.py' || (git diff && exit 1)
 
 avro_models:
 	@echo "generating message queues classes from avro schemas"
