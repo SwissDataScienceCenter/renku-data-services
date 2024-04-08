@@ -1,5 +1,4 @@
 import json
-from dataclasses import asdict
 from uuid import uuid4
 
 import pytest
@@ -101,7 +100,7 @@ async def test_logged_in_users_can_get_other_users(sanic_client, users):
 
 
 @pytest.mark.asyncio
-async def test_logged_in_user_check_adds_user_if_missing(sanic_client, users, admin_user):
+async def test_logged_in_user_check_adds_user_if_missing(sanic_client, users, admin_headers):
     user = UserInfo(
         id=str(uuid4()),
         first_name="Peter",
@@ -132,10 +131,9 @@ async def test_logged_in_user_check_adds_user_if_missing(sanic_client, users, ad
     )
     assert user_response == user
     # Check that the user just added via acccess token is returned in the list when the admin lists all users
-    admin_token = json.dumps(asdict(admin_user))
     _, res = await sanic_client.get(
         "/api/data/users",
-        headers={"Authorization": f"bearer {admin_token}"},
+        headers=admin_headers,
     )
     assert res.status_code == 200
     users_response = [UserInfo(**iuser) for iuser in res.json]
