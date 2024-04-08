@@ -6,6 +6,7 @@ import pytest_asyncio
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 
+from components.renku_data_services.utils.middleware import validate_null_byte
 from renku_data_services.app_config.config import Config
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.storage.rclone import RCloneValidator
@@ -58,6 +59,7 @@ async def sanic_app(app_config: Config, users: list[UserInfo]) -> Sanic:
     app_config.kc_api = DummyKeycloakAPI(users=get_kc_users(users))
     app = Sanic(app_config.app_name)
     app = register_all_handlers(app, app_config)
+    app.register_middleware(validate_null_byte, "request")
     await app_config.kc_user_repo.initialize(app_config.kc_api)
     await app_config.group_repo.generate_user_namespaces()
     validator = RCloneValidator()
