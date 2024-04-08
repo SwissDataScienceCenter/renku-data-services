@@ -1,64 +1,9 @@
 """Tests for sessions blueprints."""
 
-import json
 from typing import Any
 
 import pytest
 from sanic_testing.testing import SanicASGITestClient
-
-from renku_data_services.users.models import UserInfo
-
-
-@pytest.fixture
-def admin_user() -> UserInfo:
-    return UserInfo("admin", "Admin", "Doe", "admin.doe@gmail.com")
-
-
-@pytest.fixture
-def regular_user() -> UserInfo:
-    return UserInfo("user", "User", "Doe", "user.doe@gmail.com")
-
-
-@pytest.fixture
-def users(admin_user, regular_user) -> list[UserInfo]:
-    return [
-        admin_user,
-        regular_user,
-        UserInfo("member-1", "Member-1", "Doe", "member-1.doe@gmail.com"),
-        UserInfo("member-2", "Member-2", "Doe", "member-2.doe@gmail.com"),
-    ]
-
-
-@pytest.fixture
-def admin_headers(admin_user) -> dict[str, str]:
-    """Authentication headers for an admin user."""
-    access_token = json.dumps(
-        {
-            "is_admin": True,
-            "id": admin_user.id,
-            "name": f"{admin_user.first_name} {admin_user.last_name}",
-        }
-    )
-    return {"Authorization": f"Bearer {access_token}"}
-
-
-@pytest.fixture
-def user_headers(regular_user) -> dict[str, str]:
-    """Authentication headers for a normal user."""
-    access_token = json.dumps(
-        {
-            "is_admin": False,
-            "id": regular_user.id,
-            "name": f"{regular_user.first_name} {regular_user.last_name}",
-        }
-    )
-    return {"Authorization": f"Bearer {access_token}"}
-
-
-@pytest.fixture
-def unauthorized_headers() -> dict[str, str]:
-    """Authentication headers for an anonymous user (did not log in)."""
-    return {"Authorization": "Bearer {}"}
 
 
 @pytest.fixture
