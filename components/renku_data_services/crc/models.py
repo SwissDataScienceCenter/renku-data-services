@@ -93,8 +93,6 @@ class ResourceClass(ResourcesCompareMixin):
     tolerations: list[str] = field(default_factory=list)
 
     def __post_init__(self):
-        if "\x00" in self.name:
-            raise ValidationError(message="'\x00' is not allowed in 'name' field.")
         if len(self.name) > 40:
             raise ValidationError(message="'name' cannot be longer than 40 characters.")
         if self.default_storage > self.max_storage:
@@ -179,8 +177,6 @@ class ResourcePool:
 
     def __post_init__(self):
         """Validate the resource pool after initialization."""
-        if "\x00" in self.name:
-            raise ValidationError(message="'\x00' is not allowed in 'name' field.")
         if len(self.name) > 40:
             raise ValidationError(message="'name' cannot be longer than 40 characters.")
         if self.default and not self.public:

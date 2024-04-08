@@ -24,12 +24,18 @@ def merge_api_specs(*args):
     """Merges API spec files into a single one."""
     merger = Merger(
         type_strategies=[(list, "append_unique"), (dict, "merge"), (set, "union")],
-        fallback_strategies=["override"],
-        type_conflict_strategies=["override_if_not_empty"],
+        fallback_strategies=["use_existing"],
+        type_conflict_strategies=["use_existing"],
     )
 
-    merged_spec: dict[str, Any]
-    merged_spec = functools.reduce(merger.merge, args, dict())
+    merged_spec: dict[str, Any] = dict()
+    if len(args) == 0:
+        return merged_spec
+    merged_spec = args[0]
+    if len(args) == 1:
+        return merged_spec
+    for to_merge in args[1:]:
+        merger.merge(merged_spec, to_merge)
 
     return merged_spec
 

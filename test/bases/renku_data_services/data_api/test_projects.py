@@ -563,3 +563,20 @@ async def test_delete_project_members(create_project, sanic_client, user_headers
         "last_name": "Doe",
         "role": "owner",
     }
+
+
+@pytest.mark.asyncio
+async def test_null_byte_middleware(sanic_client, user_headers, regular_user, app_config):
+    payload = {
+        "name": "Renku Native \x00Project",
+        "slug": "project-slug",
+        "description": "First Renku native project",
+        "visibility": "public",
+        "repositories": ["http://renkulab.io/repository-1", "http://renkulab.io/repository-2"],
+        "namespace": f"{regular_user.first_name}.{regular_user.last_name}",
+    }
+
+    _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
+
+    assert response.status_code == 422, response.text
+    assert "Null byte found in request" in response.text
