@@ -252,7 +252,7 @@ components:
         id:
           $ref: "#/components/schemas/Ulid"
         name:
-          $ref: "#/components/schemas/Name"
+          $ref: "#/components/schemas/ProjectName"
         namespace:
           $ref: "#/components/schemas/Slug"
         slug:
@@ -292,7 +292,7 @@ components:
       additionalProperties: false
       properties:
         name:
-          $ref: "#/components/schemas/Name"
+          $ref: "#/components/schemas/ProjectName"
         namespace:
           $ref: "#/components/schemas/Slug"
         slug:
@@ -313,7 +313,7 @@ components:
       additionalProperties: false
       properties:
         name:
-          $ref: "#/components/schemas/Name"
+          $ref: "#/components/schemas/ProjectName"
         namespace:
           $ref: "#/components/schemas/Slug"
         repositories:
@@ -329,14 +329,14 @@ components:
       maxLength: 26
       pattern: "^[A-Z0-9]{26}$"  # This is case-insensitive
       format: ulid
-    Name:
+    ProjectName:
       description: Renku project name
       type: string
       minLength: 1
       maxLength: 99
       example: "My Renku Project :)"
     Slug:
-      description: A command-line friendly name for a project or namespace
+      description: A command-line/url friendly name for a namespace
       type: string
       minLength: 1
       maxLength: 99
@@ -347,14 +347,14 @@ components:
       # - cannot contain any combination of two or more consecutive -._
       # - has to start with letter or number
       pattern: '^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-zA-Z0-9][a-zA-Z0-9\-_.]*$'  
-      example: "my-renku-project"
+      example: "a-slug-example"
     CreationDate:
-      description: The date and time the project was created (time is always in UTC)
+      description: The date and time the resource was created (in UTC and ISO-8601 format)
       type: string
       format: date-time
       example: "2023-11-01T17:32:28Z"
     Description:
-      description: A description for project
+      description: A description for the resource 
       type: string
       maxLength: 500
     KeyCloakId:

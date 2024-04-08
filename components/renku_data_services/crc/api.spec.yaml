@@ -187,7 +187,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/UsersWithId"
+                $ref: "#/components/schemas/PoolUsersWithId"
         "404":
           description: The resource pool does not exist
           content:
@@ -212,7 +212,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/UsersWithId"
+              $ref: "#/components/schemas/PoolUsersWithId"
             example:
               - id: 543-user-id
               - id: 123-some-user
@@ -222,7 +222,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/UsersWithId"
+                $ref: "#/components/schemas/PoolUsersWithId"
               example:
                 - id: 123-user-id
                 - id: user-id
@@ -251,14 +251,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/UsersWithId"
+              $ref: "#/components/schemas/PoolUsersWithId"
       responses:
         "200":
           description: The list of users was updated
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/UsersWithId"
+                $ref: "#/components/schemas/PoolUsersWithId"
         "404":
           description: The resource pool does not exist
           content:
@@ -289,7 +289,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/UserWithId"
+                $ref: "#/components/schemas/PoolUserWithId"
         "404":
           description: The user does not belong to the resource pool, or the resource pool or user do not exist
           content:
@@ -710,128 +710,6 @@ paths:
           $ref: '#/components/responses/Error'
       tags:
         - quota
-  /users:
-    get:
-      summary: List all users
-      responses:
-        "200":
-          description: The list of users in the service (this is a subset of what is in Keycloak)
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/UsersWithId"
-      tags:
-        - users
-    post:
-      summary: Add a user
-      requestBody:
-        description: User id
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UserWithId"
-      responses:
-        "200":
-          description: The user already exists
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/UserWithId"
-        "201":
-          description: The user was added
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/UserWithId"
-        "404":
-          description: The user does not exist in Keycloak
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        default:
-          $ref: '#/components/responses/Error'
-      tags:
-        - users
-  /users/{user_id}:
-    put:
-      summary: Edit a user
-      parameters:
-        - in: path
-          name: user_id
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UserPut"
-      responses:
-        "200":
-          description: The user has been edited
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/UserWithId"
-        "404":
-          description: The user does not exist
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        default:
-          $ref: '#/components/responses/Error'
-      tags:
-        - users
-    patch:
-      summary: Edit a user
-      parameters:
-        - in: path
-          name: user_id
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UserPatch"
-      responses:
-        "200":
-          description: The user has been edited
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/UserWithId"
-        "404":
-          description: The user does not exist
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        default:
-          $ref: '#/components/responses/Error'
-      tags:
-        - users
-    delete:
-      summary: Remove a user from all resource pools
-      parameters:
-        - in: path
-          name: user_id
-          required: true
-          schema:
-            type: string
-      responses:
-        "204":
-          description: The user was removed or it never existed
-        default:
-          $ref: '#/components/responses/Error'
-      tags:
-        - users
   /users/{user_id}/resource_pools:
     get:
       summary: Get all resource pools that the user has access to
@@ -1360,7 +1238,7 @@ components:
         - no_default_access
       example:
         no_default_access: true
-    UserWithId:
+    PoolUserWithId:
       type: object
       additionalProperties: false
       properties:
@@ -1373,10 +1251,10 @@ components:
       required: ["id"]
       example:
         id: "some-random-keycloak-id"
-    UsersWithId:
+    PoolUsersWithId:
       type: array
       items:
-        $ref: "#/components/schemas/UserWithId"
+        $ref: "#/components/schemas/PoolUserWithId"
       uniqueItems: true
     Quota:
       type: object
@@ -1463,9 +1341,7 @@ components:
     UserId:
       type: string
       description: Keycloak user ID
-      example: 123-keycloak-user-id-456
-      pattern: "^[A-Za-z0-9-]+$"
-      minLength: 5
+      example: f74a228b-1790-4276-af5f-25c2424e9b0c
     IntegerId:
       type: integer
       description: An integer ID used to identify different resources

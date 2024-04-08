@@ -23,6 +23,7 @@ from renku_data_services import errors
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
 from renku_data_services.k8s.quota import QuotaRepository
+from renku_data_services.users.db import UserRepo
 
 
 class _Base:
@@ -555,7 +556,11 @@ class RespositoryUsers:
 
 
 class UserRepository(_Base):
-    """The adapter used for accessing users with SQLAlchemy."""
+    """The adapter used for accessing resource pool users with SQLAlchemy."""
+
+    def __init__(self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository, user_repo: UserRepo):
+        super().__init__(session_maker, quotas_repo)
+        self.kc_user_repo = user_repo
 
     @_only_admins
     async def get_resource_pool_users(
@@ -607,41 +612,6 @@ class UserRepository(_Base):
                 allowed = [user.dump() for user in rp.users]
             return RespositoryUsers(rp.id, allowed, disallowed)
 
-    @_only_admins
-    async def get_users(
-        self,
-        *,
-        api_user: base_models.APIUser,
-        id: str | None = None,
-    ) -> list[base_models.User]:
-        """Get users from the users-resource pools access lists."""
-        async with self.session_maker() as session, session.begin():
-            stmt = select(schemas.RPUserORM)
-            if id:
-                stmt.where(schemas.RPUserORM.keycloak_id == id)
-            res = await session.execute(stmt)
-            return [user.dump() for user in res.scalars().all()]
-
-    @_only_admins
-    async def insert_user(self, api_user: base_models.APIUser, user: base_models.User) -> base_models.User:
-        """Insert a user in the resource pool access lists."""
-        orm = schemas.RPUserORM.load(user)
-        async with self.session_maker() as session, session.begin():
-            session.add(orm)
-        return orm.dump()
-
-    @_only_admins
-    async def delete_user(self, api_user: base_models.APIUser, id: str):
-        """Remove a user from the resource pool access lists."""
-        async with self.session_maker() as session, session.begin():
-            stmt = select(schemas.RPUserORM).where(schemas.RPUserORM.keycloak_id == id)
-            res = await session.execute(stmt)
-            user = res.scalars().first()
-            if user is None:
-                return None
-            await session.delete(user)
-        return None
-
     async def get_user_resource_pools(
         self,
         api_user: base_models.APIUser,
@@ -683,15 +653,19 @@ class UserRepository(_Base):
     ) -> list[models.ResourcePool]:
         """Update the resource pools that a specific user has access to."""
         async with self.session_maker() as session, session.begin():
+            kc_user = await self.kc_user_repo.get_user(api_user, keycloak_id)
+            if kc_user is None:
+                raise errors.MissingResourceError(message=f"The user with ID {keycloak_id} does not exist")
             stmt = (
                 select(schemas.RPUserORM)
                 .where(schemas.RPUserORM.keycloak_id == keycloak_id)
                 .options(selectinload(schemas.RPUserORM.resource_pools))
             )
             res = await session.execute(stmt)
-            user: Optional[schemas.RPUserORM] = res.scalars().first()
+            user = res.scalars().first()
             if user is None:
-                raise errors.MissingResourceError(message=f"The user with keycloak id {keycloak_id} does not exist")
+                user = schemas.RPUserORM(keycloak_id=keycloak_id)
+                session.add(user)
             stmt_rp = (
                 select(schemas.ResourcePoolORM)
                 .where(schemas.ResourcePoolORM.id.in_(resource_pool_ids))
