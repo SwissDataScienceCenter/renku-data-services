@@ -1,16 +1,9 @@
 import json
 from dataclasses import asdict
-from test.bases.renku_data_services.keycloak_sync.test_sync import get_kc_users
 from uuid import uuid4
 
 import pytest
-import pytest_asyncio
-from sanic import Sanic
-from sanic_testing.testing import SanicASGITestClient
 
-from renku_data_services.app_config import Config as DataConfig
-from renku_data_services.data_api.app import register_all_handlers
-from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import UserInfo
 
 

@@ -7,7 +7,6 @@ from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 
 from renku_data_services.app_config.config import Config
-from renku_data_services.authn.dummy import DummyAuthenticator
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
