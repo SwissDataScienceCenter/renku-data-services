@@ -251,9 +251,11 @@ class UserServer:
             }
         else:
             storage = {
-                "size": self.server_options.storage
-                if config.sessions.storage.use_empty_dir_size_limit
-                else "",
+                "size": (
+                    self.server_options.storage
+                    if config.sessions.storage.use_empty_dir_size_limit
+                    else ""
+                ),
                 "pvc": {
                     "enabled": False,
                     "mountPath": self.workspace_mount_path.absolute().as_posix(),

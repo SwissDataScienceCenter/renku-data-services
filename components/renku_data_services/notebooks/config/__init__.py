@@ -29,31 +29,27 @@ class CRCValidatorProto(Protocol):
         user: "User",
         class_id: int,
         storage: Optional[int] = None,
-    ) -> "ServerOptions":
-        ...
+    ) -> "ServerOptions": ...
 
-    def get_default_class(self) -> Dict[str, Any]:
-        ...
+    def get_default_class(self) -> Dict[str, Any]: ...
 
     def find_acceptable_class(
         self, user: "User", requested_server_options: "ServerOptions"
-    ) -> Optional["ServerOptions"]:
-        ...
+    ) -> Optional["ServerOptions"]: ...
 
 
 class StorageValidatorProto(Protocol):
     def get_storage_by_id(
         self, user: "User", project_id: int, storage_id: str
-    ) -> "CloudStorageConfig":
-        ...
+    ) -> "CloudStorageConfig": ...
 
     def validate_storage_configuration(
         self, configuration: Dict[str, Any], source_path: str
-    ) -> None:
-        ...
+    ) -> None: ...
 
-    def obscure_password_fields_for_storage(self, configuration: dict[str, Any]) -> dict[str, Any]:
-        ...
+    def obscure_password_fields_for_storage(
+        self, configuration: dict[str, Any]
+    ) -> dict[str, Any]: ...
 
 
 @dataclass
