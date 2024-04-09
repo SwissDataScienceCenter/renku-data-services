@@ -1,38 +1,13 @@
 import json
-from dataclasses import asdict
-from test.bases.renku_data_services.keycloak_sync.test_sync import get_kc_users
 from uuid import uuid4
 
 import pytest
-import pytest_asyncio
-from sanic import Sanic
-from sanic_testing.testing import SanicASGITestClient
 
-from renku_data_services.app_config import Config as DataConfig
-from renku_data_services.data_api.app import register_all_handlers
-from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import UserInfo
 
 
-@pytest.fixture
-def users() -> list[UserInfo]:
-    return [
-        UserInfo("user-1-id", "John", "Doe", "john.doe@gmail.com"),
-        UserInfo("user-2-id", "Jane", "Doe", "jane.doe@gmail.com"),
-    ]
-
-
-@pytest_asyncio.fixture
-async def users_test_client(app_config: DataConfig, users: list[UserInfo]) -> SanicASGITestClient:
-    app_config.kc_api = DummyKeycloakAPI(users=get_kc_users(users))
-    app = Sanic(app_config.app_name)
-    app = register_all_handlers(app, app_config)
-    await app_config.kc_user_repo.initialize(app_config.kc_api)
-    return SanicASGITestClient(app)
-
-
 @pytest.mark.asyncio
-async def test_get_all_users_as_admin(users_test_client, users):
+async def test_get_all_users_as_admin(sanic_client, users):
     admin = UserInfo(
         id="admin-id",
         first_name="Admin",
@@ -46,7 +21,7 @@ async def test_get_all_users_as_admin(users_test_client, users):
         "last_name": admin.last_name,
         "email": admin.email,
     }
-    _, res = await users_test_client.get(
+    _, res = await sanic_client.get(
         "/api/data/users",
         headers={"Authorization": f"bearer {json.dumps(admin_token)}"},
     )
@@ -58,7 +33,7 @@ async def test_get_all_users_as_admin(users_test_client, users):
     ]
     assert set(retrieved_users) == set(users)
     for user in users:
-        _, res = await users_test_client.get(
+        _, res = await sanic_client.get(
             f"/api/data/users/{user.id}",
             headers={"Authorization": f"bearer {json.dumps(admin_token)}"},
         )
@@ -70,16 +45,16 @@ async def test_get_all_users_as_admin(users_test_client, users):
 
 
 @pytest.mark.asyncio
-async def test_get_all_users_as_anonymous(users_test_client):
-    _, res = await users_test_client.get("/api/data/users")
+async def test_get_all_users_as_anonymous(sanic_client):
+    _, res = await sanic_client.get("/api/data/users")
     assert res.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_get_all_users_as_non_admin(users_test_client, users):
+async def test_get_all_users_as_non_admin(sanic_client, users):
     user = users[0]
     access_token = {"id": user.id, "is_admin": False}
-    _, res = await users_test_client.get(
+    _, res = await sanic_client.get(
         "/api/data/users",
         headers={"Authorization": f"bearer {json.dumps(access_token)}"},
     )
@@ -87,10 +62,10 @@ async def test_get_all_users_as_non_admin(users_test_client, users):
 
 
 @pytest.mark.asyncio
-async def test_get_logged_in_user(users_test_client, users):
+async def test_get_logged_in_user(sanic_client, users):
     user = users[0]
     access_token = {"id": user.id, "is_admin": False}
-    _, res = await users_test_client.get(
+    _, res = await sanic_client.get(
         "/api/data/user",
         headers={"Authorization": f"bearer {json.dumps(access_token)}"},
     )
@@ -99,7 +74,7 @@ async def test_get_logged_in_user(users_test_client, users):
         res.json["id"], res.json.get("first_name"), res.json.get("last_name"), res.json.get("email")
     )
     assert retrieved_user == user
-    _, res = await users_test_client.get(
+    _, res = await sanic_client.get(
         f"/api/data/users/{user.id}",
         headers={"Authorization": f"bearer {json.dumps(access_token)}"},
     )
@@ -111,11 +86,11 @@ async def test_get_logged_in_user(users_test_client, users):
 
 
 @pytest.mark.asyncio
-async def test_logged_in_users_can_get_other_users(users_test_client, users):
+async def test_logged_in_users_can_get_other_users(sanic_client, users):
     user = users[0]
     other_user = users[1]
     access_token = {"id": user.id, "is_admin": False}
-    _, res = await users_test_client.get(
+    _, res = await sanic_client.get(
         f"/api/data/users/{other_user.id}",
         headers={"Authorization": f"bearer {json.dumps(access_token)}"},
     )
@@ -125,7 +100,7 @@ async def test_logged_in_users_can_get_other_users(users_test_client, users):
 
 
 @pytest.mark.asyncio
-async def test_logged_in_user_check_adds_user_if_missing(users_test_client, users, admin_user):
+async def test_logged_in_user_check_adds_user_if_missing(sanic_client, users, admin_headers):
     user = UserInfo(
         id=str(uuid4()),
         first_name="Peter",
@@ -143,7 +118,7 @@ async def test_logged_in_user_check_adds_user_if_missing(users_test_client, user
         "name": f"{user.first_name} {user.last_name}",
     }
     # Just by hitting the users endpoint with valid credentials the user will be aded to the database
-    _, res = await users_test_client.get(
+    _, res = await sanic_client.get(
         f"/api/data/users/{user.id}",
         headers={"Authorization": f"bearer {json.dumps(access_token)}"},
     )
@@ -156,10 +131,9 @@ async def test_logged_in_user_check_adds_user_if_missing(users_test_client, user
     )
     assert user_response == user
     # Check that the user just added via acccess token is returned in the list when the admin lists all users
-    admin_token = json.dumps(asdict(admin_user))
-    _, res = await users_test_client.get(
+    _, res = await sanic_client.get(
         "/api/data/users",
-        headers={"Authorization": f"bearer {admin_token}"},
+        headers=admin_headers,
     )
     assert res.status_code == 200
     users_response = [UserInfo(**iuser) for iuser in res.json]
