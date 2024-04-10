@@ -86,14 +86,13 @@ class UserSecretsBP(CustomBlueprint):
     Each user has their own secret key 'user_secret', encrypted at rest, that only data service can decrypt.
     Secret service has a public private key combo where only it knows the private key. To store a secret,
     it is first enrypted with the user_secret, and then with the secret service public key, and then stored
-    in the database. This way neither the data service nor the secret service can dercypt the secrets on their
+    in the database. This way neither the data service nor the secret service can decrypt the secrets on their
     own.
     """
 
     secret_repo: UserSecretRepo
     user_repo: UserRepo
     authenticator: base_models.Authenticator
-    encryption_key: bytes
     secret_service_public_key: rsa.RSAPublicKey
 
     async def _encrypt_user_secret(self, requested_by: base_models.APIUser, user_id: str, value: str) -> bytes:

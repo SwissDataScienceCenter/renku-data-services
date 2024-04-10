@@ -326,7 +326,7 @@ class Config:
         user_preferences_config = UserPreferencesConfig(max_pinned_projects=max_pinned_projects)
         db = DBConfig.from_env(prefix)
         kc_api: IKeycloakAPI
-        encryption_key_path = os.getenv("ENCRYPTION_KEY_PATH", "/encryption-key")
+        encryption_key_path = os.getenv(f"{prefix}ENCRYPTION_KEY_PATH", "/encryption-key")
         encryption_key = Path(encryption_key_path).read_bytes()
         secret_service_public_key_path = os.getenv(
             f"{prefix}SECRET_SERVICE_PUBLIC_KEY_PATH", "/secret_service_public_key"

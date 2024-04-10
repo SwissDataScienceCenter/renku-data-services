@@ -90,7 +90,7 @@ class SecretORM(BaseORM):
     modification_date: Mapped[datetime] = mapped_column("modification_date", DateTime(timezone=True))
     id: Mapped[str] = mapped_column("id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False)
     user_id: Mapped[Optional[str]] = mapped_column(
-        "user_id", ForeignKey(UserORM.id, ondelete="CASCADE", nullable=True), default=None, index=True
+        "user_id", ForeignKey(UserORM.id, ondelete="CASCADE"), default=None, index=True, nullable=True
     )
 
     def dump(self) -> models.Secret:
