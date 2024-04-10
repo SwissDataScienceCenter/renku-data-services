@@ -123,7 +123,7 @@ paths:
       tags:
         - users
         - secrets
-  /user/{user_id}/secrets/{secret_id}:
+  /users/{user_id}/secrets/{secret_id}:
     get:
       summary: Get a secret key by id
       parameters:
@@ -139,7 +139,7 @@ paths:
             type: string
       responses:
         "200":
-          description: The secret
+          description: The secret 
           content:
             "application/json":
               schema:
@@ -204,7 +204,10 @@ paths:
           description: The secret was deleted or didn't exist
         default:
           $ref: "#/components/responses/Error"
-
+      tags:
+        - users
+        - secrets
+      
   /error:
     get:
       summary: Get a sample error response with status code 422

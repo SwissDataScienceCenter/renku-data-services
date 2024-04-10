@@ -1,12 +1,15 @@
 """SQLAlchemy schemas for the CRC database."""
+
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, MetaData, String
+from renku_data_services.users import models
+from sqlalchemy import DateTime, ForeignKey, LargeBinary, MetaData, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 
 from renku_data_services.base_models import Slug
 from renku_data_services.users.models import UserInfo
+from ulid import ULID
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
@@ -23,6 +26,7 @@ class UserORM(BaseORM):
     first_name: Mapped[Optional[str]] = mapped_column(String(256), default=None)
     last_name: Mapped[Optional[str]] = mapped_column(String(256), default=None)
     email: Mapped[Optional[str]] = mapped_column(String(320), default=None, index=True)
+    secret_key: Mapped[Optional[str]] = mapped_column(String(64), default=None)
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
 
     def dump(self) -> UserInfo:
@@ -68,3 +72,41 @@ class LastKeycloakEventTimestamp(BaseORM):
     __tablename__ = "last_keycloak_event_timestamp"
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
     timestamp_utc: Mapped[datetime] = mapped_column(DateTime(timezone=False), default_factory=datetime.utcnow)
+
+
+class SecretORM(BaseORM):
+    """Secret table."""
+
+    __tablename__ = "secrets"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "name",
+            name="_unique_name_user",
+        ),
+    )
+    name: Mapped[str] = mapped_column(String(256))
+    encrypted_value: Mapped[bytes] = mapped_column(LargeBinary())
+    modification_date: Mapped[datetime] = mapped_column("modification_date", DateTime(timezone=True))
+    id: Mapped[str] = mapped_column("id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    user_id: Mapped[Optional[str]] = mapped_column(
+        "user_id", ForeignKey(UserORM.id, ondelete="CASCADE", nullable=True), default=None, index=True
+    )
+
+    def dump(self) -> models.Secret:
+        """Create a secret object from the ORM object."""
+        return models.Secret(
+            id=self.id,
+            name=self.name,
+            encrypted_value=self.encrypted_value,
+            modification_date=self.modification_date,
+        )
+
+    @classmethod
+    def load(cls, secret: models.Secret):
+        """Create an ORM object from the user object."""
+        return cls(
+            name=secret.name,
+            encrypted_value=secret.encrypted_value,
+            modification_date=secret.modification_date,
+        )

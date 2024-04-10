@@ -4,10 +4,13 @@ import json
 import logging
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any
+
+from pydantic import BaseModel
+from renku_data_services import base_models
 
 
 class KeycloakEvent(Enum):
@@ -247,3 +250,13 @@ class UserInfo:
                 "lastFailure": 0,
             },
         }
+
+
+@dataclass(eq=True, frozen=True)
+class Secret(BaseModel):
+    """Secret objects."""
+
+    id: str
+    name: str
+    modification_date: datetime
+    encrypted_value: bytes = field(repr=False)

@@ -1,11 +1,13 @@
 """Database adapters and helpers for users."""
+
 import logging
 from collections.abc import Callable
 from dataclasses import asdict
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.base_api.auth import APIUser, only_authenticated
@@ -18,8 +20,8 @@ from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import dispatch_message
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.users.kc_api import IKeycloakAPI
-from renku_data_services.users.models import KeycloakAdminEvent, UserInfo, UserInfoUpdate
-from renku_data_services.users.orm import LastKeycloakEventTimestamp, UserORM
+from renku_data_services.users.models import KeycloakAdminEvent, UserInfo, UserInfoUpdate, Secret
+from renku_data_services.users.orm import LastKeycloakEventTimestamp, SecretORM, UserORM
 from renku_data_services.utils.core import with_db_transaction
 
 
@@ -107,6 +109,11 @@ class UserRepo:
             orms = res.scalars().all()
             return [orm.dump() for orm in orms]
 
+    @only_authenticated
+    async def get_or_cerate_user_secret_key(self, requested_by:APIUser, user_id: str):
+        """Get a users secret key, or create it if it doesn't exist"""
+        
+        async with self.session_maker() as session, session.begin():
 
 def create_user_added_message(result: UserInfo, **_) -> UserAdded:
     """Transform user to message queue message."""
@@ -277,3 +284,102 @@ class UsersSync:
                     logging.info(
                         f"Updated the latest sync event timestamp in the database: {current_sync_latest_utc_timestamp}"
                     )
+
+
+class UserSecretRepo:
+    """An adapter for accessing users secrets."""
+
+    def __init__(
+        self,
+        session_maker: Callable[..., AsyncSession],
+        message_queue: IMessageQueue,
+        event_repo: EventRepository,
+        group_repo: GroupRepository,
+    ):
+        self.session_maker = session_maker
+
+    @only_authenticated
+    async def get_secrets(self, requested_by: APIUser, user_id: str) -> list[Secret]:
+        """Get a specific user secret from the database."""
+        if user_id != requested_by.id and not requested_by.is_admin:
+            raise errors.Unauthorized(message="Cannot list secrets.")
+        async with self.session_maker() as session:
+            stmt = select(SecretORM).where(SecretORM.user_id == user_id)
+            res = await session.execute(stmt)
+            orm = res.scalars().all()
+            return [o.dump() for o in orm]
+
+    @only_authenticated
+    async def get_secret_by_id(self, requested_by: APIUser, user_id: str, secret_id: str) -> Secret | None:
+        """Get a specific user secret from the database."""
+        if user_id != requested_by.id and not requested_by.is_admin:
+            raise errors.Unauthorized(message="Cannot list secrets.")
+        async with self.session_maker() as session:
+            stmt = select(SecretORM).where(SecretORM.user_id == user_id).where(SecretORM.id == secret_id)
+            res = await session.execute(stmt)
+            orm = res.scalar_one_or_none()
+            if orm is None:
+                return None
+            return orm.dump()
+
+    @only_authenticated
+    async def insert_secret(self, requested_by: APIUser, user_id: str, secret: Secret) -> Secret | None:
+        """Insert a new secret."""
+        if user_id != requested_by.id and not requested_by.is_admin:
+            raise errors.Unauthorized(message="Cannot create secret.")
+
+        async with self.session_maker() as session, session.begin():
+            modification_date = datetime.now(UTC).replace(microsecond=0)
+            orm = SecretORM(
+                name=secret.name,
+                modification_date=modification_date,
+                user_id=user_id,
+                encrypted_value=secret.encrypted_value,
+            )
+            session.add(orm)
+
+            try:
+                await session.flush()
+            except IntegrityError as err:
+                if len(err.args) > 0 and "UniqueViolationError" in err.args[0]:
+                    raise errors.ValidationError(
+                        message="The name for the secret should be unique but it already exists",
+                        detail="Please modify the name field and then retry",
+                    )
+            return orm.dump()
+
+    @only_authenticated
+    async def update_secret(
+        self, requested_by: APIUser, user_id: str, secret_id: str, encrypted_value: bytes
+    ) -> Secret:
+        """Update a secret."""
+        if user_id != requested_by.id and not requested_by.is_admin:
+            raise errors.Unauthorized(message="Cannot update secret.")
+
+        async with self.session_maker() as session, session.begin():
+            result = await session.execute(
+                select(SecretORM).where(SecretORM.id == secret_id).where(SecretORM.user_id == user_id)
+            )
+            secret = result.scalar_one_or_none()
+            if secret is None:
+                raise errors.MissingResourceError(message=f"The secret with id '{secret_id}' cannot be found")
+
+            secret.encrypted_value = encrypted_value
+            secret.modification_date = datetime.now(UTC).replace(microsecond=0)
+        return secret.dump()
+
+    @only_authenticated
+    async def delete_secret(self, requested_by: APIUser, user_id: str, secret_id: str) -> None:
+        """Delete a secret."""
+        if user_id != requested_by.id and not requested_by.is_admin:
+            raise errors.Unauthorized(message="Cannot delete secret.")
+
+        async with self.session_maker() as session, session.begin():
+            result = await session.execute(
+                select(SecretORM).where(SecretORM.id == secret_id).where(SecretORM.user_id == user_id)
+            )
+            secret = result.scalar_one_or_none()
+            if secret is None:
+                return None
+
+            await session.execute(delete(SecretORM).where(SecretORM.id == secret.id))
