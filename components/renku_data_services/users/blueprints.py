@@ -2,16 +2,18 @@
 
 from dataclasses import dataclass
 
-from renku_data_services.users.models import Secret
+from cryptography.hazmat.primitives.asymmetric import rsa
 from sanic import HTTPResponse, Request, json
+from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.errors import errors
-from renku_data_services.users.db import UserRepo, UserSecretRepo
 from renku_data_services.users import apispec
-from sanic_ext import validate
+from renku_data_services.users.db import UserRepo, UserSecretRepo
+from renku_data_services.users.models import Secret
+from renku_data_services.utils.cryptography import encrypt_rsa, encrypt_string
 
 
 @dataclass(kw_only=True)
@@ -78,11 +80,30 @@ class KCUsersBP(CustomBlueprint):
 
 @dataclass(kw_only=True)
 class UserSecretsBP(CustomBlueprint):
-    """Handlers for user secrets."""
+    """Handlers for user secrets.
+
+    Secrets storage is jointly handled by data service and secret service.
+    Each user has their own secret key 'user_secret', encrypted at rest, that only data service can decrypt.
+    Secret service has a public private key combo where only it knows the private key. To store a secret,
+    it is first enrypted with the user_secret, and then with the secret service public key, and then stored
+    in the database. This way neither the data service nor the secret service can dercypt the secrets on their
+    own.
+    """
 
     secret_repo: UserSecretRepo
     user_repo: UserRepo
     authenticator: base_models.Authenticator
+    encryption_key: bytes
+    secret_service_public_key: rsa.RSAPublicKey
+
+    async def _encrypt_user_secret(self, requested_by: base_models.APIUser, user_id: str, value: str) -> bytes:
+        """Doubly encrypt a secret for a user."""
+        secret_key = await self.user_repo.get_or_create_user_secret_key(requested_by=requested_by, id=user_id)
+        # encrypt once with user secret
+        encrypted_value = encrypt_string(secret_key.encode(), user_id, value)
+        # encrypt again with secret service public key
+        encrypted_value = encrypt_rsa(self.secret_service_public_key, encrypted_value)
+        return encrypted_value
 
     def get_all(self) -> BlueprintFactoryResponse:
         """Get all user's secrets."""
@@ -93,10 +114,7 @@ class UserSecretsBP(CustomBlueprint):
             secrets = await self.secret_repo.get_secrets(requested_by=user, user_id=user_id)
             return json(
                 apispec.SecretsList(
-                    root=[
-                        apispec.SecretWithId(id=secret.id, name=secret.name, modification_date=secret.modification_date)
-                        for secret in secrets
-                    ]
+                    root=[apispec.SecretWithId.model_validate(secret) for secret in secrets]
                 ).model_dump(mode="json"),
                 200,
             )
@@ -113,11 +131,7 @@ class UserSecretsBP(CustomBlueprint):
             if not secret:
                 raise errors.MissingResourceError(message=f"The secret with id {secret_id} cannot be found.")
 
-            return json(
-                apispec.SecretWithId(
-                    id=secret.id, name=secret.name, modification_date=secret.modification_date
-                ).model_dump(mode="json")
-            )
+            return json(apispec.SecretWithId.model_validate(secret).model_dump(mode="json"))
 
         return "/users/<user_id>/secrets/<secret_id>", ["GET"], _get_one
 
@@ -128,10 +142,11 @@ class UserSecretsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.SecretPost)
         async def _post(_: Request, *, user: base_models.APIUser, user_id: str, body: apispec.SecretPost):
-            target_user = await self.user_repo.get_user_secret_key(requested_by=user, id=user_id)
-            result = await self.secret_repo.insert_secret(
-                requested_by=user, user_id=user_id, secret=Secret.model_validate(body)
+            secret = Secret(
+                name=body.name,
+                encrypted_value=await self._encrypt_user_secret(requested_by=user, user_id=user_id, value=body.value),
             )
+            result = await self.secret_repo.insert_secret(requested_by=user, user_id=user_id, secret=secret)
             return json(apispec.SecretWithId.model_validate(result).model_dump(exclude_none=True, mode="json"), 201)
 
         return "/user/<user_id>/secrets", ["POST"], _post
@@ -145,8 +160,9 @@ class UserSecretsBP(CustomBlueprint):
         async def _patch(
             _: Request, *, user: base_models.APIUser, user_id: str, secret_id: str, body: apispec.SecretPatch
         ):
+            encrypted_value = await self._encrypt_user_secret(requested_by=user, user_id=user_id, value=body.value)
             updated_secret = await self.secret_repo.update_secret(
-                requested_by=user, user_id=user_id, secret_id=secret_id, encrypted_value=body.value
+                requested_by=user, user_id=user_id, secret_id=secret_id, encrypted_value=encrypted_value
             )
 
             return json(apispec.SecretWithId.model_validate(updated_secret).model_dump(exclude_none=True, mode="json"))

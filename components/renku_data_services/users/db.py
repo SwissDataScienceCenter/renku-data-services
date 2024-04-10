@@ -1,6 +1,7 @@
 """Database adapters and helpers for users."""
 
 import logging
+import secrets
 from collections.abc import Callable
 from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
@@ -20,9 +21,10 @@ from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import dispatch_message
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.users.kc_api import IKeycloakAPI
-from renku_data_services.users.models import KeycloakAdminEvent, UserInfo, UserInfoUpdate, Secret
+from renku_data_services.users.models import KeycloakAdminEvent, Secret, UserInfo, UserInfoUpdate
 from renku_data_services.users.orm import LastKeycloakEventTimestamp, SecretORM, UserORM
 from renku_data_services.utils.core import with_db_transaction
+from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
 
 
 class UserRepo:
@@ -34,8 +36,10 @@ class UserRepo:
         message_queue: IMessageQueue,
         event_repo: EventRepository,
         group_repo: GroupRepository,
+        encryption_key: bytes,
     ):
         self.session_maker = session_maker
+        self.encryption_key = encryption_key
         self._users_sync = UsersSync(self.session_maker, message_queue, event_repo, group_repo)
 
     async def initialize(self, kc_api: IKeycloakAPI):
@@ -110,10 +114,25 @@ class UserRepo:
             return [orm.dump() for orm in orms]
 
     @only_authenticated
-    async def get_or_cerate_user_secret_key(self, requested_by:APIUser, user_id: str):
-        """Get a users secret key, or create it if it doesn't exist"""
-        
+    async def get_or_create_user_secret_key(self, requested_by: APIUser, id: str) -> str:
+        """Get a users secret key, or create it if it doesn't exist."""
+        if requested_by.id != id:
+            raise errors.Unauthorized(message="Cannot get secret.")
+
         async with self.session_maker() as session, session.begin():
+            stmt = select(UserORM).where(UserORM.keycloak_id == id)
+            user = await session.scalar(stmt)
+            if not user:
+                raise errors.MissingResourceError(message=f"User with id {id} not found")
+            if user.secret_key is not None:
+                return decrypt_string(self.encryption_key, user.keycloak_id, user.secret_key)
+            # create a new secret key
+            secret_key = secrets.token_urlsafe(32)
+            user.secret_key = encrypt_string(self.encryption_key, user.keycloak_id, secret_key)
+            session.add(user)
+
+        return secret_key
+
 
 def create_user_added_message(result: UserInfo, **_) -> UserAdded:
     """Transform user to message queue message."""
@@ -292,16 +311,13 @@ class UserSecretRepo:
     def __init__(
         self,
         session_maker: Callable[..., AsyncSession],
-        message_queue: IMessageQueue,
-        event_repo: EventRepository,
-        group_repo: GroupRepository,
     ):
         self.session_maker = session_maker
 
     @only_authenticated
     async def get_secrets(self, requested_by: APIUser, user_id: str) -> list[Secret]:
         """Get a specific user secret from the database."""
-        if user_id != requested_by.id and not requested_by.is_admin:
+        if user_id != requested_by.id:
             raise errors.Unauthorized(message="Cannot list secrets.")
         async with self.session_maker() as session:
             stmt = select(SecretORM).where(SecretORM.user_id == user_id)
@@ -312,7 +328,7 @@ class UserSecretRepo:
     @only_authenticated
     async def get_secret_by_id(self, requested_by: APIUser, user_id: str, secret_id: str) -> Secret | None:
         """Get a specific user secret from the database."""
-        if user_id != requested_by.id and not requested_by.is_admin:
+        if user_id != requested_by.id:
             raise errors.Unauthorized(message="Cannot list secrets.")
         async with self.session_maker() as session:
             stmt = select(SecretORM).where(SecretORM.user_id == user_id).where(SecretORM.id == secret_id)
@@ -325,7 +341,7 @@ class UserSecretRepo:
     @only_authenticated
     async def insert_secret(self, requested_by: APIUser, user_id: str, secret: Secret) -> Secret | None:
         """Insert a new secret."""
-        if user_id != requested_by.id and not requested_by.is_admin:
+        if user_id != requested_by.id:
             raise errors.Unauthorized(message="Cannot create secret.")
 
         async with self.session_maker() as session, session.begin():
@@ -353,7 +369,7 @@ class UserSecretRepo:
         self, requested_by: APIUser, user_id: str, secret_id: str, encrypted_value: bytes
     ) -> Secret:
         """Update a secret."""
-        if user_id != requested_by.id and not requested_by.is_admin:
+        if user_id != requested_by.id:
             raise errors.Unauthorized(message="Cannot update secret.")
 
         async with self.session_maker() as session, session.begin():
@@ -371,7 +387,7 @@ class UserSecretRepo:
     @only_authenticated
     async def delete_secret(self, requested_by: APIUser, user_id: str, secret_id: str) -> None:
         """Delete a secret."""
-        if user_id != requested_by.id and not requested_by.is_admin:
+        if user_id != requested_by.id:
             raise errors.Unauthorized(message="Cannot delete secret.")
 
         async with self.session_maker() as session, session.begin():

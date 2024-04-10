@@ -5,12 +5,11 @@ import logging
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel
-from renku_data_services import base_models
 
 
 class KeycloakEvent(Enum):
@@ -256,7 +255,7 @@ class UserInfo:
 class Secret(BaseModel):
     """Secret objects."""
 
-    id: str
     name: str
-    modification_date: datetime
     encrypted_value: bytes = field(repr=False)
+    id: str | None = field(default=None)
+    modification_date: datetime = field(default_factory=lambda: datetime.now(UTC).replace(microsecond=0))

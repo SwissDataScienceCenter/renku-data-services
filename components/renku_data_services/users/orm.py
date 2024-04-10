@@ -3,13 +3,13 @@
 from datetime import datetime
 from typing import Optional
 
-from renku_data_services.users import models
 from sqlalchemy import DateTime, ForeignKey, LargeBinary, MetaData, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
+from ulid import ULID
 
 from renku_data_services.base_models import Slug
+from renku_data_services.users import models
 from renku_data_services.users.models import UserInfo
-from ulid import ULID
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
@@ -26,7 +26,7 @@ class UserORM(BaseORM):
     first_name: Mapped[Optional[str]] = mapped_column(String(256), default=None)
     last_name: Mapped[Optional[str]] = mapped_column(String(256), default=None)
     email: Mapped[Optional[str]] = mapped_column(String(320), default=None, index=True)
-    secret_key: Mapped[Optional[str]] = mapped_column(String(64), default=None)
+    secret_key: Mapped[Optional[bytes]] = mapped_column(LargeBinary(), default=None)
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
 
     def dump(self) -> UserInfo:

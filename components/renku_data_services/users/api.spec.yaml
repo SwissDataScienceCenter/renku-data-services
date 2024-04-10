@@ -139,7 +139,7 @@ paths:
             type: string
       responses:
         "200":
-          description: The secret 
+          description: The secret
           content:
             "application/json":
               schema:
@@ -207,7 +207,7 @@ paths:
       tags:
         - users
         - secrets
-      
+
   /error:
     get:
       summary: Get a sample error response with status code 422
@@ -317,6 +317,8 @@ components:
       properties:
         value:
           $ref: "#/components/schemas/SecretValue"
+      required:
+        - "value"
     SecretName:
       description: Secret name
       type: string

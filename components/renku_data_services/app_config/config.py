@@ -13,7 +13,9 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
+from cryptography.hazmat.primitives import serialization
 
+from cryptography.hazmat.primitives.asymmetric import rsa
 import httpx
 from jwt import PyJWKClient
 from tenacity import retry, stop_after_attempt, stop_after_delay, wait_fixed
@@ -50,7 +52,7 @@ from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.user_preferences.config import UserPreferencesConfig
 from renku_data_services.user_preferences.db import UserPreferencesRepository
-from renku_data_services.users.db import UserRepo as KcUserRepo
+from renku_data_services.users.db import UserRepo as KcUserRepo, UserSecretRepo
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
 from renku_data_services.users.models import UserInfo
@@ -128,7 +130,9 @@ class Config:
     gitlab_client: base_models.GitlabAPIProtocol
     kc_api: IKeycloakAPI
     message_queue: IMessageQueue
+    secret_service_public_key: rsa.RSAPublicKey
     spec: dict[str, Any] = field(init=False, default_factory=dict)
+    encryption_key: bytes = field(repr=False)
     version: str = "0.0.1"
     app_name: str = "renku_crc"
     default_resource_pool_file: Optional[str] = None
@@ -145,6 +149,7 @@ class Config:
     _session_repo: SessionRepository | None = field(default=None, repr=False, init=False)
     _user_preferences_repo: UserPreferencesRepository | None = field(default=None, repr=False, init=False)
     _kc_user_repo: KcUserRepo | None = field(default=None, repr=False, init=False)
+    _user_secrets_repo: UserSecretRepo | None = field(default=None, repr=False, init=False)
     _project_member_repo: ProjectMemberRepository | None = field(default=None, repr=False, init=False)
 
     def __post_init__(self):
@@ -290,8 +295,18 @@ class Config:
                 message_queue=self.message_queue,
                 event_repo=self.event_repo,
                 group_repo=self.group_repo,
+                encryption_key=self.encryption_key,
             )
         return self._kc_user_repo
+
+    @property
+    def user_secrets_repo(self) -> UserSecretRepo:
+        """The DB adapter for users."""
+        if not self._user_secrets_repo:
+            self._user_secrets_repo = UserSecretRepo(
+                session_maker=self.db.async_session_maker,
+            )
+        return self._user_secrets_repo
 
     @classmethod
     def from_env(cls, prefix: str = ""):
@@ -311,6 +326,14 @@ class Config:
         user_preferences_config = UserPreferencesConfig(max_pinned_projects=max_pinned_projects)
         db = DBConfig.from_env(prefix)
         kc_api: IKeycloakAPI
+        encryption_key_path = os.getenv("ENCRYPTION_KEY_PATH", "/encryption-key")
+        encryption_key = Path(encryption_key_path).read_bytes()
+        secret_service_public_key_path = os.getenv(
+            f"{prefix}SECRET_SERVICE_PUBLIC_KEY_PATH", "/secret_service_public_key"
+        )
+        secret_service_public_key = serialization.load_pem_public_key(Path(secret_service_public_key_path).read_bytes())
+        if not isinstance(secret_service_public_key, rsa.RSAPublicKey):
+            raise errors.ConfigurationError(message="Secret service public key is not an RSAPublicKey")
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
             authenticator = DummyAuthenticator()
@@ -378,4 +401,6 @@ class Config:
             redis=redis,
             kc_api=kc_api,
             message_queue=message_queue,
+            encryption_key=encryption_key,
+            secret_service_public_key=secret_service_public_key,
         )
