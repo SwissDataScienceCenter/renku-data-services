@@ -163,6 +163,36 @@ class ProjectRepository:
 
             return project_orm.dump()
 
+    async def get_project_by_namespace_slug(
+        self, user: base_models.APIUser, namespace: str, slug: str
+    ) -> models.Project:
+        """Get one project from the database."""
+        async with self.session_maker() as session:
+            slug_stmt = (
+                select(schemas.ProjectSlug)
+                .where((schemas.ProjectSlug.slug == slug))
+                .where(schemas.NamespaceORM.slug == namespace)
+                .where(schemas.ProjectSlug.namespace_id == schemas.NamespaceORM.id)
+            )
+            slug_result = await session.execute(slug_stmt)
+            project_slug = slug_result.scalars().first()
+            stmt = select(schemas.ProjectORM).where((schemas.ProjectORM.slug == project_slug))
+            result = await session.execute(stmt)
+            project_orm = result.scalars().first()
+
+            if project_orm is None:
+                raise errors.MissingResourceError(
+                    message=f"Project with identifier '{namespace}/{slug}' does not exist."
+                )
+
+            authorized = await self.project_authz.has_permission(user=user, project_id=project_orm.id, scope=Scope.READ)
+            if not authorized:
+                raise errors.MissingResourceError(
+                    message=f"Project with identifier '{namespace}/{slug}'  does not exist or you do not have access to it."
+                )
+
+            return project_orm.dump()
+
     @with_db_transaction
     @dispatch_message(create_project_created_message)
     async def insert_project(

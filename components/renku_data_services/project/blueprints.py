@@ -59,6 +59,16 @@ class ProjectsBP(CustomBlueprint):
 
         return "/projects/<project_id>", ["GET"], _get_one
 
+    def get_one_by_namespace_slug(self) -> BlueprintFactoryResponse:
+        """Get a specific project by namespace/slug."""
+
+        @authenticate(self.authenticator)
+        async def _get_one_by_namespace_slug(_: Request, *, user: base_models.APIUser, namespace: str, slug: str):
+            project = await self.project_repo.get_project_by_namespace_slug(user=user, namespace=namespace, slug=slug)
+            return json(apispec.Project.model_validate(project).model_dump(exclude_none=True, mode="json"))
+
+        return "/projects/<namespace>/<slug>", ["GET"], _get_one_by_namespace_slug
+
     def delete(self) -> BlueprintFactoryResponse:
         """Delete a specific project."""
 

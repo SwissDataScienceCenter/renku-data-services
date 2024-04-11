@@ -94,6 +94,17 @@ async def test_project_creation(sanic_client, user_headers, regular_user, app_co
         "http://renkulab.io/repository-2",
     }
 
+    # same as above, but using namespace/slug to retreive the pr
+    _, response = await sanic_client.get(
+        f"/api/data/projects/{payload['namespace'].lower()}/{payload['slug']}", headers=user_headers
+    )
+
+    assert response.status_code == 200, response.text
+    project = response.json
+    assert project["name"] == "Renku Native Project"
+    assert project["slug"] == "project-slug"
+    assert project["namespace"] == f"{regular_user.first_name.lower()}.{regular_user.last_name.lower()}"
+
 
 @pytest.mark.asyncio
 async def test_project_creation_with_default_values(sanic_client, user_headers, regular_user, get_project):
