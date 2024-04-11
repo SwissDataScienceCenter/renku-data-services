@@ -170,9 +170,9 @@ class ProjectRepository:
         async with self.session_maker() as session:
             stmt = (
                 select(schemas.ProjectORM)
-                .where(schemas.NamespaceORM.slug == namespace)
+                .where(schemas.NamespaceORM.slug == namespace.lower())
                 .where(schemas.ProjectSlug.namespace_id == schemas.NamespaceORM.id)
-                .where(schemas.ProjectSlug.slug == slug)
+                .where(schemas.ProjectSlug.slug == slug.lower())
                 .where(schemas.ProjectORM.id == schemas.ProjectSlug.project_id)
             )
             result = await session.execute(stmt)
