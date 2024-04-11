@@ -168,28 +168,26 @@ class ProjectRepository:
     ) -> models.Project:
         """Get one project from the database."""
         async with self.session_maker() as session:
-            slug_stmt = (
-                select(schemas.ProjectSlug)
-                .where((schemas.ProjectSlug.slug == slug))
+            stmt = (
+                select(schemas.ProjectORM)
                 .where(schemas.NamespaceORM.slug == namespace)
                 .where(schemas.ProjectSlug.namespace_id == schemas.NamespaceORM.id)
+                .where(schemas.ProjectSlug.slug == slug)
+                .where(schemas.ProjectORM.id == schemas.ProjectSlug.project_id)
             )
-            slug_result = await session.execute(slug_stmt)
-            project_slug = slug_result.scalars().first()
-            stmt = select(schemas.ProjectORM).where((schemas.ProjectORM.slug == project_slug))
             result = await session.execute(stmt)
             project_orm = result.scalars().first()
 
+            not_found_msg = (
+                f"Project with identifier '{namespace}/{slug}' does not exist or you do not have access to it."
+            )
+
             if project_orm is None:
-                raise errors.MissingResourceError(
-                    message=f"Project with identifier '{namespace}/{slug}' does not exist."
-                )
+                raise errors.MissingResourceError(message=not_found_msg)
 
             authorized = await self.project_authz.has_permission(user=user, project_id=project_orm.id, scope=Scope.READ)
             if not authorized:
-                raise errors.MissingResourceError(
-                    message=f"Project with identifier '{namespace}/{slug}'  does not exist or you do not have access to it."
-                )
+                raise errors.MissingResourceError(message=not_found_msg)
 
             return project_orm.dump()
 
