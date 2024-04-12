@@ -13,10 +13,10 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
-from cryptography.hazmat.primitives import serialization
 
-from cryptography.hazmat.primitives.asymmetric import rsa
 import httpx
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from jwt import PyJWKClient
 from tenacity import retry, stop_after_attempt, stop_after_delay, wait_fixed
 from yaml import safe_load
@@ -52,7 +52,8 @@ from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.user_preferences.config import UserPreferencesConfig
 from renku_data_services.user_preferences.db import UserPreferencesRepository
-from renku_data_services.users.db import UserRepo as KcUserRepo, UserSecretRepo
+from renku_data_services.users.db import UserRepo as KcUserRepo
+from renku_data_services.users.db import UserSecretsRepo
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
 from renku_data_services.users.models import UserInfo
@@ -130,7 +131,7 @@ class Config:
     gitlab_client: base_models.GitlabAPIProtocol
     kc_api: IKeycloakAPI
     message_queue: IMessageQueue
-    secret_service_public_key: rsa.RSAPublicKey
+    secrets_service_public_key: rsa.RSAPublicKey
     spec: dict[str, Any] = field(init=False, default_factory=dict)
     encryption_key: bytes = field(repr=False)
     version: str = "0.0.1"
@@ -149,7 +150,7 @@ class Config:
     _session_repo: SessionRepository | None = field(default=None, repr=False, init=False)
     _user_preferences_repo: UserPreferencesRepository | None = field(default=None, repr=False, init=False)
     _kc_user_repo: KcUserRepo | None = field(default=None, repr=False, init=False)
-    _user_secrets_repo: UserSecretRepo | None = field(default=None, repr=False, init=False)
+    _user_secrets_repo: UserSecretsRepo | None = field(default=None, repr=False, init=False)
     _project_member_repo: ProjectMemberRepository | None = field(default=None, repr=False, init=False)
 
     def __post_init__(self):
@@ -300,10 +301,10 @@ class Config:
         return self._kc_user_repo
 
     @property
-    def user_secrets_repo(self) -> UserSecretRepo:
+    def user_secrets_repo(self) -> UserSecretsRepo:
         """The DB adapter for users."""
         if not self._user_secrets_repo:
-            self._user_secrets_repo = UserSecretRepo(
+            self._user_secrets_repo = UserSecretsRepo(
                 session_maker=self.db.async_session_maker,
             )
         return self._user_secrets_repo
@@ -328,17 +329,19 @@ class Config:
         kc_api: IKeycloakAPI
         encryption_key_path = os.getenv(f"{prefix}ENCRYPTION_KEY_PATH", "/encryption-key")
         encryption_key = Path(encryption_key_path).read_bytes()
-        secret_service_public_key_path = os.getenv(
+        secrets_service_public_key_path = os.getenv(
             f"{prefix}SECRET_SERVICE_PUBLIC_KEY_PATH", "/secret_service_public_key"
         )
-        secret_service_public_key = serialization.load_pem_public_key(Path(secret_service_public_key_path).read_bytes())
-        if not isinstance(secret_service_public_key, rsa.RSAPublicKey):
+        secrets_service_public_key = serialization.load_pem_public_key(
+            Path(secrets_service_public_key_path).read_bytes()
+        )
+        if not isinstance(secrets_service_public_key, rsa.RSAPublicKey):
             raise errors.ConfigurationError(message="Secret service public key is not an RSAPublicKey")
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
             authenticator = DummyAuthenticator()
             gitlab_authenticator = DummyAuthenticator()
-            quota_repo = QuotaRepository(DummyCoreClient({}), DummySchedulingClient({}), namespace=k8s_namespace)
+            quota_repo = QuotaRepository(DummyCoreClient({}, {}), DummySchedulingClient({}), namespace=k8s_namespace)
             user_always_exists = os.environ.get("DUMMY_USERSTORE_USER_ALWAYS_EXISTS", "true").lower() == "true"
             user_store = DummyUserStore(user_always_exists=user_always_exists)
             gitlab_client = DummyGitlabAPI()
@@ -402,5 +405,5 @@ class Config:
             kc_api=kc_api,
             message_queue=message_queue,
             encryption_key=encryption_key,
-            secret_service_public_key=secret_service_public_key,
+            secrets_service_public_key=secrets_service_public_key,
         )

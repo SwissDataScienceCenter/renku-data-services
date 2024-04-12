@@ -8,8 +8,7 @@ from sanic import Sanic
 from sanic.log import logger
 from sanic.worker.loader import AppLoader
 
-from renku_data_services.secrets_storage.app_config import Config
-from renku_data_services.secrets_storage.migrations.core import run_migrations_for_app
+from renku_data_services.secrets.config import Config
 from renku_data_services.secrets_storage_api.app import register_all_handlers
 
 
@@ -21,21 +20,12 @@ def create_app() -> Sanic:
         app.config.TOUCHUP = False
         # NOTE: in single process mode where we usually run schemathesis to get coverage the db migrations
         # specified below with the main_process_start decorator do not run.
-        run_migrations_for_app("secret")
-        config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
         asyncio.run(config.kc_user_repo.initialize(config.kc_api))
     app = register_all_handlers(app, config)
-
-    if environ.get("CORS_ALLOW_ALL_ORIGINS", "false").lower() == "true":
-        from sanic_ext import Extend
-
-        app.config.CORS_ORIGINS = "*"
-        Extend(app)
 
     @app.main_process_start
     async def do_migrations(*_):
         logger.info("running migrations")
-        run_migrations_for_app("secret")
         config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
         await config.kc_user_repo.initialize(config.kc_api)
 

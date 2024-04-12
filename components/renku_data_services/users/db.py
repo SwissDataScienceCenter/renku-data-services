@@ -114,16 +114,14 @@ class UserRepo:
             return [orm.dump() for orm in orms]
 
     @only_authenticated
-    async def get_or_create_user_secret_key(self, requested_by: APIUser, id: str) -> str:
+    async def get_or_create_user_secret_key(self, requested_by: APIUser) -> str:
         """Get a users secret key, or create it if it doesn't exist."""
-        if requested_by.id != id:
-            raise errors.Unauthorized(message="Cannot get secret.")
 
         async with self.session_maker() as session, session.begin():
-            stmt = select(UserORM).where(UserORM.keycloak_id == id)
+            stmt = select(UserORM).where(UserORM.keycloak_id == requested_by.id)
             user = await session.scalar(stmt)
             if not user:
-                raise errors.MissingResourceError(message=f"User with id {id} not found")
+                raise errors.MissingResourceError(message=f"User with id {requested_by.id} not found")
             if user.secret_key is not None:
                 return decrypt_string(self.encryption_key, user.keycloak_id, user.secret_key)
             # create a new secret key
@@ -305,7 +303,7 @@ class UsersSync:
                     )
 
 
-class UserSecretRepo:
+class UserSecretsRepo:
     """An adapter for accessing users secrets."""
 
     def __init__(
@@ -315,23 +313,19 @@ class UserSecretRepo:
         self.session_maker = session_maker
 
     @only_authenticated
-    async def get_secrets(self, requested_by: APIUser, user_id: str) -> list[Secret]:
+    async def get_secrets(self, requested_by: APIUser) -> list[Secret]:
         """Get a specific user secret from the database."""
-        if user_id != requested_by.id:
-            raise errors.Unauthorized(message="Cannot list secrets.")
         async with self.session_maker() as session:
-            stmt = select(SecretORM).where(SecretORM.user_id == user_id)
+            stmt = select(SecretORM).where(SecretORM.user_id == requested_by.id)
             res = await session.execute(stmt)
             orm = res.scalars().all()
             return [o.dump() for o in orm]
 
     @only_authenticated
-    async def get_secret_by_id(self, requested_by: APIUser, user_id: str, secret_id: str) -> Secret | None:
+    async def get_secret_by_id(self, requested_by: APIUser, secret_id: str) -> Secret | None:
         """Get a specific user secret from the database."""
-        if user_id != requested_by.id:
-            raise errors.Unauthorized(message="Cannot list secrets.")
         async with self.session_maker() as session:
-            stmt = select(SecretORM).where(SecretORM.user_id == user_id).where(SecretORM.id == secret_id)
+            stmt = select(SecretORM).where(SecretORM.user_id == requested_by.id).where(SecretORM.id == secret_id)
             res = await session.execute(stmt)
             orm = res.scalar_one_or_none()
             if orm is None:
@@ -339,17 +333,24 @@ class UserSecretRepo:
             return orm.dump()
 
     @only_authenticated
-    async def insert_secret(self, requested_by: APIUser, user_id: str, secret: Secret) -> Secret | None:
+    async def get_secrets_by_ids(self, requested_by: APIUser, secret_ids: list[str]) -> list[Secret]:
+        """Get a specific user secret from the database."""
+        async with self.session_maker() as session:
+            stmt = select(SecretORM).where(SecretORM.user_id == requested_by.id).where(SecretORM.id.in_(secret_ids))
+            res = await session.execute(stmt)
+            orms = res.scalars()
+            return [orm.dump() for orm in orms]
+
+    @only_authenticated
+    async def insert_secret(self, requested_by: APIUser, secret: Secret) -> Secret | None:
         """Insert a new secret."""
-        if user_id != requested_by.id:
-            raise errors.Unauthorized(message="Cannot create secret.")
 
         async with self.session_maker() as session, session.begin():
             modification_date = datetime.now(UTC).replace(microsecond=0)
             orm = SecretORM(
                 name=secret.name,
                 modification_date=modification_date,
-                user_id=user_id,
+                user_id=requested_by.id,
                 encrypted_value=secret.encrypted_value,
             )
             session.add(orm)
@@ -365,16 +366,12 @@ class UserSecretRepo:
             return orm.dump()
 
     @only_authenticated
-    async def update_secret(
-        self, requested_by: APIUser, user_id: str, secret_id: str, encrypted_value: bytes
-    ) -> Secret:
+    async def update_secret(self, requested_by: APIUser, secret_id: str, encrypted_value: bytes) -> Secret:
         """Update a secret."""
-        if user_id != requested_by.id:
-            raise errors.Unauthorized(message="Cannot update secret.")
 
         async with self.session_maker() as session, session.begin():
             result = await session.execute(
-                select(SecretORM).where(SecretORM.id == secret_id).where(SecretORM.user_id == user_id)
+                select(SecretORM).where(SecretORM.id == secret_id).where(SecretORM.user_id == requested_by.id)
             )
             secret = result.scalar_one_or_none()
             if secret is None:
@@ -385,14 +382,12 @@ class UserSecretRepo:
         return secret.dump()
 
     @only_authenticated
-    async def delete_secret(self, requested_by: APIUser, user_id: str, secret_id: str) -> None:
+    async def delete_secret(self, requested_by: APIUser, secret_id: str) -> None:
         """Delete a secret."""
-        if user_id != requested_by.id:
-            raise errors.Unauthorized(message="Cannot delete secret.")
 
         async with self.session_maker() as session, session.begin():
             result = await session.execute(
-                select(SecretORM).where(SecretORM.id == secret_id).where(SecretORM.user_id == user_id)
+                select(SecretORM).where(SecretORM.id == secret_id).where(SecretORM.user_id == requested_by.id)
             )
             secret = result.scalar_one_or_none()
             if secret is None:

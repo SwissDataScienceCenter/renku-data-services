@@ -21,7 +21,7 @@ packages = [
   { include = "renku_data_services/message_queue", from = "../../components" },
   { include = "renku_data_services/migrations", from = "../../components" },
   { include = "renku_data_services/project", from = "../../components" },
-  { include = "renku_data_services/secrets_storage", from = "../../components" },
+  { include = "renku_data_services/secrets", from = "../../components" },
   { include = "renku_data_services/session", from = "../../components" },
   { include = "renku_data_services/storage", from = "../../components" },
   { include = "renku_data_services/user_preferences", from = "../../components" },

@@ -3,19 +3,21 @@
 from sanic import Sanic
 
 from renku_data_services.base_api.error_handler import CustomErrorHandler
-from renku_data_services.secrets_storage.app_config import Config
-from renku_data_services.secrets_storage.secret import apispec
-from renku_data_services.secrets_storage.secret.blueprints import SecretsBP
+from renku_data_services.secrets import apispec
+from renku_data_services.secrets.blueprints import K8sSecretsBP
+from renku_data_services.secrets.config import Config
 
 
 def register_all_handlers(app: Sanic, config: Config) -> Sanic:
     """Register all handlers on the application."""
-    url_prefix = "/api/secret"
-    secrets_storage = SecretsBP(
+    url_prefix = "/api/secrets"
+    secrets_storage = K8sSecretsBP(
         name="secrets_storage_api",
         url_prefix=url_prefix,
-        secret_repo=config.secret_repo,
+        user_secrets_repo=config.user_secrets_repo,
         authenticator=config.authenticator,
+        secret_service_private_key=config.secrets_service_private_key,
+        core_client=config.core_client,
     )
     app.blueprint([secrets_storage.blueprint()])
 

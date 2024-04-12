@@ -44,7 +44,7 @@ def test_config_no_dummy(monkeypatch):
     monkeypatch.setenv("KEYCLOAK_CLIENT_SECRET", "data-service-client-secret")
     monkeypatch.setattr(conf, "oidc_discovery", lambda _, __: {"jwks_uri": "localhost"})
     monkeypatch.setattr(conf, "PyJWKClient", lambda _: MagicMock())
-    monkeypatch.setattr(conf, "K8sCoreClient", lambda: DummyCoreClient({}))
+    monkeypatch.setattr(conf, "K8sCoreClient", lambda: DummyCoreClient({}, {}))
     monkeypatch.setattr(conf, "K8sSchedulingClient", lambda: DummySchedulingClient({}))
 
     def patch_kc_api(*args, **kwargs):

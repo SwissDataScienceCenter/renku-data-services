@@ -11,7 +11,7 @@ from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.errors import errors
 from renku_data_services.users import apispec
-from renku_data_services.users.db import UserRepo, UserSecretRepo
+from renku_data_services.users.db import UserRepo, UserSecretsRepo
 from renku_data_services.users.models import Secret
 from renku_data_services.utils.cryptography import encrypt_rsa, encrypt_string
 
@@ -90,16 +90,17 @@ class UserSecretsBP(CustomBlueprint):
     own.
     """
 
-    secret_repo: UserSecretRepo
+    secret_repo: UserSecretsRepo
     user_repo: UserRepo
     authenticator: base_models.Authenticator
     secret_service_public_key: rsa.RSAPublicKey
 
-    async def _encrypt_user_secret(self, requested_by: base_models.APIUser, user_id: str, value: str) -> bytes:
+    @only_authenticated
+    async def _encrypt_user_secret(self, requested_by: base_models.APIUser, value: str) -> bytes:
         """Doubly encrypt a secret for a user."""
-        secret_key = await self.user_repo.get_or_create_user_secret_key(requested_by=requested_by, id=user_id)
+        secret_key = await self.user_repo.get_or_create_user_secret_key(requested_by=requested_by)
         # encrypt once with user secret
-        encrypted_value = encrypt_string(secret_key.encode(), user_id, value)
+        encrypted_value = encrypt_string(secret_key.encode(), requested_by.id, value)  # type: ignore
         # encrypt again with secret service public key
         encrypted_value = encrypt_rsa(self.secret_service_public_key, encrypted_value)
         return encrypted_value
@@ -109,8 +110,8 @@ class UserSecretsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _get_all(request: Request, user_id: str, user: base_models.APIUser):
-            secrets = await self.secret_repo.get_secrets(requested_by=user, user_id=user_id)
+        async def _get_all(request: Request, user: base_models.APIUser):
+            secrets = await self.secret_repo.get_secrets(requested_by=user)
             return json(
                 apispec.SecretsList(
                     root=[apispec.SecretWithId.model_validate(secret) for secret in secrets]
@@ -118,21 +119,21 @@ class UserSecretsBP(CustomBlueprint):
                 200,
             )
 
-        return "/users/<user_id>/secrets/", ["GET"], _get_all
+        return "/user/secrets", ["GET"], _get_all
 
     def get_one(self) -> BlueprintFactoryResponse:
         """Get a user secret."""
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _get_one(request: Request, user_id: str, secret_id: str, user: base_models.APIUser):
-            secret = await self.secret_repo.get_secret_by_id(requested_by=user, user_id=user_id, secret_id=secret_id)
+        async def _get_one(request: Request, secret_id: str, user: base_models.APIUser):
+            secret = await self.secret_repo.get_secret_by_id(requested_by=user, secret_id=secret_id)
             if not secret:
                 raise errors.MissingResourceError(message=f"The secret with id {secret_id} cannot be found.")
 
             return json(apispec.SecretWithId.model_validate(secret).model_dump(mode="json"))
 
-        return "/users/<user_id>/secrets/<secret_id>", ["GET"], _get_one
+        return "/user/secrets/<secret_id>", ["GET"], _get_one
 
     def post(self) -> BlueprintFactoryResponse:
         """Create a new secret."""
@@ -140,15 +141,15 @@ class UserSecretsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_authenticated
         @validate(json=apispec.SecretPost)
-        async def _post(_: Request, *, user: base_models.APIUser, user_id: str, body: apispec.SecretPost):
+        async def _post(_: Request, *, user: base_models.APIUser, body: apispec.SecretPost):
             secret = Secret(
                 name=body.name,
-                encrypted_value=await self._encrypt_user_secret(requested_by=user, user_id=user_id, value=body.value),
+                encrypted_value=await self._encrypt_user_secret(requested_by=user, value=body.value),
             )
-            result = await self.secret_repo.insert_secret(requested_by=user, user_id=user_id, secret=secret)
+            result = await self.secret_repo.insert_secret(requested_by=user, secret=secret)
             return json(apispec.SecretWithId.model_validate(result).model_dump(exclude_none=True, mode="json"), 201)
 
-        return "/user/<user_id>/secrets", ["POST"], _post
+        return "/user/secrets", ["POST"], _post
 
     def patch(self) -> BlueprintFactoryResponse:
         """Update a specific secret."""
@@ -156,25 +157,23 @@ class UserSecretsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_authenticated
         @validate(json=apispec.SecretPatch)
-        async def _patch(
-            _: Request, *, user: base_models.APIUser, user_id: str, secret_id: str, body: apispec.SecretPatch
-        ):
-            encrypted_value = await self._encrypt_user_secret(requested_by=user, user_id=user_id, value=body.value)
+        async def _patch(_: Request, *, user: base_models.APIUser, secret_id: str, body: apispec.SecretPatch):
+            encrypted_value = await self._encrypt_user_secret(requested_by=user, value=body.value)
             updated_secret = await self.secret_repo.update_secret(
-                requested_by=user, user_id=user_id, secret_id=secret_id, encrypted_value=encrypted_value
+                requested_by=user, secret_id=secret_id, encrypted_value=encrypted_value
             )
 
             return json(apispec.SecretWithId.model_validate(updated_secret).model_dump(exclude_none=True, mode="json"))
 
-        return "/users/<user_id>/secrets/<secret_id>", ["PATCH"], _patch
+        return "/user/secrets/<secret_id>", ["PATCH"], _patch
 
     def delete(self) -> BlueprintFactoryResponse:
         """Delete a specific secret."""
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _delete(_: Request, *, user: base_models.APIUser, user_id: str, secret_id: str):
-            await self.secret_repo.delete_secret(requested_by=user, user_id=user_id, secret_id=secret_id)
+        async def _delete(_: Request, *, user: base_models.APIUser, secret_id: str):
+            await self.secret_repo.delete_secret(requested_by=user, secret_id=secret_id)
             return HTTPResponse(status=204)
 
-        return "/secrets/<secret_id>", ["DELETE"], _delete
+        return "/user/secrets/<secret_id>", ["DELETE"], _delete

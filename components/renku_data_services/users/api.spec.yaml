@@ -70,7 +70,7 @@ paths:
           $ref: '#/components/responses/Error'
       tags:
         - users
-  /users/{user_id}/secrets:
+  /user/secrets:
     get:
       summary: List all secrets for a user (keys only)
       parameters:
@@ -123,7 +123,7 @@ paths:
       tags:
         - users
         - secrets
-  /users/{user_id}/secrets/{secret_id}:
+  /user/secrets/{secret_id}:
     get:
       summary: Get a secret key by id
       parameters:
