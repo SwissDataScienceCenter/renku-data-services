@@ -8,6 +8,7 @@ from sanic_ext import validate
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.project.db import ProjectRepository
 from renku_data_services.session import apispec
 from renku_data_services.session.db import SessionRepository
 
@@ -79,6 +80,7 @@ class EnvironmentsBP(CustomBlueprint):
 class SessionLaunchersBP(CustomBlueprint):
     """Handlers for manipulating session launcher."""
 
+    project_repo: ProjectRepository
     session_repo: SessionRepository
     authenticator: base_models.Authenticator
 
@@ -156,3 +158,23 @@ class SessionLaunchersBP(CustomBlueprint):
             )
 
         return "/projects/<project_id>/session_launchers", ["GET"], _get_launcher
+
+    def get_project_launchers_by_namespace_slug(self) -> BlueprintFactoryResponse:
+        """Get all launchers belonging to a project."""
+
+        @authenticate(self.authenticator)
+        async def _get_launcher_by_namespace_slug(_: Request, namespace: str, slug: str, user: base_models.APIUser):
+            project = await self.project_repo.get_project_by_namespace_slug(user=user, namespace=namespace, slug=slug)
+            if project.id is None:
+                # this should not happen because an exception should be raised by the repo
+                return HTTPResponse(status=404)
+
+            launchers = await self.session_repo.get_project_launchers(user=user, project_id=project.id)
+            return json(
+                [
+                    apispec.SessionLauncher.model_validate(item).model_dump(exclude_none=True, mode="json")
+                    for item in launchers
+                ]
+            )
+
+        return "/projects/<namespace>/<slug>/session_launchers", ["GET"], _get_launcher_by_namespace_slug

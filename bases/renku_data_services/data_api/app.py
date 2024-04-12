@@ -91,6 +91,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
     session_launchers = SessionLaunchersBP(
         name="sessions_launchers",
         url_prefix=url_prefix,
+        project_repo=config.project_repo,
         session_repo=config.session_repo,
         authenticator=config.authenticator,
     )

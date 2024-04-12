@@ -267,6 +267,16 @@ async def test_get_project_launchers(
     launchers = res.json
     assert {launcher["name"] for launcher in launchers} == {"Launcher 2", "Launcher 3"}
 
+    # Test with namespace and slug
+    _, res = await sanic_client.get(
+        f"/api/data/projects/{project_2['namespace']}/{project_2['slug']}/session_launchers", headers=user_headers
+    )
+
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    launchers = res.json
+    assert {launcher["name"] for launcher in launchers} == {"Launcher 2", "Launcher 3"}
+
 
 @pytest.mark.asyncio
 async def test_post_session_launcher(sanic_client: SanicASGITestClient, user_headers, create_project):

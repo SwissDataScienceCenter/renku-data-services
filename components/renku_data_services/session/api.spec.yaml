@@ -4,7 +4,7 @@ info:
   description: |
     Service that allows creating, deleting, and managing Renku 2.0 environments
     and sessions.
-  version: 0.1.0
+  version: 0.2.0
 servers:
   - url: /api/data
   - url: /ui-server/api/data
@@ -267,6 +267,32 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - session_launchers
+  /projects/{namespace}/{slug}/session_launchers:
+    get:
+      summary: Get a project's session launchers by namespace/slug
+      parameters:
+        - in: path
+          name: namespace
+          required: true
+          schema:
+            type: string
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of sessions launchers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionLaunchersList"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_launchers
 components:
   schemas:
     EnvironmentList:
@@ -450,7 +476,7 @@ components:
       format: date-time
       example: "2023-11-01T17:32:28Z"
     Description:
-      description: A description for the resource 
+      description: A description for the resource
       type: string
       maxLength: 500
     ContainerImage:
