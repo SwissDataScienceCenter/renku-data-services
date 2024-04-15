@@ -20,6 +20,7 @@ class ProjectCreated(AvroModel):
     repositories: List[str]
     visibility: Visibility
     description: Optional[str]
+    keywords: List[str]
     createdBy: str
     creationDate: datetime  # logicalType: timestamp-millis
 
@@ -60,6 +61,14 @@ class ProjectCreated(AvroModel):
                     "null",
                     "string"
                 ]
+            },
+            {
+                "name": "keywords",
+                "type": {
+                    "type": "array",
+                    "items": "string"
+                },
+                "default": []
             },
             {
                 "name": "createdBy",

@@ -2,21 +2,20 @@
 
 import contextlib
 from dataclasses import dataclass
-from datetime import UTC, datetime
 
 from cryptography.hazmat.primitives.asymmetric import rsa
-from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface
-from sanic import HTTPResponse, Request, json
+from kubernetes import client as k8s_client
+from sanic import Request
 from sanic_ext import validate
+from sqlalchemy.util import b64encode
 
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface
 from renku_data_services.secrets import apispec
 from renku_data_services.users.db import UserSecretsRepo
 from renku_data_services.utils.cryptography import decrypt_rsa
-from sqlalchemy.util import b64encode
-from kubernetes import client as k8s_client
 
 
 @dataclass(kw_only=True)

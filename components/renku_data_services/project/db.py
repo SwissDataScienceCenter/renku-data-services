@@ -71,6 +71,7 @@ def create_project_created_message(result: models.Project, *_, **__) -> ProjectC
         description=result.description,
         createdBy=result.created_by,
         creationDate=result.creation_date,
+        keywords=[],
     )
 
 
@@ -92,6 +93,7 @@ def create_project_update_message(result: models.Project, *_, **__) -> ProjectUp
         repositories=result.repositories,
         visibility=vis,
         description=result.description,
+        keywords=[],
     )
 
 
