@@ -19,7 +19,7 @@ services:
     ports:
       - "8000:8000"
       - "5432:5432"
-      - "8081:8080"
+      - "8080:8080"
       - "5678:5678"
 
     # Use "forwardPorts" in **devcontainer.json** to forward an app port locally.
@@ -50,7 +50,7 @@ services:
     image: swaggerapi/swagger-ui
     environment:
       SWAGGER_JSON_URL: http://localhost:8000/api/data/spec.json
-      PORT: "8081"
+      PORT: "8080"
     # Runs on the same network as the main app
     network_mode: service:data_service
 
