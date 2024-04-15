@@ -36,6 +36,14 @@
       ]
     },
     {
+      "name": "keywords",
+      "type": {
+        "type": "array",
+        "items": "string"
+      },
+      "default": []
+    },
+    {
       "name": "createdBy",
       "type": "string"
     },
