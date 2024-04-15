@@ -11,10 +11,7 @@ from pytest_postgresql import factories
 import renku_data_services.base_models as base_models
 from renku_data_services.app_config import Config as DataConfig
 from renku_data_services.migrations.core import run_migrations_for_app as run_data_service_migrations_for_app
-from renku_data_services.secrets_storage.app_config import Config as SecretsConfig
-from renku_data_services.secrets_storage.migrations.core import (
-    run_migrations_for_app as run_secrets_storage_migrations_for_app,
-)
+from renku_data_services.secrets.config import Config as SecretsConfig
 
 settings.register_profile("ci", deadline=400, max_examples=5)
 settings.register_profile("dev", deadline=200, max_examples=5)
@@ -39,10 +36,8 @@ def get_init_db(component):
         os.environ["DB_HOST"] = kwargs["host"]
         os.environ["DB_PORT"] = str(kwargs["port"])
 
-        if component == "renku-data-service":
+        if component == "renku-data-service" or component == "secrets-storage":
             run_data_service_migrations_for_app("common")
-        elif component == "secrets-storage":
-            run_secrets_storage_migrations_for_app("common")
         else:
             raise ValueError("Invalid component name")
 

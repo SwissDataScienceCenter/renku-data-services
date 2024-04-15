@@ -9,7 +9,7 @@ import pytest_asyncio
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 
-from renku_data_services.secrets_storage.app_config import Config
+from renku_data_services.secrets.config import Config
 from renku_data_services.secrets_storage_api.app import register_all_handlers
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import UserInfo
@@ -26,9 +26,7 @@ def users() -> list[UserInfo]:
 
 
 @pytest_asyncio.fixture
-async def sanic_client(
-    secrets_storage_app_config: Config, users: list[UserInfo]
-) -> SanicASGITestClient:
+async def sanic_client(secrets_storage_app_config: Config, users: list[UserInfo]) -> SanicASGITestClient:
     secrets_storage_app_config.kc_api = DummyKeycloakAPI(users=get_kc_users(users))
     app = Sanic(secrets_storage_app_config.app_name)
     app = register_all_handlers(app, secrets_storage_app_config)
@@ -61,9 +59,7 @@ def create_secret(sanic_client: SanicASGITestClient, user_headers):
     async def create_secret_helper(name: str, value: str) -> dict[str, Any]:
         payload = {"name": name, "value": value}
 
-        _, response = await sanic_client.post(
-            "/api/secret/secrets", headers=user_headers, json=payload
-        )
+        _, response = await sanic_client.post("/api/secret/secrets", headers=user_headers, json=payload)
 
         assert response.status_code == 201, response.text
         return response.json
@@ -77,9 +73,7 @@ async def test_create_secrets(sanic_client: SanicASGITestClient, user_headers):
         "name": "my-secret",
         "value": "42",
     }
-    _, response = await sanic_client.post(
-        "/api/secret/secrets", headers=user_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/secret/secrets", headers=user_headers, json=payload)
 
     assert response.status_code == 201, response.text
     assert response.json is not None
@@ -90,18 +84,14 @@ async def test_create_secrets(sanic_client: SanicASGITestClient, user_headers):
 
 
 @pytest.mark.asyncio
-async def test_get_one_secret(
-    sanic_client: SanicASGITestClient, user_headers, create_secret
-):
+async def test_get_one_secret(sanic_client: SanicASGITestClient, user_headers, create_secret):
     await create_secret("secret-1", "value-1")
     secret = await create_secret("secret-2", "value-2")
     await create_secret("secret-3", "value-3")
 
     secret_id = secret["id"]
 
-    _, response = await sanic_client.get(
-        f"/api/secret/secrets/{secret_id}", headers=user_headers
-    )
+    _, response = await sanic_client.get(f"/api/secret/secrets/{secret_id}", headers=user_headers)
 
     assert response.status_code == 200, response.text
     assert response.json is not None
@@ -111,9 +101,7 @@ async def test_get_one_secret(
 
 
 @pytest.mark.asyncio
-async def test_get_all_secrets(
-    sanic_client: SanicASGITestClient, user_headers, create_secret
-):
+async def test_get_all_secrets(sanic_client: SanicASGITestClient, user_headers, create_secret):
     await create_secret("secret-1", "value-1")
     await create_secret("secret-2", "value-2")
     await create_secret("secret-3", "value-3")
@@ -127,18 +115,14 @@ async def test_get_all_secrets(
 
 
 @pytest.mark.asyncio
-async def test_get_delete_a_secret(
-    sanic_client: SanicASGITestClient, user_headers, create_secret
-):
+async def test_get_delete_a_secret(sanic_client: SanicASGITestClient, user_headers, create_secret):
     await create_secret("secret-1", "value-1")
     secret = await create_secret("secret-2", "value-2")
     await create_secret("secret-3", "value-3")
 
     secret_id = secret["id"]
 
-    _, response = await sanic_client.delete(
-        f"/api/secret/secrets/{secret_id}", headers=user_headers
-    )
+    _, response = await sanic_client.delete(f"/api/secret/secrets/{secret_id}", headers=user_headers)
 
     assert response.status_code == 204, response.text
 
@@ -150,9 +134,7 @@ async def test_get_delete_a_secret(
 
 
 @pytest.mark.asyncio
-async def test_get_update_a_secret(
-    sanic_client: SanicASGITestClient, user_headers, create_secret
-):
+async def test_get_update_a_secret(sanic_client: SanicASGITestClient, user_headers, create_secret):
     await create_secret("secret-1", "value-1")
     secret = await create_secret("secret-2", "value-2")
     await create_secret("secret-3", "value-3")
@@ -160,15 +142,11 @@ async def test_get_update_a_secret(
     secret_id = secret["id"]
     payload = {"name": "new-name", "value": "new-value"}
 
-    _, response = await sanic_client.patch(
-        f"/api/secret/secrets/{secret_id}", headers=user_headers, json=payload
-    )
+    _, response = await sanic_client.patch(f"/api/secret/secrets/{secret_id}", headers=user_headers, json=payload)
 
     assert response.status_code == 200, response.text
 
-    _, response = await sanic_client.get(
-        f"/api/secret/secrets/{secret_id}", headers=user_headers
-    )
+    _, response = await sanic_client.get(f"/api/secret/secrets/{secret_id}", headers=user_headers)
 
     assert response.status_code == 200, response.text
     assert response.json is not None
@@ -187,15 +165,10 @@ async def test_cannot_get_another_user_secret(
 
     secret_id = secret["id"]
 
-    _, response = await sanic_client.get(
-        f"/api/secret/secrets/{secret_id}", headers=admin_headers
-    )
+    _, response = await sanic_client.get(f"/api/secret/secrets/{secret_id}", headers=admin_headers)
 
     assert response.status_code == 404, response.text
-    assert (
-        "does not exist or you do not have access to it."
-        in response.json["error"]["message"]
-    )
+    assert "does not exist or you do not have access to it." in response.json["error"]["message"]
 
     _, response = await sanic_client.get("/api/secret/secrets", headers=admin_headers)
 
@@ -204,19 +177,12 @@ async def test_cannot_get_another_user_secret(
 
 
 @pytest.mark.asyncio
-async def test_anonymous_users_cannot_create_secrets(
-    sanic_client: SanicASGITestClient, unauthorized_headers
-):
+async def test_anonymous_users_cannot_create_secrets(sanic_client: SanicASGITestClient, unauthorized_headers):
     payload = {
         "name": "my-secret",
         "value": "42",
     }
-    _, response = await sanic_client.post(
-        "/api/secret/secrets", headers=unauthorized_headers, json=payload
-    )
+    _, response = await sanic_client.post("/api/secret/secrets", headers=unauthorized_headers, json=payload)
 
     assert response.status_code == 401, response.text
-    assert (
-        "You have to be authenticated to perform this operation."
-        in response.json["error"]["message"]
-    )
+    assert "You have to be authenticated to perform this operation." in response.json["error"]["message"]
