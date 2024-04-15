@@ -4,12 +4,9 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
-from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 
-from renku_data_services.app_config import Config
 from renku_data_services.base_models import APIUser
-from renku_data_services.data_api.app import register_all_handlers
 
 _valid_add_pinned_project: dict[str, Any] = {"project_slug": "user.1/first-project"}
 
@@ -17,13 +14,6 @@ _valid_add_pinned_project: dict[str, Any] = {"project_slug": "user.1/first-proje
 @pytest.fixture
 def valid_add_pinned_project_payload() -> dict[str, Any]:
     return _valid_add_pinned_project
-
-
-@pytest.fixture
-def test_client(app_config: Config) -> SanicASGITestClient:
-    app = Sanic(app_config.app_name)
-    app = register_all_handlers(app, app_config)
-    return SanicASGITestClient(app)
 
 
 @pytest.fixture
@@ -55,12 +45,12 @@ def api_user() -> APIUser:
 
 @pytest.mark.asyncio
 async def test_get_user_preferences(
-    test_client: SanicASGITestClient, valid_add_pinned_project_payload: dict[str, Any], api_user: APIUser
+    sanic_client: SanicASGITestClient, valid_add_pinned_project_payload: dict[str, Any], api_user: APIUser
 ):
-    _, res = await create_user_preferences(test_client, valid_add_pinned_project_payload, api_user)
+    _, res = await create_user_preferences(sanic_client, valid_add_pinned_project_payload, api_user)
     assert res.status_code == 200
 
-    _, res = await test_client.get(
+    _, res = await sanic_client.get(
         "/api/data/user/preferences",
         headers={"Authorization": f"bearer {api_user.access_token}"},
     )
@@ -76,12 +66,12 @@ async def test_get_user_preferences(
 
 @pytest.mark.asyncio
 async def test_post_user_preferences_pinned_projects(
-    test_client: SanicASGITestClient, valid_add_pinned_project_payload: dict[str, Any], api_user: APIUser
+    sanic_client: SanicASGITestClient, valid_add_pinned_project_payload: dict[str, Any], api_user: APIUser
 ):
-    _, res = await create_user_preferences(test_client, valid_add_pinned_project_payload, api_user)
+    _, res = await create_user_preferences(sanic_client, valid_add_pinned_project_payload, api_user)
     assert res.status_code == 200
 
-    _, res = await test_client.post(
+    _, res = await sanic_client.post(
         "/api/data/user/preferences/pinned_projects",
         headers={"Authorization": f"bearer {api_user.access_token}"},
         data=json.dumps(dict(project_slug="user.2/second-project")),
@@ -99,12 +89,12 @@ async def test_post_user_preferences_pinned_projects(
 
 @pytest.mark.asyncio
 async def test_post_user_preferences_pinned_projects_existing(
-    test_client: SanicASGITestClient, valid_add_pinned_project_payload: dict[str, Any], api_user: APIUser
+    sanic_client: SanicASGITestClient, valid_add_pinned_project_payload: dict[str, Any], api_user: APIUser
 ):
-    _, res = await create_user_preferences(test_client, valid_add_pinned_project_payload, api_user)
+    _, res = await create_user_preferences(sanic_client, valid_add_pinned_project_payload, api_user)
     assert res.status_code == 200
 
-    _, res = await test_client.post(
+    _, res = await sanic_client.post(
         "/api/data/user/preferences/pinned_projects",
         headers={"Authorization": f"bearer {api_user.access_token}"},
         data=json.dumps(valid_add_pinned_project_payload),
@@ -121,12 +111,12 @@ async def test_post_user_preferences_pinned_projects_existing(
 
 @pytest.mark.asyncio
 async def test_delete_user_preferences_pinned_projects(
-    test_client: SanicASGITestClient, valid_add_pinned_project_payload: dict[str, Any], api_user: APIUser
+    sanic_client: SanicASGITestClient, valid_add_pinned_project_payload: dict[str, Any], api_user: APIUser
 ):
-    _, res = await create_user_preferences(test_client, valid_add_pinned_project_payload, api_user)
+    _, res = await create_user_preferences(sanic_client, valid_add_pinned_project_payload, api_user)
     assert res.status_code == 200
 
-    _, res = await test_client.delete(
+    _, res = await sanic_client.delete(
         "/api/data/user/preferences/pinned_projects",
         params=dict(project_slug="user.1/first-project"),
         headers={"Authorization": f"bearer {api_user.access_token}"},
@@ -141,12 +131,12 @@ async def test_delete_user_preferences_pinned_projects(
 
 @pytest.mark.asyncio
 async def test_delete_user_preferences_pinned_projects_unknown(
-    test_client: SanicASGITestClient, valid_add_pinned_project_payload: dict[str, Any], api_user: APIUser
+    sanic_client: SanicASGITestClient, valid_add_pinned_project_payload: dict[str, Any], api_user: APIUser
 ):
-    _, res = await create_user_preferences(test_client, valid_add_pinned_project_payload, api_user)
+    _, res = await create_user_preferences(sanic_client, valid_add_pinned_project_payload, api_user)
     assert res.status_code == 200
 
-    _, res = await test_client.delete(
+    _, res = await sanic_client.delete(
         "/api/data/user/preferences/pinned_projects",
         params=dict(project_slug="user.2/second-project"),
         headers={"Authorization": f"bearer {api_user.access_token}"},

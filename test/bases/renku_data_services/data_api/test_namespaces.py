@@ -1,38 +1,4 @@
-import json
-
 import pytest
-
-from renku_data_services.users.models import UserInfo
-
-
-@pytest.fixture
-def users() -> list[UserInfo]:
-    return [
-        UserInfo("admin", "Admin", "Doe", "admin.doe@gmail.com"),
-        UserInfo("user", "User", "Doe", "user.doe@gmail.com"),
-        UserInfo("member-1", "Member-1", "Doe", "member-1.doe@gmail.com"),
-        UserInfo("member-2", "Member-2", "Doe", "member-2.doe@gmail.com"),
-    ]
-
-
-@pytest.fixture
-def admin_headers() -> dict[str, str]:
-    """Authentication headers for an admin user."""
-    access_token = json.dumps({"is_admin": True, "id": "admin", "name": "Admin User"})
-    return {"Authorization": f"Bearer {access_token}"}
-
-
-@pytest.fixture
-def user_headers() -> dict[str, str]:
-    """Authentication headers for a normal user."""
-    access_token = json.dumps({"is_admin": False, "id": "user", "name": "Normal User"})
-    return {"Authorization": f"Bearer {access_token}"}
-
-
-@pytest.fixture
-def unauthorized_headers() -> dict[str, str]:
-    """Authentication headers for an anonymous user (did not log in)."""
-    return {"Authorization": "Bearer {}"}
 
 
 @pytest.mark.asyncio
