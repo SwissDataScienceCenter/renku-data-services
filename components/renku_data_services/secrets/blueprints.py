@@ -14,7 +14,7 @@ from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface
 from renku_data_services.secrets import apispec
-from renku_data_services.users.db import UserSecretsRepo
+from renku_data_services.secrets.db import UserSecretsRepo
 from renku_data_services.utils.cryptography import decrypt_rsa
 
 

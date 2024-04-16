@@ -42,6 +42,26 @@ files = [
 ]
 
 [[package]]
+name = "anyio"
+version = "4.3.0"
+description = "High level compatibility layer for multiple asynchronous event loop implementations"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8"},
+    {file = "anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6"},
+]
+
+[package.dependencies]
+idna = ">=2.8"
+sniffio = ">=1.1"
+
+[package.extras]
+doc = ["Sphinx (>=7)", "packaging", "sphinx-autodoc-typehints (>=1.2.0)", "sphinx-rtd-theme"]
+test = ["anyio[trio]", "coverage[toml] (>=7)", "exceptiongroup (>=1.2.0)", "hypothesis (>=4.0)", "psutil (>=5.9)", "pytest (>=7.0)", "pytest-mock (>=3.6.1)", "trustme", "uvloop (>=0.17)"]
+trio = ["trio (>=0.23)"]
+
+[[package]]
 name = "asyncpg"
 version = "0.29.0"
 description = "An asyncio PostgreSQL driver"
@@ -655,6 +675,17 @@ docs = ["Sphinx", "furo"]
 test = ["objgraph", "psutil"]
 
 [[package]]
+name = "h11"
+version = "0.14.0"
+description = "A pure-Python, bring-your-own-I/O implementation of HTTP/1.1"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "h11-0.14.0-py3-none-any.whl", hash = "sha256:e3fe4ac4b851c468cc8363d500db52c2ead036020723024a109d37346efaa761"},
+    {file = "h11-0.14.0.tar.gz", hash = "sha256:8f19fbbe99e72420ff35c00b27a34cb9937e902a8b810e2c88300c6f0a3b699d"},
+]
+
+[[package]]
 name = "html5tagger"
 version = "1.3.0"
 description = "Pythonic HTML generation/templating (no template files)"
@@ -664,6 +695,27 @@ files = [
     {file = "html5tagger-1.3.0-py3-none-any.whl", hash = "sha256:ce14313515edffec8ed8a36c5890d023922641171b4e6e5774ad1a74998f5351"},
     {file = "html5tagger-1.3.0.tar.gz", hash = "sha256:84fa3dfb49e5c83b79bbd856ab7b1de8e2311c3bb46a8be925f119e3880a8da9"},
 ]
+
+[[package]]
+name = "httpcore"
+version = "0.16.3"
+description = "A minimal low-level HTTP client."
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "httpcore-0.16.3-py3-none-any.whl", hash = "sha256:da1fb708784a938aa084bde4feb8317056c55037247c787bd7e19eb2c2949dc0"},
+    {file = "httpcore-0.16.3.tar.gz", hash = "sha256:c5d6f04e2fc530f39e0c077e6a30caa53f1451096120f1f38b954afd0b17c0cb"},
+]
+
+[package.dependencies]
+anyio = ">=3.0,<5.0"
+certifi = "*"
+h11 = ">=0.13,<0.15"
+sniffio = "==1.*"
+
+[package.extras]
+http2 = ["h2 (>=3,<5)"]
+socks = ["socksio (==1.*)"]
 
 [[package]]
 name = "httptools"
@@ -712,6 +764,29 @@ files = [
 
 [package.extras]
 test = ["Cython (>=0.29.24,<0.30.0)"]
+
+[[package]]
+name = "httpx"
+version = "0.23.3"
+description = "The next generation HTTP client."
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "httpx-0.23.3-py3-none-any.whl", hash = "sha256:a211fcce9b1254ea24f0cd6af9869b3d29aba40154e947d2a07bb499b3e310d6"},
+    {file = "httpx-0.23.3.tar.gz", hash = "sha256:9818458eb565bb54898ccb9b8b251a28785dd4a55afbc23d0eb410754fe7d0f9"},
+]
+
+[package.dependencies]
+certifi = "*"
+httpcore = ">=0.15.0,<0.17.0"
+rfc3986 = {version = ">=1.3,<2", extras = ["idna2008"]}
+sniffio = "*"
+
+[package.extras]
+brotli = ["brotli", "brotlicffi"]
+cli = ["click (==8.*)", "pygments (==2.*)", "rich (>=10,<13)"]
+http2 = ["h2 (>=3,<5)"]
+socks = ["socksio (==1.*)"]
 
 [[package]]
 name = "idna"
@@ -1290,6 +1365,26 @@ plugins = ["importlib-metadata"]
 windows-terminal = ["colorama (>=0.4.6)"]
 
 [[package]]
+name = "pyjwt"
+version = "2.8.0"
+description = "JSON Web Token implementation in Python"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "PyJWT-2.8.0-py3-none-any.whl", hash = "sha256:59127c392cc44c2da5bb3192169a91f429924e17aff6534d70fdc02ab3e04320"},
+    {file = "PyJWT-2.8.0.tar.gz", hash = "sha256:57e28d156e3d5c10088e0c68abb90bfac3df82b40a71bd0daa20c65ccd5c23de"},
+]
+
+[package.dependencies]
+cryptography = {version = ">=3.4.0", optional = true, markers = "extra == \"crypto\""}
+
+[package.extras]
+crypto = ["cryptography (>=3.4.0)"]
+dev = ["coverage[toml] (==5.0.4)", "cryptography (>=3.4.0)", "pre-commit", "pytest (>=6.0.0,<7.0.0)", "sphinx (>=4.5.0,<5.0.0)", "sphinx-rtd-theme", "zope.interface"]
+docs = ["sphinx (>=4.5.0,<5.0.0)", "sphinx-rtd-theme", "zope.interface"]
+tests = ["coverage[toml] (==5.0.4)", "pytest (>=6.0.0,<7.0.0)"]
+
+[[package]]
 name = "python-dateutil"
 version = "2.9.0.post0"
 description = "Extensions to the standard Python datetime module"
@@ -1302,6 +1397,25 @@ files = [
 
 [package.dependencies]
 six = ">=1.5"
+
+[[package]]
+name = "python-gitlab"
+version = "3.15.0"
+description = "Interact with GitLab API"
+optional = false
+python-versions = ">=3.7.0"
+files = [
+    {file = "python-gitlab-3.15.0.tar.gz", hash = "sha256:c9e65eb7612a9fbb8abf0339972eca7fd7a73d4da66c9b446ffe528930aff534"},
+    {file = "python_gitlab-3.15.0-py3-none-any.whl", hash = "sha256:8f8d1c0d387f642eb1ac7bf5e8e0cd8b3dd49c6f34170cee3c7deb7d384611f3"},
+]
+
+[package.dependencies]
+requests = ">=2.25.0"
+requests-toolbelt = ">=0.10.1"
+
+[package.extras]
+autocompletion = ["argcomplete (>=1.10.0,<3)"]
+yaml = ["PyYaml (>=5.2)"]
 
 [[package]]
 name = "python-ulid"
@@ -1437,6 +1551,37 @@ requests = ">=2.0.0"
 
 [package.extras]
 rsa = ["oauthlib[signedtoken] (>=3.0.0)"]
+
+[[package]]
+name = "requests-toolbelt"
+version = "1.0.0"
+description = "A utility belt for advanced users of python-requests"
+optional = false
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
+files = [
+    {file = "requests-toolbelt-1.0.0.tar.gz", hash = "sha256:7681a0a3d047012b5bdc0ee37d7f8f07ebe76ab08caeccfc3921ce23c88d5bc6"},
+    {file = "requests_toolbelt-1.0.0-py2.py3-none-any.whl", hash = "sha256:cccfdd665f0a24fcf4726e690f65639d272bb0637b9b92dfd91a5568ccf6bd06"},
+]
+
+[package.dependencies]
+requests = ">=2.0.1,<3.0.0"
+
+[[package]]
+name = "rfc3986"
+version = "1.5.0"
+description = "Validating URI References per RFC 3986"
+optional = false
+python-versions = "*"
+files = [
+    {file = "rfc3986-1.5.0-py2.py3-none-any.whl", hash = "sha256:a86d6e1f5b1dc238b218b012df0aa79409667bb209e58da56d0b94704e712a97"},
+    {file = "rfc3986-1.5.0.tar.gz", hash = "sha256:270aaf10d87d0d4e095063c65bf3ddbc6ee3d0b226328ce21e036f946e421835"},
+]
+
+[package.dependencies]
+idna = {version = "*", optional = true, markers = "extra == \"idna2008\""}
+
+[package.extras]
+idna2008 = ["idna"]
 
 [[package]]
 name = "rsa"
@@ -1617,6 +1762,17 @@ files = [
 ]
 
 [[package]]
+name = "sniffio"
+version = "1.3.1"
+description = "Sniff out which async library your code is running under"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2"},
+    {file = "sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc"},
+]
+
+[[package]]
 name = "sortedcontainers"
 version = "2.4.0"
 description = "Sorted Containers -- Sorted List, Sorted Dict, Sorted Set"
@@ -1713,6 +1869,20 @@ postgresql-psycopg2cffi = ["psycopg2cffi"]
 postgresql-psycopgbinary = ["psycopg[binary] (>=3.0.7)"]
 pymysql = ["pymysql"]
 sqlcipher = ["sqlcipher3_binary"]
+
+[[package]]
+name = "tenacity"
+version = "8.2.3"
+description = "Retry code until it succeeds"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "tenacity-8.2.3-py3-none-any.whl", hash = "sha256:ce510e327a630c9e1beaf17d42e6ffacc88185044ad85cf74c0a8887c6a0f88c"},
+    {file = "tenacity-8.2.3.tar.gz", hash = "sha256:5398ef0d78e63f40007c1fb4c0bff96e1911394d2fa8d194f77619c05ff6cc8a"},
+]
+
+[package.extras]
+doc = ["reno", "sphinx", "tornado (>=4.5)"]
 
 [[package]]
 name = "tracerite"
@@ -1996,4 +2166,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "1c73a48491538301060d8debf1d06bffd79a25f4631e58a65590fd112f3f0fc3"
+content-hash = "658175c54302bac660fc94080bfbd3c6c45b13c37f3fc431008e2d6dfe89e204"

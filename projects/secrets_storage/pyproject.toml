@@ -27,6 +27,7 @@ packages = [
   { include = "renku_data_services/user_preferences", from = "../../components" },
   { include = "renku_data_services/users", from = "../../components" },
   { include = "renku_data_services/utils", from = "../../components" },
+  { include = "renku_data_services/namespace", from = "../../components" },
 ]
 
 [tool.poetry.dependencies]

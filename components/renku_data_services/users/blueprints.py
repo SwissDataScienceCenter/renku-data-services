@@ -10,9 +10,10 @@ import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.errors import errors
+from renku_data_services.secrets.db import UserSecretsRepo
+from renku_data_services.secrets.models import Secret
 from renku_data_services.users import apispec
-from renku_data_services.users.db import UserRepo, UserSecretsRepo
-from renku_data_services.users.models import Secret
+from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.cryptography import encrypt_rsa, encrypt_string
 
 

@@ -14,11 +14,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
-import httpx
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from jwt import PyJWKClient
-from tenacity import retry, stop_after_attempt, stop_after_delay, wait_fixed
 from yaml import safe_load
 
 import renku_data_services.base_models as base_models
@@ -48,27 +46,16 @@ from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
+from renku_data_services.secrets.db import UserSecretsRepo
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.user_preferences.config import UserPreferencesConfig
 from renku_data_services.user_preferences.db import UserPreferencesRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
-from renku_data_services.users.db import UserSecretsRepo
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
 from renku_data_services.users.models import UserInfo
-from renku_data_services.utils.core import get_ssl_context, merge_api_specs
-
-
-@retry(stop=(stop_after_attempt(20) | stop_after_delay(300)), wait=wait_fixed(2), reraise=True)
-def oidc_discovery(url: str, realm: str) -> dict[str, Any]:
-    """Get OIDC configuration."""
-    url = f"{url}/realms/{realm}/.well-known/openid-configuration"
-    res = httpx.get(url, verify=get_ssl_context())
-    if res.status_code == 200:
-        return res.json()
-    raise errors.ConfigurationError(message=f"Cannot successfully do OIDC discovery with url {url}.")
-
+from renku_data_services.utils.core import merge_api_specs, oidc_discovery
 
 default_resource_pool = models.ResourcePool(
     name="default",

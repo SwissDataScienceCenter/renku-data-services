@@ -12,13 +12,13 @@ from yaml import safe_load
 
 import renku_data_services.secrets
 from renku_data_services import base_models, errors
-from renku_data_services.app_config.config import oidc_discovery
 from renku_data_services.authn.dummy import DummyAuthenticator
 from renku_data_services.authn.keycloak import KeycloakAuthenticator
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface
 from renku_data_services.k8s.clients import DummyCoreClient, K8sCoreClient
-from renku_data_services.users.db import UserSecretsRepo
+from renku_data_services.secrets.db import UserSecretsRepo
+from renku_data_services.utils.core import oidc_discovery
 
 
 @dataclass

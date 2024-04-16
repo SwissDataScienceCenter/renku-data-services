@@ -4,12 +4,10 @@ import json
 import logging
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 from typing import Any
-
-from pydantic import BaseModel
 
 
 class KeycloakEvent(Enum):
@@ -249,13 +247,3 @@ class UserInfo:
                 "lastFailure": 0,
             },
         }
-
-
-@dataclass(eq=True, frozen=True)
-class Secret(BaseModel):
-    """Secret objects."""
-
-    name: str
-    encrypted_value: bytes = field(repr=False)
-    id: str | None = field(default=None)
-    modification_date: datetime = field(default_factory=lambda: datetime.now(UTC).replace(microsecond=0))
