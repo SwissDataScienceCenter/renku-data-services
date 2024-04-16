@@ -222,11 +222,6 @@ class ProjectRepository:
         )
         slug = schemas.ProjectSlug(project_slug, project_id=project.id, namespace_id=ns.id)
 
-        # project_dict = new_project.model_dump(exclude_none=True)
-        # project_dict["created_by"] = models.Member(id=user.id)
-        # project_model = models.Project.from_dict(project_dict)
-        # project = schemas.ProjectORM.load(project_model)
-
         session.add(slug)
         session.add(project)
         await session.flush()
@@ -240,44 +235,7 @@ class ProjectRepository:
             requested_by=user, project_id=project_model.id, public_project=public_project
         )
 
-        # # Need to commit() to get the timestamps
-        # async with session.begin_nested() as nested:
-        #     await nested.commit()
-
         return project.dump()
-        # ns = await self.group_repo.get_namespace(user, project.namespace)
-        # if not ns:
-        #     raise errors.MissingResourceError(
-        #         message=f"The project cannot be created because the namespace {project.namespace} does not exist"
-        #     )
-        # user_id = cast(str, user.id)
-        # repos = [schemas.ProjectRepositoryORM(url) for url in (project.repositories or [])]
-        # slug = project.slug or base_models.Slug.from_name(project.name).value
-        # project_orm = schemas.ProjectORM(
-        #     name=project.name,
-        #     visibility=(
-        #         models.Visibility(project.visibility) if isinstance(project.visibility, str) else project.visibility
-        #     ),
-        #     created_by_id=user_id,
-        #     description=project.description,
-        #     repositories=repos,
-        #     creation_date=datetime.now(UTC).replace(microsecond=0),
-        # )
-        # slug = schemas.ProjectSlug(slug, project_id=project_orm.id, namespace_id=ns.id)
-        # session.add(slug)
-        # session.add(project_orm)
-        # await session.flush()
-        # await session.refresh(project_orm)
-
-        # project_dump = project_orm.dump()
-        # public_project = project_dump.visibility == Visibility.public
-        # if project_dump.id is None:
-        #     raise errors.BaseError(detail="The created project does not have an ID but it should.")
-        # await self.project_authz.create_project(
-        #     requested_by=user, project_id=project_dump.id, public_project=public_project
-        # )
-
-        # return project_dump
 
     @with_db_transaction
     @dispatch_message(create_project_update_message)
@@ -302,7 +260,7 @@ class ProjectRepository:
             raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
 
         visibility_before = project.visibility
-        session.add(project) # reattach to session
+
         if "repositories" in payload:
             payload["repositories"] = [
                 schemas.ProjectRepositoryORM(url=r, project_id=project_id, project=project)
@@ -323,13 +281,16 @@ class ProjectRepository:
             if not ns:
                 raise errors.MissingResourceError(message=f"The namespace with slug {ns_slug} does not exist")
             project.slug.namespace_id = ns.id
-            await session.refresh(project)
+            # await session.refresh(project)
 
         if visibility_before != project.visibility:
             public_project = project.visibility == Visibility.public
             await self.project_authz.update_project_visibility(
                 requested_by=user, project_id=project_id, public_project=public_project
             )
+
+        await session.flush()
+        await session.refresh(project)
 
         return project.dump()  # NOTE: Triggers validation before the transaction saves data
 
