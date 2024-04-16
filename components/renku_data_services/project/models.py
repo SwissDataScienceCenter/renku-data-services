@@ -1,12 +1,11 @@
 """Models for project."""
 
-import re
-import unicodedata
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from typing import Dict, List, Optional
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel, Field
+
 from renku_data_services import base_models, errors
 from renku_data_services.project.apispec import Role, Visibility
 from renku_data_services.utils.etag import compute_etag_from_timestamp
@@ -42,10 +41,10 @@ class Project(BaseModel):
     slug: str
     namespace: str
     visibility: Visibility
-    created_by: Member
+    created_by: str
     creation_date: datetime | None = Field(default=None)
     updated_at: datetime | None = Field(default=None)
-    repositories: List[Repository] = Field(default_factory=list)
+    repositories: list[Repository] = Field(default_factory=list)
     description: Optional[str] = None
 
     @property

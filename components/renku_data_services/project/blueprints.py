@@ -2,20 +2,18 @@
 
 from dataclasses import dataclass
 
+from sanic import HTTPResponse, Request, json
+from sanic_ext import validate
+
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
-from renku_data_services.base_api.blueprint import (BlueprintFactoryResponse,
-                                                    CustomBlueprint)
+from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.etag import if_match_required
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.errors import errors
 from renku_data_services.project import apispec
-from renku_data_services.project.apispec import FullUserWithRole, UserWithId
-from renku_data_services.project.db import (ProjectMemberRepository,
-                                            ProjectRepository)
+from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
 from renku_data_services.users.db import UserRepo
-from sanic import HTTPResponse, Request, json
-from sanic_ext import validate
 
 
 @dataclass(kw_only=True)

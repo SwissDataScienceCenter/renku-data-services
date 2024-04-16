@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from asyncio import gather
 from collections.abc import Callable
-from datetime import UTC, datetime
-from typing import Any, Callable, Dict, List, NamedTuple, Tuple, cast
+from typing import Any, NamedTuple, cast
+
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
@@ -13,14 +15,10 @@ from renku_data_services.authz import models as authz_models
 from renku_data_services.authz.authz import IProjectAuthorizer
 from renku_data_services.authz.models import MemberQualifier, Scope
 from renku_data_services.base_api.pagination import PaginationRequest
-from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_created import \
-    ProjectCreated
-from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_removed import \
-    ProjectRemoved
-from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_updated import \
-    ProjectUpdated
-from renku_data_services.message_queue.avro_models.io.renku.events.v1.visibility import \
-    Visibility as MsgVisibility
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_created import ProjectCreated
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_removed import ProjectRemoved
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_updated import ProjectUpdated
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.visibility import Visibility as MsgVisibility
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import dispatch_message
@@ -29,8 +27,6 @@ from renku_data_services.project import apispec, models
 from renku_data_services.project import orm as schemas
 from renku_data_services.project.apispec import Role, Visibility
 from renku_data_services.utils.core import with_db_transaction
-from sqlalchemy import delete, func, select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
 
 def convert_to_authz_role(role: Role) -> authz_models.Role:
@@ -74,6 +70,7 @@ def create_project_created_message(result: models.Project, *_, **__) -> ProjectC
         description=result.description,
         createdBy=result.created_by,
         creationDate=result.creation_date,
+        keywords=[],
     )
 
 
@@ -95,6 +92,7 @@ def create_project_update_message(result: models.Project, *_, **__) -> ProjectUp
         repositories=result.repositories,
         visibility=vis,
         description=result.description,
+        keywords=[],
     )
 
 
@@ -200,15 +198,39 @@ class ProjectRepository:
         self, session: AsyncSession, user: base_models.APIUser, new_project=apispec.ProjectPost
     ) -> models.Project:
         """Insert a new project entry."""
+        ns = await self.group_repo.get_namespace(user, new_project.namespace)
+        if not ns:
+            raise errors.MissingResourceError(
+                message=f"The project cannot be created because the namespace {new_project.namespace} does not exist"
+            )
+
         if user.id is None:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
-        project_dict = new_project.model_dump(exclude_none=True)
-        project_dict["created_by"] = models.Member(id=user.id)
-        project_model = models.Project.from_dict(project_dict)
-        project = schemas.ProjectORM.load(project_model)
+        repositories = [schemas.ProjectRepositoryORM(url) for url in (new_project.repositories or [])]
+        project_slug = new_project.slug or base_models.Slug.from_name(new_project.name).value
+        project = schemas.ProjectORM(
+            name=new_project.name,
+            visibility=(
+                models.Visibility(new_project.visibility)
+                if isinstance(new_project.visibility, str)
+                else new_project.visibility
+            ),
+            created_by_id=user.id,
+            description=new_project.description,
+            repositories=repositories,
+        )
+        slug = schemas.ProjectSlug(project_slug, project_id=project.id, namespace_id=ns.id)
 
+        # project_dict = new_project.model_dump(exclude_none=True)
+        # project_dict["created_by"] = models.Member(id=user.id)
+        # project_model = models.Project.from_dict(project_dict)
+        # project = schemas.ProjectORM.load(project_model)
+
+        session.add(slug)
         session.add(project)
+        await session.flush()
+        await session.refresh(project)
 
         project_model = project.dump()
         public_project = project_model.visibility == Visibility.public
@@ -218,9 +240,9 @@ class ProjectRepository:
             requested_by=user, project_id=project_model.id, public_project=public_project
         )
 
-        # Need to commit() to get the timestamps
-        async with session.begin_nested() as nested:
-            await nested.commit()
+        # # Need to commit() to get the timestamps
+        # async with session.begin_nested() as nested:
+        #     await nested.commit()
 
         return project.dump()
         # ns = await self.group_repo.get_namespace(user, project.namespace)

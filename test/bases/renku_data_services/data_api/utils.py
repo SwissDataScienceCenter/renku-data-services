@@ -26,7 +26,7 @@ async def create_user_preferences(
     )
 
 
-def merge_headers(*headers: Dict[str, str]) -> Dict[str, str]:
+def merge_headers(*headers: dict[str, str]) -> dict[str, str]:
     """Merge multiple headers."""
     all_headers = dict()
     for h in headers:

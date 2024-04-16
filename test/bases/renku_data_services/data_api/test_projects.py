@@ -2,8 +2,6 @@
 
 import time
 from test.bases.renku_data_services.data_api.utils import merge_headers
-from test.bases.renku_data_services.keycloak_sync.test_sync import get_kc_users
-from typing import Any, Dict, List
 from typing import Any
 
 import pytest

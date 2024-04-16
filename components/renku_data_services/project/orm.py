@@ -47,17 +47,17 @@ class ProjectORM(BaseORM):
         repr=False,
     )
 
-    @classmethod
-    def load(cls, project: models.Project):
-        """Create ProjectORM from the project model."""
-        return cls(
-            name=project.name,
-            slug=project.slug,
-            visibility=project.visibility,
-            created_by_id=project.created_by.id,
-            repositories=[ProjectRepositoryORM(url=r) for r in project.repositories],
-            description=project.description,
-        )
+    # @classmethod
+    # def load(cls, project: models.Project):
+    #     """Create ProjectORM from the project model."""
+    #     return cls(
+    #         name=project.name,
+    #         slug=project.slug,
+    #         visibility=project.visibility,
+    #         created_by_id=project.created_by.id,
+    #         repositories=[ProjectRepositoryORM(url=r) for r in project.repositories],
+    #         description=project.description,
+    #     )
 
     def dump(self) -> models.Project:
         """Create a project model from the ProjectORM."""
