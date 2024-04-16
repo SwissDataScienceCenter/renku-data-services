@@ -17,6 +17,16 @@ async def apispec(sanic_client: SanicASGITestClient) -> BaseOpenAPISchema:
     # and some of these can break the header normalization that httpx library uses to send requests.
     # See https://github.com/schemathesis/schemathesis/issues/1142
     schema["security"] = []
+
+    # Same issue as for "security" for the "If-Match" header.
+    # For some odd reason, schemathesis will not apply filtering if no "format" is specified on a header.
+    if (
+        "components" in schema
+        and "parameters" in schema["components"]
+        and "If-Match" in schema["components"]["parameters"]
+    ):
+        schema["components"]["parameters"]["If-Match"]["schema"]["format"] = "special"
+
     return schemathesis.from_dict(schema)
 
 
