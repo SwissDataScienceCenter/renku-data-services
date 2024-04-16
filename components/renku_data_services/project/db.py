@@ -302,7 +302,7 @@ class ProjectRepository:
             raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
 
         visibility_before = project.visibility
-
+        session.add(project) # reattach to session
         if "repositories" in payload:
             payload["repositories"] = [
                 schemas.ProjectRepositoryORM(url=r, project_id=project_id, project=project)
