@@ -3,7 +3,6 @@ from test.components.renku_data_services.user_preferences_models.hypothesis impo
     project_slugs_strat,
 )
 from test.utils import create_user_preferences
-from typing import List
 
 import pytest
 from hypothesis import HealthCheck, given, settings, target
@@ -28,7 +27,7 @@ async def test_user_preferences_insert_get(project_slug: str, app_config: Config
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None, max_examples=25)
 @pytest.mark.asyncio
 async def test_user_preferences_add_pinned_project(
-    project_slugs: List[str], app_config: Config, loggedin_user: base_models.APIUser
+    project_slugs: list[str], app_config: Config, loggedin_user: base_models.APIUser
 ):
     target(len(project_slugs))
     user_preferences_repo = app_config.user_preferences_repo
@@ -50,7 +49,7 @@ async def test_user_preferences_add_pinned_project(
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None, max_examples=25)
 @pytest.mark.asyncio
 async def test_user_preferences_add_pinned_project_existing(
-    project_slugs: List[str], app_config: Config, loggedin_user: base_models.APIUser
+    project_slugs: list[str], app_config: Config, loggedin_user: base_models.APIUser
 ):
     target(len(project_slugs))
     user_preferences_repo = app_config.user_preferences_repo
@@ -73,7 +72,7 @@ async def test_user_preferences_add_pinned_project_existing(
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None, max_examples=25)
 @pytest.mark.asyncio
 async def test_user_preferences_delete_pinned_project(
-    project_slugs: List[str], app_config: Config, loggedin_user: base_models.APIUser
+    project_slugs: list[str], app_config: Config, loggedin_user: base_models.APIUser
 ):
     target(len(project_slugs))
     user_preferences_repo = app_config.user_preferences_repo
@@ -97,7 +96,7 @@ async def test_user_preferences_delete_pinned_project(
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None, max_examples=25)
 @pytest.mark.asyncio
 async def test_user_preferences_add_pinned_project_respects_maximum(
-    project_slugs: List[str], app_config: Config, loggedin_user: base_models.APIUser
+    project_slugs: list[str], app_config: Config, loggedin_user: base_models.APIUser
 ):
     target(len(project_slugs))
     user_preferences_repo = app_config.user_preferences_repo

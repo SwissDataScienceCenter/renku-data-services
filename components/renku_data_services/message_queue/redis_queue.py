@@ -5,13 +5,14 @@ import copy
 import glob
 import inspect
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from functools import wraps
 from io import BytesIO
 from pathlib import Path
 from types import NoneType, UnionType
-from typing import Callable, Optional, Type, TypeVar, Union
+from typing import Optional, TypeVar, Union
 
 from dataclasses_avroschema.schema_generator import AvroModel
 from dataclasses_avroschema.utils import standardize_custom_type
@@ -62,7 +63,7 @@ def serialize_binary(obj: AvroModel) -> bytes:
 T = TypeVar("T", bound=AvroModel)
 
 
-def deserialize_binary(data: bytes, model: Type[T]) -> T:
+def deserialize_binary(data: bytes, model: type[T]) -> T:
     """Deserialize an avro binary message, using the original schema."""
     input_stream = BytesIO(data)
     schema = parse_schema(schema=json.loads(getattr(model, "_schema", model.avro_schema())), named_schemas=_schemas)

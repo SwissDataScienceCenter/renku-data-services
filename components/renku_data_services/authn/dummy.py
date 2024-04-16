@@ -4,7 +4,7 @@ import contextlib
 import json
 from asyncio import Lock
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Optional
 
 from sanic import Request
 
@@ -15,7 +15,7 @@ class DummyUserStore:
     """A dummy adapter for keycloak. By default, it will create and return users that do not exist."""
 
     def __init__(self, *, user_always_exists: bool = True):
-        self._users: Dict[str, base_models.User] = {}
+        self._users: dict[str, base_models.User] = {}
         self._lock = Lock()
         self.user_always_exists = user_always_exists
 

@@ -66,6 +66,30 @@ class NoDefaultPoolAccessError(BaseError):
 
 
 @dataclass
+class GeneralBadRequest(BaseError):
+    """Raised for a 400 status code - when the server cannot or will not process the request."""
+
+    code: int = 1400
+    message: str = "The request is invalid, malformed or non-sensical and cannot be fulfilled."
+    status_code: int = 400
+
+
+@dataclass
+class UpdatingWithStaleContentError(BaseError):
+    """Raised when the request content for an update is old or outdated.
+
+    Mostly used when an old resource slug is used to patch a resource. In these cases it is hard for the
+    server to understand what is the intention of the client. The best option in this case is for the client
+    to refresh its state and send a new request with the latest slug for the resource in question.
+    """
+
+    code: int = 1409
+    message: str = "The content of the update request is out of date."
+    detail: str = "Please refresh the state on the client by sending a GET request and retry the update."
+    status_code: int = 409
+
+
+@dataclass
 class ProgrammingError(BaseError):
     """Raised an irrecoverable programming error or bug occurs."""
 

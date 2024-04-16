@@ -7,9 +7,10 @@ it all in one place.
 """
 
 from asyncio import gather
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from functools import wraps
-from typing import Callable, Dict, List, Optional, Sequence, Tuple, cast
+from typing import Optional, cast
 
 from sqlalchemy import NullPool, create_engine, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +23,7 @@ from renku_data_services import errors
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
 from renku_data_services.k8s.quota import QuotaRepository
+from renku_data_services.users.db import UserRepo
 
 
 class _Base:
@@ -32,8 +34,8 @@ class _Base:
 
 def _resource_pool_access_control(
     api_user: base_models.APIUser,
-    stmt: Select[Tuple[schemas.ResourcePoolORM]],
-) -> Select[Tuple[schemas.ResourcePoolORM]]:
+    stmt: Select[tuple[schemas.ResourcePoolORM]],
+) -> Select[tuple[schemas.ResourcePoolORM]]:
     """Modifies a select query to list resource pools based on whether the user is logged in or not."""
     output = stmt
     match (api_user.is_authenticated, api_user.is_admin):
@@ -71,8 +73,8 @@ def _resource_pool_access_control(
 
 def _classes_user_access_control(
     api_user: base_models.APIUser,
-    stmt: Select[Tuple[schemas.ResourceClassORM]],
-) -> Select[Tuple[schemas.ResourceClassORM]]:
+    stmt: Select[tuple[schemas.ResourceClassORM]],
+) -> Select[tuple[schemas.ResourceClassORM]]:
     """Adjust the select statement for classes based on whether the user is logged in or not."""
     output = stmt
     match (api_user.is_authenticated, api_user.is_admin):
@@ -155,7 +157,7 @@ class ResourcePoolRepository(_Base):
 
     async def get_resource_pools(
         self, api_user: base_models.APIUser, id: Optional[int] = None, name: Optional[str] = None
-    ) -> List[models.ResourcePool]:
+    ) -> list[models.ResourcePool]:
         """Get resource pools from database."""
         async with self.session_maker() as session:
             stmt = select(schemas.ResourcePoolORM).options(selectinload(schemas.ResourcePoolORM.classes))
@@ -167,7 +169,7 @@ class ResourcePoolRepository(_Base):
             stmt = _resource_pool_access_control(api_user, stmt)
             res = await session.execute(stmt)
             orms = res.scalars().all()
-            output: List[models.ResourcePool] = []
+            output: list[models.ResourcePool] = []
             for rp in orms:
                 quota = self.quotas_repo.get_quota(rp.quota) if rp.quota else None
                 output.append(rp.dump(quota))
@@ -180,7 +182,7 @@ class ResourcePoolRepository(_Base):
         memory: int = 0,
         max_storage: int = 0,
         gpu: int = 0,
-    ) -> List[models.ResourcePool]:
+    ) -> list[models.ResourcePool]:
         """Get resource pools from database with indication of which resource class matches the specified crtieria."""
         async with self.session_maker() as session:
             criteria = models.ResourceClass(
@@ -241,7 +243,7 @@ class ResourcePoolRepository(_Base):
         id: Optional[int] = None,
         name: Optional[str] = None,
         resource_pool_id: Optional[int] = None,
-    ) -> List[models.ResourceClass]:
+    ) -> list[models.ResourceClass]:
         """Get classes from the database."""
         async with self.session_maker() as session:
             stmt = select(schemas.ResourceClassORM).join(
@@ -431,9 +433,9 @@ class ResourcePoolRepository(_Base):
             for k, v in kwargs.items():
                 match k:
                     case "node_affinities":
-                        v = cast(List[Dict[str, str | bool]], v)
-                        existing_affinities: Dict[str, schemas.NodeAffintyORM] = {i.key: i for i in cls.node_affinities}
-                        new_affinities: Dict[str, schemas.NodeAffintyORM] = {
+                        v = cast(list[dict[str, str | bool]], v)
+                        existing_affinities: dict[str, schemas.NodeAffintyORM] = {i.key: i for i in cls.node_affinities}
+                        new_affinities: dict[str, schemas.NodeAffintyORM] = {
                             i["key"]: schemas.NodeAffintyORM(**i) for i in v
                         }
                         for new_affinity_key, new_affinity in new_affinities.items():
@@ -456,11 +458,11 @@ class ResourcePoolRepository(_Base):
                                 if existing_affinity_key not in new_affinities:
                                     cls.node_affinities.remove(existing_affinity)
                     case "tolerations":
-                        v = cast(List[str], v)
-                        existing_tolerations: Dict[str, schemas.TolerationORM] = {
+                        v = cast(list[str], v)
+                        existing_tolerations: dict[str, schemas.TolerationORM] = {
                             tol.key: tol for tol in cls.tolerations
                         }
-                        new_tolerations: Dict[str, schemas.TolerationORM] = {
+                        new_tolerations: dict[str, schemas.TolerationORM] = {
                             tol: schemas.TolerationORM(key=tol) for tol in v
                         }
                         for new_tol_key, new_tol in new_tolerations.items():
@@ -488,7 +490,7 @@ class ResourcePoolRepository(_Base):
             return cls_model
 
     @_only_admins
-    async def get_tolerations(self, api_user: base_models.APIUser, resource_pool_id: int, class_id: int) -> List[str]:
+    async def get_tolerations(self, api_user: base_models.APIUser, resource_pool_id: int, class_id: int) -> list[str]:
         """Get all tolerations of a resource class."""
         async with self.session_maker() as session:
             res_classes = await self.get_classes(api_user, class_id, resource_pool_id=resource_pool_id)
@@ -517,7 +519,7 @@ class ResourcePoolRepository(_Base):
     @_only_admins
     async def get_affinities(
         self, api_user: base_models.APIUser, resource_pool_id: int, class_id: int
-    ) -> List[models.NodeAffinity]:
+    ) -> list[models.NodeAffinity]:
         """Get all affinities for a resource class."""
         async with self.session_maker() as session:
             res_classes = await self.get_classes(api_user, class_id, resource_pool_id=resource_pool_id)
@@ -549,12 +551,16 @@ class RespositoryUsers:
     """Information about which users can access a specific resource pool."""
 
     resource_pool_id: int
-    allowed: List[base_models.User] = field(default_factory=list)
-    disallowed: List[base_models.User] = field(default_factory=list)
+    allowed: list[base_models.User] = field(default_factory=list)
+    disallowed: list[base_models.User] = field(default_factory=list)
 
 
 class UserRepository(_Base):
-    """The adapter used for accessing users with SQLAlchemy."""
+    """The adapter used for accessing resource pool users with SQLAlchemy."""
+
+    def __init__(self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository, user_repo: UserRepo):
+        super().__init__(session_maker, quotas_repo)
+        self.kc_user_repo = user_repo
 
     @_only_admins
     async def get_resource_pool_users(
@@ -589,8 +595,8 @@ class UserRepository(_Base):
                     await session.execute(select(schemas.RPUserORM).where(schemas.RPUserORM.keycloak_id == keycloak_id))
                 ).scalar_one_or_none()
                 specific_user = None if not specific_user_res else specific_user_res.dump()
-            allowed: List[base_models.User] = []
-            disallowed: List[base_models.User] = []
+            allowed: list[base_models.User] = []
+            disallowed: list[base_models.User] = []
             if rp.default:
                 disallowed_stmt = select(schemas.RPUserORM).where(schemas.RPUserORM.no_default_access == true())
                 if keycloak_id:
@@ -606,48 +612,13 @@ class UserRepository(_Base):
                 allowed = [user.dump() for user in rp.users]
             return RespositoryUsers(rp.id, allowed, disallowed)
 
-    @_only_admins
-    async def get_users(
-        self,
-        *,
-        api_user: base_models.APIUser,
-        id: str | None = None,
-    ) -> List[base_models.User]:
-        """Get users from the users-resource pools access lists."""
-        async with self.session_maker() as session, session.begin():
-            stmt = select(schemas.RPUserORM)
-            if id:
-                stmt.where(schemas.RPUserORM.keycloak_id == id)
-            res = await session.execute(stmt)
-            return [user.dump() for user in res.scalars().all()]
-
-    @_only_admins
-    async def insert_user(self, api_user: base_models.APIUser, user: base_models.User) -> base_models.User:
-        """Insert a user in the resource pool access lists."""
-        orm = schemas.RPUserORM.load(user)
-        async with self.session_maker() as session, session.begin():
-            session.add(orm)
-        return orm.dump()
-
-    @_only_admins
-    async def delete_user(self, api_user: base_models.APIUser, id: str):
-        """Remove a user from the resource pool access lists."""
-        async with self.session_maker() as session, session.begin():
-            stmt = select(schemas.RPUserORM).where(schemas.RPUserORM.keycloak_id == id)
-            res = await session.execute(stmt)
-            user = res.scalars().first()
-            if user is None:
-                return None
-            await session.delete(user)
-        return None
-
     async def get_user_resource_pools(
         self,
         api_user: base_models.APIUser,
         keycloak_id: str,
         resource_pool_id: Optional[int] = None,
         resource_pool_name: Optional[str] = None,
-    ) -> List[models.ResourcePool]:
+    ) -> list[models.ResourcePool]:
         """Get resource pools that a specific user has access to."""
         async with self.session_maker() as session, session.begin():
             if not api_user.is_admin and api_user.id != keycloak_id:
@@ -670,7 +641,7 @@ class UserRepository(_Base):
             stmt = _resource_pool_access_control(api_user, stmt)
             res = await session.execute(stmt)
             rps: Sequence[schemas.ResourcePoolORM] = res.scalars().all()
-            output: List[models.ResourcePool] = []
+            output: list[models.ResourcePool] = []
             for rp in rps:
                 quota = self.quotas_repo.get_quota(rp.quota) if rp.quota else None
                 output.append(rp.dump(quota))
@@ -678,19 +649,23 @@ class UserRepository(_Base):
 
     @_only_admins
     async def update_user_resource_pools(
-        self, api_user: base_models.APIUser, keycloak_id: str, resource_pool_ids: List[int], append: bool = True
-    ) -> List[models.ResourcePool]:
+        self, api_user: base_models.APIUser, keycloak_id: str, resource_pool_ids: list[int], append: bool = True
+    ) -> list[models.ResourcePool]:
         """Update the resource pools that a specific user has access to."""
         async with self.session_maker() as session, session.begin():
+            kc_user = await self.kc_user_repo.get_user(api_user, keycloak_id)
+            if kc_user is None:
+                raise errors.MissingResourceError(message=f"The user with ID {keycloak_id} does not exist")
             stmt = (
                 select(schemas.RPUserORM)
                 .where(schemas.RPUserORM.keycloak_id == keycloak_id)
                 .options(selectinload(schemas.RPUserORM.resource_pools))
             )
             res = await session.execute(stmt)
-            user: Optional[schemas.RPUserORM] = res.scalars().first()
+            user = res.scalars().first()
             if user is None:
-                raise errors.MissingResourceError(message=f"The user with keycloak id {keycloak_id} does not exist")
+                user = schemas.RPUserORM(keycloak_id=keycloak_id)
+                session.add(user)
             stmt_rp = (
                 select(schemas.ResourcePoolORM)
                 .where(schemas.ResourcePoolORM.id.in_(resource_pool_ids))
@@ -718,7 +693,7 @@ class UserRepository(_Base):
                 user.resource_pools.extend(rps_to_add)
             else:
                 user.resource_pools = list(rps_to_add)
-            output: List[models.ResourcePool] = []
+            output: list[models.ResourcePool] = []
             for rp in rps_to_add:
                 quota = self.quotas_repo.get_quota(rp.quota) if rp.quota else None
                 output.append(rp.dump(quota))
@@ -739,8 +714,8 @@ class UserRepository(_Base):
 
     @_only_admins
     async def update_resource_pool_users(
-        self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: List[str], append: bool = True
-    ) -> List[base_models.User]:
+        self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: list[str], append: bool = True
+    ) -> list[base_models.User]:
         """Update the users to have access to a specific resource pool."""
         async with self.session_maker() as session, session.begin():
             stmt = (

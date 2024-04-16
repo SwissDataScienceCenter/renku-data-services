@@ -1,5 +1,5 @@
 """Models for user preferences."""
-from typing import List, Optional
+from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 class PinnedProjects(BaseModel):
     """Pinned projects model."""
 
-    project_slugs: Optional[List[str]] = None
+    project_slugs: Optional[list[str]] = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "PinnedProjects":

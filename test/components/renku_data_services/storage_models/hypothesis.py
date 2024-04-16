@@ -19,14 +19,26 @@ def s3_configuration(draw):
             keys=st.just("provider"), values=st.sampled_from(["Other", "AWS", "GCS"]), min_size=0, max_size=1
         )
     )
-    region = draw(st.dictionaries(keys=st.just("region"), values=st.text(), min_size=0, max_size=1))
+    region = draw(
+        st.dictionaries(
+            keys=st.just("region"),
+            values=st.text(alphabet=st.characters(codec="utf-8", exclude_characters=["\x00"])),
+            min_size=0,
+            max_size=1,
+        )
+    )
     endpoint = draw(st.dictionaries(keys=st.just("endpoint"), values=urls(), min_size=0))
     return {"type": "s3", **providers, **region, **endpoint}
 
 
 @st.composite
 def azure_configuration(draw):
-    account = draw(st.dictionaries(keys=st.just("account"), values=st.text(min_size=5)))
+    account = draw(
+        st.dictionaries(
+            keys=st.just("account"),
+            values=st.text(min_size=5, alphabet=st.characters(codec="utf-8", exclude_characters=["\x00"])),
+        )
+    )
     endpoint = draw(st.dictionaries(keys=st.just("endpoint"), values=urls(), min_size=0))
     return {"type": "azureblob", **account, **endpoint}
 

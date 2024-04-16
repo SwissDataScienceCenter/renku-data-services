@@ -1,5 +1,3 @@
-from typing import Dict
-
 from hypothesis import assume
 from hypothesis import strategies as st
 
@@ -8,7 +6,7 @@ from renku_data_services import errors
 from renku_data_services.crc import models
 
 
-def make_cpu_float(data) -> Dict[str, int | float]:
+def make_cpu_float(data) -> dict[str, int | float]:
     if "cpu" in data:
         data["cpu"] = float(data["cpu"])
     return data
@@ -25,7 +23,7 @@ a_quota_gpu = st.integers(min_value=200, max_value=1000)
 a_quota_storage = st.integers(min_value=2000, max_value=10000)
 a_quota_memory = st.integers(min_value=64, max_value=1000)
 a_row_id = st.integers(min_value=1, max_value=SQL_BIGINT_MAX)
-a_name = st.text(min_size=5)
+a_name = st.text(min_size=5, alphabet=st.characters(codec="utf-8", exclude_characters=["\x00"]))
 a_uuid_string = st.uuids(version=4).map(lambda x: str(x))
 a_bool = st.booleans()
 a_tolerations_list = st.lists(a_uuid_string, min_size=3, max_size=3)

@@ -1,9 +1,9 @@
 """Database adapters and helpers for users."""
-import asyncio
 import logging
+from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime, timedelta
-from typing import Any, Callable, Dict, List
+from typing import Any
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +16,7 @@ from renku_data_services.message_queue.avro_models.io.renku.events.v1.user_updat
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import dispatch_message
+from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.users.kc_api import IKeycloakAPI
 from renku_data_services.users.models import KeycloakAdminEvent, UserInfo, UserInfoUpdate
 from renku_data_services.users.orm import LastKeycloakEventTimestamp, UserORM
@@ -30,9 +31,10 @@ class UserRepo:
         session_maker: Callable[..., AsyncSession],
         message_queue: IMessageQueue,
         event_repo: EventRepository,
+        group_repo: GroupRepository,
     ):
         self.session_maker = session_maker
-        self._users_sync = UsersSync(self.session_maker, message_queue, event_repo)
+        self._users_sync = UsersSync(self.session_maker, message_queue, event_repo, group_repo)
 
     async def initialize(self, kc_api: IKeycloakAPI):
         """Do a total sync of users from Keycloak if there is nothing in the DB."""
@@ -83,7 +85,7 @@ class UserRepo:
             return user
 
     @only_authenticated
-    async def get_users(self, requested_by: APIUser, email: str | None = None) -> List[UserInfo]:
+    async def get_users(self, requested_by: APIUser, email: str | None = None) -> list[UserInfo]:
         """Get users from the database."""
         if not email and not requested_by.is_admin:
             raise errors.Unauthorized(message="Non-admin users cannot list all users.")
@@ -96,7 +98,7 @@ class UserRepo:
             users.append(api_user_info)
         return users
 
-    async def _get_users(self, email: str | None = None) -> List[UserInfo]:
+    async def _get_users(self, email: str | None = None) -> list[UserInfo]:
         async with self.session_maker() as session:
             stmt = select(UserORM)
             if email:
@@ -129,10 +131,12 @@ class UsersSync:
         session_maker: Callable[..., AsyncSession],
         message_queue: IMessageQueue,
         event_repo: EventRepository,
+        group_repo: GroupRepository,
     ):
         self.session_maker = session_maker
         self.message_queue: IMessageQueue = message_queue
         self.event_repo: EventRepository = event_repo
+        self.group_repo = group_repo
 
     async def _get_user(self, id) -> UserInfo | None:
         """Get a specific user."""
@@ -142,7 +146,7 @@ class UsersSync:
             orm = res.scalar_one_or_none()
             return orm.dump() if orm else None
 
-    async def update_or_insert_user(self, user_id: str, **kwargs):
+    async def update_or_insert_user(self, user_id: str, **kwargs) -> UserORM:
         """Update a user or insert it if it does not exist."""
         async with self.session_maker() as session, session.begin():
             res = await session.execute(select(UserORM).where(UserORM.keycloak_id == user_id))
@@ -154,17 +158,21 @@ class UsersSync:
 
     @with_db_transaction
     @dispatch_message(create_user_added_message)
-    async def insert_user(self, session: AsyncSession, user_id: str, **kwargs):
+    async def insert_user(self, session: AsyncSession, user_id: str, **kwargs) -> UserInfo:
         """Insert a user."""
         kwargs.pop("keycloak_id", None)
         kwargs.pop("id", None)
         new_user = UserORM(keycloak_id=user_id, **kwargs)
         session.add(new_user)
+        await session.flush()
+        await self.group_repo.insert_user_namespace(new_user, session, retry_enumerate=5, retry_random=True)
         return new_user.dump()
 
     @with_db_transaction
     @dispatch_message(create_user_updated_message)
-    async def update_user(self, session: AsyncSession, user_id: str, existing_user: UserORM | None, **kwargs):
+    async def update_user(
+        self, session: AsyncSession, user_id: str, existing_user: UserORM | None, **kwargs
+    ) -> UserInfo:
         """Update a user."""
         if not existing_user:
             async with self.session_maker() as session, session.begin():
@@ -195,7 +203,7 @@ class UsersSync:
             logging.info("Starting a total user database sync.")
             kc_users = kc_api.get_users()
 
-            async def _do_update(raw_kc_user: Dict[str, Any]):
+            async def _do_update(raw_kc_user: dict[str, Any]):
                 kc_user = UserInfo.from_kc_user_payload(raw_kc_user)
                 logging.info(f"Checking user with Keycloak ID {kc_user.id}")
                 db_user = await self._get_user(kc_user.id)
@@ -203,7 +211,10 @@ class UsersSync:
                     logging.info(f"Inserting or updating user {db_user} -> {kc_user}")
                     await self.update_or_insert_user(kc_user.id, **asdict(kc_user))
 
-            await asyncio.gather(*[_do_update(u) for u in kc_users])
+            # NOTE: If asyncio.gather is used here you quickly exhaust all DB connections
+            # or timeout on waiting for available connections
+            for user in kc_users:
+                await _do_update(user)
 
     async def events_sync(self, kc_api: IKeycloakAPI):
         """Use the events from Keycloak to update the users database."""

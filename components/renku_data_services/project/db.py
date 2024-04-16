@@ -2,27 +2,35 @@
 
 from __future__ import annotations
 
+from asyncio import gather
+from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any, Callable, Dict, List, NamedTuple, Tuple, cast
-
-from sqlalchemy import func, select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.authz import models as authz_models
 from renku_data_services.authz.authz import IProjectAuthorizer
 from renku_data_services.authz.models import MemberQualifier, Scope
-from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_created import ProjectCreated
-from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_removed import ProjectRemoved
-from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_updated import ProjectUpdated
-from renku_data_services.message_queue.avro_models.io.renku.events.v1.visibility import Visibility as MsgVisibility
+from renku_data_services.base_api.pagination import PaginationRequest
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_created import \
+    ProjectCreated
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_removed import \
+    ProjectRemoved
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_updated import \
+    ProjectUpdated
+from renku_data_services.message_queue.avro_models.io.renku.events.v1.visibility import \
+    Visibility as MsgVisibility
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import dispatch_message
+from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project import apispec, models
 from renku_data_services.project import orm as schemas
 from renku_data_services.project.apispec import Role, Visibility
 from renku_data_services.utils.core import with_db_transaction
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 def convert_to_authz_role(role: Role) -> authz_models.Role:
@@ -64,7 +72,7 @@ def create_project_created_message(result: models.Project, *_, **__) -> ProjectC
         repositories=result.repositories,
         visibility=vis,
         description=result.description,
-        createdBy=result.created_by.id,
+        createdBy=result.created_by,
         creationDate=result.creation_date,
     )
 
@@ -106,24 +114,20 @@ class ProjectRepository:
         project_authz: IProjectAuthorizer,
         message_queue: IMessageQueue,
         event_repo: EventRepository,
+        group_repo: GroupRepository,
     ):
         self.session_maker = session_maker  # type: ignore[call-overload]
         self.project_authz: IProjectAuthorizer = project_authz
         self.message_queue: IMessageQueue = message_queue
         self.event_repo: EventRepository = event_repo
+        self.group_repo: GroupRepository = group_repo
 
     async def get_projects(
-        self, user: base_models.APIUser, page: int, per_page: int
-    ) -> Tuple[list[models.Project], PaginationResponse]:
+        self,
+        user: base_models.APIUser,
+        pagination: PaginationRequest,
+    ) -> tuple[list[models.Project], int]:
         """Get all projects from the database."""
-        if page < 1:
-            raise errors.ValidationError(message="Parameter 'page' must be a natural number")
-        offset = (page - 1) * per_page
-        if offset > 2**63 - 1:
-            raise errors.ValidationError(message="Parameter 'page' is too large")
-        if per_page < 1 or per_page > 100:
-            raise errors.ValidationError(message="Parameter 'per_page' must be between 1 and 100")
-
         user_id = user.id if user.is_authenticated else MemberQualifier.ALL
         # NOTE: without the line below mypy thinks user_id can be None
         user_id = user_id if user_id is not None else MemberQualifier.ALL
@@ -132,21 +136,17 @@ class ProjectRepository:
         async with self.session_maker() as session:
             stmt = select(schemas.ProjectORM)
             stmt = stmt.where(schemas.ProjectORM.id.in_(project_ids))
-            stmt = stmt.limit(per_page).offset(offset)
+            stmt = stmt.limit(pagination.per_page).offset(pagination.offset)
             stmt = stmt.order_by(schemas.ProjectORM.creation_date.desc())
-            result = await session.execute(stmt)
-            projects_orm = result.scalars().all()
+            stmt_count = (
+                select(func.count()).select_from(schemas.ProjectORM).where(schemas.ProjectORM.id.in_(project_ids))
+            )
 
-            stmt_count = select(func.count()).select_from(schemas.ProjectORM)
-            result = await session.execute(stmt_count)
-            n_total_elements = cast(int, result.scalar() or 0)
-            total_pages, remainder = divmod(n_total_elements, per_page)
-            if remainder:
-                total_pages += 1
+            results = await gather(session.execute(stmt), session.execute(stmt_count))
+            projects_orm = results[0].scalars().all()
+            total_elements = cast(int, results[1].scalar() or 0)
 
-            pagination = PaginationResponse(page, per_page, n_total_elements, total_pages)
-
-            return [p.dump() for p in projects_orm], pagination
+            return [p.dump() for p in projects_orm], total_elements
 
     async def get_project(self, user: base_models.APIUser, project_id: str) -> models.Project:
         """Get one project from the database."""
@@ -163,6 +163,34 @@ class ProjectRepository:
 
             if project_orm is None:
                 raise errors.MissingResourceError(message=f"Project with id '{project_id}' does not exist.")
+
+            return project_orm.dump()
+
+    async def get_project_by_namespace_slug(
+        self, user: base_models.APIUser, namespace: str, slug: str
+    ) -> models.Project:
+        """Get one project from the database."""
+        async with self.session_maker() as session:
+            stmt = (
+                select(schemas.ProjectORM)
+                .where(schemas.NamespaceORM.slug == namespace.lower())
+                .where(schemas.ProjectSlug.namespace_id == schemas.NamespaceORM.id)
+                .where(schemas.ProjectSlug.slug == slug.lower())
+                .where(schemas.ProjectORM.id == schemas.ProjectSlug.project_id)
+            )
+            result = await session.execute(stmt)
+            project_orm = result.scalars().first()
+
+            not_found_msg = (
+                f"Project with identifier '{namespace}/{slug}' does not exist or you do not have access to it."
+            )
+
+            if project_orm is None:
+                raise errors.MissingResourceError(message=not_found_msg)
+
+            authorized = await self.project_authz.has_permission(user=user, project_id=project_orm.id, scope=Scope.READ)
+            if not authorized:
+                raise errors.MissingResourceError(message=not_found_msg)
 
             return project_orm.dump()
 
@@ -195,6 +223,39 @@ class ProjectRepository:
             await nested.commit()
 
         return project.dump()
+        # ns = await self.group_repo.get_namespace(user, project.namespace)
+        # if not ns:
+        #     raise errors.MissingResourceError(
+        #         message=f"The project cannot be created because the namespace {project.namespace} does not exist"
+        #     )
+        # user_id = cast(str, user.id)
+        # repos = [schemas.ProjectRepositoryORM(url) for url in (project.repositories or [])]
+        # slug = project.slug or base_models.Slug.from_name(project.name).value
+        # project_orm = schemas.ProjectORM(
+        #     name=project.name,
+        #     visibility=(
+        #         models.Visibility(project.visibility) if isinstance(project.visibility, str) else project.visibility
+        #     ),
+        #     created_by_id=user_id,
+        #     description=project.description,
+        #     repositories=repos,
+        #     creation_date=datetime.now(UTC).replace(microsecond=0),
+        # )
+        # slug = schemas.ProjectSlug(slug, project_id=project_orm.id, namespace_id=ns.id)
+        # session.add(slug)
+        # session.add(project_orm)
+        # await session.flush()
+        # await session.refresh(project_orm)
+
+        # project_dump = project_orm.dump()
+        # public_project = project_dump.visibility == Visibility.public
+        # if project_dump.id is None:
+        #     raise errors.BaseError(detail="The created project does not have an ID but it should.")
+        # await self.project_authz.create_project(
+        #     requested_by=user, project_id=project_dump.id, public_project=public_project
+        # )
+
+        # return project_dump
 
     @with_db_transaction
     @dispatch_message(create_project_update_message)
@@ -229,9 +290,18 @@ class ProjectRepository:
             await session.execute(update(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id).values())
 
         for key, value in payload.items():
-            # NOTE: ``slug``, ``id``, ``created_by``, and ``creation_date`` cannot be edited
-            if key not in ["slug", "id", "created_by", "creation_date"]:
+            # NOTE: ``slug``, ``id``, ``created_by``, and ``creation_date`` cannot be edited or cannot
+            # be edited by setting a property on the ORM object instance.
+            if key not in ["slug", "id", "created_by", "creation_date", "namespace"]:
                 setattr(project, key, value)
+
+        if "namespace" in payload:
+            ns_slug = payload["namespace"]
+            ns = await self.group_repo.get_namespace(user, ns_slug)
+            if not ns:
+                raise errors.MissingResourceError(message=f"The namespace with slug {ns_slug} does not exist")
+            project.slug.namespace_id = ns.id
+            await session.refresh(project)
 
         if visibility_before != project.visibility:
             public_project = project.visibility == Visibility.public
@@ -257,7 +327,7 @@ class ProjectRepository:
         if projects is None:
             return None
 
-        await session.delete(projects[0])
+        await session.execute(delete(schemas.ProjectORM).where(schemas.ProjectORM.id == projects[0].id))
 
         await self.project_authz.delete_project(requested_by=user, project_id=project_id)
         return project_id
@@ -266,11 +336,15 @@ class ProjectRepository:
 class ProjectMemberRepository:
     """Repository for project members."""
 
-    def __init__(self, session_maker: Callable[..., AsyncSession], project_authz: IProjectAuthorizer):
+    def __init__(
+        self,
+        session_maker: Callable[..., AsyncSession],
+        project_authz: IProjectAuthorizer,
+    ):
         self.session_maker = session_maker  # type: ignore[call-overload]
         self.project_authz: IProjectAuthorizer = project_authz
 
-    async def get_members(self, user: base_models.APIUser, project_id: str) -> List[models.MemberWithRole]:
+    async def get_members(self, user: base_models.APIUser, project_id: str) -> list[models.MemberWithRole]:
         """Get all members of a project."""
         authorized = await self.project_authz.has_permission(user=user, project_id=project_id, scope=Scope.READ)
         if not authorized:
@@ -280,12 +354,9 @@ class ProjectMemberRepository:
 
         members = await self.project_authz.get_project_users(requested_by=user, project_id=project_id, scope=Scope.READ)
 
-        return [
-            models.MemberWithRole(member=models.Member(id=m.user_id), role=convert_from_authz_role(m.role))
-            for m in members
-        ]
+        return [models.MemberWithRole(member=m.user_id, role=convert_from_authz_role(m.role)) for m in members]
 
-    async def update_members(self, user: base_models.APIUser, project_id: str, members: List[Dict[str, Any]]) -> None:
+    async def update_members(self, user: base_models.APIUser, project_id: str, members: list[dict[str, Any]]) -> None:
         """Update project's members."""
         authorized = await self.project_authz.has_permission(user=user, project_id=project_id, scope=Scope.WRITE)
         if not authorized:
@@ -303,7 +374,7 @@ class ProjectMemberRepository:
                 await self.project_authz.update_or_add_user(
                     requested_by=user,
                     project_id=project_id,
-                    user_id=member["member"]["id"],
+                    user_id=member["id"],
                     role=convert_to_authz_role(Role(member["role"])),
                 )
 

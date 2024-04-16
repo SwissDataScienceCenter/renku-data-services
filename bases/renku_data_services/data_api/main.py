@@ -22,6 +22,7 @@ from renku_data_services.errors.errors import (
 )
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.storage.rclone import RCloneValidator
+from renku_data_services.utils.middleware import validate_null_byte
 
 
 def create_app() -> Sanic:
@@ -65,6 +66,8 @@ def create_app() -> Sanic:
         app.signal("http.routing.after")(_set_transaction)
 
     app = register_all_handlers(app, config)
+
+    # Setup prometheus
     monitor(app, endpoint_type="url", multiprocess_mode="all", is_middleware=True).expose_endpoint()
 
     if environ.get("CORS_ALLOW_ALL_ORIGINS", "false").lower() == "true":
@@ -73,12 +76,15 @@ def create_app() -> Sanic:
         app.config.CORS_ORIGINS = "*"
         Extend(app)
 
+    app.register_middleware(validate_null_byte, "request")
+
     @app.main_process_start
     async def do_migrations(*_):
         logger.info("running migrations")
         run_migrations_for_app("common")
         config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
         await config.kc_user_repo.initialize(config.kc_api)
+        await config.group_repo.generate_user_namespaces()
         await config.event_repo.send_pending_events()
 
     @app.before_server_start
