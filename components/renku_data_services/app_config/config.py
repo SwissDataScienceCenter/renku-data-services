@@ -10,12 +10,14 @@ instantiated multiple times without creating multiple database connections.
 """
 
 import os
+import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric.types import PublicKeyTypes
 from jwt import PyJWKClient
 from yaml import safe_load
 
@@ -314,18 +316,12 @@ class Config:
         user_preferences_config = UserPreferencesConfig(max_pinned_projects=max_pinned_projects)
         db = DBConfig.from_env(prefix)
         kc_api: IKeycloakAPI
-        encryption_key_path = os.getenv(f"{prefix}ENCRYPTION_KEY_PATH", "/encryption-key")
-        encryption_key = Path(encryption_key_path).read_bytes()
-        secrets_service_public_key_path = os.getenv(
-            f"{prefix}SECRET_SERVICE_PUBLIC_KEY_PATH", "/secret_service_public_key"
-        )
-        secrets_service_public_key = serialization.load_pem_public_key(
-            Path(secrets_service_public_key_path).read_bytes()
-        )
-        if not isinstance(secrets_service_public_key, rsa.RSAPublicKey):
-            raise errors.ConfigurationError(message="Secret service public key is not an RSAPublicKey")
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
+            encryption_key = secrets.token_bytes(32)
+            private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+            secrets_service_public_key: PublicKeyTypes = private_key.public_key()
+
             authenticator = DummyAuthenticator()
             gitlab_authenticator = DummyAuthenticator()
             quota_repo = QuotaRepository(DummyCoreClient({}, {}), DummySchedulingClient({}), namespace=k8s_namespace)
@@ -339,6 +335,14 @@ class Config:
             kc_api = DummyKeycloakAPI(users=[i._to_keycloak_dict() for i in dummy_users])
             redis = RedisConfig.fake()
         else:
+            encryption_key_path = os.getenv(f"{prefix}ENCRYPTION_KEY_PATH", "/encryption-key")
+            encryption_key = Path(encryption_key_path).read_bytes()
+            secrets_service_public_key_path = os.getenv(
+                f"{prefix}SECRET_SERVICE_PUBLIC_KEY_PATH", "/secret_service_public_key"
+            )
+            secrets_service_public_key = serialization.load_pem_public_key(
+                Path(secrets_service_public_key_path).read_bytes()
+            )
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
             keycloak_url = os.environ.get(f"{prefix}KEYCLOAK_URL")
             if keycloak_url is None:
@@ -372,6 +376,9 @@ class Config:
                 realm=keycloak_realm,
             )
             redis = RedisConfig.from_env(prefix)
+
+        if not isinstance(secrets_service_public_key, rsa.RSAPublicKey):
+            raise errors.ConfigurationError(message="Secret service public key is not an RSAPublicKey")
 
         sentry = SentryConfig.from_env(prefix)
         message_queue = RedisQueue(redis)
