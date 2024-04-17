@@ -30,12 +30,6 @@ class ProjectORM(BaseORM):
     visibility: Mapped[Visibility]
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
     description: Mapped[str | None] = mapped_column("description", String(500))
-    creation_date: Mapped[datetime | None] = mapped_column(
-        "creation_date", DateTime(timezone=True), default=None, server_default=func.now(), nullable=False
-    )
-    updated_at: Mapped[datetime | None] = mapped_column(
-        "updated_at", DateTime(timezone=True), default=None, server_default=func.now(), onupdate=func.now()
-    )
     # NOTE: The project slugs table has a foreign key from the projects table, but there is a stored procedure
     # triggered by the deletion of slugs to remove the project used by the slug. See migration 89aa4573cfa9.
     slug: Mapped["ProjectSlug"] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
@@ -46,18 +40,12 @@ class ProjectORM(BaseORM):
         lazy="selectin",
         repr=False,
     )
-
-    # @classmethod
-    # def load(cls, project: models.Project):
-    #     """Create ProjectORM from the project model."""
-    #     return cls(
-    #         name=project.name,
-    #         slug=project.slug,
-    #         visibility=project.visibility,
-    #         created_by_id=project.created_by.id,
-    #         repositories=[ProjectRepositoryORM(url=r) for r in project.repositories],
-    #         description=project.description,
-    #     )
+    creation_date: Mapped[datetime] = mapped_column(
+        "creation_date", DateTime(timezone=True), default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        "updated_at", DateTime(timezone=True), default=None, server_default=func.now(), onupdate=func.now()
+    )
 
     def dump(self) -> models.Project:
         """Create a project model from the ProjectORM."""

@@ -195,47 +195,47 @@ class ProjectRepository:
     @with_db_transaction
     @dispatch_message(create_project_created_message)
     async def insert_project(
-        self, session: AsyncSession, user: base_models.APIUser, new_project=apispec.ProjectPost
+        self, session: AsyncSession, user: base_models.APIUser, project=apispec.ProjectPost
     ) -> models.Project:
         """Insert a new project entry."""
-        ns = await self.group_repo.get_namespace(user, new_project.namespace)
+        ns = await self.group_repo.get_namespace(user, project.namespace)
         if not ns:
             raise errors.MissingResourceError(
-                message=f"The project cannot be created because the namespace {new_project.namespace} does not exist"
+                message=f"The project cannot be created because the namespace {project.namespace} does not exist"
             )
 
         if user.id is None:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
-        repositories = [schemas.ProjectRepositoryORM(url) for url in (new_project.repositories or [])]
-        project_slug = new_project.slug or base_models.Slug.from_name(new_project.name).value
-        project = schemas.ProjectORM(
-            name=new_project.name,
+        repositories = [schemas.ProjectRepositoryORM(url) for url in (project.repositories or [])]
+        slug = project.slug or base_models.Slug.from_name(project.name).value
+        project_orm = schemas.ProjectORM(
+            name=project.name,
             visibility=(
-                models.Visibility(new_project.visibility)
-                if isinstance(new_project.visibility, str)
-                else new_project.visibility
+                models.Visibility(project.visibility)
+                if isinstance(project.visibility, str)
+                else project.visibility
             ),
             created_by_id=user.id,
-            description=new_project.description,
+            description=project.description,
             repositories=repositories,
         )
-        slug = schemas.ProjectSlug(project_slug, project_id=project.id, namespace_id=ns.id)
+        project_slug = schemas.ProjectSlug(slug, project_id=project_orm.id, namespace_id=ns.id)
 
-        session.add(slug)
-        session.add(project)
+        session.add(project_slug)
+        session.add(project_orm)
         await session.flush()
-        await session.refresh(project)
+        await session.refresh(project_orm)
 
-        project_model = project.dump()
-        public_project = project_model.visibility == Visibility.public
-        if project_model.id is None:
+        project_dump = project_orm.dump()
+        public_project = project_dump.visibility == Visibility.public
+        if project_dump.id is None:
             raise errors.BaseError(detail="The created project does not have an ID but it should.")
         await self.project_authz.create_project(
-            requested_by=user, project_id=project_model.id, public_project=public_project
+            requested_by=user, project_id=project_dump.id, public_project=public_project
         )
 
-        return project.dump()
+        return project_dump
 
     @with_db_transaction
     @dispatch_message(create_project_update_message)
@@ -281,7 +281,6 @@ class ProjectRepository:
             if not ns:
                 raise errors.MissingResourceError(message=f"The namespace with slug {ns_slug} does not exist")
             project.slug.namespace_id = ns.id
-            # await session.refresh(project)
 
         if visibility_before != project.visibility:
             public_project = project.visibility == Visibility.public
