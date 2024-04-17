@@ -45,7 +45,7 @@ class ProjectsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.ProjectPost)
         async def _post(_: Request, *, user: base_models.APIUser, body: apispec.ProjectPost):
-            project = await self.project_repo.insert_project(user=user, new_project=body)
+            project = await self.project_repo.insert_project(user=user, project=body)
             return json(apispec.Project.model_validate(project).model_dump(exclude_none=True, mode="json"), 201)
 
         return "/projects", ["POST"], _post
