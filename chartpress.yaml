@@ -19,4 +19,19 @@ charts:
         contextPath: .
         dockerfilePath: projects/keycloak_sync/Dockerfile
         valuesPath: dataService.keycloakSync.image
-      
+  - name: helm-chart/secrets-storage
+    resetTag: latest
+    imagePrefix: renku/
+    repo:
+      git: SwissDataScienceCenter/helm-charts
+      published: https://swissdatasciencecenter.github.io/helm-charts
+    paths:
+      - .
+      - bases
+      - components
+      - projects
+    images:
+      secrets-storage:
+        contextPath: .
+        dockerfilePath: projects/secrets_storage/Dockerfile
+        valuesPath: secretsStorage.image
