@@ -3,6 +3,7 @@
 from sanic import Sanic
 
 from renku_data_services.base_api.error_handler import CustomErrorHandler
+from renku_data_services.base_api.misc import MiscBP
 from renku_data_services.secrets import apispec
 from renku_data_services.secrets.blueprints import K8sSecretsBP
 from renku_data_services.secrets.config import Config
@@ -19,7 +20,8 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         secret_service_private_key=config.secrets_service_private_key,
         core_client=config.core_client,
     )
-    app.blueprint([secrets_storage.blueprint()])
+    misc = MiscBP(name="misc", url_prefix=url_prefix, apispec=config.spec, version=config.version)
+    app.blueprint([secrets_storage.blueprint(), misc.blueprint()])
 
     app.error_handler = CustomErrorHandler(apispec)
     app.config.OAS = False

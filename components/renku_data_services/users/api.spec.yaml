@@ -277,7 +277,7 @@ components:
       description: A list of secrets
       type: array
       items:
-        $ref: "#/components/schemas/SecretId"
+        $ref: "#/components/schemas/SecretWithId"
       minItems: 0
     SecretWithId:
       description: A Renku secret

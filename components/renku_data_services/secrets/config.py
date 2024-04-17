@@ -29,6 +29,7 @@ class Config:
     authenticator: base_models.Authenticator
     secrets_service_private_key: rsa.RSAPrivateKey
     core_client: K8sCoreClientInterface
+    version: str = "0.0.1"
     spec: dict[str, Any] = field(init=False, default_factory=dict)
     _user_secrets_repo: UserSecretsRepo | None = field(default=None, repr=False, init=False)
 
@@ -61,6 +62,8 @@ class Config:
         if not isinstance(secrets_service_private_key, rsa.RSAPrivateKey):
             raise errors.ConfigurationError(message="Secret service private key is not an RSAPrivateKey")
 
+        version = os.environ.get(f"{prefix}VERSION", "0.0.1")
+
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
             authenticator = DummyAuthenticator()
             core_client = DummyCoreClient({}, {})
@@ -85,6 +88,7 @@ class Config:
             core_client = K8sCoreClient()
 
         return cls(
+            version=version,
             db=db,
             authenticator=authenticator,
             secrets_service_private_key=secrets_service_private_key,
