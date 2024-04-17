@@ -53,7 +53,7 @@ class Config:
         core_client: K8sCoreClientInterface
         db = DBConfig.from_env(prefix)
         secrets_service_private_key_path = os.getenv(
-            f"{prefix}SECRETs_SERVICE_PRIVATE_KEY_PATH", "/secrets_service_private_key"
+            f"{prefix}SECRETS_SERVICE_PRIVATE_KEY_PATH", "/secrets_service_private_key"
         )
         secrets_service_private_key = serialization.load_pem_private_key(
             Path(secrets_service_private_key_path).read_bytes(), password=None

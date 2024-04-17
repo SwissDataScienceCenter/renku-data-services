@@ -338,7 +338,7 @@ class Config:
             encryption_key_path = os.getenv(f"{prefix}ENCRYPTION_KEY_PATH", "/encryption-key")
             encryption_key = Path(encryption_key_path).read_bytes()
             secrets_service_public_key_path = os.getenv(
-                f"{prefix}SECRET_SERVICE_PUBLIC_KEY_PATH", "/secret_service_public_key"
+                f"{prefix}SECRETS_SERVICE_PUBLIC_KEY_PATH", "/secret_service_public_key"
             )
             secrets_service_public_key = serialization.load_pem_public_key(
                 Path(secrets_service_public_key_path).read_bytes()
