@@ -30,7 +30,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="Renku Secrets Storage")
     # NOTE: K8s probes will fail if listening only on 127.0.0.1 - so we listen on 0.0.0.0
     parser.add_argument("-H", "--host", default="0.0.0.0", help="Host to listen on")  # nosec B104
-    parser.add_argument("-p", "--port", default=8100, type=int, help="Port to listen on")
+    parser.add_argument("-p", "--port", default=8000, type=int, help="Port to listen on")
     parser.add_argument("--debug", action="store_true", help="Enable Sanic debug mode")
     parser.add_argument("--fast", action="store_true", help="Enable Sanic fast mode")
     parser.add_argument("-d", "--dev", action="store_true", help="Enable Sanic development mode")
