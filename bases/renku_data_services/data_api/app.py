@@ -16,7 +16,7 @@ from renku_data_services.crc.blueprints import (
 from renku_data_services.namespace.blueprints import GroupsBP
 from renku_data_services.project.blueprints import ProjectsBP
 from renku_data_services.session.blueprints import EnvironmentsBP, SessionLaunchersBP
-from renku_data_services.storage.blueprints import StorageBP, StorageSchemaBP
+from renku_data_services.storage.blueprints import StorageBP, StorageSchemaBP, StoragesV2BP
 from renku_data_services.user_preferences.blueprints import UserPreferencesBP
 from renku_data_services.users.blueprints import KCUsersBP
 
@@ -59,6 +59,12 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         url_prefix=url_prefix,
         storage_repo=config.storage_repo,
         authenticator=config.gitlab_authenticator,
+    )
+    storages_v2 = StoragesV2BP(
+        name="storages_v2",
+        url_prefix=url_prefix,
+        storage_v2_repo=config.storage_v2_repo,
+        authenticator=config.authenticator,
     )
     storage_schema = StorageSchemaBP(name="storage_schema", url_prefix=url_prefix)
     user_preferences = UserPreferencesBP(
@@ -103,6 +109,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
             users.blueprint(),
             user_resource_pools.blueprint(),
             storage.blueprint(),
+            storages_v2.blueprint(),
             storage_schema.blueprint(),
             user_preferences.blueprint(),
             misc.blueprint(),

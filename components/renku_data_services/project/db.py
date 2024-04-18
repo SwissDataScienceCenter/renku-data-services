@@ -27,6 +27,7 @@ from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project import apispec, models
 from renku_data_services.project import orm as schemas
 from renku_data_services.project.apispec import Role, Visibility
+from renku_data_services.storage import orm as storage_schemas
 from renku_data_services.utils.core import with_db_transaction
 
 
@@ -320,7 +321,11 @@ class ProjectRepository:
         if projects is None:
             return None
 
-        await session.execute(delete(schemas.ProjectORM).where(schemas.ProjectORM.id == projects[0].id))
+        await session.execute(delete(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
+
+        await session.execute(
+            delete(storage_schemas.CloudStorageORM).where(storage_schemas.CloudStorageORM.project_id == project_id)
+        )
 
         await self.project_authz.delete_project(requested_by=user, project_id=project_id)
         return project_id
