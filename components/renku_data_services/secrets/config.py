@@ -29,6 +29,7 @@ class Config:
     authenticator: base_models.Authenticator
     secrets_service_private_key: rsa.RSAPrivateKey
     core_client: K8sCoreClientInterface
+    app_name: str = "secrets_storage"
     version: str = "0.0.1"
     spec: dict[str, Any] = field(init=False, default_factory=dict)
     _user_secrets_repo: UserSecretsRepo | None = field(default=None, repr=False, init=False)

@@ -124,7 +124,7 @@ class Config:
     spec: dict[str, Any] = field(init=False, default_factory=dict)
     encryption_key: bytes = field(repr=False)
     version: str = "0.0.1"
-    app_name: str = "renku_crc"
+    app_name: str = "renku_data_services"
     default_resource_pool_file: Optional[str] = None
     default_resource_pool: models.ResourcePool = default_resource_pool
     server_options_file: Optional[str] = None
