@@ -1,7 +1,6 @@
 """The entrypoint for the secrets storage application."""
 
 import argparse
-import asyncio
 from os import environ
 
 from sanic import Sanic
@@ -18,16 +17,11 @@ def create_app() -> Sanic:
     app = Sanic(config.app_name)
     if "COVERAGE_RUN" in environ:
         app.config.TOUCHUP = False
-        # NOTE: in single process mode where we usually run schemathesis to get coverage the db migrations
-        # specified below with the main_process_start decorator do not run.
-        asyncio.run(config.kc_user_repo.initialize(config.kc_api))
     app = register_all_handlers(app, config)
 
     @app.main_process_start
     async def do_migrations(*_):
         logger.info("running migrations")
-        config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
-        await config.kc_user_repo.initialize(config.kc_api)
 
     return app
 
