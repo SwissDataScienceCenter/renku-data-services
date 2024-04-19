@@ -1,4 +1,8 @@
+import secrets
 from unittest.mock import MagicMock
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 import renku_data_services.app_config.config as conf
 from renku_data_services.authn.dummy import DummyAuthenticator
@@ -23,7 +27,21 @@ def test_config_dummy(monkeypatch):
     assert config.version == "9.9.9"
 
 
-def test_config_no_dummy(monkeypatch):
+def test_config_no_dummy(monkeypatch, tmp_path):
+    encryption_key_path = tmp_path / "encryption-key"
+    encryption_key_path.write_bytes(secrets.token_bytes(32))
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    secrets_service_public_key = private_key.public_key()
+    pub_key_path = tmp_path / "key.pub"
+    pub_key_path.write_bytes(
+        secrets_service_public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+    )
+
+    monkeypatch.setenv("ENCRYPTION_KEY_PATH", encryption_key_path.as_posix())
+    monkeypatch.setenv("SECRETS_SERVICE_PUBLIC_KEY_PATH", pub_key_path.as_posix())
     monkeypatch.setenv("DUMMY_STORES", "false")
     monkeypatch.setenv("VERSION", "9.9.9")
     monkeypatch.setenv("DB_HOST", "localhost")

@@ -24,7 +24,7 @@ def upgrade() -> None:
         sa.Column("encrypted_value", sa.LargeBinary(), nullable=False),
         sa.Column("modification_date", sa.DateTime(timezone=True), nullable=False),
         sa.Column("id", sa.String(length=26), nullable=False),
-        sa.Column("user_id", sa.String(length=26), nullable=True),
+        sa.Column("user_id", sa.String(length=36), nullable=True),
         sa.ForeignKeyConstraint(["user_id"], ["users.users.keycloak_id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("user_id", "name", name="_unique_name_user"),
