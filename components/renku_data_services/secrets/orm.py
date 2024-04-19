@@ -8,6 +8,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_co
 from ulid import ULID
 
 from renku_data_services.secrets import models
+from renku_data_services.users.orm import UserORM
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
@@ -32,17 +33,18 @@ class SecretORM(BaseORM):
     modification_date: Mapped[datetime] = mapped_column("modification_date", DateTime(timezone=True))
     id: Mapped[str] = mapped_column("id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False)
     user_id: Mapped[Optional[str]] = mapped_column(
-        "user_id", ForeignKey("users.users", ondelete="CASCADE"), default=None, index=True, nullable=True
+        "user_id", ForeignKey(UserORM.keycloak_id, ondelete="CASCADE"), default=None, index=True, nullable=True
     )
 
     def dump(self) -> models.Secret:
         """Create a secret object from the ORM object."""
-        return models.Secret(
-            id=self.id,
+        secret = models.Secret(
             name=self.name,
             encrypted_value=self.encrypted_value,
-            modification_date=self.modification_date,
         )
+        secret.id = self.id
+        secret.modification_date = self.modification_date
+        return secret
 
     @classmethod
     def load(cls, secret: models.Secret):

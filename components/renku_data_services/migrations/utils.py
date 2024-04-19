@@ -1,4 +1,5 @@
 """Custom migrations env file to support modular migrations."""
+
 from collections.abc import Sequence
 
 from alembic import context
