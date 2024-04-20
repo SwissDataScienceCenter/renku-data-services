@@ -95,3 +95,11 @@ class ProgrammingError(BaseError):
     code: int = 1500
     message: str = "An unexpected error occurred."
     status_code: int = 500
+
+@dataclass
+class EventError(BaseError):
+    """Raised an irrecoverable error when generating events for the message queue."""
+
+    code: int = 1501
+    message: str = "An unexpected error occured when handling or generating events for the message queue."
+    status_code: int = 500

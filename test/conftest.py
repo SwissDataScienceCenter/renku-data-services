@@ -1,20 +1,40 @@
 """Fixtures for testing."""
 
 import os
+import subprocess
 from collections.abc import Iterator
 
 import pytest
 from hypothesis import settings
 from pytest_postgresql import factories
+from pytest_postgresql.janitor import DatabaseJanitor
 
 import renku_data_services.base_models as base_models
 from renku_data_services.app_config import Config as DataConfig
+from renku_data_services.authz.config import AuthzConfig
+from renku_data_services.db_config.config import DBConfig
 from renku_data_services.migrations.core import run_migrations_for_app
+from ulid import ULID
 
 settings.register_profile("ci", deadline=400, max_examples=5)
 settings.register_profile("dev", deadline=200, max_examples=5)
 
 settings.load_profile(os.getenv("HYPOTHESIS_PROFILE", "dev"))
+
+
+@pytest.fixture
+def authz_config(monkeypatch) -> Iterator[AuthzConfig]:
+    port = 60051
+    proc = subprocess.Popen(["spicedb", "serve-testing", "--grpc-addr", f":{port}"])
+    monkeypatch.setenv("AUTHZ_DB_HOST", "127.0.0.1")
+    # NOTE: In our devcontainer setup 50051 and 50052 is taken by the running authzed instance
+    monkeypatch.setenv("AUTHZ_DB_GRPC_PORT", f"{port}")
+    monkeypatch.setenv("AUTHZ_DB_KEY", "renku")
+    yield AuthzConfig.from_env()
+    try:
+        proc.terminate()
+    except Exception:
+        proc.kill()
 
 
 def init_db(**kwargs):
@@ -64,11 +84,31 @@ def init_db(**kwargs):
 postgresql_in_docker = factories.postgresql_noproc(load=[init_db])
 postgresql = factories.postgresql("postgresql_in_docker")
 
+@pytest.fixture
+def db_config(monkeypatch) -> Iterator[DBConfig]:
+    db_name = str(ULID()).lower()
+    user = "renku"
+    host = "127.0.0.1"
+    port = 5432
+    password = "renku"
+
+    monkeypatch.setenv("DUMMY_STORES", "true")
+    monkeypatch.setenv("DB_NAME", db_name)
+    monkeypatch.setenv("DB_USER", user)
+    monkeypatch.setenv("DB_PASSWORD", password)
+    monkeypatch.setenv("DB_HOST", host)
+    monkeypatch.setenv("DB_PORT", port)
+    with DatabaseJanitor(
+        user, host, port, db_name, "16.2", password,
+    ):
+        yield DBConfig.from_env()
 
 @pytest.fixture
-def app_config(postgresql, monkeypatch) -> Iterator[DataConfig]:
-    monkeypatch.setenv("DUMMY_STORES", "true")
-    monkeypatch.setenv("DB_NAME", postgresql.info.dbname)
+def run_migrations(db_config, authz_config):
+    run_migrations_for_app("common")
+
+@pytest.fixture
+def app_config(run_migrations, monkeypatch) -> Iterator[DataConfig]:
     monkeypatch.setenv("MAX_PINNED_PROJECTS", "5")
 
     config = DataConfig.from_env()

@@ -1,4 +1,5 @@
 """Database adapters and helpers for users."""
+
 import logging
 from collections.abc import Callable
 from dataclasses import asdict
@@ -10,9 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.base_api.auth import APIUser, only_authenticated
 from renku_data_services.errors import errors
-from renku_data_services.message_queue.avro_models.io.renku.events.v1.user_added import UserAdded
-from renku_data_services.message_queue.avro_models.io.renku.events.v1.user_removed import UserRemoved
-from renku_data_services.message_queue.avro_models.io.renku.events.v1.user_updated import UserUpdated
+from renku_data_services.message_queue.avro_models.io.renku.events import v1 as avro_schema_v1
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import dispatch_message
@@ -108,21 +107,6 @@ class UserRepo:
             return [orm.dump() for orm in orms]
 
 
-def create_user_added_message(result: UserInfo, **_) -> UserAdded:
-    """Transform user to message queue message."""
-    return UserAdded(id=result.id, firstName=result.first_name, lastName=result.last_name, email=result.email)
-
-
-def create_user_updated_message(result: UserInfo, **_) -> UserUpdated:
-    """Transform user to message queue message."""
-    return UserUpdated(id=result.id, firstName=result.first_name, lastName=result.last_name, email=result.email)
-
-
-def create_user_removed_message(result, user_id: str) -> UserRemoved:
-    """Transform user removal to message queue message."""
-    return UserRemoved(id=user_id)
-
-
 class UsersSync:
     """Sync users from Keycloak to the database."""
 
@@ -157,7 +141,7 @@ class UsersSync:
             return await self.insert_user(user_id=user_id, **kwargs)
 
     @with_db_transaction
-    @dispatch_message(create_user_added_message)
+    @dispatch_message(avro_schema_v1.UserAdded)
     async def insert_user(self, session: AsyncSession, user_id: str, **kwargs) -> UserInfo:
         """Insert a user."""
         kwargs.pop("keycloak_id", None)
@@ -169,7 +153,7 @@ class UsersSync:
         return new_user.dump()
 
     @with_db_transaction
-    @dispatch_message(create_user_updated_message)
+    @dispatch_message(avro_schema_v1.UserUpdated)
     async def update_user(
         self, session: AsyncSession, user_id: str, existing_user: UserORM | None, **kwargs
     ) -> UserInfo:
@@ -190,7 +174,7 @@ class UsersSync:
         return existing_user.dump()
 
     @with_db_transaction
-    @dispatch_message(create_user_removed_message)
+    @dispatch_message(avro_schema_v1.UserRemoved)
     async def _remove_user(self, session: AsyncSession, user_id: str):
         """Remove a user from the database."""
         logging.info(f"Removing user with ID {user_id}")

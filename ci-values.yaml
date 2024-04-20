@@ -1,0 +1,108 @@
+amalthea:
+  resources:
+    limits: null
+    requests:
+      cpu: 20m
+      memory: 100Mi
+core:
+  horizontalPodAutoscaling:
+    minReplicas: 1
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 500Mi
+dataService:
+  replicaCount: 1
+gateway:
+  redis:
+    master:
+      resources:
+        requests:
+          cpu: 20m
+          memory: 20Mi
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+  reverseProxy:
+    replicaCount: 1
+graph:
+  commitEventService:
+    resources:
+      limits: null
+      requests:
+        cpu: 20m
+  eventLog:
+    resources:
+      limits: null
+      requests:
+        cpu: 200m
+  knowledgeGraph:
+    resources:
+      limits: null
+      requests:
+        cpu: 10m
+  tokenRepository:
+    resources:
+      limits: null
+      requests:
+        cpu: 50m
+        memory: 250Mi
+  triplesGenerator:
+    jvmXmx: 512m
+    resources:
+      limits: null
+      requests:
+        cpu: 500m
+        memory: 600Mi
+  webhookService:
+    resources:
+      limits: null
+      requests:
+        cpu: 50m
+        memory: 256Mi
+jena:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 1.5Gi
+keycloakx:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 600Mi
+notebooks:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 150Mi
+postgresql:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 100Mi
+redis:
+  master:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 50Mi
+  sentinel:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 50Mi
+  slave:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 50Mi
+ui:
+  server:
+    resources:
+      requests:
+        cpu: 25m
+        memory: 75Mi
+

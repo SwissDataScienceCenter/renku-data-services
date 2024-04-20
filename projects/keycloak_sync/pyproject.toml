@@ -42,6 +42,7 @@ undictify = "^0.11.3"
 kubernetes = "^26.1.0"
 python-ulid = "^1.1.0"
 deepmerge = "^1.1.0"
+authzed = "^0.14.0"
 
 [tool.poetry.group.dev.dependencies]
 pyavro-gen = "^0.3.3"

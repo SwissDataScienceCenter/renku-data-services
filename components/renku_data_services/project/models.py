@@ -4,35 +4,14 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Optional
 
-from pydantic import BaseModel
-
 from renku_data_services import base_models, errors
-from renku_data_services.project.apispec import Role, Visibility
-
-
-@dataclass(frozen=True, eq=True, kw_only=True)
-class MemberWithRole(BaseModel):
-    """Model for project's members."""
-
-    member: str  # The keycloakID of the user
-    role: Role
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "MemberWithRole":
-        """Create an instance from a dictionary."""
-        if "member" not in data:
-            raise errors.ValidationError(message="'member' not set")
-        if "role" not in data:
-            raise errors.ValidationError(message="'role' not set")
-
-        return cls(member=data["member"], role=Role(data["role"]))
-
+from renku_data_services.authz.models import Visibility
 
 Repository = str
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class Project(BaseModel):
+class Project:
     """Project model."""
 
     id: Optional[str]
@@ -68,7 +47,7 @@ class Project(BaseModel):
             namespace=namespace,
             slug=slug,
             created_by=created_by,
-            visibility=data.get("visibility", Visibility.private),
+            visibility=data.get("visibility", Visibility.PRIVATE),
             creation_date=creation_date,
             repositories=[Repository(r) for r in data.get("repositories", [])],
             description=data.get("description"),

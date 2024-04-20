@@ -16,8 +16,10 @@ definition platform {
 definition project {
 	relation project_platform: platform
 	relation owner: user
+        relation editor: user
 	relation viewer: user | user:* | anonymous_user:*
 	permission read = viewer + write
-	permission write = delete
+	permission write = editor + delete
+        permission change_membership = delete
 	permission delete = owner + project_platform->is_admin
 }"""
