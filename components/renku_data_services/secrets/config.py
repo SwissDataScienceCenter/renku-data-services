@@ -7,6 +7,7 @@ from typing import Any
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric.types import PrivateKeyTypes
 from jwt import PyJWKClient
 from yaml import safe_load
 
@@ -53,21 +54,15 @@ class Config:
         """Create a config from environment variables."""
         authenticator: base_models.Authenticator
         core_client: K8sCoreClientInterface
+        secrets_service_private_key: PrivateKeyTypes
         db = DBConfig.from_env(prefix)
-        secrets_service_private_key_path = os.getenv(
-            f"{prefix}SECRETS_SERVICE_PRIVATE_KEY_PATH", "/secrets_service_private_key"
-        )
-        secrets_service_private_key = serialization.load_pem_private_key(
-            Path(secrets_service_private_key_path).read_bytes(), password=None
-        )
-        if not isinstance(secrets_service_private_key, rsa.RSAPrivateKey):
-            raise errors.ConfigurationError(message="Secret service private key is not an RSAPrivateKey")
 
         version = os.environ.get(f"{prefix}VERSION", "0.0.1")
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
             authenticator = DummyAuthenticator()
             core_client = DummyCoreClient({}, {})
+            secrets_service_private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         else:
             keycloak_url = os.environ.get(f"{prefix}KEYCLOAK_URL")
             if keycloak_url is None:
@@ -87,6 +82,14 @@ class Config:
             jwks = PyJWKClient(jwks_url)
             authenticator = KeycloakAuthenticator(jwks=jwks, algorithms=algorithms_lst)
             core_client = K8sCoreClient()
+            secrets_service_private_key_path = os.getenv(
+                f"{prefix}SECRETS_SERVICE_PRIVATE_KEY_PATH", "/secrets_service_private_key"
+            )
+            secrets_service_private_key = serialization.load_pem_private_key(
+                Path(secrets_service_private_key_path).read_bytes(), password=None
+            )
+        if not isinstance(secrets_service_private_key, rsa.RSAPrivateKey):
+            raise errors.ConfigurationError(message="Secret service private key is not an RSAPrivateKey")
 
         return cls(
             version=version,

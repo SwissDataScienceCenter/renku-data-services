@@ -121,8 +121,10 @@ class Config:
     kc_api: IKeycloakAPI
     message_queue: IMessageQueue
     secrets_service_public_key: rsa.RSAPublicKey
+    """The public key of the secrets service, used to encrypt user secrets that only it can decrypt."""
     spec: dict[str, Any] = field(init=False, default_factory=dict)
     encryption_key: bytes = field(repr=False)
+    """The encryption key to encrypt user keys at rest in the database."""
     version: str = "0.0.1"
     app_name: str = "renku_data_services"
     default_resource_pool_file: Optional[str] = None

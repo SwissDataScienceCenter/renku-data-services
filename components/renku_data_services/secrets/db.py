@@ -24,7 +24,7 @@ class UserSecretsRepo:
 
     @only_authenticated
     async def get_secrets(self, requested_by: APIUser) -> list[Secret]:
-        """Get a specific user secret from the database."""
+        """Get all user's secrets from the database."""
         async with self.session_maker() as session:
             stmt = select(SecretORM).where(SecretORM.user_id == requested_by.id)
             res = await session.execute(stmt)
@@ -44,7 +44,7 @@ class UserSecretsRepo:
 
     @only_authenticated
     async def get_secrets_by_ids(self, requested_by: APIUser, secret_ids: list[str]) -> list[Secret]:
-        """Get a specific user secret from the database."""
+        """Get a specific user secrets from the database."""
         async with self.session_maker() as session:
             stmt = select(SecretORM).where(SecretORM.user_id == requested_by.id).where(SecretORM.id.in_(secret_ids))
             res = await session.execute(stmt)

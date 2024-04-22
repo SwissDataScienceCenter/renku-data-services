@@ -9,4 +9,4 @@ def test_can_decrypt_correctly():
 
     decrypted_data = decrypt_string(password=password, salt=salt, data=encrypted_data)
 
-    assert decrypted_data == "some data"
+    assert decrypted_data == data

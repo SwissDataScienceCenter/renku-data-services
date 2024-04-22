@@ -17,10 +17,20 @@ def include_object(obj, name, type_, reflected, compare_to):
     return True
 
 
-def combine_version_tables(schemas: dict[str, str], conn: Connection, metadata_schema: str | None):
+def combine_version_tables(conn: Connection, metadata_schema: str | None):
     """Used to combine all alembic version tables into one."""
     # NOTE: ``schemas`` are the revisions that each schema will be when the version table is moved
     # in all other cases this function will do nothing.
+    schemas = {
+        # NOTE: These are the revisions that each schema will be when the version table is moved
+        "authz": "748ed0f3439f",
+        "projects": "7c08ed2fb79d",
+        "resource_pools": "5403953f654f",
+        "storage": "61a4d72981cf",
+        "users": "3b30da432a76",
+        "user_preferences": "6eccd7d4e3ed",
+        "events": "4c425d8889b6",
+    }
     if not metadata_schema:
         return
     with conn.begin_nested():
@@ -60,9 +70,7 @@ def combine_version_tables(schemas: dict[str, str], conn: Connection, metadata_s
         conn.execute(text(f"DROP TABLE IF EXISTS {metadata_schema}.alembic_version"))
 
 
-def run_migrations_offline(
-    schemas: dict[str, str], target_metadata: Sequence[MetaData], sync_sqlalchemy_url: str
-) -> None:
+def run_migrations_offline(target_metadata: Sequence[MetaData], sync_sqlalchemy_url: str) -> None:
     """Run migrations in 'offline' mode.
 
     This configures the context with just a URL
@@ -88,7 +96,7 @@ def run_migrations_offline(
         conn.execute(CreateSchema("common", if_not_exists=True))
         for m in target_metadata:
             conn.execute(CreateSchema(m.schema, if_not_exists=True))
-            combine_version_tables(schemas, conn, m.schema)
+            combine_version_tables(conn, m.schema)
 
         with context.begin_transaction():
             context.get_context()._ensure_version_table()
@@ -96,9 +104,7 @@ def run_migrations_offline(
             context.run_migrations()
 
 
-def run_migrations_online(
-    schemas: dict[str, str], target_metadata: Sequence[MetaData], sync_sqlalchemy_url: str
-) -> None:
+def run_migrations_online(target_metadata: Sequence[MetaData], sync_sqlalchemy_url: str) -> None:
     """Run migrations in 'online' mode.
 
     In this scenario we need to create an Engine
@@ -117,7 +123,7 @@ def run_migrations_online(
         conn.execute(CreateSchema("common", if_not_exists=True))
         for m in target_metadata:
             conn.execute(CreateSchema(m.schema, if_not_exists=True))
-            combine_version_tables(schemas, conn, m.schema)
+            combine_version_tables(conn, m.schema)
 
         with context.begin_transaction():
             context.get_context()._ensure_version_table()
@@ -125,13 +131,13 @@ def run_migrations_online(
             context.run_migrations()
 
 
-def run_migrations(schemas: dict[str, str], metadata: Sequence[MetaData]):
+def run_migrations(metadata: Sequence[MetaData]):
     """Run migrations for a specific base model class."""
     # this is the Alembic Config object, which provides
     # access to the values within the .ini file in use.
     db_config = DBConfig.from_env()
     sync_sqlalchemy_url = db_config.conn_url(async_client=False)
     if context.is_offline_mode():
-        run_migrations_offline(schemas, metadata, sync_sqlalchemy_url)
+        run_migrations_offline(metadata, sync_sqlalchemy_url)
     else:
-        run_migrations_online(schemas, metadata, sync_sqlalchemy_url)
+        run_migrations_online(metadata, sync_sqlalchemy_url)
