@@ -341,7 +341,8 @@ components:
     SecretValue:
       description: Secret value that can be any text
       type: string
-      maxLength: 5000  # TODO: What should be the max length
+      minLength: 1
+      maxLength: 5000
     ErrorResponse:
       type: object
       properties:
