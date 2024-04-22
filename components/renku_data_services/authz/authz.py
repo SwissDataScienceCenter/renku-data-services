@@ -1,10 +1,10 @@
 """Projects authorization adapter."""
 
+import logging
 from collections.abc import Awaitable, Callable, Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import wraps
-import logging
 from typing import ClassVar, Protocol
 
 from authzed.api.v1 import (
@@ -28,12 +28,10 @@ from authzed.api.v1 import (
     ZedToken,
 )
 from authzed.api.v1.permission_service_pb2 import LOOKUP_PERMISSIONSHIP_HAS_PERMISSION
-from httpx import request
-from renku_data_services.base_models.core import APIUser
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services import base_models
-from renku_data_services.authz.models import Change, Member, Role, Scope, Visibility, MembershipChange
+from renku_data_services.authz.models import Change, Member, MembershipChange, Role, Scope, Visibility
 from renku_data_services.errors import errors
 from renku_data_services.project.models import Project
 

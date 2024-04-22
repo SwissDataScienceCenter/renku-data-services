@@ -8,9 +8,9 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_co
 from sqlalchemy.schema import ForeignKey
 from ulid import ULID
 
+from renku_data_services.authz import models as authz_models
 from renku_data_services.namespace.orm import NamespaceORM
 from renku_data_services.project import models
-from renku_data_services.authz import models as authz_models
 from renku_data_services.project.apispec import Visibility
 
 metadata_obj = MetaData(schema="projects")  # Has to match alembic ini section name

@@ -89,7 +89,7 @@ paths:
           name: project_id
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Ulid"
       responses:
         "200":
           description: The project
@@ -114,7 +114,7 @@ paths:
           name: project_id
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Ulid"
       requestBody:
         required: true
         content:
@@ -145,7 +145,7 @@ paths:
           name: project_id
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Ulid"
       responses:
         "204":
           description: The project was removed or did not exist in the first place
@@ -161,7 +161,7 @@ paths:
           name: project_id
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Ulid"
       responses:
         "200":
           description: The project's members
@@ -189,7 +189,7 @@ paths:
           name: project_id
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Ulid"
       requestBody:
         required: true
         content:
@@ -217,13 +217,13 @@ paths:
           name: project_id
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Ulid"
         - in: path
           name: member_id
           description: This is user's KeyCloak ID
           required: true
           schema:
-            type: string
+            type: "#/components/schemas/UserId"
       responses:
         "204":
           description: The member was removed or wasn't part of project's members.
@@ -444,6 +444,7 @@ components:
       type: string
       description: Keycloak user ID
       example: f74a228b-1790-4276-af5f-25c2424e9b0c
+      pattern: "^[A-Za-z0-9]{1}[A-Za-z0-9-]+$"
     UserFirstLastName:
       type: string
       description: First or last name of the user

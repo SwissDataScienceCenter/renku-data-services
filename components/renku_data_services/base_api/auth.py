@@ -1,4 +1,6 @@
 """Authentication decorators for Sanic."""
+
+import re
 from functools import wraps
 
 from sanic import Request
@@ -28,6 +30,49 @@ def authenticate(authenticator: Authenticator):
         return decorated_function
 
     return decorator
+
+
+def validate_path_project_id(f):
+    """Decorator for a Sanic handler that validates the project_id path parameter."""
+
+    @wraps(f)
+    async def decorated_function(request: Request, *args, **kwargs):
+        project_id = kwargs.get("project_id")
+        if not project_id:
+            raise errors.ProgrammingError(
+                message="Could not find 'project_id' in the keyword arguments for the handler in order to validate it."
+            )
+        regex = r"^[A-Za-z0-9]{26}$"
+        if not re.match(regex, project_id):
+            raise errors.ValidationError(
+                message=f"The 'project_id' path parameter {project_id} does not match the requried regex {regex}"
+            )
+
+        return await f(request, *args, **kwargs)
+
+    return decorated_function
+
+
+def validate_path_user_id(f):
+    """Decorator for a Sanic handler that validates the user_id or member_id path parameter."""
+
+    @wraps(f)
+    async def decorated_function(request: Request, *args, **kwargs):
+        user_id = kwargs.get("user_id") or kwargs.get("member_id")
+        if not user_id:
+            raise errors.ProgrammingError(
+                message="Could not find 'user_id' or 'member_id' in the keyword arguments for the handler "
+                "in order to validate it."
+            )
+        regex = r"^[A-Za-z0-9]{1}[A-Za-z0-9-]+$"
+        if not re.match(regex, user_id):
+            raise errors.ValidationError(
+                message=f"The 'user_id' path parameter {user_id} does not match the requried regex {regex}"
+            )
+
+        return await f(request, *args, **kwargs)
+
+    return decorated_function
 
 
 def only_admins(f):

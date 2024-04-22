@@ -111,7 +111,7 @@ def db_config(monkeypatch, worker_id) -> Iterator[DBConfig]:
     user = "renku"
     host = "127.0.0.1"
     port = 5432
-    password = "renku"
+    password = "renku"  # nosec: B105
 
     monkeypatch.setenv("DUMMY_STORES", "true")
     monkeypatch.setenv("DB_NAME", db_name)

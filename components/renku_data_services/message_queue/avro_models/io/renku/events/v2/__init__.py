@@ -1,4 +1,3 @@
-from typing import TypeAlias, Union
 from renku_data_services.message_queue.avro_models.io.renku.events.v2.group_added import GroupAdded
 from renku_data_services.message_queue.avro_models.io.renku.events.v2.member_role import MemberRole
 from renku_data_services.message_queue.avro_models.io.renku.events.v2.group_member_removed import GroupMemberRemoved
@@ -16,4 +15,3 @@ from renku_data_services.message_queue.avro_models.io.renku.events.v2.user_added
 from renku_data_services.message_queue.avro_models.io.renku.events.v2.user_removed import UserRemoved
 from renku_data_services.message_queue.avro_models.io.renku.events.v2.user_updated import UserUpdated
 from renku_data_services.message_queue.avro_models.io.renku.events.v2.project_created import ProjectCreated
-project_member_changed = type[Union[ProjectMemberAdded, ProjectMemberUpdated, ProjectMemberRemoved]]

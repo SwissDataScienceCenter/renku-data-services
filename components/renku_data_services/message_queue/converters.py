@@ -1,12 +1,12 @@
 """Converter of models to Avro schemas for events."""
 
-from types import UnionType
 from typing import TypeAlias, cast
 
 from dataclasses_avroschema.schema_generator import AvroModel
 
 from renku_data_services.authz import models as authz_models
 from renku_data_services.errors import errors
+from renku_data_services.message_queue import AmbiguousEvent
 from renku_data_services.message_queue.avro_models.io.renku.events import v1, v2
 from renku_data_services.project import models as project_models
 from renku_data_services.users import models as user_models
@@ -26,7 +26,7 @@ class _ProjectEventConverter:
         )
 
     @staticmethod
-    def to_event(project: project_models.Project, event_type: type[AvroModel]) -> AvroModel:
+    def to_event(project: project_models.Project, event_type: type[AvroModel] | AmbiguousEvent) -> AvroModel:
         if project.id is None:
             raise errors.EventError(
                 message=f"Cannot create an event of type {event_type} for a project which has no ID"
@@ -60,7 +60,7 @@ class _ProjectEventConverter:
 
 class _UserEventConverter:
     @staticmethod
-    def to_event(user: user_models.UserInfo, event_type: type[AvroModel]) -> AvroModel:
+    def to_event(user: user_models.UserInfo, event_type: type[AvroModel] | AmbiguousEvent) -> AvroModel:
         match event_type:
             case v1.UserAdded:
                 return v1.UserAdded(id=user.id, firstName=user.first_name, lastName=user.last_name, email=user.email)
@@ -126,7 +126,7 @@ class EventConverter:
     """Generates event from any type of data service models."""
 
     @staticmethod
-    def to_event(input: _ModelTypes, event_type: type[AvroModel] | v2.project_member_changed) -> list[AvroModel]:
+    def to_event(input: _ModelTypes, event_type: type[AvroModel] | AmbiguousEvent) -> list[AvroModel]:
         """Generate an event for a data service model based on an event type."""
         if isinstance(input, project_models.Project):
             input = cast(project_models.Project, input)
@@ -134,9 +134,15 @@ class EventConverter:
         elif isinstance(input, user_models.UserInfo):
             input = cast(user_models.UserInfo, input)
             return [_UserEventConverter.to_event(input, event_type)]
-        elif isinstance(input, list) and len(input) > 0 and isinstance(input[0], authz_models.MembershipChange):
+        elif (
+            isinstance(input, list)
+            and len(input) > 0
+            and isinstance(input[0], authz_models.MembershipChange)
+        ):
             input = cast(list[authz_models.MembershipChange], input)
             return _ProjectAuthzEventConverter.to_events(input)
+        import logging
+        logging.error(f"Input {input}")
         raise errors.EventError(
             message=f"Trying to convert an uknown model of type {type(input)} to an event type {event_type}"
         )

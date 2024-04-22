@@ -10,7 +10,6 @@ from datetime import datetime
 from functools import wraps
 from io import BytesIO
 from pathlib import Path
-from types import UnionType
 from typing import TypeVar
 
 from dataclasses_avroschema.schema_generator import AvroModel
@@ -18,6 +17,7 @@ from dataclasses_avroschema.utils import standardize_custom_type
 from fastavro import parse_schema, schemaless_reader, schemaless_writer
 from ulid import ULID
 
+from renku_data_services.message_queue import AmbiguousEvent
 from renku_data_services.message_queue.avro_models.io.renku.events import v1, v2
 from renku_data_services.message_queue.avro_models.io.renku.events.v1.header import Header
 from renku_data_services.message_queue.config import RedisConfig
@@ -72,9 +72,7 @@ def create_header(message_type: str, content_type: str = "application/avro+binar
         requestId=ULID().hex,
     )
 
-_AvroModelSubtype = TypeVar("_AvroModelSubtype", bound=AvroModel)
-
-def dispatch_message(event_type: type[AvroModel] | v2.project_member_changed):
+def dispatch_message(event_type: type[AvroModel] | AmbiguousEvent):
     """Sends a message on the message queue.
 
     The transform method is called with the arguments and result of the wrapped method. It is responsible for
@@ -118,7 +116,7 @@ def dispatch_message(event_type: type[AvroModel] | v2.project_member_changed):
                     queue_name = "user.updated"
                 case v1.UserRemoved | v2.UserRemoved:
                     queue_name = "user.removed"
-                case v2.project_member_changed:
+                case AmbiguousEvent.PROJECT_MEMBERSHIP_CHANGED:
                     queue_name = "to_be_determined_later"
                 case v2.ProjectMemberRemoved:
                     queue_name = "projectAuth.removed"

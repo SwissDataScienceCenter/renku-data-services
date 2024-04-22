@@ -5,7 +5,7 @@ from __future__ import annotations
 from asyncio import gather
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import cast
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,8 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.authz.authz import Authz, ProjectAuthzOperation, ResourceType
-from renku_data_services.authz.models import Member, MembershipChange, Scope, Visibility
+from renku_data_services.authz.models import Member, MembershipChange, Scope
 from renku_data_services.base_api.pagination import PaginationRequest
+from renku_data_services.message_queue import AmbiguousEvent
 from renku_data_services.message_queue.avro_models.io.renku.events import v1 as avro_schema_v1
 from renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
 from renku_data_services.message_queue.db import EventRepository
@@ -24,7 +25,6 @@ from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project import apispec as project_apispec
 from renku_data_services.project import models
 from renku_data_services.project import orm as schemas
-from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.core import with_db_transaction
 
 
@@ -215,7 +215,7 @@ class ProjectMemberRepository:
         return members
 
     @with_db_transaction
-    @dispatch_message(avro_schema_v2.project_member_changed)
+    @dispatch_message(AmbiguousEvent.PROJECT_MEMBERSHIP_CHANGED)
     async def update_members(
         self, session: AsyncSession, user: base_models.APIUser, project_id: str, members: list[Member]
     ) -> list[MembershipChange]:

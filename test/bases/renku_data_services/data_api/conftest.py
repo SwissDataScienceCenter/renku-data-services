@@ -1,20 +1,19 @@
 import json
-
-from authzed.api.v1 import Relationship, RelationshipUpdate, SubjectReference, WriteRelationshipsRequest
 from test.bases.renku_data_services.keycloak_sync.test_sync import get_kc_users
 
 import pytest
 import pytest_asyncio
+from authzed.api.v1 import Relationship, RelationshipUpdate, SubjectReference, WriteRelationshipsRequest
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 
 from components.renku_data_services.utils.middleware import validate_null_byte
 from renku_data_services.app_config.config import Config
+from renku_data_services.authz.authz import _AuthzConverter
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import UserInfo
-from renku_data_services.authz.authz import _AuthzConverter
 
 
 @pytest.fixture
