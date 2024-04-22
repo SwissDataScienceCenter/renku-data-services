@@ -437,7 +437,8 @@ components:
       description: Possible roles of members in a project
       type: string
       enum:
-        - member
+        - viewer
+        - editor
         - owner
     UserId:
       type: string

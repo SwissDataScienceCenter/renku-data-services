@@ -13,9 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.authz.authz import Authz, ProjectAuthzOperation, ResourceType
-from renku_data_services.authz.models import Member, Scope
+from renku_data_services.authz.models import Member, MembershipChange, Scope, Visibility
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.message_queue.avro_models.io.renku.events import v1 as avro_schema_v1
+from renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import dispatch_message
@@ -50,7 +51,7 @@ class ProjectRepository:
         pagination: PaginationRequest,
     ) -> tuple[list[models.Project], int]:
         """Get all projects from the database."""
-        project_ids = self.authz.resources_with_permission(user, ResourceType.project, Scope.READ)
+        project_ids = self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
 
         async with self.session_maker() as session:
             stmt = select(schemas.ProjectORM)
@@ -102,9 +103,9 @@ class ProjectRepository:
         slug = project.slug or base_models.Slug.from_name(project.name).value
         project_orm = schemas.ProjectORM(
             name=project.name,
-            visibility=(
-                models.Visibility(project.visibility) if isinstance(project.visibility, str) else project.visibility
-            ),
+            visibility=project_apispec.Visibility(project.visibility)
+            if isinstance(project.visibility, str)
+            else project_apispec.Visibility(project.visibility.value),
             created_by_id=user_id,
             description=project.description,
             repositories=repos,
@@ -198,20 +199,37 @@ class ProjectMemberRepository:
     def __init__(
         self,
         session_maker: Callable[..., AsyncSession],
+        event_repo: EventRepository,
         authz: Authz,
+        message_queue: IMessageQueue,
     ):
         self.session_maker = session_maker  # type: ignore[call-overload]
+        self.event_repo = event_repo
         self.authz = authz
-        self.user_repo = UserRepo
+        self.message_queue = message_queue
 
     async def get_members(self, user: base_models.APIUser, project_id: str) -> list[Member]:
         """Get all members of a project."""
-        return self.authz.members(user, ResourceType.project, project_id)
+        members = self.authz.members(user, ResourceType.project, project_id)
+        members = [member for member in members if member.user_id and member.user_id != "*"]
+        return members
 
-    async def update_members(self, user: base_models.APIUser, project_id: str, members: list[Member]) -> list[Member]:
+    @with_db_transaction
+    @dispatch_message(avro_schema_v2.project_member_changed)
+    async def update_members(
+        self, session: AsyncSession, user: base_models.APIUser, project_id: str, members: list[Member]
+    ) -> list[MembershipChange]:
         """Update project's members."""
-        return self.authz.upsert_project_members(user, project_id, members)
+        output = self.authz.upsert_project_members(user, ResourceType.project, project_id, members)
+        import logging
+        logging.error(output)
+        return output
 
-    async def delete_members(self, user: base_models.APIUser, project_id: str, members: list[Member]) -> list[Member]:
+    @with_db_transaction
+    @dispatch_message(avro_schema_v2.ProjectMemberRemoved)
+    async def delete_members(
+        self, session: AsyncSession, user: base_models.APIUser, project_id: str, user_ids: list[str]
+    ) -> list[MembershipChange]:
         """Delete members from a project."""
-        return self.authz.remove_project_members(user, project_id, members)
+        members = self.authz.remove_project_members(user, ResourceType.project, project_id, user_ids)
+        return members

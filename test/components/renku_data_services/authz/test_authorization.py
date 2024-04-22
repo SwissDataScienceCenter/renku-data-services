@@ -39,9 +39,9 @@ def bootstrap_admins(app_config: Config):
 
 @pytest.mark.parametrize("public_project", [True, False])
 def test_adding_deleting_project(app_config: Config, bootstrap_admins, public_project: bool):
+    assert regular_user1.id
     authz = app_config.authz
     project_id = str(ULID())
-    assert regular_user1.id is not None
     project = Project(
         id=project_id,
         name=project_id,
@@ -78,8 +78,9 @@ def test_adding_deleting_project(app_config: Config, bootstrap_admins, public_pr
 @pytest.mark.parametrize("public_project", [True, False])
 @pytest.mark.parametrize("granted_role", [Role.VIEWER, Role.EDITOR, Role.OWNER])
 def test_granting_access(app_config: Config, bootstrap_admins, public_project: bool, granted_role: Role):
+    assert regular_user1.id
+    assert regular_user2.id
     authz = app_config.authz
-    assert regular_user1.id is not None
     project_id = str(ULID())
     project = Project(
         id=project_id,
@@ -96,8 +97,8 @@ def test_granting_access(app_config: Config, bootstrap_admins, public_project: b
     assert not authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.DELETE)
     assert not authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.CHANGE_MEMBERSHIP)
     assert public_project == authz.has_permission(anon_user, ResourceType.project, project_id, Scope.READ)
-    new_member = Member(granted_role, regular_user2.id)
-    authz.upsert_project_members(regular_user1, project, [new_member])
+    new_member = Member(granted_role, regular_user2.id, project_id)
+    authz.upsert_project_members(regular_user1, ResourceType.project, project.id, [new_member])
     granted_role_members = authz.members(regular_user1, ResourceType.project, project_id, granted_role)
     assert regular_user2.id in [i.user_id for i in granted_role_members]
     assert authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.READ)
@@ -114,6 +115,8 @@ def test_granting_access(app_config: Config, bootstrap_admins, public_project: b
 
 @pytest.mark.parametrize("public_project", [True, False])
 def test_listing_users_with_access(app_config: Config, public_project: bool, bootstrap_admins):
+    assert regular_user1.id
+    assert regular_user2.id
     authz = app_config.authz
     project1_id = str(ULID())
     project1 = Project(
@@ -206,7 +209,12 @@ def test_listing_projects_with_access(app_config: Config, bootstrap_admins):
     assert {public_project_id} == set(
         authz.resources_with_permission(regular_user2, regular_user2.id, ResourceType.project, Scope.READ)
     )
-    authz.upsert_project_members(regular_user1, private_project1, [Member(Role.VIEWER, regular_user2.id)])
+    authz.upsert_project_members(
+        regular_user1,
+        ResourceType.project,
+        private_project1.id,
+        [Member(Role.VIEWER, regular_user2.id, private_project_id1)],
+    )
     assert {public_project_id, private_project_id1} == set(
         authz.resources_with_permission(regular_user2, regular_user2.id, ResourceType.project, Scope.READ)
     )

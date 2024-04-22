@@ -1,20 +1,22 @@
 """Fixtures for testing."""
 
 import os
+import socket
 import subprocess
 from collections.abc import Iterator
+from multiprocessing import Lock
 
 import pytest
 from hypothesis import settings
 from pytest_postgresql import factories
 from pytest_postgresql.janitor import DatabaseJanitor
+from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services.app_config import Config as DataConfig
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.migrations.core import run_migrations_for_app
-from ulid import ULID
 
 settings.register_profile("ci", deadline=400, max_examples=5)
 settings.register_profile("dev", deadline=200, max_examples=5)
@@ -22,10 +24,28 @@ settings.register_profile("dev", deadline=200, max_examples=5)
 settings.load_profile(os.getenv("HYPOTHESIS_PROFILE", "dev"))
 
 
+@pytest.fixture(scope="session")
+def free_port() -> int:
+    lock = Lock()
+    with lock, socket.socket() as s:
+        s.bind(("", 0))
+        port = int(s.getsockname()[1])
+        return port
+
+
 @pytest.fixture
-def authz_config(monkeypatch) -> Iterator[AuthzConfig]:
-    port = 60051
-    proc = subprocess.Popen(["spicedb", "serve-testing", "--grpc-addr", f":{port}"])
+def authz_config(monkeypatch, free_port) -> Iterator[AuthzConfig]:
+    port = free_port
+    proc = subprocess.Popen(
+        [
+            "spicedb",
+            "serve-testing",
+            "--grpc-addr",
+            f":{port}",
+            "--readonly-grpc-enabled=false",
+            "--skip-release-check=true",
+        ]
+    )
     monkeypatch.setenv("AUTHZ_DB_HOST", "127.0.0.1")
     # NOTE: In our devcontainer setup 50051 and 50052 is taken by the running authzed instance
     monkeypatch.setenv("AUTHZ_DB_GRPC_PORT", f"{port}")
@@ -84,9 +104,10 @@ def init_db(**kwargs):
 postgresql_in_docker = factories.postgresql_noproc(load=[init_db])
 postgresql = factories.postgresql("postgresql_in_docker")
 
+
 @pytest.fixture
-def db_config(monkeypatch) -> Iterator[DBConfig]:
-    db_name = str(ULID()).lower()
+def db_config(monkeypatch, worker_id) -> Iterator[DBConfig]:
+    db_name = str(ULID()).lower() + "_" + worker_id
     user = "renku"
     host = "127.0.0.1"
     port = 5432
@@ -99,25 +120,30 @@ def db_config(monkeypatch) -> Iterator[DBConfig]:
     monkeypatch.setenv("DB_HOST", host)
     monkeypatch.setenv("DB_PORT", port)
     with DatabaseJanitor(
-        user, host, port, db_name, "16.2", password,
+        user,
+        host,
+        port,
+        db_name,
+        "16.2",
+        password,
     ):
         yield DBConfig.from_env()
+        DBConfig._async_engine = None
+
 
 @pytest.fixture
 def run_migrations(db_config, authz_config):
     run_migrations_for_app("common")
 
+
 @pytest.fixture
-def app_config(run_migrations, monkeypatch) -> Iterator[DataConfig]:
+def app_config(run_migrations, monkeypatch, worker_id) -> Iterator[DataConfig]:
     monkeypatch.setenv("MAX_PINNED_PROJECTS", "5")
 
     config = DataConfig.from_env()
+    app_name = "app_" + str(ULID()).lower() + "_" + worker_id
+    config.app_name = app_name
     yield config
-    monkeypatch.delenv("DUMMY_STORES", raising=False)
-    # NOTE: This is necessary because the postgresql pytest extension does not close
-    # the async connection/pool we use in the config and the connection will succeed in the first
-    # test but fail in all others if the connection is not disposed at the end of every test.
-    config.db.dispose_connection()
 
 
 @pytest.fixture

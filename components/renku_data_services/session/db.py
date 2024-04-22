@@ -108,7 +108,9 @@ class SessionRepository:
 
     async def get_launchers(self, user: base_models.APIUser) -> list[models.SessionLauncher]:
         """Get all session launchers visible for a specific user from the database."""
-        project_ids = self.project_authz.resources_with_permission(user, ResourceType.project, scope=Scope.READ)
+        project_ids = self.project_authz.resources_with_permission(
+            user, user.id, ResourceType.project, scope=Scope.READ
+        )
 
         async with self.session_maker() as session:
             res = await session.scalars(

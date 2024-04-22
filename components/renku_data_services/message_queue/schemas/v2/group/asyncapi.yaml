@@ -1,0 +1,92 @@
+asyncapi: 3.0.0
+info:
+  title: Group Events
+  version: 0.0.2
+servers:
+  redis:
+    url: renku-redis
+    protocol: redis
+    description: Renku Redis Instance
+channels:
+  group.added:
+    publish:
+      messages:
+        groupAdded:
+          schemaFormat: "application/vnd.apache.avro;version=1.9.0"
+          payload:
+            type: object
+            properties:
+              payload:
+              - $ref: './events/added.avsc#/GroupAdded'
+          traits:
+          - $ref: '#/components/messageTraits/headers'
+  group.updated:
+    publish:
+      messages:
+        groupUpdated:
+          schemaFormat: "application/vnd.apache.avro;version=1.9.0"
+          payload:
+            type: object
+            properties:
+              payload:
+              - $ref: './events/created.avsc#/GroupUpdated'
+          traits:
+          - $ref: '#/components/messageTraits/headers'
+  group.removed:
+    publish:
+      messages:
+        groupRemoved:
+          schemaFormat: "application/vnd.apache.avro;version=1.9.0"
+          payload:
+            type: object
+            properties:
+              payload:
+              - $ref: './events/removed.avsc#/GroupRemoved'
+          traits:
+          - $ref: '#/components/messageTraits/headers'
+  memberGroup.added:
+    publish:
+      messages:
+        memberGroupAdded:
+          schemaFormat: "application/vnd.apache.avro;version=1.9.0"
+          payload:
+            type: object
+            properties:
+              payload:
+                - $ref: './events/member_added.avsc#/GroupMemberAdded'
+          traits:
+            - $ref: '#/components/messageTraits/headers'
+  memberGroup.updated:
+    publish:
+      messages:
+        memberGroupUpdated:
+          schemaFormat: "application/vnd.apache.avro;version=1.9.0"
+          payload:
+            type: object
+            properties:
+              payload:
+                - $ref: './events/member_added.avsc#/GroupMemberUpdated'
+          traits:
+            - $ref: '#/components/messageTraits/headers'
+  memberGroup.removed:
+    publish:
+      messages:
+        memberGroupRemoved:
+          schemaFormat: "application/vnd.apache.avro;version=1.9.0"
+          payload:
+            type: object
+            properties:
+              payload:
+                - $ref: './events/member_removed.avsc#/GroupMemberRemoved'
+          traits:
+            - $ref: '#/components/messageTraits/headers'
+components:
+  messageTraits:
+    headers:
+      payload:
+        type: object
+        properties:
+          id:
+            type: string
+          headers:
+            - $ref: '../../header/headers.avsc#/Header'

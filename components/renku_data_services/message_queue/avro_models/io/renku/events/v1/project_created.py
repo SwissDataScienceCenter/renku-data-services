@@ -1,4 +1,4 @@
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import ClassVar, Dict, List, Optional
 
@@ -22,6 +22,7 @@ class ProjectCreated(AvroModel):
     description: Optional[str]
     createdBy: str
     creationDate: datetime  # logicalType: timestamp-millis
+    keywords: List[str] = field(default_factory=list)
 
     #: The Avro Schema associated to this class
     _schema: ClassVar[str] = """{
@@ -60,6 +61,14 @@ class ProjectCreated(AvroModel):
                     "null",
                     "string"
                 ]
+            },
+            {
+                "name": "keywords",
+                "type": {
+                    "type": "array",
+                    "items": "string"
+                },
+                "default": []
             },
             {
                 "name": "createdBy",

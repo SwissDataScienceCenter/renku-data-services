@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable, Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import wraps
+import logging
 from typing import ClassVar, Protocol
 
 from authzed.api.v1 import (
@@ -32,7 +33,7 @@ from renku_data_services.base_models.core import APIUser
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services import base_models
-from renku_data_services.authz.models import Member, Role, Scope, Visibility
+from renku_data_services.authz.models import Change, Member, Role, Scope, Visibility, MembershipChange
 from renku_data_services.errors import errors
 from renku_data_services.project.models import Project
 
@@ -127,23 +128,10 @@ class _AuthzConverter:
         return ObjectReference(object_type=ResourceType.user, object_id="*")
 
 
-def _project_id_not_none(f):
-    @wraps(f)
-    def _project_id_not_none(self, project: Project, *args, **kwargs):
-        if project.id is None:
-            raise errors.ProgrammingError(message="Cannot create authorization relationships for project without an ID")
-        return f(self, project, *args, **kwargs)
-
-    return _project_id_not_none
-
-
 def _is_allowed_on_project(operation: Scope):
     """A decorator that checks if the operation on a project is allowed or not."""
 
-    class _DecoratedFuncType(Protocol):
-        def __call__(self: "Authz", user: base_models.APIUser, project: Project, *args, **kwargs): ...
-
-    def decorator(f: _DecoratedFuncType):
+    def decorator(f):
         @wraps(f)
         def decorated_function(self: "Authz", user: base_models.APIUser, project: Project, *args, **kwargs):
             allowed, zed_token = self._has_permission(user, ResourceType.project, project.id, operation)
@@ -162,12 +150,7 @@ def _is_allowed_on_project(operation: Scope):
 def _is_allowed(operation: Scope):
     """A decorator that checks if the operation on a resource is allowed or not."""
 
-    class _DecoratedFuncType(Protocol):
-        def __call__(
-            self: "Authz", user: base_models.APIUser, resource_type: ResourceType, resource_id: str, *args, **kwargs
-        ): ...
-
-    def decorator(f: _DecoratedFuncType):
+    def decorator(f):
         @wraps(f)
         def decorated_function(
             self: "Authz", user: base_models.APIUser, resource_type: ResourceType, resource_id: str, *args, **kwargs
@@ -205,9 +188,13 @@ class Authz:
         )
 
     def _has_permission(
-        self, user: base_models.APIUser, resource_type: ResourceType, resource_id: str, scope: Scope
+        self, user: base_models.APIUser, resource_type: ResourceType, resource_id: str | None, scope: Scope
     ) -> tuple[bool, ZedToken]:
         """Checks whether the provided user has a specific permission on the specific resource."""
+        if not resource_id:
+            raise errors.ProgrammingError(
+                message=f"Cannot check permissions on a resource of type {resource_type} with missing resource ID."
+            )
         res = self._to_object(resource_type, resource_id)
         sub = SubjectReference(
             object=self._to_object(ResourceType.user, user.id) if user.id else _AuthzConverter.anonymous_user()
@@ -227,7 +214,7 @@ class Authz:
         return res
 
     def resources_with_permission(
-        self, requested_by: base_models.APIUser, user_id: str, resource_type: ResourceType, scope: Scope
+        self, requested_by: base_models.APIUser, user_id: str | None, resource_type: ResourceType, scope: Scope
     ) -> list[str]:
         """Get all the resource IDs (for a specific resource kind) that a specific user has access to.
 
@@ -290,8 +277,6 @@ class Authz:
         zed_token: ZedToken | None = None,
     ) -> list[Member]:
         """Get all users that are members of a resource, if role is None then all roles are retrieved."""
-        res = self._to_object(resource_type, resource_id)
-        relation = _Relation.from_role(role)
         sub_filter = SubjectFilter(subject_type=ResourceType.user.value)
         rel_filter = RelationshipFilter(
             resource_type=resource_type,
@@ -299,6 +284,7 @@ class Authz:
             optional_subject_filter=sub_filter,
         )
         if role:
+            relation = _Relation.from_role(role)
             rel_filter = RelationshipFilter(
                 resource_type=resource_type,
                 optional_resource_id=resource_id,
@@ -314,7 +300,11 @@ class Authz:
         members: list[Member] = []
         for response in responses:
             member_role = _Relation(response.relationship.relation).to_role()
-            members.append(Member(user_id=response.relationship.subject.object.object_id, role=member_role))
+            members.append(
+                Member(
+                    user_id=response.relationship.subject.object.object_id, role=member_role, resource_id=resource_id
+                )
+            )
         return members
 
     @staticmethod
@@ -338,9 +328,9 @@ class Authz:
                         message="Updating the project authorization database without a postgress transaction "
                         "is not allowed",
                     )
+                authz_change = _AuthzChange()
                 try:
                     project = await f(db_repo, session, user, *args, **kwargs)
-                    authz_change = _AuthzChange()
                     match op:
                         case ProjectAuthzOperation.create:
                             authz_change = db_repo.authz._add_project(project)
@@ -363,9 +353,12 @@ class Authz:
 
         return decorator
 
-    @_project_id_not_none
     def _add_project(self, project: Project) -> _AuthzChange:
         """Create the new project and associated resources and relations in the DB."""
+        if not project.id:
+            raise errors.ProgrammingError(
+                message="Cannot create a project in the authorization database if its ID is missing."
+            )
         creator = SubjectReference(object=_AuthzConverter.user(project.created_by))
         project_res = _AuthzConverter.project(project.id)  # type: ignore[arg-type]
         creator_is_owner = Relationship(resource=project_res, relation=_Relation.owner.value, subject=creator)
@@ -401,7 +394,6 @@ class Authz:
         )
         return _AuthzChange(apply=apply, undo=undo)
 
-    @_project_id_not_none
     @_is_allowed_on_project(Scope.DELETE)
     def _remove_project(self, user: base_models.APIUser, project: Project, zed_token: ZedToken) -> _AuthzChange:
         """Remove the relationships associated with the project."""
@@ -422,7 +414,6 @@ class Authz:
         )
         return _AuthzChange(apply=apply, undo=undo)
 
-    @_project_id_not_none
     @_is_allowed_on_project(Scope.DELETE)  # NOTE changing visibility is the same access level as removal
     def _update_project_visibility(
         self, user: base_models.APIUser, project: Project, zed_token: ZedToken
@@ -460,7 +451,7 @@ class Authz:
                 subject_type=ResourceType.user.value, optional_subject_id=all_users_sub.object.object_id
             ),
         )
-        current_relation_users: ReadRelationshipsResponse = next(
+        current_relation_users: ReadRelationshipsResponse | None = next(
             self.client.ReadRelationships(ReadRelationshipsRequest(relationship_filter=rel_filter)), None
         )
         rel_filter = RelationshipFilter(
@@ -471,7 +462,7 @@ class Authz:
                 optional_subject_id=anon_users_sub.object.object_id,
             ),
         )
-        current_relation_anon_users: ReadRelationshipsResponse = next(
+        current_relation_anon_users: ReadRelationshipsResponse | None = next(
             self.client.ReadRelationships(
                 ReadRelationshipsRequest(
                     consistency=Consistency(at_least_as_fresh=zed_token), relationship_filter=rel_filter
@@ -489,13 +480,15 @@ class Authz:
             and current_relation_anon_users.relationship.subject.object.object_type == ResourceType.anonymous_user.value
             and current_relation_anon_users.relationship.subject.object.object_id == anon_users_sub.object.object_id,
         )
+        project_already_public = project_is_public_for_users and project_is_public_for_anon_users
+        project_already_private = not project_already_public
         match project.visibility:
             case Visibility.PUBLIC:
-                if project_is_public_for_users and project_is_public_for_anon_users:
+                if project_already_public:
                     return _AuthzChange(apply=WriteRelationshipsRequest(), undo=WriteRelationshipsRequest())
                 return _AuthzChange(apply=make_public, undo=make_private)
             case Visibility.PRIVATE:
-                if not project_is_public_for_users and not project_is_public_for_anon_users:
+                if project_already_private:
                     return _AuthzChange(apply=WriteRelationshipsRequest(), undo=WriteRelationshipsRequest())
                 return _AuthzChange(apply=make_private, undo=make_public)
         raise errors.ProgrammingError(
@@ -503,17 +496,24 @@ class Authz:
             f"update permissions for visibility change for project with ID {project.id}",
         )
 
-    @_is_allowed_on_project(Scope.CHANGE_MEMBERSHIP)
+    @_is_allowed(Scope.CHANGE_MEMBERSHIP)
     def upsert_project_members(
-        self, user: base_models.APIUser, project: Project, members: list[Member], zed_token: ZedToken
-    ) -> list[Member]:
+        self,
+        user: base_models.APIUser,
+        resource_type: ResourceType,
+        resource_id: str,
+        members: list[Member],
+        zed_token: ZedToken,
+    ) -> list[MembershipChange]:
         """Updates the project members or inserts them if they do not exist.
 
         Returns the list that was updated/inserted.
         """
-        project_res = _AuthzConverter.project(project.id)
+        project_res = _AuthzConverter.project(resource_id)
         add_members: list[RelationshipUpdate] = []
         undo: list[RelationshipUpdate] = []
+        output: list[MembershipChange] = []
+        expected_user_roles = [_Relation.viewer.value, _Relation.owner.value, _Relation.editor.value]
         for member in members:
             rel = Relationship(
                 resource=project_res,
@@ -521,8 +521,8 @@ class Authz:
                 subject=SubjectReference(object=_AuthzConverter.user(member.user_id)),
             )
             existing_rel_filter = RelationshipFilter(
-                resource_type=ResourceType.project,
-                optional_resource_id=project.id,
+                resource_type=resource_type.value,
+                optional_resource_id=resource_id,
                 optional_subject_filter=SubjectFilter(
                     subject_type=ResourceType.user, optional_subject_id=member.user_id
                 ),
@@ -534,21 +534,15 @@ class Authz:
                     )
                 )
             )
-            # The new relationship is added if all goes well and deleted if we have to undo
-            add_members.extend(
-                [
-                    RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=rel),
-                ]
-            )
-            undo.append(
-                RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=rel),
-            )
-            # The existing relationships should be deleted if all goes well and added back in if we have to undo
+            existing_rels = [i for i in existing_rels if i.relationship.relation in expected_user_roles]
             if len(existing_rels) > 0:
-                for existing_rel in existing_rels:
+                # The existing relationships should be deleted if all goes well and added back in if we have to undo
+                existing_rel = existing_rels[0]
+                if existing_rel.relationship != rel:
                     add_members.append(
                         RelationshipUpdate(
-                            operation=RelationshipUpdate.OPERATION_DELETE, relationship=existing_rel.relationship
+                            operation=RelationshipUpdate.OPERATION_TOUCH,
+                            relationship=rel,
                         ),
                     )
                     undo.append(
@@ -556,6 +550,37 @@ class Authz:
                             operation=RelationshipUpdate.OPERATION_TOUCH, relationship=existing_rel.relationship
                         ),
                     )
+                    output.append(MembershipChange(member, Change.UPDATE))
+                for rel_to_remove in existing_rels[1:]:
+                    # NOTE: This means that the user has more than 1 role on the project - which should not happen
+                    # But if this does occur then we simply delete the extra roles of the user here.
+                    logging.warning(
+                        f"Removing additional unexpected role {rel_to_remove.relationship.relation} "
+                        f"of user {member.user_id} on project {resource_id}, "
+                        f"kept role {existing_rel.relationship.relation} which will be updated to {rel.relation}."
+                    )
+                    add_members.append(
+                        RelationshipUpdate(
+                            operation=RelationshipUpdate.OPERATION_DELETE,
+                            relationship=rel_to_remove.relationship,
+                        ),
+                    )
+                    undo.append(
+                        RelationshipUpdate(
+                            operation=RelationshipUpdate.OPERATION_TOUCH, relationship=rel_to_remove.relationship
+                        ),
+                    )
+                    output.append(MembershipChange(member, Change.REMOVE))
+            else:
+                # The new relationship is added if all goes well and deleted if we have to undo
+                add_members.append(
+                    RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=rel),
+                )
+                undo.append(
+                    RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=rel),
+                )
+                output.append(MembershipChange(member, Change.ADD))
+
         change = _AuthzChange(
             apply=WriteRelationshipsRequest(updates=add_members), undo=WriteRelationshipsRequest(updates=undo)
         )
@@ -564,23 +589,26 @@ class Authz:
         except Exception as err:
             self.client.WriteRelationships(change.undo)
             raise err
-        return members
+        return output
 
-    @_is_allowed_on_project(Scope.CHANGE_MEMBERSHIP)
+    @_is_allowed(Scope.CHANGE_MEMBERSHIP)
     def remove_project_members(
-        self, user: base_models.APIUser, project: Project, members: list[Member], zed_token: ZedToken
-    ) -> list[Member]:
+        self,
+        user: base_models.APIUser,
+        resource_type: ResourceType,
+        resource_id: str,
+        user_ids: list[str],
+        zed_token: ZedToken,
+    ) -> list[MembershipChange]:
         """Remove the specific members from the project, then return the list of members that were removed."""
-        project_res = _AuthzConverter.project(project.id)  # type: ignore[arg-type]
         add_members: list[RelationshipUpdate] = []
         remove_members: list[RelationshipUpdate] = []
-        for member in members:
+        output: list[MembershipChange] = []
+        for user_id in user_ids:
             existing_rel_filter = RelationshipFilter(
-                resource_type=ResourceType.project,
-                optional_resource_id=project.id,
-                optional_subject_filter=SubjectFilter(
-                    subject_type=ResourceType.user, optional_subject_id=member.user_id
-                ),
+                resource_type=resource_type.value,
+                optional_resource_id=resource_id,
+                optional_subject_filter=SubjectFilter(subject_type=ResourceType.user, optional_subject_id=user_id),
             )
             existing_rels: Iterator[ReadRelationshipsResponse] = self.client.ReadRelationships(
                 ReadRelationshipsRequest(
@@ -588,19 +616,28 @@ class Authz:
                 )
             )
             # NOTE: We have to make sure that when we undo we only put back relationships that existed already.
-            # Blidnly putting back all removed relationship may result in adding things that weren't there before.
+            # Blidnly undoing everything that was passed in may result in adding things that weren't there before.
             for existing_rel in existing_rels:
                 add_members.append(
                     RelationshipUpdate(
                         operation=RelationshipUpdate.OPERATION_TOUCH, relationship=existing_rel.relationship
                     )
                 )
-            rel = Relationship(
-                resource=project_res,
-                relation=_Relation.from_role(member.role).value,
-                subject=SubjectReference(_AuthzConverter.user(member.user_id)),
-            )
-            remove_members.append(RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=rel))
+                remove_members.append(
+                    RelationshipUpdate(
+                        operation=RelationshipUpdate.OPERATION_DELETE, relationship=existing_rel.relationship
+                    )
+                )
+                output.append(
+                    MembershipChange(
+                        Member(
+                            Role(existing_rel.relationship.relation),
+                            existing_rel.relationship.subject.object.object_id,
+                            resource_id,
+                        ),
+                        Change.REMOVE,
+                    ),
+                )
         change = _AuthzChange(
             apply=WriteRelationshipsRequest(updates=remove_members), undo=WriteRelationshipsRequest(updates=add_members)
         )
@@ -609,4 +646,4 @@ class Authz:
         except Exception as err:
             self.client.WriteRelationships(change.undo)
             raise err
-        return members
+        return output

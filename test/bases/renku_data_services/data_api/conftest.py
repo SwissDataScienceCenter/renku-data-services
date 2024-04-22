@@ -1,4 +1,6 @@
 import json
+
+from authzed.api.v1 import Relationship, RelationshipUpdate, SubjectReference, WriteRelationshipsRequest
 from test.bases.renku_data_services.keycloak_sync.test_sync import get_kc_users
 
 import pytest
@@ -12,6 +14,7 @@ from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import UserInfo
+from renku_data_services.authz.authz import _AuthzConverter
 
 
 @pytest.fixture
@@ -53,9 +56,21 @@ def unauthorized_headers() -> dict[str, str]:
     """Authentication headers for an anonymous user (did not log in)."""
     return {"Authorization": "Bearer {}"}
 
+@pytest.fixture
+def bootstrap_admins(app_config: Config, admin_user: UserInfo):
+    authz = app_config.authz
+    rels: list[RelationshipUpdate] = []
+    sub = SubjectReference(object=_AuthzConverter.user(admin_user.id))
+    rels.append(
+        RelationshipUpdate(
+            operation=RelationshipUpdate.OPERATION_TOUCH,
+            relationship=Relationship(resource=_AuthzConverter.platform(), relation="admin", subject=sub),
+        )
+    )
+    authz.client.WriteRelationships(WriteRelationshipsRequest(updates=rels))
 
 @pytest_asyncio.fixture
-async def sanic_app(app_config: Config, users: list[UserInfo]) -> Sanic:
+async def sanic_app(app_config: Config, users: list[UserInfo], bootstrap_admins) -> Sanic:
     app_config.kc_api = DummyKeycloakAPI(users=get_kc_users(users))
     app = Sanic(app_config.app_name)
     app = register_all_handlers(app, app_config)

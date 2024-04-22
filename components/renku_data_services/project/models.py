@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Optional
+from typing import Optional, TypeAlias
 
 from renku_data_services import base_models, errors
 from renku_data_services.authz.models import Visibility
@@ -52,3 +52,5 @@ class Project:
             repositories=[Repository(r) for r in data.get("repositories", [])],
             description=data.get("description"),
         )
+
+ProjectsType: TypeAlias = list[Project]

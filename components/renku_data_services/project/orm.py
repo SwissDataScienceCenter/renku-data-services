@@ -10,6 +10,7 @@ from ulid import ULID
 
 from renku_data_services.namespace.orm import NamespaceORM
 from renku_data_services.project import models
+from renku_data_services.authz import models as authz_models
 from renku_data_services.project.apispec import Visibility
 
 metadata_obj = MetaData(schema="projects")  # Has to match alembic ini section name
@@ -51,7 +52,9 @@ class ProjectORM(BaseORM):
             name=self.name,
             slug=self.slug.slug,
             namespace=self.slug.namespace.slug,
-            visibility=self.visibility,
+            visibility=authz_models.Visibility.PUBLIC
+            if self.visibility == Visibility.public
+            else authz_models.Visibility.PRIVATE,
             created_by=self.created_by_id,
             creation_date=self.creation_date,
             repositories=[models.Repository(r.url) for r in self.repositories],

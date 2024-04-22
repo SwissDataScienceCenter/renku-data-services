@@ -1,23 +1,24 @@
 """Converter of models to Avro schemas for events."""
 
+from types import UnionType
 from typing import TypeAlias, cast
 
 from dataclasses_avroschema.schema_generator import AvroModel
 
 from renku_data_services.authz import models as authz_models
 from renku_data_services.errors import errors
-from renku_data_services.message_queue.avro_models.io.renku.events import v1
+from renku_data_services.message_queue.avro_models.io.renku.events import v1, v2
 from renku_data_services.project import models as project_models
 from renku_data_services.users import models as user_models
 
 
 class _ProjectEventConverter:
     @staticmethod
-    def _convert_project_visibility(visibility: project_models.Visibility) -> v1.Visibility:
+    def _convert_project_visibility(visibility: authz_models.Visibility) -> v1.Visibility:
         match visibility:
-            case project_models.Visibility.public:
+            case authz_models.Visibility.PUBLIC:
                 return v1.Visibility.PUBLIC
-            case project_models.Visibility.private:
+            case authz_models.Visibility.PRIVATE:
                 return v1.Visibility.PRIVATE
 
         raise errors.EventError(
@@ -72,56 +73,70 @@ class _UserEventConverter:
 
 class _ProjectAuthzEventConverter:
     @staticmethod
-    def _convert_project_member_role(role: authz_models.Role) -> v1.ProjectMemberRole:
+    def _convert_project_member_role(role: authz_models.Role) -> v2.MemberRole:
         match role:
-            case authz_models.Role.MEMBER:
-                return v1.ProjectMemberRole.MEMBER
+            case authz_models.Role.EDITOR:
+                return v2.MemberRole.EDITOR
+            case authz_models.Role.VIEWER:
+                return v2.MemberRole.VIEWER
             case authz_models.Role.OWNER:
-                return v1.ProjectMemberRole.OWNER
+                return v2.MemberRole.OWNER
         raise errors.EventError(message=f"Cannot convert role {role} to an event")
 
     @staticmethod
-    def to_event(project_member: authz_models.Member, event_type: type[AvroModel]) -> AvroModel:
-        match event_type:
-            case v1.ProjectAuthorizationAdded:
-                return v1.ProjectAuthorizationAdded(
-                    projectId=project_member.project_id,
-                    userId=project_member.user_id,
-                    role=_ProjectAuthzEventConverter._convert_project_member_role(project_member.role),
-                )
-            case v1.ProjectAuthorizationRemoved:
-                return v1.ProjectAuthorizationRemoved(
-                    projectId=project_member.project_id,
-                    userId=project_member.user_id,
-                )
-            case v1.ProjectAuthorizationUpdated:
-                return v1.ProjectAuthorizationAdded(
-                    projectId=project_member.project_id,
-                    userId=project_member.user_id,
-                    role=_ProjectAuthzEventConverter._convert_project_member_role(project_member.role),
-                )
-        raise errors.EventError(message=f"Trying to convert a project member to an uknown event type {event_type}")
+    def to_events(member_changes: list[authz_models.MembershipChange]) -> list[AvroModel]:
+        output: list[AvroModel] = []
+        for change in member_changes:
+            match change.change:
+                case authz_models.Change.UPDATE:
+                    output.append(
+                        v2.ProjectMemberUpdated(
+                            projectId=change.member.resource_id,
+                            userId=change.member.user_id,
+                            role=_ProjectAuthzEventConverter._convert_project_member_role(change.member.role),
+                        )
+                    )
+                case authz_models.Change.REMOVE:
+                    output.append(
+                        v2.ProjectMemberRemoved(
+                            projectId=change.member.resource_id,
+                            userId=change.member.user_id,
+                        )
+                    )
+                case authz_models.Change.ADD:
+                    output.append(
+                        v2.ProjectMemberAdded(
+                            projectId=change.member.resource_id,
+                            userId=change.member.user_id,
+                            role=_ProjectAuthzEventConverter._convert_project_member_role(change.member.role),
+                        )
+                    )
+                case _:
+                    raise errors.EventError(
+                        message="Trying to convert a project membership change to an uknown event type with "
+                        f"unkonwn change {change.change}"
+                    )
+        return output
 
 
-_ModelTypes: TypeAlias = project_models.Project | user_models.UserInfo | authz_models.Member
+_ModelTypes: TypeAlias = project_models.Project | user_models.UserInfo | list[authz_models.MembershipChange]
 
 
 class EventConverter:
     """Generates event from any type of data service models."""
 
     @staticmethod
-    def to_event(input: _ModelTypes, event_type: type[AvroModel]) -> AvroModel:
+    def to_event(input: _ModelTypes, event_type: type[AvroModel] | v2.project_member_changed) -> list[AvroModel]:
         """Generate an event for a data service model based on an event type."""
-        match type(input):
-            case project_models.Project:
-                input = cast(project_models.Project, input)
-                return _ProjectEventConverter.to_event(input, event_type)
-            case user_models.UserInfo:
-                input = cast(user_models.UserInfo, input)
-                return _UserEventConverter.to_event(input, event_type)
-            case authz_models.Member:
-                input = cast(authz_models.Member, input)
-                return _ProjectAuthzEventConverter.to_event(input, event_type)
+        if isinstance(input, project_models.Project):
+            input = cast(project_models.Project, input)
+            return [_ProjectEventConverter.to_event(input, event_type)]
+        elif isinstance(input, user_models.UserInfo):
+            input = cast(user_models.UserInfo, input)
+            return [_UserEventConverter.to_event(input, event_type)]
+        elif isinstance(input, list) and len(input) > 0 and isinstance(input[0], authz_models.MembershipChange):
+            input = cast(list[authz_models.MembershipChange], input)
+            return _ProjectAuthzEventConverter.to_events(input)
         raise errors.EventError(
             message=f"Trying to convert an uknown model of type {type(input)} to an event type {event_type}"
         )

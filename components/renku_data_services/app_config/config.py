@@ -245,7 +245,10 @@ class Config:
         """The DB adapter for Renku native projects members."""
         if not self._project_member_repo:
             self._project_member_repo = ProjectMemberRepository(
-                session_maker=self.db.async_session_maker, authz=self.authz
+                session_maker=self.db.async_session_maker,
+                authz=self.authz,
+                event_repo=self.event_repo,
+                message_queue=self.message_queue,
             )
         return self._project_member_repo
 
@@ -260,9 +263,7 @@ class Config:
     def session_repo(self) -> SessionRepository:
         """The DB adapter for sessions."""
         if not self._session_repo:
-            self._session_repo = SessionRepository(
-                session_maker=self.db.async_session_maker, project_authz=self.authz
-            )
+            self._session_repo = SessionRepository(session_maker=self.db.async_session_maker, project_authz=self.authz)
         return self._session_repo
 
     @property
