@@ -5,6 +5,7 @@ import pytest_asyncio
 import schemathesis
 from hypothesis import HealthCheck, settings
 from sanic_testing.testing import SanicASGITestClient
+from schemathesis.hooks import HookContext
 from schemathesis.specs.openapi.schemas import BaseOpenAPISchema
 
 
@@ -18,6 +19,22 @@ async def apispec(sanic_client: SanicASGITestClient) -> BaseOpenAPISchema:
     # See https://github.com/schemathesis/schemathesis/issues/1142
     schema["security"] = []
     return schemathesis.from_dict(schema)
+
+
+# Same issue as for "security" for the "If-Match" header.
+# We skip header values which cannot be encoded as ascii.
+@schemathesis.hook
+def filter_headers(context: HookContext, headers: dict[str, str]):
+    op = context.operation
+    if op.method.upper() == "PATCH" and op.path == "/projects/{project_id}":
+        if_match = headers.get("If-Match")
+        if if_match and isinstance(if_match, str):
+            try:
+                if_match.encode("ascii")
+                return True
+            except UnicodeEncodeError:
+                return False
+    return True
 
 
 schema = schemathesis.from_pytest_fixture(
