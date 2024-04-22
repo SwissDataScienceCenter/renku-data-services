@@ -5,7 +5,7 @@ from sanic import Sanic
 from renku_data_services.app_config import Config
 from renku_data_services.base_api.error_handler import CustomErrorHandler
 from renku_data_services.base_api.misc import MiscBP
-from renku_data_services.connected_services.blueprints import AdminOAuth2ClientsBP
+from renku_data_services.connected_services.blueprints import AdminOAuth2ClientsBP, OAuth2ClientsBP
 from renku_data_services.crc import apispec
 from renku_data_services.crc.blueprints import (
     ClassesBP,
@@ -95,6 +95,12 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         session_repo=config.session_repo,
         authenticator=config.authenticator,
     )
+    oauth2_clients = OAuth2ClientsBP(
+        name="oauth2_clients",
+        url_prefix=url_prefix,
+        connected_services_repo=config.connected_services_repo,
+        authenticator=config.authenticator,
+    )
     admin_oauth2_clients = AdminOAuth2ClientsBP(
         name="admin_oauth2_clients",
         url_prefix=url_prefix,
@@ -117,6 +123,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
             group.blueprint(),
             session_environments.blueprint(),
             session_launchers.blueprint(),
+            oauth2_clients.blueprint(),
             admin_oauth2_clients.blueprint()
         ]
     )
