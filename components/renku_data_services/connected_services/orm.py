@@ -21,6 +21,7 @@ class OAuth2ClientORM(BaseORM):
     client_id: Mapped[str] = mapped_column("client_id", String(500))
     display_name: Mapped[str] = mapped_column("display_name", String(99))
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
+    client_secret: Mapped[str | None] = mapped_column("client_secret", String(500), default=None)
     creation_date: Mapped[datetime] = mapped_column(
         "creation_date", DateTime(timezone=True), default=None,  server_default=func.now(), nullable=False
     )

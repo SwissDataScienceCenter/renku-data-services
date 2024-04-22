@@ -57,7 +57,7 @@ python-gitlab = "^3.15.0"
 psycopg = { version = "^3.1.10", extras = ["binary"] }
 urllib3 = "^2.2.1"
 deepmerge = "^1.1.0"
-authlib = "^1.2.1"
+authlib = "^1.3.0"
 redis = "^5.0.1"
 dataclasses-avroschema = "^0.57.4"
 undictify = "^0.11.3"
@@ -201,6 +201,7 @@ module = [
   "dataclasses_avroschema",
   "urllib3.*",
   "prometheus_sanic.*",
+  "authlib.integrations.httpx_client",
 ]
 ignore_missing_imports = true
 

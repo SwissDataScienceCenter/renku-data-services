@@ -11,7 +11,7 @@ paths:
   /oauth2/providers:
     get:
       summary: Get all OAuth2 Clients
-      description: The list of available OAuth2 Clients.
+      description: Get the list of available OAuth2 Clients.
       responses:
         "200":
           description: The list of providers.
@@ -23,10 +23,46 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - oauth2
+  /oauth2/providers/{provider}:
+    get:
+      summary: Get an OAuth2 Client
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The provider.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Provider"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - oauth2
+  /oauth2/providers/{provider}/authorize:
+    get:
+      summary: Authorize an OAuth2 Client
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema:
+            type: string
+      responses:
+        "301":
+          description: The authorization URL for this OAuth2 Client.
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - oauth2
   /oauth2/admin/providers:
     get:
       summary: Get all OAuth2 Clients
-      description: The list of available OAuth2 Clients (admin view).
+      description: Get the list of available OAuth2 Clients (admin view).
       responses:
         "200":
           description: The list of providers.
@@ -58,6 +94,72 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - oauth2
+  /oauth2/admin/providers/{provider}:
+    get:
+      summary: Get an OAuth2 Client
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The provider.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminProvider"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - oauth2
+    patch:
+      summary: Update specific fields of an OAuth2 Client
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminProviderPatch"
+      responses:
+        "200":
+          description: The updated OAuth2 Client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminProvider"
+        "404":
+          description: The OAuth2 Client does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - oauth2
+    delete:
+      summary: Remove an OAuth2 Client
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: The OAuth2 Client was removed or did not exist in the first place
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - oauth2
 components:
   schemas:
     AdminProviderList:
@@ -70,28 +172,40 @@ components:
       properties:
         id:
           $ref: "#/components/schemas/ProviderId"
-        clientId:
+        client_id:
           $ref: "#/components/schemas/ClientId"
-        displayName:
+        display_name:
           $ref: "#/components/schemas/DisplayName"
       required:
         - id
-        - clientId
-        - displayName
+        - client_id
+        - display_name
     AdminProviderPost:
       type: object
       additionalProperties: false
       properties:
         id:
           $ref: "#/components/schemas/ProviderId"
-        clientId:
+        client_id:
           $ref: "#/components/schemas/ClientId"
-        displayName:
+        client_secret:
+          $ref: "#/components/schemas/ClientSecret"
+        display_name:
           $ref: "#/components/schemas/DisplayName"
       required:
         - id
-        - clientId
-        - displayName
+        - client_id
+        - display_name
+    AdminProviderPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        client_id:
+          $ref: "#/components/schemas/ClientId"
+        client_secret:
+          $ref: "#/components/schemas/ClientSecret"
+        display_name:
+          $ref: "#/components/schemas/DisplayName"
     ProviderList:
       type: array
       items:
@@ -102,17 +216,20 @@ components:
       properties:
         id:
           $ref: "#/components/schemas/ProviderId"
-        displayName:
+        display_name:
           $ref: "#/components/schemas/DisplayName"
       required:
         - id
-        - displayName
+        - display_name
     ProviderId:
       type: string
       example: "some-id"
     ClientId:
       type: string
       example: "some-client-id"
+    ClientSecret:
+      type: string
+      example: "some-client-secret"
     DisplayName:
       type: string
       example: "my oauth2 application"
