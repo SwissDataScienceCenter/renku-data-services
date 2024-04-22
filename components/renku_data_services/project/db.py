@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from asyncio import gather
 from collections.abc import Callable
-from datetime import UTC, datetime
 from typing import Any, NamedTuple, cast
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import renku_data_services.base_models as base_models
@@ -24,7 +23,7 @@ from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import dispatch_message
 from renku_data_services.namespace.db import GroupRepository
-from renku_data_services.project import models
+from renku_data_services.project import apispec, models
 from renku_data_services.project import orm as schemas
 from renku_data_services.project.apispec import Role, Visibility
 from renku_data_services.utils.core import with_db_transaction
@@ -196,7 +195,7 @@ class ProjectRepository:
     @with_db_transaction
     @dispatch_message(create_project_created_message)
     async def insert_project(
-        self, session: AsyncSession, user: base_models.APIUser, project: models.Project
+        self, session: AsyncSession, user: base_models.APIUser, project=apispec.ProjectPost
     ) -> models.Project:
         """Insert a new project entry."""
         ns = await self.group_repo.get_namespace(user, project.namespace)
@@ -204,21 +203,26 @@ class ProjectRepository:
             raise errors.MissingResourceError(
                 message=f"The project cannot be created because the namespace {project.namespace} does not exist"
             )
-        user_id = cast(str, user.id)
-        repos = [schemas.ProjectRepositoryORM(url) for url in (project.repositories or [])]
+
+        if user.id is None:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+
+        repositories = [schemas.ProjectRepositoryORM(url) for url in (project.repositories or [])]
         slug = project.slug or base_models.Slug.from_name(project.name).value
         project_orm = schemas.ProjectORM(
             name=project.name,
             visibility=(
-                models.Visibility(project.visibility) if isinstance(project.visibility, str) else project.visibility
+                models.Visibility(project.visibility)
+                if isinstance(project.visibility, str)
+                else project.visibility
             ),
-            created_by_id=user_id,
+            created_by_id=user.id,
             description=project.description,
-            repositories=repos,
-            creation_date=datetime.now(UTC).replace(microsecond=0),
+            repositories=repositories,
         )
-        slug = schemas.ProjectSlug(slug, project_id=project_orm.id, namespace_id=ns.id)
-        session.add(slug)
+        project_slug = schemas.ProjectSlug(slug, project_id=project_orm.id, namespace_id=ns.id)
+
+        session.add(project_slug)
         session.add(project_orm)
         await session.flush()
         await session.refresh(project_orm)
@@ -236,11 +240,7 @@ class ProjectRepository:
     @with_db_transaction
     @dispatch_message(create_project_update_message)
     async def update_project(
-        self,
-        session: AsyncSession,
-        user: base_models.APIUser,
-        project_id: str,
-        **payload,
+        self, session: AsyncSession, user: base_models.APIUser, project_id: str, etag: str | None = None, **payload
     ) -> models.Project:
         """Update a project entry."""
         authorized = await self.project_authz.has_permission(user=user, project_id=project_id, scope=Scope.WRITE)
@@ -249,19 +249,25 @@ class ProjectRepository:
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
 
-        result = await session.execute(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
-        project = result.scalar_one_or_none()
+        result = await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
+        project = result.one_or_none()
 
         if project is None:
             raise errors.MissingResourceError(message=f"The project with id '{project_id}' cannot be found")
 
+        current_etag = project.dump().etag
+        if etag is not None and current_etag != etag:
+            raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
+
         visibility_before = project.visibility
-        session.add(project)  # reattach to session
+
         if "repositories" in payload:
             payload["repositories"] = [
                 schemas.ProjectRepositoryORM(url=r, project_id=project_id, project=project)
                 for r in payload["repositories"]
             ]
+            # Trigger update for ``updated_at`` column
+            await session.execute(update(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id).values())
 
         for key, value in payload.items():
             # NOTE: ``slug``, ``id``, ``created_by``, and ``creation_date`` cannot be edited or cannot
@@ -275,13 +281,15 @@ class ProjectRepository:
             if not ns:
                 raise errors.MissingResourceError(message=f"The namespace with slug {ns_slug} does not exist")
             project.slug.namespace_id = ns.id
-            await session.refresh(project)
 
         if visibility_before != project.visibility:
             public_project = project.visibility == Visibility.public
             await self.project_authz.update_project_visibility(
                 requested_by=user, project_id=project_id, public_project=public_project
             )
+
+        await session.flush()
+        await session.refresh(project)
 
         return project.dump()  # NOTE: Triggers validation before the transaction saves data
 

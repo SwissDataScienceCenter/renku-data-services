@@ -8,6 +8,7 @@ from sanic_ext import validate
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_api.etag import if_match_required
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.errors import errors
 from renku_data_services.project import apispec
@@ -44,8 +45,8 @@ class ProjectsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.ProjectPost)
         async def _post(_: Request, *, user: base_models.APIUser, body: apispec.ProjectPost):
-            result = await self.project_repo.insert_project(user=user, project=body)
-            return json(apispec.Project.model_validate(result).model_dump(exclude_none=True, mode="json"), 201)
+            project = await self.project_repo.insert_project(user=user, project=body)
+            return json(apispec.Project.model_validate(project).model_dump(exclude_none=True, mode="json"), 201)
 
         return "/projects", ["POST"], _post
 
@@ -53,9 +54,17 @@ class ProjectsBP(CustomBlueprint):
         """Get a specific project."""
 
         @authenticate(self.authenticator)
-        async def _get_one(_: Request, *, user: base_models.APIUser, project_id: str):
+        async def _get_one(request: Request, *, user: base_models.APIUser, project_id: str):
             project = await self.project_repo.get_project(user=user, project_id=project_id)
-            return json(apispec.Project.model_validate(project).model_dump(exclude_none=True, mode="json"))
+
+            etag = request.headers.get("If-None-Match")
+            if project.etag is not None and project.etag == etag:
+                return HTTPResponse(status=304)
+
+            headers = {"ETag": project.etag} if project.etag is not None else None
+            return json(
+                apispec.Project.model_validate(project).model_dump(exclude_none=True, mode="json"), headers=headers
+            )
 
         return "/projects/<project_id>", ["GET"], _get_one
 
@@ -85,11 +94,16 @@ class ProjectsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
+        @if_match_required
         @validate(json=apispec.ProjectPatch)
-        async def _patch(_: Request, *, user: base_models.APIUser, project_id: str, body: apispec.ProjectPatch):
+        async def _patch(
+            _: Request, *, user: base_models.APIUser, project_id: str, body: apispec.ProjectPatch, etag: str
+        ):
             body_dict = body.model_dump(exclude_none=True)
 
-            updated_project = await self.project_repo.update_project(user=user, project_id=project_id, **body_dict)
+            updated_project = await self.project_repo.update_project(
+                user=user, project_id=project_id, etag=etag, **body_dict
+            )
 
             return json(apispec.Project.model_validate(updated_project).model_dump(exclude_none=True, mode="json"))
 
