@@ -1,17 +1,11 @@
 """Tests for secrets blueprints."""
 
 import json
-from test.bases.renku_data_services.keycloak_sync.test_sync import get_kc_users
 from typing import Any
 
 import pytest
-import pytest_asyncio
-from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 
-from renku_data_services.secrets.config import Config
-from renku_data_services.secrets_storage_api.app import register_all_handlers
-from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import UserInfo
 
 
@@ -23,14 +17,6 @@ def users() -> list[UserInfo]:
         UserInfo("member-1", "Member-1", "Doe", "member-1.doe@gmail.com"),
         UserInfo("member-2", "Member-2", "Doe", "member-2.doe@gmail.com"),
     ]
-
-
-@pytest_asyncio.fixture
-async def secrets_sanic_client(secrets_storage_app_config: Config, users: list[UserInfo]) -> SanicASGITestClient:
-    secrets_storage_app_config.kc_api = DummyKeycloakAPI(users=get_kc_users(users))
-    app = Sanic(secrets_storage_app_config.app_name)
-    app = register_all_handlers(app, secrets_storage_app_config)
-    return SanicASGITestClient(app)
 
 
 @pytest.fixture
@@ -182,3 +168,37 @@ async def test_anonymous_users_cannot_create_secrets(sanic_client: SanicASGITest
 
     assert response.status_code == 401, response.text
     assert "You have to be authenticated to perform this operation." in response.json["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_secret_encryption_decryption(
+    sanic_client: SanicASGITestClient,
+    secrets_sanic_client: SanicASGITestClient,
+    secrets_storage_app_config,
+    user_headers,
+    create_secret,
+):
+    """Test adding a secret and decrypting it in the secret service."""
+    secret1 = await create_secret("secret-1", "value-1")
+    secret1_id = secret1["id"]
+    secret2 = await create_secret("secret-2", "value-2")
+    secret2_id = secret2["id"]
+
+    payload = {
+        "name": "test-secret",
+        "namespace": "test-namespace",
+        "secret_ids": [secret1_id, secret2_id],
+        "owner_references": [
+            {
+                "apiVersion": "amalthea.dev/v1alpha1",
+                "kind": "JupyterServer",
+                "name": "renku-1234",
+                "uid": "c9328118-8d32-41b4-b9bd-1437880c95a2",
+                "controller": True,
+            }
+        ],
+    }
+
+    _, response = await secrets_sanic_client.post("/api/secrets/k8s_secret", headers=user_headers, json=payload)
+    assert response.status_code == 201
+    assert len(secrets_storage_app_config.core_client.secrets) == 1

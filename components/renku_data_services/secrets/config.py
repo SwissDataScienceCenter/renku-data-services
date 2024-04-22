@@ -62,7 +62,13 @@ class Config:
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
             authenticator = DummyAuthenticator()
             core_client = DummyCoreClient({}, {})
-            secrets_service_private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+            secrets_service_private_key_path = os.getenv(f"{prefix}SECRETS_SERVICE_PRIVATE_KEY_PATH")
+            if secrets_service_private_key_path:
+                secrets_service_private_key = serialization.load_pem_private_key(
+                    Path(secrets_service_private_key_path).read_bytes(), password=None
+                )
+            else:
+                secrets_service_private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         else:
             keycloak_url = os.environ.get(f"{prefix}KEYCLOAK_URL")
             if keycloak_url is None:

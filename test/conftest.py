@@ -5,6 +5,8 @@ import secrets
 from collections.abc import Iterator
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from hypothesis import settings
 from pytest_postgresql import factories
 
@@ -74,7 +76,34 @@ postgresql = factories.postgresql("postgresql_in_docker")
 
 
 @pytest.fixture
-def app_config(postgresql, monkeypatch) -> Iterator[DataConfig]:
+def secrets_key_pair(monkeypatch, tmp_path):
+    """Create a public/private key pair to be used for secrets service tests."""
+
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    priv_key_path = tmp_path / "key.priv"
+    priv_key_path.write_bytes(
+        private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+    )
+
+    secrets_service_public_key = private_key.public_key()
+    pub_key_path = tmp_path / "key.pub"
+    pub_key_path.write_bytes(
+        secrets_service_public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+    )
+
+    monkeypatch.setenv("SECRETS_SERVICE_PUBLIC_KEY_PATH", pub_key_path.as_posix())
+    monkeypatch.setenv("SECRETS_SERVICE_PRIVATE_KEY_PATH", priv_key_path.as_posix())
+
+
+@pytest.fixture
+def app_config(postgresql, secrets_key_pair, monkeypatch) -> Iterator[DataConfig]:
     monkeypatch.setenv("DUMMY_STORES", "true")
     monkeypatch.setenv("DB_NAME", postgresql.info.dbname)
     monkeypatch.setenv("MAX_PINNED_PROJECTS", "5")
@@ -88,20 +117,14 @@ def app_config(postgresql, monkeypatch) -> Iterator[DataConfig]:
     config.db.dispose_connection()
 
 
-secrets_storage_postgresql_in_docker = factories.postgresql_noproc(
-    dbname="secrets-storage", load=[get_init_db("secrets-storage")]
-)
-secrets_storage_postgresql = factories.postgresql("secrets_storage_postgresql_in_docker")
-
-
 @pytest.fixture
-def secrets_storage_app_config(secrets_storage_postgresql, monkeypatch, tmp_path) -> Iterator[DataConfig]:
+def secrets_storage_app_config(postgresql, secrets_key_pair, monkeypatch, tmp_path) -> Iterator[DataConfig]:
     encryption_key_path = tmp_path / "encryption-key"
     encryption_key_path.write_bytes(secrets.token_bytes(32))
 
     monkeypatch.setenv("ENCRYPTION_KEY_PATH", encryption_key_path.as_posix())
     monkeypatch.setenv("DUMMY_STORES", "true")
-    monkeypatch.setenv("DB_NAME", secrets_storage_postgresql.info.dbname)
+    monkeypatch.setenv("DB_NAME", postgresql.info.dbname)
     monkeypatch.setenv("MAX_PINNED_PROJECTS", "5")
 
     config = SecretsConfig.from_env()

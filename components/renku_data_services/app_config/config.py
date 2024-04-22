@@ -318,11 +318,18 @@ class Config:
         user_preferences_config = UserPreferencesConfig(max_pinned_projects=max_pinned_projects)
         db = DBConfig.from_env(prefix)
         kc_api: IKeycloakAPI
+        secrets_service_public_key: PublicKeyTypes
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
             encryption_key = secrets.token_bytes(32)
-            private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-            secrets_service_public_key: PublicKeyTypes = private_key.public_key()
+            secrets_service_public_key_path = os.getenv(f"{prefix}SECRETS_SERVICE_PUBLIC_KEY_PATH")
+            if secrets_service_public_key_path is not None:
+                secrets_service_public_key = serialization.load_pem_public_key(
+                    Path(secrets_service_public_key_path).read_bytes()
+                )
+            else:
+                private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+                secrets_service_public_key = private_key.public_key()
 
             authenticator = DummyAuthenticator()
             gitlab_authenticator = DummyAuthenticator()
