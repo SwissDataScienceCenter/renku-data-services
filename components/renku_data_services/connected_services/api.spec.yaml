@@ -1,0 +1,147 @@
+openapi: 3.0.2
+info:
+  title: Renku Connected Services
+  description: |
+    Service which allows users to connect to services hosted on third-party platforms.
+  version: 0.0.1
+servers:
+  - url: /api/data
+  - url: /ui-server/api/data
+paths:
+  /oauth2/providers:
+    get:
+      summary: Get all OAuth2 Clients
+      description: The list of available OAuth2 Clients.
+      responses:
+        "200":
+          description: The list of providers.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderList"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - oauth2
+  /oauth2/admin/providers:
+    get:
+      summary: Get all OAuth2 Clients
+      description: The list of available OAuth2 Clients (admin view).
+      responses:
+        "200":
+          description: The list of providers.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminProviderList"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - oauth2
+    post:
+      summary: Create a new OAuth2 Client
+      description: Create a new OAuth2 Client by sending a configuration.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: "#/components/schemas/AdminProviderPost"
+      responses:
+        "201":
+          description: The OAuth2 Client was created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminProvider"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - oauth2
+components:
+  schemas:
+    AdminProviderList:
+      type: array
+      items:
+        $ref: "#/components/schemas/AdminProvider"
+    AdminProvider:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/ProviderId"
+        clientId:
+          $ref: "#/components/schemas/ClientId"
+        displayName:
+          $ref: "#/components/schemas/DisplayName"
+      required:
+        - id
+        - clientId
+        - displayName
+    AdminProviderPost:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/ProviderId"
+        clientId:
+          $ref: "#/components/schemas/ClientId"
+        displayName:
+          $ref: "#/components/schemas/DisplayName"
+      required:
+        - id
+        - clientId
+        - displayName
+    ProviderList:
+      type: array
+      items:
+        $ref: "#/components/schemas/Provider"
+    Provider:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/ProviderId"
+        displayName:
+          $ref: "#/components/schemas/DisplayName"
+      required:
+        - id
+        - displayName
+    ProviderId:
+      type: string
+      example: "some-id"
+    ClientId:
+      type: string
+      example: "some-client-id"
+    DisplayName:
+      type: string
+      example: "my oauth2 application"
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: integer
+              minimum: 0
+              exclusiveMinimum: true
+              example: 1404
+            detail:
+              type: string
+              example: "A more detailed optional message showing what the problem was"
+            message:
+              type: string
+              example: "Something went wrong - please try again later"
+          required:
+            - "code"
+            - "message"
+      required:
+        - "error"
+  responses:
+    Error:
+      description: The schema for all 4xx and 5xx responses
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"

@@ -20,6 +20,7 @@ from tenacity import retry, stop_after_attempt, stop_after_delay, wait_fixed
 from yaml import safe_load
 
 import renku_data_services.base_models as base_models
+import renku_data_services.connected_services
 import renku_data_services.crc
 import renku_data_services.storage
 import renku_data_services.user_preferences
@@ -29,6 +30,7 @@ from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.authn.gitlab import GitlabAuthenticator
 from renku_data_services.authn.keycloak import KcUserStore, KeycloakAuthenticator
 from renku_data_services.authz.authz import IProjectAuthorizer, SQLProjectAuthorizer
+from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.crc import models
 from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
 from renku_data_services.data_api.server_options import (
@@ -145,6 +147,7 @@ class Config:
     _user_preferences_repo: UserPreferencesRepository | None = field(default=None, repr=False, init=False)
     _kc_user_repo: KcUserRepo | None = field(default=None, repr=False, init=False)
     _project_member_repo: ProjectMemberRepository | None = field(default=None, repr=False, init=False)
+    _connected_services_repo: ConnectedServicesRepository | None = field(default=None, repr=False, init=False)
 
     def __post_init__(self):
         spec_file = Path(renku_data_services.crc.__file__).resolve().parent / "api.spec.yaml"
@@ -175,7 +178,13 @@ class Config:
         with open(spec_file) as f:
             sessions = safe_load(f)
 
-        self.spec = merge_api_specs(crc_spec, storage_spec, user_preferences_spec, users, projects, groups, sessions)
+        spec_file = Path(renku_data_services.connected_services.__file__).resolve().parent / "api.spec.yaml"
+        with open(spec_file) as f:
+            connected_services = safe_load(f)
+
+        self.spec = merge_api_specs(
+            crc_spec, storage_spec, user_preferences_spec, users, projects, groups, sessions, connected_services
+        )
 
         if self.default_resource_pool_file is not None:
             with open(self.default_resource_pool_file) as f:
@@ -291,6 +300,15 @@ class Config:
                 group_repo=self.group_repo,
             )
         return self._kc_user_repo
+
+    @property
+    def connected_services_repo(self) -> ConnectedServicesRepository:
+        """The DB adapter for connected services."""
+        if not self._connected_services_repo:
+            self._connected_services_repo = ConnectedServicesRepository(
+                session_maker=self.db.async_session_maker,
+            )
+        return self._connected_services_repo
 
     @classmethod
     def from_env(cls, prefix: str = ""):

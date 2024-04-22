@@ -5,6 +5,7 @@ from logging.config import fileConfig
 from alembic import context
 
 from renku_data_services.authz.orm import BaseORM as authz
+from renku_data_services.connected_services.orm import BaseORM as connected_services
 from renku_data_services.crc.orm import BaseORM as crc
 from renku_data_services.message_queue.orm import BaseORM as events
 from renku_data_services.migrations.utils import run_migrations
@@ -34,5 +35,6 @@ all_metadata = [
     users.metadata,
     events.metadata,
     namespaces.metadata,
+    connected_services.metadata,
 ]
 run_migrations(all_metadata)
