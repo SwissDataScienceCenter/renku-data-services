@@ -17,7 +17,7 @@ class ConnectedServicesRepository:
     """Repository for connected services."""
 
     _authorization_url = "https://gitlab.com/oauth/authorize"
-    _callback_url = "https://renku-ci-ds-179.dev.renku.ch/ui-server/api/data/oauth2/callback"
+    _callback_url = "https://renku-ci-ds-179.dev.renku.ch/api/data/oauth2/callback"
     _scope = "api"
 
     def __init__(self, session_maker: Callable[..., AsyncSession]):
