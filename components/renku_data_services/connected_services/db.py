@@ -19,7 +19,8 @@ class ConnectedServicesRepository:
     """Repository for connected services."""
 
     _authorization_url = "https://gitlab.com/oauth/authorize"
-    _callback_url = "https://renku-ci-ds-179.dev.renku.ch/api/data/oauth2/callback"
+    # _callback_url = "https://renku-ci-ds-179.dev.renku.ch/api/data/oauth2/callback"
+    _callback_url = "https://renku-ci-ds-179.dev.renku.ch/api/data/oauth2/callback?next=https%3A%2F%2Frenku-ci-ds-179.dev.renku.ch%2Fhelp"
     _scope = "api"
     _token_endpoint = "https://gitlab.com/oauth/token"
 
