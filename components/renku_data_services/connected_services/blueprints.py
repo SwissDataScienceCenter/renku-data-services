@@ -48,7 +48,7 @@ class OAuth2ClientsBP(CustomBlueprint):
         @only_authenticated
         async def _authorize(_: Request, provider_id: str, user: base_models.APIUser):
             url, state, cookie = await self.connected_services_repo.authorize_client(provider_id=provider_id, user=user)
-            logger.debug(f"Started oauth2: {url} {state} {cookie}")
+            logger.info(f"Started oauth2: {url} {state} {cookie}")
             response = redirect(to=url)
             response.add_cookie("renku-oauth2", cookie,httponly=True)
             return response
@@ -62,7 +62,7 @@ class OAuth2ClientsBP(CustomBlueprint):
             cookie = request.cookies.get("renku-oauth2")
             cookie = cookie if cookie else ""
             token = await self.connected_services_repo.authorize_callback(cookie=cookie, rawUrl=request.url)
-            logger.debug(f"Token: {token}")
+            logger.info(f"Token: {token}")
             return HTTPResponse(status=200)
 
         return "/oauth2/callback", ["GET"], _callback

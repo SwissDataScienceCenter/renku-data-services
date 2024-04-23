@@ -7,6 +7,7 @@ from typing import Any
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
@@ -175,6 +176,7 @@ class ConnectedServicesRepository:
         async with self.session_maker() as session, session.begin():
             result = await session.scalars(
                 select(schemas.OAuth2ConnectionORM).where(schemas.OAuth2ConnectionORM.cookie == cookie)
+                .options(selectinload(schemas.OAuth2ConnectionORM.client))
             )
             connection = result.one_or_none()
 
