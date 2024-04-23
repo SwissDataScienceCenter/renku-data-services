@@ -1,0 +1,35 @@
+{
+  "type": "record",
+  "name": "Header",
+  "namespace":"io.renku.events",
+  "doc":"common headers for messages",
+  "fields": [
+    {
+      "name": "source",
+      "type": "string"
+    },
+    {
+      "name": "type",
+      "type": "string"
+    },
+    {
+      "name": "dataContentType",
+      "type": "string"
+    },
+    {
+      "name": "schemaVersion",
+      "type": "string"
+    },
+    {
+      "name": "time",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
+    },
+    {
+      "name": "requestId",
+      "type": "string"
+    }
+  ]
+}

@@ -45,7 +45,8 @@ schema = schemathesis.from_pytest_fixture(
 
 ALLOWED_SLOW_ENDPOINTS = [
     ("/user/secrets", "POST"),  # encryption of secrets is a costly operation
-    ("/api/data/user/secrets/{secret_id}", "PATCH"),
+    ("/user/secrets/{secret_id}", "PATCH"),
+    ("/user/secret_key", "GET"),
 ]
 
 
