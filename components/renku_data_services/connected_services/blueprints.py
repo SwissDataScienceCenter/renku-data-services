@@ -63,7 +63,9 @@ class OAuth2ClientsBP(CustomBlueprint):
             cookie = cookie if cookie else ""
             token = await self.connected_services_repo.authorize_callback(cookie=cookie, rawUrl=request.url)
             logger.info(f"Token: {token}")
-            return HTTPResponse(status=200)
+            response = json({"status": "OK"})
+            response.delete_cookie("renku-oauth2")
+            return response
 
         return "/oauth2/callback", ["GET"], _callback
 

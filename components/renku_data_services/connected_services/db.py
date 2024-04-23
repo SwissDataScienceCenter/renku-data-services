@@ -191,7 +191,7 @@ class ConnectedServicesRepository:
                 redirect_uri=self._callback_url,
                 state=connection.state,
             ) as oauth2_client:
-                token = oauth2_client.fetch_token(self._token_endpoint, authorization_response=rawUrl)
+                token = await oauth2_client.fetch_token(self._token_endpoint, authorization_response=rawUrl)
 
                 connection.token = f"{token}"
                 connection.cookie = None
