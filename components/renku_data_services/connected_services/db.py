@@ -1,5 +1,6 @@
 """Adapters for connected services database classes."""
-
+import base64
+import random
 from collections.abc import Callable
 from typing import Any
 
@@ -19,6 +20,7 @@ class ConnectedServicesRepository:
     _authorization_url = "https://gitlab.com/oauth/authorize"
     _callback_url = "https://renku-ci-ds-179.dev.renku.ch/api/data/oauth2/callback"
     _scope = "api"
+    _token_endpoint = "https://gitlab.com/oauth/token"
 
     def __init__(self, session_maker: Callable[..., AsyncSession]):
         self.session_maker = session_maker  # type: ignore[call-overload]
@@ -112,12 +114,12 @@ class ConnectedServicesRepository:
 
             await session.delete(client)
 
-    async def authorize_client(self, user: base_models.APIUser, provider_id: str) -> tuple[str, str | Any]:
+    async def authorize_client(self, user: base_models.APIUser, provider_id: str) -> tuple[str, str | Any, str]:
         """Authorize an OAuth2 Client."""
         if not user.is_authenticated or user.id is None:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
-        async with self.session_maker() as session:
+        async with self.session_maker() as session, session.begin():
             result = await session.scalars(
                 select(schemas.OAuth2ClientORM).where(schemas.OAuth2ClientORM.id == provider_id)
             )
@@ -126,12 +128,80 @@ class ConnectedServicesRepository:
             if client is None:
                 raise errors.MissingResourceError(message=f"OAuth2 Client with id '{provider_id}' does not exist.")
 
-            oauth2_client = AsyncOAuth2Client(
+            async with AsyncOAuth2Client(
                 client_id=client.client_id,
                 client_secret=client.client_secret,
                 scope=self._scope,
                 redirect_uri=self._callback_url,
+            ) as oauth2_client:
+                authorization_endpoint = self._authorization_url
+                url, state = oauth2_client.create_authorization_url(authorization_endpoint)
+
+                cookie = _generate_cookie()
+
+                result_conn = await session.scalars(
+                    select(schemas.OAuth2ConnectionORM).where(
+                        schemas.OAuth2ConnectionORM.client_id == client.id
+                        and schemas.OAuth2ConnectionORM.user_id == user.id
+                    )
+                )
+                connection = result_conn.one_or_none()
+
+                if connection is None:
+                    connection = schemas.OAuth2ConnectionORM(
+                        user_id=user.id,
+                        client_id=client.id,
+                        token=None,
+                        cookie=cookie,
+                        state=state,
+                        status=schemas.ConnectionStatus.pending,
+                    )
+                    session.add(connection)
+                else:
+                    connection.cookie = cookie
+                    connection.state = state
+                    connection.status = schemas.ConnectionStatus.pending
+
+                await session.flush()
+                await session.refresh(connection)
+
+                return url, state, cookie
+
+    async def authorize_callback(self, cookie: str, rawUrl: str) -> dict | Any:
+        """Performs the OAuth2 authorization callback."""
+        if not cookie:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session, session.begin():
+            result = await session.scalars(
+                select(schemas.OAuth2ConnectionORM).where(schemas.OAuth2ConnectionORM.cookie == cookie)
             )
-            authorization_endpoint = self._authorization_url
-            url, state = oauth2_client.create_authorization_url(authorization_endpoint)
-            return url, state
+            connection = result.one_or_none()
+
+            if connection is None:
+                raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+
+            client = connection.client
+            async with AsyncOAuth2Client(
+                client_id=client.client_id,
+                client_secret=client.client_secret,
+                scope=self._scope,
+                redirect_uri=self._callback_url,
+                state=connection.state,
+            ) as oauth2_client:
+                token = oauth2_client.fetch_token(self._token_endpoint, authorization_response=rawUrl)
+
+                connection.token = f"{token}"
+                connection.cookie = None
+                connection.state = None
+                connection.status = schemas.ConnectionStatus.connected
+
+                await session.flush()
+                await session.refresh(connection)
+
+                return token
+
+
+def _generate_cookie():
+    rand = random.SystemRandom()
+    return base64.b64encode(rand.randbytes(32)).decode()

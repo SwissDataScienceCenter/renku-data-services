@@ -1,8 +1,10 @@
 """SQLAlchemy schemas for the connected services database."""
 from datetime import datetime
+from enum import Enum
 
-from sqlalchemy import DateTime, MetaData, String, func
-from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
+from sqlalchemy import DateTime, ForeignKey, MetaData, String, func
+from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
+from ulid import ULID
 
 from renku_data_services.connected_services import models
 
@@ -40,3 +42,28 @@ class OAuth2ClientORM(BaseORM):
             creation_date=self.creation_date,
             updated_at=self.updated_at,
         )
+
+class ConnectionStatus(Enum):
+    """OAuth2 connection status."""
+    pending = "pending"
+    connected = "connected"
+
+class OAuth2ConnectionORM(BaseORM):
+    """An OAuth2 connection."""
+
+    __tablename__="oauth2_connections"
+    id: Mapped[str] = mapped_column("id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    user_id: Mapped[str] = mapped_column("user_id", String())
+    client_id: Mapped[str] = mapped_column(ForeignKey(OAuth2ClientORM.id, ondelete="CASCADE"),  index=True)
+    client: Mapped[OAuth2ClientORM]= relationship(init=False, repr=False)
+    token: Mapped[str|None] = mapped_column("token", String())
+    cookie: Mapped[str|None] = mapped_column("cookie", String())
+    state: Mapped[str|None] = mapped_column("state", String())
+    status: Mapped[ConnectionStatus]
+    creation_date: Mapped[datetime] = mapped_column(
+        "creation_date", DateTime(timezone=True), default=None,  server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        "updated_at", DateTime(timezone=True), default=None, server_default=func.now(), onupdate=func.now(),
+        nullable=False
+    )

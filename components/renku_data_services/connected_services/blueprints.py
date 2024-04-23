@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 
 from sanic import HTTPResponse, Request, json, redirect
+from sanic.log import logger
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
@@ -46,10 +47,25 @@ class OAuth2ClientsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_authenticated
         async def _authorize(_: Request, provider_id: str, user: base_models.APIUser):
-            (url, _state) = await self.connected_services_repo.authorize_client(provider_id=provider_id, user=user)
-            return redirect(to=url, status=303)
+            url, state, cookie = await self.connected_services_repo.authorize_client(provider_id=provider_id, user=user)
+            logger.debug(f"Started oauth2: {url} {state} {cookie}")
+            response = redirect(to=url)
+            response.add_cookie("renku-oauth2", cookie,httponly=True)
+            return response
 
         return "/oauth2/providers/<provider_id>/authorize", ["GET"], _authorize
+
+    def authorize_callback(self) -> BlueprintFactoryResponse:
+        """OAuth2 authorization callback."""
+
+        async def _callback(request: Request):
+            cookie = request.cookies.get("renku-oauth2")
+            cookie = cookie if cookie else ""
+            token = await self.connected_services_repo.authorize_callback(cookie=cookie, rawUrl=request.url)
+            logger.debug(f"Token: {token}")
+            return HTTPResponse(status=200)
+
+        return "/oauth2/callback", ["GET"], _callback
 
 
 @dataclass(kw_only=True)
