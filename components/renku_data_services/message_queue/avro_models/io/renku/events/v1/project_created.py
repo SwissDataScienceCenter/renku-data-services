@@ -20,7 +20,6 @@ class ProjectCreated(AvroModel):
     repositories: List[str]
     visibility: Visibility
     description: Optional[str]
-    keywords: List[str]
     createdBy: str
     creationDate: datetime  # logicalType: timestamp-millis
     keywords: List[str] = field(default_factory=list)

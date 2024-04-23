@@ -21,7 +21,7 @@ class Project:
     namespace: str
     visibility: Visibility
     created_by: str
-    creation_date: datetime | None = field(default=None)
+    creation_date: datetime = field(default_factory=lambda: datetime.now(UTC).replace(microsecond=0))
     updated_at: datetime | None = field(default=None)
     repositories: list[Repository] = field(default_factory=list)
     description: Optional[str] = None
@@ -47,6 +47,7 @@ class Project:
         name = data["name"]
         slug = base_models.Slug.from_name(data.get("slug") or name).value
         created_by = data["created_by"]
+        creation_date = data.get("creation_date") or datetime.now(UTC).replace(microsecond=0)
         namespace = data["namespace"]
 
         return cls(
@@ -56,8 +57,7 @@ class Project:
             slug=slug,
             created_by=created_by,
             visibility=data.get("visibility", Visibility.PRIVATE),
-            created_by=created_by,
-            creation_date=data.get("creation_date"),
+            creation_date=creation_date,
             updated_at=data.get("updated_at"),
             repositories=[Repository(r) for r in data.get("repositories", [])],
             description=data.get("description"),

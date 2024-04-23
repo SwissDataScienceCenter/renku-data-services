@@ -22,6 +22,7 @@ services:
       AUTHZ_DB_HOST: 127.0.0.1 
       AUTHZ_DB_GRPC_PORT: "50051" 
       AUTHZ_DB_KEY: renku 
+      AUTHZ_DB_NO_TLS_CONNECTION: "true"
       ZED_ENDPOINT: 127.0.0.1:50051
       ZED_TOKEN: renku
       ZED_INSECURE: "true"

@@ -107,7 +107,9 @@ class ProjectRepository:
             if project_orm is None:
                 raise errors.MissingResourceError(message=not_found_msg)
 
-            authorized = await self.project_authz.has_permission(user=user, project_id=project_orm.id, scope=Scope.READ)
+            authorized = self.authz.has_permission(
+                user=user, resource_type=ResourceType.project, resource_id=project_orm.id, scope=Scope.READ
+            )
             if not authorized:
                 raise errors.MissingResourceError(message=not_found_msg)
 
@@ -117,7 +119,7 @@ class ProjectRepository:
     @Authz.project_change(ProjectAuthzOperation.create)
     @dispatch_message(avro_schema_v1.ProjectCreated)
     async def insert_project(
-        self, session: AsyncSession, user: base_models.APIUser, project=apispec.ProjectPost
+        self, session: AsyncSession, user: base_models.APIUser, project=project_apispec.ProjectPost
     ) -> models.Project:
         """Insert a new project entry."""
         ns = await self.group_repo.get_namespace(user, project.namespace)
@@ -257,6 +259,7 @@ class ProjectMemberRepository:
         """Update project's members."""
         output = self.authz.upsert_project_members(user, ResourceType.project, project_id, members)
         import logging
+
         logging.error(output)
         return output
 

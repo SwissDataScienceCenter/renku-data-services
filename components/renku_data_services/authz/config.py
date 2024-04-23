@@ -3,11 +3,7 @@ import os
 from dataclasses import dataclass, field
 
 from authzed.api.v1 import Client
-
-# NOTE: we use insecure below because we do not use an encrypted (i.e. with SSL) connection to talk
-# to the authorization service. None of the cluster-internal communication in Renku and we terminate
-# SSL connections from ingress as soon as they enter our cluster.
-from grpcutil import insecure_bearer_token_credentials
+from grpcutil import bearer_token_credentials, insecure_bearer_token_credentials
 
 
 @dataclass
@@ -16,6 +12,7 @@ class AuthzConfig:
     host: str
     grpc_port: int
     key: str = field(repr=False)
+    no_tls_connection: bool = False  # If set to true it means the communication to authzed is unencrypted
 
     @classmethod
     def from_env(cls, prefix: str=""):
@@ -23,11 +20,15 @@ class AuthzConfig:
         host = os.environ[f"{prefix}AUTHZ_DB_HOST"]
         grpc_port = os.environ.get(f"{prefix}AUTHZ_DB_GRPC_PORT", "50051")
         key = os.environ[f"{prefix}AUTHZ_DB_KEY"]
-        return cls(host, int(grpc_port), key)
+        no_tls_connection = os.environ.get(f"{prefix}AUTHZ_DB_NO_TLS_CONNECTION", "false").lower() == "true"
+        return cls(host, int(grpc_port), key, no_tls_connection)
 
     def authz_client(self) -> Client:
         """Generate an Authzed client."""
         target = f"{self.host}:{self.grpc_port}"
-        credentials = insecure_bearer_token_credentials(self.key)
+        if self.no_tls_connection:
+            credentials = insecure_bearer_token_credentials(self.key)
+        else:
+            credentials = bearer_token_credentials(self.key)
         return Client(target=target, credentials=credentials)
 
