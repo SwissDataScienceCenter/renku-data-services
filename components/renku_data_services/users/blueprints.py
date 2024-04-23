@@ -59,6 +59,19 @@ class KCUsersBP(CustomBlueprint):
 
         return "/user", ["GET"], _get_self
 
+    def get_secret_key(self) -> BlueprintFactoryResponse:
+        """Get the user's secret key.
+
+        This is used to decrypt user secrets. This endpoint is only accessible from within the cluster.
+        """
+
+        @authenticate(self.authenticator)
+        async def _get_secret_key(request: Request, user: base_models.APIUser):
+            secret_key = await self.repo.get_or_create_user_secret_key(requested_by=user)
+            return json({"secret_key": secret_key})
+
+        return "/user/secret_key", ["GET"], _get_secret_key
+
     def get_one(self) -> BlueprintFactoryResponse:
         """Get info about a specific user."""
 

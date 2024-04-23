@@ -23,6 +23,22 @@ paths:
           $ref: '#/components/responses/Error'
       tags:
         - users
+  /user/secret_key:
+    get:
+      summary: Get the current users secret key
+      responses:
+        "200":
+          description: |
+            The secret key of the currently logged in user.
+            This endpoint is not publicly accessible.
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/UserSecretKey"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - users
   /users:
     get:
       summary: List all users
@@ -252,6 +268,13 @@ components:
       items:
         $ref: "#/components/schemas/UserWithId"
       uniqueItems: true
+    UserSecretKey:
+      type: object
+      additionalProperties: false
+      properties:
+        secret_key:
+          type: string
+          description: The users secret key
     Version:
       type: object
       properties:

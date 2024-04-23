@@ -1,12 +1,14 @@
 """Tests for secrets blueprints."""
 
 import json
+from base64 import b64decode
 from typing import Any
 
 import pytest
 from sanic_testing.testing import SanicASGITestClient
 
 from renku_data_services.users.models import UserInfo
+from renku_data_services.utils.cryptography import decrypt_string
 
 
 @pytest.fixture
@@ -201,4 +203,13 @@ async def test_secret_encryption_decryption(
 
     _, response = await secrets_sanic_client.post("/api/secrets/k8s_secret", headers=user_headers, json=payload)
     assert response.status_code == 201
-    assert len(secrets_storage_app_config.core_client.secrets) == 1
+    assert "test-secret" in secrets_storage_app_config.core_client.secrets
+    k8s_secret = secrets_storage_app_config.core_client.secrets["test-secret"].data
+
+    _, response = await sanic_client.get("/api/data/user/secret_key", headers=user_headers)
+    assert response.status_code == 200
+    assert "secret_key" in response.json
+    secret_key = response.json["secret_key"]
+
+    assert decrypt_string(secret_key.encode(), "user", b64decode(k8s_secret["secret-1"])) == "value-1"
+    assert decrypt_string(secret_key.encode(), "user", b64decode(k8s_secret["secret-2"])) == "value-2"
