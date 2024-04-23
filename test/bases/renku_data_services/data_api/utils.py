@@ -24,3 +24,11 @@ async def create_user_preferences(
         headers={"Authorization": f"bearer {api_user.access_token}"},
         data=json.dumps(valid_add_pinned_project_payload),
     )
+
+
+def merge_headers(*headers: dict[str, str]) -> dict[str, str]:
+    """Merge multiple headers."""
+    all_headers = dict()
+    for h in headers:
+        all_headers.update(**h)
+    return all_headers

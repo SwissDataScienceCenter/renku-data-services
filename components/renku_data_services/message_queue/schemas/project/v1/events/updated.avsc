@@ -34,6 +34,14 @@
         "null",
         "string"
       ]
+    },
+    {
+      "name": "keywords",
+      "type": {
+        "type": "array",
+        "items": "string"
+      },
+      "default": []
     }
   ]
 }

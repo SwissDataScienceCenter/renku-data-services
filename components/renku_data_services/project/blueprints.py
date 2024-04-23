@@ -14,6 +14,7 @@ from renku_data_services.base_api.auth import (
     validate_path_user_id,
 )
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_api.etag import if_match_required
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.errors import errors
 from renku_data_services.project import apispec
@@ -97,8 +98,14 @@ class ProjectsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @validate_path_project_id
-        async def _get_one(_: Request, *, user: base_models.APIUser, project_id: str):
+        async def _get_one(request: Request, *, user: base_models.APIUser, project_id: str):
             project = await self.project_repo.get_project(user=user, project_id=project_id)
+
+            etag = request.headers.get("If-None-Match")
+            if project.etag is not None and project.etag == etag:
+                return HTTPResponse(status=304)
+
+            headers = {"ETag": project.etag} if project.etag is not None else None
             return json(
                 dict(
                     id=project.id,
@@ -110,11 +117,20 @@ class ProjectsBP(CustomBlueprint):
                     repositories=project.repositories,
                     visibility=project.visibility.value,
                     description=project.description,
-                ),
-                200,
+                ), headers=headers
             )
 
         return "/projects/<project_id>", ["GET"], _get_one
+
+    def get_one_by_namespace_slug(self) -> BlueprintFactoryResponse:
+        """Get a specific project by namespace/slug."""
+
+        @authenticate(self.authenticator)
+        async def _get_one_by_namespace_slug(_: Request, *, user: base_models.APIUser, namespace: str, slug: str):
+            project = await self.project_repo.get_project_by_namespace_slug(user=user, namespace=namespace, slug=slug)
+            return json(apispec.Project.model_validate(project).model_dump(exclude_none=True, mode="json"))
+
+        return "/projects/<namespace>/<slug>", ["GET"], _get_one_by_namespace_slug
 
     def delete(self) -> BlueprintFactoryResponse:
         """Delete a specific project."""
@@ -134,11 +150,16 @@ class ProjectsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_authenticated
         @validate_path_project_id
+        @if_match_required
         @validate(json=apispec.ProjectPatch)
-        async def _patch(_: Request, *, user: base_models.APIUser, project_id: str, body: apispec.ProjectPatch):
+        async def _patch(
+            _: Request, *, user: base_models.APIUser, project_id: str, body: apispec.ProjectPatch, etag: str
+        ):
             body_dict = body.model_dump(exclude_none=True)
 
-            updated_project = await self.project_repo.update_project(user=user, project_id=project_id, **body_dict)
+            updated_project = await self.project_repo.update_project(
+                user=user, project_id=project_id, etag=etag, **body_dict
+            )
 
             return json(
                 dict(

@@ -4,7 +4,7 @@ info:
   description: |
     Service that allows creating, updating, deleting, and managing Renku native projects.
     All errors have the same format as the schema called ErrorResponse.
-  version: 0.5.0
+  version: 0.6.0
 servers:
   - url: /api/data
   - url: /ui-server/api/data
@@ -115,6 +115,8 @@ paths:
           required: true
           schema:
             $ref: "#/components/schemas/Ulid"
+            type: string
+        - $ref: "#/components/parameters/If-Match"
       requestBody:
         required: true
         content:
@@ -149,6 +151,37 @@ paths:
       responses:
         "204":
           description: The project was removed or did not exist in the first place
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - projects
+  /projects/{namespace}/{slug}:
+    get:
+      summary: Get a project by namespace and project slug
+      parameters:
+        - in: path
+          name: namespace
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: slug
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          description: The project does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -267,6 +300,8 @@ components:
           $ref: "#/components/schemas/Visibility"
         description:
           $ref: "#/components/schemas/Description"
+        etag:
+          $ref: "#/components/schemas/ETag"
       required:
         - "id"
         - "name"
@@ -300,7 +335,7 @@ components:
         repositories:
           $ref: "#/components/schemas/RepositoriesList"
         visibility:
-          $ref: "#/components/schemas/Visibility"  # Visibility is ``private`` if not passed at this point
+          $ref: "#/components/schemas/Visibility" # Visibility is ``private`` if not passed at this point
           default: "private"
         description:
           $ref: "#/components/schemas/Description"
@@ -327,7 +362,7 @@ components:
       type: string
       minLength: 26
       maxLength: 26
-      pattern: "^[A-Z0-9]{26}$"  # This is case-insensitive
+      pattern: "^[A-Z0-9]{26}$" # This is case-insensitive
       format: ulid
     ProjectName:
       description: Renku project name
@@ -340,13 +375,13 @@ components:
       type: string
       minLength: 1
       maxLength: 99
-      # Slug regex rules 
+      # Slug regex rules
       # from https://docs.gitlab.com/ee/user/reserved_names.html#limitations-on-usernames-project-and-group-names
       # - cannot end in .git
       # - cannot end in .atom
       # - cannot contain any combination of two or more consecutive -._
       # - has to start with letter or number
-      pattern: '^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-zA-Z0-9][a-zA-Z0-9\-_.]*$'  
+      pattern: '^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-zA-Z0-9][a-zA-Z0-9\-_.]*$'
       example: "a-slug-example"
     CreationDate:
       description: The date and time the resource was created (in UTC and ISO-8601 format)
@@ -354,7 +389,7 @@ components:
       format: date-time
       example: "2023-11-01T17:32:28Z"
     Description:
-      description: A description for the resource 
+      description: A description for the resource
       type: string
       maxLength: 500
     KeyCloakId:
@@ -375,8 +410,7 @@ components:
     Repository:
       description: A project's repository
       type: string
-      example:
-        git@github.com:SwissDataScienceCenter/project-1.git
+      example: git@github.com:SwissDataScienceCenter/project-1.git
     Visibility:
       description: Project's visibility levels
       type: string
@@ -456,6 +490,10 @@ components:
       format: email
       description: User email
       example: some-user@gmail.com
+    ETag:
+      type: string
+      description: Entity Tag
+      example: "9EE498F9D565D0C41E511377425F32F3"
     ErrorResponse:
       type: object
       properties:
@@ -485,3 +523,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+
+  parameters:
+    If-Match:
+      in: header
+      name: If-Match
+      description: If-Match header, for avoiding mid-air collisions
+      required: true
+      schema:
+        $ref: "#/components/schemas/ETag"

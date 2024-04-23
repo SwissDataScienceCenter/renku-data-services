@@ -1,4 +1,5 @@
 from datetime import datetime
+from test.bases.renku_data_services.data_api.utils import merge_headers
 
 import pytest
 
@@ -193,8 +194,9 @@ async def test_moving_project_across_groups(sanic_client, user_headers, regular_
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
     assert response.status_code == 200, response.text
     assert response.json["namespace"] == user_namespace
+    headers = merge_headers(user_headers, {"If-Match":response.json["etag"]})
     _, response = await sanic_client.patch(
-        f"/api/data/projects/{project_id}", headers=user_headers, json={"namespace": "group-1"}
+        f"/api/data/projects/{project_id}", headers=headers, json={"namespace": "group-1"}
     )
     assert response.status_code == 200, response.text
     assert response.json["namespace"] == "group-1"

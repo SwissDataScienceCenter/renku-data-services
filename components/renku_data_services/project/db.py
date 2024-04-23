@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from asyncio import gather
 from collections.abc import Callable
-from datetime import UTC, datetime
 from typing import cast
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import renku_data_services.base_models as base_models
@@ -86,11 +85,39 @@ class ProjectRepository:
 
             return project_orm.dump()
 
+    async def get_project_by_namespace_slug(
+        self, user: base_models.APIUser, namespace: str, slug: str
+    ) -> models.Project:
+        """Get one project from the database."""
+        async with self.session_maker() as session:
+            stmt = (
+                select(schemas.ProjectORM)
+                .where(schemas.NamespaceORM.slug == namespace.lower())
+                .where(schemas.ProjectSlug.namespace_id == schemas.NamespaceORM.id)
+                .where(schemas.ProjectSlug.slug == slug.lower())
+                .where(schemas.ProjectORM.id == schemas.ProjectSlug.project_id)
+            )
+            result = await session.execute(stmt)
+            project_orm = result.scalars().first()
+
+            not_found_msg = (
+                f"Project with identifier '{namespace}/{slug}' does not exist or you do not have access to it."
+            )
+
+            if project_orm is None:
+                raise errors.MissingResourceError(message=not_found_msg)
+
+            authorized = await self.project_authz.has_permission(user=user, project_id=project_orm.id, scope=Scope.READ)
+            if not authorized:
+                raise errors.MissingResourceError(message=not_found_msg)
+
+            return project_orm.dump()
+
     @with_db_transaction
     @Authz.project_change(ProjectAuthzOperation.create)
     @dispatch_message(avro_schema_v1.ProjectCreated)
     async def insert_project(
-        self, session: AsyncSession, user: base_models.APIUser, project: models.Project
+        self, session: AsyncSession, user: base_models.APIUser, project=apispec.ProjectPost
     ) -> models.Project:
         """Insert a new project entry."""
         ns = await self.group_repo.get_namespace(user, project.namespace)
@@ -98,21 +125,24 @@ class ProjectRepository:
             raise errors.MissingResourceError(
                 message=f"The project cannot be created because the namespace {project.namespace} does not exist"
             )
-        user_id = cast(str, user.id)
-        repos = [schemas.ProjectRepositoryORM(url) for url in (project.repositories or [])]
+
+        if user.id is None:
+            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+
+        repositories = [schemas.ProjectRepositoryORM(url) for url in (project.repositories or [])]
         slug = project.slug or base_models.Slug.from_name(project.name).value
         project_orm = schemas.ProjectORM(
             name=project.name,
             visibility=project_apispec.Visibility(project.visibility)
             if isinstance(project.visibility, str)
             else project_apispec.Visibility(project.visibility.value),
-            created_by_id=user_id,
+            created_by_id=user.id,
             description=project.description,
-            repositories=repos,
-            creation_date=datetime.now(UTC).replace(microsecond=0),
+            repositories=repositories,
         )
-        slug = schemas.ProjectSlug(slug, project_id=project_orm.id, namespace_id=ns.id)
-        session.add(slug)
+        project_slug = schemas.ProjectSlug(slug, project_id=project_orm.id, namespace_id=ns.id)
+
+        session.add(project_slug)
         session.add(project_orm)
         await session.flush()
         await session.refresh(project_orm)
@@ -127,11 +157,7 @@ class ProjectRepository:
     @Authz.project_change(ProjectAuthzOperation.change_visibility)
     @dispatch_message(avro_schema_v1.ProjectUpdated)
     async def update_project(
-        self,
-        session: AsyncSession,
-        user: base_models.APIUser,
-        project_id: str,
-        **payload,
+        self, session: AsyncSession, user: base_models.APIUser, project_id: str, etag: str | None = None, **payload
     ) -> models.Project:
         """Update a project entry."""
         authorized = self.authz.has_permission(user, ResourceType.project, project_id, Scope.WRITE)
@@ -140,18 +166,25 @@ class ProjectRepository:
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
 
-        result = await session.execute(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
-        project = result.scalar_one_or_none()
+        result = await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
+        project = result.one_or_none()
 
         if project is None:
             raise errors.MissingResourceError(message=f"The project with id '{project_id}' cannot be found")
 
-        session.add(project)  # reattach to session
+        current_etag = project.dump().etag
+        if etag is not None and current_etag != etag:
+            raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
+
+        visibility_before = project.visibility
+
         if "repositories" in payload:
             payload["repositories"] = [
                 schemas.ProjectRepositoryORM(url=r, project_id=project_id, project=project)
                 for r in payload["repositories"]
             ]
+            # Trigger update for ``updated_at`` column
+            await session.execute(update(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id).values())
 
         for key, value in payload.items():
             # NOTE: ``slug``, ``id``, ``created_by``, and ``creation_date`` cannot be edited or cannot
@@ -165,7 +198,9 @@ class ProjectRepository:
             if not ns:
                 raise errors.MissingResourceError(message=f"The namespace with slug {ns_slug} does not exist")
             project.slug.namespace_id = ns.id
-            await session.refresh(project)
+
+        await session.flush()
+        await session.refresh(project)
 
         return project.dump()  # NOTE: Triggers validation before the transaction saves data
 

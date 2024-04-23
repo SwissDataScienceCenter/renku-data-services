@@ -1,4 +1,5 @@
 """Exceptions for the server."""
+
 from dataclasses import dataclass
 from typing import Optional
 
@@ -96,6 +97,7 @@ class ProgrammingError(BaseError):
     message: str = "An unexpected error occurred."
     status_code: int = 500
 
+
 @dataclass
 class EventError(BaseError):
     """Raised an irrecoverable error when generating events for the message queue."""
@@ -103,3 +105,21 @@ class EventError(BaseError):
     code: int = 1501
     message: str = "An unexpected error occured when handling or generating events for the message queue."
     status_code: int = 500
+
+
+@dataclass
+class ConflictError(BaseError):
+    """Raised when a conflicting update occurs."""
+
+    code: int = 1409
+    message: str = "Conflicting update detected."
+    status_code: int = 409
+
+
+@dataclass
+class PreconditionRequiredError(BaseError):
+    """Raised when a precondition is not met."""
+
+    code: int = 1428
+    message: str = "Conflicting update detected."
+    status_code: int = 428

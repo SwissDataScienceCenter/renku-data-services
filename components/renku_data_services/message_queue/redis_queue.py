@@ -15,6 +15,7 @@ from typing import TypeVar
 from dataclasses_avroschema.schema_generator import AvroModel
 from dataclasses_avroschema.utils import standardize_custom_type
 from fastavro import parse_schema, schemaless_reader, schemaless_writer
+from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
 from renku_data_services.message_queue import AmbiguousEvent
@@ -97,7 +98,7 @@ def dispatch_message(event_type: type[AvroModel] | AmbiguousEvent):
 
     def decorator(f):
         @wraps(f)
-        async def message_wrapper(self, session, *args, **kwargs):
+        async def message_wrapper(self, session: AsyncSession, *args, **kwargs):
             result = await f(self, session, *args, **kwargs)
             if result is None:
                 return result
@@ -137,7 +138,7 @@ def dispatch_message(event_type: type[AvroModel] | AmbiguousEvent):
                     "payload": base64.b64encode(serialize_binary(payload)).decode(),
                 }
                 event_id = await self.event_repo.store_event(session, queue_name, message)
-                session.commit()
+                await session.commit()
 
                 try:
                     await self.message_queue.send_message(queue_name, message)
