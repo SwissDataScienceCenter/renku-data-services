@@ -64,9 +64,11 @@ class OAuth2ClientsBP(CustomBlueprint):
             cookie = request.cookies.get("renku-oauth2")
             cookie = cookie if cookie else ""
 
-            next_url = request.get_args().get("next")
+            params = AuthorizeParams.model_validate(dict(request.query_args))
 
-            await self.connected_services_repo.authorize_callback(cookie=cookie, rawUrl=request.url)
+            next_url = params.next
+
+            await self.connected_services_repo.authorize_callback(cookie=cookie, raw_url=request.url, next_url=next_url)
 
             response = redirect(to=next_url)  if next_url else  json({"status": "OK"})
             response.delete_cookie("renku-oauth2")

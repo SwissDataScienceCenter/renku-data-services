@@ -177,7 +177,7 @@ class ConnectedServicesRepository:
 
                 return url, state, cookie
 
-    async def authorize_callback(self, cookie: str, rawUrl: str) -> dict | Any:
+    async def authorize_callback(self, cookie: str, raw_url: str, next_url: str | None = None) -> dict | Any:
         """Performs the OAuth2 authorization callback."""
         if not cookie:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
@@ -192,15 +192,20 @@ class ConnectedServicesRepository:
             if connection is None:
                 raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
+            callback_url = self._callback_url
+            if next_url:
+                query = urlencode([("next", next_url)])
+                callback_url = f"{callback_url}?{query}"
+
             client = connection.client
             async with AsyncOAuth2Client(
                 client_id=client.client_id,
                 client_secret=client.client_secret,
                 scope=self._scope,
-                redirect_uri=self._callback_url,
+                redirect_uri=callback_url,
                 state=connection.state,
             ) as oauth2_client:
-                token = await oauth2_client.fetch_token(self._token_endpoint, authorization_response=rawUrl)
+                token = await oauth2_client.fetch_token(self._token_endpoint, authorization_response=raw_url)
 
                 connection.token = f"{token}"
                 connection.cookie = None
