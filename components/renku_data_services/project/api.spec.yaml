@@ -256,7 +256,7 @@ paths:
           description: This is user's KeyCloak ID
           required: true
           schema:
-            type: "#/components/schemas/UserId"
+            $ref: "#/components/schemas/UserId"
       responses:
         "204":
           description: The member was removed or wasn't part of project's members.
@@ -427,7 +427,7 @@ components:
         - id: "some-keycloak-user-id"
           role: "owner"
         - id: "another-keycloak-user-id"
-          role: "member"
+          role: "viewer"
     ProjectMemberPatchRequest:
       description: A member and the access level to the project
       type: object
