@@ -151,10 +151,9 @@ class ConnectedServicesRepository:
                 cookie = _generate_cookie()
 
                 result_conn = await session.scalars(
-                    select(schemas.OAuth2ConnectionORM).where(
-                        schemas.OAuth2ConnectionORM.client_id == client.id
-                        and schemas.OAuth2ConnectionORM.user_id == user.id
-                    )
+                    select(schemas.OAuth2ConnectionORM)
+                    .where(schemas.OAuth2ConnectionORM.client_id == client.id)
+                    .where(schemas.OAuth2ConnectionORM.user_id == user.id)
                 )
                 connection = result_conn.one_or_none()
 
