@@ -30,6 +30,7 @@ class SecretORM(BaseORM):
     )
     name: Mapped[str] = mapped_column(String(256))
     encrypted_value: Mapped[bytes] = mapped_column(LargeBinary())
+    encrypted_key: Mapped[bytes] = mapped_column(LargeBinary())
     modification_date: Mapped[datetime] = mapped_column("modification_date", DateTime(timezone=True))
     id: Mapped[str] = mapped_column("id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False)
     user_id: Mapped[Optional[str]] = mapped_column(
@@ -38,10 +39,7 @@ class SecretORM(BaseORM):
 
     def dump(self) -> models.Secret:
         """Create a secret object from the ORM object."""
-        secret = models.Secret(
-            name=self.name,
-            encrypted_value=self.encrypted_value,
-        )
+        secret = models.Secret(name=self.name, encrypted_value=self.encrypted_value, encrypted_key=self.encrypted_key)
         secret.id = self.id
         secret.modification_date = self.modification_date
         return secret
@@ -52,5 +50,6 @@ class SecretORM(BaseORM):
         return cls(
             name=secret.name,
             encrypted_value=secret.encrypted_value,
+            encrypted_key=secret.encrypted_key,
             modification_date=secret.modification_date,
         )

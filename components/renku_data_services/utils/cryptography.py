@@ -21,6 +21,11 @@ def _get_encryption_key(password: bytes, salt: bytes) -> bytes:
     return base64.urlsafe_b64encode(kdf.derive(password))
 
 
+def generate_random_encryption_key():
+    """Generate a random key to be used with Fernet encryption."""
+    return Fernet.generate_key()
+
+
 def encrypt_string(password: bytes, salt: str, data: str) -> bytes:
     """Encrypt a given string."""
     key = _get_encryption_key(password=password, salt=salt.encode())

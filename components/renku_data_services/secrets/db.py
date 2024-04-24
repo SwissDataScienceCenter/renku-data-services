@@ -62,6 +62,7 @@ class UserSecretsRepo:
                 modification_date=modification_date,
                 user_id=requested_by.id,
                 encrypted_value=secret.encrypted_value,
+                encrypted_key=secret.encrypted_key,
             )
             session.add(orm)
 
@@ -76,7 +77,9 @@ class UserSecretsRepo:
             return orm.dump()
 
     @only_authenticated
-    async def update_secret(self, requested_by: APIUser, secret_id: str, encrypted_value: bytes) -> Secret:
+    async def update_secret(
+        self, requested_by: APIUser, secret_id: str, encrypted_value: bytes, encrypted_key: bytes
+    ) -> Secret:
         """Update a secret."""
 
         async with self.session_maker() as session, session.begin():
@@ -88,6 +91,7 @@ class UserSecretsRepo:
                 raise errors.MissingResourceError(message=f"The secret with id '{secret_id}' cannot be found")
 
             secret.encrypted_value = encrypted_value
+            secret.encrypted_key = encrypted_key
             secret.modification_date = datetime.now(UTC).replace(microsecond=0)
         return secret.dump()
 

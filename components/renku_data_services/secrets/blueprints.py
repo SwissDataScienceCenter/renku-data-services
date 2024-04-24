@@ -16,7 +16,7 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface
 from renku_data_services.secrets import apispec
 from renku_data_services.secrets.db import UserSecretsRepo
-from renku_data_services.utils.cryptography import decrypt_rsa
+from renku_data_services.utils.cryptography import decrypt_rsa, decrypt_string
 
 
 @dataclass(kw_only=True)
@@ -45,9 +45,11 @@ class K8sSecretsBP(CustomBlueprint):
                 raise errors.MissingResourceError(
                     message=f"Couldn't find secrets with ids {', '.join(missing_secret_ids)}"
                 )
-            decrypted_secrets = {
-                s.name: b64encode(decrypt_rsa(self.secret_service_private_key, s.encrypted_value)) for s in secrets
-            }
+            decrypted_secrets = {}
+            for secret in secrets:
+                decryption_key = decrypt_rsa(self.secret_service_private_key, secret.encrypted_key)
+                decrypted_value = decrypt_string(decryption_key, user.id, secret.encrypted_value).encode()  # type: ignore
+                decrypted_secrets[secret.name] = b64encode(decrypted_value)
 
             with contextlib.suppress(k8s_client.ApiException):
                 # try and delete the secret in case it already existed

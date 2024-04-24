@@ -14,7 +14,7 @@ from renku_data_services.secrets.db import UserSecretsRepo
 from renku_data_services.secrets.models import Secret
 from renku_data_services.users import apispec
 from renku_data_services.users.db import UserRepo
-from renku_data_services.utils.cryptography import encrypt_rsa, encrypt_string
+from renku_data_services.utils.cryptography import encrypt_rsa, encrypt_string, generate_random_encryption_key
 
 
 @dataclass(kw_only=True)
@@ -110,14 +110,20 @@ class UserSecretsBP(CustomBlueprint):
     secret_service_public_key: rsa.RSAPublicKey
 
     @only_authenticated
-    async def _encrypt_user_secret(self, requested_by: base_models.APIUser, value: str) -> bytes:
-        """Doubly encrypt a secret for a user."""
+    async def _encrypt_user_secret(self, requested_by: base_models.APIUser, value: str) -> tuple[bytes, bytes]:
+        """Doubly encrypt a secret for a user.
+
+        Since RSA cannot encrypt arbitrary length strings, we use symmetric encryption with a random key and encrypt the
+        random key with RSA to get it to the secrets service.
+        """
         secret_key = await self.user_repo.get_or_create_user_secret_key(requested_by=requested_by)
         # encrypt once with user secret
         encrypted_value = encrypt_string(secret_key.encode(), requested_by.id, value)  # type: ignore
         # encrypt again with secret service public key
-        encrypted_value = encrypt_rsa(self.secret_service_public_key, encrypted_value)
-        return encrypted_value
+        encryption_key = generate_random_encryption_key()
+        encrypted_value = encrypt_string(encryption_key, requested_by.id, encrypted_value.decode())  # type: ignore
+        encrypted_key = encrypt_rsa(self.secret_service_public_key, encryption_key)
+        return encrypted_value, encrypted_key
 
     def get_all(self) -> BlueprintFactoryResponse:
         """Get all user's secrets."""
@@ -156,10 +162,8 @@ class UserSecretsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.SecretPost)
         async def _post(_: Request, *, user: base_models.APIUser, body: apispec.SecretPost):
-            secret = Secret(
-                name=body.name,
-                encrypted_value=await self._encrypt_user_secret(requested_by=user, value=body.value),
-            )
+            encrypted_value, encrypted_key = await self._encrypt_user_secret(requested_by=user, value=body.value)
+            secret = Secret(name=body.name, encrypted_value=encrypted_value, encrypted_key=encrypted_key)
             result = await self.secret_repo.insert_secret(requested_by=user, secret=secret)
             return json(apispec.SecretWithId.model_validate(result).model_dump(exclude_none=True, mode="json"), 201)
 
@@ -172,9 +176,9 @@ class UserSecretsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.SecretPatch)
         async def _patch(_: Request, *, user: base_models.APIUser, secret_id: str, body: apispec.SecretPatch):
-            encrypted_value = await self._encrypt_user_secret(requested_by=user, value=body.value)
+            encrypted_value, encrypted_key = await self._encrypt_user_secret(requested_by=user, value=body.value)
             updated_secret = await self.secret_repo.update_secret(
-                requested_by=user, secret_id=secret_id, encrypted_value=encrypted_value
+                requested_by=user, secret_id=secret_id, encrypted_value=encrypted_value, encrypted_key=encrypted_key
             )
 
             return json(apispec.SecretWithId.model_validate(updated_secret).model_dump(exclude_none=True, mode="json"))

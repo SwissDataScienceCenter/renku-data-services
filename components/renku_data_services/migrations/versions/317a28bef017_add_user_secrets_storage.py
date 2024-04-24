@@ -22,6 +22,7 @@ def upgrade() -> None:
         "secrets",
         sa.Column("name", sa.String(length=256), nullable=False),
         sa.Column("encrypted_value", sa.LargeBinary(), nullable=False),
+        sa.Column("encrypted_key", sa.LargeBinary(), nullable=False),
         sa.Column("modification_date", sa.DateTime(timezone=True), nullable=False),
         sa.Column("id", sa.String(length=26), nullable=False),
         sa.Column("user_id", sa.String(length=36), nullable=True),
