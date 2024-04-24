@@ -1,5 +1,6 @@
 """Adapters for connected services database classes."""
 import base64
+import json
 import random
 from collections.abc import Callable
 from typing import Any
@@ -207,7 +208,8 @@ class ConnectedServicesRepository:
             ) as oauth2_client:
                 token = await oauth2_client.fetch_token(self._token_endpoint, authorization_response=raw_url)
 
-                connection.token = f"{token}"
+                token_model = models.OAuth2TokenSet.from_dict(token)
+                connection.token = json.dumps(token_model.to_dict())
                 connection.cookie = None
                 connection.state = None
                 connection.status = schemas.ConnectionStatus.connected
@@ -231,6 +233,69 @@ class ConnectedServicesRepository:
             )
             connections = result.all()
             return [c.dump() for c in connections]
+
+    async def get_oauth2_connection(self, connection_id: str, user: base_models.APIUser) -> models.OAuth2Connection:
+        """Get one OAuth2 connection from the database."""
+        if not user.is_authenticated or user.id is None:
+            raise errors.MissingResourceError(
+                message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."  # noqa: E501
+            )
+
+        async with self.session_maker() as session:
+            result = await session.scalars(
+                select(schemas.OAuth2ConnectionORM).where(
+                    schemas.OAuth2ConnectionORM.id == connection_id and schemas.OAuth2ConnectionORM.user_id == user.id
+                )
+            )
+            connection = result.one_or_none()
+            if connection is None:
+                raise errors.MissingResourceError(
+                    message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."  # noqa: E501
+                )
+            return connection.dump()
+
+    async def get_oauth2_connected_account(
+        self, connection_id: str, user: base_models.APIUser
+    ) -> models.ConnectedAccount:
+        """Get the account information from a OAuth2 connection."""
+        if not user.is_authenticated or user.id is None:
+            raise errors.MissingResourceError(
+                message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."  # noqa: E501
+            )
+
+        async with self.session_maker() as session:
+            result = await session.scalars(
+                select(schemas.OAuth2ConnectionORM).where(
+                    schemas.OAuth2ConnectionORM.id == connection_id and schemas.OAuth2ConnectionORM.user_id == user.id
+                )
+                .options(selectinload(schemas.OAuth2ConnectionORM.client))
+            )
+            connection = result.one_or_none()
+            if connection is None:
+                raise errors.MissingResourceError(
+                    message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."  # noqa: E501
+                )
+
+            if connection.token is None:
+                raise errors.Unauthorized(message=f"OAuth2 connection with id '{connection_id}' is not valid.")
+
+            client = connection.client
+            token = models.OAuth2TokenSet.from_dict(json.loads(connection.token))
+            async with AsyncOAuth2Client(
+                client_id=client.client_id,
+                client_secret=client.client_secret,
+                scope=self._scope,
+            ) as oauth2_client:
+                oauth2_client.token=token.to_dict()
+
+                # TODO: how to configure this?
+                response = await oauth2_client.get("https://gitlab.com/api/v4/user")
+
+                if response.status_code > 200:
+                    raise errors.Unauthorized(message="Could not get account information.")
+
+                account = models.ConnectedAccount.model_validate(response.json())
+                return account
 
 
 def _generate_cookie():

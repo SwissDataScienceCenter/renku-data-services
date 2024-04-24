@@ -179,6 +179,46 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - oauth2
+  /oauth2/connections/{connection}:
+    get:
+      summary: Get an OAuth2 connection
+      parameters:
+        - in: path
+          name: connection
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The connection.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Connection"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - oauth2
+  /oauth2/connections/{connection}/account:
+    get:
+      summary: Get the account information for this OAuth2 connection
+      parameters:
+        - in: path
+          name: connection
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The connection.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectedAccount"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - oauth2
 components:
   schemas:
     AdminProviderList:
@@ -258,6 +298,17 @@ components:
         - id
         - provider_id
         - status
+    ConnectedAccount:
+      type: object
+      additionalProperties: false
+      properties:
+        username:
+          $ref: "#/components/schemas/Username"
+        web_url:
+          $ref: "#/components/schemas/WebUrl"
+      required:
+        - username
+        - web_url
     Ulid:
       description: ULID identifier
       type: string
@@ -282,6 +333,12 @@ components:
       enum:
         - connected
         - pending
+    Username:
+      type: string
+      example: "some-username"
+    WebUrl:
+      type: string
+      example: "https://example.org"
     ErrorResponse:
       type: object
       properties:

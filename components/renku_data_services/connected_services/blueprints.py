@@ -163,3 +163,27 @@ class OAuth2ConnectionsBP(CustomBlueprint):
             )
 
         return "/oauth2/connections", ["GET"], _get_all
+
+    def get_one(self) -> BlueprintFactoryResponse:
+        """Get a specific OAuth2 connection."""
+
+        @authenticate(self.authenticator)
+        async def _get_one(_: Request, connection_id: str, user: base_models.APIUser):
+            connection = await self.connected_services_repo.get_oauth2_connection(
+                connection_id=connection_id, user=user
+            )
+            return json(apispec.Connection.model_validate(connection).model_dump(exclude_none=True, mode="json"))
+
+        return "/oauth2/connections/<connection_id>", ["GET"], _get_one
+
+    def get_account(self) -> BlueprintFactoryResponse:
+        """Get the account information for a specific OAuth2 connection."""
+
+        @authenticate(self.authenticator)
+        async def _get_account(_: Request, connection_id: str, user: base_models.APIUser):
+            account = await self.connected_services_repo.get_oauth2_connected_account(
+                connection_id=connection_id, user=user
+            )
+            return json(apispec.ConnectedAccount.model_validate(account).model_dump(exclude_none=True, mode="json"))
+
+        return "/oauth2/connections/<connection_id>/account", ["GET"], _get_account
