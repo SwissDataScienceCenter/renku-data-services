@@ -46,7 +46,11 @@ class OAuth2TokenSet(BaseModel):
     @classmethod
     def from_dict(cls, token_set: dict[str, Any]):
         """Create an OAuth2 token set a dictionary."""
-        return cls(**token_set)
+        data = dict()
+        data['access_token'] = token_set.get("access_token", "")
+        data['refresh_token'] = token_set.get("refresh_token", "")
+        data['expires_at'] = token_set.get("expires_at", 0)
+        return cls(**data)
 
     def to_dict(self) -> dict:
         """Return this token set as a dictionary."""
