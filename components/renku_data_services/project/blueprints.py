@@ -50,6 +50,7 @@ class ProjectsBP(CustomBlueprint):
                     repositories=p.repositories,
                     visibility=p.visibility.value,
                     description=p.description,
+                    etag=p.etag,
                 )
                 for p in projects
             ], total_num
@@ -87,6 +88,7 @@ class ProjectsBP(CustomBlueprint):
                     repositories=result.repositories,
                     visibility=result.visibility.value,
                     description=result.description,
+                    etag=result.etag,
                 ),
                 201,
             )
@@ -117,6 +119,7 @@ class ProjectsBP(CustomBlueprint):
                     repositories=project.repositories,
                     visibility=project.visibility.value,
                     description=project.description,
+                    etag=project.etag,
                 ), headers=headers
             )
 
@@ -126,9 +129,28 @@ class ProjectsBP(CustomBlueprint):
         """Get a specific project by namespace/slug."""
 
         @authenticate(self.authenticator)
-        async def _get_one_by_namespace_slug(_: Request, *, user: base_models.APIUser, namespace: str, slug: str):
+        async def _get_one_by_namespace_slug(request: Request, *, user: base_models.APIUser, namespace: str, slug: str):
             project = await self.project_repo.get_project_by_namespace_slug(user=user, namespace=namespace, slug=slug)
-            return json(apispec.Project.model_validate(project).model_dump(exclude_none=True, mode="json"))
+
+            etag = request.headers.get("If-None-Match")
+            if project.etag is not None and project.etag == etag:
+                return HTTPResponse(status=304)
+
+            headers = {"ETag": project.etag} if project.etag is not None else None
+            return json(
+                dict(
+                    id=project.id,
+                    name=project.name,
+                    namespace=project.namespace,
+                    slug=project.slug,
+                    creation_date=project.creation_date.isoformat(),
+                    created_by=project.created_by,
+                    repositories=project.repositories,
+                    visibility=project.visibility.value,
+                    description=project.description,
+                    etag=project.etag,
+                ), headers=headers,
+            )
 
         return "/projects/<namespace>/<slug>", ["GET"], _get_one_by_namespace_slug
 
@@ -172,6 +194,7 @@ class ProjectsBP(CustomBlueprint):
                     repositories=updated_project.repositories,
                     visibility=updated_project.visibility.value,
                     description=updated_project.description,
+                    etag=updated_project.etag,
                 ),
                 200,
             )

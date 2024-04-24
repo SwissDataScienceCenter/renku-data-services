@@ -53,6 +53,7 @@ class ProjectRepository:
         project_ids = self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
 
         async with self.session_maker() as session:
+            _ = await session.connection()
             stmt = select(schemas.ProjectORM)
             stmt = stmt.where(schemas.ProjectORM.id.in_(project_ids))
             stmt = stmt.limit(pagination.per_page).offset(pagination.offset)
@@ -60,11 +61,9 @@ class ProjectRepository:
             stmt_count = (
                 select(func.count()).select_from(schemas.ProjectORM).where(schemas.ProjectORM.id.in_(project_ids))
             )
-
             results = await gather(session.execute(stmt), session.execute(stmt_count))
             projects_orm = results[0].scalars().all()
             total_elements = cast(int, results[1].scalar() or 0)
-
             return [p.dump() for p in projects_orm], total_elements
 
     async def get_project(self, user: base_models.APIUser, project_id: str) -> models.Project:
@@ -178,8 +177,6 @@ class ProjectRepository:
         if etag is not None and current_etag != etag:
             raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
 
-        visibility_before = project.visibility
-
         if "repositories" in payload:
             payload["repositories"] = [
                 schemas.ProjectRepositoryORM(url=r, project_id=project_id, project=project)
@@ -258,9 +255,6 @@ class ProjectMemberRepository:
     ) -> list[MembershipChange]:
         """Update project's members."""
         output = self.authz.upsert_project_members(user, ResourceType.project, project_id, members)
-        import logging
-
-        logging.error(output)
         return output
 
     @with_db_transaction

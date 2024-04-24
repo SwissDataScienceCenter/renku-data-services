@@ -141,8 +141,6 @@ class EventConverter:
         ):
             input = cast(list[authz_models.MembershipChange], input)
             return _ProjectAuthzEventConverter.to_events(input)
-        import logging
-        logging.error(f"Input {input}")
         raise errors.EventError(
             message=f"Trying to convert an uknown model of type {type(input)} to an event type {event_type}"
         )

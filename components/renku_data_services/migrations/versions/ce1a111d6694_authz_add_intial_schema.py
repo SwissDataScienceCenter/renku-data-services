@@ -5,7 +5,9 @@ Revises: 89aa4573cfa9
 Create Date: 2024-04-11 09:05:15.645542
 
 """
-from authzed.api.v1 import WriteSchemaRequest
+import logging
+
+from authzed.api.v1 import WriteSchemaRequest  # type: ignore[attr-defined]
 
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.authz.schemas import v1
@@ -21,8 +23,8 @@ depends_on = None
 def upgrade() -> None:
     config = AuthzConfig.from_env()
     client = config.authz_client()
-    client.WriteSchema(WriteSchemaRequest(schema=v1))
+    res = client.WriteSchema(WriteSchemaRequest(schema=v1))
+    logging.info(f"Finished initial Authz schema migration, revision {revision}, response: {res}")
 
-
-def downgrade() -> None:
+async def downgrade() -> None:
     pass

@@ -42,7 +42,7 @@ undictify = "^0.11.3"
 kubernetes = "^26.1.0"
 python-ulid = "^1.1.0"
 deepmerge = "^1.1.0"
-authzed = "^0.14.0"
+authzed = {git = "https://github.com/authzed/authzed-py.git", rev = "bcd9640a5c2f8e0350e1eff29b34b3fe23a57f14"}
 
 [tool.poetry.group.dev.dependencies]
 pyavro-gen = "^0.3.3"

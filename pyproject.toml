@@ -62,7 +62,7 @@ undictify = "^0.11.3"
 types-redis = "^4.6.0.20240218"
 prometheus-sanic = "^3.0.0"
 sentry-sdk = { version = "^1.43.0", extras = ["sanic"] }
-authzed = "^0.14.0"
+authzed = {git = "https://github.com/authzed/authzed-py.git", rev = "bcd9640a5c2f8e0350e1eff29b34b3fe23a57f14"}
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.7.5"

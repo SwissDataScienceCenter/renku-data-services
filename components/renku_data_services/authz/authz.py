@@ -7,7 +7,7 @@ from enum import StrEnum
 from functools import wraps
 from typing import ClassVar, Protocol
 
-from authzed.api.v1 import (
+from authzed.api.v1 import (  # type: ignore[attr-defined]
     CheckPermissionRequest,
     CheckPermissionResponse,
     Client,

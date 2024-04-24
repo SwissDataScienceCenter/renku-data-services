@@ -189,18 +189,22 @@ name = "authzed"
 version = "0.14.0"
 description = "Client library for SpiceDB."
 optional = false
-python-versions = ">=3.8,<4.0"
-files = [
-    {file = "authzed-0.14.0-py3-none-any.whl", hash = "sha256:28b26757a5f2ae9ae565b0f19860a69245cc2381be89434bdb784a1407ceb716"},
-    {file = "authzed-0.14.0.tar.gz", hash = "sha256:31d3e7e9fb3f32b283ac720fa5077fa3d75968119db309b36dc9c078025e0d38"},
-]
+python-versions = "^3.8"
+files = []
+develop = false
 
 [package.dependencies]
-google_api = ">=0.1.12,<0.2.0"
-google-api-core = ">=2.4.0,<3.0.0"
-grpcio = ">=1.54,<2.0"
-protobuf = ">=4.23,<4.25"
+google_api = "^0.1.12"
+google-api-core = "^2.4.0"
+grpcio = "^1.54"
+protobuf = ">=4.23,<4.26"
 typing-extensions = ">=3.7.4,<5"
+
+[package.source]
+type = "git"
+url = "https://github.com/authzed/authzed-py.git"
+reference = "bcd9640a5c2f8e0350e1eff29b34b3fe23a57f14"
+resolved_reference = "bcd9640a5c2f8e0350e1eff29b34b3fe23a57f14"
 
 [[package]]
 name = "avro-preprocessor"
@@ -3784,4 +3788,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "0b87b6d9fc42bbc0df4ecd036cba7b47e351b2d67703836f1b37e9c81ad0c554"
+content-hash = "d5f01673f5f22bcde520f64ae51d1d051a3782f3d6f5b4187616ea164bf00bcf"

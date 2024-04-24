@@ -2,7 +2,7 @@
 import os
 from dataclasses import dataclass, field
 
-from authzed.api.v1 import Client
+from authzed.api.v1 import AsyncClient, SyncClient
 from grpcutil import bearer_token_credentials, insecure_bearer_token_credentials
 
 
@@ -23,12 +23,20 @@ class AuthzConfig:
         no_tls_connection = os.environ.get(f"{prefix}AUTHZ_DB_NO_TLS_CONNECTION", "false").lower() == "true"
         return cls(host, int(grpc_port), key, no_tls_connection)
 
-    def authz_client(self) -> Client:
+    def authz_client(self) -> SyncClient:
         """Generate an Authzed client."""
         target = f"{self.host}:{self.grpc_port}"
         if self.no_tls_connection:
             credentials = insecure_bearer_token_credentials(self.key)
         else:
             credentials = bearer_token_credentials(self.key)
-        return Client(target=target, credentials=credentials)
+        return SyncClient(target=target, credentials=credentials)
 
+    def authz_async_client(self) -> AsyncClient:
+        """Generate an Authzed client."""
+        target = f"{self.host}:{self.grpc_port}"
+        if self.no_tls_connection:
+            credentials = insecure_bearer_token_credentials(self.key)
+        else:
+            credentials = bearer_token_credentials(self.key)
+        return AsyncClient(target=target, credentials=credentials)
