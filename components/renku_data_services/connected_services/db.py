@@ -204,6 +204,21 @@ class ConnectedServicesRepository:
 
                 return token
 
+    async def get_oauth2_connections(
+        self,
+        user: base_models.APIUser,
+    ) -> list[models.OAuth2Connection]:
+        """Get all OAuth2 connections for the user from the database."""
+        if not user.is_authenticated or user.id is None:
+            return []
+
+        async with self.session_maker() as session:
+            result = await session.scalars(
+                select(schemas.OAuth2ConnectionORM).where(schemas.OAuth2ConnectionORM.user_id == user.id)
+            )
+            connections = result.all()
+            return [c.dump() for c in connections]
+
 
 def _generate_cookie():
     rand = random.SystemRandom()

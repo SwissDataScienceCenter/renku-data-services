@@ -82,7 +82,7 @@ paths:
         content:
           application/json:
             schema:
-                $ref: "#/components/schemas/AdminProviderPost"
+              $ref: "#/components/schemas/AdminProviderPost"
       responses:
         "201":
           description: The OAuth2 Client was created
@@ -160,6 +160,21 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - oauth2
+  /oauth2/connections:
+    get:
+      summary: Get all OAuth2 connections
+      description: Get the list of all connected services for the current user.
+      responses:
+        "200":
+          description: The list of connections.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectionList"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - oauth2
 components:
   schemas:
     AdminProviderList:
@@ -221,6 +236,31 @@ components:
       required:
         - id
         - display_name
+    ConnectionList:
+      type: array
+      items:
+        $ref: "#/components/schemas/Connection"
+    Connection:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        provider_id:
+          $ref: "#/components/schemas/ProviderId"
+        status:
+          $ref: "#/components/schemas/ConnectionStatus"
+      required:
+        - id
+        - provider_id
+        - status
+    Ulid:
+      description: ULID identifier
+      type: string
+      minLength: 26
+      maxLength: 26
+      pattern: "^[A-Z0-9]{26}$" # This is case-insensitive
+      format: ulid
     ProviderId:
       type: string
       example: "some-id"
@@ -233,6 +273,11 @@ components:
     DisplayName:
       type: string
       example: "my oauth2 application"
+    ConnectionStatus:
+      type: string
+      enum:
+        - connected
+        - pending
     ErrorResponse:
       type: object
       properties:

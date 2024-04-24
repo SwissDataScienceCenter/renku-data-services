@@ -137,3 +137,22 @@ class AdminOAuth2ClientsBP(CustomBlueprint):
             return HTTPResponse(status=204)
 
         return "/oauth2/admin/providers/<provider_id>", ["DELETE"], _delete
+
+@dataclass(kw_only=True)
+class OAuth2ConnectionsBP(CustomBlueprint):
+    """Handlers for using OAuth2 connections."""
+
+    connected_services_repo: ConnectedServicesRepository
+    authenticator: base_models.Authenticator
+
+    def get_all(self) -> BlueprintFactoryResponse:
+        """List all OAuth2 connections."""
+
+        @authenticate(self.authenticator)
+        async def _get_all(_: Request, user: base_models.APIUser):
+            connections = await self.connected_services_repo.get_oauth2_connections(user=user)
+            return json(
+                [apispec.Connection.model_validate(c).model_dump(exclude_none=True, mode='json') for c in connections]
+            )
+
+        return "/oauth2/connections", ["GET"], _get_all

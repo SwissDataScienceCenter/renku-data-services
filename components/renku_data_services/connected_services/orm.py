@@ -1,12 +1,12 @@
 """SQLAlchemy schemas for the connected services database."""
 from datetime import datetime
-from enum import Enum
 
 from sqlalchemy import DateTime, ForeignKey, MetaData, String, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from ulid import ULID
 
 from renku_data_services.connected_services import models
+from renku_data_services.connected_services.apispec import ConnectionStatus
 
 metadata_obj = MetaData(schema="connected_services")
 
@@ -43,11 +43,6 @@ class OAuth2ClientORM(BaseORM):
             updated_at=self.updated_at,
         )
 
-class ConnectionStatus(Enum):
-    """OAuth2 connection status."""
-    pending = "pending"
-    connected = "connected"
-
 class OAuth2ConnectionORM(BaseORM):
     """An OAuth2 connection."""
 
@@ -67,3 +62,11 @@ class OAuth2ConnectionORM(BaseORM):
         "updated_at", DateTime(timezone=True), default=None, server_default=func.now(), onupdate=func.now(),
         nullable=False
     )
+
+    def dump(self) -> models.OAuth2Connection:
+        """Create an OAuth2 connection model from the OAuth2ConnectionORM."""
+        return models.OAuth2Connection(
+            id=self.id,
+            provider_id=self.client_id,
+            status=self.status
+        )
