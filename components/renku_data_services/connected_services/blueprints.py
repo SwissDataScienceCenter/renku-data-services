@@ -2,13 +2,13 @@
 from dataclasses import dataclass
 
 from sanic import HTTPResponse, Request, json, redirect
-from sanic.log import logger
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_admins, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.connected_services import apispec
+from renku_data_services.connected_services.apispec_base import AuthorizeParams
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 
 
@@ -46,11 +46,13 @@ class OAuth2ClientsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _authorize(_: Request, provider_id: str, user: base_models.APIUser):
-            url, state, cookie = await self.connected_services_repo.authorize_client(provider_id=provider_id, user=user)
-            logger.info(f"Started oauth2: {url} {state} {cookie}")
+        async def _authorize(request: Request, provider_id: str, user: base_models.APIUser):
+            params = AuthorizeParams.model_validate(dict(request.query_args))
+            url, _state, cookie = await self.connected_services_repo.authorize_client(
+                provider_id=provider_id, user=user, next_url=params.next
+            )
             response = redirect(to=url)
-            response.add_cookie("renku-oauth2", cookie,httponly=True)
+            response.add_cookie("renku-oauth2", cookie, httponly=True)
             return response
 
         return "/oauth2/providers/<provider_id>/authorize", ["GET"], _authorize
@@ -61,9 +63,12 @@ class OAuth2ClientsBP(CustomBlueprint):
         async def _callback(request: Request):
             cookie = request.cookies.get("renku-oauth2")
             cookie = cookie if cookie else ""
-            token = await self.connected_services_repo.authorize_callback(cookie=cookie, rawUrl=request.url)
-            logger.info(f"Token: {token}")
-            response = json({"status": "OK"})
+
+            next_url = request.get_args().get("next")
+
+            await self.connected_services_repo.authorize_callback(cookie=cookie, rawUrl=request.url)
+
+            response = redirect(to=next_url)  if next_url else  json({"status": "OK"})
             response.delete_cookie("renku-oauth2")
             return response
 

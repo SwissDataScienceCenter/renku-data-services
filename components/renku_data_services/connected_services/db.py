@@ -3,6 +3,7 @@ import base64
 import random
 from collections.abc import Callable
 from typing import Any
+from urllib.parse import urlencode
 
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from sqlalchemy import select
@@ -19,8 +20,8 @@ class ConnectedServicesRepository:
     """Repository for connected services."""
 
     _authorization_url = "https://gitlab.com/oauth/authorize"
-    # _callback_url = "https://renku-ci-ds-179.dev.renku.ch/api/data/oauth2/callback"
-    _callback_url = "https://renku-ci-ds-179.dev.renku.ch/api/data/oauth2/callback?next=https%3A%2F%2Frenku-ci-ds-179.dev.renku.ch%2Fhelp"
+    _callback_url = "https://renku-ci-ds-179.dev.renku.ch/api/data/oauth2/callback"
+    # _callback_url = "https://renku-ci-ds-179.dev.renku.ch/api/data/oauth2/callback?next=https%3A%2F%2Frenku-ci-ds-179.dev.renku.ch%2Fhelp"
     _scope = "api"
     _token_endpoint = "https://gitlab.com/oauth/token"
 
@@ -116,7 +117,9 @@ class ConnectedServicesRepository:
 
             await session.delete(client)
 
-    async def authorize_client(self, user: base_models.APIUser, provider_id: str) -> tuple[str, str | Any, str]:
+    async def authorize_client(
+        self, user: base_models.APIUser, provider_id: str, next_url: str | None = None
+    ) -> tuple[str, str | Any, str]:
         """Authorize an OAuth2 Client."""
         if not user.is_authenticated or user.id is None:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
@@ -130,11 +133,16 @@ class ConnectedServicesRepository:
             if client is None:
                 raise errors.MissingResourceError(message=f"OAuth2 Client with id '{provider_id}' does not exist.")
 
+            callback_url = self._callback_url
+            if next_url:
+                query = urlencode([("next", next_url)])
+                callback_url = f"{callback_url}?{query}"
+
             async with AsyncOAuth2Client(
                 client_id=client.client_id,
                 client_secret=client.client_secret,
                 scope=self._scope,
-                redirect_uri=self._callback_url,
+                redirect_uri=callback_url,
             ) as oauth2_client:
                 authorization_endpoint = self._authorization_url
                 url, state = oauth2_client.create_authorization_url(authorization_endpoint)

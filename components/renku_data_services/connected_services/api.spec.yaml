@@ -52,6 +52,10 @@ paths:
           required: true
           schema:
             type: string
+        - in: query
+          name: next
+          schema:
+            type: string
       responses:
         "302":
           description: The authorization URL for this OAuth2 Client.
