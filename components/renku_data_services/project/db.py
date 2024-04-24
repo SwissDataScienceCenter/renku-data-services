@@ -161,17 +161,23 @@ class ProjectRepository:
         self, session: AsyncSession, user: base_models.APIUser, project_id: str, etag: str | None = None, **payload
     ) -> models.Project:
         """Update a project entry."""
-        authorized = self.authz.has_permission(user, ResourceType.project, project_id, Scope.WRITE)
+        result = await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
+        project = result.one_or_none()
+        if project is None:
+            raise errors.MissingResourceError(message=f"The project with id '{project_id}' cannot be found")
+
+        required_scope = Scope.WRITE
+        if (
+            "visibility" in payload
+            and isinstance(payload["visibility"], project_apispec.Visibility)
+            and payload["visibility"].value != project.visibility.value
+        ):
+            required_scope = Scope.DELETE
+        authorized = self.authz.has_permission(user, ResourceType.project, project_id, required_scope)
         if not authorized:
             raise errors.MissingResourceError(
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
-
-        result = await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
-        project = result.one_or_none()
-
-        if project is None:
-            raise errors.MissingResourceError(message=f"The project with id '{project_id}' cannot be found")
 
         current_etag = project.dump().etag
         if etag is not None and current_etag != etag:

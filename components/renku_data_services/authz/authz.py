@@ -33,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from renku_data_services import base_models
 from renku_data_services.authz.models import Change, Member, MembershipChange, Role, Scope, Visibility
 from renku_data_services.errors import errors
+from renku_data_services.project import apispec as project_apispec
 from renku_data_services.project.models import Project
 
 
@@ -335,7 +336,12 @@ class Authz:
                         case ProjectAuthzOperation.delete:
                             authz_change = db_repo.authz._remove_project(user, project)
                         case ProjectAuthzOperation.change_visibility:
-                            authz_change = db_repo.authz._update_project_visibility(user, project)
+                            if (
+                                "visibility" in kwargs
+                                and isinstance(kwargs["visibility"], project_apispec.Visibility)
+                                and project.visibility.value != kwargs["visibility"].value
+                            ):
+                                authz_change = db_repo.authz._update_project_visibility(user, project)
                         case _:
                             raise errors.ProgrammingError(
                                 message=f"Encountered an unkonwn project authorization operation {op} "
@@ -491,7 +497,7 @@ class Authz:
                 return _AuthzChange(apply=make_private, undo=make_public)
         raise errors.ProgrammingError(
             message=f"Encountered unknown project visibility {project.visibility} when trying to "
-            f"update permissions for visibility change for project with ID {project.id}",
+            f"make a visibility change for project with ID {project.id}",
         )
 
     @_is_allowed(Scope.CHANGE_MEMBERSHIP)
