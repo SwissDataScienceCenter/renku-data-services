@@ -286,8 +286,13 @@ class ConnectedServicesRepository:
                 client_id=client.client_id,
                 client_secret=client.client_secret,
                 scope=self._scope,
+                token_endpoint=self._token_endpoint,
             ) as oauth2_client:
                 oauth2_client.token = token.to_dict()
+
+                oauth2_client.ensure_active_token(oauth2_client.token)
+                token_model = models.OAuth2TokenSet.from_dict(oauth2_client.token)
+                connection.token = json.dumps(token_model.to_dict())
 
                 # TODO: how to configure this?
                 response = await oauth2_client.get("https://gitlab.com/api/v4/user")
