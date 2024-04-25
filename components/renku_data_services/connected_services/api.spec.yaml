@@ -235,10 +235,13 @@ components:
           $ref: "#/components/schemas/ClientId"
         display_name:
           $ref: "#/components/schemas/DisplayName"
+        url:
+          $ref: "#/components/schemas/ProviderUrl"
       required:
         - id
         - client_id
         - display_name
+        - url
     AdminProviderPost:
       type: object
       additionalProperties: false
@@ -251,10 +254,13 @@ components:
           $ref: "#/components/schemas/ClientSecret"
         display_name:
           $ref: "#/components/schemas/DisplayName"
+        url:
+          $ref: "#/components/schemas/ProviderUrl"
       required:
         - id
         - client_id
         - display_name
+        - url
     AdminProviderPatch:
       type: object
       additionalProperties: false
@@ -265,6 +271,8 @@ components:
           $ref: "#/components/schemas/ClientSecret"
         display_name:
           $ref: "#/components/schemas/DisplayName"
+        url:
+          $ref: "#/components/schemas/ProviderUrl"
     ProviderList:
       type: array
       items:
@@ -277,9 +285,12 @@ components:
           $ref: "#/components/schemas/ProviderId"
         display_name:
           $ref: "#/components/schemas/DisplayName"
+        url:
+          $ref: "#/components/schemas/ProviderUrl"
       required:
         - id
         - display_name
+        - url
     ConnectionList:
       type: array
       items:
@@ -328,6 +339,9 @@ components:
     DisplayName:
       type: string
       example: "my oauth2 application"
+    ProviderUrl: 
+      type: string
+      example: "https://example.org"
     ConnectionStatus:
       type: string
       enum:

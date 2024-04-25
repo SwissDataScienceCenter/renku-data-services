@@ -1,4 +1,5 @@
 """Adapters for connected services database classes."""
+
 import base64
 import json
 import random
@@ -184,7 +185,8 @@ class ConnectedServicesRepository:
 
         async with self.session_maker() as session, session.begin():
             result = await session.scalars(
-                select(schemas.OAuth2ConnectionORM).where(schemas.OAuth2ConnectionORM.cookie == cookie)
+                select(schemas.OAuth2ConnectionORM)
+                .where(schemas.OAuth2ConnectionORM.cookie == cookie)
                 .options(selectinload(schemas.OAuth2ConnectionORM.client))
             )
             connection = result.one_or_none()
@@ -242,9 +244,9 @@ class ConnectedServicesRepository:
 
         async with self.session_maker() as session:
             result = await session.scalars(
-                select(schemas.OAuth2ConnectionORM).where(
-                    schemas.OAuth2ConnectionORM.id == connection_id and schemas.OAuth2ConnectionORM.user_id == user.id
-                )
+                select(schemas.OAuth2ConnectionORM)
+                .where(schemas.OAuth2ConnectionORM.id == connection_id)
+                .where(schemas.OAuth2ConnectionORM.user_id == user.id)
             )
             connection = result.one_or_none()
             if connection is None:
@@ -264,9 +266,9 @@ class ConnectedServicesRepository:
 
         async with self.session_maker() as session:
             result = await session.scalars(
-                select(schemas.OAuth2ConnectionORM).where(
-                    schemas.OAuth2ConnectionORM.id == connection_id and schemas.OAuth2ConnectionORM.user_id == user.id
-                )
+                select(schemas.OAuth2ConnectionORM)
+                .where(schemas.OAuth2ConnectionORM.id == connection_id)
+                .where(schemas.OAuth2ConnectionORM.user_id == user.id)
                 .options(selectinload(schemas.OAuth2ConnectionORM.client))
             )
             connection = result.one_or_none()
@@ -285,7 +287,7 @@ class ConnectedServicesRepository:
                 client_secret=client.client_secret,
                 scope=self._scope,
             ) as oauth2_client:
-                oauth2_client.token=token.to_dict()
+                oauth2_client.token = token.to_dict()
 
                 # TODO: how to configure this?
                 response = await oauth2_client.get("https://gitlab.com/api/v4/user")
@@ -295,6 +297,26 @@ class ConnectedServicesRepository:
 
                 account = models.ConnectedAccount.model_validate(response.json())
                 return account
+
+    async def get_oauth2_connection_token(self, connection_id: str, user: base_models.APIUser) -> str:
+        """Get the OAuth2 access token from one connection from the database."""
+        if not user.is_authenticated or user.id is None:
+            raise errors.MissingResourceError(
+                message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."  # noqa: E501
+            )
+
+        async with self.session_maker() as session:
+            result = await session.scalars(
+                select(schemas.OAuth2ConnectionORM)
+                .where(schemas.OAuth2ConnectionORM.id == connection_id)
+                .where(schemas.OAuth2ConnectionORM.user_id == user.id)
+            )
+            connection = result.one_or_none()
+            if connection is None:
+                raise errors.MissingResourceError(
+                    message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."  # noqa: E501
+                )
+            return connection.token or ""
 
 
 def _generate_cookie():

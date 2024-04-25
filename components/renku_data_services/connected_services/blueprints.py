@@ -1,4 +1,5 @@
 """Connected services blueprint."""
+
 from dataclasses import dataclass
 
 from sanic import HTTPResponse, Request, json, redirect
@@ -26,7 +27,7 @@ class OAuth2ClientsBP(CustomBlueprint):
         async def _get_all(_: Request, user: base_models.APIUser):
             clients = await self.connected_services_repo.get_oauth2_clients(user=user)
             return json(
-                [apispec.Provider.model_validate(c).model_dump(exclude_none=True, mode='json') for c in clients]
+                [apispec.Provider.model_validate(c).model_dump(exclude_none=True, mode="json") for c in clients]
             )
 
         return "/oauth2/providers", ["GET"], _get_all
@@ -70,7 +71,7 @@ class OAuth2ClientsBP(CustomBlueprint):
 
             await self.connected_services_repo.authorize_callback(cookie=cookie, raw_url=request.url, next_url=next_url)
 
-            response = redirect(to=next_url)  if next_url else  json({"status": "OK"})
+            response = redirect(to=next_url) if next_url else json({"status": "OK"})
             response.delete_cookie("renku-oauth2")
             return response
 
@@ -92,7 +93,7 @@ class AdminOAuth2ClientsBP(CustomBlueprint):
         async def _get_all(_: Request, user: base_models.APIUser):
             clients = await self.connected_services_repo.get_oauth2_clients(user=user)
             return json(
-                [apispec.AdminProvider.model_validate(c).model_dump(exclude_none=True, mode='json') for c in clients]
+                [apispec.AdminProvider.model_validate(c).model_dump(exclude_none=True, mode="json") for c in clients]
             )
 
         return "/oauth2/admin/providers", ["GET"], _get_all
@@ -115,7 +116,7 @@ class AdminOAuth2ClientsBP(CustomBlueprint):
         @validate(json=apispec.AdminProviderPost)
         async def _post(_: Request, body: apispec.AdminProviderPost, user: base_models.APIUser):
             client = await self.connected_services_repo.insert_oauth2_client(user=user, new_client=body)
-            return json(apispec.AdminProvider.model_validate(client).model_dump(exclude_none=True, mode='json'), 201)
+            return json(apispec.AdminProvider.model_validate(client).model_dump(exclude_none=True, mode="json"), 201)
 
         return "/oauth2/admin/providers", ["POST"], _post
 
@@ -145,6 +146,7 @@ class AdminOAuth2ClientsBP(CustomBlueprint):
 
         return "/oauth2/admin/providers/<provider_id>", ["DELETE"], _delete
 
+
 @dataclass(kw_only=True)
 class OAuth2ConnectionsBP(CustomBlueprint):
     """Handlers for using OAuth2 connections."""
@@ -159,7 +161,7 @@ class OAuth2ConnectionsBP(CustomBlueprint):
         async def _get_all(_: Request, user: base_models.APIUser):
             connections = await self.connected_services_repo.get_oauth2_connections(user=user)
             return json(
-                [apispec.Connection.model_validate(c).model_dump(exclude_none=True, mode='json') for c in connections]
+                [apispec.Connection.model_validate(c).model_dump(exclude_none=True, mode="json") for c in connections]
             )
 
         return "/oauth2/connections", ["GET"], _get_all
@@ -187,3 +189,15 @@ class OAuth2ConnectionsBP(CustomBlueprint):
             return json(apispec.ConnectedAccount.model_validate(account).model_dump(exclude_none=True, mode="json"))
 
         return "/oauth2/connections/<connection_id>/account", ["GET"], _get_account
+
+    def get_token(self) -> BlueprintFactoryResponse:
+        """Get the access token for a specific OAuth2 connection."""
+
+        @authenticate(self.authenticator)
+        async def _get_token(_: Request, connection_id: str, user: base_models.APIUser):
+            token = await self.connected_services_repo.get_oauth2_connection_token(
+                connection_id=connection_id, user=user
+            )
+            return json(dict(token=token))
+
+        return "/oauth2/connections/<connection_id>/token", ["GET"], _get_token
