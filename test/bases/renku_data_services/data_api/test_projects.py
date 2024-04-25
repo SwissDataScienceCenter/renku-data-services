@@ -5,11 +5,13 @@ from test.bases.renku_data_services.data_api.utils import merge_headers
 from typing import Any
 
 import pytest
+from ulid import ULID
 
 from components.renku_data_services.message_queue.avro_models.io.renku.events import v1 as avro_schema_v1
 from components.renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
 from renku_data_services.app_config.config import Config
 from renku_data_services.message_queue.redis_queue import deserialize_binary
+from renku_data_services.users.models import UserInfo
 
 
 @pytest.fixture
@@ -532,6 +534,7 @@ async def test_add_project_members(create_project, sanic_client, user_headers, a
     assert auth_event.userId == members[0]["id"]
     assert auth_event.role.value.lower() == members[0]["role"]
 
+
 @pytest.mark.asyncio
 async def test_delete_project_members(create_project, sanic_client, user_headers, app_config: Config):
     project = await create_project("Project 1")
@@ -580,3 +583,58 @@ async def test_null_byte_middleware(sanic_client, user_headers, regular_user, ap
 
     assert response.status_code == 422, response.text
     assert "Null byte found in request" in response.text
+
+
+@pytest.mark.asyncio
+async def test_cannot_change_membership_non_existent_resources(create_project, sanic_client, user_headers):
+    project = await create_project("Project 1")
+    project_id = project["id"]
+
+    # User does not exist
+    members = [{"id": "non-existing", "role": "viewer"}]
+    _, response = await sanic_client.patch(
+        f"/api/data/projects/{project_id}/members", headers=user_headers, json=members
+    )
+    assert response.status_code == 404
+
+    # Project does not exist
+    non_existent_project_id = str(ULID())
+    members = [{"id": "member-1", "role": "viewer"}]
+    _, response = await sanic_client.patch(
+        f"/api/data/projects/{non_existent_project_id}/members", headers=user_headers, json=members
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_project_owner_cannot_remove_themselves_if_no_other_owner(
+    create_project,
+    sanic_client,
+    user_headers,
+    regular_user: UserInfo,
+    member_1_user: UserInfo,
+    member_1_headers: dict,
+):
+    owner = regular_user
+    project = await create_project("Project 1")
+    project_id = project["id"]
+    assert project["created_by"] == owner.id
+
+    # Try to remove the only owner
+    _, response = await sanic_client.delete(f"/api/data/projects/{project_id}/members/{owner.id}", headers=user_headers)
+    assert response.status_code == 401
+
+    # Add another user as owner
+    members = [{"id": member_1_user.id, "role": "owner"}]
+    _, response = await sanic_client.patch(
+        f"/api/data/projects/{project_id}/members", headers=user_headers, json=members
+    )
+    assert response.status_code == 200
+
+    # Now an owner can remove themselsevs
+    _, response = await sanic_client.delete(f"/api/data/projects/{project_id}/members/{owner.id}", headers=user_headers)
+    assert response.status_code == 204
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/members", headers=member_1_headers)
+    assert response.status_code == 200
+    assert len(response.json) == 1
+    assert response.json[0]["id"] == member_1_user.id

@@ -27,26 +27,58 @@ def regular_user() -> UserInfo:
 
 
 @pytest.fixture
-def users(admin_user, regular_user) -> list[UserInfo]:
+def member_1_user() -> UserInfo:
+    return UserInfo("member-1", "Member-1", "Doe", "member-1.doe@gmail.com")
+
+
+@pytest.fixture
+def member_2_user() -> UserInfo:
+    return UserInfo("member-2", "Member-2", "Doe", "member-2.doe@gmail.com")
+
+
+@pytest.fixture
+def users(admin_user, regular_user, member_1_user, member_2_user) -> list[UserInfo]:
     return [
         admin_user,
         regular_user,
-        UserInfo("member-1", "Member-1", "Doe", "member-1.doe@gmail.com"),
-        UserInfo("member-2", "Member-2", "Doe", "member-2.doe@gmail.com"),
+        member_1_user,
+        member_2_user,
     ]
 
 
 @pytest.fixture
-def admin_headers() -> dict[str, str]:
+def admin_headers(admin_user: UserInfo) -> dict[str, str]:
     """Authentication headers for an admin user."""
-    access_token = json.dumps({"is_admin": True, "id": "admin", "name": "Admin User"})
+    access_token = json.dumps(
+        {"is_admin": True, "id": admin_user.id, "name": f"{admin_user.first_name} {admin_user.last_name}"}
+    )
     return {"Authorization": f"Bearer {access_token}"}
 
 
 @pytest.fixture
-def user_headers() -> dict[str, str]:
+def user_headers(regular_user: UserInfo) -> dict[str, str]:
     """Authentication headers for a normal user."""
-    access_token = json.dumps({"is_admin": False, "id": "user", "name": "Normal User"})
+    access_token = json.dumps(
+        {"is_admin": False, "id": regular_user.id, "name": f"{regular_user.first_name} {regular_user.last_name}"}
+    )
+    return {"Authorization": f"Bearer {access_token}"}
+
+
+@pytest.fixture
+def member_1_headers(member_1_user: UserInfo) -> dict[str, str]:
+    """Authentication headers for a normal user."""
+    access_token = json.dumps(
+        {"is_admin": False, "id": member_1_user.id, "name": f"{member_1_user.first_name} {member_1_user.last_name}"}
+    )
+    return {"Authorization": f"Bearer {access_token}"}
+
+
+@pytest.fixture
+def member_2_headers(member_2_user: UserInfo) -> dict[str, str]:
+    """Authentication headers for a normal user."""
+    access_token = json.dumps(
+        {"is_admin": False, "id": member_2_user.id, "name": f"{member_2_user.first_name} {member_2_user.last_name}"}
+    )
     return {"Authorization": f"Bearer {access_token}"}
 
 
@@ -54,6 +86,7 @@ def user_headers() -> dict[str, str]:
 def unauthorized_headers() -> dict[str, str]:
     """Authentication headers for an anonymous user (did not log in)."""
     return {"Authorization": "Bearer {}"}
+
 
 @pytest.fixture
 def bootstrap_admins(app_config: Config, admin_user: UserInfo):
@@ -67,6 +100,7 @@ def bootstrap_admins(app_config: Config, admin_user: UserInfo):
         )
     )
     authz.client.WriteRelationships(WriteRelationshipsRequest(updates=rels))
+
 
 @pytest_asyncio.fixture
 async def sanic_app(app_config: Config, users: list[UserInfo], bootstrap_admins) -> Sanic:

@@ -33,8 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from renku_data_services import base_models
 from renku_data_services.authz.models import Change, Member, MembershipChange, Role, Scope, Visibility
 from renku_data_services.errors import errors
-from renku_data_services.project import apispec as project_apispec
-from renku_data_services.project.models import Project
+from renku_data_services.project.models import Project, ProjectUpdate
 
 
 @dataclass
@@ -314,7 +313,7 @@ class Authz:
             @property
             def authz(self) -> Authz: ...
 
-        def decorator(f: Callable[..., Awaitable[Project]]):
+        def decorator(f: Callable[..., Awaitable[Project | ProjectUpdate]]):
             @wraps(f)
             async def decorated_function(
                 db_repo: WithAuthz, session: AsyncSession, user: base_models.APIUser, *args, **kwargs
@@ -331,21 +330,18 @@ class Authz:
                 try:
                     project = await f(db_repo, session, user, *args, **kwargs)
                     match op:
-                        case ProjectAuthzOperation.create:
+                        case ProjectAuthzOperation.create if isinstance(project, Project):
                             authz_change = db_repo.authz._add_project(project)
-                        case ProjectAuthzOperation.delete:
+                        case ProjectAuthzOperation.delete if isinstance(project, Project):
                             authz_change = db_repo.authz._remove_project(user, project)
-                        case ProjectAuthzOperation.change_visibility:
-                            if (
-                                "visibility" in kwargs
-                                and isinstance(kwargs["visibility"], project_apispec.Visibility)
-                                and project.visibility.value != kwargs["visibility"].value
-                            ):
-                                authz_change = db_repo.authz._update_project_visibility(user, project)
+                        case ProjectAuthzOperation.change_visibility if isinstance(project, ProjectUpdate):
+                            if project.old.visibility != project.new.visibility:
+                                authz_change = db_repo.authz._update_project_visibility(user, project.new)
                         case _:
+                            project_id = project.id if isinstance(project, Project) else project.new.id
                             raise errors.ProgrammingError(
                                 message=f"Encountered an unkonwn project authorization operation {op} "
-                                f"when updating the project database for project with ID {project.id}",
+                                f"when updating the project database for project with ID {project_id}",
                             )
                     db_repo.authz.client.WriteRelationships(authz_change.apply)
                     return project
@@ -588,11 +584,7 @@ class Authz:
         change = _AuthzChange(
             apply=WriteRelationshipsRequest(updates=add_members), undo=WriteRelationshipsRequest(updates=undo)
         )
-        try:
-            self.client.WriteRelationships(change.apply)
-        except Exception as err:
-            self.client.WriteRelationships(change.undo)
-            raise err
+        self.client.WriteRelationships(change.apply)
         return output
 
     @_is_allowed(Scope.CHANGE_MEMBERSHIP)
@@ -608,7 +600,16 @@ class Authz:
         add_members: list[RelationshipUpdate] = []
         remove_members: list[RelationshipUpdate] = []
         output: list[MembershipChange] = []
+        existing_owners_filter = RelationshipFilter(
+            resource_type=resource_type.value,
+            optional_resource_id=resource_id,
+            optional_subject_filter=SubjectFilter(subject_type=ResourceType.user),
+            optional_relation=_Relation.owner.value,
+        )
+        existing_owners_rels: list[ReadRelationshipsResponse] | None = None
         for user_id in user_ids:
+            if user_id == "*":
+                raise errors.ValidationError(message="Cannot remove a project member with ID '*'")
             existing_rel_filter = RelationshipFilter(
                 resource_type=resource_type.value,
                 optional_resource_id=resource_id,
@@ -622,6 +623,19 @@ class Authz:
             # NOTE: We have to make sure that when we undo we only put back relationships that existed already.
             # Blidnly undoing everything that was passed in may result in adding things that weren't there before.
             for existing_rel in existing_rels:
+                if existing_rel.relationship.relation == _Relation.owner.value:
+                    if existing_owners_rels is None:
+                        existing_owners_rels = list(self.client.ReadRelationships(
+                            ReadRelationshipsRequest(
+                                consistency=Consistency(at_least_as_fresh=zed_token),
+                                relationship_filter=existing_owners_filter,
+                            )
+                        ))
+                    if len(existing_owners_rels) == 1:
+                        raise errors.Unauthorized(
+                            message="You are trying to remove the single last owner of the project, "
+                            "which is not allowed. Assign another user as owner and then retry."
+                        )
                 add_members.append(
                     RelationshipUpdate(
                         operation=RelationshipUpdate.OPERATION_TOUCH, relationship=existing_rel.relationship
@@ -645,9 +659,5 @@ class Authz:
         change = _AuthzChange(
             apply=WriteRelationshipsRequest(updates=remove_members), undo=WriteRelationshipsRequest(updates=add_members)
         )
-        try:
-            self.client.WriteRelationships(change.apply)
-        except Exception as err:
-            self.client.WriteRelationships(change.undo)
-            raise err
+        self.client.WriteRelationships(change.apply)
         return output

@@ -31,7 +31,7 @@ schemas: components/renku_data_services/crc/apispec.py components/renku_data_ser
 
 download_avro:
 	@echo "Downloading avro schema files"
-	curl -L -o schemas.tar.gz https://github.com/SwissDataScienceCenter/renku-schema/tarball/v2
+	curl -L -o schemas.tar.gz https://github.com/SwissDataScienceCenter/renku-schema/tarball/main
 	tar xf schemas.tar.gz --directory=components/renku_data_services/message_queue/schemas/ --strip-components=1
 	rm schemas.tar.gz
 

@@ -1,4 +1,4 @@
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from typing import ClassVar, Dict, List, Optional
 
 from dataclasses_avroschema import AvroModel
@@ -19,8 +19,7 @@ class ProjectUpdated(AvroModel):
     repositories: List[str]
     visibility: Visibility
     description: Optional[str]
-    keywords: List[str] = field(default_factory=list)
-
+    keywords: List[str]
 
     #: The Avro Schema associated to this class
     _schema: ClassVar[str] = """{

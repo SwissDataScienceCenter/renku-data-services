@@ -42,6 +42,7 @@ class _ProjectEventConverter:
                     description=project.description,
                     createdBy=project.created_by,
                     creationDate=project.creation_date,
+                    keywords=[],
                 )
             case v1.ProjectUpdated:
                 return v1.ProjectUpdated(
@@ -51,6 +52,7 @@ class _ProjectEventConverter:
                     repositories=project.repositories,
                     visibility=_ProjectEventConverter._convert_project_visibility(project.visibility),
                     description=project.description,
+                    keywords=[],
                 )
             case v1.ProjectRemoved:
                 return v1.ProjectRemoved(id=project.id)
@@ -131,6 +133,9 @@ class EventConverter:
         if isinstance(input, project_models.Project):
             input = cast(project_models.Project, input)
             return [_ProjectEventConverter.to_event(input, event_type)]
+        elif isinstance(input, project_models.ProjectUpdate):
+            input = cast(project_models.Project, input.new)
+            return [_ProjectEventConverter.to_event(input, event_type)]
         elif isinstance(input, user_models.UserInfo):
             input = cast(user_models.UserInfo, input)
             return [_UserEventConverter.to_event(input, event_type)]
@@ -141,6 +146,8 @@ class EventConverter:
         ):
             input = cast(list[authz_models.MembershipChange], input)
             return _ProjectAuthzEventConverter.to_events(input)
+        elif isinstance(input, list) and len(input) == 0:
+            return []
         raise errors.EventError(
             message=f"Trying to convert an uknown model of type {type(input)} to an event type {event_type}"
         )

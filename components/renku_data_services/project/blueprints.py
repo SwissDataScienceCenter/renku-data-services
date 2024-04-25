@@ -120,7 +120,8 @@ class ProjectsBP(CustomBlueprint):
                     visibility=project.visibility.value,
                     description=project.description,
                     etag=project.etag,
-                ), headers=headers
+                ),
+                headers=headers,
             )
 
         return "/projects/<project_id>", ["GET"], _get_one
@@ -149,7 +150,8 @@ class ProjectsBP(CustomBlueprint):
                     visibility=project.visibility.value,
                     description=project.description,
                     etag=project.etag,
-                ), headers=headers,
+                ),
+                headers=headers,
             )
 
         return "/projects/<namespace>/<slug>", ["GET"], _get_one_by_namespace_slug
@@ -179,10 +181,16 @@ class ProjectsBP(CustomBlueprint):
         ):
             body_dict = body.model_dump(exclude_none=True)
 
-            updated_project = await self.project_repo.update_project(
+            project_update = await self.project_repo.update_project(
                 user=user, project_id=project_id, etag=etag, **body_dict
             )
+            if not isinstance(project_update, project_models.ProjectUpdate):
+                raise errors.ProgrammingError(
+                    message="Expected the result of a project update to be ProjectUpdate but instead "
+                    f"got {type(project_update)}"
+                )
 
+            updated_project = project_update.new
             return json(
                 dict(
                     id=updated_project.id,

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import functools
 from asyncio import gather
 from collections.abc import Callable
+from enum import Enum
 from typing import cast
 
 from sqlalchemy import delete, func, select, update
@@ -24,6 +26,7 @@ from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project import apispec as project_apispec
 from renku_data_services.project import models
 from renku_data_services.project import orm as schemas
+from renku_data_services.users.orm import UserORM
 from renku_data_services.utils.core import with_db_transaction
 
 
@@ -159,18 +162,20 @@ class ProjectRepository:
     @dispatch_message(avro_schema_v1.ProjectUpdated)
     async def update_project(
         self, session: AsyncSession, user: base_models.APIUser, project_id: str, etag: str | None = None, **payload
-    ) -> models.Project:
+    ) -> models.ProjectUpdate:
         """Update a project entry."""
         result = await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
         project = result.one_or_none()
         if project is None:
             raise errors.MissingResourceError(message=f"The project with id '{project_id}' cannot be found")
+        old_project = project.dump()
 
         required_scope = Scope.WRITE
-        if (
-            "visibility" in payload
-            and isinstance(payload["visibility"], project_apispec.Visibility)
-            and payload["visibility"].value != project.visibility.value
+        if "visibility" in payload and (
+            (isinstance(payload["visibility"], Enum) and payload["visibility"].value != old_project.visibility.value)
+            or (
+                isinstance(payload["visibility"], str) and payload["visibility"].lower() != old_project.visibility.value
+            )
         ):
             required_scope = Scope.DELETE
         authorized = self.authz.has_permission(user, ResourceType.project, project_id, required_scope)
@@ -207,7 +212,10 @@ class ProjectRepository:
         await session.flush()
         await session.refresh(project)
 
-        return project.dump()  # NOTE: Triggers validation before the transaction saves data
+        return models.ProjectUpdate(
+            old=old_project,
+            new=project.dump(),  # NOTE: Triggers validation before the transaction saves data
+        )
 
     @with_db_transaction
     @Authz.project_change(ProjectAuthzOperation.delete)
@@ -233,6 +241,29 @@ class ProjectRepository:
         return project.dump()
 
 
+def _project_exists(f):
+    """Checks if the project exists when adding or modifying project members."""
+
+    @functools.wraps(f)
+    async def decorated_func(
+        self: ProjectMemberRepository,
+        session: AsyncSession,
+        user: base_models.APIUser,
+        project_id: str,
+        *args,
+        **kwargs,
+    ):
+        stmt = select(schemas.ProjectORM.id).where(schemas.ProjectORM.id == project_id)
+        res = await session.scalar(stmt)
+        if not res:
+            raise errors.MissingResourceError(
+                message=f"Project with ID {project_id} does not exist or you do not have access to it."
+            )
+        return await f(self, session, user, project_id, *args, **kwargs)
+
+    return decorated_func
+
+
 class ProjectMemberRepository:
     """Repository for project members."""
 
@@ -248,26 +279,47 @@ class ProjectMemberRepository:
         self.authz = authz
         self.message_queue = message_queue
 
-    async def get_members(self, user: base_models.APIUser, project_id: str) -> list[Member]:
+    @with_db_transaction
+    @_project_exists
+    async def get_members(self, session: AsyncSession, user: base_models.APIUser, project_id: str) -> list[Member]:
         """Get all members of a project."""
         members = self.authz.members(user, ResourceType.project, project_id)
         members = [member for member in members if member.user_id and member.user_id != "*"]
         return members
 
     @with_db_transaction
+    @_project_exists
     @dispatch_message(AmbiguousEvent.PROJECT_MEMBERSHIP_CHANGED)
     async def update_members(
         self, session: AsyncSession, user: base_models.APIUser, project_id: str, members: list[Member]
     ) -> list[MembershipChange]:
         """Update project's members."""
+        if len(members) == 0:
+            raise errors.ValidationError(message="Please request at least 1 member to be added to the project")
+
+        requested_member_ids = [member.user_id for member in members]
+        requested_member_ids_set = set(requested_member_ids)
+        stmt = select(UserORM.keycloak_id).where(UserORM.keycloak_id.in_(requested_member_ids))
+        res = await session.scalars(stmt)
+        existing_member_ids = set(res)
+        if len(existing_member_ids) != len(requested_member_ids_set):
+            raise errors.MissingResourceError(
+                message="You are trying to add users to the project, but the users with ids "
+                f"{requested_member_ids_set.difference(existing_member_ids)} cannot be found"
+            )
+
         output = self.authz.upsert_project_members(user, ResourceType.project, project_id, members)
         return output
 
     @with_db_transaction
+    @_project_exists
     @dispatch_message(avro_schema_v2.ProjectMemberRemoved)
     async def delete_members(
         self, session: AsyncSession, user: base_models.APIUser, project_id: str, user_ids: list[str]
     ) -> list[MembershipChange]:
         """Delete members from a project."""
+        if len(user_ids) == 0:
+            raise errors.ValidationError(message="Please request at least 1 member to be removed from the project")
+
         members = self.authz.remove_project_members(user, ResourceType.project, project_id, user_ids)
         return members
