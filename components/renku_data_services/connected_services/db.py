@@ -291,7 +291,7 @@ class ConnectedServicesRepository:
             ) as oauth2_client:
                 oauth2_client.token = token.to_dict()
 
-                oauth2_client.ensure_active_token(oauth2_client.token)
+                await oauth2_client.ensure_active_token(oauth2_client.token)
                 token_model = models.OAuth2TokenSet.from_dict(oauth2_client.token)
                 old_token = connection.token
                 connection.token = json.dumps(token_model.to_dict())
