@@ -8,6 +8,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 from authlib.integrations.httpx_client import AsyncOAuth2Client
+from sanic.log import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -264,7 +265,7 @@ class ConnectedServicesRepository:
                 message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."  # noqa: E501
             )
 
-        async with self.session_maker() as session:
+        async with self.session_maker() as session, session.begin():
             result = await session.scalars(
                 select(schemas.OAuth2ConnectionORM)
                 .where(schemas.OAuth2ConnectionORM.id == connection_id)
@@ -292,7 +293,14 @@ class ConnectedServicesRepository:
 
                 oauth2_client.ensure_active_token(oauth2_client.token)
                 token_model = models.OAuth2TokenSet.from_dict(oauth2_client.token)
+                old_token = connection.token
                 connection.token = json.dumps(token_model.to_dict())
+
+                if old_token != connection.token:
+                    logger.info("Token refreshed!")
+
+                await session.flush()
+                await session.refresh(connection)
 
                 # TODO: how to configure this?
                 response = await oauth2_client.get("https://gitlab.com/api/v4/user")
