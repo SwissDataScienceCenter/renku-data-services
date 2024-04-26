@@ -1,0 +1,51 @@
+{
+  "type": "record",
+  "name": "ProjectUpdated",
+  "namespace":"io.renku.events.v2",
+  "doc":"Event raised when a project is updated",
+  "fields": [
+    {
+      "name":"id",
+      "type":"string"
+    },
+    {
+      "name": "name",
+      "type": "string"
+    },
+    {
+      "name":"namespace",
+      "type":"string"
+    },
+    {
+      "name": "slug",
+      "type": "string"
+    },
+    {
+      "name": "repositories",
+      "type": {
+        "type": "array",
+        "items": "string"
+      },
+      "default": []
+    },
+    {
+      "name": "visibility",
+      "type": "io.renku.events.v2.Visibility"
+    },
+    {
+      "name": "description",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "name": "keywords",
+      "type": {
+        "type": "array",
+        "items": "string"
+      },
+      "default": []
+    }
+  ]
+}

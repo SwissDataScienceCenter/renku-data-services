@@ -161,8 +161,8 @@ class ResourcePoolORM(BaseORM):
             name=resource_pool.name,
             quota=quota,
             classes=[ResourceClassORM.load(resource_class) for resource_class in resource_pool.classes],
-            idle_threshold=resource_class.idle_threshold,
-            hibernation_threshold=resource_class.hibernation_threshold,
+            idle_threshold=resource_pool.idle_threshold,
+            hibernation_threshold=resource_pool.hibernation_threshold,
             public=resource_pool.public,
             default=resource_pool.default,
         )

@@ -1390,11 +1390,11 @@ components:
       default: false
       example: false
     IdleThreshold:
-      type: int
+      type: integer
       description: A threshold in seconds after which a session gets hibernated
       minimum: 1
     HibernationThreshold:
-      type: int
+      type: integer
       description: A threshold in seconds after which a session gets culled/deleted
       minimum: 1
     K8sLabelList:

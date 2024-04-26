@@ -1,0 +1,24 @@
+{
+  "type": "record",
+  "name":"GroupAdded",
+  "namespace":"io.renku.events.v2",
+  "doc":"Event raised when a new group is added",
+  "fields":[
+    {
+      "name":"id",
+      "type":"string"
+    },
+    {
+      "name":"name",
+      "type":"string"
+    },
+    {
+      "name": "description",
+      "type": ["null", "string"]
+    },
+    {
+      "name":"namespace",
+      "type":"string"
+    }
+  ]
+}
