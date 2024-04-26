@@ -344,6 +344,7 @@ async def test_keywords_are_not_modified_in_patch(create_project, get_project, s
     await create_project("Project 3")
 
     # Patch a project
+    user_headers.update({"If-Match": project["etag"]})
     patch_no_keywords = {"name": "New Name"}
     project_id = project["id"]
     _, response = await sanic_client.patch(
@@ -372,6 +373,7 @@ async def test_keywords_are_deleted_in_patch(create_project, get_project, sanic_
     await create_project("Project 3")
 
     # Patch a project
+    user_headers.update({"If-Match": project["etag"]})
     patch_with_empty_keywords = {
         "name": "New Name",
         "keywords": [],
