@@ -24,6 +24,8 @@ _valid_resource_pool_payload: dict[str, Any] = {
     "quota": {"cpu": 100, "memory": 100, "gpu": 0},
     "default": False,
     "public": True,
+    "idle_threshold": 86400,
+    "hibernation_threshold": 99999,
 }
 
 
@@ -190,9 +192,7 @@ async def test_put_quota(
     assert res.status_code == 200
     quota = res.json
     quota = {**quota, "cpu": 1000, "memory": 1000, "gpu": 1000}
-    _, res = await sanic_client.put(
-        "/api/data/resource_pools/1/quota", headers=admin_headers, data=json.dumps(quota)
-    )
+    _, res = await sanic_client.put("/api/data/resource_pools/1/quota", headers=admin_headers, data=json.dumps(quota))
     assert res.status_code == 200
     assert res.json == quota
 
@@ -430,7 +430,8 @@ async def test_remove_resource_pool_users(
     assert res.json == rp_private
     # The added user should appear in the list of pool users
     _, res = await sanic_client.get(
-        f"/api/data/resource_pools/{rp_private['id']}/users", headers=admin_headers,
+        f"/api/data/resource_pools/{rp_private['id']}/users",
+        headers=admin_headers,
     )
     assert res.status_code == 200
     assert len(res.json) == 2
@@ -448,7 +449,8 @@ async def test_remove_resource_pool_users(
     assert res.status_code == 404
     # The removed user does not appear in the list of pool users
     _, res = await sanic_client.get(
-        f"/api/data/resource_pools/{rp_private['id']}/users", headers=admin_headers,
+        f"/api/data/resource_pools/{rp_private['id']}/users",
+        headers=admin_headers,
     )
     assert res.status_code == 200
     assert len(res.json) == 1
@@ -457,7 +459,8 @@ async def test_remove_resource_pool_users(
     user2_access_token = json.dumps({"id": allowed_user2_id})
     user2_headers = {"Authorization": f"Bearer {user2_access_token}"}
     _, res = await sanic_client.get(
-        f"/api/data/resource_pools/{rp_private['id']}", headers=user2_headers,
+        f"/api/data/resource_pools/{rp_private['id']}",
+        headers=user2_headers,
     )
     assert res.status_code == 200
 
@@ -495,7 +498,9 @@ async def test_user_resource_pools(
     assert res.json[0] == rp_public
     # Give access to the user to the private pool
     _, res = await sanic_client.post(
-        f"/api/data/users/{user_id}/resource_pools", headers=admin_headers, json=[rp_private["id"]],
+        f"/api/data/users/{user_id}/resource_pools",
+        headers=admin_headers,
+        json=[rp_private["id"]],
     )
     res.status_code == 201
     # Check the user can see the private pool
@@ -510,7 +515,9 @@ async def test_user_resource_pools(
     assert added_pool == rp_private
     # Set the resource pools the user has access to with a put request
     _, res = await sanic_client.put(
-        f"/api/data/users/{user_id}/resource_pools", headers=admin_headers, json=[rp_public["id"]],
+        f"/api/data/users/{user_id}/resource_pools",
+        headers=admin_headers,
+        json=[rp_public["id"]],
     )
     res.status_code == 200
     # Check only the public pool appears in the list of pools for the user

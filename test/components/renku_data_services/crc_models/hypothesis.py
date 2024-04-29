@@ -27,6 +27,7 @@ a_name = st.text(min_size=5, alphabet=st.characters(codec="utf-8", exclude_chara
 a_uuid_string = st.uuids(version=4).map(lambda x: str(x))
 a_bool = st.booleans()
 a_tolerations_list = st.lists(a_uuid_string, min_size=3, max_size=3)
+a_threshold = st.one_of(st.integers(min_value=1), st.none())
 
 
 @st.composite
@@ -84,8 +85,18 @@ def rp_strat(draw):
     default = False
     public = draw(a_bool)
     name = draw(a_name)
+    idle_threshold = draw(a_threshold)
+    hibernation_threshold = draw(a_threshold)
     try:
-        return models.ResourcePool(name=name, classes=classes, quota=quota, default=default, public=public)
+        return models.ResourcePool(
+            name=name,
+            classes=classes,
+            quota=quota,
+            default=default,
+            public=public,
+            idle_threshold=idle_threshold,
+            hibernation_threshold=hibernation_threshold,
+        )
     except errors.ValidationError:
         assume(False)
 
