@@ -20,22 +20,6 @@ from renku_data_services.message_queue.redis_queue import deserialize_binary
 
 
 @pytest.fixture
-def create_project(sanic_client, user_headers, admin_headers, regular_user, admin_user):
-    async def create_project_helper(name: str, admin: bool = False, **payload) -> dict[str, Any]:
-        headers = admin_headers if admin else user_headers
-        user = admin_user if admin else regular_user
-        payload = payload.copy()
-        payload.update({"name": name, "namespace": f"{user.first_name}.{user.last_name}"})
-
-        _, response = await sanic_client.post("/api/data/projects", headers=headers, json=payload)
-
-        assert response.status_code == 201, response.text
-        return response.json
-
-    return create_project_helper
-
-
-@pytest.fixture
 def get_project(sanic_client, user_headers, admin_headers):
     async def get_project_helper(project_id: str, admin: bool = False) -> dict[str, Any]:
         headers = admin_headers if admin else user_headers
@@ -561,14 +545,12 @@ async def test_creator_is_added_as_owner_members(sanic_client, create_project, u
 
 
 @pytest.mark.asyncio
-async def test_add_project_members(create_project, sanic_client, user_headers, admin_headers, app_config):
+async def test_add_project_members(create_project, sanic_client, user_headers, app_config, project_members):
     project = await create_project("Project 1")
     project_id = project["id"]
 
-    members = [{"id": "member-1", "role": "member"}, {"id": "member-2", "role": "owner"}]
-
     _, response = await sanic_client.patch(
-        f"/api/data/projects/{project_id}/members", headers=user_headers, json=members
+        f"/api/data/projects/{project_id}/members", headers=user_headers, json=project_members
     )
 
     assert response.status_code == 200, response.text
@@ -578,13 +560,13 @@ async def test_add_project_members(create_project, sanic_client, user_headers, a
     event = events[1][1]
     auth_event = deserialize_binary(event[b"payload"], ProjectAuthorizationAdded)
     assert auth_event.projectId == project_id
-    assert auth_event.userId == members[0]["id"]
-    assert auth_event.role.value.lower() == members[0]["role"]
+    assert auth_event.userId == project_members[0]["id"]
+    assert auth_event.role.value.lower() == project_members[0]["role"]
     event = events[2][1]
     auth_event = deserialize_binary(event[b"payload"], ProjectAuthorizationAdded)
     assert auth_event.projectId == project_id
-    assert auth_event.userId == members[1]["id"]
-    assert auth_event.role.value.lower() == members[1]["role"]
+    assert auth_event.userId == project_members[1]["id"]
+    assert auth_event.role.value.lower() == project_members[1]["role"]
 
     # TODO: Should project owner be able to see the project members -> Replace the header with ``user_headers``
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}/members", headers=user_headers)
@@ -594,21 +576,22 @@ async def test_add_project_members(create_project, sanic_client, user_headers, a
     assert len(response.json) == 3
     member = next(m for m in response.json if m["id"] == "user")
     assert member["role"] == "owner"
-    member = next(m for m in response.json if m["id"] == "member-1")
+    member = next(m for m in response.json if m["id"] == "normal-member")
     assert member["role"] == "member"
-    member = next(m for m in response.json if m["id"] == "member-2")
+    member = next(m for m in response.json if m["id"] == "owner-member")
     assert member["role"] == "owner"
 
 
 @pytest.mark.asyncio
-async def test_delete_project_members(create_project, sanic_client, user_headers, app_config):
+async def test_delete_project_members(create_project, sanic_client, user_headers, app_config, project_members):
     project = await create_project("Project 1")
     project_id = project["id"]
 
-    members = [{"id": "member-1", "role": "member"}, {"id": "member-2", "role": "owner"}]
-    await sanic_client.patch(f"/api/data/projects/{project_id}/members", headers=user_headers, json=members)
+    await sanic_client.patch(f"/api/data/projects/{project_id}/members", headers=user_headers, json=project_members)
 
-    _, response = await sanic_client.delete(f"/api/data/projects/{project_id}/members/member-1", headers=user_headers)
+    _, response = await sanic_client.delete(
+        f"/api/data/projects/{project_id}/members/normal-member", headers=user_headers
+    )
 
     assert response.status_code == 204, response.text
 
@@ -617,7 +600,7 @@ async def test_delete_project_members(create_project, sanic_client, user_headers
     event = events[0][1]
     auth_event = deserialize_binary(event[b"payload"], ProjectAuthorizationRemoved)
     assert auth_event.projectId == project_id
-    assert auth_event.userId == "member-1"
+    assert auth_event.userId == "normal-member"
 
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}/members", headers=user_headers)
 
