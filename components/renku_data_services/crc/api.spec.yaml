@@ -1393,10 +1393,12 @@ components:
       type: integer
       description: A threshold in seconds after which a session gets hibernated
       minimum: 1
+      maximum: 2147483647
     HibernationThreshold:
       type: integer
       description: A threshold in seconds after which a session gets culled/deleted
       minimum: 1
+      maximum: 2147483647
     K8sLabelList:
       type: array
       description: A list of k8s labels used for tolerations

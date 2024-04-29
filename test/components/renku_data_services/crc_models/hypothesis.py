@@ -13,6 +13,7 @@ def make_cpu_float(data) -> dict[str, int | float]:
 
 
 SQL_BIGINT_MAX = 9_223_372_036_854_775_807
+SQL_INT_MAX = 2_147_483_647
 # NOTE: A quota always has to have resource that are greater than a class
 a_rc_cpu = st.floats(min_value=0.0, max_value=10)
 a_rc_gpu = st.integers(min_value=0, max_value=100)
@@ -27,7 +28,7 @@ a_name = st.text(min_size=5, alphabet=st.characters(codec="utf-8", exclude_chara
 a_uuid_string = st.uuids(version=4).map(lambda x: str(x))
 a_bool = st.booleans()
 a_tolerations_list = st.lists(a_uuid_string, min_size=3, max_size=3)
-a_threshold = st.one_of(st.integers(min_value=1), st.none())
+a_threshold = st.one_of(st.none(), st.integers(min_value=1, max_value=SQL_INT_MAX))
 
 
 @st.composite
