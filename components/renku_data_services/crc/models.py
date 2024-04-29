@@ -240,4 +240,6 @@ class ResourcePool:
             quota=quota,
             default=data.get("default", False),
             public=data.get("public", False),
+            idle_threshold=data.get("idle_threshold"),
+            hibernation_threshold=data.get("hibernation_threshold"),
         )
