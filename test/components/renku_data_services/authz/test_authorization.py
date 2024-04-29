@@ -14,10 +14,10 @@ from renku_data_services.base_models import APIUser
 from renku_data_services.errors import errors
 from renku_data_services.project.models import Project
 
-admin_user = APIUser(is_admin=True, id="some-id", access_token="some-token", full_name="admin")  # nosec B106
+admin_user = APIUser(is_admin=True, id="admin-id", access_token="some-token", full_name="admin")  # nosec B106
 anon_user = APIUser(is_admin=False)
-regular_user1 = APIUser(is_admin=False, id="some-id1", access_token="some-token1", full_name="some-user1")  # nosec B106
-regular_user2 = APIUser(is_admin=False, id="some-id2", access_token="some-token2", full_name="some-user2")  # nosec B106
+regular_user1 = APIUser(is_admin=False, id="user1-id", access_token="some-token1", full_name="some-user1")  # nosec B106
+regular_user2 = APIUser(is_admin=False, id="user2-id", access_token="some-token2", full_name="some-user2")  # nosec B106
 
 
 @pytest.fixture
@@ -139,11 +139,13 @@ def test_listing_users_with_access(app_config: Config, public_project: bool, boo
     for p in [project1, project2]:
         changes = authz._add_project(p)
         authz.client.WriteRelationships(changes.apply)
-    user_list = set(authz.users_with_permission(regular_user1, ResourceType.project, project1_id, Scope.READ))
+    proj1_users = set(authz.users_with_permission(regular_user1, ResourceType.project, project1_id, Scope.READ))
+    proj2_users = set(authz.users_with_permission(regular_user2, ResourceType.project, project2_id, Scope.READ))
     if public_project:
-        assert user_list == {regular_user1.id, admin_user.id, "*"}
+        assert proj1_users == {regular_user1.id, admin_user.id, "*"}
     else:
-        assert user_list == {regular_user1.id, admin_user.id}
+        assert proj1_users == {regular_user1.id, admin_user.id}
+    assert proj2_users == {regular_user2.id, admin_user.id}
 
 
 def test_listing_projects_with_access(app_config: Config, bootstrap_admins):

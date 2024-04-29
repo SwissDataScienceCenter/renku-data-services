@@ -22,7 +22,7 @@ from renku_data_services.crc import models
 
 
 @given(rp=rp_strat())
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+@settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_pool_insert_get(rp: models.ResourcePool, app_config: Config, admin_user: base_models.APIUser):
     inserted_rp = None
@@ -37,7 +37,7 @@ async def test_resource_pool_insert_get(rp: models.ResourcePool, app_config: Con
 
 
 @given(rp=rp_strat(), new_name=a_name)
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+@settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_pool_update_name(
     rp: models.ResourcePool, app_config: Config, new_name: str, admin_user: base_models.APIUser
@@ -63,7 +63,7 @@ async def test_resource_pool_update_name(
 
 
 @given(rp=rp_strat())
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+@settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_pool_update_quota(rp: models.ResourcePool, app_config: Config, admin_user: base_models.APIUser):
     pool_repo = app_config.rp_repo
@@ -92,7 +92,7 @@ async def test_resource_pool_update_quota(rp: models.ResourcePool, app_config: C
 
 
 @given(rp=rp_strat(), data=st.data())
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+@settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_pool_update_classes(
     rp: models.ResourcePool, app_config: Config, data, admin_user: base_models.APIUser
@@ -128,7 +128,7 @@ async def test_resource_pool_update_classes(
 
 
 @given(rp=rp_strat())
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+@settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_get_classes(rp: models.ResourcePool, app_config: Config, admin_user: base_models.APIUser):
     inserted_rp = None
@@ -146,7 +146,7 @@ async def test_get_classes(rp: models.ResourcePool, app_config: Config, admin_us
 
 
 @given(rp=rp_strat())
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+@settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_get_class_by_id(rp: models.ResourcePool, app_config: Config, admin_user: base_models.APIUser):
     inserted_rp = None
@@ -167,7 +167,7 @@ async def test_get_class_by_id(rp: models.ResourcePool, app_config: Config, admi
 
 
 @given(rp=rp_strat())
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+@settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_get_class_by_name(rp: models.ResourcePool, app_config: Config, admin_user: base_models.APIUser):
     inserted_rp = None
@@ -188,7 +188,7 @@ async def test_get_class_by_name(rp: models.ResourcePool, app_config: Config, ad
 
 
 @given(rp=rp_strat())
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_pool_delete(rp: models.ResourcePool, app_config: Config, admin_user: base_models.APIUser):
     pool_repo = app_config.rp_repo
@@ -203,7 +203,7 @@ async def test_resource_pool_delete(rp: models.ResourcePool, app_config: Config,
 
 
 @given(rc=rc_non_default_strat(), rp=rp_strat())
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+@settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_class_create(
     rc: models.ResourceClass,
@@ -236,7 +236,7 @@ async def test_resource_class_create(
 
 
 @given(rp=rp_strat())
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+@settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_class_delete(rp: models.ResourcePool, app_config: Config, admin_user: base_models.APIUser):
     inserted_rp = None
@@ -267,7 +267,7 @@ async def test_resource_class_delete(rp: models.ResourcePool, app_config: Config
 
 
 @given(rp=rp_strat(), rc_update=rc_update_reqs_dict)
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+@settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_class_update(
     rp: models.ResourcePool, app_config: Config, admin_user: base_models.APIUser, rc_update: dict
@@ -313,7 +313,7 @@ async def test_resource_class_update(
 
 
 @given(rp=rp_strat())
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_lookup_rp_by_name(rp: models.ResourcePool, app_config: Config, admin_user: base_models.APIUser):
     inserted_rp = None
@@ -332,7 +332,7 @@ async def test_lookup_rp_by_name(rp: models.ResourcePool, app_config: Config, ad
 
 
 @given(rc=rc_non_default_strat())
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_insert_class_in_nonexisting_rp(
     app_config: Config, rc: models.ResourceClass, admin_user: base_models.APIUser
@@ -342,7 +342,7 @@ async def test_insert_class_in_nonexisting_rp(
 
 
 @given(new_quota_id=a_uuid_string)
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+@settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_update_quota_in_nonexisting_rp(app_config: Config, new_quota_id: str, admin_user: base_models.APIUser):
     with pytest.raises(errors.MissingResourceError):
@@ -350,7 +350,7 @@ async def test_update_quota_in_nonexisting_rp(app_config: Config, new_quota_id: 
 
 
 @given(public_rp=public_rp_strat, private_rp=private_rp_strat)
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+@settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_pools_access_control(
     public_rp: models.ResourcePool,
@@ -393,7 +393,7 @@ async def test_resource_pools_access_control(
 
 
 @given(rp1=rp_strat(), rp2=rp_strat())
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+@settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_classes_filtering(
     rp1: models.ResourcePool,

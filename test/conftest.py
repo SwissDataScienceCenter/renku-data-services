@@ -8,7 +8,6 @@ from multiprocessing import Lock
 
 import pytest
 from hypothesis import settings
-from pytest_postgresql import factories
 from pytest_postgresql.janitor import DatabaseJanitor
 from ulid import ULID
 
@@ -57,54 +56,6 @@ def authz_config(monkeypatch, free_port) -> Iterator[AuthzConfig]:
         proc.kill()
 
 
-def init_db(**kwargs):
-    """Run database migrations so they don't need to run on every test."""
-    dummy_stores = os.environ.get("DUMMY_STORES")
-    name = os.environ.get("DB_NAME")
-    user = os.environ.get("DB_USER")
-    pw = os.environ.get("DB_PASSWORD")
-    host = os.environ.get("DB_HOST")
-    port = os.environ.get("DB_PORT")
-
-    os.environ["DUMMY_STORES"] = "true"
-    os.environ["DB_NAME"] = kwargs["dbname"]
-    os.environ["DB_USER"] = kwargs["user"]
-    os.environ["DB_PASSWORD"] = kwargs["password"]
-    os.environ["DB_HOST"] = kwargs["host"]
-    os.environ["DB_PORT"] = str(kwargs["port"])
-
-    run_migrations_for_app("common")
-
-    if dummy_stores:
-        os.environ["DUMMY_STORES"] = dummy_stores
-    else:
-        del os.environ["DUMMY_STORES"]
-    if name:
-        os.environ["DB_NAME"] = name
-    else:
-        del os.environ["DB_NAME"]
-    if user:
-        os.environ["DB_USER"] = user
-    else:
-        del os.environ["DB_USER"]
-    if pw:
-        os.environ["DB_PASSWORD"] = pw
-    else:
-        del os.environ["DB_PASSWORD"]
-    if host:
-        os.environ["DB_HOST"] = host
-    else:
-        del os.environ["DB_HOST"]
-    if port:
-        os.environ["DB_PORT"] = port
-    else:
-        del os.environ["DB_PORT"]
-
-
-postgresql_in_docker = factories.postgresql_noproc(load=[init_db])
-postgresql = factories.postgresql("postgresql_in_docker")
-
-
 @pytest.fixture
 def db_config(monkeypatch, worker_id) -> Iterator[DBConfig]:
     db_name = str(ULID()).lower() + "_" + worker_id
@@ -127,17 +78,13 @@ def db_config(monkeypatch, worker_id) -> Iterator[DBConfig]:
         "16.2",
         password,
     ):
+        run_migrations_for_app("common")
         yield DBConfig.from_env()
         DBConfig._async_engine = None
 
 
 @pytest.fixture
-def run_migrations(db_config, authz_config):
-    run_migrations_for_app("common")
-
-
-@pytest.fixture
-def app_config(run_migrations, monkeypatch, worker_id) -> Iterator[DataConfig]:
+def app_config(authz_config, db_config, monkeypatch, worker_id) -> Iterator[DataConfig]:
     monkeypatch.setenv("MAX_PINNED_PROJECTS", "5")
 
     config = DataConfig.from_env()

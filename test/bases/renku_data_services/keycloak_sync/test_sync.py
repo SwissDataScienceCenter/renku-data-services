@@ -1,6 +1,6 @@
 import json
 import re
-from collections.abc import Callable, Generator
+from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime
 from typing import Any
@@ -18,20 +18,6 @@ from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.users.db import UserRepo, UsersSync
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import KeycloakAdminEvent, UserInfo, UserInfoUpdate
-
-
-@pytest.fixture
-def db_config(postgresql, monkeypatch) -> Generator[Any, Any, SyncConfig]:
-    monkeypatch.setenv("DB_NAME", postgresql.info.dbname)
-    db_config = DBConfig.from_env()
-    monkeypatch.delenv("DB_NAME", raising=False)
-
-    yield db_config
-    monkeypatch.delenv("DB_NAME", raising=False)
-    # NOTE: This is necessary because the postgresql pytest extension does not close
-    # the async connection/pool we use in the config and the connection will succeed in the first
-    # test but fail in all others if the connection is not disposed at the end of every test.
-    db_config.dispose_connection()
 
 
 @pytest.fixture
