@@ -110,6 +110,10 @@ class _AuthzConverter:
         return ObjectReference(object_type=ResourceType.user.value, object_id=id)
 
     @staticmethod
+    def user_subject(id: str | None) -> SubjectReference:
+        return SubjectReference(object=_AuthzConverter.user(id))
+
+    @staticmethod
     def platform() -> ObjectReference:
         return ObjectReference(object_type=ResourceType.platform.value, object_id="renku")
 
@@ -625,12 +629,14 @@ class Authz:
             for existing_rel in existing_rels:
                 if existing_rel.relationship.relation == _Relation.owner.value:
                     if existing_owners_rels is None:
-                        existing_owners_rels = list(self.client.ReadRelationships(
-                            ReadRelationshipsRequest(
-                                consistency=Consistency(at_least_as_fresh=zed_token),
-                                relationship_filter=existing_owners_filter,
+                        existing_owners_rels = list(
+                            self.client.ReadRelationships(
+                                ReadRelationshipsRequest(
+                                    consistency=Consistency(at_least_as_fresh=zed_token),
+                                    relationship_filter=existing_owners_filter,
+                                )
                             )
-                        ))
+                        )
                     if len(existing_owners_rels) == 1:
                         raise errors.Unauthorized(
                             message="You are trying to remove the single last owner of the project, "
@@ -661,3 +667,55 @@ class Authz:
         )
         self.client.WriteRelationships(change.apply)
         return output
+
+    def _get_admin_user_ids(self) -> list[str]:
+        platform = _AuthzConverter.platform()
+        sub_filter = SubjectFilter(subject_type=ResourceType.user.value)
+        rel_filter = RelationshipFilter(
+            resource_type=platform.object_type,
+            optional_resource_id=platform.object_id,
+            optional_subject_filter=sub_filter,
+        )
+        existing_admins: Iterator[ReadRelationshipsResponse] = self.client.ReadRelationships(
+            ReadRelationshipsRequest(
+                consistency=Consistency(fully_consistent=True),
+                relationship_filter=rel_filter,
+            )
+        )
+        return [admin.relationship.subject.object.object_id for admin in existing_admins]
+
+    def _add_admin(self, user_id: str) -> _AuthzChange:
+        """Add a deployment-wide administrator in the authorization database."""
+        existing_admin_ids = self._get_admin_user_ids()
+        rel = Relationship(
+            resource=_AuthzConverter.platform(),
+            relation=_Relation.admin.value,
+            subject=_AuthzConverter.user_subject(user_id),
+        )
+        apply = WriteRelationshipsRequest(
+            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=rel)]
+        )
+        undo = WriteRelationshipsRequest()
+        if user_id in existing_admin_ids:
+            undo = WriteRelationshipsRequest(
+                updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=rel)]
+            )
+        return _AuthzChange(apply=apply, undo=undo)
+
+    def _remove_admin(self, user_id: str) -> _AuthzChange:
+        """Add a deployment-wide administrator in the authorization database."""
+        existing_admin_ids = self._get_admin_user_ids()
+        rel = Relationship(
+            resource=_AuthzConverter.platform(),
+            relation=_Relation.admin.value,
+            subject=_AuthzConverter.user_subject(user_id),
+        )
+        apply = WriteRelationshipsRequest(
+            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=rel)]
+        )
+        undo = WriteRelationshipsRequest()
+        if user_id in existing_admin_ids:
+            undo = WriteRelationshipsRequest(
+                updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=rel)]
+            )
+        return _AuthzChange(apply=apply, undo=undo)

@@ -57,7 +57,7 @@ def authz_config(monkeypatch, free_port) -> Iterator[AuthzConfig]:
 
 
 @pytest.fixture
-def db_config(monkeypatch, worker_id) -> Iterator[DBConfig]:
+def db_config(monkeypatch, worker_id, authz_config) -> Iterator[DBConfig]:
     db_name = str(ULID()).lower() + "_" + worker_id
     user = "renku"
     host = "127.0.0.1"
