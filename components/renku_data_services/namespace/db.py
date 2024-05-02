@@ -21,7 +21,9 @@ from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.authz.models import Member, MembershipChange, Role, Scope
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.message_queue import AmbiguousEvent
+from renku_data_services.message_queue.avro_models.io.renku.events.v2 import GroupAdded, GroupRemoved, GroupUpdated
 from renku_data_services.message_queue.db import EventRepository
+from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import dispatch_message
 from renku_data_services.namespace import apispec, models
 from renku_data_services.namespace import orm as schemas
@@ -38,10 +40,12 @@ class GroupRepository:
         session_maker: Callable[..., AsyncSession],
         event_repo: EventRepository,
         group_authz: Authz,
+        message_queue: IMessageQueue,
     ):
         self.session_maker = session_maker  # type: ignore[call-overload]
         self.authz: Authz = group_authz
         self.event_repo: EventRepository = event_repo
+        self.message_queue: IMessageQueue = message_queue
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.insert_many, ResourceType.user_namespace)
@@ -144,41 +148,46 @@ class GroupRepository:
             for member in result
         ]
 
-    async def update_group(self, user: base_models.APIUser, slug: str, payload: dict[str, str]) -> models.Group:
+    @with_db_transaction
+    @dispatch_message(GroupUpdated)
+    async def update_group(
+        self, user: base_models.APIUser, slug: str, payload: dict[str, str], *, session: AsyncSession | None = None
+    ) -> models.Group:
         """Update a group in the DB."""
-        async with self.session_maker() as session, session.begin():
-            group, _ = await self._get_group(session, user, slug)
-            if user.id != group.created_by and not user.is_admin:
-                raise errors.Unauthorized(message="Only the owner and admins can modify groups")
-            if group.namespace.slug != slug.lower():
-                raise errors.UpdatingWithStaleContentError(
-                    message=f"You cannot update a group by using its old slug {slug}.",
-                    detail=f"The latest slug is {group.namespace.slug}, please use this for updates.",
-                )
-            for k, v in payload.items():
-                match k:
-                    case "slug":
-                        new_slug_str = v.lower()
-                        if group.namespace.slug == new_slug_str:
-                            # The slug has not changed at all
-                            # NOTE that the continue will work only because of the enclosing loop over the payload
-                            continue
-                        new_slug_already_taken = await session.scalar(
-                            select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == new_slug_str)
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required")
+        group, _ = await self._get_group(session, user, slug)
+        if user.id != group.created_by and not user.is_admin:
+            raise errors.Unauthorized(message="Only the owner and admins can modify groups")
+        if group.namespace.slug != slug.lower():
+            raise errors.UpdatingWithStaleContentError(
+                message=f"You cannot update a group by using its old slug {slug}.",
+                detail=f"The latest slug is {group.namespace.slug}, please use this for updates.",
+            )
+        for k, v in payload.items():
+            match k:
+                case "slug":
+                    new_slug_str = v.lower()
+                    if group.namespace.slug == new_slug_str:
+                        # The slug has not changed at all.
+                        # NOTE that the continue will work only because of the enclosing loop over the payload
+                        continue
+                    new_slug_already_taken = await session.scalar(
+                        select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == new_slug_str)
+                    )
+                    if new_slug_already_taken:
+                        raise errors.ValidationError(
+                            message=f"The slug {v} is already in use, please try a different one"
                         )
-                        if new_slug_already_taken:
-                            raise errors.ValidationError(
-                                message=f"The slug {v} is already in use, please try a different one"
-                            )
-                        session.add(
-                            schemas.NamespaceOldORM(slug=group.namespace.slug, latest_slug_id=group.namespace.id)
-                        )
-                        group.namespace.slug = new_slug_str
-                    case "description":
-                        group.description = v
-                    case "name":
-                        group.name = v
-            return group.dump()
+                    session.add(
+                        schemas.NamespaceOldORM(slug=group.namespace.slug, latest_slug_id=group.namespace.id)
+                    )
+                    group.namespace.slug = new_slug_str
+                case "description":
+                    group.description = v
+                case "name":
+                    group.name = v
+        return group.dump()
 
     @with_db_transaction
     @dispatch_message(AmbiguousEvent.GROUP_MEMBERSHIP_CHANGED)
@@ -205,6 +214,7 @@ class GroupRepository:
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.delete, ResourceType.group)
+    @dispatch_message(GroupRemoved)
     async def delete_group(
         self, user: base_models.APIUser, slug: str, *, session: AsyncSession | None = None
     ) -> models.Group | None:
@@ -245,6 +255,7 @@ class GroupRepository:
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.create, ResourceType.group)
+    @dispatch_message(GroupAdded)
     async def insert_group(
         self,
         user: base_models.APIUser,
@@ -380,7 +391,7 @@ class GroupRepository:
     async def _insert_user_namespace(
         self, session: AsyncSession, user: schemas.UserORM, retry_enumerate: int = 0, retry_random: bool = False
     ) -> models.Namespace:
-        """Insert a new namespace for the user and optionally retry different variatioins to avoid collisions."""
+        """Insert a new namespace for the user and optionally retry different variations to avoid collisions."""
         original_slug = user.to_slug()
         for inc in range(0, retry_enumerate + 1):
             # NOTE: on iteration 0 we try with the optimal slug value derived from the user data without any suffix.

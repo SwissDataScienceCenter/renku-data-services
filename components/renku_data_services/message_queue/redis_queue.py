@@ -19,7 +19,7 @@ from renku_data_services.message_queue.models import Event
 
 
 class WithMessageQueue(Protocol):
-    """The protcol required for a class to send messages to a message queue."""
+    """The protocol required for a class to send messages to a message queue."""
 
     @property
     def event_repo(self) -> EventRepository:

@@ -188,7 +188,7 @@ class _ProjectAuthzEventConverter:
                 case _:
                     raise errors.EventError(
                         message="Trying to convert a project membership change to an unknown event type with "
-                        f"unkonwn change {change.change}"
+                        f"unknown change {change.change}"
                     )
         return output
 
@@ -233,16 +233,16 @@ class _GroupAuthzEventConverter:
                     )
                 case _:
                     raise errors.EventError(
-                        message="Trying to convert a project membership change to an unknown event type with "
-                        f"unkonwn change {change.change}"
+                        message="Trying to convert a group membership change to an unknown event type with "
+                        f"unknown change {change.change}"
                     )
         return output
 
 
 class _GroupEventConverter:
     @staticmethod
-    def to_events(input: Group, event_type: type[AvroModel] | AmbiguousEvent) -> list[Event]:
-        if input.id is None:
+    def to_events(group: Group, event_type: type[AvroModel] | AmbiguousEvent) -> list[Event]:
+        if group.id is None:
             raise errors.ProgrammingError(
                 message="Cannot send group events to the message queue for a group that does not have an ID"
             )
@@ -252,18 +252,26 @@ class _GroupEventConverter:
                     Event(
                         "group.added",
                         v2.GroupAdded(
-                            id=input.id, name=input.name, description=input.description, namespace=input.slug
+                            id=group.id, name=group.name, description=group.description, namespace=group.slug
                         ),
-                    )
+                    ),
+                    Event(
+                        "memberGroup.added",
+                        v2.GroupMemberAdded(
+                            groupId=group.id,
+                            userId=group.created_by,
+                            role=v2.MemberRole.OWNER,
+                        ),
+                    ),
                 ]
             case v2.GroupRemoved:
-                return [Event("group.removed", v2.GroupRemoved(id=input.id))]
+                return [Event("group.removed", v2.GroupRemoved(id=group.id))]
             case v2.GroupUpdated:
                 return [
                     Event(
                         "group.updated",
                         v2.GroupUpdated(
-                            id=input.id, name=input.name, description=input.description, namespace=input.slug
+                            id=group.id, name=group.name, description=group.description, namespace=group.slug
                         ),
                     )
                 ]
@@ -289,7 +297,7 @@ class EventConverter:
         elif isinstance(input, (user_models.UserInfo, user_models.UserWithNamespace)):
             return _UserEventConverter.to_events(input, event_type)
         elif input is None and event_type == type(v2.UserRemoved):  # type: ignore[unreachable]
-            # NOTE: The user that was supposed to be removed is not in the database at all, so dont send the event
+            # NOTE: The user that was supposed to be removed is not in the database at all, so don't send the event
             # The code is definitely reachable it is just that mypy thinks it is not
             return []  # type: ignore[unreachable]
         elif (

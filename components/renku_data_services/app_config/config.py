@@ -293,7 +293,10 @@ class Config:
         """The DB adapter for Renku groups."""
         if not self._group_repo:
             self._group_repo = GroupRepository(
-                session_maker=self.db.async_session_maker, event_repo=self.event_repo, group_authz=self.authz
+                session_maker=self.db.async_session_maker,
+                event_repo=self.event_repo,
+                group_authz=self.authz,
+                message_queue=self.message_queue,
             )
         return self._group_repo
 
