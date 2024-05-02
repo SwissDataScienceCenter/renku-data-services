@@ -224,7 +224,7 @@ class Config:
         """The DB adapter for V2 cloud storage configs."""
         if not self._storage_v2_repo:
             self._storage_v2_repo = StorageV2Repository(
-                session_maker=self.db.async_session_maker, project_authz=self.project_authz
+                session_maker=self.db.async_session_maker, project_authz=self.authz
             )
         return self._storage_v2_repo
 

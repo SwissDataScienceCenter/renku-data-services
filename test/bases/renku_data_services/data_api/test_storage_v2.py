@@ -2,6 +2,32 @@ from typing import Any, Optional
 
 import pytest
 
+from renku_data_services.users.models import UserInfo
+
+
+@pytest.fixture
+def project_members(member_1_user: UserInfo, member_2_user: UserInfo) -> list[dict[str, str]]:
+    """List of a project's members."""
+    return [{"id": member_1_user.id, "role": "viewer"}, {"id": member_2_user.id, "role": "owner"}]
+
+
+@pytest.fixture
+def project_owner_member_headers(member_2_headers) -> dict[str, str]:
+    """Authentication headers for a normal project owner user."""
+    return member_2_headers
+
+
+@pytest.fixture
+def project_non_member_headers(unauthorized_headers) -> dict[str, str]:
+    """Authentication headers for a user that isn't a member of a project."""
+    return unauthorized_headers
+
+
+@pytest.fixture
+def project_normal_member_headers(member_1_headers) -> dict[str, str]:
+    """Authentication headers for a user that isn't a member of a project."""
+    return member_1_headers
+
 
 @pytest.fixture
 def create_storage(sanic_client, user_headers, admin_headers, create_project, project_members):

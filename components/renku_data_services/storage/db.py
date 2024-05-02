@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.authz import models as authz_models
-from renku_data_services.authz.authz import IProjectAuthorizer
+from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.storage import models
 from renku_data_services.storage import orm as schemas
 
@@ -61,7 +61,7 @@ class BaseStorageRepository(_Base):
             res = await session.execute(stmt)
             orms = res.scalars().all()
             accessible_projects = await self.filter_projects_by_access_level(
-                user, [p.project_id for p in orms], authz_models.Role.MEMBER
+                user, [p.project_id for p in orms], authz_models.Role.VIEWER
             )
 
             return [p.dump() for p in orms if p.project_id in accessible_projects]
@@ -76,7 +76,7 @@ class BaseStorageRepository(_Base):
 
             if storage is None:
                 raise errors.MissingResourceError(message=f"The storage with id '{storage_id}' cannot be found")
-            if not await self.filter_projects_by_access_level(user, [storage[0].project_id], authz_models.Role.MEMBER):
+            if not await self.filter_projects_by_access_level(user, [storage[0].project_id], authz_models.Role.VIEWER):
                 raise errors.Unauthorized(message="User does not have access to this project")
             return storage[0].dump()
 
@@ -157,7 +157,7 @@ class StorageRepository(BaseStorageRepository):
     async def filter_projects_by_access_level(
         self, user: base_models.APIUser, project_ids: list[str], minimum_access_level: authz_models.Role
     ) -> list[str]:
-        """Get a list of projects of which the user is a member with a specific access level."""
+        """Get a list of Gitlab project IDs of which the user is a member with a specific access level."""
         gitlab_access_level = (
             base_models.GitlabAccessLevel.ADMIN
             if minimum_access_level == authz_models.Role.OWNER
@@ -172,19 +172,22 @@ class StorageV2Repository(BaseStorageRepository):
 
     def __init__(
         self,
-        project_authz: IProjectAuthorizer,
+        project_authz: Authz,
         session_maker: Callable[..., AsyncSession],
     ):
         super().__init__(session_maker)
-        self.project_authz: IProjectAuthorizer = project_authz
+        self.project_authz: Authz = project_authz
 
     async def filter_projects_by_access_level(
         self, user: base_models.APIUser, project_ids: list[str], minimum_access_level: authz_models.Role
     ) -> list[str]:
-        """Get a list of projects of which the user is a member with a specific access level."""
+        """Get a list of project IDs of which the user is a member with a specific access level."""
         if not user.is_authenticated or not project_ids:
             return []
 
         scope = authz_models.Scope.WRITE if minimum_access_level == authz_models.Role.OWNER else authz_models.Scope.READ
-
-        return await self.project_authz.filter_user_projects(user=user, project_ids=project_ids, scope=scope)
+        output = []
+        for id in project_ids:
+            if self.project_authz.has_permission(user, ResourceType.project, id, scope):
+                output.append(id)
+        return output

@@ -26,6 +26,18 @@ class _ProjectEventConverter:
         )
 
     @staticmethod
+    def _convert_project_visibility_v2(visibility: authz_models.Visibility) -> v2.Visibility:
+        match visibility:
+            case authz_models.Visibility.PUBLIC:
+                return v2.Visibility.PUBLIC
+            case authz_models.Visibility.PRIVATE:
+                return v2.Visibility.PRIVATE
+
+        raise errors.EventError(
+            message=f"Trying to convert an unknown project visibility {visibility} to message visibility"
+        )
+
+    @staticmethod
     def to_event(project: project_models.Project, event_type: type[AvroModel] | AmbiguousEvent) -> AvroModel:
         if project.id is None:
             raise errors.EventError(
@@ -42,7 +54,7 @@ class _ProjectEventConverter:
                     description=project.description,
                     createdBy=project.created_by,
                     creationDate=project.creation_date,
-                    keywords=[],
+                    keywords=project.keywords or [],
                 )
             case v1.ProjectUpdated:
                 return v1.ProjectUpdated(
@@ -52,10 +64,36 @@ class _ProjectEventConverter:
                     repositories=project.repositories,
                     visibility=_ProjectEventConverter._convert_project_visibility(project.visibility),
                     description=project.description,
-                    keywords=[],
+                    keywords=project.keywords or [],
                 )
             case v1.ProjectRemoved:
                 return v1.ProjectRemoved(id=project.id)
+            case v2.ProjectCreated:
+                return v2.ProjectCreated(
+                    id=project.id,
+                    name=project.name,
+                    namespace=project.namespace,
+                    slug=project.slug,
+                    repositories=project.repositories,
+                    visibility=_ProjectEventConverter._convert_project_visibility_v2(project.visibility),
+                    description=project.description,
+                    createdBy=project.created_by,
+                    creationDate=project.creation_date,
+                    keywords=project.keywords or [],
+                )
+            case v2.ProjectUpdated:
+                return v2.ProjectUpdated(
+                    id=project.id,
+                    name=project.name,
+                    namespace=project.namespace,
+                    slug=project.slug,
+                    repositories=project.repositories,
+                    visibility=_ProjectEventConverter._convert_project_visibility_v2(project.visibility),
+                    description=project.description,
+                    keywords=project.keywords or [],
+                )
+            case v2.ProjectRemoved:
+                return v2.ProjectRemoved(id=project.id)
 
         raise errors.EventError(message=f"Trying to convert a project to an uknown event type {event_type}")
 

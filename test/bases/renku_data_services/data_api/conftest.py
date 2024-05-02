@@ -84,27 +84,6 @@ def member_2_headers(member_2_user: UserInfo) -> dict[str, str]:
 
 
 @pytest.fixture
-def project_normal_member_headers(project_normal_member) -> dict[str, str]:
-    """Authentication headers for a normal project member user."""
-    access_token = json.dumps({"is_admin": False, "id": project_normal_member.id})
-    return {"Authorization": f"Bearer {access_token}"}
-
-
-@pytest.fixture
-def project_owner_member_headers(project_owner_member) -> dict[str, str]:
-    """Authentication headers for a normal project owner user."""
-    access_token = json.dumps({"is_admin": False, "id": project_owner_member.id})
-    return {"Authorization": f"Bearer {access_token}"}
-
-
-@pytest.fixture
-def project_non_member_headers(project_non_member) -> dict[str, str]:
-    """Authentication headers for a user that isn't a member of a project."""
-    access_token = json.dumps({"is_admin": False, "id": project_non_member.id})
-    return {"Authorization": f"Bearer {access_token}"}
-
-
-@pytest.fixture
 def unauthorized_headers() -> dict[str, str]:
     """Authentication headers for an anonymous user (did not log in)."""
     return {"Authorization": "Bearer {}"}

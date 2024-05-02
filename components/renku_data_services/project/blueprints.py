@@ -51,6 +51,7 @@ class ProjectsBP(CustomBlueprint):
                     visibility=p.visibility.value,
                     description=p.description,
                     etag=p.etag,
+                    keywords=p.keywords or [],
                 )
                 for p in projects
             ], total_num
@@ -64,6 +65,7 @@ class ProjectsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.ProjectPost)
         async def _post(_: Request, *, user: base_models.APIUser, body: apispec.ProjectPost):
+            keywords = [kw.root for kw in body.keywords] if body.keywords is not None else []
             project = project_models.Project(
                 id=None,
                 name=body.name,
@@ -75,6 +77,7 @@ class ProjectsBP(CustomBlueprint):
                 visibility=Visibility(body.visibility)
                 if isinstance(body.visibility, str)
                 else Visibility(body.visibility.value),
+                keywords=keywords,
             )
             result = await self.project_repo.insert_project(user=user, project=project)
             return json(
@@ -89,6 +92,7 @@ class ProjectsBP(CustomBlueprint):
                     visibility=result.visibility.value,
                     description=result.description,
                     etag=result.etag,
+                    keywords=result.keywords or [],
                 ),
                 201,
             )
@@ -120,6 +124,7 @@ class ProjectsBP(CustomBlueprint):
                     visibility=project.visibility.value,
                     description=project.description,
                     etag=project.etag,
+                    keywords=project.keywords or [],
                 ),
                 headers=headers,
             )
@@ -150,6 +155,7 @@ class ProjectsBP(CustomBlueprint):
                     visibility=project.visibility.value,
                     description=project.description,
                     etag=project.etag,
+                    keywords=project.keywords or [],
                 ),
                 headers=headers,
             )
@@ -203,6 +209,7 @@ class ProjectsBP(CustomBlueprint):
                     visibility=updated_project.visibility.value,
                     description=updated_project.description,
                     etag=updated_project.etag,
+                    keywords=updated_project.keywords or [],
                 ),
                 200,
             )
