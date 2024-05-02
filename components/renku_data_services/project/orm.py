@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import DateTime, Index, Integer, MetaData, String, func
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
 from ulid import ULID
@@ -30,6 +31,7 @@ class ProjectORM(BaseORM):
     visibility: Mapped[Visibility]
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
     description: Mapped[str | None] = mapped_column("description", String(500))
+    keywords: Mapped[Optional[list[str]]] = mapped_column("keywords", ARRAY(String(99)), nullable=True)
     # NOTE: The project slugs table has a foreign key from the projects table, but there is a stored procedure
     # triggered by the deletion of slugs to remove the project used by the slug. See migration 89aa4573cfa9.
     slug: Mapped["ProjectSlug"] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
@@ -60,6 +62,7 @@ class ProjectORM(BaseORM):
             updated_at=self.updated_at,
             repositories=[models.Repository(r.url) for r in self.repositories],
             description=self.description,
+            keywords=self.keywords
         )
 
 

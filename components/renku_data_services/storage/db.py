@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from renku_data_services.authz import models as authz_models
+from renku_data_services.authz.authz import IProjectAuthorizer
 from renku_data_services.storage import models
 from renku_data_services.storage import orm as schemas
 
@@ -18,16 +20,20 @@ class _Base:
         self.session_maker = session_maker  # type: ignore[call-overload]
 
 
-class StorageRepository(_Base):
-    """Repository for cloud storage."""
+class BaseStorageRepository(_Base):
+    """Base repository for cloud storage."""
 
     def __init__(
         self,
-        gitlab_client: base_models.GitlabAPIProtocol,
         session_maker: Callable[..., AsyncSession],
     ):
         super().__init__(session_maker)
-        self.gitlab_client = gitlab_client
+
+    async def filter_projects_by_access_level(
+        self, user: base_models.APIUser, project_ids: list[str], minimum_access_level: authz_models.Role
+    ) -> list[str]:
+        """Get a list of projects of which the user is a member with a specific access level."""
+        raise NotImplementedError
 
     async def get_storage(
         self,
@@ -54,8 +60,8 @@ class StorageRepository(_Base):
 
             res = await session.execute(stmt)
             orms = res.scalars().all()
-            accessible_projects = await self.gitlab_client.filter_projects_by_access_level(
-                user, [p.project_id for p in orms], base_models.GitlabAccessLevel.MEMBER
+            accessible_projects = await self.filter_projects_by_access_level(
+                user, [p.project_id for p in orms], authz_models.Role.MEMBER
             )
 
             return [p.dump() for p in orms if p.project_id in accessible_projects]
@@ -70,17 +76,13 @@ class StorageRepository(_Base):
 
             if storage is None:
                 raise errors.MissingResourceError(message=f"The storage with id '{storage_id}' cannot be found")
-            if not await self.gitlab_client.filter_projects_by_access_level(
-                user, [storage[0].project_id], base_models.GitlabAccessLevel.MEMBER
-            ):
+            if not await self.filter_projects_by_access_level(user, [storage[0].project_id], authz_models.Role.MEMBER):
                 raise errors.Unauthorized(message="User does not have access to this project")
             return storage[0].dump()
 
     async def insert_storage(self, storage: models.CloudStorage, user: base_models.APIUser) -> models.CloudStorage:
         """Insert a new cloud storage entry."""
-        if not await self.gitlab_client.filter_projects_by_access_level(
-            user, [storage.project_id], base_models.GitlabAccessLevel.ADMIN
-        ):
+        if not await self.filter_projects_by_access_level(user, [storage.project_id], authz_models.Role.OWNER):
             raise errors.Unauthorized(message="User does not have access to this project")
         existing_storage = await self.get_storage(user, project_id=storage.project_id, name=storage.name)
         if existing_storage:
@@ -102,9 +104,7 @@ class StorageRepository(_Base):
 
             if storage is None:
                 raise errors.MissingResourceError(message=f"The storage with id '{storage_id}' cannot be found")
-            if not await self.gitlab_client.filter_projects_by_access_level(
-                user, [storage.project_id], base_models.GitlabAccessLevel.ADMIN
-            ):
+            if not await self.filter_projects_by_access_level(user, [storage.project_id], authz_models.Role.OWNER):
                 raise errors.Unauthorized(message="User does not have access to this project")
             if "project_id" in kwargs and kwargs["project_id"] != storage.project_id:
                 raise errors.ValidationError(message="Cannot change project id of existing storage.")
@@ -137,9 +137,54 @@ class StorageRepository(_Base):
 
             if storage is None:
                 return
-            if not await self.gitlab_client.filter_projects_by_access_level(
-                user, [storage[0].project_id], base_models.GitlabAccessLevel.ADMIN
-            ):
+            if not await self.filter_projects_by_access_level(user, [storage[0].project_id], authz_models.Role.OWNER):
                 raise errors.Unauthorized(message="User does not have access to this project")
 
             await session.delete(storage[0])
+
+
+class StorageRepository(BaseStorageRepository):
+    """Repository for V1 cloud storage."""
+
+    def __init__(
+        self,
+        gitlab_client: base_models.GitlabAPIProtocol,
+        session_maker: Callable[..., AsyncSession],
+    ):
+        super().__init__(session_maker)
+        self.gitlab_client = gitlab_client
+
+    async def filter_projects_by_access_level(
+        self, user: base_models.APIUser, project_ids: list[str], minimum_access_level: authz_models.Role
+    ) -> list[str]:
+        """Get a list of projects of which the user is a member with a specific access level."""
+        gitlab_access_level = (
+            base_models.GitlabAccessLevel.ADMIN
+            if minimum_access_level == authz_models.Role.OWNER
+            else base_models.GitlabAccessLevel.MEMBER
+        )
+
+        return await self.gitlab_client.filter_projects_by_access_level(user, project_ids, gitlab_access_level)
+
+
+class StorageV2Repository(BaseStorageRepository):
+    """Repository for V2 cloud storage."""
+
+    def __init__(
+        self,
+        project_authz: IProjectAuthorizer,
+        session_maker: Callable[..., AsyncSession],
+    ):
+        super().__init__(session_maker)
+        self.project_authz: IProjectAuthorizer = project_authz
+
+    async def filter_projects_by_access_level(
+        self, user: base_models.APIUser, project_ids: list[str], minimum_access_level: authz_models.Role
+    ) -> list[str]:
+        """Get a list of projects of which the user is a member with a specific access level."""
+        if not user.is_authenticated or not project_ids:
+            return []
+
+        scope = authz_models.Scope.WRITE if minimum_access_level == authz_models.Role.OWNER else authz_models.Scope.READ
+
+        return await self.project_authz.filter_user_projects(user=user, project_ids=project_ids, scope=scope)
