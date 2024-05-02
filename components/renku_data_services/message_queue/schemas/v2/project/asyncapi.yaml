@@ -1,0 +1,92 @@
+asyncapi: 3.0.0
+info:
+  title: Project Events
+  version: 0.0.2
+servers:
+  redis:
+    url: renku-redis
+    protocol: redis
+    description: Renku Redis Instance
+channels:
+  project.created:
+    publish:
+      messages:
+        projectCreated:
+          schemaFormat: "application/vnd.apache.avro;version=1.9.0"
+          payload:
+            type: object
+            properties:
+              payload:
+              - $ref: './events/created.avsc#/ProjectCreated'
+          traits:
+          - $ref: '#/components/messageTraits/headers'
+  project.updated:
+    publish:
+      messages:
+        projectUpdated:
+          schemaFormat: "application/vnd.apache.avro;version=1.9.0"
+          payload:
+            type: object
+            properties:
+              payload:
+              - $ref: './events/updated.avsc#/ProjectUpdated'
+          traits:
+          - $ref: '#/components/messageTraits/headers'
+  project.removed:
+    publish:
+      messages:
+        projectRemoved:
+          schemaFormat: "application/vnd.apache.avro;version=1.9.0"
+          payload:
+            type: object
+            properties:
+              payload:
+              - $ref: './events/removed.avsc#/ProjectRemoved'
+          traits:
+          - $ref: '#/components/messageTraits/headers'
+  projectMember.added:
+    publish:
+      messages:
+        projectMemberAdded:
+          schemaFormat: "application/vnd.apache.avro;version=1.9.0"
+          payload:
+            type: object
+            properties:
+              payload:
+              - $ref: './events/member_added.avsc#/ProjectMemberAdded'
+          traits:
+          - $ref: '#/components/messageTraits/headers'
+  projectMember.updated:
+    publish:
+      messages:
+        projectMemberUpdated:
+          schemaFormat: "application/vnd.apache.avro;version=1.9.0"
+          payload:
+            type: object
+            properties:
+              payload:
+              - $ref: './events/member_updated.avsc#/ProjectMemberUpdated'
+          traits:
+          - $ref: '#/components/messageTraits/headers'
+  projectMember.removed:
+    publish:
+      messages:
+        projectMemberRemoved:
+          schemaFormat: "application/vnd.apache.avro;version=1.9.0"
+          payload:
+            type: object
+            properties:
+              payload:
+              - $ref: './events/member_removed.avsc#/ProjectMemberRemoved'
+          traits:
+          - $ref: '#/components/messageTraits/headers'
+components:
+  messageTraits:
+    headers:
+      payload:
+        type: object
+        properties:
+          id:
+            type: string
+          headers:
+            - $ref: '../../header/headers.avsc#/Header'
