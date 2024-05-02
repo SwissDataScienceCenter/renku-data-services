@@ -12,13 +12,13 @@ from pydantic import ConfigDict, EmailStr, Field, RootModel
 from renku_data_services.project.apispec_base import BaseAPISpec
 
 
-class KeyCloakId(RootModel[str]):
+class Keyword(RootModel[str]):
     root: str = Field(
         ...,
-        description="Member's KeyCloak ID",
-        example="123-keycloak-user-id-456",
+        description="A single keyword",
+        max_length=99,
         min_length=1,
-        pattern="^[A-Za-z0-9-]+$",
+        pattern="^[A-Za-z0-9\\s\\-_.]*$",
     )
 
 
@@ -146,6 +146,12 @@ class Project(BaseAPISpec):
     etag: Optional[str] = Field(
         None, description="Entity Tag", example="9EE498F9D565D0C41E511377425F32F3"
     )
+    keywords: Optional[List[Keyword]] = Field(
+        None,
+        description="Project keywords",
+        example=["project", "keywords"],
+        min_length=0,
+    )
 
 
 class ProjectPost(BaseAPISpec):
@@ -188,6 +194,12 @@ class ProjectPost(BaseAPISpec):
     description: Optional[str] = Field(
         None, description="A description for the resource", max_length=500
     )
+    keywords: Optional[List[Keyword]] = Field(
+        None,
+        description="Project keywords",
+        example=["project", "keywords"],
+        min_length=0,
+    )
 
 
 class ProjectPatch(BaseAPISpec):
@@ -221,6 +233,12 @@ class ProjectPatch(BaseAPISpec):
     visibility: Optional[Visibility] = None
     description: Optional[str] = Field(
         None, description="A description for the resource", max_length=500
+    )
+    keywords: Optional[List[Keyword]] = Field(
+        None,
+        description="Project keywords",
+        example=["project", "keywords"],
+        min_length=0,
     )
 
 

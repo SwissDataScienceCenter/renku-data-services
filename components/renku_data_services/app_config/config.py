@@ -48,7 +48,7 @@ from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
 from renku_data_services.session.db import SessionRepository
-from renku_data_services.storage.db import StorageRepository
+from renku_data_services.storage.db import StorageRepository, StorageV2Repository
 from renku_data_services.user_preferences.config import UserPreferencesConfig
 from renku_data_services.user_preferences.db import UserPreferencesRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
@@ -138,6 +138,7 @@ class Config:
     _user_repo: UserRepository | None = field(default=None, repr=False, init=False)
     _rp_repo: ResourcePoolRepository | None = field(default=None, repr=False, init=False)
     _storage_repo: StorageRepository | None = field(default=None, repr=False, init=False)
+    _storage_v2_repo: StorageV2Repository | None = field(default=None, repr=False, init=False)
     _project_repo: ProjectRepository | None = field(default=None, repr=False, init=False)
     _group_repo: GroupRepository | None = field(default=None, repr=False, init=False)
     _event_repo: EventRepository | None = field(default=None, repr=False, init=False)
@@ -211,12 +212,21 @@ class Config:
 
     @property
     def storage_repo(self) -> StorageRepository:
-        """The DB adapter for cloud storage configs."""
+        """The DB adapter for V1 cloud storage configs."""
         if not self._storage_repo:
             self._storage_repo = StorageRepository(
                 session_maker=self.db.async_session_maker, gitlab_client=self.gitlab_client
             )
         return self._storage_repo
+
+    @property
+    def storage_v2_repo(self) -> StorageV2Repository:
+        """The DB adapter for V2 cloud storage configs."""
+        if not self._storage_v2_repo:
+            self._storage_v2_repo = StorageV2Repository(
+                session_maker=self.db.async_session_maker, project_authz=self.project_authz
+            )
+        return self._storage_v2_repo
 
     @property
     def event_repo(self) -> EventRepository:
@@ -301,7 +311,6 @@ class Config:
         server_options_file = os.environ.get("SERVER_OPTIONS")
         server_defaults_file = os.environ.get("SERVER_DEFAULTS")
         k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
-        gitlab_url = None
         max_pinned_projects = int(os.environ.get(f"{prefix}MAX_PINNED_PROJECTS", "10"))
         user_preferences_config = UserPreferencesConfig(max_pinned_projects=max_pinned_projects)
         db = DBConfig.from_env(prefix)

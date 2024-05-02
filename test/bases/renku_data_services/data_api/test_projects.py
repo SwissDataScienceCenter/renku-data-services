@@ -51,6 +51,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user, app_co
         "visibility": "public",
         "repositories": ["http://renkulab.io/repository-1", "http://renkulab.io/repository-2"],
         "namespace": f"{regular_user.first_name}.{regular_user.last_name}",
+        "keywords": ["keyword 1", "keyword.2", "keyword-3", "KEYWORD_4"]
     }
 
     _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
@@ -60,6 +61,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user, app_co
     assert project["name"] == "Renku Native Project"
     assert project["slug"] == "project-slug"
     assert project["description"] == "First Renku native project"
+    assert set(project["keywords"]) == {"keyword 1", "keyword.2", "keyword-3", "KEYWORD_4"}
     assert project["visibility"] == "public"
     assert project["created_by"] == "user"
     assert {r for r in project["repositories"]} == {
@@ -75,6 +77,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user, app_co
     assert proj_event.name == payload["name"]
     project_id = project["id"]
     assert proj_event.id == project_id
+    assert set(proj_event.keywords) == {"keyword 1", "keyword.2", "keyword-3", "KEYWORD_4"}
 
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
 
@@ -83,6 +86,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user, app_co
     assert project["name"] == "Renku Native Project"
     assert project["slug"] == "project-slug"
     assert project["description"] == "First Renku native project"
+    assert set(project["keywords"]) == {"keyword 1", "keyword.2", "keyword-3", "KEYWORD_4"}
     assert project["visibility"] == "public"
     assert project["created_by"] == "user"
     assert {r for r in project["repositories"]} == {
@@ -120,6 +124,7 @@ async def test_project_creation_with_default_values(sanic_client, user_headers, 
     assert "description" not in project or project["description"] is None
     assert project["visibility"] == "private"
     assert project["created_by"] == "user"
+    assert "keywords" not in project
     assert len(project["repositories"]) == 0
 
 
@@ -129,6 +134,15 @@ async def test_create_project_with_invalid_visibility(sanic_client, user_headers
 
     assert response.status_code == 422, response.text
     assert "visibility: Input should be 'private' or 'public'" in response.json["error"]["message"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("keyword", ["invalid chars '", "Nön English"])
+async def test_create_project_with_invalid_keywords(sanic_client, user_headers, keyword):
+    _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json={"keywords": [keyword]})
+
+    assert response.status_code == 422, response.text
+    assert "String should match pattern '^[A-Za-z0-9\\s\\-_.]*$'" in response.json["error"]["message"]
 
 
 @pytest.mark.asyncio
@@ -278,7 +292,7 @@ async def test_delete_project(create_project, sanic_client, user_headers, app_co
 async def test_patch_project(create_project, get_project, sanic_client, user_headers, app_config):
     # Create some projects
     await create_project("Project 1")
-    project = await create_project("Project 2", repositories=["http://renkulab.io/repository-0"])
+    project = await create_project("Project 2", repositories=["http://renkulab.io/repository-0"], keywords=["keyword"])
     await create_project("Project 3")
 
     # Patch a project
@@ -286,6 +300,7 @@ async def test_patch_project(create_project, get_project, sanic_client, user_hea
     patch = {
         "name": "New Name",
         "description": "A patched Renku native project",
+        "keywords": ["keyword 1", "keyword 2"],
         "visibility": "public",
         "repositories": ["http://renkulab.io/repository-1", "http://renkulab.io/repository-2"],
     }
@@ -300,6 +315,7 @@ async def test_patch_project(create_project, get_project, sanic_client, user_hea
     proj_event = deserialize_binary(event[b"payload"], avro_schema_v1.ProjectUpdated)
     assert proj_event.id == project_id
     assert proj_event.name == patch["name"]
+    assert set(proj_event.keywords) == {"keyword 1", "keyword 2"}
 
     # Get the project
     project = await get_project(project_id=project_id)
@@ -307,11 +323,73 @@ async def test_patch_project(create_project, get_project, sanic_client, user_hea
     assert project["name"] == "New Name"
     assert project["slug"] == project["slug"]
     assert project["description"] == "A patched Renku native project"
+    assert set(project["keywords"]) == {"keyword 1", "keyword 2"}
     assert project["visibility"] == "public"
     assert {r for r in project["repositories"]} == {
         "http://renkulab.io/repository-1",
         "http://renkulab.io/repository-2",
     }
+
+
+@pytest.mark.asyncio
+async def test_keywords_are_not_modified_in_patch(create_project, get_project, sanic_client, user_headers, app_config):
+    # Create some projects
+    await create_project("Project 1")
+    project = await create_project("Project 2", keywords=["keyword 1", "keyword 2"])
+    await create_project("Project 3")
+
+    # Patch a project
+    user_headers.update({"If-Match": project["etag"]})
+    patch_no_keywords = {"name": "New Name"}
+    project_id = project["id"]
+    _, response = await sanic_client.patch(
+        f"/api/data/projects/{project_id}", headers=user_headers, json=patch_no_keywords
+    )
+
+    assert response.status_code == 200, response.text
+
+    events = await app_config.redis.redis_connection.xrange("project.updated")
+    assert len(events) == 1
+    event = events[0][1]
+    proj_event = deserialize_binary(event[b"payload"], ProjectUpdated)
+    assert set(proj_event.keywords) == {"keyword 1", "keyword 2"}
+
+    # Get the project
+    project = await get_project(project_id=project_id)
+
+    assert set(project["keywords"]) == {"keyword 1", "keyword 2"}
+
+
+@pytest.mark.asyncio
+async def test_keywords_are_deleted_in_patch(create_project, get_project, sanic_client, user_headers, app_config):
+    # Create some projects
+    await create_project("Project 1")
+    project = await create_project("Project 2", keywords=["keyword 1", "keyword 2"])
+    await create_project("Project 3")
+
+    # Patch a project
+    user_headers.update({"If-Match": project["etag"]})
+    patch_with_empty_keywords = {
+        "name": "New Name",
+        "keywords": [],
+    }
+    project_id = project["id"]
+    _, response = await sanic_client.patch(
+        f"/api/data/projects/{project_id}", headers=user_headers, json=patch_with_empty_keywords
+    )
+
+    assert response.status_code == 200, response.text
+
+    events = await app_config.redis.redis_connection.xrange("project.updated")
+    assert len(events) == 1
+    event = events[0][1]
+    proj_event = deserialize_binary(event[b"payload"], ProjectUpdated)
+    assert proj_event.keywords == []
+
+    # Get the project
+    project = await get_project(project_id=project_id)
+
+    assert "keywords" not in project
 
 
 @pytest.mark.asyncio
@@ -478,14 +556,14 @@ async def test_creator_is_added_as_owner_members(sanic_client, create_project, u
 
 
 @pytest.mark.asyncio
-async def test_add_project_members(create_project, sanic_client, user_headers, admin_headers, app_config):
+async def test_add_project_members(create_project, sanic_client, user_headers, app_config, project_members):
     project = await create_project("Project 1")
     project_id = project["id"]
 
     # Add new roles
     members = [{"id": "member-1", "role": "viewer"}, {"id": "member-2", "role": "owner"}]
     _, response = await sanic_client.patch(
-        f"/api/data/projects/{project_id}/members", headers=user_headers, json=members
+        f"/api/data/projects/{project_id}/members", headers=user_headers, json=project_members
     )
     assert response.status_code == 200, response.text
     events = await app_config.redis.redis_connection.xrange("projectAuth.updated")
@@ -502,8 +580,8 @@ async def test_add_project_members(create_project, sanic_client, user_headers, a
     event = events[1][1]
     auth_event = deserialize_binary(event[b"payload"], avro_schema_v2.ProjectMemberAdded)
     assert auth_event.projectId == project_id
-    assert auth_event.userId == members[1]["id"]
-    assert auth_event.role.value.lower() == members[1]["role"]
+    assert auth_event.userId == project_members[1]["id"]
+    assert auth_event.role.value.lower() == project_members[1]["role"]
 
     # Check that you can see the new roles
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}/members", headers=user_headers)
@@ -543,7 +621,9 @@ async def test_delete_project_members(create_project, sanic_client, user_headers
     members = [{"id": "member-1", "role": "viewer"}, {"id": "member-2", "role": "viewer"}]
     await sanic_client.patch(f"/api/data/projects/{project_id}/members", headers=user_headers, json=members)
 
-    _, response = await sanic_client.delete(f"/api/data/projects/{project_id}/members/member-1", headers=user_headers)
+    _, response = await sanic_client.delete(
+        f"/api/data/projects/{project_id}/members/normal-member", headers=user_headers
+    )
 
     assert response.status_code == 204, response.text
 
@@ -552,7 +632,7 @@ async def test_delete_project_members(create_project, sanic_client, user_headers
     event = events[0][1]
     auth_event = deserialize_binary(event[b"payload"], avro_schema_v2.ProjectMemberRemoved)
     assert auth_event.projectId == project_id
-    assert auth_event.userId == "member-1"
+    assert auth_event.userId == "normal-member"
 
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}/members", headers=user_headers)
 

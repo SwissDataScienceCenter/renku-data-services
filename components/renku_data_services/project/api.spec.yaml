@@ -302,6 +302,8 @@ components:
           $ref: "#/components/schemas/Description"
         etag:
           $ref: "#/components/schemas/ETag"
+        keywords:
+          $ref: "#/components/schemas/KeywordsList"
       required:
         - "id"
         - "name"
@@ -321,6 +323,9 @@ components:
         repositories:
           - url: https://github.com/SwissDataScienceCenter/project-1.git
           - url: git@github.com:SwissDataScienceCenter/project-2.git
+        keywords:
+          - "keyword 1"
+          - "keyword 2"
     ProjectPost:
       description: Project metadata to be created in Renku
       type: object
@@ -339,6 +344,8 @@ components:
           default: "private"
         description:
           $ref: "#/components/schemas/Description"
+        keywords:
+          $ref: "#/components/schemas/KeywordsList"
       required:
         - "name"
         - "namespace"
@@ -357,6 +364,8 @@ components:
           $ref: "#/components/schemas/Visibility"
         description:
           $ref: "#/components/schemas/Description"
+        keywords:
+          $ref: "#/components/schemas/KeywordsList"
     Ulid:
       description: ULID identifier
       type: string
@@ -392,12 +401,21 @@ components:
       description: A description for the resource
       type: string
       maxLength: 500
-    KeyCloakId:
-      description: Member's KeyCloak ID
+    KeywordsList:
+      description: Project keywords
+      type: array
+      items:
+        $ref: "#/components/schemas/Keyword"
+      minItems: 0
+      example:
+        - "project"
+        - "keywords"
+    Keyword:
+      description: A single keyword
       type: string
-      pattern: "^[A-Za-z0-9-]+$"
       minLength: 1
-      example: "123-keycloak-user-id-456"
+      maxLength: 99
+      pattern: '^[A-Za-z0-9\s\-_.]*$'
     RepositoriesList:
       description: A list of repositories
       type: array
