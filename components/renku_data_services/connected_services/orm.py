@@ -28,8 +28,8 @@ class OAuth2ClientORM(BaseORM):
     client_id: Mapped[str] = mapped_column("client_id", String(500))
     display_name: Mapped[str] = mapped_column("display_name", String(99))
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
+    kind: Mapped[ProviderKind | None]
     client_secret: Mapped[str | None] = mapped_column("client_secret", String(500), default=None)
-    kind: Mapped[ProviderKind | None] = mapped_column("kind", default=None)
     scope: Mapped[str | None] = mapped_column("scope", String(), default=None)
     url: Mapped[str | None] = mapped_column("url", String(), default=None)
     creation_date: Mapped[datetime] = mapped_column(
