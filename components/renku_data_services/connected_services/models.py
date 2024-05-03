@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from renku_data_services.connected_services.apispec import ConnectionStatus
+from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -14,6 +14,7 @@ class OAuth2Client(BaseModel):
     """OAuth2 Client model."""
 
     id: str
+    kind: ProviderKind
     client_id: str
     display_name: str
     scope: str

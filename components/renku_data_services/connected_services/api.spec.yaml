@@ -231,6 +231,8 @@ components:
       properties:
         id:
           $ref: "#/components/schemas/ProviderId"
+        kind:
+          $ref: "#/components/schemas/ProviderKind"
         client_id:
           $ref: "#/components/schemas/ClientId"
         display_name:
@@ -241,6 +243,7 @@ components:
           $ref: "#/components/schemas/ProviderUrl"
       required:
         - id
+        - kind
         - client_id
         - display_name
         - scope
@@ -251,6 +254,8 @@ components:
       properties:
         id:
           $ref: "#/components/schemas/ProviderId"
+        kind:
+          $ref: "#/components/schemas/ProviderKind"
         client_id:
           $ref: "#/components/schemas/ClientId"
         client_secret:
@@ -263,6 +268,7 @@ components:
           $ref: "#/components/schemas/ProviderUrl"
       required:
         - id
+        - kind
         - client_id
         - display_name
         - scope
@@ -271,6 +277,8 @@ components:
       type: object
       additionalProperties: false
       properties:
+        kind:
+          $ref: "#/components/schemas/ProviderKind"
         client_id:
           $ref: "#/components/schemas/ClientId"
         client_secret:
@@ -338,6 +346,12 @@ components:
     ProviderId:
       type: string
       example: "some-id"
+    ProviderKind:
+      type: string
+      enum:
+        - "gitlab"
+        - "github"
+      example: "gitlab"
     ClientId:
       type: string
       example: "some-client-id"

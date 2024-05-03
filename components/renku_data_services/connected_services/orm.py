@@ -9,7 +9,7 @@ from ulid import ULID
 
 from renku_data_services import errors
 from renku_data_services.connected_services import models
-from renku_data_services.connected_services.apispec import ConnectionStatus
+from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind
 
 metadata_obj = MetaData(schema="connected_services")
 
@@ -29,6 +29,7 @@ class OAuth2ClientORM(BaseORM):
     display_name: Mapped[str] = mapped_column("display_name", String(99))
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
     client_secret: Mapped[str | None] = mapped_column("client_secret", String(500), default=None)
+    kind: Mapped[ProviderKind | None] = mapped_column("kind", default=None)
     scope: Mapped[str | None] = mapped_column("scope", String(), default=None)
     url: Mapped[str | None] = mapped_column("url", String(), default=None)
     creation_date: Mapped[datetime] = mapped_column(
@@ -47,6 +48,7 @@ class OAuth2ClientORM(BaseORM):
         """Create an OAuth2 Client model from the OAuth2ClientORM."""
         return models.OAuth2Client(
             id=self.id,
+            kind=self.kind or ProviderKind.gitlab,
             client_id=self.client_id if not redacted else "",
             display_name=self.display_name,
             scope=self.scope or "",

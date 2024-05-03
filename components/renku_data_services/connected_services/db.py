@@ -64,6 +64,7 @@ class ConnectedServicesRepository:
 
         client = schemas.OAuth2ClientORM(
             id=new_client.id,
+            kind=new_client.kind,
             client_id=new_client.client_id,
             client_secret=new_client.client_secret if new_client.client_secret else None,
             display_name=new_client.display_name,
@@ -92,7 +93,7 @@ class ConnectedServicesRepository:
                 raise errors.MissingResourceError(message=f"OAuth2 Client with id '{provider_id}' does not exist.")
 
             for key, value in kwargs.items():
-                if key in ["client_id", "client_secret", "display_name", "scope", "url"]:
+                if key in ["kind", "client_id", "client_secret", "display_name", "scope", "url"]:
                     setattr(client, key, value)
 
             await session.flush()
@@ -204,6 +205,8 @@ class ConnectedServicesRepository:
                 state=connection.state,
             ) as oauth2_client:
                 token = await oauth2_client.fetch_token(client.token_endpoint_url, authorization_response=raw_url)
+
+                logger.info(f"Token for client {client.id} has keys: {", ".join(token.keys())}")
 
                 token_model = models.OAuth2TokenSet.from_dict(token)
                 connection.token = json.dumps(token_model.to_dict())
