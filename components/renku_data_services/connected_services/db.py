@@ -5,7 +5,7 @@ import json
 import random
 from collections.abc import Callable
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urljoin
 
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from sanic.log import logger
@@ -298,7 +298,8 @@ class ConnectedServicesRepository:
                 await session.refresh(connection)
 
                 # TODO: how to configure this?
-                response = await oauth2_client.get("https://gitlab.com/api/v4/user")
+                request_url = urljoin(client.url or "", "api/v4/user")
+                response = await oauth2_client.get(request_url)
 
                 if response.status_code > 200:
                     raise errors.Unauthorized(message="Could not get account information.")
