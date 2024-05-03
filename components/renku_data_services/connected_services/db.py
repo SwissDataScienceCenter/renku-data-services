@@ -67,6 +67,8 @@ class ConnectedServicesRepository:
             client_id=new_client.client_id,
             client_secret=new_client.client_secret if new_client.client_secret else None,
             display_name=new_client.display_name,
+            scope=new_client.scope,
+            url=new_client.url,
             created_by_id=user.id,
         )
 
