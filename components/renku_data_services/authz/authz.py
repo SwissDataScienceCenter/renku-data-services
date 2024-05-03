@@ -34,6 +34,10 @@ class IProjectAuthorizer(Protocol):
         """Whether the user has specific permission on a specific project."""
         ...
 
+    async def filter_user_projects(self, user: APIUser, project_ids: list[str], scope: Scope) -> list[str]:
+        """Given a list of project IDs, return those IDs that the user has access to."""
+        ...
+
     async def has_role(self, user: APIUser, project_id: str, role: Role) -> bool:
         """Whether the user is a member of the project with the specific role."""
         ...
@@ -121,7 +125,20 @@ class SQLProjectAuthorizer:
 
     async def has_permission(self, user: APIUser, project_id: str, scope: Scope) -> bool:
         """Whether the permissions granted to the user for the project match the access level."""
-        stmt = select(ProjectUserAuthz).where(ProjectUserAuthz.project_id == project_id)
+        project_ids = await self.filter_user_projects(user=user, project_ids=[project_id], scope=scope)
+        return bool(project_ids)
+
+    async def filter_user_projects(self, user: APIUser, project_ids: list[str], scope: Scope) -> list[str]:
+        """Given a list of project IDs, return those IDs that the user has access to."""
+        if not project_ids:
+            return []
+
+        stmt = select(ProjectUserAuthz)
+        if len(project_ids) == 1:
+            project_id = project_ids[0]
+            stmt = stmt.where(ProjectUserAuthz.project_id == project_id)
+        else:
+            stmt = stmt.where(ProjectUserAuthz.project_id.in_(project_ids))
         if not user.is_admin:
             # NOTE: the specific user should have the required access level OR
             # the user field should be NULL in the db (which means it applies to users)
@@ -130,8 +147,9 @@ class SQLProjectAuthorizer:
             )
         async with self.session_maker() as session:
             res = await session.execute(stmt)
-            permission = res.scalars().first()
-        return permission is not None
+            projects = res.scalars()
+
+        return [p.project_id for p in projects]
 
     async def has_role(self, user: APIUser, project_id: str, role: Role) -> bool:
         """Check if the user has the specific member type on a project."""

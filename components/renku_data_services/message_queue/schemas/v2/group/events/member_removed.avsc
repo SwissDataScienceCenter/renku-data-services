@@ -1,0 +1,16 @@
+{
+  "type":"record",
+  "name":"GroupMemberRemoved",
+  "namespace":"io.renku.events.v2",
+  "doc":"Event raised when a member is removed from a group",
+  "fields":[
+    {
+      "name":"groupId",
+      "type":"string"
+    },
+    {
+      "name":"userId",
+      "type":"string"
+    }
+  ]
+}

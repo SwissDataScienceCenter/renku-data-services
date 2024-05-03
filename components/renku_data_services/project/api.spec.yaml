@@ -115,6 +115,7 @@ paths:
           required: true
           schema:
             type: string
+        - $ref: "#/components/parameters/If-Match"
       requestBody:
         required: true
         content:
@@ -298,6 +299,10 @@ components:
           $ref: "#/components/schemas/Visibility"
         description:
           $ref: "#/components/schemas/Description"
+        etag:
+          $ref: "#/components/schemas/ETag"
+        keywords:
+          $ref: "#/components/schemas/KeywordsList"
       required:
         - "id"
         - "name"
@@ -317,6 +322,9 @@ components:
         repositories:
           - url: https://github.com/SwissDataScienceCenter/project-1.git
           - url: git@github.com:SwissDataScienceCenter/project-2.git
+        keywords:
+          - "keyword 1"
+          - "keyword 2"
     ProjectPost:
       description: Project metadata to be created in Renku
       type: object
@@ -331,10 +339,12 @@ components:
         repositories:
           $ref: "#/components/schemas/RepositoriesList"
         visibility:
-          $ref: "#/components/schemas/Visibility"  # Visibility is ``private`` if not passed at this point
+          $ref: "#/components/schemas/Visibility" # Visibility is ``private`` if not passed at this point
           default: "private"
         description:
           $ref: "#/components/schemas/Description"
+        keywords:
+          $ref: "#/components/schemas/KeywordsList"
       required:
         - "name"
         - "namespace"
@@ -353,12 +363,14 @@ components:
           $ref: "#/components/schemas/Visibility"
         description:
           $ref: "#/components/schemas/Description"
+        keywords:
+          $ref: "#/components/schemas/KeywordsList"
     Ulid:
       description: ULID identifier
       type: string
       minLength: 26
       maxLength: 26
-      pattern: "^[A-Z0-9]{26}$"  # This is case-insensitive
+      pattern: "^[A-Z0-9]{26}$" # This is case-insensitive
       format: ulid
     ProjectName:
       description: Renku project name
@@ -388,12 +400,21 @@ components:
       description: A description for the resource
       type: string
       maxLength: 500
-    KeyCloakId:
-      description: Member's KeyCloak ID
+    KeywordsList:
+      description: Project keywords
+      type: array
+      items:
+        $ref: "#/components/schemas/Keyword"
+      minItems: 0
+      example:
+        - "project"
+        - "keywords"
+    Keyword:
+      description: A single keyword
       type: string
-      pattern: "^[A-Za-z0-9-]+$"
       minLength: 1
-      example: "123-keycloak-user-id-456"
+      maxLength: 99
+      pattern: '^[A-Za-z0-9\s\-_.]*$'
     RepositoriesList:
       description: A list of repositories
       type: array
@@ -406,8 +427,7 @@ components:
     Repository:
       description: A project's repository
       type: string
-      example:
-        git@github.com:SwissDataScienceCenter/project-1.git
+      example: git@github.com:SwissDataScienceCenter/project-1.git
     Visibility:
       description: Project's visibility levels
       type: string
@@ -485,6 +505,10 @@ components:
       format: email
       description: User email
       example: some-user@gmail.com
+    ETag:
+      type: string
+      description: Entity Tag
+      example: "9EE498F9D565D0C41E511377425F32F3"
     ErrorResponse:
       type: object
       properties:
@@ -514,3 +538,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+
+  parameters:
+    If-Match:
+      in: header
+      name: If-Match
+      description: If-Match header, for avoiding mid-air collisions
+      required: true
+      schema:
+        $ref: "#/components/schemas/ETag"

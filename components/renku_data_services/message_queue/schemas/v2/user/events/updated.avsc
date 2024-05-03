@@ -1,0 +1,28 @@
+{
+  "type": "record",
+  "name":"UserUpdated",
+  "namespace":"io.renku.events.v2",
+  "doc":"Event raised when a user is updated",
+  "fields":[
+    {
+      "name":"id",
+      "type":"string"
+    },
+    {
+      "name": "firstName",
+      "type":["null","string"]
+    },
+    {
+      "name":"lastName",
+      "type":["null","string"]
+    },
+    {
+      "name":"email",
+      "type":["null","string"]
+    },
+    {
+      "name":"namespace",
+      "type":"string"
+    }
+  ]
+}

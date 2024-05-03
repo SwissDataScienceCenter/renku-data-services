@@ -1,0 +1,16 @@
+{
+  "type":"record",
+  "name":"ProjectMemberRemoved",
+  "namespace":"io.renku.events.v2",
+  "doc":"Event raised when a user is removed from a project",
+  "fields":[
+    {
+      "name":"projectId",
+      "type":"string"
+    },
+    {
+      "name":"userId",
+      "type":"string"
+    }
+  ]
+}

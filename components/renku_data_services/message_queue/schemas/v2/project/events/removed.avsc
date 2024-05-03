@@ -1,0 +1,12 @@
+{
+  "type": "record",
+  "name": "ProjectRemoved",
+  "namespace":"io.renku.events.v2",
+  "doc":"Event raised when a project is removed",
+  "fields": [
+    {
+      "name":"id",
+      "type":"string"
+    }
+  ]
+}
