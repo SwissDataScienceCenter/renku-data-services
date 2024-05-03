@@ -74,6 +74,15 @@ async def test_resource_pool_creation(
 
 
 @pytest.mark.asyncio
+async def test_resource_pool_quotas(sanic_client: SanicASGITestClient):
+    _, res = await create_rp(_valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+
+    assert res.json.get("idle_threshold") == 86400
+    assert res.json.get("hibernation_threshold") == 99999
+
+
+@pytest.mark.asyncio
 async def test_resource_class_filtering(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
