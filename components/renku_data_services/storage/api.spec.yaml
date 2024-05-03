@@ -10,6 +10,104 @@ servers:
   - url: /api/data
   - url: /ui-server/api/data
 paths:
+  /storages_v2/{storage_id}:
+    parameters:
+      - in: path
+        name: storage_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/UlidId"
+        description: the id of the storage
+    get:
+      summary: get cloud storage details
+      responses:
+        "200":
+          description: Found the cloud storage
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/CloudStorageGet"
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
+        - storages_v2
+    patch:
+      summary: partially update a cloud storage entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CloudStoragePatch"
+      responses:
+        "201":
+          description: The cloud storage entry was updated
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/CloudStorageGet"
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
+        - storages_v2
+    delete:
+      summary: remove a cloud storage definition
+      responses:
+        "204":
+          description: The rcloud storage was removed or did not exist in the first place
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
+        - storages_v2
+  /storages_v2:
+    get:
+      summary: get cloud storage for a project by id
+      parameters:
+        - in: query
+          name: project_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/UlidId"
+      responses:
+        "200":
+          description: the storage configurations for the project
+          content:
+            "application/json":
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CloudStorageGet"
+        "404":
+          description: Storage was not found
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
+        - storages_v2
+    post:
+      summary: create a new cloud storage for a project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/CloudStorage"
+                - $ref: "#/components/schemas/CloudStorageUrl"
+      responses:
+        "201":
+          description: The cloud storage entry was created
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/CloudStorageGet"
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
+        - storages_v2
   /storage/{storage_id}:
     parameters:
       - in: path
@@ -217,7 +315,9 @@ components:
       type: object
       properties:
         project_id:
-          $ref: "#/components/schemas/GitlabProjectId"
+          oneOf:
+            - $ref: "#/components/schemas/GitlabProjectId"
+            - $ref: "#/components/schemas/UlidId"
       required:
         - project_id
       example:
@@ -287,7 +387,9 @@ components:
       type: object
       properties:
         project_id:
-          $ref: "#/components/schemas/GitlabProjectId"
+          oneOf:
+            - $ref: "#/components/schemas/GitlabProjectId"
+            - $ref: "#/components/schemas/UlidId"
         storage_type:
           $ref: "#/components/schemas/StorageType"
         name:
@@ -373,7 +475,7 @@ components:
           type: string
           description: string representation of the default value
         examples:
-          description: "These list potential values for this option, like an enum. With `excluse: true`, only a value from the list is allowed."
+          description: "These list potential values for this option, like an enum. With `exclusive: true`, only a value from the list is allowed."
           type: array
           items:
             type: object

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from asyncio import gather
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any, NamedTuple, cast
 
 from sqlalchemy import delete, func, select, update
@@ -26,6 +27,7 @@ from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project import apispec, models
 from renku_data_services.project import orm as schemas
 from renku_data_services.project.apispec import Role, Visibility
+from renku_data_services.storage import orm as storage_schemas
 from renku_data_services.utils.core import with_db_transaction
 
 
@@ -61,6 +63,8 @@ def create_project_created_message(result: models.Project, *_, **__) -> ProjectC
     assert result.id is not None
     assert result.creation_date is not None
 
+    keywords = [] if result.keywords is None else result.keywords
+
     return ProjectCreated(
         id=result.id,
         name=result.name,
@@ -70,7 +74,7 @@ def create_project_created_message(result: models.Project, *_, **__) -> ProjectC
         description=result.description,
         createdBy=result.created_by,
         creationDate=result.creation_date,
-        keywords=[],
+        keywords=keywords,
     )
 
 
@@ -85,6 +89,9 @@ def create_project_update_message(result: models.Project, *_, **__) -> ProjectUp
             raise NotImplementedError(f"unknown visibility:{result.visibility}")
 
     assert result.id is not None
+
+    keywords = [] if result.keywords is None else result.keywords
+
     return ProjectUpdated(
         id=result.id,
         name=result.name,
@@ -92,7 +99,7 @@ def create_project_update_message(result: models.Project, *_, **__) -> ProjectUp
         repositories=result.repositories,
         visibility=vis,
         description=result.description,
-        keywords=[],
+        keywords=keywords,
     )
 
 
@@ -219,6 +226,8 @@ class ProjectRepository:
             created_by_id=user.id,
             description=project.description,
             repositories=repositories,
+            creation_date=datetime.now(UTC).replace(microsecond=0),
+            keywords=project.keywords,
         )
         project_slug = schemas.ProjectSlug(slug, project_id=project_orm.id, namespace_id=ns.id)
 
@@ -269,6 +278,9 @@ class ProjectRepository:
             # Trigger update for ``updated_at`` column
             await session.execute(update(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id).values())
 
+        if "keywords" in payload and not payload["keywords"]:
+            payload["keywords"] = None
+
         for key, value in payload.items():
             # NOTE: ``slug``, ``id``, ``created_by``, and ``creation_date`` cannot be edited or cannot
             # be edited by setting a property on the ORM object instance.
@@ -309,7 +321,11 @@ class ProjectRepository:
         if projects is None:
             return None
 
-        await session.execute(delete(schemas.ProjectORM).where(schemas.ProjectORM.id == projects[0].id))
+        await session.execute(delete(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
+
+        await session.execute(
+            delete(storage_schemas.CloudStorageORM).where(storage_schemas.CloudStorageORM.project_id == project_id)
+        )
 
         await self.project_authz.delete_project(requested_by=user, project_id=project_id)
         return project_id
