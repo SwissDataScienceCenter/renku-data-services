@@ -1,0 +1,11 @@
+{
+  "type":"enum",
+  "name":"MemberRole",
+  "namespace":"io.renku.events.v2",
+  "doc":"Access role of a member",
+  "symbols":[
+    "OWNER",
+    "EDITOR",
+    "VIEWER"
+  ]
+}
