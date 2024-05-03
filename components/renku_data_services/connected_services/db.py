@@ -90,7 +90,7 @@ class ConnectedServicesRepository:
                 raise errors.MissingResourceError(message=f"OAuth2 Client with id '{provider_id}' does not exist.")
 
             for key, value in kwargs.items():
-                if key in ["client_id", "client_secret", "display_name", "url"]:
+                if key in ["client_id", "client_secret", "display_name", "scope", "url"]:
                     setattr(client, key, value)
 
             await session.flush()
