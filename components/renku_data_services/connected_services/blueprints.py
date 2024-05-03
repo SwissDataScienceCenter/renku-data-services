@@ -53,6 +53,8 @@ class OAuth2ClientsBP(CustomBlueprint):
         async def _authorize(request: Request, provider_id: str, user: base_models.APIUser):
             cb_url = urljoin(request.url, "/api/data/oauth2/callback")
             logger.info(f"Test cb url: {cb_url}")
+            cb_url = request.url_for("authorize_callback")
+            logger.info(f"Other test cb url: {cb_url}")
 
             params = AuthorizeParams.model_validate(dict(request.query_args))
             url, _state, cookie = await self.connected_services_repo.authorize_client(
