@@ -22,9 +22,6 @@ from renku_data_services.connected_services import orm as schemas
 class ConnectedServicesRepository:
     """Repository for connected services."""
 
-    # _callback_url = "https://renku-ci-ds-179.dev.renku.ch/api/data/oauth2/callback"
-    _scope = "api"
-
     def __init__(self, session_maker: Callable[..., AsyncSession]):
         self.session_maker = session_maker  # type: ignore[call-overload]
 
@@ -140,7 +137,7 @@ class ConnectedServicesRepository:
             async with AsyncOAuth2Client(
                 client_id=client.client_id,
                 client_secret=client.client_secret,
-                scope=self._scope,
+                scope=client.scope,
                 redirect_uri=callback_url,
             ) as oauth2_client:
                 url, state = oauth2_client.create_authorization_url(client.authorization_url)
@@ -200,7 +197,7 @@ class ConnectedServicesRepository:
             async with AsyncOAuth2Client(
                 client_id=client.client_id,
                 client_secret=client.client_secret,
-                scope=self._scope,
+                scope=client.scope,
                 redirect_uri=callback_url,
                 state=connection.state,
             ) as oauth2_client:
@@ -282,7 +279,7 @@ class ConnectedServicesRepository:
             async with AsyncOAuth2Client(
                 client_id=client.client_id,
                 client_secret=client.client_secret,
-                scope=self._scope,
+                scope=client.scope,
                 token_endpoint=client.token_endpoint_url,
             ) as oauth2_client:
                 oauth2_client.token = token.to_dict()
@@ -335,7 +332,7 @@ class ConnectedServicesRepository:
             async with AsyncOAuth2Client(
                 client_id=client.client_id,
                 client_secret=client.client_secret,
-                scope=self._scope,
+                scope=client.scope,
                 token_endpoint=client.token_endpoint_url,
             ) as oauth2_client:
                 oauth2_client.token = token.to_dict()

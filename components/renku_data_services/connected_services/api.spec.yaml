@@ -235,12 +235,15 @@ components:
           $ref: "#/components/schemas/ClientId"
         display_name:
           $ref: "#/components/schemas/DisplayName"
+        scope:
+          $ref: "#/components/schemas/ApiScope"
         url:
           $ref: "#/components/schemas/ProviderUrl"
       required:
         - id
         - client_id
         - display_name
+        - scope
         - url
     AdminProviderPost:
       type: object
@@ -254,12 +257,15 @@ components:
           $ref: "#/components/schemas/ClientSecret"
         display_name:
           $ref: "#/components/schemas/DisplayName"
+        scope:
+          $ref: "#/components/schemas/ApiScope"
         url:
           $ref: "#/components/schemas/ProviderUrl"
       required:
         - id
         - client_id
         - display_name
+        - scope
         - url
     AdminProviderPatch:
       type: object
@@ -271,6 +277,8 @@ components:
           $ref: "#/components/schemas/ClientSecret"
         display_name:
           $ref: "#/components/schemas/DisplayName"
+        scope:
+          $ref: "#/components/schemas/ApiScope"
         url:
           $ref: "#/components/schemas/ProviderUrl"
     ProviderList:
@@ -339,7 +347,10 @@ components:
     DisplayName:
       type: string
       example: "my oauth2 application"
-    ProviderUrl: 
+    ApiScope:
+      type: string
+      example: "api"
+    ProviderUrl:
       type: string
       example: "https://example.org"
     ConnectionStatus:

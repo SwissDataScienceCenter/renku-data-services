@@ -29,6 +29,7 @@ class OAuth2ClientORM(BaseORM):
     display_name: Mapped[str] = mapped_column("display_name", String(99))
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
     client_secret: Mapped[str | None] = mapped_column("client_secret", String(500), default=None)
+    scope: Mapped[str | None] = mapped_column("scope", String(), default=None)
     url: Mapped[str | None] = mapped_column("url", String(), default=None)
     creation_date: Mapped[datetime] = mapped_column(
         "creation_date", DateTime(timezone=True), default=None, server_default=func.now(), nullable=False
@@ -48,6 +49,7 @@ class OAuth2ClientORM(BaseORM):
             id=self.id,
             client_id=self.client_id if not redacted else "",
             display_name=self.display_name,
+            scope=self.scope or "",
             url=self.url or "",
             created_by_id=self.created_by_id,
             creation_date=self.creation_date,

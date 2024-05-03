@@ -16,6 +16,7 @@ class OAuth2Client(BaseModel):
     id: str
     client_id: str
     display_name: str
+    scope: str
     url: str
     created_by_id: str
     creation_date: datetime
