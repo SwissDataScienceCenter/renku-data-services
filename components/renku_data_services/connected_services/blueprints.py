@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from urllib.parse import urlunparse
 
 from sanic import HTTPResponse, Request, json, redirect
-from sanic.log import logger
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
@@ -51,13 +50,10 @@ class OAuth2ClientsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_authenticated
         async def _authorize(request: Request, provider_id: str, user: base_models.APIUser):
-            cb_path = "/api/data/oauth2/callback"
-            cb_url = urlunparse(("https", request.host, cb_path, None, None, None))
-            logger.info(f"Test cb url: {cb_url}")
-
             params = AuthorizeParams.model_validate(dict(request.query_args))
-            url, _state, cookie = await self.connected_services_repo.authorize_client(
-                provider_id=provider_id, user=user, next_url=params.next
+            callback_url = self._get_callback_url(request)
+            url, cookie = await self.connected_services_repo.authorize_client(
+                provider_id=provider_id, user=user, callback_url=callback_url, next_url=params.next
             )
             response = redirect(to=url)
             response.add_cookie("renku-oauth2", cookie, httponly=True)
@@ -74,15 +70,23 @@ class OAuth2ClientsBP(CustomBlueprint):
 
             params = AuthorizeParams.model_validate(dict(request.query_args))
 
+            callback_url = self._get_callback_url(request)
             next_url = params.next
 
-            await self.connected_services_repo.authorize_callback(cookie=cookie, raw_url=request.url, next_url=next_url)
+            await self.connected_services_repo.authorize_callback(
+                cookie=cookie, raw_url=request.url, callback_url=callback_url, next_url=next_url
+            )
 
             response = redirect(to=next_url) if next_url else json({"status": "OK"})
             response.delete_cookie("renku-oauth2")
             return response
 
         return "/oauth2/callback", ["GET"], _callback
+
+    @staticmethod
+    def _get_callback_url(request: Request) -> str:
+        callback_path = "/api/data/oauth2/callback"
+        return urlunparse(("https", request.host, callback_path, None, None, None))
 
 
 @dataclass(kw_only=True)

@@ -22,7 +22,7 @@ from renku_data_services.connected_services import orm as schemas
 class ConnectedServicesRepository:
     """Repository for connected services."""
 
-    _callback_url = "https://renku-ci-ds-179.dev.renku.ch/api/data/oauth2/callback"
+    # _callback_url = "https://renku-ci-ds-179.dev.renku.ch/api/data/oauth2/callback"
     _scope = "api"
 
     def __init__(self, session_maker: Callable[..., AsyncSession]):
@@ -118,8 +118,8 @@ class ConnectedServicesRepository:
             await session.delete(client)
 
     async def authorize_client(
-        self, user: base_models.APIUser, provider_id: str, next_url: str | None = None
-    ) -> tuple[str, str | Any, str]:
+        self, user: base_models.APIUser, provider_id: str, callback_url: str, next_url: str | None = None
+    ) -> tuple[str, str]:
         """Authorize an OAuth2 Client."""
         if not user.is_authenticated or user.id is None:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
@@ -133,7 +133,6 @@ class ConnectedServicesRepository:
             if client is None:
                 raise errors.MissingResourceError(message=f"OAuth2 Client with id '{provider_id}' does not exist.")
 
-            callback_url = self._callback_url
             if next_url:
                 query = urlencode([("next", next_url)])
                 callback_url = f"{callback_url}?{query}"
@@ -173,9 +172,11 @@ class ConnectedServicesRepository:
                 await session.flush()
                 await session.refresh(connection)
 
-                return url, state, cookie
+                return url, cookie
 
-    async def authorize_callback(self, cookie: str, raw_url: str, next_url: str | None = None) -> dict | Any:
+    async def authorize_callback(
+        self, cookie: str, raw_url: str, callback_url: str, next_url: str | None = None
+    ) -> dict | Any:
         """Performs the OAuth2 authorization callback."""
         if not cookie:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
@@ -191,7 +192,6 @@ class ConnectedServicesRepository:
             if connection is None:
                 raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
-            callback_url = self._callback_url
             if next_url:
                 query = urlencode([("next", next_url)])
                 callback_url = f"{callback_url}?{query}"
