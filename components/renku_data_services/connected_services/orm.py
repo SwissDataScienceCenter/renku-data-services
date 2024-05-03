@@ -5,6 +5,7 @@ from urllib.parse import urljoin
 
 from sqlalchemy import DateTime, ForeignKey, MetaData, String, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
+from sqlalchemy.schema import UniqueConstraint
 from ulid import ULID
 
 from renku_data_services import errors
@@ -82,7 +83,7 @@ class OAuth2ConnectionORM(BaseORM):
     client_id: Mapped[str] = mapped_column(ForeignKey(OAuth2ClientORM.id, ondelete="CASCADE"), index=True)
     client: Mapped[OAuth2ClientORM] = relationship(init=False, repr=False)
     token: Mapped[str | None] = mapped_column("token", String())
-    cookie: Mapped[str | None] = mapped_column("cookie", String())
+    cookie: Mapped[str | None] = mapped_column("cookie", String(), index=True, unique=True)
     state: Mapped[str | None] = mapped_column("state", String())
     status: Mapped[ConnectionStatus]
     creation_date: Mapped[datetime] = mapped_column(
@@ -95,6 +96,14 @@ class OAuth2ConnectionORM(BaseORM):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "client_id",
+            name="_unique_user_id_client_id_uc",
+        ),
     )
 
     def dump(self) -> models.OAuth2Connection:
