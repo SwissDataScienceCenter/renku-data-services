@@ -2,8 +2,10 @@
 
 import datetime
 from dataclasses import dataclass
+from urllib.parse import urljoin
 
 from sanic import HTTPResponse, Request, json, redirect
+from sanic.log import logger
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
@@ -49,6 +51,9 @@ class OAuth2ClientsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_authenticated
         async def _authorize(request: Request, provider_id: str, user: base_models.APIUser):
+            cb_url = urljoin(request.url, "/api/data/oauth2/callback")
+            logger.info(f"Test cb url: {cb_url}")
+
             params = AuthorizeParams.model_validate(dict(request.query_args))
             url, _state, cookie = await self.connected_services_repo.authorize_client(
                 provider_id=provider_id, user=user, next_url=params.next

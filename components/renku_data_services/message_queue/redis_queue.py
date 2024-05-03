@@ -166,7 +166,7 @@ def dispatch_message(transform: Callable[..., Union[AvroModel, Optional[AvroMode
                 "payload": base64.b64encode(serialize_binary(payload)).decode(),
             }
             event_id = await self.event_repo.store_event(session, queue_name, message)
-            session.commit()
+            await session.commit()
 
             try:
                 await self.message_queue.send_message(queue_name, message)

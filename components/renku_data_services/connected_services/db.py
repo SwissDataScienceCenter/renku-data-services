@@ -22,11 +22,8 @@ from renku_data_services.connected_services import orm as schemas
 class ConnectedServicesRepository:
     """Repository for connected services."""
 
-    _authorization_url = "https://gitlab.com/oauth/authorize"
     _callback_url = "https://renku-ci-ds-179.dev.renku.ch/api/data/oauth2/callback"
-    # _callback_url = "https://renku-ci-ds-179.dev.renku.ch/api/data/oauth2/callback?next=https%3A%2F%2Frenku-ci-ds-179.dev.renku.ch%2Fhelp"
     _scope = "api"
-    _token_endpoint = "https://gitlab.com/oauth/token"
 
     def __init__(self, session_maker: Callable[..., AsyncSession]):
         self.session_maker = session_maker  # type: ignore[call-overload]
@@ -147,8 +144,7 @@ class ConnectedServicesRepository:
                 scope=self._scope,
                 redirect_uri=callback_url,
             ) as oauth2_client:
-                authorization_endpoint = self._authorization_url
-                url, state = oauth2_client.create_authorization_url(authorization_endpoint)
+                url, state = oauth2_client.create_authorization_url(client.authorization_url)
 
                 cookie = _generate_cookie()
 
@@ -208,7 +204,7 @@ class ConnectedServicesRepository:
                 redirect_uri=callback_url,
                 state=connection.state,
             ) as oauth2_client:
-                token = await oauth2_client.fetch_token(self._token_endpoint, authorization_response=raw_url)
+                token = await oauth2_client.fetch_token(client.token_endpoint_url, authorization_response=raw_url)
 
                 token_model = models.OAuth2TokenSet.from_dict(token)
                 connection.token = json.dumps(token_model.to_dict())
@@ -287,7 +283,7 @@ class ConnectedServicesRepository:
                 client_id=client.client_id,
                 client_secret=client.client_secret,
                 scope=self._scope,
-                token_endpoint=self._token_endpoint,
+                token_endpoint=client.token_endpoint_url,
             ) as oauth2_client:
                 oauth2_client.token = token.to_dict()
 
@@ -340,7 +336,7 @@ class ConnectedServicesRepository:
                 client_id=client.client_id,
                 client_secret=client.client_secret,
                 scope=self._scope,
-                token_endpoint=self._token_endpoint,
+                token_endpoint=client.token_endpoint_url,
             ) as oauth2_client:
                 oauth2_client.token = token.to_dict()
 
