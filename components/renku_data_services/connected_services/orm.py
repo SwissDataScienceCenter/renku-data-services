@@ -28,10 +28,10 @@ class OAuth2ClientORM(BaseORM):
     client_id: Mapped[str] = mapped_column("client_id", String(500))
     display_name: Mapped[str] = mapped_column("display_name", String(99))
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
-    kind: Mapped[ProviderKind | None]
+    kind: Mapped[ProviderKind]
+    scope: Mapped[str] = mapped_column("scope", String())
+    url: Mapped[str] = mapped_column("url", String())
     client_secret: Mapped[str | None] = mapped_column("client_secret", String(500), default=None)
-    scope: Mapped[str | None] = mapped_column("scope", String(), default=None)
-    url: Mapped[str | None] = mapped_column("url", String(), default=None)
     creation_date: Mapped[datetime] = mapped_column(
         "creation_date", DateTime(timezone=True), default=None, server_default=func.now(), nullable=False
     )
@@ -48,11 +48,11 @@ class OAuth2ClientORM(BaseORM):
         """Create an OAuth2 Client model from the OAuth2ClientORM."""
         return models.OAuth2Client(
             id=self.id,
-            kind=self.kind or ProviderKind.gitlab,
+            kind=self.kind,
             client_id=self.client_id if not redacted else "",
             display_name=self.display_name,
-            scope=self.scope or "",
-            url=self.url or "",
+            scope=self.scope,
+            url=self.url,
             created_by_id=self.created_by_id,
             creation_date=self.creation_date,
             updated_at=self.updated_at,

@@ -301,7 +301,7 @@ class ConnectedServicesRepository:
                 await session.refresh(connection)
 
                 # TODO: how to configure this?
-                request_url = urljoin(client.url or "", "api/v4/user")
+                request_url = urljoin(client.url, "api/v4/user")
                 response = await oauth2_client.get(request_url)
 
                 if response.status_code > 200:
