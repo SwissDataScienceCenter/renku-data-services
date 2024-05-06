@@ -1,4 +1,5 @@
 """SQLAlchemy schemas for the CRC database."""
+
 import logging
 from typing import Optional
 
@@ -144,6 +145,8 @@ class ResourcePoolORM(BaseORM):
         cascade="save-update, merge, delete",
         lazy="selectin",
     )
+    idle_threshold: Mapped[Optional[int]] = mapped_column(default=None)
+    hibernation_threshold: Mapped[Optional[int]] = mapped_column(default=None)
     default: Mapped[bool] = mapped_column(default=False, index=True)
     public: Mapped[bool] = mapped_column(default=False, index=True)
     id: Mapped[int] = mapped_column("id", Integer, primary_key=True, default=None, init=False)
@@ -158,6 +161,8 @@ class ResourcePoolORM(BaseORM):
             name=resource_pool.name,
             quota=quota,
             classes=[ResourceClassORM.load(resource_class) for resource_class in resource_pool.classes],
+            idle_threshold=resource_pool.idle_threshold,
+            hibernation_threshold=resource_pool.hibernation_threshold,
             public=resource_pool.public,
             default=resource_pool.default,
         )
@@ -183,6 +188,8 @@ class ResourcePoolORM(BaseORM):
             name=self.name,
             quota=quota,
             classes=[resource_class.dump(class_match_criteria) for resource_class in classes],
+            idle_threshold=self.idle_threshold,
+            hibernation_threshold=self.hibernation_threshold,
             public=self.public,
             default=self.default,
         )

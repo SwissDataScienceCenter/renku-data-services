@@ -1,4 +1,5 @@
 """Domain models for the application."""
+
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
@@ -172,6 +173,8 @@ class ResourcePool:
     classes: list["ResourceClass"]
     quota: Optional[Quota] = None
     id: Optional[int] = None
+    idle_threshold: Optional[int] = None
+    hibernation_threshold: Optional[int] = None
     default: bool = False
     public: bool = False
 
@@ -183,6 +186,10 @@ class ResourcePool:
             raise ValidationError(message="The default resource pool has to be public.")
         if self.default and self.quota is not None:
             raise ValidationError(message="A default resource pool cannot have a quota.")
+        if (self.idle_threshold and self.idle_threshold < 1) or (
+            self.hibernation_threshold and self.hibernation_threshold < 1
+        ):
+            raise ValidationError(message="Idle threshold and hibernation threshold need to be larger than 1.")
         default_classes = []
         for cls in list(self.classes):
             if self.quota and not self.quota.is_resource_class_compatible(cls):
@@ -233,4 +240,6 @@ class ResourcePool:
             quota=quota,
             default=data.get("default", False),
             public=data.get("public", False),
+            idle_threshold=data.get("idle_threshold"),
+            hibernation_threshold=data.get("hibernation_threshold"),
         )
