@@ -75,6 +75,13 @@ class ConnectedServicesRepository:
         )
 
         async with self.session_maker() as session, session.begin():
+            result = await session.scalars(
+                select(schemas.OAuth2ClientORM).where(schemas.OAuth2ClientORM.id == client.id)
+            )
+            existing_client = result.one_or_none()
+            if existing_client is not None:
+                raise errors.ValidationError(message=f"OAuth2 Client with id '{client.id}' already exists.")
+
             session.add(client)
             await session.flush()
             await session.refresh(client)
