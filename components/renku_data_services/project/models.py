@@ -69,7 +69,7 @@ ProjectsType: TypeAlias = list[Project]
 
 @dataclass
 class ProjectUpdate:
-    """Inidicates that a project has been updated and retains and the old and new values."""
+    """Indicates that a project has been updated and retains the old and new values."""
 
     old: Project
     new: Project

@@ -58,7 +58,7 @@ class _Relation(StrEnum):
     project_platform: str = "project_platform"
 
     @classmethod
-    def from_role(cls, role: Role):
+    def from_role(cls, role: Role)->Self:
         match role:
             case Role.OWNER:
                 return cls.owner
@@ -186,7 +186,7 @@ class Authz:
             case (ResourceType.anonymous_user, _):
                 return _AuthzConverter.anonymous_users()
         raise errors.ProgrammingError(
-            message=f"Unexpected or uknnown resource type when checking permissions {resource_type}"
+            message=f"Unexpected or unknown resource type when checking permissions {resource_type}"
         )
 
     def _has_permission(
@@ -327,7 +327,7 @@ class Authz:
                 # even though this is a static method.
                 if not session.in_transaction():
                     raise errors.ProgrammingError(
-                        message="Updating the project authorization database without a postgress transaction "
+                        message="Updating the project authorization database without a postgres transaction "
                         "is not allowed",
                     )
                 authz_change = _AuthzChange()
@@ -625,7 +625,7 @@ class Authz:
                 )
             )
             # NOTE: We have to make sure that when we undo we only put back relationships that existed already.
-            # Blidnly undoing everything that was passed in may result in adding things that weren't there before.
+            # Blindly undoing everything that was passed in may result in adding things that weren't there before.
             for existing_rel in existing_rels:
                 if existing_rel.relationship.relation == _Relation.owner.value:
                     if existing_owners_rels is None:
