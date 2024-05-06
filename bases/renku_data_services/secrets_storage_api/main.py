@@ -4,7 +4,6 @@ import argparse
 from os import environ
 
 from sanic import Sanic
-from sanic.log import logger
 from sanic.worker.loader import AppLoader
 
 from renku_data_services.secrets.config import Config
@@ -18,10 +17,6 @@ def create_app() -> Sanic:
     if "COVERAGE_RUN" in environ:
         app.config.TOUCHUP = False
     app = register_all_handlers(app, config)
-
-    @app.main_process_start
-    async def do_migrations(*_):
-        logger.info("running migrations")
 
     return app
 

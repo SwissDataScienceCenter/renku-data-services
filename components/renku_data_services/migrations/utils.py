@@ -19,8 +19,6 @@ def include_object(obj, name, type_, reflected, compare_to):
 
 def combine_version_tables(conn: Connection, metadata_schema: str | None):
     """Used to combine all alembic version tables into one."""
-    # NOTE: ``schemas`` are the revisions that each schema will be when the version table is moved
-    # in all other cases this function will do nothing.
     schemas = {
         # NOTE: These are the revisions that each schema will be when the version table is moved
         "authz": "748ed0f3439f",

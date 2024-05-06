@@ -1,11 +1,10 @@
 """Secrets blueprint."""
 
-import contextlib
 from dataclasses import dataclass
 
 from cryptography.hazmat.primitives.asymmetric import rsa
 from kubernetes import client as k8s_client
-from sanic import Request, empty
+from sanic import Request, json
 from sanic_ext import validate
 from sqlalchemy.util import b64encode
 
@@ -46,21 +45,29 @@ class K8sSecretsBP(CustomBlueprint):
                     message=f"Couldn't find secrets with ids {', '.join(missing_secret_ids)}"
                 )
             decrypted_secrets = {}
-            for secret in secrets:
-                decryption_key = decrypt_rsa(self.secret_service_private_key, secret.encrypted_key)
-                decrypted_value = decrypt_string(decryption_key, user.id, secret.encrypted_value).encode()  # type: ignore
-                decrypted_secrets[secret.name] = b64encode(decrypted_value)
+            try:
+                for secret in secrets:
+                    decryption_key = decrypt_rsa(self.secret_service_private_key, secret.encrypted_key)
+                    decrypted_value = decrypt_string(decryption_key, user.id, secret.encrypted_value).encode()  # type: ignore
+                    decrypted_secrets[secret.name] = b64encode(decrypted_value)
+            except Exception as e:
+                # don't wrap the error, we don't want secrets accidentally leaking.
+                raise errors.SecretDecryptionError(message=f"An error occured decrypting secrets: {str(type(e))}")
 
-            with contextlib.suppress(k8s_client.ApiException):
-                # try and delete the secret in case it already existed
-                self.core_client.delete_namespaced_secret(body.name, body.namespace)
-
-            secret = k8s_client.V1Secret(
-                data=decrypted_secrets,
-                metadata={"name": body.name, "namespace": body.namespace, "owner_references": body.owner_references},
-            )
+            try:
+                secret = k8s_client.V1Secret(
+                    data=decrypted_secrets,
+                    metadata={
+                        "name": body.name,
+                        "namespace": body.namespace,
+                        "owner_references": body.owner_references,
+                    },
+                )
+            except k8s_client.ApiException as e:
+                # don't wrap the error, we don't want secrets accidentally leaking.
+                raise errors.SecretCreationError(message=f"An error occured creating secrets: {str(type(e))}")
 
             self.core_client.create_namespaced_secret(body.namespace, secret)
-            return empty(201)
+            return json(body.name, 201)
 
-        return "/k8s_secret", ["POST"], _post
+        return "/kubernetes", ["POST"], _post

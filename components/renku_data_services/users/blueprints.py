@@ -99,9 +99,9 @@ class UserSecretsBP(CustomBlueprint):
     Secrets storage is jointly handled by data service and secret service.
     Each user has their own secret key 'user_secret', encrypted at rest, that only data service can decrypt.
     Secret service has a public private key combo where only it knows the private key. To store a secret,
-    it is first enrypted with the user_secret, and then with the secret service public key, and then stored
-    in the database. This way neither the data service nor the secret service can decrypt the secrets on their
-    own.
+    it is first encrypted with the user_secret, and then with a random password that is passed to the secret service by
+    encrypting it with the secret service's public key and then storing both in the database. This way neither the data
+    service nor the secret service can decrypt the secrets on their own.
     """
 
     secret_repo: UserSecretsRepo
@@ -110,20 +110,22 @@ class UserSecretsBP(CustomBlueprint):
     secret_service_public_key: rsa.RSAPublicKey
 
     @only_authenticated
-    async def _encrypt_user_secret(self, requested_by: base_models.APIUser, value: str) -> tuple[bytes, bytes]:
+    async def _encrypt_user_secret(self, requested_by: base_models.APIUser, secret_value: str) -> tuple[bytes, bytes]:
         """Doubly encrypt a secret for a user.
 
         Since RSA cannot encrypt arbitrary length strings, we use symmetric encryption with a random key and encrypt the
         random key with RSA to get it to the secrets service.
         """
-        secret_key = await self.user_repo.get_or_create_user_secret_key(requested_by=requested_by)
+        if requested_by.id is None:
+            raise errors.ValidationError(message="APIUser has no id")
+        user_secret_key = await self.user_repo.get_or_create_user_secret_key(requested_by=requested_by)
         # encrypt once with user secret
-        encrypted_value = encrypt_string(secret_key.encode(), requested_by.id, value)  # type: ignore
+        encrypted_value = encrypt_string(user_secret_key.encode(), requested_by.id, secret_value)
         # encrypt again with secret service public key
-        encryption_key = generate_random_encryption_key()
-        encrypted_value = encrypt_string(encryption_key, requested_by.id, encrypted_value.decode())  # type: ignore
-        encrypted_key = encrypt_rsa(self.secret_service_public_key, encryption_key)
-        return encrypted_value, encrypted_key
+        secret_svc_encryption_key = generate_random_encryption_key()
+        doubly_encrypted_value = encrypt_string(secret_svc_encryption_key, requested_by.id, encrypted_value.decode())
+        encrypted_key = encrypt_rsa(self.secret_service_public_key, secret_svc_encryption_key)
+        return doubly_encrypted_value, encrypted_key
 
     def get_all(self) -> BlueprintFactoryResponse:
         """Get all user's secrets."""
@@ -162,7 +164,7 @@ class UserSecretsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.SecretPost)
         async def _post(_: Request, *, user: base_models.APIUser, body: apispec.SecretPost):
-            encrypted_value, encrypted_key = await self._encrypt_user_secret(requested_by=user, value=body.value)
+            encrypted_value, encrypted_key = await self._encrypt_user_secret(requested_by=user, secret_value=body.value)
             secret = Secret(name=body.name, encrypted_value=encrypted_value, encrypted_key=encrypted_key)
             result = await self.secret_repo.insert_secret(requested_by=user, secret=secret)
             return json(apispec.SecretWithId.model_validate(result).model_dump(exclude_none=True, mode="json"), 201)
@@ -176,7 +178,7 @@ class UserSecretsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.SecretPatch)
         async def _patch(_: Request, *, user: base_models.APIUser, secret_id: str, body: apispec.SecretPatch):
-            encrypted_value, encrypted_key = await self._encrypt_user_secret(requested_by=user, value=body.value)
+            encrypted_value, encrypted_key = await self._encrypt_user_secret(requested_by=user, secret_value=body.value)
             updated_secret = await self.secret_repo.update_secret(
                 requested_by=user, secret_id=secret_id, encrypted_value=encrypted_value, encrypted_key=encrypted_key
             )

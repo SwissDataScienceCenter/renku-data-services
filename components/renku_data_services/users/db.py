@@ -114,7 +114,7 @@ class UserRepo:
 
     @only_authenticated
     async def get_or_create_user_secret_key(self, requested_by: APIUser) -> str:
-        """Get a users secret key, or create it if it doesn't exist."""
+        """Get a user's secret encryption key or create it if it doesn't exist."""
 
         async with self.session_maker() as session, session.begin():
             stmt = select(UserORM).where(UserORM.keycloak_id == requested_by.id)

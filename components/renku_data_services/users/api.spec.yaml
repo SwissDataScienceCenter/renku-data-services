@@ -38,7 +38,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - users
+        - secrets
   /users:
     get:
       summary: List all users
@@ -89,12 +89,6 @@ paths:
   /user/secrets:
     get:
       summary: List all secrets for a user (keys only)
-      parameters:
-        - in: path
-          name: user_id
-          required: true
-          schema:
-            type: string
       responses:
         "200":
           description: The user's secrets
@@ -111,7 +105,6 @@ paths:
         default:
           $ref: '#/components/responses/Error'
       tags:
-        - users
         - secrets
     post:
       summary: Create a new secret for the user
@@ -137,7 +130,6 @@ paths:
         default:
           $ref: '#/components/responses/Error'
       tags:
-        - users
         - secrets
   /user/secrets/{secret_id}:
     get:
@@ -169,7 +161,6 @@ paths:
         default:
           $ref: '#/components/responses/Error'
       tags:
-        - users
         - secrets
     patch:
       summary: Change a secret
@@ -200,7 +191,6 @@ paths:
         default:
           $ref: '#/components/responses/Error'
       tags:
-        - users
         - secrets
     delete:
       summary: Delete a secret
@@ -221,7 +211,6 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - users
         - secrets
 
   /error:

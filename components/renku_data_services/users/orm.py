@@ -24,7 +24,7 @@ class UserORM(BaseORM):
     first_name: Mapped[Optional[str]] = mapped_column(String(256), default=None)
     last_name: Mapped[Optional[str]] = mapped_column(String(256), default=None)
     email: Mapped[Optional[str]] = mapped_column(String(320), default=None, index=True)
-    secret_key: Mapped[Optional[bytes]] = mapped_column(LargeBinary(), default=None)
+    secret_key: Mapped[Optional[bytes]] = mapped_column(LargeBinary(), default=None, repr=False)
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
 
     def dump(self) -> UserInfo:

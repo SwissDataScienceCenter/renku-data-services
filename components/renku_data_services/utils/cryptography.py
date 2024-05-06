@@ -6,9 +6,6 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from sqlalchemy import MetaData
-
-metadata_obj = MetaData(schema="secrets")  # Has to match alembic ini section name
 
 
 def _get_encryption_key(password: bytes, salt: bytes) -> bytes:

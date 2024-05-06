@@ -10,11 +10,13 @@ from ulid import ULID
 from renku_data_services.secrets import models
 from renku_data_services.users.orm import UserORM
 
+metadata_obj = MetaData(schema="secrets")  # Has to match alembic ini section name
+
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
     """Base class for all ORM classes."""
 
-    metadata = MetaData(schema="secrets")  # Has to match alembic ini section name
+    metadata = metadata_obj
 
 
 class SecretORM(BaseORM):

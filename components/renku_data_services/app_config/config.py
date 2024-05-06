@@ -122,9 +122,11 @@ class Config:
     message_queue: IMessageQueue
     secrets_service_public_key: rsa.RSAPublicKey
     """The public key of the secrets service, used to encrypt user secrets that only it can decrypt."""
+
     spec: dict[str, Any] = field(init=False, default_factory=dict)
     encryption_key: bytes = field(repr=False)
     """The encryption key to encrypt user keys at rest in the database."""
+
     version: str = "0.0.1"
     app_name: str = "renku_data_services"
     default_resource_pool_file: Optional[str] = None
@@ -293,7 +295,7 @@ class Config:
 
     @property
     def user_secrets_repo(self) -> UserSecretsRepo:
-        """The DB adapter for users."""
+        """The DB adapter for user secrets storage."""
         if not self._user_secrets_repo:
             self._user_secrets_repo = UserSecretsRepo(
                 session_maker=self.db.async_session_maker,
