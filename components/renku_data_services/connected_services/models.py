@@ -1,7 +1,7 @@
 """Models for connected services."""
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import BaseModel
@@ -41,23 +41,41 @@ class ConnectedAccount(BaseModel):
     web_url: str
 
 
-@dataclass(frozen=True, eq=True, kw_only=True)
-class OAuth2TokenSet(BaseModel):
+class OAuth2TokenSet(dict):
     """OAuth2 token set model."""
-
-    access_token: str
-    refresh_token: str
-    expires_at: int
 
     @classmethod
     def from_dict(cls, token_set: dict[str, Any]):
-        """Create an OAuth2 token set a dictionary."""
-        data = dict()
-        data["access_token"] = token_set.get("access_token", "")
-        data["refresh_token"] = token_set.get("refresh_token", "")
-        data["expires_at"] = token_set.get("expires_at", 0)
-        return cls(**data)
+        """Create an OAuth2 token set from a dictionary."""
+        if isinstance(token_set, dict) and not isinstance(token_set, cls):
+            return cls(token_set)
+        return token_set
 
-    def to_dict(self) -> dict:
-        """Return this token set as a dictionary."""
-        return dict(access_token=self.access_token, refresh_token=self.refresh_token, expires_at=self.expires_at)
+    def dump_for_api(self) -> dict[str, Any]:
+        """Expose data for API consumption."""
+        data = dict((k, v) for k, v in self.items() if k != "refresh_token")
+        if self.expires_at_iso is not None:
+            data['expires_at_iso'] = self.expires_at_iso
+        return data
+
+    @property
+    def access_token(self) -> str | None:
+        """Returns the access token."""
+        return self.get("access_token")
+
+    @property
+    def refresh_token(self) -> str | None:
+        """Returns the refresh token."""
+        return self.get("refresh_token")
+
+    @property
+    def expires_at(self) -> int | None:
+        """Returns the access token expiry date."""
+        return self.get("expires_at")
+
+    @property
+    def expires_at_iso(self) -> str | None:
+        """Returns the access token expiry date."""
+        if self.expires_at is None:
+            return None
+        return datetime.fromtimestamp(self.expires_at, UTC).isoformat()

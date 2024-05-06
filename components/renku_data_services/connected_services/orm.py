@@ -1,9 +1,11 @@
 """SQLAlchemy schemas for the connected services database."""
 
 from datetime import datetime
+from typing import Any
 from urllib.parse import urljoin
 
-from sqlalchemy import DateTime, ForeignKey, MetaData, String, func
+from sqlalchemy import JSON, DateTime, ForeignKey, MetaData, String, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import UniqueConstraint
 from ulid import ULID
@@ -11,6 +13,8 @@ from ulid import ULID
 from renku_data_services import errors
 from renku_data_services.connected_services import models
 from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind
+
+JSONVariant = JSON().with_variant(JSONB(), "postgresql")
 
 metadata_obj = MetaData(schema="connected_services")
 
@@ -82,7 +86,7 @@ class OAuth2ConnectionORM(BaseORM):
     user_id: Mapped[str] = mapped_column("user_id", String())
     client_id: Mapped[str] = mapped_column(ForeignKey(OAuth2ClientORM.id, ondelete="CASCADE"), index=True)
     client: Mapped[OAuth2ClientORM] = relationship(init=False, repr=False)
-    token: Mapped[str | None] = mapped_column("token", String())
+    token: Mapped[dict[str, Any] | None] = mapped_column("token", JSONVariant)
     cookie: Mapped[str | None] = mapped_column("cookie", String(), index=True, unique=True)
     state: Mapped[str | None] = mapped_column("state", String())
     status: Mapped[ConnectionStatus]

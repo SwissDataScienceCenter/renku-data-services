@@ -1,7 +1,6 @@
 """Adapters for connected services database classes."""
 
 import base64
-import json
 import random
 from collections.abc import Callable
 from contextlib import asynccontextmanager
@@ -210,8 +209,7 @@ class ConnectedServicesRepository:
 
                 logger.info(f"Token for client {client.id} has keys: {", ".join(token.keys())}")
 
-                token_model = models.OAuth2TokenSet.from_dict(token)
-                connection.token = json.dumps(token_model.to_dict())
+                connection.token = models.OAuth2TokenSet.from_dict(token)
                 connection.cookie = None
                 connection.state = None
                 connection.status = schemas.ConnectionStatus.connected
@@ -271,108 +269,12 @@ class ConnectedServicesRepository:
             account = models.ConnectedAccount.model_validate(response.json())
             return account
 
-        # if not user.is_authenticated or user.id is None:
-        #     raise errors.MissingResourceError(
-        #         message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."  # noqa: E501
-        #     )
-
-        # async with self.session_maker() as session, session.begin():
-        #     result = await session.scalars(
-        #         select(schemas.OAuth2ConnectionORM)
-        #         .where(schemas.OAuth2ConnectionORM.id == connection_id)
-        #         .where(schemas.OAuth2ConnectionORM.user_id == user.id)
-        #         .options(selectinload(schemas.OAuth2ConnectionORM.client))
-        #     )
-        #     connection = result.one_or_none()
-        #     if connection is None:
-        #         raise errors.MissingResourceError(
-        #             message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."  # noqa: E501
-        #         )
-
-        #     if connection.token is None:
-        #         raise errors.Unauthorized(message=f"OAuth2 connection with id '{connection_id}' is not valid.")
-
-        #     client = connection.client
-        #     token = models.OAuth2TokenSet.from_dict(json.loads(connection.token))
-        #     async with AsyncOAuth2Client(
-        #         client_id=client.client_id,
-        #         client_secret=client.client_secret,
-        #         scope=client.scope,
-        #         token_endpoint=client.token_endpoint_url,
-        #     ) as oauth2_client:
-        #         oauth2_client.token = token.to_dict()
-
-        #         await oauth2_client.ensure_active_token(oauth2_client.token)
-        #         token_model = models.OAuth2TokenSet.from_dict(oauth2_client.token)
-        #         old_token = connection.token
-        #         connection.token = json.dumps(token_model.to_dict())
-
-        #         if old_token != connection.token:
-        #             logger.info("Token refreshed!")
-
-        #         await session.flush()
-        #         await session.refresh(connection)
-
-        #         # TODO: how to configure this?
-        #         request_url = urljoin(client.url, "api/v4/user")
-        #         response = await oauth2_client.get(request_url)
-
-        #         if response.status_code > 200:
-        #             raise errors.Unauthorized(message="Could not get account information.")
-
-        #         account = models.ConnectedAccount.model_validate(response.json())
-        #         return account
-
     async def get_oauth2_connection_token(self, connection_id: str, user: base_models.APIUser) -> models.OAuth2TokenSet:
         """Get the OAuth2 access token from one connection from the database."""
         async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (oauth2_client, _, _):
             await oauth2_client.ensure_active_token(oauth2_client.token)
             token_model = models.OAuth2TokenSet.from_dict(oauth2_client.token)
             return token_model
-
-        # if not user.is_authenticated or user.id is None:
-        #     raise errors.MissingResourceError(
-        #         message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."  # noqa: E501
-        #     )
-
-        # async with self.session_maker() as session, session.begin():
-        #     result = await session.scalars(
-        #         select(schemas.OAuth2ConnectionORM)
-        #         .where(schemas.OAuth2ConnectionORM.id == connection_id)
-        #         .where(schemas.OAuth2ConnectionORM.user_id == user.id)
-        #         .options(selectinload(schemas.OAuth2ConnectionORM.client))
-        #     )
-        #     connection = result.one_or_none()
-        #     if connection is None:
-        #         raise errors.MissingResourceError(
-        #             message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."  # noqa: E501
-        #         )
-
-        #     if connection.token is None:
-        #         raise errors.Unauthorized(message=f"OAuth2 connection with id '{connection_id}' is not valid.")
-
-        #     client = connection.client
-        #     token = models.OAuth2TokenSet.from_dict(json.loads(connection.token))
-        #     async with AsyncOAuth2Client(
-        #         client_id=client.client_id,
-        #         client_secret=client.client_secret,
-        #         scope=client.scope,
-        #         token_endpoint=client.token_endpoint_url,
-        #     ) as oauth2_client:
-        #         oauth2_client.token = token.to_dict()
-
-        #         await oauth2_client.ensure_active_token(oauth2_client.token)
-        #         token_model = models.OAuth2TokenSet.from_dict(oauth2_client.token)
-        #         old_token = connection.token
-        #         connection.token = json.dumps(token_model.to_dict())
-
-        #         if old_token != connection.token:
-        #             logger.info("Token refreshed!")
-
-        #         await session.flush()
-        #         await session.refresh(connection)
-
-        #         return token_model
 
     @asynccontextmanager
     async def get_async_oauth2_client(self, connection_id: str, user: base_models.APIUser):
@@ -399,7 +301,7 @@ class ConnectedServicesRepository:
                 raise errors.Unauthorized(message=f"OAuth2 connection with id '{connection_id}' is not valid.")
 
             client = connection.client
-            token = models.OAuth2TokenSet.from_dict(json.loads(connection.token))
+            token = models.OAuth2TokenSet.from_dict(connection.token)
 
         async def update_token(token: dict[str, Any], refresh_token: str | None = None):
             if refresh_token is None:
@@ -407,8 +309,7 @@ class ConnectedServicesRepository:
             async with self.session_maker() as session, session.begin():
                 session.add(connection)
                 await session.refresh(connection)
-                token_model = models.OAuth2TokenSet.from_dict(token)
-                connection.token = json.dumps(token_model.to_dict())
+                connection.token = models.OAuth2TokenSet.from_dict(token)
                 await session.flush()
                 await session.refresh(connection)
                 logger.info("Token refreshed!")
@@ -418,7 +319,7 @@ class ConnectedServicesRepository:
             client_secret=client.client_secret,
             scope=client.scope,
             token_endpoint=client.token_endpoint_url,
-            token=token.to_dict(),
+            token=token,
             update_token=update_token,
         ), connection, client
 
