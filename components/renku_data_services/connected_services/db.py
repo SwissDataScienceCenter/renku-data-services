@@ -405,7 +405,7 @@ class ConnectedServicesRepository:
             if refresh_token is None:
                 return
             async with self.session_maker() as session, session.begin():
-                await session.add(connection)
+                session.add(connection)
                 await session.refresh(connection)
                 token_model = models.OAuth2TokenSet.from_dict(token)
                 connection.token = json.dumps(token_model.to_dict())
