@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
-from renku_data_services.authz.authz import Authz, ProjectAuthzOperation, ResourceType
+from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.authz.models import Member, MembershipChange, Scope
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.message_queue import AmbiguousEvent
@@ -120,10 +120,10 @@ class ProjectRepository:
             return project_orm.dump()
 
     @with_db_transaction
-    @Authz.project_change(ProjectAuthzOperation.create)
+    @Authz.authz_change(AuthzOperation.create, ResourceType.project)
     @dispatch_message(avro_schema_v1.ProjectCreated)
     async def insert_project(
-        self, session: AsyncSession, user: base_models.APIUser, project=project_apispec.ProjectPost
+        self, *, session: AsyncSession, user: base_models.APIUser, project=project_apispec.ProjectPost
     ) -> models.Project:
         """Insert a new project entry."""
         ns = await self.group_repo.get_namespace(user, project.namespace)
@@ -162,10 +162,10 @@ class ProjectRepository:
         return project_dump
 
     @with_db_transaction
-    @Authz.project_change(ProjectAuthzOperation.change_visibility)
+    @Authz.authz_change(AuthzOperation.change_visibility, ResourceType.project)
     @dispatch_message(avro_schema_v1.ProjectUpdated)
     async def update_project(
-        self, session: AsyncSession, user: base_models.APIUser, project_id: str, etag: str | None = None, **payload
+        self, *, session: AsyncSession, user: base_models.APIUser, project_id: str, etag: str | None = None, **payload
     ) -> models.ProjectUpdate:
         """Update a project entry."""
         result = await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
@@ -225,10 +225,10 @@ class ProjectRepository:
         )
 
     @with_db_transaction
-    @Authz.project_change(ProjectAuthzOperation.delete)
+    @Authz.authz_change(AuthzOperation.delete, ResourceType.project)
     @dispatch_message(avro_schema_v1.ProjectRemoved)
     async def delete_project(
-        self, session: AsyncSession, user: base_models.APIUser, project_id: str
+        self, *, session: AsyncSession, user: base_models.APIUser, project_id: str
     ) -> models.Project | None:
         """Delete a cloud project entry."""
         authorized = self.authz.has_permission(user, ResourceType.project, project_id, Scope.DELETE)

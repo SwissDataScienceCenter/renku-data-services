@@ -134,8 +134,178 @@ def v1_schema() -> SpiceDBSchema:
         },
     )
 
+@pytest.fixture
+def v2_schema() -> SpiceDBSchema:
+    return SpiceDBSchema(
+        schemas.v2,
+        relationships=[
+            "platform:renku#admin@user:admin1",
+            "platform:renku#admin@user:admin2",
+            "project:project1#owner@user:user1",
+            "project:project1#project_namespace@user_namespace:user1",
+            "project:project1#viewer@user:*",  # project1 is public
+            "project:project1#viewer@anonymous_user:*",  # project1 is public
+            "project:project1#project_platform@platform:renku",
+            "project:project2#owner@user:user2",  # project 2 is private
+            "project:project2#project_namespace@group:group1",
+            "project:project2#viewer@user:project2_viewer",
+            "project:project2#editor@user:project2_editor",
+            "project:project2#project_platform@platform:renku",
+            "group:group1#owner@user:user2",
+            "group:group1#owner@user:group1_owner",
+            "group:group1#editor@user:group1_editor",
+            "group:group1#viewer@user:group1_viewer",
+        ],
+        assertions={
+            "assertTrue": [
+                # project1 owner can do everything
+                "project:project1#read@user:user1",
+                "project:project1#write@user:user1",
+                "project:project1#change_membership@user:user1",
+                "project:project1#delete@user:user1",
+                # admins can do everything
+                "project:project1#read@user:admin1",
+                "project:project1#write@user:admin1",
+                "project:project1#change_membership@user:admin1",
+                "project:project1#delete@user:admin1",
+                "project:project1#read@user:admin2",
+                "project:project1#write@user:admin2",
+                "project:project1#change_membership@user:admin2",
+                "project:project1#delete@user:admin2",
+                # project1 is public so everyone can read
+                "project:project1#read@user:random_user",
+                "project:project1#read@user:user2",
+                "project:project1#read@anonymous_user:anon_user",
+                # project2 is private, owner can do everything
+                "project:project2#read@user:user2",
+                "project:project2#write@user:user2",
+                "project:project2#change_membership@user:user2",
+                "project:project2#delete@user:user2",
+                # project2 editor can act as project editor
+                "project:project2#read@user:project2_editor",
+                "project:project2#write@user:project2_editor",
+                # project2 viewer can act as project viewer
+                "project:project2#read@user:project2_viewer",
+                # admins can do everything
+                "project:project2#read@user:admin1",
+                "project:project2#write@user:admin1",
+                "project:project2#change_membership@user:admin1",
+                "project:project2#delete@user:admin1",
+                "project:project2#read@user:admin2",
+                "project:project2#write@user:admin2",
+                "project:project2#change_membership@user:admin2",
+                "project:project2#delete@user:admin2",
+                # group owner can act as project2 owner
+                "project:project2#read@user:group1_owner",
+                "project:project2#write@user:group1_owner",
+                "project:project2#change_membership@user:group1_owner",
+                "project:project2#delete@user:group1_owner",
+                # group editor can act as project2 editor
+                "project:project2#read@user:group1_editor",
+                "project:project2#write@user:group1_editor",
+                # group viewer can act as project2 viewer
+                "project:project2#read@user:group1_viewer",
+            ],
+            "assertFalse": [
+                # the owner of project2 cannot act like owner of project1
+                "project:project1#write@user:user2",
+                "project:project1#change_membership@user:user2",
+                "project:project1#delete@user:user2",
+                # the owner of project1 cannot act like owner of project2
+                "project:project2#read@user:user1",
+                "project:project2#write@user:user1",
+                "project:project2#change_membership@user:user1",
+                "project:project2#delete@user:user1",
+                # anonymous or random users cannot do anything on private project like project2
+                "project:project2#read@user:random",
+                "project:project2#write@user:random",
+                "project:project2#change_membership@user:random",
+                "project:project2#delete@user:random",
+                "project:project2#read@anonymous_user:random",
+                "project:project2#write@anonymous_user:random",
+                "project:project2#change_membership@anonymous_user:random",
+                "project:project2#delete@anonymous_user:random",
+                # anonymous or random users cannot do anything on private project like project2
+                "project:project1#write@user:random",
+                "project:project1#change_membership@user:random",
+                "project:project1#delete@user:random",
+                "project:project1#write@anonymous_user:random",
+                "project:project1#change_membership@anonymous_user:random",
+                "project:project1#delete@anonymous_user:random",
+                # project2 editor cannot act like owner
+                "project:project2#change_membership@user:project2_editor",
+                "project:project2#delete@user:project2_editor",
+                # project2 viewer cannot act like owner or editor
+                "project:project2#write@user:project2_viewer",
+                "project:project2#change_membership@user:project2_viewer",
+                "project:project2#delete@user:project2_viewer",
+            ],
+        },
+        validation={
+            "project:project1#read": [
+                "[user:admin1] is <platform:renku#admin>",
+                "[user:admin2] is <platform:renku#admin>",
+                "[user:user1] is <project:project1#owner>",
+                # project1 is public so any user or any anonymous user can read
+                "[user:*] is <project:project1#viewer>",
+                "[anonymous_user:*] is <project:project1#viewer>",
+            ],
+            "project:project1#write": [
+                "[user:admin1] is <platform:renku#admin>",
+                "[user:admin2] is <platform:renku#admin>",
+                "[user:user1] is <project:project1#owner>",
+            ],
+            "project:project1#delete": [
+                "[user:admin1] is <platform:renku#admin>",
+                "[user:admin2] is <platform:renku#admin>",
+                "[user:user1] is <project:project1#owner>",
+            ],
+            "project:project1#change_membership": [
+                "[user:admin1] is <platform:renku#admin>",
+                "[user:admin2] is <platform:renku#admin>",
+                "[user:user1] is <project:project1#owner>",
+            ],
+            "project:project2#read": [
+                "[user:admin1] is <platform:renku#admin>",
+                "[user:admin2] is <platform:renku#admin>",
+                "[user:project2_editor] is <project:project2#editor>",
+                "[user:project2_viewer] is <project:project2#viewer>",
+                "[user:group1_owner] is <group:group1#owner>",
+                "[user:group1_editor] is <group:group1#editor>",
+                "[user:group1_viewer] is <group:group1#viewer>",
+                "[user:user2] is <group:group1#owner>/<project:project2#owner>",
+            ],
+            "project:project2#write": [
+                "[user:admin1] is <platform:renku#admin>",
+                "[user:admin2] is <platform:renku#admin>",
+                "[user:project2_editor] is <project:project2#editor>",
+                "[user:group1_owner] is <group:group1#owner>",
+                "[user:group1_editor] is <group:group1#editor>",
+                "[user:user2] is <group:group1#owner>/<project:project2#owner>",
+            ],
+            "project:project2#delete": [
+                "[user:admin1] is <platform:renku#admin>",
+                "[user:admin2] is <platform:renku#admin>",
+                "[user:group1_owner] is <group:group1#owner>",
+                "[user:user2] is <group:group1#owner>/<project:project2#owner>",
+            ],
+            "project:project2#change_membership": [
+                "[user:admin1] is <platform:renku#admin>",
+                "[user:admin2] is <platform:renku#admin>",
+                "[user:group1_owner] is <group:group1#owner>",
+                "[user:user2] is <group:group1#owner>/<project:project2#owner>",
+            ],
+        },
+    )
 
-def test_schema(tmp_path: Path, v1_schema: SpiceDBSchema):
+
+
+def test_v1_schema(tmp_path: Path, v1_schema: SpiceDBSchema):
     validation_file = tmp_path / "validate.yaml"
     v1_schema.to_yaml(validation_file)
+    check_call(["zed", "validate", validation_file.as_uri()])
+
+def test_v2_schema(tmp_path: Path, v2_schema: SpiceDBSchema):
+    validation_file = tmp_path / "validate.yaml"
+    v2_schema.to_yaml(validation_file)
     check_call(["zed", "validate", validation_file.as_uri()])

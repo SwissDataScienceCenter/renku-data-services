@@ -369,7 +369,7 @@ class GroupRepository:
 
     async def insert_user_namespace(
         self, user: schemas.UserORM, session: AsyncSession, retry_enumerate: int = 0, retry_random: bool = False
-    ) -> schemas.NamespaceORM:
+    ) -> models.Namespace:
         """Insert a new namespace for the user and optionally retry different variatioins to avoid collisions."""
         # session.add(user)  # reattach the user to the session
         original_slug = user.to_slug()
@@ -388,7 +388,7 @@ class GroupRepository:
                     raise errors.ValidationError(message=f"The user namespace slug {slug.value} already exists")
                 continue
             else:
-                return ns
+                return models.Namespace(ns.id, slug=ns.slug, created_by=ns.user_id, kind=models.NamespaceKind.user)
         if not retry_random:
             raise errors.ValidationError(
                 message=f"Cannot create generate a unique namespace slug for the user with ID {user.keycloak_id}"
@@ -399,4 +399,4 @@ class GroupRepository:
         slug = base_models.Slug.from_name(original_slug.value.lower() + suffix)
         ns = schemas.NamespaceORM(slug.value, user_id=user.keycloak_id)
         session.add(ns)
-        return ns
+        return models.Namespace(ns.id, slug=ns.slug, created_by=ns.user_id, kind=models.NamespaceKind.user)
