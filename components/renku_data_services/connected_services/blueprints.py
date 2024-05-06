@@ -208,9 +208,6 @@ class OAuth2ConnectionsBP(CustomBlueprint):
             token = await self.connected_services_repo.get_oauth2_connection_token(
                 connection_id=connection_id, user=user
             )
-            data = token.dump_for_api()
-            # data = dict(access_token=token.access_token, expires_at=token.expires_at)
-            # data["expires_at_iso"] = datetime.datetime.fromtimestamp(token.expires_at, datetime.UTC).isoformat()
-            return json(data)
+            return json(token.dump_for_api())
 
         return "/oauth2/connections/<connection_id>/token", ["GET"], _get_token
