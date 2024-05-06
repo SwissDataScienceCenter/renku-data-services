@@ -19,7 +19,6 @@ from renku_data_services.authz.models import Member, MembershipChange, Scope
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.message_queue import AmbiguousEvent
 from renku_data_services.message_queue.avro_models.io.renku.events import v1 as avro_schema_v1
-from renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import dispatch_message
@@ -58,6 +57,8 @@ class ProjectRepository:
         project_ids = self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
 
         async with self.session_maker() as session:
+            # NOTE: without awaiting the connnection below there are failures about how a connection has not
+            # been established in the DB but the query is getting executed.
             _ = await session.connection()
             stmt = select(schemas.ProjectORM)
             stmt = stmt.where(schemas.ProjectORM.id.in_(project_ids))
@@ -324,7 +325,7 @@ class ProjectMemberRepository:
 
     @with_db_transaction
     @_project_exists
-    @dispatch_message(avro_schema_v2.ProjectMemberRemoved)
+    @dispatch_message(AmbiguousEvent.PROJECT_MEMBERSHIP_CHANGED)
     async def delete_members(
         self, session: AsyncSession, user: base_models.APIUser, project_id: str, user_ids: list[str]
     ) -> list[MembershipChange]:

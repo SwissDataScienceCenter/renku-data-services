@@ -58,7 +58,7 @@ class _Relation(StrEnum):
     project_platform: str = "project_platform"
 
     @classmethod
-    def from_role(cls, role: Role)->Self:
+    def from_role(cls, role: Role):
         match role:
             case Role.OWNER:
                 return cls.owner
@@ -93,9 +93,7 @@ class ProjectAuthzOperation(StrEnum):
 
     create: str = "create"
     delete: str = "delete"
-    edit: str = "edit"
     change_visibility: str = "change_visibilty"
-    change_membership: str = "change_membership"
 
 
 class _AuthzConverter:
@@ -128,6 +126,19 @@ class _AuthzConverter:
     @staticmethod
     def all_users() -> ObjectReference:
         return ObjectReference(object_type=ResourceType.user, object_id="*")
+
+    @staticmethod
+    def to_object(resource_type: ResourceType, resource_id: str | int) -> ObjectReference:
+        match (resource_type, resource_id):
+            case (ResourceType.project, sid) if isinstance(sid, str):
+                return _AuthzConverter.project(sid)
+            case (ResourceType.user, sid) if isinstance(sid, str) or sid is None:
+                return _AuthzConverter.user(sid)
+            case (ResourceType.anonymous_user, _):
+                return _AuthzConverter.anonymous_users()
+        raise errors.ProgrammingError(
+            message=f"Unexpected or unknown resource type when checking permissions {resource_type}"
+        )
 
 
 def _is_allowed_on_project(operation: Scope):
@@ -177,18 +188,6 @@ class Authz:
     client: Client
     _platform: ClassVar[ObjectReference] = field(default=_AuthzConverter.platform())
 
-    def _to_object(self, resource_type: ResourceType, resource_id: str | int) -> ObjectReference:
-        match (resource_type, resource_id):
-            case (ResourceType.project, sid) if isinstance(sid, str):
-                return _AuthzConverter.project(sid)
-            case (ResourceType.user, sid) if isinstance(sid, str) or sid is None:
-                return _AuthzConverter.user(sid)
-            case (ResourceType.anonymous_user, _):
-                return _AuthzConverter.anonymous_users()
-        raise errors.ProgrammingError(
-            message=f"Unexpected or unknown resource type when checking permissions {resource_type}"
-        )
-
     def _has_permission(
         self, user: base_models.APIUser, resource_type: ResourceType, resource_id: str | None, scope: Scope
     ) -> tuple[bool, ZedToken]:
@@ -197,9 +196,11 @@ class Authz:
             raise errors.ProgrammingError(
                 message=f"Cannot check permissions on a resource of type {resource_type} with missing resource ID."
             )
-        res = self._to_object(resource_type, resource_id)
+        res = _AuthzConverter.to_object(resource_type, resource_id)
         sub = SubjectReference(
-            object=self._to_object(ResourceType.user, user.id) if user.id else _AuthzConverter.anonymous_user()
+            object=_AuthzConverter.to_object(ResourceType.user, user.id)
+            if user.id
+            else _AuthzConverter.anonymous_user()
         )
         response: CheckPermissionResponse = self.client.CheckPermission(
             CheckPermissionRequest(
@@ -228,7 +229,9 @@ class Authz:
                 message=f"User with ID {requested_by.id} cannot check the permissions of another user with ID {user_id}"
             )
         sub = SubjectReference(
-            object=self._to_object(ResourceType.user, user_id) if user_id else _AuthzConverter.anonymous_user()
+            object=_AuthzConverter.to_object(ResourceType.user, user_id)
+            if user_id
+            else _AuthzConverter.anonymous_user()
         )
         ids: list[str] = []
         responses: Iterator[LookupResourcesResponse] = self.client.LookupResources(
@@ -254,7 +257,7 @@ class Authz:
         zed_token: ZedToken | None = None,
     ) -> list[str]:
         """Get all user IDs that have a specific permission on a specific reosurce."""
-        res = self._to_object(resource_type, resource_id)
+        res = _AuthzConverter.to_object(resource_type, resource_id)
         ids: list[str] = []
         responses: Iterator[LookupSubjectsResponse] = self.client.LookupSubjects(
             LookupSubjectsRequest(
@@ -610,7 +613,15 @@ class Authz:
             optional_subject_filter=SubjectFilter(subject_type=ResourceType.user),
             optional_relation=_Relation.owner.value,
         )
-        existing_owners_rels: list[ReadRelationshipsResponse] | None = None
+        existing_owners: set[str] = {
+            rel.relationship.subject.object.object_id
+            for rel in self.client.ReadRelationships(
+                ReadRelationshipsRequest(
+                    consistency=Consistency(at_least_as_fresh=zed_token),
+                    relationship_filter=existing_owners_filter,
+                )
+            )
+        }
         for user_id in user_ids:
             if user_id == "*":
                 raise errors.ValidationError(message="Cannot remove a project member with ID '*'")
@@ -627,21 +638,16 @@ class Authz:
             # NOTE: We have to make sure that when we undo we only put back relationships that existed already.
             # Blindly undoing everything that was passed in may result in adding things that weren't there before.
             for existing_rel in existing_rels:
-                if existing_rel.relationship.relation == _Relation.owner.value:
-                    if existing_owners_rels is None:
-                        existing_owners_rels = list(
-                            self.client.ReadRelationships(
-                                ReadRelationshipsRequest(
-                                    consistency=Consistency(at_least_as_fresh=zed_token),
-                                    relationship_filter=existing_owners_filter,
-                                )
-                            )
-                        )
-                    if len(existing_owners_rels) == 1:
+                if (
+                    existing_rel.relationship.relation == _Relation.owner.value
+                    and user_id in existing_owners
+                ):
+                    if len(existing_owners) == 1:
                         raise errors.Unauthorized(
                             message="You are trying to remove the single last owner of the project, "
                             "which is not allowed. Assign another user as owner and then retry."
                         )
+                    existing_owners.remove(user_id)
                 add_members.append(
                     RelationshipUpdate(
                         operation=RelationshipUpdate.OPERATION_TOUCH, relationship=existing_rel.relationship
@@ -686,7 +692,6 @@ class Authz:
 
     def _add_admin(self, user_id: str) -> _AuthzChange:
         """Add a deployment-wide administrator in the authorization database."""
-        existing_admin_ids = self._get_admin_user_ids()
         rel = Relationship(
             resource=_AuthzConverter.platform(),
             relation=_Relation.admin.value,
@@ -695,11 +700,9 @@ class Authz:
         apply = WriteRelationshipsRequest(
             updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=rel)]
         )
-        undo = WriteRelationshipsRequest()
-        if user_id in existing_admin_ids:
-            undo = WriteRelationshipsRequest(
-                updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=rel)]
-            )
+        undo = WriteRelationshipsRequest(
+            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=rel)]
+        )
         return _AuthzChange(apply=apply, undo=undo)
 
     def _remove_admin(self, user_id: str) -> _AuthzChange:
