@@ -15,10 +15,10 @@ async def main():
     config = SyncConfig.from_env()
     if config.total_user_sync:
         await config.syncer.users_sync(config.kc_api)
-        sync_admins_from_keycloak(config.kc_api, Authz(config.authz.authz_client()))
+        await sync_admins_from_keycloak(config.kc_api, Authz(config.authz_config))
     else:
         await config.syncer.events_sync(config.kc_api)
-        sync_admins_from_keycloak(config.kc_api, Authz(config.authz.authz_client()))
+        await sync_admins_from_keycloak(config.kc_api, Authz(config.authz_config))
 
 
 if __name__ == "__main__":

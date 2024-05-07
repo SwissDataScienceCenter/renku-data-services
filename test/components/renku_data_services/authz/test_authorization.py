@@ -1,4 +1,5 @@
 import pytest
+import pytest_asyncio
 from authzed.api.v1 import (
     Relationship,
     RelationshipUpdate,
@@ -20,8 +21,8 @@ regular_user1 = APIUser(is_admin=False, id="user1-id", access_token="some-token1
 regular_user2 = APIUser(is_admin=False, id="user2-id", access_token="some-token2", full_name="some-user2")  # nosec B106
 
 
-@pytest.fixture
-def bootstrap_admins(app_config: Config):
+@pytest_asyncio.fixture
+async def bootstrap_admins(app_config: Config):
     authz = app_config.authz
     admins = [admin_user]
     rels: list[RelationshipUpdate] = []
@@ -34,11 +35,12 @@ def bootstrap_admins(app_config: Config):
                 relationship=Relationship(resource=_AuthzConverter.platform(), relation="admin", subject=sub),
             )
         )
-    authz.client.WriteRelationships(WriteRelationshipsRequest(updates=rels))
+    await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=rels))
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize("public_project", [True, False])
-def test_adding_deleting_project(app_config: Config, bootstrap_admins, public_project: bool):
+async def test_adding_deleting_project(app_config: Config, bootstrap_admins, public_project: bool):
     project_owner = regular_user1
     assert project_owner.id
     authz = app_config.authz
@@ -52,35 +54,36 @@ def test_adding_deleting_project(app_config: Config, bootstrap_admins, public_pr
         created_by=project_owner.id,
     )
     authz_changes = authz._add_project(project)
-    authz.client.WriteRelationships(authz_changes.apply)
-    assert authz.has_permission(project_owner, ResourceType.project, project_id, Scope.DELETE)
-    assert authz.has_permission(project_owner, ResourceType.project, project_id, Scope.WRITE)
-    assert authz.has_permission(project_owner, ResourceType.project, project_id, Scope.READ)
-    assert authz.has_permission(admin_user, ResourceType.project, project_id, Scope.DELETE)
-    assert authz.has_permission(admin_user, ResourceType.project, project_id, Scope.WRITE)
-    assert authz.has_permission(admin_user, ResourceType.project, project_id, Scope.READ)
-    assert public_project == authz.has_permission(anon_user, ResourceType.project, project_id, Scope.READ)
-    assert public_project == authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.READ)
-    assert not authz.has_permission(anon_user, ResourceType.project, project_id, Scope.WRITE)
-    assert not authz.has_permission(anon_user, ResourceType.project, project_id, Scope.DELETE)
-    assert not authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.WRITE)
-    assert not authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.DELETE)
-    authz_changes = authz._remove_project(project_owner, project)
-    authz.client.WriteRelationships(authz_changes.apply)
-    assert not authz.has_permission(admin_user, ResourceType.project, project_id, Scope.READ)
-    assert not authz.has_permission(admin_user, ResourceType.project, project_id, Scope.WRITE)
-    assert not authz.has_permission(admin_user, ResourceType.project, project_id, Scope.DELETE)
-    assert not authz.has_permission(project_owner, ResourceType.project, project_id, Scope.READ)
-    assert not authz.has_permission(project_owner, ResourceType.project, project_id, Scope.WRITE)
-    assert not authz.has_permission(project_owner, ResourceType.project, project_id, Scope.DELETE)
-    assert not authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.READ)
-    assert not authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.WRITE)
-    assert not authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.DELETE)
+    await authz.client.WriteRelationships(authz_changes.apply)
+    assert await authz.has_permission(project_owner, ResourceType.project, project_id, Scope.DELETE)
+    assert await authz.has_permission(project_owner, ResourceType.project, project_id, Scope.WRITE)
+    assert await authz.has_permission(project_owner, ResourceType.project, project_id, Scope.READ)
+    assert await authz.has_permission(admin_user, ResourceType.project, project_id, Scope.DELETE)
+    assert await authz.has_permission(admin_user, ResourceType.project, project_id, Scope.WRITE)
+    assert await authz.has_permission(admin_user, ResourceType.project, project_id, Scope.READ)
+    assert public_project == await authz.has_permission(anon_user, ResourceType.project, project_id, Scope.READ)
+    assert public_project == await authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.READ)
+    assert not await authz.has_permission(anon_user, ResourceType.project, project_id, Scope.WRITE)
+    assert not await authz.has_permission(anon_user, ResourceType.project, project_id, Scope.DELETE)
+    assert not await authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.WRITE)
+    assert not await authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.DELETE)
+    authz_changes = await authz._remove_project(project_owner, project)
+    await authz.client.WriteRelationships(authz_changes.apply)
+    assert not await authz.has_permission(admin_user, ResourceType.project, project_id, Scope.READ)
+    assert not await authz.has_permission(admin_user, ResourceType.project, project_id, Scope.WRITE)
+    assert not await authz.has_permission(admin_user, ResourceType.project, project_id, Scope.DELETE)
+    assert not await authz.has_permission(project_owner, ResourceType.project, project_id, Scope.READ)
+    assert not await authz.has_permission(project_owner, ResourceType.project, project_id, Scope.WRITE)
+    assert not await authz.has_permission(project_owner, ResourceType.project, project_id, Scope.DELETE)
+    assert not await authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.READ)
+    assert not await authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.WRITE)
+    assert not await authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.DELETE)
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize("public_project", [True, False])
 @pytest.mark.parametrize("granted_role", [Role.VIEWER, Role.EDITOR, Role.OWNER])
-def test_granting_access(app_config: Config, bootstrap_admins, public_project: bool, granted_role: Role):
+async def test_granting_access(app_config: Config, bootstrap_admins, public_project: bool, granted_role: Role):
     project_owner = regular_user1
     assert project_owner.id
     assert regular_user2.id
@@ -95,30 +98,31 @@ def test_granting_access(app_config: Config, bootstrap_admins, public_project: b
         created_by=project_owner.id,
     )
     authz_changes = authz._add_project(project)
-    authz.client.WriteRelationships(authz_changes.apply)
-    assert public_project == authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.READ)
-    assert not authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.WRITE)
-    assert not authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.DELETE)
-    assert not authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.CHANGE_MEMBERSHIP)
-    assert public_project == authz.has_permission(anon_user, ResourceType.project, project_id, Scope.READ)
+    await authz.client.WriteRelationships(authz_changes.apply)
+    assert public_project == await authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.READ)
+    assert not await authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.WRITE)
+    assert not await authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.DELETE)
+    assert not await authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.CHANGE_MEMBERSHIP)
+    assert public_project == await authz.has_permission(anon_user, ResourceType.project, project_id, Scope.READ)
     new_member = Member(granted_role, regular_user2.id, project_id)
-    authz.upsert_project_members(project_owner, ResourceType.project, project.id, [new_member])
-    granted_role_members = authz.members(project_owner, ResourceType.project, project_id, granted_role)
+    await authz.upsert_project_members(project_owner, ResourceType.project, project.id, [new_member])
+    granted_role_members = await authz.members(project_owner, ResourceType.project, project_id, granted_role)
     assert regular_user2.id in [i.user_id for i in granted_role_members]
-    assert authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.READ)
-    assert (granted_role in [Role.OWNER, Role.EDITOR]) == authz.has_permission(
+    assert await authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.READ)
+    assert (granted_role in [Role.OWNER, Role.EDITOR]) == await authz.has_permission(
         regular_user2, ResourceType.project, project_id, Scope.WRITE
     )
-    assert (granted_role == Role.OWNER) == authz.has_permission(
+    assert (granted_role == Role.OWNER) == await authz.has_permission(
         regular_user2, ResourceType.project, project_id, Scope.DELETE
     )
-    assert (granted_role == Role.OWNER) == authz.has_permission(
+    assert (granted_role == Role.OWNER) == await authz.has_permission(
         regular_user2, ResourceType.project, project_id, Scope.CHANGE_MEMBERSHIP
     )
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize("public_project", [True, False])
-def test_listing_users_with_access(app_config: Config, public_project: bool, bootstrap_admins):
+async def test_listing_users_with_access(app_config: Config, public_project: bool, bootstrap_admins):
     project_owner = regular_user1
     assert project_owner.id
     assert regular_user2.id
@@ -143,9 +147,9 @@ def test_listing_users_with_access(app_config: Config, public_project: bool, boo
     )
     for p in [project1, project2]:
         changes = authz._add_project(p)
-        authz.client.WriteRelationships(changes.apply)
-    proj1_users = set(authz.users_with_permission(project_owner, ResourceType.project, project1_id, Scope.READ))
-    proj2_users = set(authz.users_with_permission(regular_user2, ResourceType.project, project2_id, Scope.READ))
+        await authz.client.WriteRelationships(changes.apply)
+    proj1_users = set(await authz.users_with_permission(project_owner, ResourceType.project, project1_id, Scope.READ))
+    proj2_users = set(await authz.users_with_permission(regular_user2, ResourceType.project, project2_id, Scope.READ))
     if public_project:
         assert proj1_users == {project_owner.id, admin_user.id, "*"}
     else:
@@ -153,7 +157,8 @@ def test_listing_users_with_access(app_config: Config, public_project: bool, boo
     assert proj2_users == {regular_user2.id, admin_user.id}
 
 
-def test_listing_projects_with_access(app_config: Config, bootstrap_admins):
+@pytest.mark.asyncio
+async def test_listing_projects_with_access(app_config: Config, bootstrap_admins):
     authz = app_config.authz
     public_project_id = str(ULID())
     private_project_id1 = str(ULID())
@@ -187,64 +192,76 @@ def test_listing_projects_with_access(app_config: Config, bootstrap_admins):
     )
     for p in [public_project, private_project1, private_project2]:
         changes = authz._add_project(p)
-        authz.client.WriteRelationships(changes.apply)
+        await authz.client.WriteRelationships(changes.apply)
     assert {public_project_id, private_project_id1, private_project_id2} == set(
-        authz.resources_with_permission(project_owner, regular_user1.id, ResourceType.project, Scope.DELETE)
+        await authz.resources_with_permission(project_owner, regular_user1.id, ResourceType.project, Scope.DELETE)
     )
     assert {public_project_id, private_project_id1, private_project_id2} == set(
-        authz.resources_with_permission(project_owner, regular_user1.id, ResourceType.project, Scope.WRITE)
+        await authz.resources_with_permission(project_owner, regular_user1.id, ResourceType.project, Scope.WRITE)
     )
     assert {public_project_id, private_project_id1, private_project_id2} == set(
-        authz.resources_with_permission(project_owner, regular_user1.id, ResourceType.project, Scope.READ)
+        await authz.resources_with_permission(project_owner, regular_user1.id, ResourceType.project, Scope.READ)
     )
     assert {public_project_id, private_project_id1, private_project_id2} == set(
-        authz.resources_with_permission(admin_user, admin_user.id, ResourceType.project, Scope.DELETE)
+        await authz.resources_with_permission(admin_user, admin_user.id, ResourceType.project, Scope.DELETE)
     )
     assert {public_project_id, private_project_id1, private_project_id2} == set(
-        authz.resources_with_permission(admin_user, admin_user.id, ResourceType.project, Scope.WRITE)
+        await authz.resources_with_permission(admin_user, admin_user.id, ResourceType.project, Scope.WRITE)
     )
     assert {public_project_id, private_project_id1, private_project_id2} == set(
-        authz.resources_with_permission(admin_user, admin_user.id, ResourceType.project, Scope.READ)
+        await authz.resources_with_permission(admin_user, admin_user.id, ResourceType.project, Scope.READ)
     )
     with pytest.raises(errors.Unauthorized):
-        authz.resources_with_permission(anon_user, project_owner.id, ResourceType.project, Scope.WRITE)
-        authz.resources_with_permission(anon_user, project_owner.id, ResourceType.project, Scope.DELETE)
-        authz.resources_with_permission(anon_user, project_owner.id, ResourceType.project, Scope.READ)
-        authz.resources_with_permission(regular_user2, project_owner.id, ResourceType.project, Scope.WRITE)
-        authz.resources_with_permission(regular_user2, project_owner.id, ResourceType.project, Scope.DELETE)
-        authz.resources_with_permission(regular_user2, project_owner.id, ResourceType.project, Scope.READ)
+        await authz.resources_with_permission(anon_user, project_owner.id, ResourceType.project, Scope.WRITE)
+        await authz.resources_with_permission(anon_user, project_owner.id, ResourceType.project, Scope.DELETE)
+        await authz.resources_with_permission(anon_user, project_owner.id, ResourceType.project, Scope.READ)
+        await authz.resources_with_permission(regular_user2, project_owner.id, ResourceType.project, Scope.WRITE)
+        await authz.resources_with_permission(regular_user2, project_owner.id, ResourceType.project, Scope.DELETE)
+        await authz.resources_with_permission(regular_user2, project_owner.id, ResourceType.project, Scope.READ)
     assert {public_project_id} == set(
-        authz.resources_with_permission(anon_user, anon_user.id, ResourceType.project, Scope.READ)
+        await authz.resources_with_permission(anon_user, anon_user.id, ResourceType.project, Scope.READ)
     )
     assert {public_project_id} == set(
-        authz.resources_with_permission(regular_user2, regular_user2.id, ResourceType.project, Scope.READ)
+        await authz.resources_with_permission(regular_user2, regular_user2.id, ResourceType.project, Scope.READ)
     )
-    authz.upsert_project_members(
+    await authz.upsert_project_members(
         project_owner,
         ResourceType.project,
         private_project1.id,
         [Member(Role.VIEWER, regular_user2.id, private_project_id1)],
     )
     assert {public_project_id, private_project_id1} == set(
-        authz.resources_with_permission(regular_user2, regular_user2.id, ResourceType.project, Scope.READ)
+        await authz.resources_with_permission(regular_user2, regular_user2.id, ResourceType.project, Scope.READ)
     )
     assert (
-        len(set(authz.resources_with_permission(regular_user2, regular_user2.id, ResourceType.project, Scope.WRITE)))
+        len(
+            set(
+                await authz.resources_with_permission(
+                    regular_user2, regular_user2.id, ResourceType.project, Scope.WRITE
+                )
+            )
+        )
         == 0
     )
     assert (
-        len(set(authz.resources_with_permission(regular_user2, regular_user2.id, ResourceType.project, Scope.DELETE)))
+        len(
+            set(
+                await authz.resources_with_permission(
+                    regular_user2, regular_user2.id, ResourceType.project, Scope.DELETE
+                )
+            )
+        )
         == 0
     )
     # Test project deletion
-    changes = authz._remove_project(project_owner, private_project1)
-    authz.client.WriteRelationships(changes.apply)
+    changes = await authz._remove_project(project_owner, private_project1)
+    await authz.client.WriteRelationships(changes.apply)
     assert private_project_id1 not in set(
-        authz.resources_with_permission(admin_user, project_owner.id, ResourceType.project, Scope.READ)
+        await authz.resources_with_permission(admin_user, project_owner.id, ResourceType.project, Scope.READ)
     )
     assert private_project_id1 not in set(
-        authz.resources_with_permission(admin_user, regular_user2.id, ResourceType.project, Scope.READ)
+        await authz.resources_with_permission(admin_user, regular_user2.id, ResourceType.project, Scope.READ)
     )
     assert private_project_id1 not in set(
-        authz.resources_with_permission(admin_user, admin_user.id, ResourceType.project, Scope.DELETE)
+        await authz.resources_with_permission(admin_user, admin_user.id, ResourceType.project, Scope.DELETE)
     )

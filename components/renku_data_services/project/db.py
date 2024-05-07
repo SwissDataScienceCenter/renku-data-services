@@ -54,7 +54,7 @@ class ProjectRepository:
         pagination: PaginationRequest,
     ) -> tuple[list[models.Project], int]:
         """Get all projects from the database."""
-        project_ids = self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
+        project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
 
         async with self.session_maker() as session:
             # NOTE: without awaiting the connnection below there are failures about how a connection has not
@@ -231,8 +231,8 @@ class ProjectRepository:
     async def delete_project(
         self, session: AsyncSession, user: base_models.APIUser, project_id: str
     ) -> models.Project | None:
-        """Delete a cloud project entry."""
-        authorized = self.authz.has_permission(user, ResourceType.project, project_id, Scope.DELETE)
+        """Delete a project."""
+        authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.DELETE)
         if not authorized:
             raise errors.MissingResourceError(
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
@@ -295,7 +295,7 @@ class ProjectMemberRepository:
     @_project_exists
     async def get_members(self, session: AsyncSession, user: base_models.APIUser, project_id: str) -> list[Member]:
         """Get all members of a project."""
-        members = self.authz.members(user, ResourceType.project, project_id)
+        members = await self.authz.members(user, ResourceType.project, project_id)
         members = [member for member in members if member.user_id and member.user_id != "*"]
         return members
 
@@ -320,7 +320,7 @@ class ProjectMemberRepository:
                 f"{requested_member_ids_set.difference(existing_member_ids)} cannot be found"
             )
 
-        output = self.authz.upsert_project_members(user, ResourceType.project, project_id, members)
+        output = await self.authz.upsert_project_members(user, ResourceType.project, project_id, members)
         return output
 
     @with_db_transaction
@@ -333,5 +333,5 @@ class ProjectMemberRepository:
         if len(user_ids) == 0:
             raise errors.ValidationError(message="Please request at least 1 member to be removed from the project")
 
-        members = self.authz.remove_project_members(user, ResourceType.project, project_id, user_ids)
+        members = await self.authz.remove_project_members(user, ResourceType.project, project_id, user_ids)
         return members

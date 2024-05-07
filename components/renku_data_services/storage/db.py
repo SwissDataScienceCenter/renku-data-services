@@ -188,6 +188,6 @@ class StorageV2Repository(BaseStorageRepository):
         scope = authz_models.Scope.WRITE if minimum_access_level == authz_models.Role.OWNER else authz_models.Scope.READ
         output = []
         for id in project_ids:
-            if self.project_authz.has_permission(user, ResourceType.project, id, scope):
+            if await self.project_authz.has_permission(user, ResourceType.project, id, scope):
                 output.append(id)
         return output

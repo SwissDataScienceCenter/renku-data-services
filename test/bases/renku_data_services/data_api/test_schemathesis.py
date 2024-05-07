@@ -44,6 +44,7 @@ schema = schemathesis.from_pytest_fixture(
 )
 
 
+@pytest.mark.schemathesis
 @pytest.mark.asyncio
 @schema.parametrize(validate_schema=True)
 @settings(max_examples=5, suppress_health_check=[HealthCheck.filter_too_much, HealthCheck.data_too_large])
