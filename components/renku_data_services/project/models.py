@@ -46,6 +46,7 @@ class Project(BaseModel):
     updated_at: datetime | None = Field(default=None)
     repositories: list[Repository] = Field(default_factory=list)
     description: Optional[str] = None
+    keywords: Optional[list[str]] = None
 
     @property
     def etag(self) -> str | None:
@@ -81,4 +82,5 @@ class Project(BaseModel):
             updated_at=data.get("updated_at"),
             repositories=[Repository(r) for r in data.get("repositories", [])],
             description=data.get("description"),
+            keywords=data.get("keywords")
         )

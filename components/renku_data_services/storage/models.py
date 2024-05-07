@@ -49,7 +49,7 @@ class RCloneConfig(BaseModel, MutableMapping):
 class CloudStorage(BaseModel):
     """Cloud Storage model."""
 
-    project_id: str = Field(pattern=r"^\d+$")
+    project_id: str = Field(pattern=r"^[A-Z0-9]+$")
     name: str = Field(min_length=3)
     storage_type: str = Field(pattern=r"^[a-z0-9]+$")
     configuration: RCloneConfig

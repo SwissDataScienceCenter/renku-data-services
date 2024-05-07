@@ -321,7 +321,7 @@ class ResourcePoolRepository(_Base):
             new_classes_coroutines = []
             for key, val in kwargs.items():
                 match key:
-                    case "name" | "public" | "default":
+                    case "name" | "public" | "default" | "idle_threshold" | "hibernation_threshold":
                         setattr(rp, key, val)
                     case "quota":
                         if val is None:
