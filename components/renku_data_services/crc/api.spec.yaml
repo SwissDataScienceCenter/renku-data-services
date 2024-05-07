@@ -1391,13 +1391,13 @@ components:
       example: false
     IdleThreshold:
       type: integer
-      description: A threshold in seconds after which a session gets hibernated
-      minimum: 1
+      description: A threshold in seconds after which a session gets hibernated (0 means no threshold)
+      minimum: 0
       maximum: 2147483647
     HibernationThreshold:
       type: integer
-      description: A threshold in seconds after which a session gets culled/deleted
-      minimum: 1
+      description: A threshold in seconds after which a session gets culled/deleted (0 means no threshold)
+      minimum: 0
       maximum: 2147483647
     K8sLabelList:
       type: array
