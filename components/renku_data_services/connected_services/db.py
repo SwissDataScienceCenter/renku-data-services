@@ -271,11 +271,12 @@ class ConnectedServicesRepository:
                 if client.kind == ProviderKind.github
                 else urljoin(client.api_url, "api/v4/user")
             )
-            headers = {
-                "Accept": "application/vnd.github+json",
-                "X-GitHub-Api-Version": "2022-11-28",
-            } if client.kind == ProviderKind.github else None
-            response = await oauth2_client.get(request_url, headers=headers)
+            # headers = {
+            #     "Accept": "application/vnd.github+json",
+            #     "X-GitHub-Api-Version": "2022-11-28",
+            # } if client.kind == ProviderKind.github else None
+            # response = await oauth2_client.get(request_url, headers=headers)
+            response = await oauth2_client.get(request_url)
 
             logger.info(f"Account response: {response}")
             logger.info(f"Account Content-Type: {response.headers.get("Content-Type")}")
