@@ -276,8 +276,11 @@ class ConnectedServicesRepository:
             if response.status_code > 200:
                 raise errors.Unauthorized(message="Could not get account information.")
 
-            logger.info(f"Accout: {response.json()}")
-            account = models.ConnectedAccount.model_validate(response.json())
+            account = (
+                models.GitHubConnectedAccount.model_validate(response.json()).to_connected_account()
+                if client.kind == ProviderKind.github
+                else models.ConnectedAccount.model_validate(response.json())
+            )
             return account
 
     async def get_oauth2_connection_token(self, connection_id: str, user: base_models.APIUser) -> models.OAuth2TokenSet:
