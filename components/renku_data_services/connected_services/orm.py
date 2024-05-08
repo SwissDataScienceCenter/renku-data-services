@@ -68,6 +68,8 @@ class OAuth2ClientORM(BaseORM):
         """The authorization URL for the OAuth2 protocol."""
         if not self.url:
             raise errors.ValidationError(message=f"URL not defined for provider {self.id}.")
+        if self.kind == ProviderKind.github:
+            return urljoin(self.url, "login/oauth/authorize")
         return urljoin(self.url, "oauth/authorize")
 
     @property
@@ -75,6 +77,8 @@ class OAuth2ClientORM(BaseORM):
         """The token endpoint URL for the OAuth2 protocol."""
         if not self.url:
             raise errors.ValidationError(message=f"URL not defined for provider {self.id}.")
+        if self.kind == ProviderKind.github:
+            return urljoin(self.url, "login/oauth/access_token")
         return urljoin(self.url, "oauth/token")
 
 
