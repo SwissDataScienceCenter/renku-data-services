@@ -201,7 +201,7 @@ async def test_secret_encryption_decryption(
         ],
     }
 
-    _, response = await secrets_sanic_client.post("/api/secrets/k8s_secret", headers=user_headers, json=payload)
+    _, response = await secrets_sanic_client.post("/api/secrets/kubernetes", headers=user_headers, json=payload)
     assert response.status_code == 201
     assert "test-secret" in secrets_storage_app_config.core_client.secrets
     k8s_secret = secrets_storage_app_config.core_client.secrets["test-secret"].data
