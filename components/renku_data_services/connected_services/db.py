@@ -271,18 +271,7 @@ class ConnectedServicesRepository:
                 "Accept": "application/vnd.github+json",
                 "X-GitHub-Api-Version": "2022-11-28",
             } if client.kind == ProviderKind.github else None
-            # request = oauth2_client.build_request("GET", request_url)
-            # logger.info(f"Account request: {request}")
-            # logger.info(f"Account headers: {request.headers}")
-            # await oauth2_client.ensure_active_token(oauth2_client.token)
-            # auth = oauth2_client.token_auth
-            # logger.info(f"Account request auth: {auth}")
-            # response = await oauth2_client.send(request, auth=auth)
             response = await oauth2_client.get(request_url, headers=headers)
-            # response = await oauth2_client.get(request_url)
-
-            logger.info(f"Account response: {response}")
-            logger.info(f"Account Content-Type: {response.headers.get("Content-Type")}")
 
             if response.status_code > 200:
                 raise errors.Unauthorized(message="Could not get account information.")
