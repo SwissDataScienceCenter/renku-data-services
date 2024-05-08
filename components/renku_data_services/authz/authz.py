@@ -94,7 +94,7 @@ class ProjectAuthzOperation(StrEnum):
 
     create: str = "create"
     delete: str = "delete"
-    change_visibility: str = "change_visibilty"
+    update: str = "update"
 
 
 class _AuthzConverter:
@@ -361,7 +361,7 @@ class Authz:
                         case ProjectAuthzOperation.delete if project is None:
                             # NOTE: This means that the project does not exist in the first place so nothing was deleted
                             pass
-                        case ProjectAuthzOperation.change_visibility if isinstance(project, ProjectUpdate):
+                        case ProjectAuthzOperation.update if isinstance(project, ProjectUpdate):
                             if project.old.visibility != project.new.visibility:
                                 authz_change = await db_repo.authz._update_project_visibility(user, project.new)
                         case _:

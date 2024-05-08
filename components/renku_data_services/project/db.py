@@ -6,7 +6,6 @@ import functools
 from asyncio import gather
 from collections.abc import Callable
 from datetime import UTC, datetime
-from enum import Enum
 from typing import cast
 
 from sqlalchemy import delete, func, select, update
@@ -163,7 +162,7 @@ class ProjectRepository:
         return project_dump
 
     @with_db_transaction
-    @Authz.project_change(ProjectAuthzOperation.change_visibility)
+    @Authz.project_change(ProjectAuthzOperation.update)
     @dispatch_message(avro_schema_v1.ProjectUpdated)
     async def update_project(
         self, session: AsyncSession, user: base_models.APIUser, project_id: str, etag: str | None = None, **payload
@@ -176,12 +175,14 @@ class ProjectRepository:
         old_project = project.dump()
 
         required_scope = Scope.WRITE
-        if "visibility" in payload and (
-            (isinstance(payload["visibility"], Enum) and payload["visibility"].value != old_project.visibility.value)
-            or (
-                isinstance(payload["visibility"], str) and payload["visibility"].lower() != old_project.visibility.value
-            )
-        ):
+        new_visibility = payload.get("visibility")
+        if isinstance(new_visibility, str):
+            new_visibility = models.Visibility(new_visibility)
+        if "visibility" in payload and new_visibility != old_project.visibility:
+            # NOTE: changing the visibility requires the user to be owner which means they should have DELETE permission
+            required_scope = Scope.DELETE
+        if "namespace" in payload and payload["namespace"] != old_project.namespace:
+            # NOTE: changing the namespace requires the user to be owner which means they should have DELETE permission
             required_scope = Scope.DELETE
         authorized = self.authz.has_permission(user, ResourceType.project, project_id, required_scope)
         if not authorized:
