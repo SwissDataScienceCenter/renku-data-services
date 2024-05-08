@@ -54,20 +54,33 @@ class K8sSecretsBP(CustomBlueprint):
                 # don't wrap the error, we don't want secrets accidentally leaking.
                 raise errors.SecretDecryptionError(message=f"An error occured decrypting secrets: {str(type(e))}")
 
+            owner_refs = []
+            if body.owner_references is not None:
+                owner_refs = [
+                    k8s_client.V1OwnerReference(
+                        api_version=ref.get("apiVersion"),
+                        kind=ref.get("kind"),
+                        name=ref.get("name"),
+                        uid=ref.get("uid"),
+                        controller=True,
+                    )
+                    for ref in body.owner_references
+                ]
+            secret = k8s_client.V1Secret(
+                data=decrypted_secrets,
+                metadata=k8s_client.V1ObjectMeta(
+                    name=body.name,
+                    namespace=body.namespace,
+                    owner_references=owner_refs,
+                ),
+            )
+
             try:
-                secret = k8s_client.V1Secret(
-                    data=decrypted_secrets,
-                    metadata={
-                        "name": body.name,
-                        "namespace": body.namespace,
-                        "owner_references": body.owner_references,
-                    },
-                )
+                self.core_client.create_namespaced_secret(body.namespace, secret)
             except k8s_client.ApiException as e:
                 # don't wrap the error, we don't want secrets accidentally leaking.
                 raise errors.SecretCreationError(message=f"An error occured creating secrets: {str(type(e))}")
 
-            self.core_client.create_namespaced_secret(body.namespace, secret)
             return json(body.name, 201)
 
         return "/kubernetes", ["POST"], _post
