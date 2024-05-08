@@ -271,7 +271,14 @@ class ConnectedServicesRepository:
                 if client.kind == ProviderKind.github
                 else urljoin(client.api_url, "api/v4/user")
             )
-            response = await oauth2_client.get(request_url)
+            headers = {
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            } if client.kind == ProviderKind.github else None
+            response = await oauth2_client.get(request_url, headers=headers)
+
+            logger.info(f"Account response: {response}")
+            logger.info(f"Account Content-Type: {response.headers.get("Content-Type")}")
 
             if response.status_code > 200:
                 raise errors.Unauthorized(message="Could not get account information.")
