@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse, urlunparse
 
 from sqlalchemy import JSON, DateTime, ForeignKey, MetaData, String, func
 from sqlalchemy.dialects.postgresql import JSONB
@@ -80,6 +80,17 @@ class OAuth2ClientORM(BaseORM):
         if self.kind == ProviderKind.github:
             return urljoin(self.url, "login/oauth/access_token")
         return urljoin(self.url, "oauth/token")
+
+    @property
+    def api_url(self) -> str:
+        """The URL used for API calls on the Resource Server."""
+        if not self.url:
+            raise errors.ValidationError(message=f"URL not defined for provider {self.id}.")
+        if self.kind == ProviderKind.github:
+            url = urlparse(self.url)
+            url._replace(netloc=f"api.{url.netloc}")
+            return urlunparse(url)
+        return self.url
 
 
 class OAuth2ConnectionORM(BaseORM):
