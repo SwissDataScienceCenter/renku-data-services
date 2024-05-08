@@ -266,17 +266,19 @@ class ConnectedServicesRepository:
     ) -> models.ConnectedAccount:
         """Get the account information from a OAuth2 connection."""
         async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (oauth2_client, _, client):
-            request_url = (
-                urljoin(client.api_url, "user")
-                if client.kind == ProviderKind.github
-                else urljoin(client.api_url, "api/v4/user")
-            )
-            # headers = {
-            #     "Accept": "application/vnd.github+json",
-            #     "X-GitHub-Api-Version": "2022-11-28",
-            # } if client.kind == ProviderKind.github else None
+            request_url = urljoin(client.api_url, "user")
+            headers = {
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            } if client.kind == ProviderKind.github else None
+            request = oauth2_client.build_request("GET", request_url, headers=headers)
+            logger.info(f"Account request: {request}")
+            await oauth2_client.ensure_active_token(oauth2_client.token)
+            auth = oauth2_client.token_auth
+            logger.info(f"Account request auth: {auth}")
+            response = await oauth2_client.send(request, auth=auth)
             # response = await oauth2_client.get(request_url, headers=headers)
-            response = await oauth2_client.get(request_url)
+            # response = await oauth2_client.get(request_url)
 
             logger.info(f"Account response: {response}")
             logger.info(f"Account Content-Type: {response.headers.get("Content-Type")}")
