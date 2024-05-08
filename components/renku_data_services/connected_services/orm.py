@@ -90,7 +90,7 @@ class OAuth2ClientORM(BaseORM):
             url = urlparse(self.url)
             url = url._replace(netloc=f"api.{url.netloc}")
             return urlunparse(url)
-        return urljoin(self.url, "api/v4")
+        return urljoin(self.url, "api/v4/")
 
 
 class OAuth2ConnectionORM(BaseORM):
