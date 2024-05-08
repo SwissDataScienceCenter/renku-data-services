@@ -267,12 +267,13 @@ class ConnectedServicesRepository:
         """Get the account information from a OAuth2 connection."""
         async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (oauth2_client, _, client):
             request_url = urljoin(client.api_url, "user")
-            headers = {
-                "Accept": "application/vnd.github+json",
-                "X-GitHub-Api-Version": "2022-11-28",
-            } if client.kind == ProviderKind.github else None
-            request = oauth2_client.build_request("GET", request_url, headers=headers)
+            # headers = {
+            #     "Accept": "application/vnd.github+json",
+            #     "X-GitHub-Api-Version": "2022-11-28",
+            # } if client.kind == ProviderKind.github else None
+            request = oauth2_client.build_request("GET", request_url)
             logger.info(f"Account request: {request}")
+            logger.info(f"Account headers: {request.headers}")
             await oauth2_client.ensure_active_token(oauth2_client.token)
             auth = oauth2_client.token_auth
             logger.info(f"Account request auth: {auth}")
