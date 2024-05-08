@@ -114,3 +114,21 @@ class PreconditionRequiredError(BaseError):
     code: int = 1428
     message: str = "Conflicting update detected."
     status_code: int = 428
+
+
+@dataclass
+class SecretDecryptionError(BaseError):
+    """Raised when an error occurs decrypting secrets."""
+
+    code: int = 1510
+    message: str = "An error occured decrypting secrets."
+    status_code: int = 500
+
+
+@dataclass
+class SecretCreationError(BaseError):
+    """Raised when an error occurs creating secrets."""
+
+    code: int = 1511
+    message: str = "An error occured creating secrets."
+    status_code: int = 500

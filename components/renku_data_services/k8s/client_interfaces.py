@@ -1,4 +1,5 @@
 """Required interfaces for k8s clients."""
+
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -29,6 +30,16 @@ class K8sCoreClientInterface(ABC):
     @abstractmethod
     def patch_namespaced_resource_quota(self, name: Any, namespace: Any, body: Any, **kwargs: Any) -> Any:
         """Update a resource quota."""
+        ...
+
+    @abstractmethod
+    def delete_namespaced_secret(self, name: Any, namespace: Any, **kwargs: Any) -> Any:
+        """Delete a secret."""
+        ...
+
+    @abstractmethod
+    def create_namespaced_secret(self, namespace: Any, body: Any, **kwargs: Any) -> Any:
+        """Create a secret."""
         ...
 
 
