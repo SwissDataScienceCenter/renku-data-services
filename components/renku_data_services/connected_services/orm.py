@@ -88,7 +88,7 @@ class OAuth2ClientORM(BaseORM):
             raise errors.ValidationError(message=f"URL not defined for provider {self.id}.")
         if self.kind == ProviderKind.github:
             url = urlparse(self.url)
-            url._replace(netloc=f"api.{url.netloc}")
+            url = url._replace(netloc=f"api.{url.netloc}")
             return urlunparse(url)
         return urljoin(self.url, "api/v4")
 
