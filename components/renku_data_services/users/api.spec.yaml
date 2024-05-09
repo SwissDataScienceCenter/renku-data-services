@@ -345,7 +345,6 @@ components:
       minLength: 26
       maxLength: 26
       pattern: "^[A-Z0-9]{26}$"  # This is case-insensitive
-      format: ulid
     ModificationDate:
       description: The date and time the secret was created or modified (this is always in UTC)
       type: string

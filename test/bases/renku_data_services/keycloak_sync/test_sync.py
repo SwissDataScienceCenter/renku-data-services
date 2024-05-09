@@ -1,7 +1,7 @@
 import json
 import re
 import secrets
-from collections.abc import Callable, Generator
+from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime
 from typing import Any

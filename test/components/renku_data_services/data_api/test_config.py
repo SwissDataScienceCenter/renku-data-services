@@ -33,8 +33,8 @@ def test_config_dummy(config_dummy_fixture: conf.Config):
     assert config.user_preferences_repo is not None
     assert config.version == "9.9.9"
 
-
-def test_config_no_dummy(monkeypatch, secrets_key_pair, tmp_path):
+@pytest.fixture
+def config_no_dummy_fixture(monkeypatch, secrets_key_pair, tmp_path):
     encryption_key_path = tmp_path / "encryption-key"
     encryption_key_path.write_bytes(secrets.token_bytes(32))
 

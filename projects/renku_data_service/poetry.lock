@@ -552,13 +552,13 @@ pydantic = ["pydantic[email] (>=2.4.2,<3.0.0)"]
 
 [[package]]
 name = "datamodel-code-generator"
-version = "0.25.5"
+version = "0.24.2"
 description = "Datamodel Code Generator"
 optional = false
 python-versions = ">=3.7,<4.0"
 files = [
-    {file = "datamodel_code_generator-0.25.5-py3-none-any.whl", hash = "sha256:3b62b42c8ebf2bb98cfbc24467b523c5b76780c585b72f4ac2fc1f1f576702ab"},
-    {file = "datamodel_code_generator-0.25.5.tar.gz", hash = "sha256:545f897481a94781e32b3c26a452ce049320b091310729f7fc6fa780f6a87898"},
+    {file = "datamodel_code_generator-0.24.2-py3-none-any.whl", hash = "sha256:582c30466def12600d7165c5f624bb63a7e944eeaf8320f282518daf9ccb566c"},
+    {file = "datamodel_code_generator-0.24.2.tar.gz", hash = "sha256:d278c751038c8911efc82856ec549ac1e3e13134567387a4bb5ab7ddc6543162"},
 ]
 
 [package.dependencies]
@@ -574,7 +574,6 @@ pyyaml = ">=6.0.1"
 
 [package.extras]
 debug = ["PySnooper (>=0.4.1,<2.0.0)"]
-graphql = ["graphql-core (>=3.2.3,<4.0.0)"]
 http = ["httpx"]
 validation = ["openapi-spec-validator (>=0.2.8,<0.7.0)", "prance (>=0.18.2)"]
 
@@ -2637,4 +2636,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "ee246fc9435d15806c0b6351ee63613f9269a9d1f38dee4c2485a69821bab341"
+content-hash = "3417cfeb98dfadb7fa367161613e6293679e4372dc874b4611767a46d610f8a5"

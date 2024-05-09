@@ -121,14 +121,14 @@ class Config:
     gitlab_client: base_models.GitlabAPIProtocol
     kc_api: IKeycloakAPI
     message_queue: IMessageQueue
-    authz_config: AuthzConfig = field(default_factory=lambda: AuthzConfig.from_env())
+
     secrets_service_public_key: rsa.RSAPublicKey
     """The public key of the secrets service, used to encrypt user secrets that only it can decrypt."""
-
-    spec: dict[str, Any] = field(init=False, default_factory=dict)
     encryption_key: bytes = field(repr=False)
     """The encryption key to encrypt user keys at rest in the database."""
 
+    authz_config: AuthzConfig = field(default_factory=lambda: AuthzConfig.from_env())
+    spec: dict[str, Any] = field(init=False, default_factory=dict)
     version: str = "0.0.1"
     app_name: str = "renku_data_services"
     default_resource_pool_file: Optional[str] = None

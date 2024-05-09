@@ -39,7 +39,7 @@ psycopg = { extras = ["binary"], version = "^3.1.13" }
 authlib = "^1.2.1"
 sanic = "^23.6.0"
 redis = "^5.0.1"
-dataclasses-avroschema = "^0.57.0"
+dataclasses-avroschema = "^0.57.4"
 undictify = "^0.11.3"
 tenacity = "^8.2.2"
 httpx = "<0.24"

@@ -425,7 +425,6 @@ components:
       minLength: 26
       maxLength: 26
       pattern: "^[A-Z0-9]{26}$" # This is case-insensitive
-      format: ulid
     SessionName:
       description: Renku session name
       type: string

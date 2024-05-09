@@ -1,9 +1,9 @@
 """Fixtures for testing."""
 
 import os
+import secrets
 import socket
 import subprocess
-import secrets
 from collections.abc import Iterator
 from multiprocessing import Lock
 
@@ -19,7 +19,6 @@ from renku_data_services.app_config import Config as DataConfig
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.migrations.core import run_migrations_for_app
-from renku_data_services.migrations.core import run_migrations_for_app as run_data_service_migrations_for_app
 from renku_data_services.secrets.config import Config as SecretsConfig
 
 settings.register_profile("ci", deadline=400, max_examples=5)
@@ -89,7 +88,34 @@ def db_config(monkeypatch, worker_id, authz_config) -> Iterator[DBConfig]:
 
 
 @pytest.fixture
-def app_config(authz_config, db_config, monkeypatch, worker_id) -> Iterator[DataConfig]:
+def secrets_key_pair(monkeypatch, tmp_path):
+    """Create a public/private key pair to be used for secrets service tests."""
+
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    priv_key_path = tmp_path / "key.priv"
+    priv_key_path.write_bytes(
+        private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+    )
+
+    secrets_service_public_key = private_key.public_key()
+    pub_key_path = tmp_path / "key.pub"
+    pub_key_path.write_bytes(
+        secrets_service_public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+    )
+
+    monkeypatch.setenv("SECRETS_SERVICE_PUBLIC_KEY_PATH", pub_key_path.as_posix())
+    monkeypatch.setenv("SECRETS_SERVICE_PRIVATE_KEY_PATH", priv_key_path.as_posix())
+
+
+@pytest.fixture
+def app_config(authz_config, db_config, monkeypatch, worker_id, secrets_key_pair) -> Iterator[DataConfig]:
     monkeypatch.setenv("MAX_PINNED_PROJECTS", "5")
 
     config = DataConfig.from_env()
@@ -99,22 +125,17 @@ def app_config(authz_config, db_config, monkeypatch, worker_id) -> Iterator[Data
 
 
 @pytest.fixture
-def secrets_storage_app_config(postgresql, secrets_key_pair, monkeypatch, tmp_path) -> Iterator[DataConfig]:
+def secrets_storage_app_config(db_config: DBConfig, secrets_key_pair, monkeypatch, tmp_path) -> Iterator[DataConfig]:
     encryption_key_path = tmp_path / "encryption-key"
     encryption_key_path.write_bytes(secrets.token_bytes(32))
 
     monkeypatch.setenv("ENCRYPTION_KEY_PATH", encryption_key_path.as_posix())
     monkeypatch.setenv("DUMMY_STORES", "true")
-    monkeypatch.setenv("DB_NAME", postgresql.info.dbname)
+    monkeypatch.setenv("DB_NAME", db_config.db_name)
     monkeypatch.setenv("MAX_PINNED_PROJECTS", "5")
 
     config = SecretsConfig.from_env()
     yield config
-    monkeypatch.delenv("DUMMY_STORES", raising=False)
-    # NOTE: This is necessary because the postgresql pytest extension does not close
-    # the async connection/pool we use in the config and the connection will succeed in the first
-    # test but fail in all others if the connection is not disposed at the end of every test.
-    config.db.dispose_connection()
 
 
 @pytest.fixture
