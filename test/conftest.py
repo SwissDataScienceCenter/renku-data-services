@@ -3,10 +3,13 @@
 import os
 import socket
 import subprocess
+import secrets
 from collections.abc import Iterator
 from multiprocessing import Lock
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from hypothesis import settings
 from pytest_postgresql.janitor import DatabaseJanitor
 from ulid import ULID
@@ -16,6 +19,8 @@ from renku_data_services.app_config import Config as DataConfig
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.migrations.core import run_migrations_for_app
+from renku_data_services.migrations.core import run_migrations_for_app as run_data_service_migrations_for_app
+from renku_data_services.secrets.config import Config as SecretsConfig
 
 settings.register_profile("ci", deadline=400, max_examples=5)
 settings.register_profile("dev", deadline=200, max_examples=5)
@@ -91,6 +96,25 @@ def app_config(authz_config, db_config, monkeypatch, worker_id) -> Iterator[Data
     app_name = "app_" + str(ULID()).lower() + "_" + worker_id
     config.app_name = app_name
     yield config
+
+
+@pytest.fixture
+def secrets_storage_app_config(postgresql, secrets_key_pair, monkeypatch, tmp_path) -> Iterator[DataConfig]:
+    encryption_key_path = tmp_path / "encryption-key"
+    encryption_key_path.write_bytes(secrets.token_bytes(32))
+
+    monkeypatch.setenv("ENCRYPTION_KEY_PATH", encryption_key_path.as_posix())
+    monkeypatch.setenv("DUMMY_STORES", "true")
+    monkeypatch.setenv("DB_NAME", postgresql.info.dbname)
+    monkeypatch.setenv("MAX_PINNED_PROJECTS", "5")
+
+    config = SecretsConfig.from_env()
+    yield config
+    monkeypatch.delenv("DUMMY_STORES", raising=False)
+    # NOTE: This is necessary because the postgresql pytest extension does not close
+    # the async connection/pool we use in the config and the connection will succeed in the first
+    # test but fail in all others if the connection is not disposed at the end of every test.
+    config.db.dispose_connection()
 
 
 @pytest.fixture

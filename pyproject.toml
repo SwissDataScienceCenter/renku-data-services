@@ -36,6 +36,7 @@ packages = [
   { include = "renku_data_services/session_migrations", from = "components" },
   { include = "renku_data_services/events_migrations", from = "components" },
   { include = "renku_data_services/message_queue", from = "components" },
+  { include = "renku_data_services/secrets", from = "components" },
 ]
 
 [tool.poetry.dependencies]
@@ -63,6 +64,7 @@ types-redis = "^4.6.0.20240218"
 prometheus-sanic = "^3.0.0"
 sentry-sdk = { version = "^1.43.0", extras = ["sanic"] }
 authzed = {git = "https://github.com/authzed/authzed-py.git", rev = "bcd9640a5c2f8e0350e1eff29b34b3fe23a57f14"}
+cryptography = "^42.0.5"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.7.5"
@@ -184,6 +186,7 @@ module = [
   "renku_data_services.users.apispec",
   "renku_data_services.data_api.error_handler",
   "renku_data_services.namespace.apispec",
+  "renku_data_services.secrets.apispec",
 ]
 ignore_errors = true
 

@@ -1,8 +1,9 @@
 """SQLAlchemy schemas for the CRC database."""
+
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, MetaData, String
+from sqlalchemy import DateTime, LargeBinary, MetaData, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 
 from renku_data_services.base_models import Slug
@@ -23,6 +24,7 @@ class UserORM(BaseORM):
     first_name: Mapped[Optional[str]] = mapped_column(String(256), default=None)
     last_name: Mapped[Optional[str]] = mapped_column(String(256), default=None)
     email: Mapped[Optional[str]] = mapped_column(String(320), default=None, index=True)
+    secret_key: Mapped[Optional[bytes]] = mapped_column(LargeBinary(), default=None, repr=False)
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
 
     def dump(self) -> UserInfo:

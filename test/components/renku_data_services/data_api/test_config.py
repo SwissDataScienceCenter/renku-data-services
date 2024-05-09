@@ -1,3 +1,4 @@
+import secrets
 from unittest.mock import MagicMock
 
 import pytest
@@ -33,8 +34,11 @@ def test_config_dummy(config_dummy_fixture: conf.Config):
     assert config.version == "9.9.9"
 
 
-@pytest.fixture
-def config_no_dummy_fixture(monkeypatch):
+def test_config_no_dummy(monkeypatch, secrets_key_pair, tmp_path):
+    encryption_key_path = tmp_path / "encryption-key"
+    encryption_key_path.write_bytes(secrets.token_bytes(32))
+
+    monkeypatch.setenv("ENCRYPTION_KEY_PATH", encryption_key_path.as_posix())
     monkeypatch.setenv("DUMMY_STORES", "false")
     monkeypatch.setenv("VERSION", "9.9.9")
     monkeypatch.setenv("DB_HOST", "localhost")
@@ -53,9 +57,9 @@ def config_no_dummy_fixture(monkeypatch):
     monkeypatch.setenv("KEYCLOAK_TOKEN_SIGNATURE_ALGS", "test")
     monkeypatch.setenv("KEYCLOAK_CLIENT_ID", "data-service")
     monkeypatch.setenv("KEYCLOAK_CLIENT_SECRET", "data-service-client-secret")
-    monkeypatch.setattr(conf, "_oidc_discovery", lambda _, __: {"jwks_uri": "localhost"})
+    monkeypatch.setattr(conf, "oidc_discovery", lambda _, __: {"jwks_uri": "localhost"})
     monkeypatch.setattr(conf, "PyJWKClient", lambda _: MagicMock())
-    monkeypatch.setattr(conf, "K8sCoreClient", lambda: DummyCoreClient({}))
+    monkeypatch.setattr(conf, "K8sCoreClient", lambda: DummyCoreClient({}, {}))
     monkeypatch.setattr(conf, "K8sSchedulingClient", lambda: DummySchedulingClient({}))
 
     def patch_kc_api(*args, **kwargs):
