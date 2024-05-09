@@ -1038,6 +1038,10 @@ components:
           $ref: "#/components/schemas/PublicFlag"
         default:
           $ref: "#/components/schemas/DefaultFlag"
+        idle_threshold:
+          $ref: "#/components/schemas/IdleThreshold"
+        hibernation_threshold:
+          $ref: "#/components/schemas/HibernationThreshold"
       required: ["classes", "name", "public", "default"]
       example:
         quota:
@@ -1076,6 +1080,10 @@ components:
           $ref: "#/components/schemas/PublicFlag"
         default:
           $ref: "#/components/schemas/DefaultFlag"
+        idle_threshold:
+          $ref: "#/components/schemas/IdleThreshold"
+        hibernation_threshold:
+          $ref: "#/components/schemas/HibernationThreshold"
       example:
         quota:
           cpu: 50
@@ -1099,6 +1107,10 @@ components:
           $ref: "#/components/schemas/PublicFlag"
         default:
           $ref: "#/components/schemas/DefaultFlag"
+        idle_threshold:
+          $ref: "#/components/schemas/IdleThreshold"
+        hibernation_threshold:
+          $ref: "#/components/schemas/HibernationThreshold"
       required: ["classes", "name", "public", "default"]
       example:
         quota:
@@ -1140,6 +1152,10 @@ components:
           $ref: "#/components/schemas/PublicFlag"
         default:
           $ref: "#/components/schemas/DefaultFlag"
+        idle_threshold:
+          $ref: "#/components/schemas/IdleThreshold"
+        hibernation_threshold:
+          $ref: "#/components/schemas/HibernationThreshold"
       required: ["classes", "name", "id", "public", "default"]
       example:
         quota:
@@ -1182,6 +1198,10 @@ components:
           $ref: "#/components/schemas/PublicFlag"
         default:
           $ref: "#/components/schemas/DefaultFlag"
+        idle_threshold:
+          $ref: "#/components/schemas/IdleThreshold"
+        hibernation_threshold:
+          $ref: "#/components/schemas/HibernationThreshold"
       required: ["classes", "name", "id", "public", "default"]
       example:
         quota:
@@ -1370,6 +1390,16 @@ components:
       description: A resource pool whose classes can be accessed by anyone
       default: false
       example: false
+    IdleThreshold:
+      type: integer
+      description: A threshold in seconds after which a session gets hibernated
+      minimum: 1
+      maximum: 2147483647
+    HibernationThreshold:
+      type: integer
+      description: A threshold in seconds after which a session gets culled/deleted
+      minimum: 1
+      maximum: 2147483647
     K8sLabelList:
       type: array
       description: A list of k8s labels used for tolerations

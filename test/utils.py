@@ -28,7 +28,14 @@ def remove_id_from_rp(rp: rp_models.ResourcePool) -> rp_models.ResourcePool:
         quota = remove_id_from_quota(quota)
     classes = [remove_id_from_rc(rc) for rc in rp.classes]
     return rp_models.ResourcePool(
-        name=rp.name, id=None, quota=quota, classes=classes, default=rp.default, public=rp.public
+        name=rp.name,
+        id=None,
+        quota=quota,
+        classes=classes,
+        default=rp.default,
+        public=rp.public,
+        idle_threshold=rp.idle_threshold,
+        hibernation_threshold=rp.hibernation_threshold,
     )
 
 

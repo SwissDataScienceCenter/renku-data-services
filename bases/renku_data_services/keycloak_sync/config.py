@@ -21,7 +21,7 @@ class SyncConfig:
 
     syncer: UsersSync
     kc_api: IKeycloakAPI
-    authz: AuthzConfig
+    authz_config: AuthzConfig
     total_user_sync: bool = False
 
     @classmethod

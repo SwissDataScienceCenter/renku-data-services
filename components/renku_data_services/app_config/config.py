@@ -128,6 +128,7 @@ class Config:
     gitlab_client: base_models.GitlabAPIProtocol
     kc_api: IKeycloakAPI
     message_queue: IMessageQueue
+    authz_config: AuthzConfig = field(default_factory=lambda: AuthzConfig.from_env())
     spec: dict[str, Any] = field(init=False, default_factory=dict)
     version: str = "0.0.1"
     app_name: str = "renku_crc"
@@ -142,7 +143,6 @@ class Config:
     _project_repo: ProjectRepository | None = field(default=None, repr=False, init=False)
     _group_repo: GroupRepository | None = field(default=None, repr=False, init=False)
     _event_repo: EventRepository | None = field(default=None, repr=False, init=False)
-    _authz: Authz | None = field(default=None, repr=False, init=False)
     _session_repo: SessionRepository | None = field(default=None, repr=False, init=False)
     _user_preferences_repo: UserPreferencesRepository | None = field(default=None, repr=False, init=False)
     _kc_user_repo: KcUserRepo | None = field(default=None, repr=False, init=False)
@@ -189,8 +189,7 @@ class Config:
                 defaults = ServerOptionsDefaults.model_validate(safe_load(f))
             self.default_resource_pool = generate_default_resource_pool(options, defaults)
 
-        authz_config = AuthzConfig.from_env()
-        self.authz = Authz(authz_config.authz_client())
+        self.authz = Authz(self.authz_config)
 
     @property
     def user_repo(self) -> UserRepository:

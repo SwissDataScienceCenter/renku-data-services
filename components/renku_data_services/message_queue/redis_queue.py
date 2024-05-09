@@ -19,7 +19,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
 from renku_data_services.message_queue import AmbiguousEvent
-from renku_data_services.message_queue.avro_models.io.renku.events import v1, v2
 from renku_data_services.message_queue.avro_models.io.renku.events.v1.header import Header
 from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.message_queue.converters import EventConverter
@@ -102,45 +101,20 @@ def dispatch_message(event_type: type[AvroModel] | AmbiguousEvent):
             result = await f(self, session, *args, **kwargs)
             if result is None:
                 return result
-            payloads = EventConverter.to_event(result, event_type)
+            events = EventConverter.to_events(result, event_type)
 
-            match event_type:
-                case v1.ProjectCreated | v2.ProjectCreated:
-                    queue_name = "project.created"
-                case v1.ProjectUpdated | v2.ProjectUpdated:
-                    queue_name = "project.updated"
-                case v1.ProjectRemoved | v2.ProjectRemoved:
-                    queue_name = "project.removed"
-                case v1.UserAdded | v2.UserUpdated:
-                    queue_name = "user.added"
-                case v1.UserUpdated | v2.UserUpdated:
-                    queue_name = "user.updated"
-                case v1.UserRemoved | v2.UserRemoved:
-                    queue_name = "user.removed"
-                case AmbiguousEvent.PROJECT_MEMBERSHIP_CHANGED:
-                    queue_name = "to_be_determined_later"
-                case v2.ProjectMemberRemoved:
-                    queue_name = "projectAuth.removed"
-                case _:
-                    raise NotImplementedError(f"Can't find queue name for event type {event_type}")
-            for payload in payloads:
-                if isinstance(payload, v2.ProjectMemberUpdated):
-                    queue_name = "projectAuth.updated"
-                elif isinstance(payload, v2.ProjectMemberAdded):
-                    queue_name = "projectAuth.added"
-                elif isinstance(payload, v2.ProjectMemberRemoved):
-                    queue_name = "projectAuth.removed"
+            for event in events:
                 message_id = ULID().hex
-                headers = create_header(queue_name).serialize_json()
+                headers = create_header(event.queue).serialize_json()
                 message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
                     "id": message_id,
                     "headers": headers,
-                    "payload": base64.b64encode(serialize_binary(payload)).decode(),
+                    "payload": base64.b64encode(serialize_binary(event.payload)).decode(),
                 }
-                event_id = await self.event_repo.store_event(session, queue_name, message)
+                event_id = await self.event_repo.store_event(session, event.queue, message)
 
                 try:
-                    await self.message_queue.send_message(queue_name, message)
+                    await self.message_queue.send_message(event.queue, message)
                 except Exception as err:
                     logging.warning(
                         f"Could not insert event message to redis queue because of {err} "

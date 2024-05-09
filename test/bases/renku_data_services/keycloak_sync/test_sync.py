@@ -37,7 +37,9 @@ def get_app_configs(db_config: DBConfig, authz_config: AuthzConfig):
             event_repo=event_repo,
             group_repo=group_repo,
         )
-        config = SyncConfig(syncer=users_sync, kc_api=kc_api, total_user_sync=total_user_sync, authz=authz_config)
+        config = SyncConfig(
+            syncer=users_sync, kc_api=kc_api, total_user_sync=total_user_sync, authz_config=authz_config
+        )
         user_repo = UserRepo(
             db_config.async_session_maker,
             message_queue=message_queue,
@@ -331,9 +333,9 @@ async def test_events_update_error(get_app_configs, admin_user: APIUser):
     # An error occurs in processing an event or between events and none of the events are processed
     assert {user1, user2, admin_user_info} == set(db_users)
     # Add admin events without error
-    kc_api.admin_events = get_kc_admin_events(
-        [(user1_updated, KeycloakAdminEvent.UPDATE)]
-    ) + get_kc_admin_events([(user2_updated, KeycloakAdminEvent.UPDATE)])
+    kc_api.admin_events = get_kc_admin_events([(user1_updated, KeycloakAdminEvent.UPDATE)]) + get_kc_admin_events(
+        [(user2_updated, KeycloakAdminEvent.UPDATE)]
+    )
     await sync_config.syncer.events_sync(kc_api)
     db_users = await user_repo.get_users(admin_user)
     assert {user1_updated, user2_updated, admin_user_info} == set(db_users)
@@ -424,22 +426,22 @@ async def test_authz_admin_sync(get_app_configs, admin_user: APIUser):
     sync_config: SyncConfig
     user_repo: UserRepo
     sync_config, user_repo = get_app_configs(kc_api)
-    authz = Authz(sync_config.authz.authz_client())
+    authz = Authz(sync_config.authz_config)
     db_users = await user_repo.get_users(admin_user)
     kc_users = [UserInfo.from_kc_user_payload(user) for user in sync_config.kc_api.get_users()]
     await sync_config.syncer.users_sync(kc_api)
-    sync_admins_from_keycloak(kc_api, authz)
+    await sync_admins_from_keycloak(kc_api, authz)
     db_users = await user_repo.get_users(admin_user)
     assert set(kc_users) == set(db_users)
-    authz_admin_ids = authz._get_admin_user_ids()
+    authz_admin_ids = await authz._get_admin_user_ids()
     assert set(authz_admin_ids) == {admin_user_info.id}
     # Make user1 admin
     kc_api.user_roles[user1.id] = ["renku-admin"]
-    sync_admins_from_keycloak(kc_api, authz)
-    authz_admin_ids = authz._get_admin_user_ids()
+    await sync_admins_from_keycloak(kc_api, authz)
+    authz_admin_ids = await authz._get_admin_user_ids()
     assert set(authz_admin_ids) == {admin_user_info.id, user1.id}
     # Remove original admin
     kc_api.user_roles.pop(admin_user_info.id)
-    sync_admins_from_keycloak(kc_api, authz)
-    authz_admin_ids = authz._get_admin_user_ids()
+    await sync_admins_from_keycloak(kc_api, authz)
+    authz_admin_ids = await authz._get_admin_user_ids()
     assert set(authz_admin_ids) == {user1.id}
