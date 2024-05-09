@@ -1,4 +1,5 @@
 """Group models."""
+
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -74,3 +75,19 @@ class Namespace:
     creation_date: datetime | None = None
     created_by: str | None = None
     latest_slug: str | None = None
+
+
+@dataclass
+class GroupUpdate:
+    """Information about the update of a group."""
+
+    old: Group
+    new: Group
+
+
+@dataclass
+class NamespaceUpdate:
+    """Information about the update of a namespace."""
+
+    old: Namespace
+    new: Namespace

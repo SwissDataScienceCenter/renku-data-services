@@ -1,7 +1,7 @@
 """Projects authorization adapter."""
 
 import logging
-from collections.abc import AsyncIterable, Awaitable, Callable
+from collections.abc import AsyncIterable, Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import wraps
@@ -34,7 +34,7 @@ from renku_data_services import base_models
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.authz.models import Change, Member, MembershipChange, Role, Scope, Visibility
 from renku_data_services.errors import errors
-from renku_data_services.namespace.models import Group, Namespace
+from renku_data_services.namespace.models import Group, GroupUpdate, Namespace, NamespaceUpdate
 from renku_data_services.project.models import Project, ProjectUpdate
 
 
@@ -141,6 +141,8 @@ class _AuthzConverter:
     @staticmethod
     def user_namespace(id: str) -> ObjectReference:
         return ObjectReference(object_type=ResourceType.user_namespace, object_id=id)
+
+    @staticmethod
     def to_object(resource_type: ResourceType, resource_id: str | int) -> ObjectReference:
         match (resource_type, resource_id):
             case (ResourceType.project, sid) if isinstance(sid, str):
@@ -154,57 +156,50 @@ class _AuthzConverter:
         )
 
 
-def _is_allowed_on_project(operation: Scope):
-    """A decorator that checks if the operation on a project is allowed or not."""
+def _is_allowed_on_resource(operation: Scope, resource_type: ResourceType):
+    """A decorator that checks if the operation on a specific resource type is allowed or not."""
 
     def decorator(f):
         @wraps(f)
-        async def decorated_function(self: "Authz", user: base_models.APIUser, project: Project, *args, **kwargs):
-            allowed, zed_token = await self._has_permission(user, ResourceType.project, project.id, operation)
+        async def decorated_function(self: "Authz", *args, **kwargs):
+            if len(args) > 0:
+                raise errors.ProgrammingError(
+                    message="The decorator for checking permissions for authorization database operations "
+                    "does not allow any variadic arguments but only keywords arguments."
+                )
+            user = kwargs.get("user")
+            if not isinstance(user, base_models.APIUser):
+                raise errors.ProgrammingError(
+                    message="The decorator for checking permissions for authorization database operations "
+                    "needs to access the user in the decorated function keyword arguments but it did not find it"
+                )
+            resource = None
+            match resource_type:
+                case ResourceType.project:
+                    resource = kwargs.get("project")
+                case ResourceType.group:
+                    resource = kwargs.get("group")
+                case ResourceType.user_namespace:
+                    resource = kwargs.get("namespace")
+                case _:
+                    raise errors.ProgrammingError(
+                        message="The decorator for checking permissions for authorization database operations "
+                        "failed to find the expected argument in the decorated function "
+                        f"for the {resource_type} resource"
+                    )
+            if not resource:
+                raise errors.ProgrammingError(
+                    message="The decorator for checking permissions for authorization database operations "
+                    "failed to find the expected resource in the decorated function "
+                    f"for the {resource_type} resource"
+                )
+            allowed, zed_token = await self._has_permission(user, resource_type, resource.id, operation)
             if not allowed:
                 raise errors.MissingResourceError(
-                    message=f"The user with ID {user.id} cannot perform operation {operation} on project "
-                    f"with ID {project.id} or the project does not exist."
+                    message=f"The user with ID {user.id} cannot perform operation {operation} "
+                    f"on resource {resource_type} with ID {resource.id} or the resource does not exist."
                 )
-            return await f(self, user, project, *args, **kwargs, zed_token=zed_token)
-
-        return decorated_function
-
-    return decorator
-
-
-def _is_allowed_on_group(operation: Scope):
-    """A decorator that checks if the operation on a group is allowed or not."""
-
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(self: "Authz", user: base_models.APIUser, group: Group, *args, **kwargs):
-            allowed, zed_token = self._has_permission(user, ResourceType.group, group.id, operation)
-            if not allowed:
-                raise errors.MissingResourceError(
-                    message=f"The user with ID {user.id} cannot perform operation {operation} on group "
-                    f"with ID {group.id} or the group does not exist."
-                )
-            return f(self, user, group, *args, **kwargs, zed_token=zed_token)
-
-        return decorated_function
-
-    return decorator
-
-
-def _is_allowed_on_user_namespace(operation: Scope):
-    """A decorator that checks if the operation on a group is allowed or not."""
-
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(self: "Authz", user: base_models.APIUser, namespace: Namespace, *args, **kwargs):
-            allowed, zed_token = self._has_permission(user, ResourceType.user_namespace, namespace.id, operation)
-            if not allowed:
-                raise errors.MissingResourceError(
-                    message=f"The user with ID {user.id} cannot perform operation {operation} on namespace "
-                    f"with ID {namespace.id} or the namespace does not exist."
-                )
-            return f(self, user, namespace, *args, **kwargs, zed_token=zed_token)
+            return await f(self, *args, **kwargs, zed_token=zed_token)
 
         return decorated_function
 
@@ -418,31 +413,51 @@ class Authz:
                     # See https://authzed.com/docs/spicedb/concepts/relationships#writing-relationships
                     # If this order of operations is changed you can get a case where for a short period of time
                     # resources exists in the postgres DB without any authorization information in the Authzed DB.
-                    project = await f(db_repo, session, user, *args, **kwargs)
-                    match op:
-                        case ProjectAuthzOperation.create if isinstance(project, Project):
-                            authz_change = db_repo.authz._add_project(project)
-                        case ProjectAuthzOperation.delete if isinstance(project, Project):
-                            authz_change = await db_repo.authz._remove_project(user, project)
-                        case ProjectAuthzOperation.delete if project is None:
+                    result = await f(db_repo, *args, **kwargs)
+                    match op, resource:
+                        case AuthzOperation.create, ResourceType.project if isinstance(result, Project):
+                            authz_change = db_repo.authz._add_project(result)
+                        case AuthzOperation.delete, ResourceType.project if isinstance(result, Project):
+                            authz_change = await db_repo.authz._remove_project(user, result)
+                        case AuthzOperation.delete, ResourceType.project if result is None:
                             # NOTE: This means that the project does not exist in the first place so nothing was deleted
                             pass
-                        case ProjectAuthzOperation.update if isinstance(project, ProjectUpdate):
-                            if project.old.visibility != project.new.visibility:
-                                authz_change = await db_repo.authz._update_project_visibility(user, project.new)
+                        case AuthzOperation.update, ResourceType.project if isinstance(result, ProjectUpdate):
+                            if result.old.visibility != result.new.visibility:
+                                authz_change = await db_repo.authz._update_project_visibility(user, result.new)
+                        case AuthzOperation.create, ResourceType.group if isinstance(result, Group):
+                            authz_change = db_repo.authz._add_group(result)
+                        case AuthzOperation.delete, ResourceType.group if isinstance(result, Group):
+                            authz_change = await db_repo.authz._remove_group(user, result)
+                        case AuthzOperation.delete, ResourceType.group if result is None:
+                            # NOTE: This means that the group does not exist in the first place so nothing was deleted
+                            pass
+                        case AuthzOperation.update, ResourceType.group if isinstance(result, GroupUpdate):
+                            # TODO: fillin
+                            pass
+                        case AuthzOperation.create, ResourceType.user_namespace if isinstance(result, Namespace):
+                            authz_change = db_repo.authz._add_user_namespace(result)
+                        case AuthzOperation.delete, ResourceType.user_namespace if isinstance(result, Namespace):
+                            authz_change = await db_repo.authz._remove_user_namespace(user, result)
+                        case AuthzOperation.delete, ResourceType.user_namespace if result is None:
+                            # NOTE: This means that the group does not exist in the first place so nothing was deleted
+                            pass
+                        case AuthzOperation.update, ResourceType.user_namespace if isinstance(result, NamespaceUpdate):
+                            # TODO: fillin
+                            pass
                         case _:
-                            project_id: str | None = "unknown"
-                            if isinstance(project, Project):
-                                project_id = project.id
-                            elif isinstance(project, ProjectUpdate):
-                                project_id = project.new.id
+                            resource_id: str | None = "unknown"
+                            if isinstance(result, (Project, Namespace, Group)):
+                                resource_id = result.id
+                            elif isinstance(result, (ProjectUpdate, NamespaceUpdate, GroupUpdate)):
+                                resource_id = result.new.id
                             raise errors.ProgrammingError(
                                 message=f"Encountered an unkonwn authorization operation {op} on resource {resource} "
-                                f"when updating the authorization database",
+                                f"with ID {resource_id} when updating the authorization database",
                             )
                     await db_repo.authz.client.WriteRelationships(authz_change.apply)
                     await session.commit()
-                    return project
+                    return result
                 except Exception as err:
                     db_rollback_err = None
                     try:
@@ -501,7 +516,7 @@ class Authz:
         )
         return _AuthzChange(apply=apply, undo=undo)
 
-    @_is_allowed_on_project(Scope.DELETE)
+    @_is_allowed_on_resource(Scope.DELETE, ResourceType.project)
     async def _remove_project(self, user: base_models.APIUser, project: Project, zed_token: ZedToken) -> _AuthzChange:
         """Remove the relationships associated with the project."""
         rel_filter = RelationshipFilter(resource_type=ResourceType.project.value, optional_resource_id=project.id)
@@ -521,7 +536,8 @@ class Authz:
         )
         return _AuthzChange(apply=apply, undo=undo)
 
-    @_is_allowed_on_project(Scope.DELETE)  # NOTE changing visibility is the same access level as removal
+    # NOTE changing visibility is the same access level as removal
+    @_is_allowed_on_resource(Scope.DELETE, ResourceType.project)
     async def _update_project_visibility(
         self, user: base_models.APIUser, project: Project, zed_token: ZedToken
     ) -> _AuthzChange:
@@ -847,11 +863,11 @@ class Authz:
         )
         return _AuthzChange(apply=apply, undo=undo)
 
-    @_is_allowed_on_group(Scope.DELETE)
+    @_is_allowed_on_resource(Scope.DELETE, ResourceType.group)
     def _remove_group(self, user: base_models.APIUser, group: Group, zed_token: ZedToken) -> _AuthzChange:
         """Remove the group from the authorization database."""
         rel_filter = RelationshipFilter(resource_type=ResourceType.group.value, optional_resource_id=group.id)
-        responses: Iterator[ReadRelationshipsResponse] = self.client.ReadRelationships(
+        responses: Iterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
             ReadRelationshipsRequest(
                 consistency=Consistency(at_least_as_fresh=zed_token), relationship_filter=rel_filter
             )
@@ -956,7 +972,7 @@ class Authz:
         return output
 
     @_is_allowed(Scope.CHANGE_MEMBERSHIP)
-    def remove_group_members(
+    async def remove_group_members(
         self,
         user: base_models.APIUser,
         resource_type: ResourceType,
@@ -983,14 +999,14 @@ class Authz:
                 optional_resource_id=resource_id,
                 optional_subject_filter=SubjectFilter(subject_type=ResourceType.user, optional_subject_id=user_id),
             )
-            existing_rels: Iterator[ReadRelationshipsResponse] = self.client.ReadRelationships(
+            existing_rels: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
                 ReadRelationshipsRequest(
                     consistency=Consistency(at_least_as_fresh=zed_token), relationship_filter=existing_rel_filter
                 )
             )
             # NOTE: We have to make sure that when we undo we only put back relationships that existed already.
             # Blidnly undoing everything that was passed in may result in adding things that weren't there before.
-            for existing_rel in existing_rels:
+            async for existing_rel in existing_rels:
                 if existing_rel.relationship.relation == _Relation.owner.value:
                     if existing_owners_rels is None:
                         existing_owners_rels = list(
@@ -1059,21 +1075,21 @@ class Authz:
         )
         return _AuthzChange(apply=apply, undo=undo)
 
-    @_is_allowed_on_user_namespace(Scope.DELETE)
-    def _remove_user_namespace(
+    @_is_allowed_on_resource(Scope.DELETE, ResourceType.user_namespace)
+    async def _remove_user_namespace(
         self, user: base_models.APIUser, namespace: Namespace, zed_token: ZedToken
     ) -> _AuthzChange:
         """Remove the user namespace from the authorization database."""
         rel_filter = RelationshipFilter(
             resource_type=ResourceType.user_namespace.value, optional_resource_id=namespace.id
         )
-        responses: Iterator[ReadRelationshipsResponse] = self.client.ReadRelationships(
+        responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
             ReadRelationshipsRequest(
                 consistency=Consistency(at_least_as_fresh=zed_token), relationship_filter=rel_filter
             )
         )
         rels: list[Relationship] = []
-        for response in responses:
+        async for response in responses:
             rels.append(response.relationship)
         apply = WriteRelationshipsRequest(
             updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=i) for i in rels]
@@ -1082,51 +1098,3 @@ class Authz:
             updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=i) for i in rels]
         )
         return _AuthzChange(apply=apply, undo=undo)
-
-    @staticmethod
-    def group_change(op: AuthzOperation):
-        """A decorator that updates the authorization database for different types of project operations."""
-
-        class WithAuthz(Protocol):
-            @property
-            def authz(self) -> Authz: ...
-
-        def decorator(f: Callable[..., Awaitable[Project | ProjectUpdate]]):
-            @wraps(f)
-            async def decorated_function(
-                db_repo: WithAuthz, session: AsyncSession, user: base_models.APIUser, *args, **kwargs
-            ):
-                # NOTE: db_repo is the "self" of the project postgres DB repository method that this function decorates.
-                # I did not call it "self" here to avoid confusion with the self of the Authz class,
-                # even though this is a static method.
-                if not session.in_transaction():
-                    raise errors.ProgrammingError(
-                        message="Updating the project authorization database without a postgress transaction "
-                        "is not allowed",
-                    )
-                authz_change = _AuthzChange()
-                try:
-                    project = await f(db_repo, session, user, *args, **kwargs)
-                    match op:
-                        case AuthzOperation.create if isinstance(project, Project):
-                            authz_change = db_repo.authz._add_project(project)
-                        case AuthzOperation.delete if isinstance(project, Project):
-                            authz_change = db_repo.authz._remove_project(user, project)
-                        case AuthzOperation.change_visibility if isinstance(project, ProjectUpdate):
-                            if project.old.visibility != project.new.visibility:
-                                authz_change = db_repo.authz._update_project_visibility(user, project.new)
-                        case _:
-                            project_id = project.id if isinstance(project, Project) else project.new.id
-                            raise errors.ProgrammingError(
-                                message=f"Encountered an unkonwn project authorization operation {op} "
-                                f"when updating the project database for project with ID {project_id}",
-                            )
-                    db_repo.authz.client.WriteRelationships(authz_change.apply)
-                    return project
-                except Exception as err:
-                    db_repo.authz.client.WriteRelationships(authz_change.undo)
-                    raise err
-
-            return decorated_function
-
-        return decorator
