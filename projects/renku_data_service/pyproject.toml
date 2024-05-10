@@ -37,6 +37,7 @@ packages = [
   { include = "renku_data_services/events_migrations", from = "../../components" },
   { include = "renku_data_services/project_migrations", from = "../../components" },
   { include = "renku_data_services/session_migrations", from = "../../components" },
+  { include = "renku_data_services/secrets", from = "../../components" },
 ]
 
 [tool.poetry.dependencies]
