@@ -37,6 +37,7 @@ packages = [
   { include = "renku_data_services/session_migrations", from = "components" },
   { include = "renku_data_services/events_migrations", from = "components" },
   { include = "renku_data_services/message_queue", from = "components" },
+  { include = "renku_data_services/secrets", from = "components" },
   { include = "renku_data_services/connected_services", from = "components" },
 ]
 
