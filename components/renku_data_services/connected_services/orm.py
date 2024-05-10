@@ -49,12 +49,16 @@ class OAuth2ClientORM(BaseORM):
         nullable=False,
     )
 
-    def dump(self, redacted: bool = True) -> models.OAuth2Client:
-        """Create an OAuth2 Client model from the OAuth2ClientORM."""
+    def dump(self, user_is_admin: bool = False) -> models.OAuth2Client:
+        """Create an OAuth2 Client model from the OAuth2ClientORM.
+
+        Some fields will be redacted if the user is not an admin user.
+        """
         return models.OAuth2Client(
             id=self.id,
             kind=self.kind,
-            client_id=self.client_id if not redacted else "",
+            client_id=self.client_id if user_is_admin else "",
+            client_secret="redacted" if self.client_secret and user_is_admin else "",
             display_name=self.display_name,
             scope=self.scope,
             url=self.url,

@@ -32,18 +32,13 @@ class ConnectedServicesRepository:
     ) -> list[models.OAuth2Client]:
         """Get all OAuth2 Clients from the database."""
         async with self.session_maker() as session:
-            redacted = not user.is_admin
-
             result = await session.scalars(select(schemas.OAuth2ClientORM))
             clients = result.all()
-
-            return [c.dump(redacted=redacted) for c in clients]
+            return [c.dump(user_is_admin=user.is_admin) for c in clients]
 
     async def get_oauth2_client(self, provider_id: str, user: base_models.APIUser) -> models.OAuth2Client:
         """Get one OAuth2 Client from the database."""
         async with self.session_maker() as session:
-            redacted = not user.is_admin
-
             result = await session.scalars(
                 select(schemas.OAuth2ClientORM).where(schemas.OAuth2ClientORM.id == provider_id)
             )
@@ -52,12 +47,12 @@ class ConnectedServicesRepository:
                 raise errors.MissingResourceError(
                     message=f"OAuth2 Client with id '{provider_id}' does not exist or you do not have access to it."  # noqa: E501
                 )
-            return client.dump(redacted=redacted)
+            return client.dump(user_is_admin=user.is_admin)
 
     async def insert_oauth2_client(
         self,
         user: base_models.APIUser,
-        new_client: apispec.AdminProviderPost,
+        new_client: apispec.ProviderPost,
     ) -> models.OAuth2Client:
         """Insert a new OAuth2 Client environment."""
         if user.id is None or not user.is_admin:
@@ -85,7 +80,7 @@ class ConnectedServicesRepository:
             session.add(client)
             await session.flush()
             await session.refresh(client)
-            return client.dump(redacted=False)
+            return client.dump(user_is_admin=user.is_admin)
 
     async def update_oauth2_client(self, user: base_models.APIUser, provider_id: str, **kwargs) -> models.OAuth2Client:
         """Update an OAuth2 Client entry."""
@@ -107,7 +102,7 @@ class ConnectedServicesRepository:
             await session.flush()
             await session.refresh(client)
 
-            return client.dump(redacted=False)
+            return client.dump(user_is_admin=user.is_admin)
 
     async def delete_oauth2_client(self, user: base_models.APIUser, provider_id: str) -> None:
         """Delete an OAuth2 Client."""

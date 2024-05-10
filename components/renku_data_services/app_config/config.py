@@ -311,7 +311,7 @@ class Config:
                 encryption_key=self.encryption_key,
             )
         return self._kc_user_repo
-    
+
     @property
     def user_secrets_repo(self) -> UserSecretsRepo:
         """The DB adapter for user secrets storage."""
@@ -320,7 +320,7 @@ class Config:
                 session_maker=self.db.async_session_maker,
             )
         return self._user_secrets_repo
-    
+
     @property
     def connected_services_repo(self) -> ConnectedServicesRepository:
         """The DB adapter for connected services."""

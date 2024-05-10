@@ -16,6 +16,7 @@ class OAuth2Client(BaseModel):
     id: str
     kind: ProviderKind
     client_id: str
+    client_secret: str | None
     display_name: str
     scope: str
     url: str

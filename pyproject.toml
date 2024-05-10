@@ -37,6 +37,7 @@ packages = [
   { include = "renku_data_services/session_migrations", from = "components" },
   { include = "renku_data_services/events_migrations", from = "components" },
   { include = "renku_data_services/message_queue", from = "components" },
+  { include = "renku_data_services/connected_services", from = "components" },
 ]
 
 [tool.poetry.dependencies]
@@ -178,8 +179,10 @@ check_untyped_defs = true
 [[tool.mypy.overrides]]
 module = [
   "renku_data_services.crc.apispec",
+  "renku_data_services.connected_services.apispec",
   "renku_data_services.storage.apispec",
   "renku_data_services.project.apispec",
+  "renku_data_services.secrets.apispec",
   "renku_data_services.session.apispec",
   "renku_data_services.user_preferences.apispec",
   "renku_data_services.users.apispec",
