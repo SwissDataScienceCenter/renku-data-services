@@ -137,7 +137,7 @@ class ConnectedServicesRepository:
                 raise errors.MissingResourceError(message=f"OAuth2 Client with id '{provider_id}' does not exist.")
 
             if next_url:
-                query = urlencode([("next", next_url)])
+                query = urlencode([("next_url", next_url)])
                 callback_url = f"{callback_url}?{query}"
 
             async with AsyncOAuth2Client(
@@ -192,7 +192,7 @@ class ConnectedServicesRepository:
                 raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
             if next_url:
-                query = urlencode([("next", next_url)])
+                query = urlencode([("next_url", next_url)])
                 callback_url = f"{callback_url}?{query}"
 
             client = connection.client
