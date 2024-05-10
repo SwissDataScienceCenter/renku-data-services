@@ -53,7 +53,7 @@ class OAuth2TokenSet(dict):
         return token_set
 
     def dump_for_api(self) -> dict[str, Any]:
-        """Expose data for API consumption."""
+        """Expose the access token and other token metadata for API consumption."""
         data = dict((k, v) for k, v in self.items() if k != "refresh_token")
         if self.expires_at_iso is not None:
             data['expires_at_iso'] = self.expires_at_iso

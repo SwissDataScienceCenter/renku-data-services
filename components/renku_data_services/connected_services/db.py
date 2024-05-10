@@ -216,9 +216,6 @@ class ConnectedServicesRepository:
                 connection.state = None
                 connection.status = schemas.ConnectionStatus.connected
 
-                await session.flush()
-                await session.refresh(connection)
-
                 return token
 
     async def get_oauth2_connections(
