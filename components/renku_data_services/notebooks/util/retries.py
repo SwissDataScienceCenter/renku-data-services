@@ -1,6 +1,9 @@
+"""Methods for retrying requests."""
+
 import functools
+from collections.abc import Callable
 from time import sleep
-from typing import Any, Callable
+from typing import Any
 
 from ..errors.intermittent import RetryTimeoutError
 
@@ -28,9 +31,7 @@ def retry_with_exponential_backoff(
                 if not should_retry(res):
                     return res
                 sleep(initial_wait_ms * (multiplier**i) / 1000)
-            raise RetryTimeoutError(
-                f"Retrying the function {func.__name__} timed out after {num_retries} retries."
-            )
+            raise RetryTimeoutError(f"Retrying the function {func.__name__} timed out after {num_retries} retries.")
 
         return wrapper_retry
 

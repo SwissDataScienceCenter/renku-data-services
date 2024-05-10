@@ -1,12 +1,13 @@
+import contextlib
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from ...config import config
 from .cloud_storage.existing import ExistingCloudStorage
 
 
 class UserServerManifest:
-    def __init__(self, manifest: Dict[str, Any]) -> None:
+    def __init__(self, manifest: dict[str, Any]) -> None:
         self.manifest = manifest
 
     @property
@@ -22,7 +23,7 @@ class UserServerManifest:
         return self.image == config.sessions.default_image
 
     @property
-    def server_options(self) -> Dict[str, Any]:
+    def server_options(self) -> dict[str, Any]:
         js = self.manifest
         server_options = {}
         # url
@@ -31,10 +32,8 @@ class UserServerManifest:
         server_options["disk_request"] = js["spec"]["storage"].get("size")
         # NOTE: Amalthea accepts only strings for disk request, but k8s allows bytes as number
         # so try to convert to number if possible
-        try:
+        with contextlib.suppress(ValueError):
             server_options["disk_request"] = float(server_options["disk_request"])
-        except ValueError:
-            pass
         # cpu, memory, gpu, ephemeral storage
         k8s_res_name_xref = {
             "memory": "mem_request",
@@ -43,11 +42,11 @@ class UserServerManifest:
             "ephemeral-storage": "ephemeral-storage",
         }
         js_resources = js["spec"]["jupyterServer"]["resources"]["requests"]
-        for k8s_res_name in k8s_res_name_xref.keys():
-            if k8s_res_name in js_resources.keys():
+        for k8s_res_name in k8s_res_name_xref:
+            if k8s_res_name in js_resources:
                 server_options[k8s_res_name_xref[k8s_res_name]] = js_resources[k8s_res_name]
         # adjust ephemeral storage properly based on whether persistent volumes are used
-        if "ephemeral-storage" in server_options.keys():
+        if "ephemeral-storage" in server_options:
             server_options["ephemeral-storage"] = (
                 server_options["ephemeral-storage"]
                 if config.sessions.storage.pvs_enabled
@@ -63,15 +62,15 @@ class UserServerManifest:
         return server_options
 
     @property
-    def annotations(self) -> Dict[str, str]:
+    def annotations(self) -> dict[str, str]:
         return self.manifest["metadata"]["annotations"]
 
     @property
-    def labels(self) -> Dict[str, str]:
+    def labels(self) -> dict[str, str]:
         return self.manifest["metadata"]["labels"]
 
     @property
-    def cloudstorage(self) -> List[ExistingCloudStorage]:
+    def cloudstorage(self) -> list[ExistingCloudStorage]:
         return ExistingCloudStorage.from_manifest(self.manifest)
 
     @property
@@ -79,7 +78,7 @@ class UserServerManifest:
         return self.manifest["metadata"]["name"]
 
     @property
-    def hibernation(self) -> Optional[Dict[str, Any]]:
+    def hibernation(self) -> Optional[dict[str, Any]]:
         """Return hibernation annotation."""
         hibernation = self.manifest["metadata"]["annotations"].get("hibernation")
         return json.loads(hibernation) if hibernation else None

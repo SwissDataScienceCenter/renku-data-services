@@ -1,3 +1,5 @@
+"""Version endpoint schema."""
+
 from marshmallow import Schema, fields
 
 

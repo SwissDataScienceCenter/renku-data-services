@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any
 
 from ...config import config
 from ..classes.user import RegisteredUser
@@ -8,10 +8,13 @@ if TYPE_CHECKING:
 
 
 def session_tolerations(server: "UserServer"):
-    """Patch for node taint tolerations, the static tolerations from the configuration are ignored
-    if the tolerations are set in the server options (coming from CRC)."""
+    """Patch for node taint tolerations.
+
+    The static tolerations from the configuration are ignored
+    if the tolerations are set in the server options (coming from CRC).
+    """
     key = f"{config.session_get_endpoint_annotations.renku_annotation_prefix}dedicated"
-    default_tolerations: List[Dict[str, str]] = [
+    default_tolerations: list[dict[str, str]] = [
         {
             "key": key,
             "operator": "Equal",
@@ -35,8 +38,11 @@ def session_tolerations(server: "UserServer"):
 
 
 def session_affinity(server: "UserServer"):
-    """Patch for session affinities, the static affinities from the configuration are ignored
-    if the affinities are set in the server options (coming from CRC)."""
+    """Patch for session affinities.
+
+    The static affinities from the configuration are ignored
+    if the affinities are set in the server options (coming from CRC).
+    """
     if not server.server_options.node_affinities:
         return [
             {
@@ -50,16 +56,16 @@ def session_affinity(server: "UserServer"):
                 ],
             }
         ]
-    default_preferred_selector_terms: List[Dict[str, Any]] = config.sessions.affinity.get(
-        "nodeAffinity", {}
-    ).get("preferredDuringSchedulingIgnoredDuringExecution", [])
-    default_required_selector_terms: List[Dict[str, Any]] = (
+    default_preferred_selector_terms: list[dict[str, Any]] = config.sessions.affinity.get("nodeAffinity", {}).get(
+        "preferredDuringSchedulingIgnoredDuringExecution", []
+    )
+    default_required_selector_terms: list[dict[str, Any]] = (
         config.sessions.affinity.get("nodeAffinity", {})
         .get("requiredDuringSchedulingIgnoredDuringExecution", {})
         .get("nodeSelectorTerms", [])
     )
-    preferred_match_expressions: List[Dict[str, str]] = []
-    required_match_expressions: List[Dict[str, str]] = []
+    preferred_match_expressions: list[dict[str, str]] = []
+    required_match_expressions: list[dict[str, str]] = []
     for affinity in server.server_options.node_affinities:
         if affinity.required_during_scheduling:
             required_match_expressions.append(affinity.json_match_expression())
@@ -74,8 +80,7 @@ def session_affinity(server: "UserServer"):
                     "path": "/statefulset/spec/template/spec/affinity",
                     "value": {
                         "nodeAffinity": {
-                            "preferredDuringScheduling"
-                            "IgnoredDuringExecution": default_preferred_selector_terms
+                            "preferredDuringSchedulingIgnoredDuringExecution": default_preferred_selector_terms
                             + [
                                 {
                                     "weight": 1,
@@ -101,8 +106,11 @@ def session_affinity(server: "UserServer"):
 
 
 def session_node_selector(server: "UserServer"):
-    """Patch for a node selector, if node affinities are specified in the server options
-    (coming from CRC) node selectors in the static configuration are ignored."""
+    """Patch for a node selector.
+
+    If node affinities are specified in the server options
+    (coming from CRC) node selectors in the static configuration are ignored.
+    """
     if not server.server_options.node_affinities:
         return [
             {
@@ -137,7 +145,9 @@ def priority_class(server: "UserServer"):
 
 
 def test(server: "UserServer"):
-    """RFC 6901 patches support test statements that will cause the whole patch
+    """Test the server patches.
+
+    RFC 6901 patches support test statements that will cause the whole patch
     to fail if the test statements are not correct. This is used to ensure that the
     order of containers in the amalthea manifests is what the notebook service expects.
     """
@@ -157,9 +167,7 @@ def test(server: "UserServer"):
                 "patch": [
                     {
                         "op": "test",
-                        "path": (
-                            f"/statefulset/spec/template/spec/containers/{container_ind}/name"
-                        ),
+                        "path": (f"/statefulset/spec/template/spec/containers/{container_ind}/name"),
                         "value": container_name,
                     }
                 ],

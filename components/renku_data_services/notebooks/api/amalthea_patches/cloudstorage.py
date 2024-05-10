@@ -1,12 +1,12 @@
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from renku_notebooks.api.classes.cloud_storage import ICloudStorageRequest
     from renku_notebooks.api.classes.server import UserServer
 
 
-def main(server: "UserServer") -> List[Dict[str, Any]]:
-    cloud_storage_patches: List[Dict[str, Any]] = []
+def main(server: "UserServer") -> list[dict[str, Any]]:
+    cloud_storage_patches: list[dict[str, Any]] = []
     cloud_storage_request: "ICloudStorageRequest"
     if not server.cloudstorage:
         return []

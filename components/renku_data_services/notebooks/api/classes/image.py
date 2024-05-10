@@ -3,7 +3,7 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import requests
 from werkzeug.datastructures import WWWAuthenticate
@@ -18,25 +18,25 @@ class ManifestTypes(Enum):
 
 @dataclass
 class ImageRepoDockerAPI:
-    """Used to query the docker image repository API. Please note that all image repositories
-    use this API, not just Dockerhub."""
+    """Used to query the docker image repository API.
+
+    Please note that all image repositories use this API, not just Dockerhub.
+    """
 
     hostname: str
     oauth2_token: Optional[str] = field(default=None, repr=False)
 
     def _get_docker_token(self, image: "Image") -> Optional[str]:
-        """
-        Get an authorization token from the docker v2 API. This will return
-        the token provided by the API (or None if no token was found).
+        """Get an authorization token from the docker v2 API.
+
+        This will return the token provided by the API (or None if no token was found).
         """
         image_digest_url = f"https://{self.hostname}/v2/{image.name}/manifests/{image.tag}"
         try:
             auth_req = requests.get(image_digest_url)
         except requests.ConnectionError:
             auth_req = None
-        if auth_req is None or not (
-            auth_req.status_code == 401 and "Www-Authenticate" in auth_req.headers.keys()
-        ):
+        if auth_req is None or not (auth_req.status_code == 401 and "Www-Authenticate" in auth_req.headers):
             # the request status code and header are not what is expected
             return None
         www_auth = WWWAuthenticate.from_header(auth_req.headers["Www-Authenticate"])
@@ -49,12 +49,11 @@ class ImageRepoDockerAPI:
         token_req = requests.get(realm, params=params, headers=headers)
         return token_req.json().get("token")
 
-    def get_image_manifest(self, image: "Image") -> Optional[Dict[str, Any]]:
+    def get_image_manifest(self, image: "Image") -> Optional[dict[str, Any]]:
         """Query the docker API to get the manifest of an image."""
         if image.hostname != self.hostname:
             raise ImageParseError(
-                f"The image hostname {image.hostname} does not match "
-                f"the image repository {self.hostname}"
+                f"The image hostname {image.hostname} does not match " f"the image repository {self.hostname}"
             )
         token = self._get_docker_token(image)
         image_digest_url = f"https://{image.hostname}/v2/{image.name}/manifests/{image.tag}"
@@ -73,7 +72,7 @@ class ImageRepoDockerAPI:
         """Check the docker repo API if the image exists."""
         return self.get_image_manifest(image) is not None
 
-    def get_image_config(self, image: "Image") -> Optional[Dict[str, Any]]:
+    def get_image_config(self, image: "Image") -> Optional[dict[str, Any]]:
         """Query the docker API to get the configuration of an image."""
         manifest = self.get_image_manifest(image)
         if manifest is None:
@@ -191,9 +190,7 @@ class Image:
         if len(matches) == 1:
             return cls(matches[0]["hostname"], matches[0]["image"], matches[0]["tag"])
         elif len(matches) > 1:
-            raise ImageParseError(
-                f"Cannot parse the image {path}, too many interpretations {matches}"
-            )
+            raise ImageParseError(f"Cannot parse the image {path}, too many interpretations {matches}")
         else:
             raise ImageParseError(f"Cannot parse the image {path}")
 

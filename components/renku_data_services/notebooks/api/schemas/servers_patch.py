@@ -1,3 +1,5 @@
+"""Server PATCH schemas."""
+
 from enum import Enum
 
 from marshmallow import EXCLUDE, Schema, fields, validate
@@ -11,6 +13,7 @@ class PatchServerStatusEnum(Enum):
 
     @classmethod
     def list(cls):
+        """Get list of enum values."""
         return [e.value for e in cls]
 
 

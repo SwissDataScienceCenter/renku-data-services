@@ -1,3 +1,5 @@
+"""Utilities for nandling exceptions."""
+
 import logging
 
 from werkzeug.exceptions import HTTPException

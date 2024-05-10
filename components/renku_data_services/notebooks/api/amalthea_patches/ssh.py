@@ -1,9 +1,9 @@
-from typing import Any, Dict, List
+from typing import Any
 
 from ...config import config
 
 
-def main() -> List[Dict[str, Any]]:
+def main() -> list[dict[str, Any]]:
     if not config.sessions.ssh.enabled:
         return []
     patches = [

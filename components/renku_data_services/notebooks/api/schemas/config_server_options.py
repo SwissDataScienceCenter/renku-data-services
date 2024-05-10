@@ -1,18 +1,26 @@
+"""Server options config schemas."""
+
 from marshmallow import EXCLUDE, Schema, fields, validate
 
 
 class BaseServerOptionsChoice(Schema):
+    """Base class for server option choices."""
+
     order = fields.Int(required=True, validate=lambda x: x >= 1)
     displayName = fields.Str(required=True)
     type = fields.Str(required=True, validate=validate.OneOf(["enum", "boolean"]))
 
 
 class StringServerOptionsChoice(BaseServerOptionsChoice):
+    """String server option choice."""
+
     default = fields.Str(required=True)
     options = fields.List(fields.Str(required=True))
 
 
 class BoolServerOptionsChoice(BaseServerOptionsChoice):
+    """Boolean server option choice."""
+
     default = fields.Bool(required=True)
 
 

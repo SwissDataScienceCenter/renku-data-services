@@ -1,7 +1,9 @@
+"""Schema for cloudstorage config."""
+
 from configparser import ConfigParser
 from io import StringIO
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from marshmallow import EXCLUDE, Schema, ValidationError, fields, validates_schema
 
@@ -10,12 +12,14 @@ from ..classes.user import User
 
 
 class RCloneStorageRequest(Schema):
+    """Request for RClone based storage."""
+
     class Meta:
         unknown = EXCLUDE
 
     source_path: Optional[str] = fields.Str()
     target_path: Optional[str] = fields.Str()
-    configuration: Optional[Dict[str, Any]] = fields.Dict(
+    configuration: Optional[dict[str, Any]] = fields.Dict(
         keys=fields.Str(), values=fields.Raw(), load_default=None, allow_none=True
     )
     storage_id: Optional[str] = fields.Str(load_default=None, allow_none=True)
@@ -23,17 +27,18 @@ class RCloneStorageRequest(Schema):
 
     @validates_schema
     def validate_storage(self, data, **kwargs):
+        """Validate a storage request."""
         if data.get("storage_id") and (data.get("source_path") or data.get("target_path")):
-            raise ValidationError(
-                "'storage_id' cannot be used together with 'source_path' or 'target_path'"
-            )
+            raise ValidationError("'storage_id' cannot be used together with 'source_path' or 'target_path'")
 
 
 class RCloneStorage:
+    """RClone based storage."""
+
     def __init__(
         self,
         source_path: str,
-        configuration: Dict[str, Any],
+        configuration: dict[str, Any],
         readonly: bool,
         mount_folder: str,
         name: Optional[str],
@@ -46,7 +51,8 @@ class RCloneStorage:
         self.name = name
 
     @classmethod
-    def storage_from_schema(cls, data: Dict[str, Any], user: User, project_id: int, work_dir: Path):
+    def storage_from_schema(cls, data: dict[str, Any], user: User, project_id: int, work_dir: Path):
+        """Create storage object from request."""
         name = None
         if data.get("storage_id"):
             # Load from storage service
@@ -72,9 +78,8 @@ class RCloneStorage:
 
         return cls(source_path, configuration, readonly, mount_folder, name)
 
-    def get_manifest_patch(
-        self, base_name: str, namespace: str, labels={}, annotations={}
-    ) -> List[Dict[str, Any]]:
+    def get_manifest_patch(self, base_name: str, namespace: str, labels={}, annotations={}) -> list[dict[str, Any]]:
+        """Get server manifest patch."""
         patches = []
         patches.append(
             {
@@ -91,9 +96,7 @@ class RCloneStorage:
                                 "labels": {"name": base_name},
                             },
                             "spec": {
-                                "accessModes": [
-                                    "ReadOnlyMany" if self.readonly else "ReadWriteMany"
-                                ],
+                                "accessModes": ["ReadOnlyMany" if self.readonly else "ReadWriteMany"],
                                 "resources": {"requests": {"storage": "10Gi"}},
                                 "storageClassName": config.cloud_storage.storage_class,
                             },
@@ -143,12 +146,13 @@ class RCloneStorage:
         return patches
 
     def config_string(self, name: str) -> str:
+        """Convert configuration oblect to string representation.
+
+        Needed to create RClone compatible INI files.
+        """
         if not self.configuration:
             raise ValidationError("Missing configuration for cloud storage")
-        if (
-            self.configuration["type"] == "s3"
-            and self.configuration.get("provider", None) == "Switch"
-        ):
+        if self.configuration["type"] == "s3" and self.configuration.get("provider", None) == "Switch":
             # Switch is a fake provider we add for users, we need to replace it since rclone itself
             # doesn't know it
             self.configuration["provider"] = "Other"
@@ -168,5 +172,7 @@ class RCloneStorage:
 
 
 class LaunchNotebookResponseCloudStorage(RCloneStorageRequest):
+    """Notebook launch response with cloud storage attached."""
+
     class Meta:
         fields = ("remote", "mount_folder", "type")

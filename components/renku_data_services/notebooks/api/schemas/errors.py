@@ -1,3 +1,5 @@
+"""Schemas for error responses."""
+
 from marshmallow import Schema, fields, pre_dump
 
 from .utils import flatten_dict
@@ -18,8 +20,11 @@ class ErrorResponse(Schema):
 
 
 class ErrorResponseFromGenericError(ErrorResponse):
+    """Generic error response."""
+
     @pre_dump
     def extract_fields(self, err, *args, **kwargs):
+        """Extract relevant fields."""
         response = {
             "message": err.message,
             "code": err.code,
@@ -32,6 +37,8 @@ class ErrorResponseFromGenericError(ErrorResponse):
 
 
 class ErrorResponseFromWerkzeug(ErrorResponse):
+    """Class to aid turning internal errors into HTTP errors."""
+
     status_code_map = {
         400: 1400,
         401: 1401,
@@ -67,6 +74,7 @@ class ErrorResponseFromWerkzeug(ErrorResponse):
 
     @pre_dump
     def extract_fields(self, err, *args, **kwargs):
+        """Extract relevant fields."""
         code = self.status_code_map.get(err.code, 2500)
         response = {
             "message": err.description,

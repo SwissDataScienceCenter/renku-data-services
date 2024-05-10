@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, NamedTuple, Optional
+from typing import Any, NamedTuple, Optional
 
 import requests
 from flask import current_app
@@ -16,16 +16,13 @@ from renku_notebooks.errors.user import (
 from ..schemas.server_options import ServerOptions
 from .user import User
 
-CloudStorageConfig = NamedTuple(
-    "CloudStorageConfig",
-    [
-        ("config", dict[str, Any]),
-        ("source_path", str),
-        ("target_path", str),
-        ("readonly", bool),
-        ("name", str),
-    ],
-)
+
+class CloudStorageConfig(NamedTuple):
+    config: dict[str, Any]
+    source_path: str
+    target_path: str
+    readonly: bool
+    name: str
 
 
 @dataclass
@@ -49,9 +46,7 @@ class StorageValidator:
         if res.status_code == 404:
             raise MissingResourceError(message=f"Couldn't find cloud storage with id {storage_id}")
         if res.status_code == 401:
-            raise AuthenticationError(
-                "User is not authorized to access this storage on this project."
-            )
+            raise AuthenticationError("User is not authorized to access this storage on this project.")
         if res.status_code != 200:
             raise IntermittentError(
                 message="The data service sent an unexpected response, please try again later",
@@ -65,9 +60,7 @@ class StorageValidator:
             name=storage["name"],
         )
 
-    def validate_storage_configuration(
-        self, configuration: dict[str, Any], source_path: str
-    ) -> None:
+    def validate_storage_configuration(self, configuration: dict[str, Any], source_path: str) -> None:
         res = requests.post(self.storage_url + "/storage_schema/validate", json=configuration)
         if res.status_code == 422:
             raise InvalidCloudStorageConfiguration(
@@ -95,9 +88,7 @@ class DummyStorageValidator:
     def get_storage_by_id(self, user: User, project_id: int, storage_id: str) -> CloudStorageConfig:
         raise NotImplementedError()
 
-    def validate_storage_configuration(
-        self, configuration: dict[str, Any], source_path: str
-    ) -> None:
+    def validate_storage_configuration(self, configuration: dict[str, Any], source_path: str) -> None:
         raise NotImplementedError()
 
 
@@ -117,7 +108,9 @@ class CRCValidator:
         storage: Optional[int] = None,
     ) -> ServerOptions:
         """Ensures that the resource class and storage requested is valid.
-        Storage in memory are assumed to be in gigabytes."""
+
+        Storage in memory are assumed to be in gigabytes.
+        """
         resource_pools = self._get_resource_pools(user=user)
         pool = None
         res_class = None
@@ -128,19 +121,13 @@ class CRCValidator:
                     pool = rp
                     break
         if res_class is None:
-            raise InvalidComputeResourceError(
-                message=f"The resource class ID {class_id} does not exist."
-            )
+            raise InvalidComputeResourceError(message=f"The resource class ID {class_id} does not exist.")
         if storage is None:
             storage = res_class.get("default_storage", 1)
         if storage < 1:
-            raise InvalidComputeResourceError(
-                message="Storage requests have to be greater than or equal to 1GB."
-            )
+            raise InvalidComputeResourceError(message="Storage requests have to be greater than or equal to 1GB.")
         if storage > res_class.get("max_storage"):
-            raise InvalidComputeResourceError(
-                message="The requested storage surpasses the maximum value allowed."
-            )
+            raise InvalidComputeResourceError(message="The requested storage surpasses the maximum value allowed.")
         options = ServerOptions.from_resource_class(res_class)
         options.set_storage(storage, gigabytes=True)
         quota = pool.get("quota")
@@ -148,27 +135,23 @@ class CRCValidator:
             options.priority_class = quota.get("id")
         return options
 
-    def get_default_class(self) -> Dict[str, Any]:
+    def get_default_class(self) -> dict[str, Any]:
         pools = self._get_resource_pools()
         default_pools = [p for p in pools if p.get("default", False)]
         if len(default_pools) < 1:
             raise ConfigurationError("Cannot find the default resource pool.")
         default_pool = default_pools[0]
-        default_classes = [
-            cls for cls in default_pool.get("classes", []) if cls.get("default", False)
-        ]
+        default_classes = [cls for cls in default_pool.get("classes", []) if cls.get("default", False)]
         if len(default_classes) < 1:
             raise ConfigurationError("Cannot find the default resource class.")
         return default_classes[0]
 
-    def find_acceptable_class(
-        self, user: User, requested_server_options: ServerOptions
-    ) -> Optional[ServerOptions]:
-        """Find a resource class that is available to the user that is greater than or equal to
-        the old-style server options that the user requested."""
-        resource_pools = self._get_resource_pools(
-            user=user, server_options=requested_server_options
-        )
+    def find_acceptable_class(self, user: User, requested_server_options: ServerOptions) -> Optional[ServerOptions]:
+        """Find a resource class greater than or equal to the old-style server options being requested.
+
+        Only classes available to the user are considered.
+        """
+        resource_pools = self._get_resource_pools(user=user, server_options=requested_server_options)
         # Difference and best candidate in the case that the resource class will be
         # greater than or equal to the request
         best_larger_or_equal_diff = None
@@ -194,7 +177,7 @@ class CRCValidator:
         self,
         user: Optional[User] = None,
         server_options: Optional[ServerOptions] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         headers = None
         params = None
         if user is not None and user.access_token is not None:
@@ -204,9 +187,7 @@ class CRCValidator:
                 "cpu": server_options.cpu,
                 "gpu": server_options.gpu,
                 "memory": (
-                    server_options.memory
-                    if server_options.gigabytes
-                    else round(server_options.memory / 1_000_000_000)
+                    server_options.memory if server_options.gigabytes else round(server_options.memory / 1_000_000_000)
                 ),
                 "max_storage": (
                     server_options.storage
@@ -225,14 +206,12 @@ class CRCValidator:
 
 @dataclass
 class DummyCRCValidator:
-    options: ServerOptions = field(
-        default_factory=lambda: ServerOptions(0.5, 1, 0, 1, "/lab", False, True)
-    )
+    options: ServerOptions = field(default_factory=lambda: ServerOptions(0.5, 1, 0, 1, "/lab", False, True))
 
     def validate_class_storage(self, *args, **kwargs) -> ServerOptions:
         return self.options
 
-    def get_default_class(self) -> Dict[str, Any]:
+    def get_default_class(self) -> dict[str, Any]:
         return {
             "name": "resource class",
             "cpu": 0.1,

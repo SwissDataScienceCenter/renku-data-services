@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any
 
 from ....config import config
 
@@ -10,8 +10,8 @@ class ExistingCloudStorage:
     type: str
 
     @classmethod
-    def from_manifest(cls, manifest: Dict[str, Any]) -> List["ExistingCloudStorage"]:
-        output: List[ExistingCloudStorage] = []
+    def from_manifest(cls, manifest: dict[str, Any]) -> list["ExistingCloudStorage"]:
+        output: list[ExistingCloudStorage] = []
         for patch_collection in manifest["spec"]["patches"]:
             for patch in patch_collection["patch"]:
                 if patch["op"] == "test":
@@ -24,9 +24,7 @@ class ExistingCloudStorage:
                     == config.cloud_storage.storage_class
                 )
                 if isinstance(patch["value"], dict) and is_persistent_volume and is_rclone:
-                    configData = patch["value"]["spec"]["csi"]["volumeAttributes"][
-                        "configData"
-                    ].splitlines()
+                    configData = patch["value"]["spec"]["csi"]["volumeAttributes"]["configData"].splitlines()
                     _, storage_type = next(
                         (line.strip().split("=") for line in configData if line.startswith("type")),
                         (None, "Unknown"),

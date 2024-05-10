@@ -1,6 +1,8 @@
+"""Base motebooks svc configuration."""
+
 import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, Optional, Protocol, Text, Union
+from typing import TYPE_CHECKING, Any, Optional, Protocol, Union
 
 import dataconf
 
@@ -14,6 +16,7 @@ from .dynamic import (
     _SentryConfig,
     _ServerOptionsConfig,
     _SessionConfig,
+    _UserSecrets,
 )
 from .static import _ServersGetEndpointAnnotations
 
@@ -31,7 +34,7 @@ class CRCValidatorProto(Protocol):
         storage: Optional[int] = None,
     ) -> "ServerOptions": ...
 
-    def get_default_class(self) -> Dict[str, Any]: ...
+    def get_default_class(self) -> dict[str, Any]: ...
 
     def find_acceptable_class(
         self, user: "User", requested_server_options: "ServerOptions"
@@ -39,17 +42,11 @@ class CRCValidatorProto(Protocol):
 
 
 class StorageValidatorProto(Protocol):
-    def get_storage_by_id(
-        self, user: "User", project_id: int, storage_id: str
-    ) -> "CloudStorageConfig": ...
+    def get_storage_by_id(self, user: "User", project_id: int, storage_id: str) -> "CloudStorageConfig": ...
 
-    def validate_storage_configuration(
-        self, configuration: Dict[str, Any], source_path: str
-    ) -> None: ...
+    def validate_storage_configuration(self, configuration: dict[str, Any], source_path: str) -> None: ...
 
-    def obscure_password_fields_for_storage(
-        self, configuration: dict[str, Any]
-    ) -> dict[str, Any]: ...
+    def obscure_password_fields_for_storage(self, configuration: dict[str, Any]) -> dict[str, Any]: ...
 
 
 @dataclass
@@ -61,14 +58,15 @@ class _NotebooksConfig:
     git: _GitConfig
     k8s: _K8sConfig
     cloud_storage: _CloudStorage
+    user_secrets: _UserSecrets
     current_resource_schema_version: int = 1
-    anonymous_sessions_enabled: Union[Text, bool] = False
-    ssh_enabled: Union[Text, bool] = False
+    anonymous_sessions_enabled: Union[str, bool] = False
+    ssh_enabled: Union[str, bool] = False
     service_prefix: str = "/notebooks"
     version: str = "0.0.0"
     keycloak_realm: str = "Renku"
     data_service_url: str = "http://renku-data-service"
-    dummy_stores: Union[Text, bool] = False
+    dummy_stores: Union[str, bool] = False
 
     def __post_init__(self):
         self.anonymous_sessions_enabled = _parse_str_as_bool(self.anonymous_sessions_enabled)
@@ -77,9 +75,7 @@ class _NotebooksConfig:
         self.session_get_endpoint_annotations = _ServersGetEndpointAnnotations()
         if not self.k8s.enabled:
             return
-        username_label = (
-            self.session_get_endpoint_annotations.renku_annotation_prefix + "safe-username"
-        )
+        username_label = self.session_get_endpoint_annotations.renku_annotation_prefix + "safe-username"
         renku_ns_client = NamespacedK8sClient(
             self.k8s.renku_namespace,
             self.amalthea.group,
@@ -253,6 +249,10 @@ k8s {
 cloud_storage {
     enabled = false
     mount_folder = /cloudstorage
+}
+user_secrets {
+    image = "renku/secrets-mount:latest",
+    secrets_storage_service_url = http://renku-secrets-storage
 }
 anonymous_sessions_enabled = false
 ssh_enabled = false

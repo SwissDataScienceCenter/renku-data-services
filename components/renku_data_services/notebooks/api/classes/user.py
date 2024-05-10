@@ -25,11 +25,9 @@ class User(ABC):
     def get_renku_project(self, namespace_project) -> Optional[Project]:
         """Retrieve the GitLab project."""
         try:
-            return self.gitlab_client.projects.get("{0}".format(namespace_project))
+            return self.gitlab_client.projects.get(f"{namespace_project}")
         except Exception as e:
-            current_app.logger.warning(
-                f"Cannot get project: {namespace_project} for user: {self.username}, error: {e}"
-            )
+            current_app.logger.warning(f"Cannot get project: {namespace_project} for user: {self.username}, error: {e}")
 
     @property
     def anonymous(self) -> bool:
@@ -43,7 +41,7 @@ class AnonymousUser(User):
         if not config.anonymous_sessions_enabled:
             raise ConfigurationError(message="Anonymous sessions are not enabled.")
         self.authenticated = (
-            self.auth_header in headers.keys()
+            self.auth_header in headers
             and headers[self.auth_header] != ""
             # The anonymous id must start with an alphanumeric character
             and re.match(r"^[a-zA-Z0-9]", headers[self.auth_header]) is not None
@@ -79,7 +77,7 @@ class RegisteredUser(User):
     git_header = "Renku-Auth-Git-Credentials"
 
     def __init__(self, headers):
-        self.authenticated = all([header in headers.keys() for header in self.auth_headers])
+        self.authenticated = all([header in headers for header in self.auth_headers])
         if not self.authenticated:
             return
         if not headers.get(self.git_header):
@@ -148,7 +146,4 @@ class RegisteredUser(User):
         )
 
     def __str__(self):
-        return (
-            f"<Registered user username:{self.username} name: "
-            f"{self.full_name} email: {self.email}>"
-        )
+        return f"<Registered user username:{self.username} name: " f"{self.full_name} email: {self.email}>"

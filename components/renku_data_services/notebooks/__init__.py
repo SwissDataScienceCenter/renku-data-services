@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #
 # Copyright 2019 - Swiss Data Science Center (SDSC)
 # A partnership between École Polytechnique Fédérale de Lausanne (EPFL) and
@@ -46,9 +45,10 @@ from .errors.utils import handle_exception
 
 
 # From: http://flask.pocoo.org/snippets/35/
-class _ReverseProxied(object):
-    """Wrap the application in this middleware and configure the
-    front-end server to add these headers, to let you quietly bind
+class _ReverseProxied:
+    """Wrap the application in this middleware and configure the front-end server to add these headers.
+
+    This lets you quietly bind
     this to a URL other than / and to an HTTP scheme that is
     different than what is used locally.
 

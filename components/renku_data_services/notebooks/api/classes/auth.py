@@ -11,8 +11,8 @@ class RenkuTokens:
 
 @dataclass
 class GitlabToken:
-    """A dataclass that hold a Gitlab access token and its expiry date
-    represented as Unix epoch in seconds."""
+    """A Gitlab access token and its expiry date."""
 
     expires_at: int
+    """Expiry date represented as Unix epoch in seconds."""
     access_token: str = field(repr=False)

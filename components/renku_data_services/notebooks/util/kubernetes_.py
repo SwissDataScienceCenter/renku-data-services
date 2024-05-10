@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #
 # Copyright 2019 - Swiss Data Science Center (SDSC)
 # A partnership between École Polytechnique Fédérale de Lausanne (EPFL) and
@@ -20,7 +19,6 @@
 from __future__ import annotations
 
 from hashlib import md5
-from typing import Tuple
 
 import escapism
 from kubernetes.client import V1Container
@@ -31,15 +29,14 @@ def filter_resources_by_annotations(
     annotations,
 ):
     """Fetch all the user server pods that matches the provided annotations.
-    If an annotation that is not present on the pod is provided the match fails."""
+
+    If an annotation that is not present on the pod is provided the match fails.
+    """
 
     def filter_resource(resource):
         res = []
-        for annotation_name in annotations.keys():
-            res.append(
-                resource["metadata"]["annotations"].get(annotation_name)
-                == annotations[annotation_name]
-            )
+        for annotation_name in annotations:
+            res.append(resource["metadata"]["annotations"].get(annotation_name) == annotations[annotation_name])
         if len(res) == 0:
             return True
         else:
@@ -48,16 +45,14 @@ def filter_resources_by_annotations(
     return list(filter(filter_resource, resources))
 
 
-def make_server_name(
-    safe_username: str, namespace: str, project: str, branch: str, commit_sha: str
-) -> str:
+def make_server_name(safe_username: str, namespace: str, project: str, branch: str, commit_sha: str) -> str:
     """Form a unique server name.
 
     This is used in naming all the k8s resources created by amalthea.
     """
     server_string_for_hashing = f"{safe_username}-{namespace}-{project}-{branch}-{commit_sha}"
     safe_username_lowercase = safe_username.lower()
-    if safe_username_lowercase[0].isalpha() and safe_username_lowercase[0].isascii():
+    if safe_username_lowercase[0].isalpha() and safe_username_lowercase[0].isascii():  # noqa: SIM108
         prefix = ""
     else:
         # NOTE: Username starts with an invalid character. This has to be modified because a
@@ -85,9 +80,8 @@ def renku_2_make_server_name(safe_username: str, project_id: str, launcher_id: s
     return f"renku-2-{all_hash[:40]}"
 
 
-def find_env_var(container: V1Container, env_name: str) -> Tuple[int, str] | None:
-    """Find the index and value of a specific environment variable by name
-    from a Kubernetes container."""
+def find_env_var(container: V1Container, env_name: str) -> tuple[int, str] | None:
+    """Find the index and value of a specific environment variable by name from a Kubernetes container."""
     env_var = next(
         filter(
             lambda x: x[1].name == env_name,

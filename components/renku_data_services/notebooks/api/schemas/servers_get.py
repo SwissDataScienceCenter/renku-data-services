@@ -1,8 +1,10 @@
+"""Server GET schemas."""
+
 import re
 from collections import OrderedDict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Dict, Union
+from typing import Union
 
 from marshmallow import EXCLUDE, Schema, fields, pre_dump, pre_load, validate
 
@@ -23,10 +25,13 @@ class ServerStatusEnum(Enum):
 
     @classmethod
     def list(cls):
+        """List all values of the enum."""
         return list(map(lambda c: c.value, cls))
 
 
 class StepStatusEnum(Enum):
+    """Enum for status of a session start step."""
+
     ready: str = "ready"  # An init job completely done or container fully running
     waiting: str = "waiting"  # Waiting to start
     executing: str = "executing"  # Running but not complete or fully ready
@@ -34,10 +39,13 @@ class StepStatusEnum(Enum):
 
     @classmethod
     def list(cls):
+        """List all values of the enum."""
         return list(map(lambda c: c.value, cls))
 
 
 class ServerStatusDetail(Schema):
+    """Status details for a session."""
+
     step = fields.String(required=True)
     status = fields.String(
         required=True,
@@ -46,11 +54,15 @@ class ServerStatusDetail(Schema):
 
 
 class ServerStatusWarning(Schema):
+    """Session status warnings."""
+
     message = fields.String(required=True)
     critical = fields.Boolean(load_default=False, dump_default=False)
 
 
 class ServerStatus(Schema):
+    """Status of a session."""
+
     state = fields.String(
         required=True,
         validate=validate.OneOf(ServerStatusEnum.list()),
@@ -69,6 +81,8 @@ class ServerStatus(Schema):
 
 
 class ResourceRequests(Schema):
+    """Resources requested by a session."""
+
     cpu = CpuField(required=True)
     memory = ByteSizeField(required=True)
     storage = ByteSizeField(required=False)
@@ -76,26 +90,31 @@ class ResourceRequests(Schema):
 
     @pre_load
     def resolve_gpu_fieldname(self, in_data, **kwargs):
-        if "nvidia.com/gpu" in in_data.keys():
+        """Sanitize gpu field name."""
+        if "nvidia.com/gpu" in in_data:
             in_data["gpu"] = in_data.pop("nvidia.com/gpu")
         return in_data
 
 
 class ResourceUsage(Schema):
+    """Resources used by a session."""
+
     cpu = CpuField(required=False)
     memory = ByteSizeField(required=False)
     storage = ByteSizeField(required=False)
 
 
 class UserPodResources(Schema):
+    """Resource requests and usage for a session."""
+
     requests = fields.Nested(ResourceRequests(), required=True)
     usage = fields.Nested(ResourceUsage(), required=False)
 
 
 class LaunchNotebookResponseWithoutStorage(Schema):
-    """
-    The response sent after a successful creation of a jupyter server. Or
-    if the user tries to create a server that already exists. Used only for
+    """The response sent after a successful creation of a jupyter server.
+
+    Or if the user tries to create a server that already exists. Used only for
     serializing the server class into a proper response.
     """
 
@@ -126,8 +145,7 @@ class LaunchNotebookResponseWithoutStorage(Schema):
         def get_user_correctable_message(exit_code):
             """Maps failure codes to messages that can help the user resolve a failed session."""
             default_server_error_message = (
-                "The server shut down unexpectedly. Please ensure "
-                "that your Dockerfile is correct and up-to-date."
+                "The server shut down unexpectedly. Please ensure that your Dockerfile is correct and up-to-date."
             )
             exit_code_msg_xref = {
                 # INFO: the command is found but cannot be invoked
@@ -228,9 +246,7 @@ class LaunchNotebookResponseWithoutStorage(Schema):
         def get_all_container_statuses(server: UserServerManifest):
             return server.manifest["status"].get("mainPod", {}).get("status", {}).get(
                 "containerStatuses", []
-            ) + server.manifest["status"].get("mainPod", {}).get("status", {}).get(
-                "initContainerStatuses", []
-            )
+            ) + server.manifest["status"].get("mainPod", {}).get("status", {}).get("initContainerStatuses", [])
 
         def get_failed_containers(container_statuses):
             failed_containers = [
@@ -238,19 +254,14 @@ class LaunchNotebookResponseWithoutStorage(Schema):
                 for container_status in container_statuses
                 if (
                     container_status.get("state", {}).get("terminated", {}).get("exitCode", 0) != 0
-                    or container_status.get("lastState", {})
-                    .get("terminated", {})
-                    .get("exitCode", 0)
-                    != 0
+                    or container_status.get("lastState", {}).get("terminated", {}).get("exitCode", 0) != 0
                 )
             ]
             return failed_containers
 
         def get_starting_message(step_summary):
             steps_not_ready = [
-                step["step"].lower()
-                for step in step_summary
-                if step["status"] != StepStatusEnum.ready.value
+                step["step"].lower() for step in step_summary if step["status"] != StepStatusEnum.ready.value
             ]
             if len(steps_not_ready) > 0:
                 return f"Steps with non-ready statuses: {', '.join(steps_not_ready)}."
@@ -332,9 +343,7 @@ class LaunchNotebookResponseWithoutStorage(Schema):
             container_statuses = get_all_container_statuses(server)
             if state == ServerStatusEnum.Failed.value:
                 failed_container_statuses = get_failed_containers(container_statuses)
-                unschedulable_msg = get_unschedulable_message(
-                    server.manifest.get("status", {}).get("mainPod", {})
-                )
+                unschedulable_msg = get_unschedulable_message(server.manifest.get("status", {}).get("mainPod", {}))
                 event_based_messages = []
                 events = server.manifest.get("status", {}).get("events", {})
                 for component in sorted(events.keys()):
@@ -353,43 +362,32 @@ class LaunchNotebookResponseWithoutStorage(Schema):
                 output["message"] = get_starting_message(output["details"])
             output["totalNumContainers"] = len(output["details"])
             output["readyNumContainers"] = len(
-                [
-                    step
-                    for step in output["details"]
-                    if step["status"] in [StepStatusEnum.ready.value]
-                ]
+                [step for step in output["details"] if step["status"] in [StepStatusEnum.ready.value]]
             )
 
             output["warnings"] = []
 
             if server.using_default_image:
-                output["warnings"].append(
-                    {"message": "Server was started using the default image."}
-                )
+                output["warnings"].append({"message": "Server was started using the default image."})
 
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             annotations = server.manifest.get("metadata", {}).get("annotations", {})
 
             last_activity_date_str = annotations.get("renku.io/lastActivityDate")
 
-            idle_threshold = (
-                server.manifest.get("spec", {}).get("culling", {}).get("idleSecondsThreshold", 0)
-            )
+            idle_threshold = server.manifest.get("spec", {}).get("culling", {}).get("idleSecondsThreshold", 0)
 
             if idle_threshold > 0 and last_activity_date_str:
                 last_activity_date = datetime.fromisoformat(last_activity_date_str)
                 idle_seconds = (now - last_activity_date).total_seconds()
                 remaining_idle_time = idle_threshold - idle_seconds
 
-                critical: bool = (
-                    remaining_idle_time < config.sessions.termination_warning_duration_seconds
-                )
+                critical: bool = remaining_idle_time < config.sessions.termination_warning_duration_seconds
                 action = "deleted" if is_user_anonymous(server) else "hibernated"
                 output["warnings"].append(
                     {
                         "message": (
-                            f"Server is idle and will be {action} in "
-                            f"{max(remaining_idle_time, 0)} seconds."
+                            f"Server is idle and will be {action} in " f"{max(remaining_idle_time, 0)} seconds."
                         ),
                         "critical": critical,
                     }
@@ -398,23 +396,15 @@ class LaunchNotebookResponseWithoutStorage(Schema):
             hibernation_date_str = annotations.get("renku.io/hibernationDate")
 
             hibernated_seconds_threshold = (
-                server.manifest.get("spec", {})
-                .get("culling", {})
-                .get("hibernatedSecondsThreshold", 0)
+                server.manifest.get("spec", {}).get("culling", {}).get("hibernatedSecondsThreshold", 0)
             )
 
-            if (
-                hibernation_date_str
-                and hibernated_seconds_threshold > 0
-                and not is_user_anonymous(server)
-            ):
+            if hibernation_date_str and hibernated_seconds_threshold > 0 and not is_user_anonymous(server):
                 hibernation_date = datetime.fromisoformat(hibernation_date_str)
                 hibernated_seconds = (now - hibernation_date).total_seconds()
                 remaining_hibernated_time = hibernated_seconds_threshold - hibernated_seconds
 
-                critical: bool = (
-                    remaining_hibernated_time < config.sessions.termination_warning_duration_seconds
-                )
+                critical: bool = remaining_hibernated_time < config.sessions.termination_warning_duration_seconds
                 output["warnings"].append(
                     {
                         "message": (
@@ -425,16 +415,11 @@ class LaunchNotebookResponseWithoutStorage(Schema):
                     }
                 )
 
-            max_age_threshold = (
-                server.manifest.get("spec", {}).get("culling", {}).get("maxAgeSecondsThreshold", 0)
-            )
-            age = (datetime.now(timezone.utc) - started).total_seconds()
+            max_age_threshold = server.manifest.get("spec", {}).get("culling", {}).get("maxAgeSecondsThreshold", 0)
+            age = (datetime.now(UTC) - started).total_seconds()
             remaining_session_time = max_age_threshold - age
 
-            if (
-                max_age_threshold > 0
-                and remaining_session_time < config.sessions.termination_warning_duration_seconds
-            ):
+            if max_age_threshold > 0 and remaining_session_time < config.sessions.termination_warning_duration_seconds:
                 output["warnings"].append(
                     {
                         "message": (
@@ -472,7 +457,7 @@ class LaunchNotebookResponseWithoutStorage(Schema):
 
         def get_resource_usage(
             server: UserServerManifest,
-        ) -> Dict[str, Union[str, int]]:
+        ) -> dict[str, Union[str, int]]:
             usage = server.manifest.get("status", {}).get("mainPod", {}).get("resourceUsage", {})
             formatted_output = {}
             if "cpuMillicores" in usage:
@@ -483,16 +468,15 @@ class LaunchNotebookResponseWithoutStorage(Schema):
                 formatted_output["storage"] = usage["disk"]["usedBytes"]
             return formatted_output
 
-        started = datetime.fromisoformat(
-            re.sub(r"Z$", "+00:00", server.manifest["metadata"]["creationTimestamp"])
-        )
+        started = datetime.fromisoformat(re.sub(r"Z$", "+00:00", server.manifest["metadata"]["creationTimestamp"]))
 
         output = {
             "annotations": config.session_get_endpoint_annotations.sanitize_dict(
                 {
                     **server.annotations,
-                    config.session_get_endpoint_annotations.renku_annotation_prefix
-                    + "default_image_used": str(server.using_default_image),
+                    config.session_get_endpoint_annotations.renku_annotation_prefix + "default_image_used": str(
+                        server.using_default_image
+                    ),
                 }
             ),
             "name": server.name,
@@ -512,9 +496,9 @@ class LaunchNotebookResponseWithoutStorage(Schema):
 
 
 class LaunchNotebookResponseWithStorage(LaunchNotebookResponseWithoutStorage):
-    """
-    The response sent after a successful creation of a jupyter server. Or
-    if the user tries to create a server that already exists. Used only for
+    """The response sent after a successful creation of a jupyter server.
+
+    Or if the user tries to create a server that already exists. Used only for
     serializing the server class into a proper response.
     """
 
@@ -539,6 +523,8 @@ class ServersGetResponse(Schema):
 
 
 class ServersGetRequest(Schema):
+    """Schema for a servers GET request."""
+
     class Meta:
         # passing unknown params does not error, but the params are ignored
         unknown = EXCLUDE
@@ -553,7 +539,5 @@ class ServersGetRequest(Schema):
 
 
 NotebookResponse = (
-    LaunchNotebookResponseWithStorage
-    if config.cloud_storage.enabled
-    else LaunchNotebookResponseWithoutStorage
+    LaunchNotebookResponseWithStorage if config.cloud_storage.enabled else LaunchNotebookResponseWithoutStorage
 )

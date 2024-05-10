@@ -1,3 +1,5 @@
+"""Programming errors (actual bugs)."""
+
 from dataclasses import dataclass
 from typing import Optional
 
@@ -6,8 +8,7 @@ from .common import GenericError
 
 @dataclass
 class ProgrammingError(GenericError):
-    """
-    *Error codes: from 2000 to 2999*
+    """Error codes: from 2000 to 2999.
 
     The programming errors are bugs or unexpected cases. In the first case, they should lead
     to creating a new GitHub issue; in the latter, it may be necessary to handle the specific
@@ -22,7 +23,7 @@ class ProgrammingError(GenericError):
 
 @dataclass
 class ConfigurationError(ProgrammingError):
-    """Raised when there is a problem with the notebooks configuration"""
+    """Raised when there is a problem with the notebooks configuration."""
 
     message: str = "There seems to to be a misconfiguration in Renku."
     code: int = ProgrammingError.code + 1

@@ -1,5 +1,7 @@
+"""Static configuration."""
+
 from dataclasses import dataclass, field
-from typing import ClassVar, Dict, List
+from typing import ClassVar
 
 from marshmallow import INCLUDE, Schema, fields
 
@@ -27,9 +29,7 @@ class _SessionAnnotationName:
     def from_str(cls, val: str, required: bool = True):
         parts = val.split(cls._sep)
         if len(parts) != 2:
-            raise ValueError(
-                f"Expected to find prefix and name in the annotation but found {len(parts)} parts."
-            )
+            raise ValueError(f"Expected to find prefix and name in the annotation but found {len(parts)} parts.")
         return cls(
             parts[0],
             parts[1],
@@ -40,7 +40,7 @@ class _SessionAnnotationName:
 @dataclass
 class _ServersGetEndpointAnnotations:
     renku_annotation_prefix: ClassVar[str] = "renku.io/"
-    required_annotation_names: List[str] = field(
+    required_annotation_names: list[str] = field(
         default_factory=lambda: [
             "renku.io/namespace",
             "renku.io/projectName",
@@ -50,7 +50,7 @@ class _ServersGetEndpointAnnotations:
             "renku.io/repository",
         ]
     )
-    optional_annotation_names: List[str] = field(
+    optional_annotation_names: list[str] = field(
         default_factory=lambda: [
             "renku.io/hibernation",
             "renku.io/hibernationBranch",
@@ -76,7 +76,7 @@ class _ServersGetEndpointAnnotations:
     )
 
     def __post_init__(self):
-        annotations: List[_SessionAnnotationName] = []
+        annotations: list[_SessionAnnotationName] = []
         for annotation in self.required_annotation_names:
             annotations.append(_SessionAnnotationName.from_str(annotation, required=True))
         for annotation in self.optional_annotation_names:
@@ -96,5 +96,5 @@ class _ServersGetEndpointAnnotations:
 
         self.schema = _UserPodAnnotations
 
-    def sanitize_dict(self, ann_dict: Dict[str, str]) -> Dict[str, str]:
+    def sanitize_dict(self, ann_dict: dict[str, str]) -> dict[str, str]:
         return self.schema().load(ann_dict)

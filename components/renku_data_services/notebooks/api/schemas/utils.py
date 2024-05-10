@@ -1,14 +1,15 @@
-from typing import Any, List, Optional, Tuple, Union
+"""Schema utilities."""
+
+from typing import Any, Optional, Union
 
 
 def flatten_dict(
-    d: List[Tuple[str, Any]], sep=".", skip_key_concat: Optional[List[Any]] = None
-) -> List[Tuple[str, Union[str, int, float]]]:
-    """
-    Convert a list of (key, value) pairs into another list of (key, value)
-    pairs but where value is never a dictionary. If dictionaries are found they
-    are converted to new (key, value) pairs where the new key is the
-    contatenation of all old (parent keys), a separator and the new keys.
+    d: list[tuple[str, Any]], sep=".", skip_key_concat: Optional[list[Any]] = None
+) -> list[tuple[str, Union[str, int, float]]]:
+    """Convert a list of (key, value) pairs into another list of (key, value) pairs where value is never a dictionary.
+
+    If dictionaries are found they are converted to new (key, value) pairs where the new key is the contatenation of
+    all old (parent keys), a separator and the new keys.
     I.e. calling this function on [("A", 1), ("B": {"C": {"D": 2}})]
     will result in [("A", 1), ("B.C.D", 2)]. Used to address the fact that
     marshmallow will parse schema keys with dots in them as a series

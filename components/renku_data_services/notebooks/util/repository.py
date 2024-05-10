@@ -1,10 +1,12 @@
+"""Repository utilities."""
+
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import requests
 
 
-def get_status(server_name: str, access_token: Optional[str]) -> Dict[str, Any]:
+def get_status(server_name: str, access_token: Optional[str]) -> dict[str, Any]:
     """Get repository status from the sidecar."""
     from renku_notebooks.config import config
 

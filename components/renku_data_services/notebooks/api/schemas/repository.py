@@ -1,3 +1,5 @@
+"""Schema for a git repository."""
+
 from marshmallow import Schema, fields
 
 from .custom_fields import LowercaseString

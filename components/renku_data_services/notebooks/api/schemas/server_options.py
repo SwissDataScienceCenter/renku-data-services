@@ -1,12 +1,15 @@
+"""Options for a user session."""
+
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Optional
 
 from marshmallow import Schema, fields, post_load
 
 from ...config import config
 from ...config.dynamic import CPUEnforcement
-from .custom_fields import ByteSizeField, CpuField, GpuField
 from ...errors.programming import ProgrammingError
+from .custom_fields import ByteSizeField, CpuField, GpuField
 
 
 @dataclass
@@ -16,7 +19,8 @@ class NodeAffinity:
     key: str
     required_during_scheduling: bool = False
 
-    def json_match_expression(self) -> Dict[str, str]:
+    def json_match_expression(self) -> dict[str, str]:
+        """Create match expression for this class."""
         return {
             "key": self.key,
             "operator": "Exists",
@@ -29,7 +33,8 @@ class Toleration:
 
     key: str
 
-    def json_match_expression(self) -> Dict[str, Any]:
+    def json_match_expression(self) -> dict[str, Any]:
+        """Create match expression for this class."""
         return {
             "key": self.key,
             "operator": "Exists",
@@ -48,8 +53,8 @@ class ServerOptions:
     lfs_auto_fetch: bool = False
     gigabytes: bool = False
     priority_class: Optional[str] = None
-    node_affinities: List[NodeAffinity] = field(default_factory=list)
-    tolerations: List[Toleration] = field(default_factory=list)
+    node_affinities: list[NodeAffinity] = field(default_factory=list)
+    tolerations: list[Toleration] = field(default_factory=list)
     resource_class_id: Optional[int] = None
 
     def __post_init__(self):
@@ -68,8 +73,7 @@ class ServerOptions:
             )
         if not all([isinstance(i, Toleration) for i in self.tolerations]):
             raise ProgrammingError(
-                message="Cannot create a ServerOptions dataclass with tolerations "
-                "that are not of type Toleration"
+                message="Cannot create a ServerOptions dataclass with tolerations that are not of type Toleration"
             )
         if self.node_affinities is None:
             self.node_affinities = []
@@ -99,6 +103,7 @@ class ServerOptions:
         return all(results)
 
     def to_gigabytes(self) -> "ServerOptions":
+        """Get this oblects with all relevant sizes in gigabytes."""
         if self.gigabytes:
             return self
         return ServerOptions(
@@ -112,6 +117,7 @@ class ServerOptions:
         )
 
     def set_storage(self, storage: int, gigabytes: bool = False):
+        """Set storage request for a session."""
         if self.gigabytes and not gigabytes:
             self.storage = round(storage / 1_000_000_000)
         elif not self.gigabytes and gigabytes:
@@ -151,9 +157,7 @@ class ServerOptions:
             and self.priority_class == other.priority_class
         )
 
-    def to_k8s_resources(
-        self, enforce_cpu_limits: CPUEnforcement = CPUEnforcement.OFF
-    ) -> Dict[str, Any]:
+    def to_k8s_resources(self, enforce_cpu_limits: CPUEnforcement = CPUEnforcement.OFF) -> dict[str, Any]:
         """Convert to the K8s resource requests and limits for cpu, memory and gpus."""
         cpu_request = float(self.cpu)
         mem = f"{self.memory}G" if self.gigabytes else self.memory
@@ -173,9 +177,11 @@ class ServerOptions:
         return resources
 
     @classmethod
-    def from_resource_class(cls, data: Dict[str, Any]) -> "ServerOptions":
-        """Convert a CRC resource class to server options. CRC users GB for storage and memory
-        whereas the notebook service uses bytes so we convert to bytes here."""
+    def from_resource_class(cls, data: dict[str, Any]) -> "ServerOptions":
+        """Convert a CRC resource class to server options.
+
+        Data Service uses GB for storage and memory whereas the notebook service uses bytes so we convert to bytes here.
+        """
         return cls(
             cpu=data["cpu"],
             memory=data["memory"] * 1000000000,
@@ -187,7 +193,7 @@ class ServerOptions:
         )
 
     @classmethod
-    def from_request(cls, data: Dict[str, Any]) -> "ServerOptions":
+    def from_request(cls, data: dict[str, Any]) -> "ServerOptions":
         """Convert a server options request dictionary to the model."""
         return ServerOptions(
             cpu=data["cpu_request"],
@@ -200,11 +206,12 @@ class ServerOptions:
 
 
 class LaunchNotebookRequestServerOptions(Schema):
-    """This is the old-style API server options and are only used to find suitable
-    # resource class form the crc service. "Suitable" in this case is any resource
-    # class where all its parameters are greather than or equal to the request. So
-    # by assigning a value of 0 to a server option we are ensuring that CRC will
-    # be able to easily find a match."""
+    """This is the old-style API for server options.
+
+    This is only used to find suitable resource class form the crc service. "Suitable" in this case is any resource
+    class where all its parameters are greather than or equal to the request. So by assigning a value of 0 to a server
+    option we are ensuring that CRC will be able to easily find a match.
+    """
 
     defaultUrl = fields.Str(
         required=False,
@@ -232,5 +239,6 @@ class LaunchNotebookRequestServerOptions(Schema):
     )
 
     @post_load
-    def make_dataclass(slef, data, **kwargs):
+    def make_dataclass(self, data, **kwargs):
+        """Create class from request."""
         return ServerOptions.from_request(data)

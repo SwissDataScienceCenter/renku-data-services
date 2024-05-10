@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod, abstractproperty
-from typing import Any, Dict, List
+from typing import Any
 
 
 class ICloudStorageRequest(ABC):
@@ -24,7 +24,7 @@ class ICloudStorageRequest(ABC):
         self,
         base_name: str,
         namespace: str,
-        labels: Dict[str, str] = {},
-        annotations: Dict[str, str] = {},
-    ) -> List[Dict[str, Any]]:
+        labels: dict[str, str] = {},
+        annotations: dict[str, str] = {},
+    ) -> list[dict[str, Any]]:
         pass

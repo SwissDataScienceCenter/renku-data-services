@@ -3,7 +3,7 @@
 import base64
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 from urllib.parse import urljoin
 
 import requests
@@ -18,7 +18,6 @@ from kubernetes.config.incluster_config import (
     InClusterConfigLoader,
 )
 
-from .auth import GitlabToken, RenkuTokens
 from ...errors.intermittent import (
     CannotStartServerError,
     DeleteServerError,
@@ -28,8 +27,9 @@ from ...errors.intermittent import (
 )
 from ...errors.programming import ProgrammingError
 from ...errors.user import MissingResourceError
-from ...util.retries import retry_with_exponential_backoff
 from ...util.kubernetes_ import find_env_var
+from ...util.retries import retry_with_exponential_backoff
+from .auth import GitlabToken, RenkuTokens
 
 
 class NamespacedK8sClient:
@@ -54,9 +54,7 @@ class NamespacedK8sClient:
             load_config()
         self._custom_objects = client.CustomObjectsApi(client.ApiClient())
         self._custom_objects_patch = client.CustomObjectsApi(client.ApiClient())
-        self._custom_objects_patch.api_client.set_default_header(
-            "Content-Type", "application/json-patch+json"
-        )
+        self._custom_objects_patch.api_client.set_default_header("Content-Type", "application/json-patch+json")
         self._core_v1 = client.CoreV1Api()
         self._apps_v1 = client.AppsV1Api()
 
@@ -75,32 +73,26 @@ class NamespacedK8sClient:
             if err.status in [400, 404]:
                 return  # container does not exist or is not ready yet
             else:
-                raise IntermittentError(
-                    f"Logs cannot be read for pod {pod_name}, container {container_name}."
-                )
+                raise IntermittentError(f"Logs cannot be read for pod {pod_name}, container {container_name}.")
         else:
             return logs
 
-    def get_pod_logs(
-        self, name: str, containers: List[str], max_log_lines: Optional[int] = None
-    ) -> Dict[str, str]:
+    def get_pod_logs(self, name: str, containers: list[str], max_log_lines: Optional[int] = None) -> dict[str, str]:
         output = {}
         for container in containers:
-            logs = self._get_container_logs(
-                pod_name=name, container_name=container, max_log_lines=max_log_lines
-            )
+            logs = self._get_container_logs(pod_name=name, container_name=container, max_log_lines=max_log_lines)
             if logs:
                 output[container] = logs
         return output
 
-    def get_secret(self, name: str) -> Optional[Dict[str, Any]]:
+    def get_secret(self, name: str) -> Optional[dict[str, Any]]:
         try:
             secret = self._core_v1.read_namespaced_secret(name, self.namespace)
         except client.rest.ApiException:
             return None
         return secret
 
-    def create_server(self, manifest: Dict[str, Any]) -> Dict[str, Any]:
+    def create_server(self, manifest: dict[str, Any]) -> dict[str, Any]:
         server_name = manifest.get("metadata", {}).get("name")
         try:
             self._custom_objects.create_namespaced_custom_object(
@@ -124,9 +116,9 @@ class NamespacedK8sClient:
         server = retry_with_exponential_backoff(lambda x: x is None)(self.get_server)(server_name)
         return server
 
-    def patch_server(self, server_name: str, patch: Dict[str, Any] | List[Dict[str, Any]]):
+    def patch_server(self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]]):
         try:
-            if isinstance(patch, list):
+            if isinstance(patch, list):  # noqa: SIM108
                 # NOTE: The _custom_objects_patch will only accept rfc6902 json-patch.
                 # We can recognize the type of patch because this is the only one that uses a list
                 client = self._custom_objects_patch
@@ -150,7 +142,7 @@ class NamespacedK8sClient:
         return server
 
     def patch_statefulset(
-        self, server_name: str, patch: Dict[str, Any] | List[Dict[str, Any]] | client.V1StatefulSet
+        self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]] | client.V1StatefulSet
     ) -> client.V1StatefulSet | None:
         try:
             ss = self._apps_v1.patch_namespaced_stateful_set(
@@ -183,8 +175,8 @@ class NamespacedK8sClient:
             raise DeleteServerError()
         return status
 
-    def get_server(self, name: str) -> Optional[Dict[str, Any]]:
-        """Get a specific JupyterServer object"""
+    def get_server(self, name: str) -> Optional[dict[str, Any]]:
+        """Get a specific JupyterServer object."""
         try:
             js = self._custom_objects.get_namespaced_custom_object(
                 name=name,
@@ -200,7 +192,7 @@ class NamespacedK8sClient:
             return
         return js
 
-    def list_servers(self, label_selector: Optional[str] = None) -> List[Dict[str, Any]]:
+    def list_servers(self, label_selector: Optional[str] = None) -> list[dict[str, Any]]:
         """Get a list of k8s jupyterserver objects for a specific user."""
         try:
             jss = self._custom_objects.list_namespaced_custom_object(
@@ -213,9 +205,7 @@ class NamespacedK8sClient:
         except ApiException as err:
             if err.status not in [400, 404]:
                 logging.exception(f"Cannot list servers because of {err}")
-                raise IntermittentError(
-                    f"Cannot list servers from the k8s API with selector {label_selector}."
-                )
+                raise IntermittentError(f"Cannot list servers from the k8s API with selector {label_selector}.")
             return []
         return jss.get("items", [])
 
@@ -260,9 +250,7 @@ class NamespacedK8sClient:
             patch,
         )
 
-    def patch_statefulset_tokens(
-        self, name: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken
-    ):
+    def patch_statefulset_tokens(self, name: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken):
         """Patch the Renku and Gitlab access tokens that are used in the session statefulset."""
         try:
             ss = self._apps_v1.read_namespaced_stateful_set(name, self.namespace)
@@ -273,22 +261,22 @@ class NamespacedK8sClient:
                 # the missing statefulset
                 return
             raise
-        if (
-            len(ss.spec.template.spec.containers) < 3
-            or len(ss.spec.template.spec.init_containers) < 3
-        ):
+        if len(ss.spec.template.spec.containers) < 3 or len(ss.spec.template.spec.init_containers) < 3:
             raise ProgrammingError(
                 "The expected setup for a session was not found when trying to inject new tokens",
                 detail="Please contact a Renku administrator.",
             )
         git_proxy_container_index = 2
         git_proxy_container = ss.spec.template.spec.containers[git_proxy_container_index]
-        git_init_container_index = 2
+        secrets_init_container_index = 0
+        secrets_init_container = ss.spec.template.spec.init_containers[secrets_init_container_index]
+        git_init_container_index = 3
         git_init_container = ss.spec.template.spec.init_containers[git_init_container_index]
         patch = []
         expires_at_env = find_env_var(git_proxy_container, "GITLAB_OAUTH_TOKEN_EXPIRES_AT")
         gitlab_token_env = find_env_var(git_proxy_container, "GITLAB_OAUTH_TOKEN")
         git_init_token_env = find_env_var(git_init_container, "GIT_CLONE_USER__OAUTH_TOKEN")
+        secrets_access_token_env = find_env_var(secrets_init_container, "RENKU_ACCESS_TOKEN")
         renku_access_token_env = find_env_var(git_proxy_container, "RENKU_ACCESS_TOKEN")
         renku_refresh_token_env = find_env_var(git_proxy_container, "RENKU_REFRESH_TOKEN")
         if not all(
@@ -296,29 +284,27 @@ class NamespacedK8sClient:
                 expires_at_env,
                 gitlab_token_env,
                 git_init_token_env,
+                secrets_access_token_env,
                 renku_access_token_env,
                 renku_refresh_token_env,
             ]
         ):
             raise ProgrammingError(
-                "The expected environment variables were not found "
-                "when trying to inject new tokens.",
+                "The expected environment variables were not found when trying to inject new tokens.",
                 detail="Please contact a Renku administrator.",
             )
         patch = [
             {
                 "op": "replace",
                 "path": (
-                    f"/spec/template/spec/containers/{git_proxy_container_index}"
-                    f"/env/{expires_at_env[0]}/value"
+                    f"/spec/template/spec/containers/{git_proxy_container_index}" f"/env/{expires_at_env[0]}/value"
                 ),
                 "value": str(gitlab_token.expires_at),
             },
             {
                 "op": "replace",
                 "path": (
-                    f"/spec/template/spec/containers/{git_proxy_container_index}"
-                    f"/env/{gitlab_token_env[0]}/value"
+                    f"/spec/template/spec/containers/{git_proxy_container_index}" f"/env/{gitlab_token_env[0]}/value"
                 ),
                 "value": gitlab_token.access_token,
             },
@@ -329,6 +315,14 @@ class NamespacedK8sClient:
                     f"/env/{git_init_token_env[0]}/value"
                 ),
                 "value": gitlab_token.access_token,
+            },
+            {
+                "op": "replace",
+                "path": (
+                    f"/spec/template/spec/initContainers/{secrets_init_container_index}"
+                    f"/env/{secrets_access_token_env[0]}/value"
+                ),
+                "value": renku_tokens.access_token,
             },
             {
                 "op": "replace",
@@ -358,7 +352,7 @@ class JsServerCache:
     def __init__(self, url: str):
         self.url = url
 
-    def list_servers(self, safe_username: str) -> List[Dict[str, Any]]:
+    def list_servers(self, safe_username: str) -> list[dict[str, Any]]:
         url = urljoin(self.url, f"/users/{safe_username}/servers")
         try:
             res = requests.get(url)
@@ -375,7 +369,7 @@ class JsServerCache:
             raise JSCacheError("The jupyter server cache is not available") from err
         return res.json()
 
-    def get_server(self, name: str) -> Optional[Dict[str, Any]]:
+    def get_server(self, name: str) -> Optional[dict[str, Any]]:
         url = urljoin(self.url, f"/servers/{name}")
         try:
             res = requests.get(url)
@@ -393,9 +387,7 @@ class JsServerCache:
         if len(output) == 0:
             return
         if len(output) > 1:
-            raise ProgrammingError(
-                f"Expected to find 1 server when getting server {name}, " f"found {len(output)}."
-            )
+            raise ProgrammingError(f"Expected to find 1 server when getting server {name}, " f"found {len(output)}.")
         return output[0]
 
 
@@ -414,23 +406,25 @@ class K8sClient:
         if not self.username_label:
             raise ProgrammingError("username_label has to be provided to K8sClient")
 
-    def list_servers(self, safe_username: str) -> List[Dict[str, Any]]:
-        """Get a list of servers that belong to a user. Attempt to use the cache
-        first but if the cache fails then use the k8s API."""
+    def list_servers(self, safe_username: str) -> list[dict[str, Any]]:
+        """Get a list of servers that belong to a user.
+
+        Attempt to use the cache first but if the cache fails then use the k8s API.
+        """
         try:
             return self.js_cache.list_servers(safe_username)
         except JSCacheError:
             logging.warning(f"Skipping the cache to list servers for user: {safe_username}")
             label_selector = f"{self.username_label}={safe_username}"
             return self.renku_ns_client.list_servers(label_selector) + (
-                self.session_ns_client.list_servers(label_selector)
-                if self.session_ns_client is not None
-                else []
+                self.session_ns_client.list_servers(label_selector) if self.session_ns_client is not None else []
             )
 
-    def get_server(self, name: str, safe_username: str) -> Optional[Dict[str, Any]]:
-        """Attempt to get a specific server by name from the cache. If the request
-        to the cache fails, fallback to the k8s API."""
+    def get_server(self, name: str, safe_username: str) -> Optional[dict[str, Any]]:
+        """Attempt to get a specific server by name from the cache.
+
+        If the request to the cache fails, fallback to the k8s API.
+        """
         server = None
         try:
             server = self.js_cache.get_server(name)
@@ -446,46 +440,41 @@ class K8sClient:
                 output.append(res)
             if len(output) > 1:
                 raise ProgrammingError(
-                    "Expected less than two results for searching for "
-                    f"server {name}, but got {len(output)}"
+                    "Expected less than two results for searching for " f"server {name}, but got {len(output)}"
                 )
             if len(output) == 0:
                 return
             server = output[0]
 
-        if server:
-            if (
-                server.get("metadata", {}).get("labels", {}).get(self.username_label)
-                != safe_username
-            ):
-                return
+        if server and server.get("metadata", {}).get("labels", {}).get(self.username_label) != safe_username:
+            return
         return server
 
     def get_server_logs(
         self, server_name: str, safe_username: str, max_log_lines: Optional[int] = None
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         server = self.get_server(server_name, safe_username)
         if server is None:
             raise MissingResourceError(
                 f"Cannot find server {server_name} for user {safe_username} to read the logs from."
             )
-        containers = list(
-            server.get("status", {}).get("containerStates", {}).get("init", {}).keys()
-        ) + list(server.get("status", {}).get("containerStates", {}).get("regular", {}).keys())
+        containers = list(server.get("status", {}).get("containerStates", {}).get("init", {}).keys()) + list(
+            server.get("status", {}).get("containerStates", {}).get("regular", {}).keys()
+        )
         namespace = server.get("metadata", {}).get("namespace")
         pod_name = f"{server_name}-0"
         if namespace == self.renku_ns_client.namespace:
             return self.renku_ns_client.get_pod_logs(pod_name, containers, max_log_lines)
         return self.session_ns_client.get_pod_logs(pod_name, containers, max_log_lines)
 
-    def get_secret(self, name: str) -> Optional[Dict[str, Any]]:
+    def get_secret(self, name: str) -> Optional[dict[str, Any]]:
         if self.session_ns_client is not None:
             secret = self.session_ns_client.get_secret(name)
             if secret:
                 return secret
         return self.renku_ns_client.get_secret(name)
 
-    def create_server(self, manifest: Dict[str, Any], safe_username: str):
+    def create_server(self, manifest: dict[str, Any], safe_username: str):
         server_name = manifest.get("metadata", {}).get("name")
         server = self.get_server(server_name, safe_username)
         if server:
@@ -495,12 +484,11 @@ class K8sClient:
             return self.renku_ns_client.create_server(manifest)
         return self.session_ns_client.create_server(manifest)
 
-    def patch_server(self, server_name: str, safe_username: str, patch: Dict[str, Any]):
+    def patch_server(self, server_name: str, safe_username: str, patch: dict[str, Any]):
         server = self.get_server(server_name, safe_username)
         if not server:
             raise MissingResourceError(
-                f"Cannot find server {server_name} for user "
-                f"{safe_username} in order to patch it."
+                f"Cannot find server {server_name} for user " f"{safe_username} in order to patch it."
             )
 
         namespace = server.get("metadata", {}).get("namespace")
@@ -510,21 +498,15 @@ class K8sClient:
         else:
             return self.session_ns_client.patch_server(server_name=server_name, patch=patch)
 
-    def patch_statefulset(
-        self, server_name: str, patch: Dict[str, Any]
-    ) -> client.V1StatefulSet | None:
-        if self.session_ns_client:
-            client = self.session_ns_client
-        else:
-            client = self.renku_ns_client
+    def patch_statefulset(self, server_name: str, patch: dict[str, Any]) -> client.V1StatefulSet | None:
+        client = self.session_ns_client if self.session_ns_client else self.renku_ns_client
         return client.patch_statefulset(server_name=server_name, patch=patch)
 
     def delete_server(self, server_name: str, safe_username: str, forced: bool = False):
         server = self.get_server(server_name, safe_username)
         if not server:
             raise MissingResourceError(
-                f"Cannot find server {server_name} for user "
-                f"{safe_username} in order to delete it."
+                f"Cannot find server {server_name} for user " f"{safe_username} in order to delete it."
             )
         namespace = server.get("metadata", {}).get("namespace")
         if namespace == self.renku_ns_client.namespace:
@@ -534,10 +516,7 @@ class K8sClient:
 
     def patch_tokens(self, server_name, renku_tokens: RenkuTokens, gitlab_token: GitlabToken):
         """Patch the Renku and Gitlab access tokens used in a session."""
-        if self.session_ns_client:
-            client = self.session_ns_client
-        else:
-            client = self.renku_ns_client
+        client = self.session_ns_client if self.session_ns_client else self.renku_ns_client
         client.patch_statefulset_tokens(server_name, renku_tokens, gitlab_token)
         client.patch_image_pull_secret(server_name, gitlab_token)
 
