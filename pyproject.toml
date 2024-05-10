@@ -12,7 +12,6 @@ packages = [
   { include = "renku_data_services/db_config", from = "components" },
   { include = "renku_data_services/app_config", from = "components" },
   { include = "renku_data_services/authz", from = "components" },
-  { include = "renku_data_services/authz_migrations", from = "components" },
   { include = "renku_data_services/crc", from = "components" },
   { include = "renku_data_services/crc_migrations", from = "components" },
   { include = "renku_data_services/k8s", from = "components" },
@@ -46,7 +45,7 @@ sanic = { extras = ["ext"], version = "^23.3.0" }
 pydantic = {extras = ["email"], version = "^2.6.4"}
 datamodel-code-generator = "^0.24.2"
 sqlalchemy = { extras = ["asyncio"], version = "^2.0.9" }
-alembic = "^1.10.3"
+alembic = "^1.12.1"
 asyncpg = "^0.29.0"
 pyjwt = { extras = ["crypto"], version = "^2.6.0" }
 tenacity = "^8.2.2"
@@ -54,7 +53,7 @@ httpx = "<0.24"
 kubernetes = "^26.1.0"
 python-ulid = "^1.1.0"
 python-gitlab = "^3.15.0"
-psycopg = { version = "^3.1.10", extras = ["binary"] }
+psycopg = { version = "^3.1.13", extras = ["binary"] }
 urllib3 = "^2.2.1"
 deepmerge = "^1.1.0"
 authlib = "^1.2.1"
@@ -64,6 +63,7 @@ undictify = "^0.11.3"
 types-redis = "^4.6.0.20240218"
 prometheus-sanic = "^3.0.0"
 sentry-sdk = { version = "^1.43.0", extras = ["sanic"] }
+authzed = {git = "https://github.com/authzed/authzed-py.git", rev = "bcd9640a5c2f8e0350e1eff29b34b3fe23a57f14"}
 cryptography = "^42.0.5"
 
 [tool.poetry.group.dev.dependencies]
@@ -84,6 +84,7 @@ avro-preprocessor = "^0.3.0"
 fakeredis = "^2.21.1"
 ruff = "^0.3.4"
 debugpy = "^1.8.1"
+pytest-xdist = {version = "^3.5.0", extras = ["psutil"]}
 
 [build-system]
 requires = ["poetry-core"]
@@ -134,7 +135,6 @@ ignore = [
 "*/user_preferences_migrations/*" = ["D", "I"]
 "*/project_migrations/*" = ["D", "I"]
 "*/session_migrations/*" = ["D", "I"]
-"*/authz_migrations/*" = ["D", "I"]
 "*/users_migrations/*" = ["D", "I"]
 "*/versions/*" = ["D", "E", "W"]
 "apispec.py" = ["D", "E", "W", "I", "UP"]
@@ -202,6 +202,8 @@ module = [
   "dataclasses_avroschema",
   "urllib3.*",
   "prometheus_sanic.*",
+  "authzed.*",
+  "grpcutil.*",
 ]
 ignore_missing_imports = true
 

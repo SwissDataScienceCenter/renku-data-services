@@ -68,7 +68,8 @@ style_checks:
 
 tests:
 	@rm -f coverage.lcov .coverage
-	poetry run pytest
+	poetry run pytest -m "not schemathesis" -n auto
+	poetry run pytest -m "schemathesis" --cov-append
 	@echo "===========================================TEST DOWNGRADE/UPGRADE==========================================="
 	DUMMY_STORES=true poetry run coverage run -a -m alembic -c components/renku_data_services/migrations/alembic.ini --name=common upgrade heads
 	DUMMY_STORES=true poetry run coverage run -a -m alembic -c components/renku_data_services/migrations/alembic.ini --name=common downgrade base

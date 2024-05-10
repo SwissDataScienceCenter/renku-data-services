@@ -9,6 +9,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_co
 from sqlalchemy.schema import ForeignKey
 from ulid import ULID
 
+from renku_data_services.authz import models as authz_models
 from renku_data_services.namespace.orm import NamespaceORM
 from renku_data_services.project import models
 from renku_data_services.project.apispec import Visibility
@@ -56,7 +57,9 @@ class ProjectORM(BaseORM):
             name=self.name,
             slug=self.slug.slug,
             namespace=self.slug.namespace.slug,
-            visibility=self.visibility,
+            visibility=authz_models.Visibility.PUBLIC
+            if self.visibility == Visibility.public
+            else authz_models.Visibility.PRIVATE,
             created_by=self.created_by_id,
             creation_date=self.creation_date,
             updated_at=self.updated_at,

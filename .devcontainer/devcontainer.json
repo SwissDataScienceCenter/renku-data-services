@@ -12,7 +12,10 @@
 		"ghcr.io/devcontainers/features/git:1": {},
 		"ghcr.io/jungaretti/features/make:1": {},
 		"ghcr.io/rocker-org/devcontainer-features/apt-packages:1": {
-			"packages": "procps,gcc,python3-dev,curl"
+			"packages": "procps,gcc,python3-dev,curl,ca-certificates,gpg"
+		},
+		"ghcr.io/devcontainers-contrib/features/bash-command:1": {
+			"command": "apt update && apt install -y curl ca-certificates gpg && curl https://apt.fury.io/authzed/gpg.key | apt-key add - && echo 'deb https://apt.fury.io/authzed/ * *' > /etc/apt/sources.list.d/fury.list && apt update && apt install -y zed && curl https://pkg.authzed.com/apt/gpg.key | apt-key add - && echo 'deb https://pkg.authzed.com/apt/ * *' > /etc/apt/sources.list.d/authzed.list && apt update && apt install -y spicedb lsof"
 		}
 	},
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.

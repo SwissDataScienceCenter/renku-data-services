@@ -1,5 +1,6 @@
 """Dummy Keycloak API."""
-from collections.abc import Iterable, Iterator
+
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
@@ -13,44 +14,53 @@ class DummyKeycloakAPI:
 
     users: Iterable[dict[str, Any] | Exception] = field(default_factory=list)
     user_events: Iterable[dict[str, Any] | Exception] = field(default_factory=list)
-    admin_update_events: Iterable[dict[str, Any] | Exception] = field(default_factory=list)
-    admin_delete_events: Iterable[dict[str, Any] | Exception] = field(default_factory=list)
+    admin_events: Iterable[dict[str, Any] | Exception] = field(default_factory=list)
+    user_roles: dict[str, list[str]] = field(default_factory=dict)
 
     def get_users(self) -> Iterable[dict[str, Any]]:
         """Get users."""
-        users = self.users
-        if not isinstance(users, Iterator):
-            users = iter(users)
-        while (elem := next(users, None)) is not None:
-            if isinstance(elem, Exception):
-                raise elem
-            yield elem
+        for user in self.users:
+            if isinstance(user, Exception):
+                raise user
+            yield user
         return
 
     def get_admin_events(
-        self, start_date: date, end_date: date | None = None, event_types: list[KeycloakAdminEvent] | None = None
+        self,
+        start_date: date,
+        end_date: date | None = None,
+        event_types: list[KeycloakAdminEvent] | None = None,
     ) -> Iterable[dict[str, Any]]:
         """Get admin events."""
-        output_events = self.admin_update_events
-        if isinstance(event_types, list) and KeycloakAdminEvent.DELETE in event_types:
-            output_events = self.admin_delete_events
-        if not isinstance(output_events, Iterator):
-            output_events = iter(output_events)
-        while (elem := next(output_events, None)) is not None:
-            if isinstance(elem, Exception):
-                raise elem
-            yield elem
+        event_types_ = event_types or [KeycloakAdminEvent.CREATE, KeycloakAdminEvent.UPDATE, KeycloakAdminEvent.DELETE]
+        resource_types_ = ["USER"]
+        for event in self.admin_events:
+            if isinstance(event, Exception):
+                raise event
+            if (
+                KeycloakAdminEvent(event["operationType"]) in event_types_
+                and event["resourceType"] in resource_types_
+            ):
+                yield event
         return
 
     def get_user_events(
         self, start_date: date, end_date: date | None = None, event_types: list[KeycloakEvent] | None = None
     ) -> Iterable[dict[str, Any]]:
         """Get user events."""
-        user_events = self.user_events
-        if not isinstance(user_events, Iterator):
-            user_events = iter(user_events)
-        while (elem := next(user_events, None)) is not None:
-            if isinstance(elem, Exception):
-                raise elem
-            yield elem
+        event_types_ = event_types or [KeycloakEvent.UPDATE_PROFILE, KeycloakEvent.REGISTER]
+        for event in self.user_events:
+            if isinstance(event, Exception):
+                raise event
+            if KeycloakEvent(event["type"]) in event_types_:
+                yield event
+        return
+
+    def get_admin_users(self) -> Iterable[dict[str, Any]]:
+        """Get the users with the renku admin role."""
+        for user in self.users:
+            if isinstance(user, Exception):
+                raise user
+            if user["id"] in self.user_roles and "renku-admin" in self.user_roles[user["id"]]:
+                yield user
         return
