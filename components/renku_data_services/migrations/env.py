@@ -3,6 +3,7 @@
 from logging.config import fileConfig
 
 from alembic import context
+
 from renku_data_services.authz.orm import BaseORM as authz
 from renku_data_services.connected_services.orm import BaseORM as connected_services
 from renku_data_services.crc.orm import BaseORM as crc
