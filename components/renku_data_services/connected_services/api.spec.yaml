@@ -170,7 +170,7 @@ paths:
         - oauth2
   /oauth2/connections/{connection_id}/account:
     get:
-      summary: Get the account information for this OAuth2 connection
+      summary: Get the account information for this OAuth2 connection for the currently authenticated user if their account is connected
       parameters:
         - in: path
           name: connection_id
