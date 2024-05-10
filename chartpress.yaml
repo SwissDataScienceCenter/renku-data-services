@@ -19,4 +19,7 @@ charts:
         contextPath: .
         dockerfilePath: projects/keycloak_sync/Dockerfile
         valuesPath: dataService.keycloakSync.image
-      
+      secrets-storage:
+        contextPath: .
+        dockerfilePath: projects/secrets_storage/Dockerfile
+        valuesPath: secretsStorage.image

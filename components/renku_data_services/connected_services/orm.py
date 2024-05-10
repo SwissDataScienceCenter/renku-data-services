@@ -30,13 +30,13 @@ class OAuth2ClientORM(BaseORM):
 
     __tablename__ = "oauth2_clients"
     id: Mapped[str] = mapped_column("id", String(99), primary_key=True)
-    client_id: Mapped[str] = mapped_column("client_id", String(500))
+    client_id: Mapped[str] = mapped_column("client_id", String(500), repr=False)
     display_name: Mapped[str] = mapped_column("display_name", String(99))
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
     kind: Mapped[ProviderKind]
     scope: Mapped[str] = mapped_column("scope", String())
     url: Mapped[str] = mapped_column("url", String())
-    client_secret: Mapped[str | None] = mapped_column("client_secret", String(500), default=None)
+    client_secret: Mapped[str | None] = mapped_column("client_secret", String(500), default=None, repr=False)
     creation_date: Mapped[datetime] = mapped_column(
         "creation_date", DateTime(timezone=True), default=None, server_default=func.now(), nullable=False
     )
@@ -49,12 +49,16 @@ class OAuth2ClientORM(BaseORM):
         nullable=False,
     )
 
-    def dump(self, redacted: bool = True) -> models.OAuth2Client:
-        """Create an OAuth2 Client model from the OAuth2ClientORM."""
+    def dump(self, user_is_admin: bool = False) -> models.OAuth2Client:
+        """Create an OAuth2 Client model from the OAuth2ClientORM.
+
+        Some fields will be redacted if the user is not an admin user.
+        """
         return models.OAuth2Client(
             id=self.id,
             kind=self.kind,
-            client_id=self.client_id if not redacted else "",
+            client_id=self.client_id if user_is_admin else "",
+            client_secret="redacted" if self.client_secret and user_is_admin else "",
             display_name=self.display_name,
             scope=self.scope,
             url=self.url,
@@ -87,8 +91,7 @@ class OAuth2ConnectionORM(BaseORM):
     client_id: Mapped[str] = mapped_column(ForeignKey(OAuth2ClientORM.id, ondelete="CASCADE"), index=True)
     client: Mapped[OAuth2ClientORM] = relationship(init=False, repr=False)
     token: Mapped[dict[str, Any] | None] = mapped_column("token", JSONVariant)
-    cookie: Mapped[str | None] = mapped_column("cookie", String(), index=True, unique=True)
-    state: Mapped[str | None] = mapped_column("state", String())
+    state: Mapped[str | None] = mapped_column("state", String(), index=True, unique=True)
     status: Mapped[ConnectionStatus]
     creation_date: Mapped[datetime] = mapped_column(
         "creation_date", DateTime(timezone=True), default=None, server_default=func.now(), nullable=False

@@ -1,8 +1,10 @@
 """add connected services
 
-Revision ID: e509b008cdc1
+Merges the previous branches.
+
+Revision ID: 788840ccdcf4
 Revises: 04655faf7248
-Create Date: 2024-05-06 09:08:58.679394
+Create Date: 2024-05-10 08:54:22.031163
 
 """
 
@@ -11,8 +13,8 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision = "e509b008cdc1"
-down_revision = ("04655faf7248", "85447af3d0dd")
+revision = "788840ccdcf4"
+down_revision = ("04655faf7248", "317a28bef017", "85447af3d0dd")
 branch_labels = None
 depends_on = None
 
@@ -42,7 +44,6 @@ def upgrade() -> None:
         sa.Column(
             "token", sa.JSON().with_variant(postgresql.JSONB(astext_type=sa.Text()), "postgresql"), nullable=True
         ),
-        sa.Column("cookie", sa.String(), nullable=True),
         sa.Column("state", sa.String(), nullable=True),
         sa.Column("status", sa.Enum("connected", "pending", name="connectionstatus"), nullable=False),
         sa.Column("creation_date", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
@@ -60,9 +61,9 @@ def upgrade() -> None:
         schema="connected_services",
     )
     op.create_index(
-        op.f("ix_connected_services_oauth2_connections_cookie"),
+        op.f("ix_connected_services_oauth2_connections_state"),
         "oauth2_connections",
-        ["cookie"],
+        ["state"],
         unique=True,
         schema="connected_services",
     )
@@ -74,7 +75,7 @@ def downgrade() -> None:
     from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind
 
     op.drop_index(
-        op.f("ix_connected_services_oauth2_connections_cookie"),
+        op.f("ix_connected_services_oauth2_connections_state"),
         table_name="oauth2_connections",
         schema="connected_services",
     )

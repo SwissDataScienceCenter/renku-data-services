@@ -32,18 +32,13 @@ class ConnectedServicesRepository:
     ) -> list[models.OAuth2Client]:
         """Get all OAuth2 Clients from the database."""
         async with self.session_maker() as session:
-            redacted = not user.is_admin
-
             result = await session.scalars(select(schemas.OAuth2ClientORM))
             clients = result.all()
-
-            return [c.dump(redacted=redacted) for c in clients]
+            return [c.dump(user_is_admin=user.is_admin) for c in clients]
 
     async def get_oauth2_client(self, provider_id: str, user: base_models.APIUser) -> models.OAuth2Client:
         """Get one OAuth2 Client from the database."""
         async with self.session_maker() as session:
-            redacted = not user.is_admin
-
             result = await session.scalars(
                 select(schemas.OAuth2ClientORM).where(schemas.OAuth2ClientORM.id == provider_id)
             )
@@ -52,12 +47,12 @@ class ConnectedServicesRepository:
                 raise errors.MissingResourceError(
                     message=f"OAuth2 Client with id '{provider_id}' does not exist or you do not have access to it."  # noqa: E501
                 )
-            return client.dump(redacted=redacted)
+            return client.dump(user_is_admin=user.is_admin)
 
     async def insert_oauth2_client(
         self,
         user: base_models.APIUser,
-        new_client: apispec.AdminProviderPost,
+        new_client: apispec.ProviderPost,
     ) -> models.OAuth2Client:
         """Insert a new OAuth2 Client environment."""
         if user.id is None or not user.is_admin:
@@ -85,7 +80,7 @@ class ConnectedServicesRepository:
             session.add(client)
             await session.flush()
             await session.refresh(client)
-            return client.dump(redacted=False)
+            return client.dump(user_is_admin=user.is_admin)
 
     async def update_oauth2_client(self, user: base_models.APIUser, provider_id: str, **kwargs) -> models.OAuth2Client:
         """Update an OAuth2 Client entry."""
@@ -107,7 +102,7 @@ class ConnectedServicesRepository:
             await session.flush()
             await session.refresh(client)
 
-            return client.dump(redacted=False)
+            return client.dump(user_is_admin=user.is_admin)
 
     async def delete_oauth2_client(self, user: base_models.APIUser, provider_id: str) -> None:
         """Delete an OAuth2 Client."""
@@ -127,7 +122,7 @@ class ConnectedServicesRepository:
 
     async def authorize_client(
         self, user: base_models.APIUser, provider_id: str, callback_url: str, next_url: str | None = None
-    ) -> tuple[str, str]:
+    ) -> str:
         """Authorize an OAuth2 Client."""
         if not user.is_authenticated or user.id is None:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
@@ -153,8 +148,6 @@ class ConnectedServicesRepository:
             ) as oauth2_client:
                 url, state = oauth2_client.create_authorization_url(client.authorization_url)
 
-                cookie = _generate_cookie()
-
                 result_conn = await session.scalars(
                     select(schemas.OAuth2ConnectionORM)
                     .where(schemas.OAuth2ConnectionORM.client_id == client.id)
@@ -167,32 +160,30 @@ class ConnectedServicesRepository:
                         user_id=user.id,
                         client_id=client.id,
                         token=None,
-                        cookie=cookie,
                         state=state,
                         status=schemas.ConnectionStatus.pending,
                     )
                     session.add(connection)
                 else:
-                    connection.cookie = cookie
                     connection.state = state
                     connection.status = schemas.ConnectionStatus.pending
 
                 await session.flush()
                 await session.refresh(connection)
 
-                return url, cookie
+                return url
 
     async def authorize_callback(
-        self, cookie: str, raw_url: str, callback_url: str, next_url: str | None = None
+        self, state: str, raw_url: str, callback_url: str, next_url: str | None = None
     ) -> dict | Any:
         """Performs the OAuth2 authorization callback."""
-        if not cookie:
+        if not state:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session, session.begin():
             result = await session.scalars(
                 select(schemas.OAuth2ConnectionORM)
-                .where(schemas.OAuth2ConnectionORM.cookie == cookie)
+                .where(schemas.OAuth2ConnectionORM.state == state)
                 .options(selectinload(schemas.OAuth2ConnectionORM.client))
             )
             connection = result.one_or_none()
@@ -217,12 +208,8 @@ class ConnectedServicesRepository:
                 logger.info(f"Token for client {client.id} has keys: {", ".join(token.keys())}")
 
                 connection.token = models.OAuth2TokenSet.from_dict(token)
-                connection.cookie = None
                 connection.state = None
                 connection.status = schemas.ConnectionStatus.connected
-
-                await session.flush()
-                await session.refresh(connection)
 
                 return token
 

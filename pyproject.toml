@@ -180,15 +180,16 @@ check_untyped_defs = true
 [[tool.mypy.overrides]]
 module = [
   "renku_data_services.crc.apispec",
+  "renku_data_services.connected_services.apispec",
   "renku_data_services.storage.apispec",
   "renku_data_services.project.apispec",
+  "renku_data_services.secrets.apispec",
   "renku_data_services.session.apispec",
   "renku_data_services.user_preferences.apispec",
   "renku_data_services.users.apispec",
   "renku_data_services.data_api.error_handler",
   "renku_data_services.namespace.apispec",
   "renku_data_services.secrets.apispec",
-  "renku_data_services.connected_services.apispec",
 ]
 ignore_errors = true
 

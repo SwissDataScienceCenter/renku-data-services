@@ -314,6 +314,15 @@ class Config:
         return self._kc_user_repo
 
     @property
+    def user_secrets_repo(self) -> UserSecretsRepo:
+        """The DB adapter for user secrets storage."""
+        if not self._user_secrets_repo:
+            self._user_secrets_repo = UserSecretsRepo(
+                session_maker=self.db.async_session_maker,
+            )
+        return self._user_secrets_repo
+
+    @property
     def connected_services_repo(self) -> ConnectedServicesRepository:
         """The DB adapter for connected services."""
         if not self._connected_services_repo:

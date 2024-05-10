@@ -5,7 +5,7 @@ from sanic import Sanic
 from renku_data_services.app_config import Config
 from renku_data_services.base_api.error_handler import CustomErrorHandler
 from renku_data_services.base_api.misc import MiscBP
-from renku_data_services.connected_services.blueprints import AdminOAuth2ClientsBP, OAuth2ClientsBP, OAuth2ConnectionsBP
+from renku_data_services.connected_services.blueprints import OAuth2ClientsBP, OAuth2ConnectionsBP
 from renku_data_services.crc import apispec
 from renku_data_services.crc.blueprints import (
     ClassesBP,
@@ -19,7 +19,7 @@ from renku_data_services.project.blueprints import ProjectsBP
 from renku_data_services.session.blueprints import EnvironmentsBP, SessionLaunchersBP
 from renku_data_services.storage.blueprints import StorageBP, StorageSchemaBP, StoragesV2BP
 from renku_data_services.user_preferences.blueprints import UserPreferencesBP
-from renku_data_services.users.blueprints import KCUsersBP
+from renku_data_services.users.blueprints import KCUsersBP, UserSecretsBP
 
 
 def register_all_handlers(app: Sanic, config: Config) -> Sanic:
@@ -41,6 +41,14 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         quota_repo=config.quota_repo,
     )
     users = KCUsersBP(name="users", url_prefix=url_prefix, repo=config.kc_user_repo, authenticator=config.authenticator)
+    user_secrets = UserSecretsBP(
+        name="user_secrets",
+        url_prefix=url_prefix,
+        user_repo=config.kc_user_repo,
+        secret_repo=config.user_secrets_repo,
+        secret_service_public_key=config.secrets_service_public_key,
+        authenticator=config.authenticator,
+    )
     resource_pools_users = ResourcePoolUsersBP(
         name="resource_pool_users",
         url_prefix=url_prefix,
@@ -107,12 +115,6 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         connected_services_repo=config.connected_services_repo,
         authenticator=config.authenticator,
     )
-    admin_oauth2_clients = AdminOAuth2ClientsBP(
-        name="admin_oauth2_clients",
-        url_prefix=url_prefix,
-        connected_services_repo=config.connected_services_repo,
-        authenticator=config.authenticator,
-    )
     oauth2_connections = OAuth2ConnectionsBP(
         name="oauth2_connections",
         url_prefix=url_prefix,
@@ -126,6 +128,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
             quota.blueprint(),
             resource_pools_users.blueprint(),
             users.blueprint(),
+            user_secrets.blueprint(),
             user_resource_pools.blueprint(),
             storage.blueprint(),
             storages_v2.blueprint(),
@@ -137,7 +140,6 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
             session_environments.blueprint(),
             session_launchers.blueprint(),
             oauth2_clients.blueprint(),
-            admin_oauth2_clients.blueprint(),
             oauth2_connections.blueprint(),
         ]
     )
