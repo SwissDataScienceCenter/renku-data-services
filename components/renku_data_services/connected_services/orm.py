@@ -91,8 +91,7 @@ class OAuth2ConnectionORM(BaseORM):
     client_id: Mapped[str] = mapped_column(ForeignKey(OAuth2ClientORM.id, ondelete="CASCADE"), index=True)
     client: Mapped[OAuth2ClientORM] = relationship(init=False, repr=False)
     token: Mapped[dict[str, Any] | None] = mapped_column("token", JSONVariant)
-    cookie: Mapped[str | None] = mapped_column("cookie", String(), index=True, unique=True)
-    state: Mapped[str | None] = mapped_column("state", String())
+    state: Mapped[str | None] = mapped_column("state", String(), index=True, unique=True)
     status: Mapped[ConnectionStatus]
     creation_date: Mapped[datetime] = mapped_column(
         "creation_date", DateTime(timezone=True), default=None, server_default=func.now(), nullable=False

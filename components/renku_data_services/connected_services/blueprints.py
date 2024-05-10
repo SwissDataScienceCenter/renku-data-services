@@ -89,12 +89,10 @@ class OAuth2ClientsBP(CustomBlueprint):
         async def _authorize(request: Request, provider_id: str, user: base_models.APIUser):
             params = AuthorizeParams.model_validate(dict(request.query_args))
             callback_url = self._get_callback_url(request)
-            url, cookie = await self.connected_services_repo.authorize_client(
+            url = await self.connected_services_repo.authorize_client(
                 provider_id=provider_id, user=user, callback_url=callback_url, next_url=params.next_url
             )
-            response = redirect(to=url)
-            response.add_cookie("renku-oauth2", cookie, httponly=True)
-            return response
+            return redirect(to=url)
 
         return "/oauth2/providers/<provider_id>/authorize", ["GET"], _authorize
 
@@ -102,21 +100,16 @@ class OAuth2ClientsBP(CustomBlueprint):
         """OAuth2 authorization callback."""
 
         async def _callback(request: Request):
-            cookie = request.cookies.get("renku-oauth2")
-            cookie = cookie if cookie else ""
-
             params = AuthorizeParams.model_validate(dict(request.query_args))
 
             callback_url = self._get_callback_url(request)
             next_url = params.next_url
 
             await self.connected_services_repo.authorize_callback(
-                cookie=cookie, raw_url=request.url, callback_url=callback_url, next_url=next_url
+                state=params.state, raw_url=request.url, callback_url=callback_url, next_url=next_url
             )
 
-            response = redirect(to=next_url) if next_url else json({"status": "OK"})
-            response.delete_cookie("renku-oauth2")
-            return response
+            return redirect(to=next_url) if next_url else json({"status": "OK"})
 
         return "/oauth2/callback", ["GET"], _callback
 

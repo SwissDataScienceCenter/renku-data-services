@@ -24,3 +24,4 @@ class AuthorizeParams(BaseAPISpec):
         extra = "ignore"
 
     next_url: str = Field(default="")
+    state: str = Field(default="")
