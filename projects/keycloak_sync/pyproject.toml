@@ -23,6 +23,8 @@ packages = [
   { include = "renku_data_services/storage", from = "../../components" },
   { include = "renku_data_services/namespace", from = "../../components" },
   { include = "renku_data_services/utils", from = "../../components" },
+  { include = "renku_data_services/secrets", from = "../../components" },
+  { include = "renku_data_services/authn", from = "../../components" },
 ]
 
 [tool.poetry.dependencies]
@@ -37,8 +39,12 @@ psycopg = { extras = ["binary"], version = "^3.1.13" }
 authlib = "^1.2.1"
 sanic = "^23.6.0"
 redis = "^5.0.1"
-dataclasses-avroschema = "^0.57.0"
+dataclasses-avroschema = "^0.57.4"
 undictify = "^0.11.3"
+tenacity = "^8.2.2"
+httpx = "<0.24"
+python-gitlab = "^3.15.0"
+pyjwt = { extras = ["crypto"], version = "^2.6.0" }
 kubernetes = "^26.1.0"
 python-ulid = "^1.1.0"
 deepmerge = "^1.1.0"

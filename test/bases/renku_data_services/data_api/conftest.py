@@ -12,6 +12,8 @@ from components.renku_data_services.utils.middleware import validate_null_byte
 from renku_data_services.app_config.config import Config
 from renku_data_services.authz.authz import _AuthzConverter
 from renku_data_services.data_api.app import register_all_handlers
+from renku_data_services.secrets.config import Config as SecretsConfig
+from renku_data_services.secrets_storage_api.app import register_all_handlers as register_secrets_handlers
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import UserInfo
@@ -146,3 +148,10 @@ def create_project(sanic_client, user_headers, admin_headers, regular_user, admi
         return project
 
     return create_project_helper
+
+
+@pytest_asyncio.fixture
+async def secrets_sanic_client(secrets_storage_app_config: SecretsConfig, users: list[UserInfo]) -> SanicASGITestClient:
+    app = Sanic(secrets_storage_app_config.app_name)
+    app = register_secrets_handlers(app, secrets_storage_app_config)
+    return SanicASGITestClient(app)

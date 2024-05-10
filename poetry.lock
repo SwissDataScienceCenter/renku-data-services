@@ -3010,13 +3010,13 @@ dev = ["pytest", "pytest-asyncio", "sanic (>=22.12)", "setuptools"]
 
 [[package]]
 name = "schemathesis"
-version = "3.26.0"
+version = "3.26.1"
 description = "Property-based testing framework for Open API and GraphQL based apps"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "schemathesis-3.26.0-py3-none-any.whl", hash = "sha256:72668f2e506cabfce6e53b8b876a1e70bcf786e2a0e54d766ada8b5ca039649d"},
-    {file = "schemathesis-3.26.0.tar.gz", hash = "sha256:042a9d2d6f7104b46e7be23589bf057f9f074aa8c22411a41b82d3fcc9410545"},
+    {file = "schemathesis-3.26.1-py3-none-any.whl", hash = "sha256:13261e4c22f41159ccdb432028f877e7fea5f601134ae6e7fbf4d6aaaadc00ec"},
+    {file = "schemathesis-3.26.1.tar.gz", hash = "sha256:352f4b05f8648d12e9819eb31e96c999293ce5be3de6184c4d7a8687f395321d"},
 ]
 
 [package.dependencies]
@@ -3051,13 +3051,13 @@ tests = ["aiohttp (>=3.9.1,<4.0)", "coverage (>=6)", "fastapi (>=0.86.0)", "flas
 
 [[package]]
 name = "sentry-sdk"
-version = "1.44.0"
+version = "1.44.1"
 description = "Python client for Sentry (https://sentry.io)"
 optional = false
 python-versions = "*"
 files = [
-    {file = "sentry-sdk-1.44.0.tar.gz", hash = "sha256:f7125a9235795811962d52ff796dc032cd1d0dd98b59beaced8380371cd9c13c"},
-    {file = "sentry_sdk-1.44.0-py2.py3-none-any.whl", hash = "sha256:eb65289da013ca92fad2694851ad2f086aa3825e808dc285bd7dcaf63602bb18"},
+    {file = "sentry-sdk-1.44.1.tar.gz", hash = "sha256:24e6a53eeabffd2f95d952aa35ca52f0f4201d17f820ac9d3ff7244c665aaf68"},
+    {file = "sentry_sdk-1.44.1-py2.py3-none-any.whl", hash = "sha256:5f75eb91d8ab6037c754a87b8501cc581b2827e923682f593bed3539ce5b3999"},
 ]
 
 [package.dependencies]
@@ -3788,4 +3788,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "d5f01673f5f22bcde520f64ae51d1d051a3782f3d6f5b4187616ea164bf00bcf"
+content-hash = "2b58241f7bfb827429f945d318dace02f564d55b4834dce382536f90fbdf133e"

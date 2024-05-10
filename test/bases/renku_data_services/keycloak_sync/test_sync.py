@@ -1,5 +1,6 @@
 import json
 import re
+import secrets
 from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime
@@ -45,6 +46,7 @@ def get_app_configs(db_config: DBConfig, authz_config: AuthzConfig):
             message_queue=message_queue,
             event_repo=event_repo,
             group_repo=group_repo,
+            encryption_key=secrets.token_bytes(32),
         )
         return config, user_repo
 

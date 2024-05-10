@@ -32,26 +32,26 @@ details.
 ### Developing with the container image
 
 The container image can be built to be used as a local development service (for renku_crc):
-`docker build -f projects/renku_crc/Dockerfile . --build-arg DEV_BUILD=true -t renku-data-service`
+`docker build -f projects/renku_data_services/Dockerfile . --build-arg DEV_BUILD=true -t renku-data-service`
 
 It can then be run as daemon: `docker run -d -e DUMMY_STORES=true --name renku-crc renku-data-service`
 
 ## Migrations
 
-We use Alembic for migrations and we have a single version table for all schemas. This version table 
+We use Alembic for migrations and we have a single version table for all schemas. This version table
 is used by Alembic to determine what migrations have been applied or not and it resides in the `common`
-schema. That is why all the Alembic commands include the `--name common` argument. 
+schema. That is why all the Alembic commands include the `--name common` argument.
 
-Our Alembic setup is such that we have multiple schemas. Most use cases will probably simply use 
-the `common` schema. However, if you add a new schema, you have to make sure to add the 
+Our Alembic setup is such that we have multiple schemas. Most use cases will probably simply use
+the `common` schema. However, if you add a new schema, you have to make sure to add the
 metadata for it in the `components/renku_data_services/migrations/env.py` file.
 
 **To create a new migration:**
 
 `DUMMY_STORES=true alembic -c components/renku_data_services/migrations/alembic.ini --name common revision -m "<message>" --autogenerate --version-path components/renku_data_services/migrations/versions`
 
-You can specify a different version path if you wish to, just make sure it is listed in `alembic.ini` under 
+You can specify a different version path if you wish to, just make sure it is listed in `alembic.ini` under
 `version_locations`.
 
-**To run all migrations:** 
+**To run all migrations:**
 `DUMMY_STORES=true alembic -c components/renku_data_services/migrations/alembic.ini --name=common upgrade heads`
