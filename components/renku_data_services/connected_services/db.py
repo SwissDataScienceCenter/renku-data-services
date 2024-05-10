@@ -1,7 +1,6 @@
 """Adapters for connected services database classes."""
 
-import base64
-import random
+from base64 import b64decode, b64encode
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from typing import Any
@@ -18,13 +17,15 @@ from renku_data_services import errors
 from renku_data_services.connected_services import apispec, models
 from renku_data_services.connected_services import orm as schemas
 from renku_data_services.connected_services.apispec import ConnectionStatus
+from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
 
 
 class ConnectedServicesRepository:
     """Repository for connected services."""
 
-    def __init__(self, session_maker: Callable[..., AsyncSession]):
+    def __init__(self, session_maker: Callable[..., AsyncSession], encryption_key: bytes):
         self.session_maker = session_maker  # type: ignore[call-overload]
+        self.encryption_key = encryption_key
 
     async def get_oauth2_clients(
         self,
@@ -58,11 +59,14 @@ class ConnectedServicesRepository:
         if user.id is None or not user.is_admin:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
+        encrypted_client_secret = (
+            encrypt_string(self.encryption_key, user.id, new_client.client_secret) if new_client.client_secret else None
+        )
         client = schemas.OAuth2ClientORM(
             id=new_client.id,
             kind=new_client.kind,
             client_id=new_client.client_id,
-            client_secret=new_client.client_secret if new_client.client_secret else None,
+            client_secret=encrypted_client_secret,
             display_name=new_client.display_name,
             scope=new_client.scope,
             url=new_client.url,
@@ -95,8 +99,13 @@ class ConnectedServicesRepository:
             if client is None:
                 raise errors.MissingResourceError(message=f"OAuth2 Client with id '{provider_id}' does not exist.")
 
+            if kwargs.get("client_secret"):
+                client.client_secret = encrypt_string(
+                    self.encryption_key, client.created_by_id, kwargs["client_secret"]
+                )
+
             for key, value in kwargs.items():
-                if key in ["kind", "client_id", "client_secret", "display_name", "scope", "url"]:
+                if key in ["kind", "client_id", "display_name", "scope", "url"]:
                     setattr(client, key, value)
 
             await session.flush()
@@ -140,9 +149,14 @@ class ConnectedServicesRepository:
                 query = urlencode([("next", next_url)])
                 callback_url = f"{callback_url}?{query}"
 
+            client_secret = (
+                decrypt_string(self.encryption_key, client.created_by_id, client.client_secret)
+                if client.client_secret
+                else None
+            )
             async with AsyncOAuth2Client(
                 client_id=client.client_id,
-                client_secret=client.client_secret,
+                client_secret=client_secret,
                 scope=client.scope,
                 redirect_uri=callback_url,
             ) as oauth2_client:
@@ -196,9 +210,14 @@ class ConnectedServicesRepository:
                 callback_url = f"{callback_url}?{query}"
 
             client = connection.client
+            client_secret = (
+                decrypt_string(self.encryption_key, client.created_by_id, client.client_secret)
+                if client.client_secret
+                else None
+            )
             async with AsyncOAuth2Client(
                 client_id=client.client_id,
-                client_secret=client.client_secret,
+                client_secret=client_secret,
                 scope=client.scope,
                 redirect_uri=callback_url,
                 state=connection.state,
@@ -207,7 +226,7 @@ class ConnectedServicesRepository:
 
                 logger.info(f"Token for client {client.id} has keys: {", ".join(token.keys())}")
 
-                connection.token = models.OAuth2TokenSet.from_dict(token)
+                connection.token = self._encrypt_token_set(token=token, user_id=connection.user_id)
                 connection.state = None
                 connection.status = schemas.ConnectionStatus.connected
 
@@ -295,7 +314,7 @@ class ConnectedServicesRepository:
                 raise errors.Unauthorized(message=f"OAuth2 connection with id '{connection_id}' is not valid.")
 
             client = connection.client
-            token = models.OAuth2TokenSet.from_dict(connection.token)
+            token = self._decrypt_token_set(token=connection.token, user_id=user.id)
 
         async def update_token(token: dict[str, Any], refresh_token: str | None = None):
             if refresh_token is None:
@@ -303,21 +322,43 @@ class ConnectedServicesRepository:
             async with self.session_maker() as session, session.begin():
                 session.add(connection)
                 await session.refresh(connection)
-                connection.token = models.OAuth2TokenSet.from_dict(token)
+                connection.token = self._encrypt_token_set(token=token, user_id=connection.user_id)
                 await session.flush()
                 await session.refresh(connection)
                 logger.info("Token refreshed!")
 
+        client_secret = (
+            decrypt_string(self.encryption_key, client.created_by_id, client.client_secret)
+            if client.client_secret
+            else None
+        )
         yield AsyncOAuth2Client(
             client_id=client.client_id,
-            client_secret=client.client_secret,
+            client_secret=client_secret,
             scope=client.scope,
             token_endpoint=client.token_endpoint_url,
             token=token,
             update_token=update_token,
         ), connection, client
 
+    def _encrypt_token_set(self, token: dict[str, Any], user_id: str) -> models.OAuth2TokenSet:
+        """Encrypts sensitive fields of token set before persisting at rest."""
+        result = models.OAuth2TokenSet.from_dict(token)
+        if result.access_token:
+            result["access_token"] = b64encode(
+                encrypt_string(self.encryption_key, user_id, result.access_token)
+            ).decode("ascii")
+        if result.refresh_token:
+            result["refresh_token"] = b64encode(
+                encrypt_string(self.encryption_key, user_id, result.refresh_token)
+            ).decode("ascii")
+        return result
 
-def _generate_cookie():
-    rand = random.SystemRandom()
-    return base64.b64encode(rand.randbytes(32)).decode()
+    def _decrypt_token_set(self, token: dict[str, Any], user_id: str) -> models.OAuth2TokenSet:
+        """Encrypts sensitive fields of token set before persisting at rest."""
+        result = models.OAuth2TokenSet.from_dict(token)
+        if result.access_token:
+            result["access_token"] = decrypt_string(self.encryption_key, user_id, b64decode(result.access_token))
+        if result.refresh_token:
+            result["refresh_token"] = decrypt_string(self.encryption_key, user_id, b64decode(result.refresh_token))
+        return result

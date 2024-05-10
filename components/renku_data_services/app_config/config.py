@@ -325,7 +325,9 @@ class Config:
     def connected_services_repo(self) -> ConnectedServicesRepository:
         """The DB adapter for connected services."""
         if not self._connected_services_repo:
-            self._connected_services_repo = ConnectedServicesRepository(session_maker=self.db.async_session_maker)
+            self._connected_services_repo = ConnectedServicesRepository(
+                session_maker=self.db.async_session_maker, encryption_key=self.encryption_key
+            )
         return self._connected_services_repo
 
     @classmethod
