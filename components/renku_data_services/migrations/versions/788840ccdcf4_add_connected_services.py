@@ -30,7 +30,7 @@ def upgrade() -> None:
         sa.Column("kind", sa.Enum("gitlab", "github", name="providerkind"), nullable=False),
         sa.Column("scope", sa.String(), nullable=False),
         sa.Column("url", sa.String(), nullable=False),
-        sa.Column("client_secret", sa.String(length=500), nullable=True),
+        sa.Column('client_secret', sa.LargeBinary(), nullable=True),
         sa.Column("creation_date", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.PrimaryKeyConstraint("id"),
