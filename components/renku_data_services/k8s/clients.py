@@ -1,4 +1,5 @@
 """Different implementations of k8s clients."""
+
 from copy import deepcopy
 from multiprocessing import Lock
 from multiprocessing.synchronize import Lock as LockType
@@ -45,6 +46,14 @@ class K8sCoreClient(K8sCoreClientInterface):  # pragma:nocover
         """Update a resource quota."""
         return self.client.patch_namespaced_resource_quota(name, namespace, body, **kwargs)
 
+    def delete_namespaced_secret(self, name: Any, namespace: Any, **kwargs: Any) -> Any:
+        """Delete a secret."""
+        return self.client.delete_namespaced_secret(name, namespace, **kwargs)
+
+    def create_namespaced_secret(self, namespace: Any, body: Any, **kwargs: Any) -> Any:
+        """Create a secret."""
+        return self.client.create_namespaced_secret(namespace, body, **kwargs)
+
 
 class K8sSchedulingClient(K8sSchedudlingClientInterface):  # pragma:nocover
     """Real k8s scheduling API client that exposes the required functions."""
@@ -74,8 +83,9 @@ class DummyCoreClient(K8sCoreClientInterface):
     Not suitable for production - to be used only for testing and development.
     """
 
-    def __init__(self, quotas: dict[str, client.V1ResourceQuota]):
+    def __init__(self, quotas: dict[str, client.V1ResourceQuota], secrets: dict[str, client.V1Secret]):
         self.quotas = quotas
+        self.secrets = secrets
         self.__lock: LockType | None = None
 
     @property
@@ -133,6 +143,25 @@ class DummyCoreClient(K8sCoreClientInterface):
                 new_quota.spec = client.V1ResourceQuota(**body).spec
             self.quotas[name] = new_quota
             return new_quota
+
+    def create_namespaced_secret(self, namespace: Any, body: Any, **kwargs: Any) -> Any:
+        """Create a secret."""
+        with self._lock:
+            if isinstance(body.metadata, dict):
+                body.metadata = client.V1ObjectMeta(**body.metadata)
+            body.metadata.uid = uuid4()
+            body.api_version = "v1"
+            body.kind = "Secret"
+            self.secrets[body.metadata.name] = body
+            return body
+
+    def delete_namespaced_secret(self, name: Any, namespace: Any, **kwargs: Any) -> Any:
+        """Delete a secret."""
+        with self._lock:
+            removed_secret = self.secrets.pop(name, None)
+            if removed_secret is None:
+                raise client.ApiException(status=404)
+            return removed_secret
 
 
 class DummySchedulingClient(K8sSchedudlingClientInterface):

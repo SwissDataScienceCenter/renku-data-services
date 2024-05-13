@@ -99,6 +99,15 @@ class ProgrammingError(BaseError):
 
 
 @dataclass
+class EventError(BaseError):
+    """Raised an irrecoverable error when generating events for the message queue."""
+
+    code: int = 1501
+    message: str = "An unexpected error occured when handling or generating events for the message queue."
+    status_code: int = 500
+
+
+@dataclass
 class ConflictError(BaseError):
     """Raised when a conflicting update occurs."""
 
@@ -114,3 +123,21 @@ class PreconditionRequiredError(BaseError):
     code: int = 1428
     message: str = "Conflicting update detected."
     status_code: int = 428
+
+
+@dataclass
+class SecretDecryptionError(BaseError):
+    """Raised when an error occurs decrypting secrets."""
+
+    code: int = 1510
+    message: str = "An error occured decrypting secrets."
+    status_code: int = 500
+
+
+@dataclass
+class SecretCreationError(BaseError):
+    """Raised when an error occurs creating secrets."""
+
+    code: int = 1511
+    message: str = "An error occured creating secrets."
+    status_code: int = 500

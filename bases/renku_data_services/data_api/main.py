@@ -13,6 +13,7 @@ from sentry_sdk.integrations.asyncio import AsyncioIntegration
 from sentry_sdk.integrations.sanic import SanicIntegration, _hub_enter, _hub_exit, _set_transaction
 
 from renku_data_services.app_config import Config
+from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.errors.errors import (
     MissingResourceError,
@@ -36,6 +37,7 @@ def create_app() -> Sanic:
         run_migrations_for_app("common")
         config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
         asyncio.run(config.kc_user_repo.initialize(config.kc_api))
+        asyncio.run(sync_admins_from_keycloak(config.kc_api, config.authz))
     if config.sentry.enabled:
         logger.info("enabling sentry")
 
@@ -84,6 +86,7 @@ def create_app() -> Sanic:
         run_migrations_for_app("common")
         config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
         await config.kc_user_repo.initialize(config.kc_api)
+        await sync_admins_from_keycloak(config.kc_api, config.authz)
         await config.group_repo.generate_user_namespaces()
         await config.event_repo.send_pending_events()
 

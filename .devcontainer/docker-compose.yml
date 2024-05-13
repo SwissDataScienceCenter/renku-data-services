@@ -8,29 +8,28 @@ services:
       args:
         - USER_UID=${USER_UID:-1000}
         - USER_GID=${USER_GID:-1000}
-
     volumes:
       - ../..:/workspaces:cached
-
     # Overrides default command so things don't shut down after the process ends.
     entrypoint: sleep infinity
-
-
-    ports:
-      - "8000:8000"
-      - "5432:5432"
-      - "8080:8080"
-      - "5678:5678"
-
-    # Use "forwardPorts" in **devcontainer.json** to forward an app port locally.
-    # (Adding the "ports" property to this file will not forward from a Codespace.)
     environment:
       DB_USER: renku
       DB_NAME: renku
       DB_PASSWORD: renku
-      DB_HOST: localhost 
+      DB_HOST: 127.0.0.1 
       CORS_ALLOW_ALL_ORIGINS: "true"
       ALEMBIC_CONFIG: /workspaces/renku-data-services/components/renku_data_services/migrations/alembic.ini
+      AUTHZ_DB_HOST: 127.0.0.1 
+      AUTHZ_DB_GRPC_PORT: "50051" 
+      AUTHZ_DB_KEY: renku 
+      AUTHZ_DB_NO_TLS_CONNECTION: "true"
+      ZED_ENDPOINT: 127.0.0.1:50051
+      ZED_TOKEN: renku
+      ZED_INSECURE: "true"
+    network_mode: service:db
+    depends_on:
+      - db
+      - authz
 
   db:
     image: postgres:latest
@@ -41,18 +40,31 @@ services:
       POSTGRES_USER: renku
       POSTGRES_DB: renku
       POSTGRES_PASSWORD: renku
-    # Runs on the same network as the main app 
-    network_mode: service:data_service
-    # Add "forwardPorts": ["5432"] to **devcontainer.json** to forward PostgreSQL locally.
-    # (Adding the "ports" property to this file will not forward from a Codespace.)
+    ports:
+      - "8000:8000"
+      - "5432:5432"
+      - "8080:8080"
+      - "5678:5678"
+      - "50051:50051"
 
   swagger:
     image: swaggerapi/swagger-ui
     environment:
       SWAGGER_JSON_URL: http://localhost:8000/api/data/spec.json
       PORT: "8080"
-    # Runs on the same network as the main app 
-    network_mode: service:data_service
+    network_mode: service:db
+  
+  authz:
+    image: authzed/spicedb:latest-debug
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      SPICEDB_GRPC_PRESHARED_KEY: renku
+      SPICEDB_DATASTORE_CONN_URI: "postgres://renku:renku@127.0.0.1:5432/postgres"
+    network_mode: service:db
+    command:
+      - serve
 
 volumes:
   postgres-data:

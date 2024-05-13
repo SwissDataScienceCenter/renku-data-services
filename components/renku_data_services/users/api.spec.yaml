@@ -23,6 +23,22 @@ paths:
           $ref: '#/components/responses/Error'
       tags:
         - users
+  /user/secret_key:
+    get:
+      summary: Get the current users secret key
+      responses:
+        "200":
+          description: |
+            The secret key of the currently logged in user.
+            This endpoint is not publicly accessible.
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/UserSecretKey"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - secrets
   /users:
     get:
       summary: List all users
@@ -66,8 +82,137 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
       tags:
         - users
+  /user/secrets:
+    get:
+      summary: List all secrets for a user (keys only)
+      responses:
+        "200":
+          description: The user's secrets
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/SecretsList"
+        "404":
+          description: The user does not exist
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
+        - secrets
+    post:
+      summary: Create a new secret for the user
+      parameters:
+        - in: path
+          name: user_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SecretPost"
+      responses:
+        "201":
+          description: Secret successfully created
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/SecretWithId"
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
+        - secrets
+  /user/secrets/{secret_id}:
+    get:
+      summary: Get a secret key by id
+      parameters:
+        - in: path
+          name: user_id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: secret_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The secret
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/SecretWithId"
+        "404":
+          description: The user does not exist
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
+        - secrets
+    patch:
+      summary: Change a secret
+      parameters:
+        - in: path
+          name: user_id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: secret_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SecretPatch"
+      responses:
+        "201":
+          description: Secret successfully changed
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/SecretWithId"
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
+        - secrets
+    delete:
+      summary: Delete a secret
+      parameters:
+        - in: path
+          name: user_id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: secret_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: The secret was deleted or didn't exist
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - secrets
+
   /error:
     get:
       summary: Get a sample error response with status code 422
@@ -112,6 +257,13 @@ components:
       items:
         $ref: "#/components/schemas/UserWithId"
       uniqueItems: true
+    UserSecretKey:
+      type: object
+      additionalProperties: false
+      properties:
+        secret_key:
+          type: string
+          description: The users secret key
     Version:
       type: object
       properties:
@@ -122,6 +274,7 @@ components:
       type: string
       description: Keycloak user ID
       example: f74a228b-1790-4276-af5f-25c2424e9b0c
+      pattern: "^[A-Za-z0-9]{1}[A-Za-z0-9-]+$"
     UserFirstLastName:
       type: string
       description: First or last name of the user
@@ -133,6 +286,75 @@ components:
       format: email
       description: User email
       example: some-user@gmail.com
+    SecretsList:
+      description: A list of secrets
+      type: array
+      items:
+        $ref: "#/components/schemas/SecretWithId"
+      minItems: 0
+    SecretWithId:
+      description: A Renku secret
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        name:
+          $ref: "#/components/schemas/SecretName"
+        modification_date:
+          $ref: "#/components/schemas/ModificationDate"
+      required:
+        - "id"
+        - "name"
+        - "modification_date"
+      example:
+        id: "01AN4Z79ZS5XN0F25N3DB94T4R"
+        name: "S3-Credentials"
+        modification_date: "2024-01-16T11:42:05Z"
+    SecretPost:
+      description: Secret metadata to be created
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/SecretName"
+        value:
+          $ref: "#/components/schemas/SecretValue"
+      required:
+        - "name"
+        - "value"
+    SecretPatch:
+      type: object
+      description: Secret metadata to be modified
+      additionalProperties: false
+      properties:
+        value:
+          $ref: "#/components/schemas/SecretValue"
+      required:
+        - "value"
+    SecretName:
+      description: Secret name
+      type: string
+      minLength: 1
+      maxLength: 99
+      pattern: "^[a-zA-Z0-9_\\-.]*$"
+      example: "Data-S3-Secret_1"
+    Ulid:
+      description: ULID identifier
+      type: string
+      minLength: 26
+      maxLength: 26
+      pattern: "^[A-Z0-9]{26}$"  # This is case-insensitive
+    ModificationDate:
+      description: The date and time the secret was created or modified (this is always in UTC)
+      type: string
+      format: date-time
+      example: "2023-11-01T17:32:28Z"
+    SecretValue:
+      description: Secret value that can be any text
+      type: string
+      minLength: 1
+      maxLength: 5000
     ErrorResponse:
       type: object
       properties:

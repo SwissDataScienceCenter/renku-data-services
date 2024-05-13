@@ -1,5 +1,7 @@
 """Database adapters and helpers for users."""
+
 import logging
+import secrets
 from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime, timedelta
@@ -10,9 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.base_api.auth import APIUser, only_authenticated
 from renku_data_services.errors import errors
-from renku_data_services.message_queue.avro_models.io.renku.events.v1.user_added import UserAdded
-from renku_data_services.message_queue.avro_models.io.renku.events.v1.user_removed import UserRemoved
-from renku_data_services.message_queue.avro_models.io.renku.events.v1.user_updated import UserUpdated
+from renku_data_services.message_queue.avro_models.io.renku.events import v1 as avro_schema_v1
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import dispatch_message
@@ -21,6 +21,7 @@ from renku_data_services.users.kc_api import IKeycloakAPI
 from renku_data_services.users.models import KeycloakAdminEvent, UserInfo, UserInfoUpdate
 from renku_data_services.users.orm import LastKeycloakEventTimestamp, UserORM
 from renku_data_services.utils.core import with_db_transaction
+from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
 
 
 class UserRepo:
@@ -32,8 +33,10 @@ class UserRepo:
         message_queue: IMessageQueue,
         event_repo: EventRepository,
         group_repo: GroupRepository,
+        encryption_key: bytes,
     ):
         self.session_maker = session_maker
+        self.encryption_key = encryption_key
         self._users_sync = UsersSync(self.session_maker, message_queue, event_repo, group_repo)
 
     async def initialize(self, kc_api: IKeycloakAPI):
@@ -107,20 +110,23 @@ class UserRepo:
             orms = res.scalars().all()
             return [orm.dump() for orm in orms]
 
+    @only_authenticated
+    async def get_or_create_user_secret_key(self, requested_by: APIUser) -> str:
+        """Get a user's secret encryption key or create it if it doesn't exist."""
 
-def create_user_added_message(result: UserInfo, **_) -> UserAdded:
-    """Transform user to message queue message."""
-    return UserAdded(id=result.id, firstName=result.first_name, lastName=result.last_name, email=result.email)
+        async with self.session_maker() as session, session.begin():
+            stmt = select(UserORM).where(UserORM.keycloak_id == requested_by.id)
+            user = await session.scalar(stmt)
+            if not user:
+                raise errors.MissingResourceError(message=f"User with id {requested_by.id} not found")
+            if user.secret_key is not None:
+                return decrypt_string(self.encryption_key, user.keycloak_id, user.secret_key)
+            # create a new secret key
+            secret_key = secrets.token_urlsafe(32)
+            user.secret_key = encrypt_string(self.encryption_key, user.keycloak_id, secret_key)
+            session.add(user)
 
-
-def create_user_updated_message(result: UserInfo, **_) -> UserUpdated:
-    """Transform user to message queue message."""
-    return UserUpdated(id=result.id, firstName=result.first_name, lastName=result.last_name, email=result.email)
-
-
-def create_user_removed_message(result, user_id: str) -> UserRemoved:
-    """Transform user removal to message queue message."""
-    return UserRemoved(id=user_id)
+        return secret_key
 
 
 class UsersSync:
@@ -157,7 +163,7 @@ class UsersSync:
             return await self.insert_user(user_id=user_id, **kwargs)
 
     @with_db_transaction
-    @dispatch_message(create_user_added_message)
+    @dispatch_message(avro_schema_v1.UserAdded)
     async def insert_user(self, session: AsyncSession, user_id: str, **kwargs) -> UserInfo:
         """Insert a user."""
         kwargs.pop("keycloak_id", None)
@@ -169,7 +175,7 @@ class UsersSync:
         return new_user.dump()
 
     @with_db_transaction
-    @dispatch_message(create_user_updated_message)
+    @dispatch_message(avro_schema_v1.UserUpdated)
     async def update_user(
         self, session: AsyncSession, user_id: str, existing_user: UserORM | None, **kwargs
     ) -> UserInfo:
@@ -190,7 +196,7 @@ class UsersSync:
         return existing_user.dump()
 
     @with_db_transaction
-    @dispatch_message(create_user_removed_message)
+    @dispatch_message(avro_schema_v1.UserRemoved)
     async def _remove_user(self, session: AsyncSession, user_id: str):
         """Remove a user from the database."""
         logging.info(f"Removing user with ID {user_id}")

@@ -1,4 +1,5 @@
 """Custom migrations env file to support modular migrations."""
+
 from collections.abc import Sequence
 
 from alembic import context
@@ -20,7 +21,6 @@ def combine_version_tables(conn: Connection, metadata_schema: str | None):
     """Used to combine all alembic version tables into one."""
     schemas = {
         # NOTE: These are the revisions that each schema will be when the version table is moved
-        # in all other cases this function will do nothing.
         "authz": "748ed0f3439f",
         "projects": "7c08ed2fb79d",
         "resource_pools": "5403953f654f",

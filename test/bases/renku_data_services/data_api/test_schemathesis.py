@@ -43,7 +43,14 @@ schema = schemathesis.from_pytest_fixture(
     sanitize_output=False,
 )
 
+ALLOWED_SLOW_ENDPOINTS = [
+    ("/user/secrets", "POST"),  # encryption of secrets is a costly operation
+    ("/user/secrets/{secret_id}", "PATCH"),
+    ("/user/secret_key", "GET"),
+]
 
+
+@pytest.mark.schemathesis
 @pytest.mark.asyncio
 @schema.parametrize(validate_schema=True)
 @settings(max_examples=5, suppress_health_check=[HealthCheck.filter_too_much, HealthCheck.data_too_large])
@@ -51,5 +58,6 @@ async def test_api_schemathesis(case: schemathesis.Case, sanic_client: SanicASGI
     req_kwargs = case.as_requests_kwargs(headers=admin_headers)
     _, res = await sanic_client.request(**req_kwargs)
     res.request.uri = str(res.url)
-    assert res.elapsed <= timedelta(milliseconds=100)
+    if all(slow[0] != case.path or slow[1] != case.method for slow in ALLOWED_SLOW_ENDPOINTS):
+        assert res.elapsed <= timedelta(milliseconds=100), f"{case.path}:{case.method}"
     case.validate_response(res)

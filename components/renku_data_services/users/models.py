@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, TypeAlias
 
 
 class KeycloakEvent(Enum):
@@ -247,3 +247,5 @@ class UserInfo:
                 "lastFailure": 0,
             },
         }
+
+UserInfosType: TypeAlias = list[UserInfo]

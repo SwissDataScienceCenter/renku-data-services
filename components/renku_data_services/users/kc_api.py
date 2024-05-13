@@ -4,7 +4,7 @@ from collections.abc import Iterable
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Any, Protocol, cast
+from typing import Any, ClassVar, Protocol, cast
 
 import requests  # type: ignore[import-untyped, import]
 from authlib.integrations.requests_client import OAuth2Session  # type: ignore[import-untyped, import]
@@ -34,6 +34,10 @@ class IKeycloakAPI(Protocol):
         """Get admin events."""
         ...
 
+    def get_admin_users(self) -> Iterable[dict[str, Any]]:
+        """Get the users with the renku admin role."""
+        ...
+
 
 @dataclass
 class KeycloakAPI:
@@ -48,6 +52,7 @@ class KeycloakAPI:
     client_id: str = "renku"
     result_per_request_limit: int = 20
     _http_client: requests.Session = field(init=False, repr=False)
+    admin_role: ClassVar[str] = "renku-admin"
 
     def __post_init__(self):
         self.keycloak_url = self.keycloak_url.rstrip("/")
@@ -82,7 +87,10 @@ class KeycloakAPI:
             res = self._http_client.get(url, params={**req_query_args, "first": first})
             output = res.json()
             if not isinstance(output, list):
-                raise ValueError(f"Received unexpected response from Keycloak for path {path}")
+                raise ValueError(
+                    f"Received unexpected response from Keycloak for path {path}, "
+                    f"status code: {res.status_code}, body: {res.text}"
+                )
             output = cast(list[dict[str, Any]], output)
             if len(output) == 0:
                 return
@@ -136,3 +144,8 @@ class KeycloakAPI:
         if end_date:
             query_args["dateTo"] = end_date.isoformat()
         yield from self._paginated_requests_iter(path, query_args)
+
+    def get_admin_users(self) -> Iterable[dict[str, Any]]:
+        """Get the users that belong to the renku admin role."""
+        path = f"/admin/realms/{self.realm}/roles/{self.admin_role}/users"
+        yield from self._paginated_requests_iter(path)
