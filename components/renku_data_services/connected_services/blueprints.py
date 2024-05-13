@@ -180,7 +180,7 @@ class OAuth2ConnectionsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @extract_if_none_match
-        async def _get_one(
+        async def _get_one_repository(
             _: Request, connection_id: str, repository_url: str, user: base_models.APIUser, etag: str | None = None
         ):
             repository = await self.connected_services_repo.get_repository(
@@ -190,4 +190,4 @@ class OAuth2ConnectionsBP(CustomBlueprint):
                 return HTTPResponse(status=304)
             return json(apispec.Repository.model_validate(repository).model_dump(exclude_none=True, mode="json"))
 
-        return "/oauth2/providers/<connection_id>/api/repository/<repository_url>", ["GET"], _get_one
+        return "/oauth2/providers/<connection_id>/api/repository/<repository_url>", ["GET"], _get_one_repository
