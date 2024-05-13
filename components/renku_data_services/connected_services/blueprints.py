@@ -190,4 +190,4 @@ class OAuth2ConnectionsBP(CustomBlueprint):
                 return HTTPResponse(status=304)
             return json(apispec.Repository.model_validate(repository).model_dump(exclude_none=True, mode="json"))
 
-        return "/oauth2/providers/<connection_id>/api/repository/<repository_url>", ["GET"], _get_one_repository
+        return "/oauth2/connections/<connection_id>/api/repository/<repository_url>", ["GET"], _get_one_repository
