@@ -10,13 +10,15 @@ instantiated multiple times without creating multiple database connections.
 """
 
 import os
+import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
-import httpx
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric.types import PublicKeyTypes
 from jwt import PyJWKClient
-from tenacity import retry, stop_after_attempt, stop_after_delay, wait_fixed
 from yaml import safe_load
 
 import renku_data_services.base_models as base_models
@@ -48,6 +50,7 @@ from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
+from renku_data_services.secrets.db import UserSecretsRepo
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository, StorageV2Repository
 from renku_data_services.user_preferences.config import UserPreferencesConfig
@@ -56,17 +59,7 @@ from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
 from renku_data_services.users.models import UserInfo
-from renku_data_services.utils.core import get_ssl_context, merge_api_specs
-
-
-@retry(stop=(stop_after_attempt(20) | stop_after_delay(300)), wait=wait_fixed(2), reraise=True)
-def _oidc_discovery(url: str, realm: str) -> dict[str, Any]:
-    url = f"{url}/realms/{realm}/.well-known/openid-configuration"
-    res = httpx.get(url, verify=get_ssl_context())
-    if res.status_code == 200:
-        return res.json()
-    raise errors.ConfigurationError(message=f"Cannot successfully do OIDC discovery with url {url}.")
-
+from renku_data_services.utils.core import merge_api_specs, oidc_discovery
 
 default_resource_pool = models.ResourcePool(
     name="default",
@@ -129,9 +122,15 @@ class Config:
     gitlab_client: base_models.GitlabAPIProtocol
     kc_api: IKeycloakAPI
     message_queue: IMessageQueue
+    secrets_service_public_key: rsa.RSAPublicKey
+    """The public key of the secrets service, used to encrypt user secrets that only it can decrypt."""
+
     spec: dict[str, Any] = field(init=False, default_factory=dict)
+    encryption_key: bytes = field(repr=False)
+    """The encryption key to encrypt user keys at rest in the database."""
+
     version: str = "0.0.1"
-    app_name: str = "renku_crc"
+    app_name: str = "renku_data_services"
     default_resource_pool_file: Optional[str] = None
     default_resource_pool: models.ResourcePool = default_resource_pool
     server_options_file: Optional[str] = None
@@ -147,6 +146,7 @@ class Config:
     _session_repo: SessionRepository | None = field(default=None, repr=False, init=False)
     _user_preferences_repo: UserPreferencesRepository | None = field(default=None, repr=False, init=False)
     _kc_user_repo: KcUserRepo | None = field(default=None, repr=False, init=False)
+    _user_secrets_repo: UserSecretsRepo | None = field(default=None, repr=False, init=False)
     _project_member_repo: ProjectMemberRepository | None = field(default=None, repr=False, init=False)
     _connected_services_repo: ConnectedServicesRepository | None = field(default=None, repr=False, init=False)
 
@@ -308,8 +308,18 @@ class Config:
                 message_queue=self.message_queue,
                 event_repo=self.event_repo,
                 group_repo=self.group_repo,
+                encryption_key=self.encryption_key,
             )
         return self._kc_user_repo
+
+    @property
+    def user_secrets_repo(self) -> UserSecretsRepo:
+        """The DB adapter for user secrets storage."""
+        if not self._user_secrets_repo:
+            self._user_secrets_repo = UserSecretsRepo(
+                session_maker=self.db.async_session_maker,
+            )
+        return self._user_secrets_repo
 
     @property
     def connected_services_repo(self) -> ConnectedServicesRepository:
@@ -337,11 +347,22 @@ class Config:
         user_preferences_config = UserPreferencesConfig(max_pinned_projects=max_pinned_projects)
         db = DBConfig.from_env(prefix)
         kc_api: IKeycloakAPI
+        secrets_service_public_key: PublicKeyTypes
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
+            encryption_key = secrets.token_bytes(32)
+            secrets_service_public_key_path = os.getenv(f"{prefix}SECRETS_SERVICE_PUBLIC_KEY_PATH")
+            if secrets_service_public_key_path is not None:
+                secrets_service_public_key = serialization.load_pem_public_key(
+                    Path(secrets_service_public_key_path).read_bytes()
+                )
+            else:
+                private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+                secrets_service_public_key = private_key.public_key()
+
             authenticator = DummyAuthenticator()
             gitlab_authenticator = DummyAuthenticator()
-            quota_repo = QuotaRepository(DummyCoreClient({}), DummySchedulingClient({}), namespace=k8s_namespace)
+            quota_repo = QuotaRepository(DummyCoreClient({}, {}), DummySchedulingClient({}), namespace=k8s_namespace)
             user_always_exists = os.environ.get("DUMMY_USERSTORE_USER_ALWAYS_EXISTS", "true").lower() == "true"
             user_store = DummyUserStore(user_always_exists=user_always_exists)
             gitlab_client = DummyGitlabAPI()
@@ -352,13 +373,21 @@ class Config:
             kc_api = DummyKeycloakAPI(users=[i._to_keycloak_dict() for i in dummy_users])
             redis = RedisConfig.fake()
         else:
+            encryption_key_path = os.getenv(f"{prefix}ENCRYPTION_KEY_PATH", "/encryption-key")
+            encryption_key = Path(encryption_key_path).read_bytes()
+            secrets_service_public_key_path = os.getenv(
+                f"{prefix}SECRETS_SERVICE_PUBLIC_KEY_PATH", "/secret_service_public_key"
+            )
+            secrets_service_public_key = serialization.load_pem_public_key(
+                Path(secrets_service_public_key_path).read_bytes()
+            )
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
             keycloak_url = os.environ.get(f"{prefix}KEYCLOAK_URL")
             if keycloak_url is None:
                 raise errors.ConfigurationError(message="The Keycloak URL has to be specified.")
             keycloak_url = keycloak_url.rstrip("/")
             keycloak_realm = os.environ.get(f"{prefix}KEYCLOAK_REALM", "Renku")
-            oidc_disc_data = _oidc_discovery(keycloak_url, keycloak_realm)
+            oidc_disc_data = oidc_discovery(keycloak_url, keycloak_realm)
             jwks_url = oidc_disc_data.get("jwks_uri")
             if jwks_url is None:
                 raise errors.ConfigurationError(
@@ -386,6 +415,9 @@ class Config:
             )
             redis = RedisConfig.from_env(prefix)
 
+        if not isinstance(secrets_service_public_key, rsa.RSAPublicKey):
+            raise errors.ConfigurationError(message="Secret service public key is not an RSAPublicKey")
+
         sentry = SentryConfig.from_env(prefix)
         message_queue = RedisQueue(redis)
 
@@ -404,4 +436,6 @@ class Config:
             redis=redis,
             kc_api=kc_api,
             message_queue=message_queue,
+            encryption_key=encryption_key,
+            secrets_service_public_key=secrets_service_public_key,
         )

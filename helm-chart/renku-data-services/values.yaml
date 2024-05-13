@@ -1,8 +1,12 @@
 dataService:
   image:
     repository: renku/renku-data-service
-    tag: "0.0.1"
+    tag:
   keycloakSync:
     image:
       repository: renku/keycloak-sync
       tag:
+secretsStorage:
+  image:
+    repository: renku/secrets-storage
+    tag:

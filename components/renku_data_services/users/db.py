@@ -1,5 +1,7 @@
 """Database adapters and helpers for users."""
+
 import logging
+import secrets
 from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime, timedelta
@@ -21,6 +23,7 @@ from renku_data_services.users.kc_api import IKeycloakAPI
 from renku_data_services.users.models import KeycloakAdminEvent, UserInfo, UserInfoUpdate
 from renku_data_services.users.orm import LastKeycloakEventTimestamp, UserORM
 from renku_data_services.utils.core import with_db_transaction
+from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
 
 
 class UserRepo:
@@ -32,8 +35,10 @@ class UserRepo:
         message_queue: IMessageQueue,
         event_repo: EventRepository,
         group_repo: GroupRepository,
+        encryption_key: bytes,
     ):
         self.session_maker = session_maker
+        self.encryption_key = encryption_key
         self._users_sync = UsersSync(self.session_maker, message_queue, event_repo, group_repo)
 
     async def initialize(self, kc_api: IKeycloakAPI):
@@ -106,6 +111,24 @@ class UserRepo:
             res = await session.execute(stmt)
             orms = res.scalars().all()
             return [orm.dump() for orm in orms]
+
+    @only_authenticated
+    async def get_or_create_user_secret_key(self, requested_by: APIUser) -> str:
+        """Get a user's secret encryption key or create it if it doesn't exist."""
+
+        async with self.session_maker() as session, session.begin():
+            stmt = select(UserORM).where(UserORM.keycloak_id == requested_by.id)
+            user = await session.scalar(stmt)
+            if not user:
+                raise errors.MissingResourceError(message=f"User with id {requested_by.id} not found")
+            if user.secret_key is not None:
+                return decrypt_string(self.encryption_key, user.keycloak_id, user.secret_key)
+            # create a new secret key
+            secret_key = secrets.token_urlsafe(32)
+            user.secret_key = encrypt_string(self.encryption_key, user.keycloak_id, secret_key)
+            session.add(user)
+
+        return secret_key
 
 
 def create_user_added_message(result: UserInfo, **_) -> UserAdded:

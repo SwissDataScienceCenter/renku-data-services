@@ -10,12 +10,13 @@ from renku_data_services.connected_services.apispec import ConnectionStatus, Pro
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class OAuth2Client(BaseModel):
+class OAuth2Client:
     """OAuth2 Client model."""
 
     id: str
     kind: ProviderKind
     client_id: str
+    client_secret: str | None
     display_name: str
     scope: str
     url: str
@@ -25,7 +26,7 @@ class OAuth2Client(BaseModel):
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class OAuth2Connection(BaseModel):
+class OAuth2Connection:
     """OAuth2 connection model."""
 
     id: str
@@ -63,10 +64,10 @@ class OAuth2TokenSet(dict):
         return token_set
 
     def dump_for_api(self) -> dict[str, Any]:
-        """Expose data for API consumption."""
+        """Expose the access token and other token metadata for API consumption."""
         data = dict((k, v) for k, v in self.items() if k != "refresh_token")
         if self.expires_at_iso is not None:
-            data['expires_at_iso'] = self.expires_at_iso
+            data["expires_at_iso"] = self.expires_at_iso
         return data
 
     @property

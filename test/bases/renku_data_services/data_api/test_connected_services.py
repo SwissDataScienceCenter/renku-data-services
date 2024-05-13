@@ -18,7 +18,7 @@ def create_oauth2_provider(sanic_client: SanicASGITestClient, admin_headers):
         payload["display_name"] = payload.get("display_name") or "my oauth2 application"
         payload["scope"] = payload.get("scope") or "api"
         payload["url"] = payload.get("url") or "https://example.org"
-        _, res = await sanic_client.post("/api/data/oauth2/admin/providers", headers=admin_headers, json=payload)
+        _, res = await sanic_client.post("/api/data/oauth2/providers", headers=admin_headers, json=payload)
 
         assert res.status_code == 201, res.text
         assert res.json is not None
@@ -77,14 +77,14 @@ async def test_post_oauth2_provider(sanic_client: SanicASGITestClient, admin_hea
         "url": "https://example.org",
     }
 
-    _, res = await sanic_client.post("/api/data/oauth2/admin/providers", headers=admin_headers, json=payload)
+    _, res = await sanic_client.post("/api/data/oauth2/providers", headers=admin_headers, json=payload)
 
     assert res.status_code == 201, res.text
     assert res.json is not None
     assert res.json.get("id") == "some-provider"
     assert res.json.get("kind") == "gitlab"
     assert res.json.get("client_id") == "some-client-id"
-    assert "client_secret" not in res.json
+    assert res.json.get("client_secret") == "redacted"
     assert res.json.get("display_name") == "Some external service"
     assert res.json.get("scope") == "api"
     assert res.json.get("url") == "https://example.org"
@@ -102,7 +102,7 @@ async def test_post_oauth2_provider_unauthorized(sanic_client: SanicASGITestClie
         "url": "https://example.org",
     }
 
-    _, res = await sanic_client.post("/api/data/oauth2/admin/providers", headers=user_headers, json=payload)
+    _, res = await sanic_client.post("/api/data/oauth2/providers", headers=user_headers, json=payload)
 
     assert res.status_code == 401, res.text
 
@@ -119,7 +119,7 @@ async def test_patch_oauth2_provider(sanic_client: SanicASGITestClient, admin_he
     }
 
     _, res = await sanic_client.patch(
-        f"/api/data/oauth2/admin/providers/{provider_id}", headers=admin_headers, json=payload
+        f"/api/data/oauth2/providers/{provider_id}", headers=admin_headers, json=payload
     )
 
     assert res.status_code == 200, res.text
@@ -143,7 +143,7 @@ async def test_patch_oauth2_provider_unauthorized(
     }
 
     _, res = await sanic_client.patch(
-        f"/api/data/oauth2/admin/providers/{provider_id}", headers=user_headers, json=payload
+        f"/api/data/oauth2/providers/{provider_id}", headers=user_headers, json=payload
     )
 
     assert res.status_code == 401, res.text
@@ -154,7 +154,7 @@ async def test_delete_oauth2_provider(sanic_client: SanicASGITestClient, admin_h
     provider = await create_oauth2_provider("provider_1")
     provider_id = provider["id"]
 
-    _, res = await sanic_client.delete(f"/api/data/oauth2/admin/providers/{provider_id}", headers=admin_headers)
+    _, res = await sanic_client.delete(f"/api/data/oauth2/providers/{provider_id}", headers=admin_headers)
 
     assert res.status_code == 204, res.text
 
@@ -166,7 +166,7 @@ async def test_delete_oauth2_provider_unauthorized(
     provider = await create_oauth2_provider("provider_1")
     provider_id = provider["id"]
 
-    _, res = await sanic_client.delete(f"/api/data/oauth2/admin/providers/{provider_id}", headers=user_headers)
+    _, res = await sanic_client.delete(f"/api/data/oauth2/providers/{provider_id}", headers=user_headers)
 
     assert res.status_code == 401, res.text
 
