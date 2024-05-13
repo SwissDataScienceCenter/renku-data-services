@@ -17,7 +17,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.connected_services import apispec, models
 from renku_data_services.connected_services import orm as schemas
-from renku_data_services.connected_services.apispec import ConnectionStatus
+from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind
 
 
 class ConnectedServicesRepository:
@@ -253,14 +253,21 @@ class ConnectedServicesRepository:
     ) -> models.ConnectedAccount:
         """Get the account information from a OAuth2 connection."""
         async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (oauth2_client, _, client):
-            # TODO: how to configure this?
-            request_url = urljoin(client.url, "api/v4/user")
-            response = await oauth2_client.get(request_url)
+            request_url = urljoin(client.api_url, "user")
+            headers = {
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            } if client.kind == ProviderKind.github else None
+            response = await oauth2_client.get(request_url, headers=headers)
 
             if response.status_code > 200:
                 raise errors.Unauthorized(message="Could not get account information.")
 
-            account = models.ConnectedAccount.model_validate(response.json())
+            account = (
+                models.GitHubConnectedAccount.model_validate(response.json()).to_connected_account()
+                if client.kind == ProviderKind.github
+                else models.ConnectedAccount.model_validate(response.json())
+            )
             return account
 
     async def get_oauth2_connection_token(self, connection_id: str, user: base_models.APIUser) -> models.OAuth2TokenSet:
