@@ -3,7 +3,7 @@
 from base64 import b64decode, b64encode
 from collections.abc import Callable
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlencode, urljoin
 
 from authlib.integrations.httpx_client import AsyncOAuth2Client
@@ -299,6 +299,36 @@ class ConnectedServicesRepository:
             await oauth2_client.ensure_active_token(oauth2_client.token)
             token_model = models.OAuth2TokenSet.from_dict(oauth2_client.token)
             return token_model
+
+    async def get_repository(
+        self, connection_id: str, repository_url: str, user: base_models.APIUser, etag: str | None
+    ) -> models.Repository | Literal["304"]:
+        """Get the metadata about a repository using an OAuth2 connection."""
+        async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (oauth2_client, _, client):
+            request_url = client.get_repository_api_url(repository_url)
+            headers: dict[str, str] = (
+                {
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                }
+                if client.kind == ProviderKind.github
+                else dict()
+            )
+            if etag:
+                headers["If-None-Match"] = etag
+            response = await oauth2_client.get(request_url, headers=headers)
+
+            if response.status_code == 304:
+                return "304"
+            if response.status_code > 200:
+                raise errors.Unauthorized(message="Could not get repository information.")
+
+            repository = (
+                models.GitHubRepository.model_validate(response.json()).to_repository()
+                if client.kind == ProviderKind.github
+                else models.GitLabRepository.model_validate(response.json()).to_repository()
+            )
+            return repository
 
     @asynccontextmanager
     async def get_async_oauth2_client(self, connection_id: str, user: base_models.APIUser):

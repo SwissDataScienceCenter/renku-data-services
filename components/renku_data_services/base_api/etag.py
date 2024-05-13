@@ -20,3 +20,14 @@ def if_match_required(f):
         return response
 
     return decorated_function
+
+def extract_if_none_match(f):
+    """Decorator which extracts the "If-None-Match" header if present."""
+
+    @wraps(f)
+    async def decorated_function(request: Request, *args, **kwargs):
+        etag = request.headers.get("If-None-Match")
+        response = await f(request, *args, **kwargs, etag=etag)
+        return response
+
+    return decorated_function

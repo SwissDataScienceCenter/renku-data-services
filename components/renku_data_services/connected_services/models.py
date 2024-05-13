@@ -41,6 +41,7 @@ class ConnectedAccount(BaseModel):
     username: str
     web_url: str
 
+
 @dataclass(frozen=True, eq=True, kw_only=True)
 class GitHubConnectedAccount(BaseModel):
     """OAuth2 connected account model for GitHub."""
@@ -91,3 +92,102 @@ class OAuth2TokenSet(dict):
         if self.expires_at is None:
             return None
         return datetime.fromtimestamp(self.expires_at, UTC).isoformat()
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class RepositoryPermissions:
+    """Repository permissions for git operations."""
+
+    pull: bool
+    push: bool
+
+    @classmethod
+    def default(cls):
+        """Default permissions."""
+        return cls(pull=False, push=False)
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class Repository:
+    """Repository metadata."""
+
+    git_http_url: str
+    web_url: str
+    permissions: RepositoryPermissions
+
+
+class GitLabRepositoryPermissionAccess(BaseModel):
+    """Repository permission access level from a GitLab provider."""
+
+    access_level: int
+
+
+class GitLabRepositoryPermissions(BaseModel):
+    """Repository permissions from a GitLab provider."""
+
+    project_access: GitLabRepositoryPermissionAccess | None
+    group_access: GitLabRepositoryPermissionAccess | None
+
+    def to_permissions(self) -> RepositoryPermissions:
+        """Returns the corresponding RepositoryPermissions object."""
+        pull = False
+        push = False
+        if self.project_access is not None and self.project_access.access_level >= 10:
+            pull = True
+        if self.project_access is not None and self.project_access.access_level >= 30:
+            push = True
+        if self.group_access is not None and self.group_access.access_level >= 10:
+            pull = True
+        if self.group_access is not None and self.group_access.access_level >= 30:
+            push = True
+        return RepositoryPermissions(pull=pull, push=push)
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class GitLabRepository(BaseModel):
+    """Repository metadata from a GitLab provider."""
+
+    http_url_to_repo: str
+    web_url: str
+    permissions: GitLabRepositoryPermissions | None
+
+    def to_repository(self) -> Repository:
+        """Returns the corresponding Repository object."""
+        return Repository(
+            git_http_url=self.http_url_to_repo,
+            web_url=self.web_url,
+            permissions=(
+                self.permissions.to_permissions() if self.permissions is not None else RepositoryPermissions.default()
+            ),
+        )
+
+
+class GitHubRepositoryPermissions(BaseModel):
+    """Repository permissions from a GitHub provider."""
+
+    pull: bool
+    push: bool
+
+    def to_permissions(self) -> RepositoryPermissions:
+        """Returns the corresponding RepositoryPermissions object."""
+        return RepositoryPermissions(pull=self.pull, push=self.push)
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class GitHubRepository(BaseModel):
+    """Repository metadata from a GitHub provider."""
+
+    clone_url: str
+    html_url: str
+    permissions: GitHubRepositoryPermissions | None
+
+    def to_repository(self) -> Repository:
+        """Returns the corresponding Repository object."""
+
+        return Repository(
+            git_http_url=self.clone_url,
+            web_url=self.html_url,
+            permissions=(
+                self.permissions.to_permissions() if self.permissions is not None else RepositoryPermissions.default()
+            ),
+        )

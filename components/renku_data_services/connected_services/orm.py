@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Any
-from urllib.parse import urljoin, urlparse, urlunparse
+from urllib.parse import quote, urljoin, urlparse, urlunparse
 
 from sqlalchemy import JSON, DateTime, ForeignKey, LargeBinary, MetaData, String, func
 from sqlalchemy.dialects.postgresql import JSONB
@@ -96,6 +96,14 @@ class OAuth2ClientORM(BaseORM):
             return urlunparse(url)
         return urljoin(self.url, "api/v4/")
 
+    def get_repository_api_url(self, repository_url: str) -> str:
+        """Compute the metadata API URL for a git repository."""
+        path = urlparse(repository_url).path
+        path = path[1:] # removes the leading slash
+        path = path[: -len(".git")] if path.endswith(".git") else path
+        if self.kind == ProviderKind.github:
+            return urljoin(self.api_url, f"repos/{path}")
+        return urljoin(self.api_url, f"projects/{quote(path, safe="")}")
 
 class OAuth2ConnectionORM(BaseORM):
     """An OAuth2 connection."""
