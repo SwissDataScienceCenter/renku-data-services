@@ -189,7 +189,6 @@ module = [
   "renku_data_services.users.apispec",
   "renku_data_services.data_api.error_handler",
   "renku_data_services.namespace.apispec",
-  "renku_data_services.connected_services.apispec",
 ]
 ignore_errors = true
 
