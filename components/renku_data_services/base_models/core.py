@@ -4,7 +4,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import ClassVar, Optional, Protocol
+from typing import ClassVar, NewType, Optional, Protocol
 
 from sanic import Request
 
@@ -19,6 +19,9 @@ class Authenticator(Protocol):
     async def authenticate(self, access_token: str, request: Request) -> "APIUser":
         """Validates the user credentials (i.e. we can say that the user is a valid Renku user)."""
         ...
+
+
+Id = NewType("Id", str)
 
 
 @dataclass(kw_only=True)

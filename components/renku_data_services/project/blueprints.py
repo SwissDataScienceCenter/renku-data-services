@@ -6,7 +6,7 @@ from sanic import HTTPResponse, Request, json
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
-from renku_data_services.authz.models import Member, Role
+from renku_data_services.authz.models import Member, Role, Visibility
 from renku_data_services.base_api.auth import (
     authenticate,
     only_authenticated,
@@ -65,7 +65,20 @@ class ProjectsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.ProjectPost)
         async def _post(_: Request, *, user: base_models.APIUser, body: apispec.ProjectPost):
-            result = await self.project_repo.insert_project(user=user, project=body)
+            keywords = [kw.root for kw in body.keywords] if body.keywords is not None else []
+            project = project_models.UnsavedProject(
+                name=body.name,
+                namespace=body.namespace,
+                slug=body.slug or base_models.Slug.from_name(body.name).value,
+                description=body.description,
+                repositories=body.repositories or [],
+                created_by=user.id,  # type: ignore[arg-type]
+                visibility=Visibility(body.visibility)
+                if isinstance(body.visibility, str)
+                else Visibility(body.visibility.value),
+                keywords=keywords,
+            )
+            result = await self.project_repo.insert_project(user, project)
             return json(
                 dict(
                     id=result.id,

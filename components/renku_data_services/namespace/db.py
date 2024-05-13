@@ -246,7 +246,11 @@ class GroupRepository:
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.create, ResourceType.group)
     async def insert_group(
-        self, user: base_models.APIUser, payload: apispec.GroupPostRequest, *, session: AsyncSession | None = None,
+        self,
+        user: base_models.APIUser,
+        payload: apispec.GroupPostRequest,
+        *,
+        session: AsyncSession | None = None,
     ) -> models.Group:
         """Insert a new group."""
         if not session:
@@ -300,7 +304,7 @@ class GroupRepository:
                 output.append(ns_orm.dump())
             return output, group_count
 
-    async def get_namespace(self, user: base_models.APIUser, slug: str) -> models.Namespace | None:
+    async def get_namespace_by_slug(self, user: base_models.APIUser, slug: str) -> models.Namespace | None:
         """Get the namespace for a slug."""
         async with self.session_maker() as session, session.begin():
             ns = await session.scalar(select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == slug.lower()))
