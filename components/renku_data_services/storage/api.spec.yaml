@@ -1,10 +1,10 @@
 ---
 openapi: 3.0.2
 info:
-  title: Renku cloud storage services
+  title: Renku Data Services API
   description: |
-    Services that provide information about data, users and compute resources. All errors
-    have the same format as the schema called ErrorResponse.
+    This service is the main backend for Renku. It provides information about users, projects,
+    cloud storage, access to compute resources and many other things.
   version: v1
 servers:
   - url: /api/data
