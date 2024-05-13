@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from urllib.parse import urlunparse
 
 from sanic import HTTPResponse, Request, json, redirect
+from sanic.log import logger
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
@@ -183,6 +184,8 @@ class OAuth2ConnectionsBP(CustomBlueprint):
         async def _get_one_repository(
             _: Request, connection_id: str, repository_url: str, user: base_models.APIUser, etag: str | None = None
         ):
+            logger.info(f"Requested repository_url={repository_url}")
+
             repository = await self.connected_services_repo.get_repository(
                 connection_id=connection_id, repository_url=repository_url, user=user, etag=etag
             )
