@@ -27,6 +27,8 @@ packages = [
   { include = "renku_data_services/message_queue", from = "../../components" },
   { include = "renku_data_services/migrations", from = "../../components" },
   { include = "renku_data_services/namespace", from = "../../components" },
+  { include = "renku_data_services/secrets", from = "../../components" },
+  { include = "renku_data_services/connected_services", from = "../../components" },
   # Note: poetry poly does not detect the migrations as dependencies, but they are. Don't remove these!
   { include = "renku_data_services/storage_migrations", from = "../../components" },
   { include = "renku_data_services/crc_migrations", from = "../../components" },
@@ -36,7 +38,6 @@ packages = [
   { include = "renku_data_services/events_migrations", from = "../../components" },
   { include = "renku_data_services/project_migrations", from = "../../components" },
   { include = "renku_data_services/session_migrations", from = "../../components" },
-  { include = "renku_data_services/secrets", from = "../../components" },
 ]
 
 [tool.poetry.dependencies]
