@@ -1,6 +1,8 @@
 """Adapters for connected services database classes."""
 
 from base64 import b64decode, b64encode
+import base64
+import random
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from typing import Any
@@ -146,7 +148,7 @@ class ConnectedServicesRepository:
                 raise errors.MissingResourceError(message=f"OAuth2 Client with id '{provider_id}' does not exist.")
 
             if next_url:
-                query = urlencode([("next", next_url)])
+                query = urlencode([("next_url", next_url)])
                 callback_url = f"{callback_url}?{query}"
 
             client_secret = (
@@ -206,7 +208,7 @@ class ConnectedServicesRepository:
                 raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
             if next_url:
-                query = urlencode([("next", next_url)])
+                query = urlencode([("next_url", next_url)])
                 callback_url = f"{callback_url}?{query}"
 
             client = connection.client
