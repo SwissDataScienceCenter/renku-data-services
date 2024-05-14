@@ -1,9 +1,10 @@
 ---
 openapi: 3.0.2
 info:
-  title: Renku user preferences services
+  title: Renku Data Services API
   description: |
-    Services that provide information about user preferences.
+    This service is the main backend for Renku. It provides information about users, projects,
+    cloud storage, access to compute resources and many other things.
   version: v1
 servers:
   - url: /api/data
