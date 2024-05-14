@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 from urllib.parse import urljoin, urlparse, urlunparse
 
-from sqlalchemy import JSON, DateTime, ForeignKey, MetaData, String, func
+from sqlalchemy import JSON, DateTime, ForeignKey, LargeBinary, MetaData, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import UniqueConstraint
@@ -36,7 +36,7 @@ class OAuth2ClientORM(BaseORM):
     kind: Mapped[ProviderKind]
     scope: Mapped[str] = mapped_column("scope", String())
     url: Mapped[str] = mapped_column("url", String())
-    client_secret: Mapped[str | None] = mapped_column("client_secret", String(500), default=None, repr=False)
+    client_secret: Mapped[bytes | None] = mapped_column("client_secret", LargeBinary(), default=None, repr=False)
     creation_date: Mapped[datetime] = mapped_column(
         "creation_date", DateTime(timezone=True), default=None, server_default=func.now(), nullable=False
     )
