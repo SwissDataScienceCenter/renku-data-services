@@ -89,7 +89,7 @@ paths:
           name: project_id
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Ulid"
       responses:
         "200":
           description: The project
@@ -114,6 +114,7 @@ paths:
           name: project_id
           required: true
           schema:
+            $ref: "#/components/schemas/Ulid"
             type: string
         - $ref: "#/components/parameters/If-Match"
       requestBody:
@@ -146,7 +147,7 @@ paths:
           name: project_id
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Ulid"
       responses:
         "204":
           description: The project was removed or did not exist in the first place
@@ -193,7 +194,7 @@ paths:
           name: project_id
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Ulid"
       responses:
         "200":
           description: The project's members
@@ -221,7 +222,7 @@ paths:
           name: project_id
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Ulid"
       requestBody:
         required: true
         content:
@@ -249,13 +250,13 @@ paths:
           name: project_id
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Ulid"
         - in: path
           name: member_id
           description: This is user's KeyCloak ID
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/UserId"
       responses:
         "204":
           description: The member was removed or wasn't part of project's members.
@@ -371,7 +372,6 @@ components:
       minLength: 26
       maxLength: 26
       pattern: "^[A-Z0-9]{26}$" # This is case-insensitive
-      format: ulid
     ProjectName:
       description: Renku project name
       type: string
@@ -444,7 +444,7 @@ components:
         - id: "some-keycloak-user-id"
           role: "owner"
         - id: "another-keycloak-user-id"
-          role: "member"
+          role: "viewer"
     ProjectMemberPatchRequest:
       description: A member and the access level to the project
       type: object
@@ -488,12 +488,14 @@ components:
       description: Possible roles of members in a project
       type: string
       enum:
-        - member
+        - viewer
+        - editor
         - owner
     UserId:
       type: string
       description: Keycloak user ID
       example: f74a228b-1790-4276-af5f-25c2424e9b0c
+      pattern: "^[A-Za-z0-9]{1}[A-Za-z0-9-]+$"
     UserFirstLastName:
       type: string
       description: First or last name of the user

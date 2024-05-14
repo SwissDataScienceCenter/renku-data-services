@@ -10,8 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
-from renku_data_services.authz.authz import IProjectAuthorizer
-from renku_data_services.authz.models import MemberQualifier, Scope
+from renku_data_services.authz.authz import Authz, ResourceType
+from renku_data_services.authz.models import Scope
 from renku_data_services.session import apispec, models
 from renku_data_services.session import orm as schemas
 from renku_data_services.session.apispec import EnvironmentKind
@@ -20,9 +20,9 @@ from renku_data_services.session.apispec import EnvironmentKind
 class SessionRepository:
     """Repository for sessions."""
 
-    def __init__(self, session_maker: Callable[..., AsyncSession], project_authz: IProjectAuthorizer):
+    def __init__(self, session_maker: Callable[..., AsyncSession], project_authz: Authz):
         self.session_maker = session_maker
-        self.project_authz: IProjectAuthorizer = project_authz
+        self.project_authz: Authz = project_authz
 
     async def get_environments(self) -> list[models.Environment]:
         """Get all session environments from the database."""
@@ -108,10 +108,9 @@ class SessionRepository:
 
     async def get_launchers(self, user: base_models.APIUser) -> list[models.SessionLauncher]:
         """Get all session launchers visible for a specific user from the database."""
-        user_id: str | MemberQualifier = (
-            user.id if user.is_authenticated and user.id is not None else MemberQualifier.ALL
+        project_ids = await self.project_authz.resources_with_permission(
+            user, user.id, ResourceType.project, scope=Scope.READ
         )
-        project_ids = await self.project_authz.get_user_projects(requested_by=user, user_id=user_id, scope=Scope.READ)
 
         async with self.session_maker() as session:
             res = await session.scalars(
@@ -124,7 +123,7 @@ class SessionRepository:
 
     async def get_project_launchers(self, user: base_models.APIUser, project_id: str) -> list[models.SessionLauncher]:
         """Get all session launchers in a project from the database."""
-        authorized = await self.project_authz.has_permission(user=user, project_id=project_id, scope=Scope.READ)
+        authorized = await self.project_authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
         if not authorized:
             raise errors.MissingResourceError(
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
@@ -148,7 +147,7 @@ class SessionRepository:
             launcher = res.one_or_none()
 
             authorized = (
-                await self.project_authz.has_permission(user=user, project_id=launcher.project_id, scope=Scope.READ)
+                await self.project_authz.has_permission(user, ResourceType.project, launcher.project_id, Scope.READ)
                 if launcher is not None
                 else False
             )
@@ -167,7 +166,7 @@ class SessionRepository:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
         project_id = new_launcher.project_id
-        authorized = await self.project_authz.has_permission(user=user, project_id=project_id, scope=Scope.WRITE)
+        authorized = await self.project_authz.has_permission(user, ResourceType.project, project_id, Scope.WRITE)
         if not authorized:
             raise errors.MissingResourceError(
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
@@ -227,7 +226,10 @@ class SessionRepository:
                 )
 
             authorized = await self.project_authz.has_permission(
-                user=user, project_id=launcher.project_id, scope=Scope.WRITE
+                user,
+                ResourceType.project,
+                launcher.project_id,
+                Scope.WRITE,
             )
             if not authorized:
                 raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
@@ -281,7 +283,10 @@ class SessionRepository:
                 return
 
             authorized = await self.project_authz.has_permission(
-                user=user, project_id=launcher.project_id, scope=Scope.WRITE
+                user,
+                ResourceType.project,
+                launcher.project_id,
+                Scope.WRITE,
             )
             if not authorized:
                 raise errors.Unauthorized(message="You do not have the required permissions for this operation.")

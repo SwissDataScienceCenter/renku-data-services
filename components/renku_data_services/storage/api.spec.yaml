@@ -514,7 +514,6 @@ components:
       minLength: 26
       maxLength: 26
       pattern: "^[A-Z0-9]+$"
-      format: ulid
     GitlabProjectId:
       description: Project id of a gitlab project (only int project id allowed, encoded as string for future-proofing)
       type: string

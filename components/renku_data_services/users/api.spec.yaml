@@ -274,6 +274,7 @@ components:
       type: string
       description: Keycloak user ID
       example: f74a228b-1790-4276-af5f-25c2424e9b0c
+      pattern: "^[A-Za-z0-9]{1}[A-Za-z0-9-]+$"
     UserFirstLastName:
       type: string
       description: First or last name of the user
@@ -344,7 +345,6 @@ components:
       minLength: 26
       maxLength: 26
       pattern: "^[A-Z0-9]{26}$"  # This is case-insensitive
-      format: ulid
     ModificationDate:
       description: The date and time the secret was created or modified (this is always in UTC)
       type: string

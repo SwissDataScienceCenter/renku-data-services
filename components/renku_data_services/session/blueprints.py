@@ -6,7 +6,7 @@ from sanic import HTTPResponse, Request, json
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
-from renku_data_services.base_api.auth import authenticate
+from renku_data_services.base_api.auth import authenticate, validate_path_project_id
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.session import apispec
 from renku_data_services.session.db import SessionRepository
@@ -146,6 +146,7 @@ class SessionLaunchersBP(CustomBlueprint):
         """Get all launchers belonging to a project."""
 
         @authenticate(self.authenticator)
+        @validate_path_project_id
         async def _get_launcher(_: Request, project_id: str, user: base_models.APIUser):
             launchers = await self.session_repo.get_project_launchers(user=user, project_id=project_id)
             return json(

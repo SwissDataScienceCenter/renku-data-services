@@ -99,6 +99,15 @@ class ProgrammingError(BaseError):
 
 
 @dataclass
+class EventError(BaseError):
+    """Raised an irrecoverable error when generating events for the message queue."""
+
+    code: int = 1501
+    message: str = "An unexpected error occured when handling or generating events for the message queue."
+    status_code: int = 500
+
+
+@dataclass
 class ConflictError(BaseError):
     """Raised when a conflicting update occurs."""
 
