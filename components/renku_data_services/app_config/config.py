@@ -15,16 +15,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric.types import PublicKeyTypes
+from jwt import PyJWKClient
+from yaml import safe_load
+
 import renku_data_services.base_models as base_models
 import renku_data_services.connected_services
 import renku_data_services.crc
 import renku_data_services.storage
 import renku_data_services.user_preferences
 import renku_data_services.users
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives.asymmetric.types import PublicKeyTypes
-from jwt import PyJWKClient
 from renku_data_services import errors
 from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.authn.gitlab import GitlabAuthenticator
@@ -59,7 +61,6 @@ from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
 from renku_data_services.users.models import UserInfo
 from renku_data_services.utils.core import merge_api_specs, oidc_discovery
-from yaml import safe_load
 
 default_resource_pool = models.ResourcePool(
     name="default",
