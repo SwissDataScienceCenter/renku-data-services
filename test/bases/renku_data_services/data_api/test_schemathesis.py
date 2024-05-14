@@ -47,6 +47,7 @@ ALLOWED_SLOW_ENDPOINTS = [
     ("/user/secrets", "POST"),  # encryption of secrets is a costly operation
     ("/user/secrets/{secret_id}", "PATCH"),
     ("/user/secret_key", "GET"),
+    ("/oauth2/providers", "POST"),
 ]
 
 
