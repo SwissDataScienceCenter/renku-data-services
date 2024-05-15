@@ -602,6 +602,10 @@ async def test_add_project_members(
         f"/api/data/projects/{project_id}/members", headers=user_headers, json=members
     )
     assert response.status_code == 200, response.text
+    _, response = await sanic_client.get(
+        f"/api/data/projects/{project_id}/members", headers=user_headers,
+    )
+    assert len(response.json) == 3
     events = await app_config.redis.redis_connection.xrange("projectAuth.removed")
     assert len(events) == 0
     events = await app_config.redis.redis_connection.xrange("projectAuth.added")
