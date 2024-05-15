@@ -191,6 +191,10 @@ class OAuth2ConnectionsBP(CustomBlueprint):
             )
             if repository == "304":
                 return HTTPResponse(status=304)
-            return json(apispec.Repository.model_validate(repository).model_dump(exclude_none=True, mode="json"))
+            headers = {"ETag": repository.etag} if repository.etag is not None else None
+            return json(
+                apispec.Repository.model_validate(repository).model_dump(exclude_none=True, mode="json"),
+                headers=headers,
+            )
 
         return "/oauth2/connections/<connection_id>/api/repository/<repository_url>", ["GET"], _get_one_repository

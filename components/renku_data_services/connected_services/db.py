@@ -333,10 +333,11 @@ class ConnectedServicesRepository:
                 model = models.GitHubRepository.model_validate(response.json())
                 logger.info(f"Got github data: {model}")
 
+            new_etag = response.headers.get("ETag")
             repository = (
-                models.GitHubRepository.model_validate(response.json()).to_repository()
+                models.GitHubRepository.model_validate(response.json()).to_repository(etag=new_etag)
                 if client.kind == ProviderKind.github
-                else models.GitLabRepository.model_validate(response.json()).to_repository()
+                else models.GitLabRepository.model_validate(response.json()).to_repository(etag=new_etag)
             )
             return repository
 

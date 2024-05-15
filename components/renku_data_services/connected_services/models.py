@@ -111,6 +111,7 @@ class RepositoryPermissions:
 class Repository:
     """Repository metadata."""
 
+    etag: str | None
     git_http_url: str
     web_url: str
     permissions: RepositoryPermissions
@@ -152,9 +153,10 @@ class GitLabRepository(BaseModel):
     permissions: GitLabRepositoryPermissions | None
     visibility: str
 
-    def to_repository(self) -> Repository:
+    def to_repository(self, etag: str | None) -> Repository:
         """Returns the corresponding Repository object."""
         return Repository(
+            etag=etag if etag else None,
             git_http_url=self.http_url_to_repo,
             web_url=self.web_url,
             permissions=(
@@ -183,10 +185,11 @@ class GitHubRepository(BaseModel):
     permissions: GitHubRepositoryPermissions | None
     visibility: str
 
-    def to_repository(self) -> Repository:
+    def to_repository(self, etag: str | None) -> Repository:
         """Returns the corresponding Repository object."""
 
         return Repository(
+            etag=etag if etag else None,
             git_http_url=self.clone_url,
             web_url=self.html_url,
             permissions=(
