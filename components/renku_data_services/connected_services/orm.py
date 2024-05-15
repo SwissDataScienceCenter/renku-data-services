@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import quote, urljoin, urlparse, urlunparse
 
 from sqlalchemy import JSON, DateTime, ForeignKey, LargeBinary, MetaData, String, func
 from sqlalchemy.dialects.postgresql import JSONB
@@ -72,6 +72,8 @@ class OAuth2ClientORM(BaseORM):
         """The authorization URL for the OAuth2 protocol."""
         if not self.url:
             raise errors.ValidationError(message=f"URL not defined for provider {self.id}.")
+        if self.kind == ProviderKind.github:
+            return urljoin(self.url, "login/oauth/authorize")
         return urljoin(self.url, "oauth/authorize")
 
     @property
@@ -79,8 +81,29 @@ class OAuth2ClientORM(BaseORM):
         """The token endpoint URL for the OAuth2 protocol."""
         if not self.url:
             raise errors.ValidationError(message=f"URL not defined for provider {self.id}.")
+        if self.kind == ProviderKind.github:
+            return urljoin(self.url, "login/oauth/access_token")
         return urljoin(self.url, "oauth/token")
 
+    @property
+    def api_url(self) -> str:
+        """The URL used for API calls on the Resource Server."""
+        if not self.url:
+            raise errors.ValidationError(message=f"URL not defined for provider {self.id}.")
+        if self.kind == ProviderKind.github:
+            url = urlparse(self.url)
+            url = url._replace(netloc=f"api.{url.netloc}")
+            return urlunparse(url)
+        return urljoin(self.url, "api/v4/")
+
+    def get_repository_api_url(self, repository_url: str) -> str:
+        """Compute the metadata API URL for a git repository."""
+        path = urlparse(repository_url).path
+        path = path[1:] # removes the leading slash
+        path = path[: -len(".git")] if path.endswith(".git") else path
+        if self.kind == ProviderKind.github:
+            return urljoin(self.api_url, f"repos/{path}")
+        return urljoin(self.api_url, f"projects/{quote(path, safe="")}")
 
 class OAuth2ConnectionORM(BaseORM):
     """An OAuth2 connection."""

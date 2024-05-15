@@ -188,6 +188,31 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - oauth2
+  /oauth2/connections/{connection_id}/api/repository/{repository_url}:
+    get:
+      summary: Get the metadata available about a repository
+      parameters:
+        - in: path
+          name: connection_id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: repository_url
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The repository.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Repository"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - oauth2
 components:
   schemas:
     ProviderList:
@@ -289,6 +314,31 @@ components:
       required:
         - username
         - web_url
+    Repository:
+      type: object
+      additionalProperties: false
+      properties:
+        git_http_url:
+          $ref: "#/components/schemas/WebUrl"
+        web_url:
+          $ref: "#/components/schemas/WebUrl"
+        permissions:
+          $ref: "#/components/schemas/RepositoryPermissions"
+      required:
+        - git_http_url
+        - web_url
+        - permissions
+    RepositoryPermissions:
+      type: object
+      additionalProperties: false
+      properties:
+        pull:
+          type: boolean
+        push:
+          type: boolean
+      required:
+        - pull
+        - push
     Ulid:
       description: ULID identifier
       type: string
