@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import BaseModel
 
@@ -135,10 +135,10 @@ class GitLabRepositoryPermissionAccess(BaseModel):
 class GitLabRepositoryPermissions(BaseModel):
     """Repository permissions from a GitLab provider."""
 
-    GUEST_ACCESS_LEVEL = 10
-    DEVELOPER_ACCESS_LEVEL = 30
-    PUBLIC_VISIBILITY = "public"
-    INTERNAL_VISIBILITY = "internal"
+    GUEST_ACCESS_LEVEL: ClassVar[int] = 10
+    DEVELOPER_ACCESS_LEVEL: ClassVar[int] = 30
+    PUBLIC_VISIBILITY: ClassVar[str] = "public"
+    INTERNAL_VISIBILITY: ClassVar[str] = "internal"
 
     project_access: GitLabRepositoryPermissionAccess | None
     group_access: GitLabRepositoryPermissionAccess | None
