@@ -150,6 +150,7 @@ class GitLabRepository(BaseModel):
     http_url_to_repo: str
     web_url: str
     permissions: GitLabRepositoryPermissions | None
+    visibility: str
 
     def to_repository(self) -> Repository:
         """Returns the corresponding Repository object."""
@@ -180,6 +181,7 @@ class GitHubRepository(BaseModel):
     clone_url: str
     html_url: str
     permissions: GitHubRepositoryPermissions | None
+    visibility: str
 
     def to_repository(self) -> Repository:
         """Returns the corresponding Repository object."""

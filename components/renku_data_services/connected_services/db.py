@@ -321,7 +321,17 @@ class ConnectedServicesRepository:
             if response.status_code == 304:
                 return "304"
             if response.status_code > 200:
-                raise errors.Unauthorized(message="Could not get repository information.")
+                raise errors.MissingResourceError(
+                    message=f"Repository {repository_url} does not exist or you do not have access to it."  # noqa: E501
+                )
+
+            model: models.GitLabRepository | models.GitHubRepository
+            if client.kind == ProviderKind.gitlab:
+                model = models.GitLabRepository.model_validate(response.json())
+                logger.info(f"Got gitlab data: {model}")
+            if client.kind == ProviderKind.github:
+                model = models.GitHubRepository.model_validate(response.json())
+                logger.info(f"Got github data: {model}")
 
             repository = (
                 models.GitHubRepository.model_validate(response.json()).to_repository()
