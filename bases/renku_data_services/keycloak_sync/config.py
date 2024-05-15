@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
+from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.errors import errors
 from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.message_queue.db import EventRepository
@@ -20,6 +21,7 @@ class SyncConfig:
 
     syncer: UsersSync
     kc_api: IKeycloakAPI
+    authz_config: AuthzConfig
     total_user_sync: bool = False
 
     @classmethod
@@ -38,7 +40,7 @@ class SyncConfig:
         # NOTE: the pool here is not used to serve HTTP requests, it is only used in background jobs.
         # Therefore, we want to consume very few connections and we can wait for an available connection
         # much longer than the default 30 seconds. In our tests syncing 15 users times out with the default.
-        engine = create_async_engine(async_sqlalchemy_url, pool_size=2, max_overflow=0, pool_timeout=600)
+        engine = create_async_engine(async_sqlalchemy_url, pool_size=4, max_overflow=0, pool_timeout=600)
         session_maker: Callable[..., AsyncSession] = sessionmaker(
             engine, class_=AsyncSession, expire_on_commit=False
         )  # type: ignore[call-overload]
@@ -54,4 +56,5 @@ class SyncConfig:
         realm = os.environ.get(f"{prefix}KEYCLOAK_REALM", "Renku")
         kc_api = KeycloakAPI(keycloak_url=keycloak_url, client_id=client_id, client_secret=client_secret, realm=realm)
         total_user_sync = os.environ.get(f"{prefix}TOTAL_USER_SYNC", "false").lower() == "true"
-        return cls(syncer, kc_api, total_user_sync)
+        authz_config = AuthzConfig.from_env()
+        return cls(syncer, kc_api, authz_config, total_user_sync)

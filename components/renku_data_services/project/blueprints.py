@@ -6,12 +6,19 @@ from sanic import HTTPResponse, Request, json
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
-from renku_data_services.base_api.auth import authenticate, only_authenticated
+from renku_data_services.authz.models import Member, Role, Visibility
+from renku_data_services.base_api.auth import (
+    authenticate,
+    only_authenticated,
+    validate_path_project_id,
+    validate_path_user_id,
+)
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.etag import if_match_required
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.errors import errors
 from renku_data_services.project import apispec
+from renku_data_services.project import models as project_models
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
 from renku_data_services.users.db import UserRepo
 
@@ -33,7 +40,20 @@ class ProjectsBP(CustomBlueprint):
         async def _get_all(_: Request, *, user: base_models.APIUser, pagination: PaginationRequest):
             projects, total_num = await self.project_repo.get_projects(user=user, pagination=pagination)
             return [
-                apispec.Project.model_validate(p).model_dump(exclude_none=True, mode="json") for p in projects
+                dict(
+                    id=p.id,
+                    name=p.name,
+                    namespace=p.namespace,
+                    slug=p.slug,
+                    creation_date=p.creation_date.isoformat(),
+                    created_by=p.created_by,
+                    repositories=p.repositories,
+                    visibility=p.visibility.value,
+                    description=p.description,
+                    etag=p.etag,
+                    keywords=p.keywords or [],
+                )
+                for p in projects
             ], total_num
 
         return "/projects", ["GET"], _get_all
@@ -45,9 +65,37 @@ class ProjectsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.ProjectPost)
         async def _post(_: Request, *, user: base_models.APIUser, body: apispec.ProjectPost):
-            body.keywords = None if body.keywords is None else [k.root for k in body.keywords]  # type: ignore
-            project = await self.project_repo.insert_project(user=user, project=body)
-            return json(apispec.Project.model_validate(project).model_dump(exclude_none=True, mode="json"), 201)
+            keywords = [kw.root for kw in body.keywords] if body.keywords is not None else []
+            project = project_models.Project(
+                id=None,
+                name=body.name,
+                namespace=body.namespace,
+                slug=body.slug or base_models.Slug.from_name(body.name).value,
+                description=body.description,
+                repositories=body.repositories or [],
+                created_by=user.id,  # type: ignore[arg-type]
+                visibility=Visibility(body.visibility)
+                if isinstance(body.visibility, str)
+                else Visibility(body.visibility.value),
+                keywords=keywords,
+            )
+            result = await self.project_repo.insert_project(user=user, project=project)
+            return json(
+                dict(
+                    id=result.id,
+                    name=result.name,
+                    namespace=result.namespace,
+                    slug=result.slug,
+                    creation_date=result.creation_date.isoformat(),
+                    created_by=result.created_by,
+                    repositories=result.repositories,
+                    visibility=result.visibility.value,
+                    description=result.description,
+                    etag=result.etag,
+                    keywords=result.keywords or [],
+                ),
+                201,
+            )
 
         return "/projects", ["POST"], _post
 
@@ -55,6 +103,7 @@ class ProjectsBP(CustomBlueprint):
         """Get a specific project."""
 
         @authenticate(self.authenticator)
+        @validate_path_project_id
         async def _get_one(request: Request, *, user: base_models.APIUser, project_id: str):
             project = await self.project_repo.get_project(user=user, project_id=project_id)
 
@@ -64,7 +113,20 @@ class ProjectsBP(CustomBlueprint):
 
             headers = {"ETag": project.etag} if project.etag is not None else None
             return json(
-                apispec.Project.model_validate(project).model_dump(exclude_none=True, mode="json"), headers=headers
+                dict(
+                    id=project.id,
+                    name=project.name,
+                    namespace=project.namespace,
+                    slug=project.slug,
+                    creation_date=project.creation_date.isoformat(),
+                    created_by=project.created_by,
+                    repositories=project.repositories,
+                    visibility=project.visibility.value,
+                    description=project.description,
+                    etag=project.etag,
+                    keywords=project.keywords or [],
+                ),
+                headers=headers,
             )
 
         return "/projects/<project_id>", ["GET"], _get_one
@@ -73,9 +135,30 @@ class ProjectsBP(CustomBlueprint):
         """Get a specific project by namespace/slug."""
 
         @authenticate(self.authenticator)
-        async def _get_one_by_namespace_slug(_: Request, *, user: base_models.APIUser, namespace: str, slug: str):
+        async def _get_one_by_namespace_slug(request: Request, *, user: base_models.APIUser, namespace: str, slug: str):
             project = await self.project_repo.get_project_by_namespace_slug(user=user, namespace=namespace, slug=slug)
-            return json(apispec.Project.model_validate(project).model_dump(exclude_none=True, mode="json"))
+
+            etag = request.headers.get("If-None-Match")
+            if project.etag is not None and project.etag == etag:
+                return HTTPResponse(status=304)
+
+            headers = {"ETag": project.etag} if project.etag is not None else None
+            return json(
+                dict(
+                    id=project.id,
+                    name=project.name,
+                    namespace=project.namespace,
+                    slug=project.slug,
+                    creation_date=project.creation_date.isoformat(),
+                    created_by=project.created_by,
+                    repositories=project.repositories,
+                    visibility=project.visibility.value,
+                    description=project.description,
+                    etag=project.etag,
+                    keywords=project.keywords or [],
+                ),
+                headers=headers,
+            )
 
         return "/projects/<namespace>/<slug>", ["GET"], _get_one_by_namespace_slug
 
@@ -84,6 +167,7 @@ class ProjectsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
+        @validate_path_project_id
         async def _delete(_: Request, *, user: base_models.APIUser, project_id: str):
             await self.project_repo.delete_project(user=user, project_id=project_id)
             return HTTPResponse(status=204)
@@ -95,6 +179,7 @@ class ProjectsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
+        @validate_path_project_id
         @if_match_required
         @validate(json=apispec.ProjectPatch)
         async def _patch(
@@ -102,11 +187,32 @@ class ProjectsBP(CustomBlueprint):
         ):
             body_dict = body.model_dump(exclude_none=True)
 
-            updated_project = await self.project_repo.update_project(
+            project_update = await self.project_repo.update_project(
                 user=user, project_id=project_id, etag=etag, **body_dict
             )
+            if not isinstance(project_update, project_models.ProjectUpdate):
+                raise errors.ProgrammingError(
+                    message="Expected the result of a project update to be ProjectUpdate but instead "
+                    f"got {type(project_update)}"
+                )
 
-            return json(apispec.Project.model_validate(updated_project).model_dump(exclude_none=True, mode="json"))
+            updated_project = project_update.new
+            return json(
+                dict(
+                    id=updated_project.id,
+                    name=updated_project.name,
+                    namespace=updated_project.namespace,
+                    slug=updated_project.slug,
+                    creation_date=updated_project.creation_date.isoformat(),
+                    created_by=updated_project.created_by,
+                    repositories=updated_project.repositories,
+                    visibility=updated_project.visibility.value,
+                    description=updated_project.description,
+                    etag=updated_project.etag,
+                    keywords=updated_project.keywords or [],
+                ),
+                200,
+            )
 
         return "/projects/<project_id>", ["PATCH"], _patch
 
@@ -114,13 +220,14 @@ class ProjectsBP(CustomBlueprint):
         """List all project members."""
 
         @authenticate(self.authenticator)
+        @validate_path_project_id
         async def _get_all_members(_: Request, *, user: base_models.APIUser, project_id: str):
             members = await self.project_member_repo.get_members(user=user, project_id=project_id)
 
             users = []
 
             for member in members:
-                user_id = member.member
+                user_id = member.user_id
                 user_info = await self.user_repo.get_user(requested_by=user, id=user_id)
                 if not user_info:
                     raise errors.MissingResourceError(message=f"The user with ID {user_id} cannot be found.")
@@ -142,12 +249,14 @@ class ProjectsBP(CustomBlueprint):
         """Update or add project members."""
 
         @authenticate(self.authenticator)
+        @validate_path_project_id
         async def _update_members(request: Request, *, user: base_models.APIUser, project_id: str):
-            body_dump = apispec.ProjectMemberListPatchRequest.model_validate(request.json).model_dump(exclude_none=True)
+            body_dump = apispec.ProjectMemberListPatchRequest.model_validate(request.json)
+            members = [Member(Role(i.role.value), i.id, project_id) for i in body_dump.root]
             await self.project_member_repo.update_members(
                 user=user,
                 project_id=project_id,
-                members=body_dump,  # type: ignore[arg-type]
+                members=members,
             )
             return HTTPResponse(status=200)
 
@@ -157,8 +266,10 @@ class ProjectsBP(CustomBlueprint):
         """Delete a specific project."""
 
         @authenticate(self.authenticator)
+        @validate_path_project_id
+        @validate_path_user_id
         async def _delete_member(_: Request, *, user: base_models.APIUser, project_id: str, member_id: str):
-            await self.project_member_repo.delete_member(user=user, project_id=project_id, member_id=member_id)
+            await self.project_member_repo.delete_members(user=user, project_id=project_id, user_ids=[member_id])
             return HTTPResponse(status=204)
 
         return "/projects/<project_id>/members/<member_id>", ["DELETE"], _delete_member

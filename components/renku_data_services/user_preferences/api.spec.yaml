@@ -84,6 +84,7 @@ components:
       type: string
       description: Keycloak user ID
       example: f74a228b-1790-4276-af5f-25c2424e9b0c
+      pattern: "^[A-Za-z0-9]{1}[A-Za-z0-9-]+$"
     PinnedProjects:
       type: object
       description: The list of projects a user has pinned on their dashboard

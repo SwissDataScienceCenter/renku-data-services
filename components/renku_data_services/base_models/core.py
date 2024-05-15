@@ -1,4 +1,5 @@
 """Base models shared by services."""
+
 import re
 import unicodedata
 from dataclasses import dataclass, field
@@ -31,6 +32,7 @@ class APIUser:
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     email: Optional[str] = None
+
 
     @property
     def is_authenticated(self):

@@ -5,18 +5,29 @@ from test.bases.renku_data_services.data_api.utils import merge_headers
 from typing import Any
 
 import pytest
+from ulid import ULID
 
-from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.header import Header
-from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_authorization_added import (
-    ProjectAuthorizationAdded,
-)
-from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_authorization_removed import (
-    ProjectAuthorizationRemoved,
-)
-from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_created import ProjectCreated
-from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_removed import ProjectRemoved
-from components.renku_data_services.message_queue.avro_models.io.renku.events.v1.project_updated import ProjectUpdated
+from components.renku_data_services.message_queue.avro_models.io.renku.events import v1 as avro_schema_v1
+from components.renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
+from renku_data_services.app_config.config import Config
 from renku_data_services.message_queue.redis_queue import deserialize_binary
+from renku_data_services.users.models import UserInfo
+
+
+@pytest.fixture
+def create_project(sanic_client, user_headers, admin_headers, regular_user, admin_user, bootstrap_admins):
+    async def create_project_helper(name: str, admin: bool = False, **payload) -> dict[str, Any]:
+        headers = admin_headers if admin else user_headers
+        user = admin_user if admin else regular_user
+        payload = payload.copy()
+        payload.update({"name": name, "namespace": f"{user.first_name}.{user.last_name}"})
+
+        _, response = await sanic_client.post("/api/data/projects", headers=headers, json=payload)
+
+        assert response.status_code == 201, response.text
+        return response.json
+
+    return create_project_helper
 
 
 @pytest.fixture
@@ -40,7 +51,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user, app_co
         "visibility": "public",
         "repositories": ["http://renkulab.io/repository-1", "http://renkulab.io/repository-2"],
         "namespace": f"{regular_user.first_name}.{regular_user.last_name}",
-        "keywords": ["keyword 1", "keyword.2", "keyword-3", "KEYWORD_4"]
+        "keywords": ["keyword 1", "keyword.2", "keyword-3", "KEYWORD_4"],
     }
 
     _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
@@ -60,9 +71,9 @@ async def test_project_creation(sanic_client, user_headers, regular_user, app_co
     events = await app_config.redis.redis_connection.xrange("project.created")
     assert len(events) == 1
     event = events[0][1]
-    headers = Header.deserialize(event.get(b"headers"), serialization_type="avro-json")
+    headers = avro_schema_v1.Header.deserialize(event.get(b"headers"), serialization_type="avro-json")
     assert headers.source == "renku-data-services"
-    proj_event = deserialize_binary(event[b"payload"], ProjectCreated)
+    proj_event = deserialize_binary(event[b"payload"], avro_schema_v1.ProjectCreated)
     assert proj_event.name == payload["name"]
     project_id = project["id"]
     assert proj_event.id == project_id
@@ -113,7 +124,7 @@ async def test_project_creation_with_default_values(sanic_client, user_headers, 
     assert "description" not in project or project["description"] is None
     assert project["visibility"] == "private"
     assert project["created_by"] == "user"
-    assert "keywords" not in project
+    assert len(project["keywords"]) == 0
     assert len(project["repositories"]) == 0
 
 
@@ -267,7 +278,7 @@ async def test_delete_project(create_project, sanic_client, user_headers, app_co
     events = await app_config.redis.redis_connection.xrange("project.removed")
     assert len(events) == 1
     event = events[0][1]
-    proj_event = deserialize_binary(event[b"payload"], ProjectRemoved)
+    proj_event = deserialize_binary(event[b"payload"], avro_schema_v1.ProjectRemoved)
     assert proj_event.id == project_id
 
     # Get all projects
@@ -301,7 +312,7 @@ async def test_patch_project(create_project, get_project, sanic_client, user_hea
     events = await app_config.redis.redis_connection.xrange("project.updated")
     assert len(events) == 1
     event = events[0][1]
-    proj_event = deserialize_binary(event[b"payload"], ProjectUpdated)
+    proj_event = deserialize_binary(event[b"payload"], avro_schema_v1.ProjectUpdated)
     assert proj_event.id == project_id
     assert proj_event.name == patch["name"]
     assert set(proj_event.keywords) == {"keyword 1", "keyword 2"}
@@ -340,7 +351,7 @@ async def test_keywords_are_not_modified_in_patch(create_project, get_project, s
     events = await app_config.redis.redis_connection.xrange("project.updated")
     assert len(events) == 1
     event = events[0][1]
-    proj_event = deserialize_binary(event[b"payload"], ProjectUpdated)
+    proj_event = deserialize_binary(event[b"payload"], avro_schema_v1.ProjectUpdated)
     assert set(proj_event.keywords) == {"keyword 1", "keyword 2"}
 
     # Get the project
@@ -372,13 +383,13 @@ async def test_keywords_are_deleted_in_patch(create_project, get_project, sanic_
     events = await app_config.redis.redis_connection.xrange("project.updated")
     assert len(events) == 1
     event = events[0][1]
-    proj_event = deserialize_binary(event[b"payload"], ProjectUpdated)
+    proj_event = deserialize_binary(event[b"payload"], avro_schema_v1.ProjectUpdated)
     assert proj_event.keywords == []
 
     # Get the project
     project = await get_project(project_id=project_id)
 
-    assert "keywords" not in project
+    assert len(project["keywords"]) == 0
 
 
 @pytest.mark.asyncio
@@ -545,76 +556,96 @@ async def test_creator_is_added_as_owner_members(sanic_client, create_project, u
 
 
 @pytest.mark.asyncio
-async def test_add_project_members(create_project, sanic_client, user_headers, app_config, project_members):
+async def test_add_project_members(
+    create_project, sanic_client, user_headers, app_config, member_1_user: UserInfo, member_2_user: UserInfo
+):
     project = await create_project("Project 1")
     project_id = project["id"]
 
+    # Add new roles
+    members = [{"id": member_1_user.id, "role": "viewer"}, {"id": member_2_user.id, "role": "owner"}]
     _, response = await sanic_client.patch(
-        f"/api/data/projects/{project_id}/members", headers=user_headers, json=project_members
+        f"/api/data/projects/{project_id}/members", headers=user_headers, json=members
     )
-
     assert response.status_code == 200, response.text
-
+    events = await app_config.redis.redis_connection.xrange("projectAuth.updated")
+    assert len(events) == 0
+    events = await app_config.redis.redis_connection.xrange("projectAuth.removed")
+    assert len(events) == 0
     events = await app_config.redis.redis_connection.xrange("projectAuth.added")
-    assert len(events) == 3
+    assert len(events) == 2
+    event = events[0][1]
+    auth_event = deserialize_binary(event[b"payload"], avro_schema_v2.ProjectMemberAdded)
+    assert auth_event.projectId == project_id
+    assert auth_event.userId == members[0]["id"]
+    assert auth_event.role.value.lower() == members[0]["role"]
     event = events[1][1]
-    auth_event = deserialize_binary(event[b"payload"], ProjectAuthorizationAdded)
+    auth_event = deserialize_binary(event[b"payload"], avro_schema_v2.ProjectMemberAdded)
     assert auth_event.projectId == project_id
-    assert auth_event.userId == project_members[0]["id"]
-    assert auth_event.role.value.lower() == project_members[0]["role"]
-    event = events[2][1]
-    auth_event = deserialize_binary(event[b"payload"], ProjectAuthorizationAdded)
-    assert auth_event.projectId == project_id
-    assert auth_event.userId == project_members[1]["id"]
-    assert auth_event.role.value.lower() == project_members[1]["role"]
+    assert auth_event.userId == members[1]["id"]
+    assert auth_event.role.value.lower() == members[1]["role"]
 
-    # TODO: Should project owner be able to see the project members -> Replace the header with ``user_headers``
+    # Check that you can see the new roles
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}/members", headers=user_headers)
-
     assert response.status_code == 200, response.text
-
     assert len(response.json) == 3
     member = next(m for m in response.json if m["id"] == "user")
     assert member["role"] == "owner"
-    member = next(m for m in response.json if m["id"] == "normal-member")
-    assert member["role"] == "member"
-    member = next(m for m in response.json if m["id"] == "owner-member")
+    member = next(m for m in response.json if m["id"] == "member-1")
+    assert member["role"] == "viewer"
+    member = next(m for m in response.json if m["id"] == "member-2")
     assert member["role"] == "owner"
+
+    # Check that patching the same role with itself and truly changing another role produces only 1 update
+    members = [{"id": "member-1", "role": "owner"}, {"id": "member-2", "role": "owner"}]
+    _, response = await sanic_client.patch(
+        f"/api/data/projects/{project_id}/members", headers=user_headers, json=members
+    )
+    assert response.status_code == 200, response.text
+    events = await app_config.redis.redis_connection.xrange("projectAuth.removed")
+    assert len(events) == 0
+    events = await app_config.redis.redis_connection.xrange("projectAuth.added")
+    assert len(events) == 2  # The events from before are still there but there arent new ones
+    events = await app_config.redis.redis_connection.xrange("projectAuth.updated")
+    assert len(events) == 1
+    event = events[0][1]
+    auth_event = deserialize_binary(event[b"payload"], avro_schema_v2.ProjectMemberUpdated)
+    assert auth_event.projectId == project_id
+    assert auth_event.userId == members[0]["id"]
+    assert auth_event.role.value.lower() == members[0]["role"]
 
 
 @pytest.mark.asyncio
-async def test_delete_project_members(create_project, sanic_client, user_headers, app_config, project_members):
+async def test_delete_project_members(create_project, sanic_client, user_headers, app_config: Config):
     project = await create_project("Project 1")
     project_id = project["id"]
 
-    await sanic_client.patch(f"/api/data/projects/{project_id}/members", headers=user_headers, json=project_members)
+    members = [{"id": "member-1", "role": "viewer"}, {"id": "member-2", "role": "viewer"}]
+    await sanic_client.patch(f"/api/data/projects/{project_id}/members", headers=user_headers, json=members)
 
-    _, response = await sanic_client.delete(
-        f"/api/data/projects/{project_id}/members/normal-member", headers=user_headers
-    )
+    _, response = await sanic_client.delete(f"/api/data/projects/{project_id}/members/member-1", headers=user_headers)
 
     assert response.status_code == 204, response.text
 
     events = await app_config.redis.redis_connection.xrange("projectAuth.removed")
     assert len(events) == 1
     event = events[0][1]
-    auth_event = deserialize_binary(event[b"payload"], ProjectAuthorizationRemoved)
+    auth_event = deserialize_binary(event[b"payload"], avro_schema_v2.ProjectMemberRemoved)
     assert auth_event.projectId == project_id
-    assert auth_event.userId == "normal-member"
+    assert auth_event.userId == "member-1"
 
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}/members", headers=user_headers)
 
     assert response.status_code == 200, response.text
 
     assert len(response.json) == 2
-    member = response.json[1]
-    assert member == {
+    assert {
         "id": "user",
         "email": "user.doe@gmail.com",
         "first_name": "User",
         "last_name": "Doe",
         "role": "owner",
-    }
+    } in response.json
 
 
 @pytest.mark.asyncio
@@ -632,3 +663,58 @@ async def test_null_byte_middleware(sanic_client, user_headers, regular_user, ap
 
     assert response.status_code == 422, response.text
     assert "Null byte found in request" in response.text
+
+
+@pytest.mark.asyncio
+async def test_cannot_change_membership_non_existent_resources(create_project, sanic_client, user_headers):
+    project = await create_project("Project 1")
+    project_id = project["id"]
+
+    # User does not exist
+    members = [{"id": "non-existing", "role": "viewer"}]
+    _, response = await sanic_client.patch(
+        f"/api/data/projects/{project_id}/members", headers=user_headers, json=members
+    )
+    assert response.status_code == 404
+
+    # Project does not exist
+    non_existent_project_id = str(ULID())
+    members = [{"id": "member-1", "role": "viewer"}]
+    _, response = await sanic_client.patch(
+        f"/api/data/projects/{non_existent_project_id}/members", headers=user_headers, json=members
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_project_owner_cannot_remove_themselves_if_no_other_owner(
+    create_project,
+    sanic_client,
+    user_headers,
+    regular_user: UserInfo,
+    member_1_user: UserInfo,
+    member_1_headers: dict,
+):
+    owner = regular_user
+    project = await create_project("Project 1")
+    project_id = project["id"]
+    assert project["created_by"] == owner.id
+
+    # Try to remove the only owner
+    _, response = await sanic_client.delete(f"/api/data/projects/{project_id}/members/{owner.id}", headers=user_headers)
+    assert response.status_code == 401
+
+    # Add another user as owner
+    members = [{"id": member_1_user.id, "role": "owner"}]
+    _, response = await sanic_client.patch(
+        f"/api/data/projects/{project_id}/members", headers=user_headers, json=members
+    )
+    assert response.status_code == 200
+
+    # Now an owner can remove themselsevs
+    _, response = await sanic_client.delete(f"/api/data/projects/{project_id}/members/{owner.id}", headers=user_headers)
+    assert response.status_code == 204
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/members", headers=member_1_headers)
+    assert response.status_code == 200
+    assert len(response.json) == 1
+    assert response.json[0]["id"] == member_1_user.id

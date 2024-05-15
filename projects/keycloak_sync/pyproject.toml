@@ -39,7 +39,7 @@ psycopg = { extras = ["binary"], version = "^3.1.13" }
 authlib = "^1.2.1"
 sanic = "^23.6.0"
 redis = "^5.0.1"
-dataclasses-avroschema = "^0.57.0"
+dataclasses-avroschema = "^0.57.4"
 undictify = "^0.11.3"
 tenacity = "^8.2.2"
 httpx = "<0.24"
@@ -48,6 +48,7 @@ pyjwt = { extras = ["crypto"], version = "^2.6.0" }
 kubernetes = "^26.1.0"
 python-ulid = "^1.1.0"
 deepmerge = "^1.1.0"
+authzed = {git = "https://github.com/authzed/authzed-py.git", rev = "bcd9640a5c2f8e0350e1eff29b34b3fe23a57f14"}
 
 [tool.poetry.group.dev.dependencies]
 pyavro-gen = "^0.3.3"
