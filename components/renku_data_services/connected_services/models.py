@@ -126,20 +126,27 @@ class GitLabRepositoryPermissionAccess(BaseModel):
 class GitLabRepositoryPermissions(BaseModel):
     """Repository permissions from a GitLab provider."""
 
+    GUEST_ACCESS_LEVEL = 10
+    DEVELOPER_ACCESS_LEVEL = 30
+    PUBLIC_VISIBILITY = "public"
+    INTERNAL_VISIBILITY = "internal"
+
     project_access: GitLabRepositoryPermissionAccess | None
     group_access: GitLabRepositoryPermissionAccess | None
 
-    def to_permissions(self) -> RepositoryPermissions:
+    def to_permissions(self, visibility: str) -> RepositoryPermissions:
         """Returns the corresponding RepositoryPermissions object."""
         pull = False
         push = False
-        if self.project_access is not None and self.project_access.access_level >= 10:
+        if visibility in [self.PUBLIC_VISIBILITY, self.INTERNAL_VISIBILITY]:
             pull = True
-        if self.project_access is not None and self.project_access.access_level >= 30:
+        if self.project_access is not None and self.project_access.access_level >= self.GUEST_ACCESS_LEVEL:
+            pull = True
+        if self.project_access is not None and self.project_access.access_level >= self.DEVELOPER_ACCESS_LEVEL:
             push = True
-        if self.group_access is not None and self.group_access.access_level >= 10:
+        if self.group_access is not None and self.group_access.access_level >= self.GUEST_ACCESS_LEVEL:
             pull = True
-        if self.group_access is not None and self.group_access.access_level >= 30:
+        if self.group_access is not None and self.group_access.access_level >= self.DEVELOPER_ACCESS_LEVEL:
             push = True
         return RepositoryPermissions(pull=pull, push=push)
 
@@ -160,7 +167,9 @@ class GitLabRepository(BaseModel):
             git_http_url=self.http_url_to_repo,
             web_url=self.web_url,
             permissions=(
-                self.permissions.to_permissions() if self.permissions is not None else RepositoryPermissions.default()
+                self.permissions.to_permissions(visibility=self.visibility)
+                if self.permissions is not None
+                else RepositoryPermissions.default()
             ),
         )
 
