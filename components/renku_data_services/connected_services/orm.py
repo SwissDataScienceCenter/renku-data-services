@@ -99,8 +99,7 @@ class OAuth2ClientORM(BaseORM):
     def get_repository_api_url(self, repository_url: str) -> str:
         """Compute the metadata API URL for a git repository."""
         path = urlparse(repository_url).path
-        path = path[1:] # removes the leading slash
-        path = path[: -len(".git")] if path.endswith(".git") else path
+        path = path.removeprefix("/").removesuffix(".git")
         if self.kind == ProviderKind.github:
             return urljoin(self.api_url, f"repos/{path}")
         return urljoin(self.api_url, f"projects/{quote(path, safe="")}")

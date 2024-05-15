@@ -182,35 +182,12 @@ class OAuth2ConnectionsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @extract_if_none_match
         async def _get_one_repository(
-            _: Request, connection_id: str, repository_url: str, user: base_models.APIUser, etag: str | None = None
-        ):
-            repository_url = unquote(repository_url)
-            logger.info(f"Requested repository_url={repository_url}")
-            repository = await self.connected_services_repo.get_repository(
-                connection_id=connection_id, repository_url=repository_url, user=user, etag=etag
-            )
-            if repository == "304":
-                return HTTPResponse(status=304)
-            headers = {"ETag": repository.etag} if repository.etag is not None else None
-            return json(
-                apispec.RepositoryMetadata.model_validate(repository).model_dump(exclude_none=True, mode="json"),
-                headers=headers,
-            )
-
-        return "/oauth2/connections/<connection_id>/api/repository/<repository_url>", ["GET"], _get_one_repository
-
-    def get_one_repository_root(self) -> BlueprintFactoryResponse:
-        """Get the metadata available about a repository."""
-
-        @authenticate(self.authenticator)
-        @extract_if_none_match
-        async def _get_one_repository_root(
             _: Request, repository_url: str, user: base_models.APIUser, etag: str | None = None
         ):
             repository_url = unquote(repository_url)
             logger.info(f"Requested repository_url={repository_url}")
 
-            result = await self.connected_services_repo.get_repository_alt(
+            result = await self.connected_services_repo.get_repository(
                 repository_url=repository_url, user=user, etag=etag
             )
             if result == "304":
@@ -225,17 +202,4 @@ class OAuth2ConnectionsBP(CustomBlueprint):
                 headers=headers,
             )
 
-            # repository_url = unquote(repository_url)
-            # logger.info(f"Requested repository_url={repository_url}")
-            # repository = await self.connected_services_repo.get_repository(
-            #     connection_id=connection_id, repository_url=repository_url, user=user, etag=etag
-            # )
-            # if repository == "304":
-            #     return HTTPResponse(status=304)
-            # headers = {"ETag": repository.etag} if repository.etag is not None else None
-            # return json(
-            #     apispec.RepositoryMetadata.model_validate(repository).model_dump(exclude_none=True, mode="json"),
-            #     headers=headers,
-            # )
-
-        return "/oauth2/api/repository/<repository_url>", ["GET"], _get_one_repository_root
+        return "/oauth2/api/repository/<repository_url>", ["GET"], _get_one_repository

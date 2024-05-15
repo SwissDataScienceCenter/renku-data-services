@@ -143,7 +143,7 @@ class GitLabRepositoryPermissions(BaseModel):
     project_access: GitLabRepositoryPermissionAccess | None
     group_access: GitLabRepositoryPermissionAccess | None
 
-    def to_permissions(self, visibility: str) -> RepositoryPermissions:
+    def to_permissions(self, visibility: str | None) -> RepositoryPermissions:
         """Returns the corresponding RepositoryPermissions object."""
         pull = False
         push = False
@@ -166,19 +166,21 @@ class GitLabRepository(BaseModel):
 
     http_url_to_repo: str
     web_url: str
-    permissions: GitLabRepositoryPermissions | None
-    visibility: str
+    permissions: GitLabRepositoryPermissions | None = None
+    visibility: str | None = None
 
-    def to_repository(self, etag: str | None) -> RepositoryMetadata:
+    def to_repository(
+        self, etag: str | None, default_permissions: RepositoryPermissions | None = None
+    ) -> RepositoryMetadata:
         """Returns the corresponding Repository object."""
         return RepositoryMetadata(
-            etag=etag if etag else None,
+            etag=etag or None,
             git_http_url=self.http_url_to_repo,
             web_url=self.web_url,
             permissions=(
                 self.permissions.to_permissions(visibility=self.visibility)
                 if self.permissions is not None
-                else RepositoryPermissions.default()
+                else default_permissions or RepositoryPermissions.default()
             ),
         )
 

@@ -188,31 +188,6 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - oauth2
-  /oauth2/connections/{connection_id}/api/repository/{repository_url}:
-    get:
-      summary: Get the metadata available about a repository
-      parameters:
-        - in: path
-          name: connection_id
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: repository_url
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: The repository.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RepositoryMetadata"
-        default:
-          $ref: "#/components/responses/Error"
-      tags:
-        - oauth2
   /oauth2/api/repository/{repository_url}:
     get:
       summary: Get the metadata available about a repository
@@ -234,6 +209,8 @@ paths:
           description: There is no available provider for this repository.
         default:
           $ref: "#/components/responses/Error"
+      tags:
+        - oauth2
 components:
   schemas:
     ProviderList:

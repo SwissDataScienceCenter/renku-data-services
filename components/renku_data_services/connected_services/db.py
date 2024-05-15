@@ -302,47 +302,6 @@ class ConnectedServicesRepository:
             return token_model
 
     async def get_repository(
-        self, connection_id: str, repository_url: str, user: base_models.APIUser, etag: str | None
-    ) -> models.RepositoryMetadata | Literal["304"]:
-        """Get the metadata about a repository using an OAuth2 connection."""
-        async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (oauth2_client, _, client):
-            request_url = client.get_repository_api_url(repository_url)
-            headers: dict[str, str] = (
-                {
-                    "Accept": "application/vnd.github+json",
-                    "X-GitHub-Api-Version": "2022-11-28",
-                }
-                if client.kind == ProviderKind.github
-                else dict()
-            )
-            if etag:
-                headers["If-None-Match"] = etag
-            response = await oauth2_client.get(request_url, headers=headers)
-
-            if response.status_code == 304:
-                return "304"
-            if response.status_code > 200:
-                raise errors.MissingResourceError(
-                    message=f"Repository {repository_url} does not exist or you do not have access to it."  # noqa: E501
-                )
-
-            model: models.GitLabRepository | models.GitHubRepository
-            if client.kind == ProviderKind.gitlab:
-                model = models.GitLabRepository.model_validate(response.json())
-                logger.info(f"Got gitlab data: {model}")
-            if client.kind == ProviderKind.github:
-                model = models.GitHubRepository.model_validate(response.json())
-                logger.info(f"Got github data: {model}")
-
-            new_etag = response.headers.get("ETag")
-            repository = (
-                models.GitHubRepository.model_validate(response.json()).to_repository(etag=new_etag)
-                if client.kind == ProviderKind.github
-                else models.GitLabRepository.model_validate(response.json()).to_repository(etag=new_etag)
-            )
-            return repository
-
-    async def get_repository_alt(
         self, repository_url: str, user: base_models.APIUser, etag: str | None
     ) -> models.RepositoryProviderMatch | Literal["304"]:
         """Get the metadata about a repository."""
@@ -370,17 +329,17 @@ class ConnectedServicesRepository:
             connection = result.one_or_none() if result is not None else None
 
         if connection is None:
-            return await self.get_repository_anonymously(
+            return await self._get_repository_anonymously(
                 repository_url=repository_url, client=matched_client, etag=etag
             )
-        return await self.get_repository_authenticated(
+        return await self._get_repository_authenticated(
             connection_id=connection.id, repository_url=repository_url, user=user, etag=etag
         )
 
-    async def get_repository_anonymously(
+    async def _get_repository_anonymously(
         self, repository_url: str, client: schemas.OAuth2ClientORM, etag: str | None
     ) -> models.RepositoryProviderMatch | Literal["304"]:
-        """Get the metadata about a repository."""
+        """Get the metadata about a repository without using credentials."""
         async with HttpClient() as http:
             request_url = client.get_repository_api_url(repository_url)
             headers: dict[str, str] = (
@@ -398,9 +357,6 @@ class ConnectedServicesRepository:
             if response.status_code == 304:
                 return "304"
             if response.status_code > 200:
-                # raise errors.MissingResourceError(
-                #     message=f"Repository {repository_url} does not exist or you do not have access to it."  # noqa: E501
-                # )
                 return models.RepositoryProviderMatch(
                     provider_id=client.id, connection_id=None, repository_metadata=None
                 )
@@ -417,13 +373,17 @@ class ConnectedServicesRepository:
             repository = (
                 models.GitHubRepository.model_validate(response.json()).to_repository(etag=new_etag)
                 if client.kind == ProviderKind.github
-                else models.GitLabRepository.model_validate(response.json()).to_repository(etag=new_etag)
+                else models.GitLabRepository.model_validate(response.json()).to_repository(
+                    etag=new_etag,
+                    # NOTE: we assume the "pull" permission if a GitLab repository is publicly visible
+                    default_permissions=models.RepositoryPermissions(pull=True, push=False),
+                )
             )
             return models.RepositoryProviderMatch(
                 provider_id=client.id, connection_id=None, repository_metadata=repository
             )
 
-    async def get_repository_authenticated(
+    async def _get_repository_authenticated(
         self, connection_id: str, repository_url: str, user: base_models.APIUser, etag: str | None
     ) -> models.RepositoryProviderMatch | Literal["304"]:
         """Get the metadata about a repository using an OAuth2 connection."""
@@ -444,9 +404,6 @@ class ConnectedServicesRepository:
             if response.status_code == 304:
                 return "304"
             if response.status_code > 200:
-                # raise errors.MissingResourceError(
-                #     message=f"Repository {repository_url} does not exist or you do not have access to it."  # noqa: E501
-                # )
                 return models.RepositoryProviderMatch(
                     provider_id=client.id, connection_id=connection_id, repository_metadata=None
                 )
