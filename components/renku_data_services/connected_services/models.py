@@ -108,13 +108,22 @@ class RepositoryPermissions:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class Repository:
+class RepositoryMetadata:
     """Repository metadata."""
 
     etag: str | None
     git_http_url: str
     web_url: str
     permissions: RepositoryPermissions
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class RepositoryProviderMatch:
+    """Repository provider match data."""
+
+    provider_id: str
+    connection_id: str | None
+    repository_metadata: RepositoryMetadata | None
 
 
 class GitLabRepositoryPermissionAccess(BaseModel):
@@ -160,9 +169,9 @@ class GitLabRepository(BaseModel):
     permissions: GitLabRepositoryPermissions | None
     visibility: str
 
-    def to_repository(self, etag: str | None) -> Repository:
+    def to_repository(self, etag: str | None) -> RepositoryMetadata:
         """Returns the corresponding Repository object."""
-        return Repository(
+        return RepositoryMetadata(
             etag=etag if etag else None,
             git_http_url=self.http_url_to_repo,
             web_url=self.web_url,
@@ -194,10 +203,10 @@ class GitHubRepository(BaseModel):
     permissions: GitHubRepositoryPermissions | None
     visibility: str
 
-    def to_repository(self, etag: str | None) -> Repository:
+    def to_repository(self, etag: str | None) -> RepositoryMetadata:
         """Returns the corresponding Repository object."""
 
-        return Repository(
+        return RepositoryMetadata(
             etag=etag if etag else None,
             git_http_url=self.clone_url,
             web_url=self.html_url,
