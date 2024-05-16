@@ -582,11 +582,6 @@ async def test_add_project_members(
     events = await app_config.redis.redis_connection.xrange("projectAuth.added")
     assert len(events) == 3
     event = events[0][1]
-    auth_event = deserialize_binary(event[b"payload"], avro_schema_v1.ProjectAuthorizationAdded)
-    assert auth_event.projectId == project_id
-    assert auth_event.userId == regular_user.id
-    assert auth_event.role.value.lower() == Role.OWNER.value
-    event = events[1][1]
     auth_event = deserialize_binary(event[b"payload"], avro_schema_v2.ProjectMemberAdded)
     assert auth_event.projectId == project_id
     assert auth_event.userId == regular_user.id
