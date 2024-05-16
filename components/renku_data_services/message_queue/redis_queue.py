@@ -108,7 +108,7 @@ def dispatch_message(event_type: type[AvroModel] | AmbiguousEvent):
 
             for event in events:
                 message_id = ULID().hex
-                schema_version = "2" if event_type == AmbiguousEvent.PROJECT_MEMBERSHIP_CHANGED else "1"
+                schema_version = "2"
                 headers = create_header(event.queue, schema_version=schema_version).serialize_json()
                 message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
                     "id": message_id,

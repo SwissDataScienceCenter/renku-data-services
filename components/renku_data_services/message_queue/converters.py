@@ -285,7 +285,7 @@ class EventConverter:
             return _ProjectEventConverter.to_events(input, event_type)
         elif isinstance(input, (user_models.UserInfo, user_models.UserWithNamespace)):
             return _UserEventConverter.to_events(input, event_type)
-        elif input is None and (event_type == type(v1.UserRemoved) or event_type == type(v2.UserRemoved)):
+        elif input is None and event_type == type(v2.UserRemoved):
             # NOTE: The user that was supposed to be removed is not in the database at all, so dont send the event
             return []
         elif isinstance(input, list) and event_type == AmbiguousEvent.PROJECT_MEMBERSHIP_CHANGED:
