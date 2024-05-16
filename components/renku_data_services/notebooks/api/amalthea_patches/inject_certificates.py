@@ -20,14 +20,16 @@ def proxy(server: "UserServer"):
             "patch": [
                 {
                     "op": "add",
-                    "path": ("/statefulset/spec/template/spec/containers/1/volumeMounts/-"),
+                    "path": (
+                        "/statefulset/spec/template/spec/containers/1/volumeMounts/-"
+                    ),
                     "value": volume_mount,
                 }
                 for volume_mount in etc_cert_volume_mounts
             ],
         },
     ]
-    if isinstance(server._user, RegisteredUser):
+    if isinstance(server.user, RegisteredUser):
         patches.append(
             {
                 "type": "application/json-patch+json",

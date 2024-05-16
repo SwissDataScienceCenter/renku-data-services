@@ -1,8 +1,7 @@
-from dataclasses import asdict, dataclass
-from functools import lru_cache
+from abc import ABC
 from itertools import chain
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 from urllib.parse import urljoin, urlparse
 
 from flask import current_app
@@ -10,7 +9,6 @@ from flask import current_app
 from ...config import config
 from ...errors.programming import ConfigurationError, DuplicateEnvironmentVariableError
 from ...errors.user import MissingResourceError
-from ...util.kubernetes_ import make_server_name
 from ..amalthea_patches import cloudstorage as cloudstorage_patches
 from ..amalthea_patches import general as general_patches
 from ..amalthea_patches import git_proxy as git_proxy_patches
@@ -23,71 +21,43 @@ from ..schemas.secrets import K8sUserSecrets
 from ..schemas.server_options import ServerOptions
 from .cloud_storage import ICloudStorageRequest
 from .k8s_client import K8sClient
+from .repository import GitProvider, Repository
 from .user import AnonymousUser, RegisteredUser
 
 
-@dataclass
-class Repository:
-    """Information required to clone a repository."""
-
-    namespace: str
-    project: str
-    branch: str
-    commit_sha: str
-    url: Optional[str] = None
-
-    @classmethod
-    def from_schema(cls, data: dict[str, str]) -> "Repository":
-        return cls(
-            namespace=data["namespace"],
-            project=data["project"],
-            branch=data["branch"],
-            commit_sha=data["commit_sha"],
-        )
-
-
-class UserServer:
-    """Represents a jupyter server session."""
+class UserServer(ABC):
+    """Represents a Renku server session."""
 
     def __init__(
         self,
-        user: Union[AnonymousUser, RegisteredUser],
-        namespace: Optional[str],
-        project: Optional[str],
-        branch: Optional[str],
-        commit_sha: Optional[str],
-        notebook: Optional[str],  # TODO: Is this value actually needed?
-        image: Optional[str],
+        user: AnonymousUser | RegisteredUser,
+        server_name: str,
+        image: str | None,
         server_options: ServerOptions,
         environment_variables: dict[str, str],
-        user_secrets: Optional[K8sUserSecrets],
+        user_secrets: K8sUserSecrets | None,
         cloudstorage: list[ICloudStorageRequest],
         k8s_client: K8sClient,
         workspace_mount_path: Path,
         work_dir: Path,
         using_default_image: bool = False,
         is_image_private: bool = False,
+        repositories: list[Repository] = [],
         **_,
     ):
         self._check_flask_config()
         self._user = user
+        self.server_name = server_name
         self._k8s_client: K8sClient = k8s_client
-        self.safe_username = self._user.safe_username  # type:ignore
-        self.namespace = namespace
-        self.project = project
-        self.branch = branch
-        self.commit_sha = commit_sha
-        self.notebook = notebook
+        self.safe_username = self._user.safe_username
         self.image = image
         self.server_options = server_options
         self.environment_variables = environment_variables
         self.user_secrets = user_secrets
         self.using_default_image = using_default_image
-        self.git_host = urlparse(config.git.url).netloc
         self.workspace_mount_path = workspace_mount_path
         self.work_dir = work_dir
-        self.cloudstorage: Optional[list[ICloudStorageRequest]] = cloudstorage
-        self.gl_project_name = f"{self.namespace}/{self.project}"
+        self.cloudstorage: list[ICloudStorageRequest] | None = cloudstorage
         self.is_image_private = is_image_private
         self.idle_seconds_threshold: int = (
             config.sessions.culling.registered.idle_seconds
@@ -99,7 +69,84 @@ class UserServer:
             if isinstance(user, RegisteredUser)
             else config.sessions.culling.anonymous.hibernated_seconds
         )
-        self._repositories: Optional[list[Repository]] = None
+        self._repositories: list[Repository] = repositories
+        self._git_providers: list[GitProvider] | None = None
+        self._has_configured_git_providers = False
+
+    @property
+    def user(self) -> AnonymousUser | RegisteredUser:
+        """Getter for server's user."""
+        return self._user
+
+    @property
+    def k8s_client(self) -> K8sClient:
+        """Return server's k8s client."""
+        return self._k8s_client
+
+    @property
+    def repositories(self) -> list[Repository]:
+        # Configure git repository providers based on matching URLs.
+        if not self._has_configured_git_providers:
+            for repo in self._repositories:
+                found_provider = None
+                for provider in self.git_providers:
+                    if urlparse(provider.url).netloc == urlparse(repo.url).netloc:
+                        found_provider = provider
+                        break
+                if found_provider is not None:
+                    repo.provider = found_provider.id
+            self._has_configured_git_providers = True
+
+        return self._repositories
+
+    @property
+    def server_url(self) -> str:
+        """The URL where a user can access their session."""
+        if type(self._user) is RegisteredUser:
+            return urljoin(
+                f"https://{config.sessions.ingress.host}",
+                f"sessions/{self.server_name}",
+            )
+        return urljoin(
+            f"https://{config.sessions.ingress.host}",
+            f"sessions/{self.server_name}?token={self._user.username}",
+        )
+
+    @property
+    def git_providers(self) -> list[GitProvider]:
+        """The list of git providers."""
+        if self._git_providers is None:
+            self._git_providers = config.git_provider_helper.get_providers(
+                user=self.user
+            )
+        return self._git_providers
+
+    @property
+    def required_git_providers(self) -> list[GitProvider]:
+        """The list of required git providers."""
+        required_provider_ids: set[str] = set(
+            r.provider for r in self.repositories if r.provider
+        )
+        return [p for p in self.git_providers if p.id in required_provider_ids]
+
+    def __str__(self):
+        return (
+            f"<UserServer user: {self._user.username} server_name: {self.server_name}>"
+        )
+
+    def start(self) -> dict[str, Any] | None:
+        """Create the jupyterserver resource in k8s."""
+        errors = self._get_start_errors()
+        if errors:
+            raise MissingResourceError(
+                message=(
+                    "Cannot start the session because the following Git "
+                    f"or Docker resources are missing: {', '.join(errors)}"
+                )
+            )
+        return self._k8s_client.create_server(
+            self._get_session_manifest(), self.safe_username
+        )
 
     @staticmethod
     def _check_flask_config():
@@ -114,128 +161,40 @@ class UserServer:
                 "an environment variable called IMAGE_REGISTRY"
             )
 
-    @property
-    def gl_project(self):
-        return self._user.get_renku_project(self.gl_project_name)
+    @staticmethod
+    def _check_environment_variables_overrides(patches_list: list[dict[str, Any]]):
+        """Check if any patch overrides server's environment variables.
 
-    @property
-    def gl_project_path(self) -> Optional[str]:
-        # NOTE: This is case sensitive and will reflect exact lower/uppercase combination of letters
-        # that is used in Gitlab for the path of the project.
-        gl_project = self.gl_project
-        return gl_project.path if gl_project else None
-
-    @property
-    def gl_project_url(self) -> Optional[str]:
-        gl_project = self.gl_project
-        return gl_project.http_url_to_repo if gl_project else None
-
-    @property
-    def repositories(self) -> list[dict[str, str]]:
-        if self._repositories is None:
-            self._repositories = [
-                asdict(
-                    Repository(
-                        namespace=self.namespace,
-                        project=self.gl_project_path,
-                        branch=self.branch,
-                        commit_sha=self.commit_sha,
-                        url=self.gl_project_url,
-                    )
-                )
-            ]
-
-        return self._repositories
-
-    @property
-    def server_name(self):
-        """Make the name that is used to identify a unique user session."""
-        return make_server_name(
-            self._user.safe_username,
-            self.namespace,
-            self.project,
-            self.branch,
-            self.commit_sha,
-        )
-
-    @property
-    def user(self) -> Union[AnonymousUser, RegisteredUser]:
-        """Getter for server's user."""
-        return self._user
-
-    @property
-    def user_is_anonymous(self) -> bool:
-        """Return True if server's user is not registered."""
-        return isinstance(self._user, AnonymousUser)
-
-    @property
-    def k8s_client(self) -> K8sClient:
-        """Return server's k8s client."""
-        return self._k8s_client
-
-    @property
-    @lru_cache(maxsize=8)
-    def hibernation_allowed(self):
-        return self._user and not self.user_is_anonymous
-
-    def _branch_exists(self):
-        """Check if a specific branch exists in the user's gitlab project.
-
-        The branch name is not required by the API and therefore
-        passing None to this function will return True.
+        Checks if it overrides with a different value or if two patches create environment variables with different
+        values.
         """
-        if self.branch is not None and self.gl_project is not None:
-            try:
-                self.gl_project.branches.get(self.branch)
-            except Exception as err:
-                current_app.logger.warning(f"Branch {self.branch} cannot be verified or does not exist. {err}")
-            else:
-                return True
-        return False
+        env_vars = {}
 
-    def _commit_sha_exists(self):
-        """Check if a specific commit sha exists in the user's gitlab project."""
-        if self.commit_sha is not None and self.gl_project is not None:
-            try:
-                self.gl_project.commits.get(self.commit_sha)
-            except Exception as err:
-                current_app.logger.warning(f"Commit {self.commit_sha} cannot be verified or does not exist. {err}")
-            else:
-                return True
-        return False
+        for patch_list in patches_list:
+            patches = patch_list["patch"]
 
-    def _get_patches(self):
-        return list(
-            chain(
-                general_patches.test(self),
-                general_patches.session_tolerations(self),
-                general_patches.session_affinity(self),
-                general_patches.session_node_selector(self),
-                general_patches.priority_class(self),
-                general_patches.dev_shm(self),
-                jupyter_server_patches.args(),
-                jupyter_server_patches.env(self),
-                jupyter_server_patches.image_pull_secret(self),
-                jupyter_server_patches.disable_service_links(),
-                jupyter_server_patches.rstudio_env_variables(self),
-                jupyter_server_patches.user_secrets(self),
-                git_proxy_patches.main(self),
-                git_sidecar_patches.main(self),
-                general_patches.oidc_unverified_email(self),
-                ssh_patches.main(),
-                # init container for certs must come before all other init containers
-                # so that it runs first before all other init containers
-                init_containers_patches.certificates(),
-                init_containers_patches.download_image(self),
-                init_containers_patches.git_clone(self),
-                inject_certificates_patches.proxy(self),
-                # Cloud Storage needs to patch the git clone sidecar spec and so should come after
-                # the sidecars
-                # WARN: this patch depends on the index of the sidecar and so needs to be updated
-                # if sidercars are added or removed
-                cloudstorage_patches.main(self),
-            )
-        )
+            for patch in patches:
+                path = patch["path"].lower()
+                if path.endswith("/env/-"):
+                    name = patch["value"]["name"]
+                    value = patch["value"]["value"]
+                    key = (path, name)
+
+                    if key in env_vars and env_vars[key] != value:
+                        raise DuplicateEnvironmentVariableError(
+                            message=f"Environment variable {path}::{name} is being overridden by "
+                            "multiple patches"
+                        )
+                    else:
+                        env_vars[key] = value
+
+    def _get_start_errors(self) -> list[str]:
+        """Check if there are any errors before starting the server."""
+        errors: list[str]
+        errors = []
+        if self.image is None:
+            errors.append(f"image {self.image} does not exist or cannot be accessed")
+        return errors
 
     def _get_session_manifest(self):
         """Compose the body of the user session for the k8s operator."""
@@ -321,235 +280,11 @@ class UserServer:
         return manifest
 
     @staticmethod
-    def _check_environment_variables_overrides(patches_list):
-        """Check if any patch overrides server's environment variables.
+    def _get_renku_annotation_prefix() -> str:
+        return config.session_get_endpoint_annotations.renku_annotation_prefix
 
-        Checks if it overrides with a different value or if two patches create environment variables with different
-        values.
-        """
-        env_vars = {}
-
-        for patch_list in patches_list:
-            patches = patch_list["patch"]
-
-            for patch in patches:
-                path = patch["path"].lower()
-                if path.endswith("/env/-"):
-                    name = patch["value"]["name"]
-                    value = patch["value"]["value"]
-                    key = (path, name)
-
-                    if key in env_vars and env_vars[key] != value:
-                        raise DuplicateEnvironmentVariableError(
-                            message=f"Environment variable {path}::{name} is being overridden by multiple patches"
-                        )
-                    else:
-                        env_vars[key] = value
-
-    def start(self) -> Optional[dict[str, Any]]:
-        """Create the jupyterserver resource in k8s."""
-        error = []
-        if self.gl_project is None:
-            error.append(f"project {self.project} does not exist")
-        if not self._branch_exists():
-            error.append(f"branch {self.branch} does not exist")
-        if not self._commit_sha_exists():
-            error.append(f"commit {self.commit_sha} does not exist")
-        if self.image is None:
-            error.append(f"image {self.image} does not exist or cannot be accessed")
-        if len(error) == 0:
-            js = self._k8s_client.create_server(self._get_session_manifest(), self.safe_username)
-        else:
-            raise MissingResourceError(
-                message=(
-                    "Cannot start the session because the following Git "
-                    f"or Docker resources are missing: {', '.join(error)}"
-                )
-            )
-        return js
-
-    @property
-    def server_url(self) -> str:
-        """The URL where a user can access their session."""
-        if isinstance(self._user, RegisteredUser):
-            return urljoin(
-                "https://" + config.sessions.ingress.host,
-                f"sessions/{self.server_name}",
-            )
-        else:
-            return urljoin(
-                "https://" + config.sessions.ingress.host,
-                f"sessions/{self.server_name}?token={self._user.username}",
-            )
-
-    def __str__(self):
-        return (
-            f"<UserServer user: {self._user.username} namespace: {self.namespace} "
-            f"project: {self.project} commit: {self.commit_sha} image: {self.image}>"
-        )
-
-    def get_annotations(self):
-        prefix = config.session_get_endpoint_annotations.renku_annotation_prefix
-        annotations = {
-            f"{prefix}commit-sha": self.commit_sha,
-            f"{prefix}gitlabProjectId": None,
-            f"{prefix}safe-username": self._user.safe_username,
-            f"{prefix}username": self._user.username,
-            f"{prefix}userId": self._user.id,
-            f"{prefix}servername": self.server_name,
-            f"{prefix}branch": self.branch,
-            f"{prefix}git-host": self.git_host,
-            f"{prefix}namespace": self.namespace,
-            f"{prefix}projectName": self.project,
-            f"{prefix}requested-image": self.image,
-            f"{prefix}repository": None,
-            f"{prefix}hibernation": "",
-            f"{prefix}hibernationBranch": "",
-            f"{prefix}hibernationCommitSha": "",
-            f"{prefix}hibernationDirty": "",
-            f"{prefix}hibernationSynchronized": "",
-            f"{prefix}hibernationDate": "",
-            f"{prefix}hibernatedSecondsThreshold": str(self.hibernated_seconds_threshold),
-            f"{prefix}lastActivityDate": "",
-            f"{prefix}idleSecondsThreshold": str(self.idle_seconds_threshold),
-        }
-        if self.server_options.resource_class_id:
-            annotations[f"{prefix}resourceClassId"] = str(self.server_options.resource_class_id)
-        if self.gl_project is not None:
-            annotations[f"{prefix}gitlabProjectId"] = str(self.gl_project.id)
-            annotations[f"{prefix}repository"] = self.gl_project.web_url
-        return annotations
-
-    def get_labels(self):
-        prefix = config.session_get_endpoint_annotations.renku_annotation_prefix
-        labels = {
-            "app": "jupyter",
-            "component": "singleuser-server",
-            f"{prefix}commit-sha": self.commit_sha,
-            f"{prefix}gitlabProjectId": None,
-            f"{prefix}safe-username": self._user.safe_username,
-            f"{prefix}quota": self.server_options.priority_class,
-            f"{prefix}userId": self._user.id,
-        }
-        if self.gl_project is not None:
-            labels[f"{prefix}gitlabProjectId"] = str(self.gl_project.id)
-        return labels
-
-
-class Renku2UserServer(UserServer):
-    """Represents a Renku 2 jupyter server session."""
-
-    def __init__(
-        self,
-        user: Union[AnonymousUser, RegisteredUser],
-        notebook: Optional[str],  # TODO: Is this value actually needed?
-        image: str,
-        project_id: str,
-        launcher_id: str,
-        server_name: str,
-        server_options: ServerOptions,
-        environment_variables: dict[str, str],
-        user_secrets: Optional[K8sUserSecrets],
-        cloudstorage: list[ICloudStorageRequest],
-        k8s_client: K8sClient,
-        workspace_mount_path: Path,
-        work_dir: Path,
-        repositories: list[Repository],
-        using_default_image: bool = False,
-        is_image_private: bool = False,
-        **_,
-    ):
-        super().__init__(
-            user=user,
-            namespace=None,
-            project=None,
-            branch=None,
-            commit_sha=None,
-            notebook=notebook,
-            image=image,
-            server_options=server_options,
-            environment_variables=environment_variables,
-            user_secrets=user_secrets,
-            cloudstorage=cloudstorage,
-            k8s_client=k8s_client,
-            workspace_mount_path=workspace_mount_path,
-            work_dir=work_dir,
-            using_default_image=using_default_image,
-            is_image_private=is_image_private,
-        )
-        self._server_name = server_name
-        self.project_id = project_id
-        self.launcher_id = launcher_id
-        self._repositories: list[Repository] = repositories or []
-        self._calculated_repository_urls: bool = False
-
-    @property
-    def gl_project(self):
-        if len(self._repositories) == 1:
-            project_path = f"{self._repositories[0].namespace}/{self._repositories[0].project}"
-            return self._user.get_renku_project(project_path)
-        return None
-
-    @property
-    def gl_project_path(self) -> Optional[str]:
-        gl_project = self.gl_project
-        return gl_project.path if gl_project else None
-
-    @property
-    def gl_project_url(self) -> Optional[str]:
-        """Return the common hostname of all repositories."""
-        repositories = self.repositories
-
-        if not repositories:
-            return ""
-        elif len(repositories) == 1:
-            return repositories[0]["url"]
-
-        # NOTE: For more than one repository, we only support one gitlab instance atm
-        return self._user.gitlab_client.url
-
-    @property
-    def server_name(self):
-        """Make the name that is used to identify a unique user session."""
-        return self._server_name
-
-    @property
-    def repositories(self) -> list[dict[str, str]]:
-        if self._repositories and not self._calculated_repository_urls:
-            for r in self._repositories:
-                project = self._user.get_renku_project(f"{r.namespace}/{r.project}")
-                if project:
-                    r.url = project.http_url_to_repo
-
-            self._calculated_repository_urls = True
-
-        return [asdict(r) for r in self._repositories]
-
-    def _branch_exists(self):
-        """Check if a specific branch exists in the user's gitlab project.
-
-        The branch name is not required by the API and therefore
-        passing None to this function will return True.
-        """
-        raise NotImplementedError
-
-    def _commit_sha_exists(self):
-        """Check if a specific commit sha exists in the user's gitlab project."""
-        raise NotImplementedError
-
-    def get_annotations(self):
-        annotations = super().get_annotations()
-
-        # Add Renku 2.0 annotations
-        prefix = config.session_get_endpoint_annotations.renku_annotation_prefix
-        annotations[f"{prefix}renkuVersion"] = "2.0"
-        annotations[f"{prefix}projectId"] = self.project_id
-        annotations[f"{prefix}launcherId"] = self.launcher_id
-
-        return annotations
-
-    def _get_patches(self):
-        has_repository = bool(self._repositories)
+    def _get_patches(self) -> list[dict[str, Any]]:
+        has_repository = bool(self.repositories)
 
         return list(
             chain(
@@ -564,7 +299,12 @@ class Renku2UserServer(UserServer):
                 jupyter_server_patches.image_pull_secret(self),
                 jupyter_server_patches.disable_service_links(),
                 jupyter_server_patches.rstudio_env_variables(self),
-                git_proxy_patches.main(self) if has_repository else [],
+                jupyter_server_patches.user_secrets(self),
+                (
+                    git_proxy_patches.main(self)
+                    if has_repository and not self.user.anonymous
+                    else []
+                ),
                 git_sidecar_patches.main(self) if has_repository else [],
                 general_patches.oidc_unverified_email(self),
                 ssh_patches.main(),
@@ -582,15 +322,224 @@ class Renku2UserServer(UserServer):
             )
         )
 
-    def start(self) -> Optional[dict[str, Any]]:
-        """Create the jupyterserver resource in k8s."""
-        if self.image is None:
-            errors = [f"image {self.image} does not exist or cannot be accessed"]
-            raise MissingResourceError(
-                message=(
-                    "Cannot start the session because the following Git "
-                    f"or Docker resources are missing: {', '.join(errors)}"
-                )
-            )
+    def get_labels(self) -> dict[str, str | None]:
+        prefix = self._get_renku_annotation_prefix()
+        labels = {
+            "app": "jupyter",
+            "component": "singleuser-server",
+            f"{prefix}commit-sha": None,
+            f"{prefix}gitlabProjectId": None,
+            f"{prefix}safe-username": self.safe_username,
+            f"{prefix}quota": self.server_options.priority_class,
+            f"{prefix}userId": self._user.id,
+        }
+        return labels
 
-        return self._k8s_client.create_server(self._get_session_manifest(), self.safe_username)
+    def get_annotations(self) -> dict[str, str | None]:
+        prefix = self._get_renku_annotation_prefix()
+        annotations = {
+            f"{prefix}commit-sha": None,
+            f"{prefix}gitlabProjectId": None,
+            f"{prefix}safe-username": self._user.safe_username,
+            f"{prefix}username": self._user.username,
+            f"{prefix}userId": self._user.id,
+            f"{prefix}servername": self.server_name,
+            f"{prefix}branch": None,
+            f"{prefix}git-host": None,
+            f"{prefix}namespace": None,
+            f"{prefix}projectName": None,
+            f"{prefix}requested-image": self.image,
+            f"{prefix}repository": None,
+            f"{prefix}hibernation": "",
+            f"{prefix}hibernationBranch": "",
+            f"{prefix}hibernationCommitSha": "",
+            f"{prefix}hibernationDirty": "",
+            f"{prefix}hibernationSynchronized": "",
+            f"{prefix}hibernationDate": "",
+            f"{prefix}hibernatedSecondsThreshold": str(
+                self.hibernated_seconds_threshold
+            ),
+            f"{prefix}lastActivityDate": "",
+            f"{prefix}idleSecondsThreshold": str(self.idle_seconds_threshold),
+        }
+        if self.server_options.resource_class_id:
+            annotations[f"{prefix}resourceClassId"] = str(
+                self.server_options.resource_class_id
+            )
+        return annotations
+
+
+class Renku1UserServer(UserServer):
+    """Represents a Renku 1.0 server session."""
+
+    def __init__(
+        self,
+        user: AnonymousUser | RegisteredUser,
+        server_name: str,
+        namespace: str,
+        project: str,
+        branch: str,
+        commit_sha: str,
+        notebook: str | None,  # TODO: Is this value actually needed?
+        image: str | None,
+        server_options: ServerOptions,
+        environment_variables: dict[str, str],
+        user_secrets: K8sUserSecrets | None,
+        cloudstorage: list[ICloudStorageRequest],
+        k8s_client: K8sClient,
+        workspace_mount_path: Path,
+        work_dir: Path,
+        using_default_image: bool = False,
+        is_image_private: bool = False,
+        **_,
+    ):
+        gitlab_project_name = f"{namespace}/{project}"
+        gitlab_project = user.get_renku_project(gitlab_project_name)
+        single_repository = (
+            Repository(
+                url=gitlab_project.http_url_to_repo,
+                dirname=gitlab_project.path,
+                branch=branch,
+                commit_sha=commit_sha,
+            )
+            if gitlab_project is not None
+            else None
+        )
+
+        super().__init__(
+            user=user,
+            server_name=server_name,
+            image=image,
+            server_options=server_options,
+            environment_variables=environment_variables,
+            user_secrets=user_secrets,
+            cloudstorage=cloudstorage,
+            k8s_client=k8s_client,
+            workspace_mount_path=workspace_mount_path,
+            work_dir=work_dir,
+            using_default_image=using_default_image,
+            is_image_private=is_image_private,
+            repositories=[single_repository] if single_repository is not None else [],
+        )
+
+        self.namespace = namespace
+        self.project = project
+        self.branch = branch
+        self.commit_sha = commit_sha
+        self.notebook = notebook
+        self.git_host = urlparse(config.git.url).netloc
+        self.gitlab_project_name = gitlab_project_name
+        self.gitlab_project = gitlab_project
+        self.single_repository = single_repository
+
+    def _get_start_errors(self) -> list[str]:
+        """Check if there are any errors before starting the server."""
+        errors = super()._get_start_errors()
+        if self.gitlab_project is None:
+            errors.append(f"project {self.project} does not exist")
+        if not self._branch_exists():
+            errors.append(f"branch {self.branch} does not exist")
+        if not self._commit_sha_exists():
+            errors.append(f"commit {self.commit_sha} does not exist")
+        return errors
+
+    def _branch_exists(self):
+        """Check if a specific branch exists in the user's gitlab project.
+
+        The branch name is not required by the API and therefore
+        passing None to this function will return True.
+        """
+        if self.branch is not None and self.gitlab_project is not None:
+            try:
+                self.gitlab_project.branches.get(self.branch)
+            except Exception as err:
+                current_app.logger.warning(
+                    f"Branch {self.branch} cannot be verified or does not exist. {err}"
+                )
+            else:
+                return True
+        return False
+
+    def _commit_sha_exists(self):
+        """Check if a specific commit sha exists in the user's gitlab project."""
+        if self.commit_sha is not None and self.gitlab_project is not None:
+            try:
+                self.gitlab_project.commits.get(self.commit_sha)
+            except Exception as err:
+                current_app.logger.warning(
+                    f"Commit {self.commit_sha} cannot be verified or does not exist. {err}"
+                )
+            else:
+                return True
+        return False
+
+    def get_labels(self) -> dict[str, str | None]:
+        prefix = self._get_renku_annotation_prefix()
+        labels = super().get_labels()
+        labels[f"{prefix}commit-sha"] = self.commit_sha
+        if self.gitlab_project is not None:
+            labels[f"{prefix}gitlabProjectId"] = str(self.gitlab_project.id)
+        return labels
+
+    def get_annotations(self) -> dict[str, str | None]:
+        prefix = self._get_renku_annotation_prefix()
+        annotations = super().get_annotations()
+        annotations[f"{prefix}commit-sha"] = self.commit_sha
+        annotations[f"{prefix}branch"] = self.branch
+        annotations[f"{prefix}git-host"] = self.git_host
+        annotations[f"{prefix}namespace"] = self.namespace
+        annotations[f"{prefix}projectName"] = self.project
+        if self.gitlab_project is not None:
+            annotations[f"{prefix}gitlabProjectId"] = str(self.gitlab_project.id)
+            annotations[f"{prefix}repository"] = self.gitlab_project.web_url
+        return annotations
+
+
+class Renku2UserServer(UserServer):
+    """Represents a Renku 2.0 server session."""
+
+    def __init__(
+        self,
+        user: AnonymousUser | RegisteredUser,
+        image: str,
+        project_id: str,
+        launcher_id: str,
+        server_name: str,
+        server_options: ServerOptions,
+        environment_variables: dict[str, str],
+        user_secrets: K8sUserSecrets | None,
+        cloudstorage: list[ICloudStorageRequest],
+        k8s_client: K8sClient,
+        workspace_mount_path: Path,
+        work_dir: Path,
+        repositories: list[Repository],
+        using_default_image: bool = False,
+        is_image_private: bool = False,
+        **_,
+    ):
+        super().__init__(
+            user=user,
+            server_name=server_name,
+            image=image,
+            server_options=server_options,
+            environment_variables=environment_variables,
+            user_secrets=user_secrets,
+            cloudstorage=cloudstorage,
+            k8s_client=k8s_client,
+            workspace_mount_path=workspace_mount_path,
+            work_dir=work_dir,
+            using_default_image=using_default_image,
+            is_image_private=is_image_private,
+            repositories=repositories,
+        )
+
+        self.project_id = project_id
+        self.launcher_id = launcher_id
+
+    def get_annotations(self):
+        prefix = self._get_renku_annotation_prefix()
+        annotations = super().get_annotations()
+        annotations[f"{prefix}renkuVersion"] = "2.0"
+        annotations[f"{prefix}projectId"] = self.project_id
+        annotations[f"{prefix}launcherId"] = self.launcher_id
+        return annotations

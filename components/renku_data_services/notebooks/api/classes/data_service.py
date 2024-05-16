@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple, Optional
+from urllib.parse import urljoin, urlparse
 
 import requests
 from flask import current_app
@@ -14,6 +15,7 @@ from renku_notebooks.errors.user import (
 )
 
 from ..schemas.server_options import ServerOptions
+from .repository import INTERNAL_GITLAB_PROVIDER, GitProvider, OAuth2Connection, OAuth2Provider
 from .user import User
 
 
@@ -225,3 +227,86 @@ class DummyCRCValidator:
 
     def find_acceptable_class(self, *args, **kwargs) -> Optional[ServerOptions]:
         return self.options
+
+
+@dataclass
+class GitProviderHelper:
+    """Calls to the data service to configure git providers."""
+
+    service_url: str
+    renku_url: str
+    internal_gitlab_url: str
+
+    def __post_init__(self):
+        self.service_url = self.service_url.rstrip("/")
+        self.renku_url = self.renku_url.rstrip("/")
+
+    def get_providers(self, user: User) -> list[GitProvider]:
+        connections = self.get_oauth2_connections(user=user)
+        providers: dict[str, GitProvider] = dict()
+        for c in connections:
+            if c.provider_id in providers:
+                continue
+            provider = self.get_oauth2_provider(c.provider_id)
+            access_token_url = urljoin(
+                self.renku_url,
+                urlparse(f"{self.service_url}/oauth2/connections/{c.id}/token").path,
+            )
+            providers[c.provider_id] = GitProvider(
+                id=c.provider_id,
+                url=provider.url,
+                connection_id=c.id,
+                access_token_url=access_token_url,
+            )
+
+        providers_list = list(providers.values())
+        # Insert the internal GitLab as the first provider
+        internal_gitlab_access_token_url = urljoin(
+            self.renku_url, "/api/auth/gitlab/exchange"
+        )
+        providers_list.insert(
+            0,
+            GitProvider(
+                id=INTERNAL_GITLAB_PROVIDER,
+                url=self.internal_gitlab_url,
+                connection_id="",
+                access_token_url=internal_gitlab_access_token_url,
+            ),
+        )
+        return providers_list
+
+    def get_oauth2_connections(
+        self, user: User | None = None
+    ) -> list[OAuth2Connection]:
+        if user is None or user.access_token is None:
+            return []
+        request_url = f"{self.service_url}/oauth2/connections"
+        headers = {"Authorization": f"bearer {user.access_token}"}
+        res = requests.get(request_url, headers=headers)
+        if res.status_code != 200:
+            raise IntermittentError(
+                message="The data service sent an unexpected response, please try again later"
+            )
+        connections = res.json()
+        connections = [
+            OAuth2Connection.from_dict(c)
+            for c in connections
+            if c["status"] == "connected"
+        ]
+        return connections
+
+    def get_oauth2_provider(self, provider_id: str) -> OAuth2Provider:
+        request_url = f"{self.service_url}/oauth2/providers/{provider_id}"
+        res = requests.get(request_url)
+        if res.status_code != 200:
+            raise IntermittentError(
+                message="The data service sent an unexpected response, please try again later"
+            )
+        provider = res.json()
+        return OAuth2Provider.from_dict(provider)
+
+
+@dataclass
+class DummyGitProviderHelper:
+    def get_providers(self, *args, **kwargs) -> list[GitProvider]:
+        return []

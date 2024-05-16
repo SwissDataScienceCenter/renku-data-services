@@ -20,7 +20,7 @@ import json
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import requests
 from flask import Blueprint, current_app, jsonify
@@ -28,7 +28,7 @@ from gitlab.const import Visibility as GitlabVisibility
 from marshmallow import ValidationError, fields, validate
 from webargs.flaskparser import use_args
 
-from renku_notebooks.api.classes.user import AnonymousUser
+from renku_notebooks.api.classes.user import AnonymousUser, RegisteredUser
 from renku_notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_notebooks.util.repository import get_status
 
@@ -36,11 +36,16 @@ from ..config import config
 from ..errors.intermittent import AnonymousUserPatchError, PVDisabledError
 from ..errors.programming import ProgrammingError
 from ..errors.user import MissingResourceError, UserInputError
-from ..util.kubernetes_ import make_server_name, renku_2_make_server_name
+from ..util.kubernetes_ import (
+    find_container,
+    renku_1_make_server_name,
+    renku_2_make_server_name,
+)
 from .auth import authenticated
 from .classes.auth import GitlabToken, RenkuTokens
 from .classes.image import Image
-from .classes.server import Renku2UserServer, Repository, UserServer
+from .classes.repository import Repository
+from .classes.server import Renku1UserServer, Renku2UserServer, UserServer
 from .classes.server_manifest import UserServerManifest
 from .schemas.config_server_options import ServerOptionsEndpointResponse
 from .schemas.logs import ServerLogs
@@ -50,6 +55,9 @@ from .schemas.servers_get import NotebookResponse, ServersGetRequest, ServersGet
 from .schemas.servers_patch import PatchServerRequest, PatchServerStatusEnum
 from .schemas.servers_post import LaunchNotebookRequest, Renku2LaunchNotebookRequest
 from .schemas.version import VersionResponse
+
+if TYPE_CHECKING:
+    from gitlab.v4.objects.projects import Project
 
 bp = Blueprint("notebooks_blueprint", __name__, url_prefix=config.service_prefix)
 
@@ -159,7 +167,7 @@ def user_server(user, server_name):
 @use_args(LaunchNotebookRequest(), location="json", as_kwargs=True)
 @authenticated
 def launch_notebook(
-    user,
+    user: AnonymousUser | RegisteredUser,
     namespace,
     project,
     branch,
@@ -175,10 +183,12 @@ def launch_notebook(
     server_options=None,
     user_secrets=None,
 ):
-    server_name = make_server_name(user.safe_username, namespace, project, branch, commit_sha)
+    server_name = renku_1_make_server_name(
+        user.safe_username, namespace, project, branch, commit_sha
+    )
     gl_project = user.get_renku_project(f"{namespace}/{project}")
     gl_project_path = gl_project.path
-    server_class = UserServer
+    server_class = Renku1UserServer
 
     return launch_notebook_helper(
         server_name=server_name,
@@ -210,7 +220,7 @@ def launch_notebook(
 @use_args(Renku2LaunchNotebookRequest(), location="json", as_kwargs=True)
 @authenticated
 def renku_2_launch_notebook_helper(
-    user,
+    user: AnonymousUser | RegisteredUser,
     notebook,
     image,
     resource_class_id,
@@ -221,21 +231,19 @@ def renku_2_launch_notebook_helper(
     cloudstorage=None,
     server_options=None,
     user_secrets=None,
-    project_id: Optional[str] = None,  # Renku 2
-    launcher_id: Optional[str] = None,  # Renku 2
-    repositories: Optional[list[dict[str, str]]] = None,  # Renku 2
+    project_id: str | None = None,  # Renku 2
+    launcher_id: str | None = None,  # Renku 2
+    repositories: list[dict[str, str]] | None = None,  # Renku 2
 ):
     server_name = renku_2_make_server_name(
         safe_username=user.safe_username, project_id=project_id, launcher_id=launcher_id
     )
-    gl_project = None
-    gl_project_path = ""
     server_class = Renku2UserServer
 
     return launch_notebook_helper(
         server_name=server_name,
-        gl_project=gl_project,
-        gl_project_path=gl_project_path,
+        gl_project=None,
+        gl_project_path=None,
         server_class=server_class,
         user=user,
         namespace=None,
@@ -260,15 +268,8 @@ def renku_2_launch_notebook_helper(
 
 def launch_notebook_helper(
     server_name: str,
-    gl_project,
-    gl_project_path: str,
     server_class: type[UserServer],
-    user,
-    namespace,
-    project,
-    branch,
-    commit_sha,
-    notebook,
+    user: AnonymousUser | RegisteredUser,
     image,
     resource_class_id,
     storage,
@@ -278,15 +279,24 @@ def launch_notebook_helper(
     lfs_auto_fetch,
     cloudstorage,
     server_options,
-    project_id: Optional[str],  # Renku 2
-    launcher_id: Optional[str],  # Renku 2
-    repositories: Optional[list[dict[str, str]]],  # Renku 2
+    namespace: str | None,  # Renku 1.0
+    project: str | None,  # Renku 1.0
+    branch: str | None,  # Renku 1.0
+    commit_sha: str | None,  # Renku 1.0
+    notebook: str | None,  # Renku 1.0
+    gl_project: Optional["Project"],  # Renku 1.0
+    gl_project_path: str | None,  # Renku 1.0
+    project_id: str | None,  # Renku 2.0
+    launcher_id: str | None,  # Renku 2.0
+    repositories: list[dict[str, str]] | None,  # Renku 2.0
 ):
     """Helper function to launch a Jupyter server."""
     server = config.k8s.client.get_server(server_name, user.safe_username)
 
     if server:
         return NotebookResponse().dump(UserServerManifest(server)), 200
+
+    gl_project_path = gl_project_path if gl_project_path is not None else ""
 
     # Add annotation for old and new notebooks
     is_image_private = False
@@ -306,7 +316,7 @@ def launch_notebook_helper(
             parsed_image = Image.from_path(image)
         if image_exists_privately:
             is_image_private = True
-    else:
+    elif gl_project is not None:
         # An image was not requested specifically, use the one automatically built for the commit
         image = f"{config.git.registry}/{gl_project.path_with_namespace.lower()}:{commit_sha[:7]}"
         parsed_image = Image(
@@ -317,7 +327,10 @@ def launch_notebook_helper(
         # NOTE: a project pulled from the Gitlab API without credentials has no visibility attribute
         # and by default it can only be public since only public projects are visible to
         # non-authenticated users. Also, a nice footgun from the Gitlab API Python library.
-        is_image_private = getattr(gl_project, "visibility", GitlabVisibility.PUBLIC) != GitlabVisibility.PUBLIC
+        is_image_private = (
+            getattr(gl_project, "visibility", GitlabVisibility.PUBLIC)
+            != GitlabVisibility.PUBLIC
+        )
         image_repo = parsed_image.repo_api()
         if is_image_private and user.git_token:
             image_repo = image_repo.with_oauth2_token(user.git_token)
@@ -328,6 +341,8 @@ def launch_notebook_helper(
                     "exist or the user does not have the permissions to access it."
                 )
             )
+    else:
+        raise UserInputError(message="Cannot determine which Docker image to use.")
 
     if resource_class_id is not None:
         # A resource class ID was passed in, validate with CRC service
@@ -369,7 +384,9 @@ def launch_notebook_helper(
             )
         if storage is None:
             storage = default_resource_class.get("default_storage")
-        parsed_server_options = ServerOptions.from_resource_class(default_resource_class)
+        parsed_server_options = ServerOptions.from_resource_class(
+            default_resource_class
+        )
         # Storage in request is in GB
         parsed_server_options.set_storage(storage, gigabytes=True)
 
@@ -429,7 +446,7 @@ def launch_notebook_helper(
         work_dir=server_work_dir,
         using_default_image=using_default_image,
         is_image_private=is_image_private,
-        repositories=[Repository.from_schema(r) for r in repositories],
+        repositories=[Repository.from_dict(r) for r in repositories],
         namespace=namespace,
         project=project,
         branch=branch,
@@ -600,7 +617,14 @@ def patch_server(user, server_name, patch_body):
 
         hibernation = {"branch": "", "commit": "", "dirty": "", "synchronized": ""}
 
-        status = get_status(server_name=server_name, access_token=user.access_token)
+        sidecar_patch = find_container(
+            server.get("spec", {}).get("patches", []), "git-sidecar"
+        )
+        status = (
+            get_status(server_name=server_name, access_token=user.access_token)
+            if sidecar_patch is not None
+            else None
+        )
         if status:
             hibernation = {
                 "branch": status.get("branch", ""),

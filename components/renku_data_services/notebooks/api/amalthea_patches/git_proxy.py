@@ -1,3 +1,5 @@
+import json
+from dataclasses import asdict
 from typing import TYPE_CHECKING
 
 from ...config import config
@@ -14,6 +16,41 @@ def main(server: "UserServer"):
         read_only_etc_certs=True,
     )
     patches = []
+
+    prefix = "GIT_PROXY_"
+    env = [
+        {"name": f"{prefix}PORT", "value": str(config.sessions.git_proxy.port)},
+        {"name": f"{prefix}HEALTH_PORT", "value": str(config.sessions.git_proxy.health_port)},
+        {
+            "name": f"{prefix}ANONYMOUS_SESSION",
+            "value": "true" if server.user.anonymous else "false",
+        },
+        {"name": f"{prefix}RENKU_ACCESS_TOKEN", "value": str(server.user.access_token)},
+        {"name": f"{prefix}RENKU_REFRESH_TOKEN", "value": str(server.user.refresh_token)},
+        {"name": f"{prefix}RENKU_REALM", "value": config.keycloak_realm},
+        {
+            "name": f"{prefix}RENKU_CLIENT_ID",
+            "value": str(config.sessions.git_proxy.renku_client_id),
+        },
+        {
+            "name": f"{prefix}RENKU_CLIENT_SECRET",
+            "value": str(config.sessions.git_proxy.renku_client_secret),
+        },
+        {"name": f"{prefix}RENKU_URL", "value": "https://" + config.sessions.ingress.host},
+        {
+            "name": f"{prefix}REPOSITORIES",
+            "value": json.dumps([asdict(repo) for repo in server.repositories]),
+        },
+        {
+            "name": f"{prefix}PROVIDERS",
+            "value": json.dumps(
+                [
+                    dict(id=provider.id, access_token_url=provider.access_token_url)
+                    for provider in server.git_providers
+                ]
+            ),
+        },
+    ]
 
     patches.append(
         {
@@ -32,56 +69,7 @@ def main(server: "UserServer"):
                             "runAsNonRoot": True,
                         },
                         "name": "git-proxy",
-                        "env": [
-                            {
-                                "name": "REPOSITORY_URL",
-                                "value": server.gl_project_url,
-                            },
-                            {
-                                "name": "GIT_PROXY_PORT",
-                                "value": str(config.sessions.git_proxy.port),
-                            },
-                            {
-                                "name": "GIT_PROXY_HEALTH_PORT",
-                                "value": str(config.sessions.git_proxy.health_port),
-                            },
-                            {
-                                "name": "GITLAB_OAUTH_TOKEN",
-                                "value": str(server.user.git_token),
-                            },
-                            {
-                                "name": "GITLAB_OAUTH_TOKEN_EXPIRES_AT",
-                                "value": str(server.user.git_token_expires_at),
-                            },
-                            {
-                                "name": "RENKU_ACCESS_TOKEN",
-                                "value": str(server.user.access_token),
-                            },
-                            {
-                                "name": "RENKU_REFRESH_TOKEN",
-                                "value": str(server.user.refresh_token),
-                            },
-                            {
-                                "name": "RENKU_REALM",
-                                "value": config.keycloak_realm,
-                            },
-                            {
-                                "name": "RENKU_CLIENT_ID",
-                                "value": str(config.sessions.git_proxy.renku_client_id),
-                            },
-                            {
-                                "name": "RENKU_CLIENT_SECRET",
-                                "value": str(config.sessions.git_proxy.renku_client_secret),
-                            },
-                            {
-                                "name": "RENKU_URL",
-                                "value": "https://" + config.sessions.ingress.host,
-                            },
-                            {
-                                "name": "ANONYMOUS_SESSION",
-                                "value": "true" if server.user.anonymous else "false",
-                            },
-                        ],
+                        "env": env,
                         "livenessProbe": {
                             "httpGet": {
                                 "path": "/health",

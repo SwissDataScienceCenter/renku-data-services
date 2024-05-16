@@ -1,5 +1,6 @@
 import json
 import os
+from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -19,51 +20,43 @@ def git_clone(server: "UserServer"):
         read_only_etc_certs=True,
     )
 
-    gl_project_path = server.gl_project_path or ""
-
+    prefix = "GIT_CLONE_"
     env = [
         {
-            "name": "GIT_CLONE_REPOSITORIES",
-            "value": json.dumps(server.repositories),
-        },
-        {
-            "name": "GIT_CLONE_WORKSPACE_MOUNT_PATH",
+            "name": f"{prefix}WORKSPACE_MOUNT_PATH",
             "value": server.workspace_mount_path.absolute().as_posix(),
         },
         {
-            "name": "GIT_CLONE_REPOSITORY_URL",
-            "value": server.gl_project.http_url_to_repo if server.gl_project else None,
+            "name": f"{prefix}MOUNT_PATH",
+            "value": server.work_dir.absolute().as_posix(),
         },
         {
-            "name": "GIT_CLONE_MOUNT_PATH",
-            "value": (server.workspace_mount_path / gl_project_path).absolute().as_posix(),
-        },
-        {
-            "name": "GIT_CLONE_LFS_AUTO_FETCH",
+            "name": f"{prefix}LFS_AUTO_FETCH",
             "value": "1" if server.server_options.lfs_auto_fetch else "0",
         },
-        {"name": "GIT_CLONE_COMMIT_SHA", "value": server.commit_sha},
-        {"name": "GIT_CLONE_BRANCH", "value": server.branch},
         {
-            "name": "GIT_CLONE_USER__USERNAME",
+            "name": f"{prefix}USER__USERNAME",
             "value": server.user.username,
         },
-        {"name": "GIT_CLONE_GIT_URL", "value": server.user.gitlab_client.url},
-        {"name": "GIT_CLONE_USER__OAUTH_TOKEN", "value": server.user.git_token},
         {
-            "name": "GIT_CLONE_SENTRY__ENABLED",
+            "name": f"{prefix}USER__RENKU_TOKEN",
+            "value": str(server.user.access_token),
+        },
+        {"name": f"{prefix}IS_GIT_PROXY_ENABLED", "value": "0" if server.user.anonymous else "1"},
+        {
+            "name": f"{prefix}SENTRY__ENABLED",
             "value": str(config.sessions.git_clone.sentry.enabled).lower(),
         },
         {
-            "name": "GIT_CLONE_SENTRY__DSN",
+            "name": f"{prefix}SENTRY__DSN",
             "value": config.sessions.git_clone.sentry.dsn,
         },
         {
-            "name": "GIT_CLONE_SENTRY__ENVIRONMENT",
+            "name": f"{prefix}SENTRY__ENVIRONMENT",
             "value": config.sessions.git_clone.sentry.env,
         },
         {
-            "name": "GIT_CLONE_SENTRY__SAMPLE_RATE",
+            "name": f"{prefix}SENTRY__SAMPLE_RATE",
             "value": str(config.sessions.git_clone.sentry.sample_rate),
         },
         {"name": "SENTRY_RELEASE", "value": os.environ.get("SENTRY_RELEASE")},
@@ -78,12 +71,34 @@ def git_clone(server: "UserServer"):
     ]
     if not server.user.anonymous:
         env += [
-            {"name": "GIT_CLONE_USER__EMAIL", "value": server.user.gitlab_user.email},
+            {"name": f"{prefix}USER__EMAIL", "value": server.user.gitlab_user.email},
             {
-                "name": "GIT_CLONE_USER__FULL_NAME",
+                "name": f"{prefix}USER__FULL_NAME",
                 "value": server.user.gitlab_user.name,
             },
         ]
+
+    # Set up git repositories
+    for idx, repo in enumerate(server.repositories):
+        obj_env = f"{prefix}REPOSITORIES_{idx}_"
+        env.append(
+            {
+                "name": obj_env,
+                "value": json.dumps(asdict(repo)),
+            }
+        )
+
+    # Set up git providers
+    for idx, provider in enumerate(server.required_git_providers):
+        obj_env = f"{prefix}GIT_PROVIDERS_{idx}_"
+        data = dict(id=provider.id, access_token_url=provider.access_token_url)
+        env.append(
+            {
+                "name": obj_env,
+                "value": json.dumps(data),
+            }
+        )
+
     return [
         {
             "type": "application/json-patch+json",

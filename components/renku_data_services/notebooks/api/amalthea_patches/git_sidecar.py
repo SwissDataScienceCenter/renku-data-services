@@ -13,7 +13,9 @@ def main(server: "UserServer"):
     if not isinstance(server.user, RegisteredUser):
         return []
 
-    gl_project_path = server.gl_project_path or "."
+    gitlab_project = getattr(server, "gitlab_project", None)
+    gl_project_path = gitlab_project.path if gitlab_project else None
+    commit_sha = getattr(server, "commit_sha", None)
 
     patches = [
         {
@@ -54,7 +56,9 @@ def main(server: "UserServer"):
                             },
                             {
                                 "name": "GIT_RPC_SENTRY__ENABLED",
-                                "value": str(config.sessions.git_rpc_server.sentry.enabled).lower(),
+                                "value": str(
+                                    config.sessions.git_rpc_server.sentry.enabled
+                                ).lower(),
                             },
                             {
                                 "name": "GIT_RPC_SENTRY__DSN",
@@ -66,7 +70,9 @@ def main(server: "UserServer"):
                             },
                             {
                                 "name": "GIT_RPC_SENTRY__SAMPLE_RATE",
-                                "value": str(config.sessions.git_rpc_server.sentry.sample_rate),
+                                "value": str(
+                                    config.sessions.git_rpc_server.sentry.sample_rate
+                                ),
                             },
                             {
                                 "name": "SENTRY_RELEASE",
@@ -74,7 +80,7 @@ def main(server: "UserServer"):
                             },
                             {
                                 "name": "CI_COMMIT_SHA",
-                                "value": f"{server.commit_sha}",
+                                "value": f"{commit_sha}",
                             },
                             {
                                 "name": "RENKU_USERNAME",
@@ -149,7 +155,9 @@ def main(server: "UserServer"):
                 {
                     "op": "add",
                     "path": "/statefulset/spec/template/spec/containers/1/args/-",
-                    "value": (f"--skip-auth-route=^/sessions/{server.server_name}/sidecar/health$"),
+                    "value": (
+                        f"--skip-auth-route=^/sessions/{server.server_name}/sidecar/health$"
+                    ),
                 },
                 {
                     "op": "add",

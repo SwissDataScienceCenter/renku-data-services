@@ -14,7 +14,9 @@ if TYPE_CHECKING:
 
 def env(server: "UserServer"):
     # amalthea always makes the jupyter server the first container in the statefulset
-    gl_project_path = server.gl_project_path or ""
+
+    commit_sha = getattr(server, "commit_sha", None)
+    project = getattr(server, "project", None)
 
     patch_list = [
         {
@@ -28,7 +30,7 @@ def env(server: "UserServer"):
         {
             "op": "add",
             "path": "/statefulset/spec/template/spec/containers/0/env/-",
-            "value": {"name": "CI_COMMIT_SHA", "value": server.commit_sha},
+            "value": {"name": "CI_COMMIT_SHA", "value": commit_sha},
         },
         {
             "op": "add",
@@ -45,7 +47,7 @@ def env(server: "UserServer"):
             # relative to $HOME.
             "value": {
                 "name": "MOUNT_PATH",
-                "value": f"/work/{gl_project_path}",
+                "value": server.work_dir.absolute().as_posix(),
             },
         },
         {
@@ -56,7 +58,7 @@ def env(server: "UserServer"):
         {
             "op": "add",
             "path": "/statefulset/spec/template/spec/containers/0/env/-",
-            "value": {"name": "PROJECT_NAME", "value": server.project},
+            "value": {"name": "PROJECT_NAME", "value": project},
         },
         {
             "op": "add",
