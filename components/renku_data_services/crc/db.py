@@ -461,11 +461,10 @@ class ResourcePoolRepository(_Base):
                             else:
                                 # CREATE a brand new affinity
                                 cls.node_affinities.append(new_affinity)
-                        if put:
-                            # REMOVE an affinity
-                            for existing_affinity_key, existing_affinity in existing_affinities.items():
-                                if existing_affinity_key not in new_affinities:
-                                    cls.node_affinities.remove(existing_affinity)
+                        # REMOVE an affinity
+                        for existing_affinity_key, existing_affinity in existing_affinities.items():
+                            if existing_affinity_key not in new_affinities:
+                                cls.node_affinities.remove(existing_affinity)
                     case "tolerations":
                         v = cast(list[str], v)
                         existing_tolerations: dict[str, schemas.TolerationORM] = {
@@ -478,11 +477,10 @@ class ResourcePoolRepository(_Base):
                             if new_tol_key not in existing_tolerations:
                                 # CREATE a brand new toleration
                                 cls.tolerations.append(new_tol)
-                        if put:
-                            # REMOVE a toleration
-                            for existing_tol_key, existing_tol in existing_tolerations.items():
-                                if existing_tol_key not in new_tolerations:
-                                    cls.tolerations.remove(existing_tol)
+                        # REMOVE a toleration
+                        for existing_tol_key, existing_tol in existing_tolerations.items():
+                            if existing_tol_key not in new_tolerations:
+                                cls.tolerations.remove(existing_tol)
                     case _:
                         setattr(cls, k, v)
             if cls.resource_pool is None:
