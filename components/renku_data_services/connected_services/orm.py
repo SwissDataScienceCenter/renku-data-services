@@ -2,7 +2,6 @@
 
 from datetime import datetime
 from typing import Any
-from urllib.parse import urljoin, urlparse, urlunparse
 
 from sqlalchemy import JSON, DateTime, ForeignKey, LargeBinary, MetaData, String, func
 from sqlalchemy.dialects.postgresql import JSONB
@@ -10,7 +9,6 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_co
 from sqlalchemy.schema import UniqueConstraint
 from ulid import ULID
 
-from renku_data_services import errors
 from renku_data_services.connected_services import models
 from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind
 
@@ -66,35 +64,6 @@ class OAuth2ClientORM(BaseORM):
             creation_date=self.creation_date,
             updated_at=self.updated_at,
         )
-
-    @property
-    def authorization_url(self) -> str:
-        """The authorization URL for the OAuth2 protocol."""
-        if not self.url:
-            raise errors.ValidationError(message=f"URL not defined for provider {self.id}.")
-        if self.kind == ProviderKind.github:
-            return urljoin(self.url, "login/oauth/authorize")
-        return urljoin(self.url, "oauth/authorize")
-
-    @property
-    def token_endpoint_url(self) -> str:
-        """The token endpoint URL for the OAuth2 protocol."""
-        if not self.url:
-            raise errors.ValidationError(message=f"URL not defined for provider {self.id}.")
-        if self.kind == ProviderKind.github:
-            return urljoin(self.url, "login/oauth/access_token")
-        return urljoin(self.url, "oauth/token")
-
-    @property
-    def api_url(self) -> str:
-        """The URL used for API calls on the Resource Server."""
-        if not self.url:
-            raise errors.ValidationError(message=f"URL not defined for provider {self.id}.")
-        if self.kind == ProviderKind.github:
-            url = urlparse(self.url)
-            url = url._replace(netloc=f"api.{url.netloc}")
-            return urlunparse(url)
-        return urljoin(self.url, "api/v4/")
 
 
 class OAuth2ConnectionORM(BaseORM):
