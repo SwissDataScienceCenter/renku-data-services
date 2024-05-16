@@ -472,14 +472,14 @@ class ResourcePool(BaseAPISpec):
     )
     idle_threshold: Optional[int] = Field(
         None,
-        description="A threshold in seconds after which a session gets hibernated",
-        ge=1,
+        description="A threshold in seconds after which a session gets hibernated (0 means no threshold)",
+        ge=0,
         le=2147483647,
     )
     hibernation_threshold: Optional[int] = Field(
         None,
-        description="A threshold in seconds after which a session gets culled/deleted",
-        ge=1,
+        description="A threshold in seconds after which a session gets culled/deleted (0 means no threshold)",
+        ge=0,
         le=2147483647,
     )
 
@@ -515,14 +515,14 @@ class ResourcePoolPatch(BaseAPISpec):
     )
     idle_threshold: Optional[int] = Field(
         None,
-        description="A threshold in seconds after which a session gets hibernated",
-        ge=1,
+        description="A threshold in seconds after which a session gets hibernated (0 means no threshold)",
+        ge=0,
         le=2147483647,
     )
     hibernation_threshold: Optional[int] = Field(
         None,
-        description="A threshold in seconds after which a session gets culled/deleted",
-        ge=1,
+        description="A threshold in seconds after which a session gets culled/deleted (0 means no threshold)",
+        ge=0,
         le=2147483647,
     )
 
@@ -575,14 +575,14 @@ class ResourcePoolPut(BaseAPISpec):
     )
     idle_threshold: Optional[int] = Field(
         None,
-        description="A threshold in seconds after which a session gets hibernated",
-        ge=1,
+        description="A threshold in seconds after which a session gets hibernated (0 means no threshold)",
+        ge=0,
         le=2147483647,
     )
     hibernation_threshold: Optional[int] = Field(
         None,
-        description="A threshold in seconds after which a session gets culled/deleted",
-        ge=1,
+        description="A threshold in seconds after which a session gets culled/deleted (0 means no threshold)",
+        ge=0,
         le=2147483647,
     )
 
@@ -617,14 +617,14 @@ class ResourcePoolWithId(BaseAPISpec):
     )
     idle_threshold: Optional[int] = Field(
         None,
-        description="A threshold in seconds after which a session gets hibernated",
-        ge=1,
+        description="A threshold in seconds after which a session gets hibernated (0 means no threshold)",
+        ge=0,
         le=2147483647,
     )
     hibernation_threshold: Optional[int] = Field(
         None,
-        description="A threshold in seconds after which a session gets culled/deleted",
-        ge=1,
+        description="A threshold in seconds after which a session gets culled/deleted (0 means no threshold)",
+        ge=0,
         le=2147483647,
     )
 
@@ -659,14 +659,14 @@ class ResourcePoolWithIdFiltered(BaseAPISpec):
     )
     idle_threshold: Optional[int] = Field(
         None,
-        description="A threshold in seconds after which a session gets hibernated",
-        ge=1,
+        description="A threshold in seconds after which a session gets hibernated (0 means no threshold)",
+        ge=0,
         le=2147483647,
     )
     hibernation_threshold: Optional[int] = Field(
         None,
-        description="A threshold in seconds after which a session gets culled/deleted",
-        ge=1,
+        description="A threshold in seconds after which a session gets culled/deleted (0 means no threshold)",
+        ge=0,
         le=2147483647,
     )
 

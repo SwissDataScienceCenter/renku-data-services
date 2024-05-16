@@ -186,10 +186,16 @@ class ResourcePool:
             raise ValidationError(message="The default resource pool has to be public.")
         if self.default and self.quota is not None:
             raise ValidationError(message="A default resource pool cannot have a quota.")
-        if (self.idle_threshold and self.idle_threshold < 1) or (
-            self.hibernation_threshold and self.hibernation_threshold < 1
+        if (self.idle_threshold and self.idle_threshold < 0) or (
+            self.hibernation_threshold and self.hibernation_threshold < 0
         ):
-            raise ValidationError(message="Idle threshold and hibernation threshold need to be larger than 1.")
+            raise ValidationError(message="Idle threshold and hibernation threshold need to be larger than 0.")
+
+        if self.idle_threshold == 0:
+            object.__setattr__(self, "idle_threshold", None)
+        if self.hibernation_threshold == 0:
+            object.__setattr__(self, "hibernation_threshold", None)
+
         default_classes = []
         for cls in list(self.classes):
             if self.quota and not self.quota.is_resource_class_compatible(cls):
