@@ -1,11 +1,10 @@
 ---
 openapi: 3.0.2
 info:
-  title: Renku Compute Resource Control (CRC) service
+  title: Renku Data Services API
   description: |
-    Service that provide information about compute resources, resource pools
-    and user access to them. All errors have the same format as the schema
-    called ErrorResponse.
+    This service is the main backend for Renku. It provides information about users, projects,
+    cloud storage, access to compute resources and many other things.
   version: v1
 servers:
   - url: /api/data
@@ -1392,13 +1391,13 @@ components:
       example: false
     IdleThreshold:
       type: integer
-      description: A threshold in seconds after which a session gets hibernated
-      minimum: 1
+      description: A threshold in seconds after which a session gets hibernated (0 means no threshold)
+      minimum: 0
       maximum: 2147483647
     HibernationThreshold:
       type: integer
-      description: A threshold in seconds after which a session gets culled/deleted
-      minimum: 1
+      description: A threshold in seconds after which a session gets culled/deleted (0 means no threshold)
+      minimum: 0
       maximum: 2147483647
     K8sLabelList:
       type: array
