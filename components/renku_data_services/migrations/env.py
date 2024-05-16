@@ -5,6 +5,7 @@ from logging.config import fileConfig
 from alembic import context
 
 from renku_data_services.authz.orm import BaseORM as authz
+from renku_data_services.connected_services.orm import BaseORM as connected_services
 from renku_data_services.crc.orm import BaseORM as crc
 from renku_data_services.message_queue.orm import BaseORM as events
 from renku_data_services.migrations.utils import run_migrations
@@ -28,6 +29,7 @@ if config.config_file_name is not None:
 all_metadata = [
     authz.metadata,
     crc.metadata,
+    connected_services.metadata,
     events.metadata,
     namespaces.metadata,
     project.metadata,
