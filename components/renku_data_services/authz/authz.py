@@ -758,16 +758,30 @@ class Authz:
                 # The existing relationships should be deleted if all goes well and added back in if we have to undo
                 existing_rel = existing_rels[0]
                 if existing_rel.relationship != rel:
-                    add_members.append(
-                        RelationshipUpdate(
-                            operation=RelationshipUpdate.OPERATION_TOUCH,
-                            relationship=rel,
-                        ),
+                    add_members.extend(
+                        [
+                            RelationshipUpdate(
+                                operation=RelationshipUpdate.OPERATION_TOUCH,
+                                relationship=rel,
+                            ),
+                            # NOTE: The old role for the user still exists and we have to remove it
+                            # if not both the old and new role for the same user will be present in the database
+                            RelationshipUpdate(
+                                operation=RelationshipUpdate.OPERATION_DELETE,
+                                relationship=existing_rel.relationship,
+                            ),
+                        ]
                     )
-                    undo.append(
-                        RelationshipUpdate(
-                            operation=RelationshipUpdate.OPERATION_TOUCH, relationship=existing_rel.relationship
-                        ),
+                    undo.extend(
+                        [
+                            RelationshipUpdate(
+                                operation=RelationshipUpdate.OPERATION_DELETE,
+                                relationship=rel,
+                            ),
+                            RelationshipUpdate(
+                                operation=RelationshipUpdate.OPERATION_TOUCH, relationship=existing_rel.relationship
+                            ),
+                        ]
                     )
                     output.append(MembershipChange(member, Change.UPDATE))
                 for rel_to_remove in existing_rels[1:]:

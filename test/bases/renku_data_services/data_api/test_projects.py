@@ -10,6 +10,7 @@ from ulid import ULID
 from components.renku_data_services.message_queue.avro_models.io.renku.events import v1 as avro_schema_v1
 from components.renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
 from renku_data_services.app_config.config import Config
+from renku_data_services.authz.models import Role
 from renku_data_services.message_queue.redis_queue import deserialize_binary
 from renku_data_services.users.models import UserInfo
 
@@ -557,7 +558,13 @@ async def test_creator_is_added_as_owner_members(sanic_client, create_project, u
 
 @pytest.mark.asyncio
 async def test_add_project_members(
-    create_project, sanic_client, user_headers, app_config, member_1_user: UserInfo, member_2_user: UserInfo
+    create_project,
+    sanic_client,
+    regular_user,
+    user_headers,
+    app_config,
+    member_1_user: UserInfo,
+    member_2_user: UserInfo,
 ):
     project = await create_project("Project 1")
     project_id = project["id"]
@@ -573,13 +580,18 @@ async def test_add_project_members(
     events = await app_config.redis.redis_connection.xrange("projectAuth.removed")
     assert len(events) == 0
     events = await app_config.redis.redis_connection.xrange("projectAuth.added")
-    assert len(events) == 2
+    assert len(events) == 3
     event = events[0][1]
+    auth_event = deserialize_binary(event[b"payload"], avro_schema_v1.ProjectAuthorizationAdded)
+    assert auth_event.projectId == project_id
+    assert auth_event.userId == regular_user.id
+    assert auth_event.role.value.lower() == Role.OWNER.value
+    event = events[1][1]
     auth_event = deserialize_binary(event[b"payload"], avro_schema_v2.ProjectMemberAdded)
     assert auth_event.projectId == project_id
     assert auth_event.userId == members[0]["id"]
     assert auth_event.role.value.lower() == members[0]["role"]
-    event = events[1][1]
+    event = events[2][1]
     auth_event = deserialize_binary(event[b"payload"], avro_schema_v2.ProjectMemberAdded)
     assert auth_event.projectId == project_id
     assert auth_event.userId == members[1]["id"]
@@ -602,10 +614,15 @@ async def test_add_project_members(
         f"/api/data/projects/{project_id}/members", headers=user_headers, json=members
     )
     assert response.status_code == 200, response.text
+    _, response = await sanic_client.get(
+        f"/api/data/projects/{project_id}/members",
+        headers=user_headers,
+    )
+    assert len(response.json) == 3
     events = await app_config.redis.redis_connection.xrange("projectAuth.removed")
     assert len(events) == 0
     events = await app_config.redis.redis_connection.xrange("projectAuth.added")
-    assert len(events) == 2  # The events from before are still there but there arent new ones
+    assert len(events) == 3  # The events from before are still there but there arent new ones
     events = await app_config.redis.redis_connection.xrange("projectAuth.updated")
     assert len(events) == 1
     event = events[0][1]

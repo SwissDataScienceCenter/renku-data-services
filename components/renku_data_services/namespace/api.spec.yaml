@@ -1,10 +1,10 @@
 openapi: 3.0.2
 info:
-  title: Renku Group Management Service
+  title: Renku Data Services API
   description: |
-    Service that allows creating, updating, deleting, and managing Renku v2 groups.
-    All errors have the same format as the schema called ErrorResponse.
-  version: 0.1.0
+    This service is the main backend for Renku. It provides information about users, projects,
+    cloud storage, access to compute resources and many other things.
+  version: v1
 servers:
   - url: /api/data
   - url: /ui-server/api/data
