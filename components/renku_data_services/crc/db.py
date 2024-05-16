@@ -226,6 +226,10 @@ class ResourcePoolRepository(_Base):
             resource_pool = resource_pool.set_quota(quota)
         orm = schemas.ResourcePoolORM.load(resource_pool)
         async with self.session_maker() as session, session.begin():
+            if orm.idle_threshold == 0:
+                orm.idle_threshold = None
+            if orm.hibernation_threshold == 0:
+                orm.hibernation_threshold = None
             if orm.default:
                 stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.default == true())
                 res = await session.execute(stmt)
@@ -314,6 +318,11 @@ class ResourcePoolRepository(_Base):
             quota = self.quotas_repo.get_quota(rp.quota) if rp.quota else None
             if len(kwargs) == 0:
                 return rp.dump(quota)
+
+            if kwargs.get("idle_threshold", None) == 0:
+                kwargs["idle_threshold"] = None
+            if kwargs.get("hibernation_threshold", None) == 0:
+                kwargs["hibernation_threshold"] = None
             # NOTE: The .update method on the model validates the update to the resource pool
             old_rp_model = rp.dump(quota)
             new_rp_model = old_rp_model.update(**kwargs)
