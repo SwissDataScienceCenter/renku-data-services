@@ -31,5 +31,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Question for the PR reviewer: Should we implement up and down migrations for authz DB?
-    # If yes then here we would have to remove all relations for groups and namespaces
+    # If yes then here we would have to remove all relations for groups and namespaces and then remove or edit the schema
     pass

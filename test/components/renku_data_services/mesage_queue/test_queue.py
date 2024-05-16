@@ -6,7 +6,7 @@ import contextlib
 import pytest
 
 from renku_data_services.authz.models import Visibility
-from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_removed import ProjectRemoved
+from renku_data_services.message_queue.avro_models.io.renku.events.v2.project_removed import ProjectRemoved
 from renku_data_services.message_queue.redis_queue import dispatch_message
 from renku_data_services.project.models import Project
 from renku_data_services.utils.core import with_db_transaction

@@ -56,7 +56,7 @@ class ProjectORM(BaseORM):
             id=self.id,
             name=self.name,
             slug=self.slug.slug,
-            namespace=self.slug.namespace.slug,
+            namespace=self.slug.namespace.dump(),
             visibility=authz_models.Visibility.PUBLIC
             if self.visibility == Visibility.public
             else authz_models.Visibility.PRIVATE,

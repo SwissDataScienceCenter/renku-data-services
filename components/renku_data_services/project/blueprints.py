@@ -6,7 +6,7 @@ from sanic import HTTPResponse, Request, json
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
-from renku_data_services.authz.models import Member, Role, Visibility
+from renku_data_services.authz.models import Member, Role
 from renku_data_services.base_api.auth import (
     authenticate,
     only_authenticated,
@@ -43,7 +43,7 @@ class ProjectsBP(CustomBlueprint):
                 dict(
                     id=p.id,
                     name=p.name,
-                    namespace=p.namespace,
+                    namespace=p.namespace.slug,
                     slug=p.slug,
                     creation_date=p.creation_date.isoformat(),
                     created_by=p.created_by,
@@ -65,26 +65,12 @@ class ProjectsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.ProjectPost)
         async def _post(_: Request, *, user: base_models.APIUser, body: apispec.ProjectPost):
-            keywords = [kw.root for kw in body.keywords] if body.keywords is not None else []
-            project = project_models.Project(
-                id=None,
-                name=body.name,
-                namespace=body.namespace,
-                slug=body.slug or base_models.Slug.from_name(body.name).value,
-                description=body.description,
-                repositories=body.repositories or [],
-                created_by=user.id,  # type: ignore[arg-type]
-                visibility=Visibility(body.visibility)
-                if isinstance(body.visibility, str)
-                else Visibility(body.visibility.value),
-                keywords=keywords,
-            )
-            result = await self.project_repo.insert_project(user=user, project=project)
+            result = await self.project_repo.insert_project(user=user, project=body)
             return json(
                 dict(
                     id=result.id,
                     name=result.name,
-                    namespace=result.namespace,
+                    namespace=result.namespace.slug,
                     slug=result.slug,
                     creation_date=result.creation_date.isoformat(),
                     created_by=result.created_by,
@@ -116,7 +102,7 @@ class ProjectsBP(CustomBlueprint):
                 dict(
                     id=project.id,
                     name=project.name,
-                    namespace=project.namespace,
+                    namespace=project.namespace.slug,
                     slug=project.slug,
                     creation_date=project.creation_date.isoformat(),
                     created_by=project.created_by,
@@ -147,7 +133,7 @@ class ProjectsBP(CustomBlueprint):
                 dict(
                     id=project.id,
                     name=project.name,
-                    namespace=project.namespace,
+                    namespace=project.namespace.slug,
                     slug=project.slug,
                     creation_date=project.creation_date.isoformat(),
                     created_by=project.created_by,
@@ -201,7 +187,7 @@ class ProjectsBP(CustomBlueprint):
                 dict(
                     id=updated_project.id,
                     name=updated_project.name,
-                    namespace=updated_project.namespace,
+                    namespace=updated_project.namespace.slug,
                     slug=updated_project.slug,
                     creation_date=updated_project.creation_date.isoformat(),
                     created_by=updated_project.created_by,

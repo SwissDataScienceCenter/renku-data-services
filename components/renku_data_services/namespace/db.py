@@ -8,45 +8,58 @@ import string
 from collections.abc import Callable
 from contextlib import nullcontext
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import cast
 
-from sqlalchemy import delete, func, or_, select, text
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
+from renku_data_services.authz.models import Member, MembershipChange, Role, Scope
 from renku_data_services.base_api.pagination import PaginationRequest
+from renku_data_services.message_queue import AmbiguousEvent
+from renku_data_services.message_queue.db import EventRepository
+from renku_data_services.message_queue.redis_queue import dispatch_message
 from renku_data_services.namespace import apispec, models
 from renku_data_services.namespace import orm as schemas
+from renku_data_services.users import models as user_models
 from renku_data_services.users import orm as user_schemas
+from renku_data_services.utils.core import with_db_transaction
 
 
 class GroupRepository:
     """Repository for groups."""
 
-    def __init__(self, session_maker: Callable[..., AsyncSession], group_authz=None):
+    def __init__(
+        self, session_maker: Callable[..., AsyncSession], event_repo: EventRepository, group_authz: Authz,
+    ):
         self.session_maker = session_maker  # type: ignore[call-overload]
-        self.group_authz: None | Any = group_authz
+        self.authz: Authz = group_authz
+        self.event_repo: EventRepository = event_repo
 
-    async def generate_user_namespaces(self):
+    @with_db_transaction
+    @Authz.authz_change(AuthzOperation.insert_many, ResourceType.user_namespace)
+    @dispatch_message(AmbiguousEvent.INSERT_USER_NAMESPACE)
+    async def generate_user_namespaces(self, session: AsyncSession) -> list[user_models.UserWithNamespace]:
         """Generate user namespaces if the user table has data and the namespaces table is empty."""
-        async with self.session_maker() as session, session.begin():
-            # NOTE: lock to make sure another instance of the data service cannot insert/update but can read
-            await session.execute(text("LOCK TABLE common.namespaces IN EXCLUSIVE MODE"))
-            at_least_one_namespace = (await session.execute(select(schemas.NamespaceORM).limit(1))).one_or_none()
-            if at_least_one_namespace:
-                logging.info("Found at least one user namespace, skipping creation")
-                return
-            logging.info("Found zero user namespaces, will try to create them from users table")
-            res = await session.execute(select(user_schemas.UserORM))
-            count = 0
-            for user in res.scalars():
-                ns = await self.insert_user_namespace(user, session, retry_enumerate=10, retry_random=True)
-                logging.info(f"Creating user namespace {ns}")
-                count += 1
-        logging.info(f"Created {count} user namespaces")
+        # NOTE: lock to make sure another instance of the data service cannot insert/update but can read
+        output: list[user_models.UserWithNamespace] = []
+        await session.execute(text("LOCK TABLE common.namespaces IN EXCLUSIVE MODE"))
+        at_least_one_namespace = (await session.execute(select(schemas.NamespaceORM).limit(1))).one_or_none()
+        if at_least_one_namespace:
+            logging.info("Found at least one user namespace, skipping creation")
+            return output
+        logging.info("Found zero user namespaces, will try to create them from users table")
+        res = await session.scalars(select(user_schemas.UserORM))
+        for user in res:
+            ns = await self._insert_user_namespace(session, user, retry_enumerate=10, retry_random=True)
+            logging.info(f"Creating user namespace {ns}")
+            output.append(user_models.UserWithNamespace(user.dump(), ns))
+        logging.info(f"Created {len(output)} user namespaces")
+        return output
 
     async def get_groups(
         self,
@@ -65,73 +78,67 @@ class GroupRepository:
             n_total_elements = cast(int, result.scalar() or 0)
             return [g.dump() for g in groups_orm], n_total_elements
 
-    async def _get_group(self, session: AsyncSession, slug: str, load_members: bool = False) -> schemas.GroupORM:
+    async def _get_group(
+        self, session: AsyncSession, user: base_models.APIUser, slug: str, load_members: bool = False
+    ) -> tuple[schemas.GroupORM, list[Member]]:
         transaction = nullcontext() if session.in_transaction() else session.begin()
         async with transaction:  # type: ignore[attr-defined]
             stmt = select(schemas.GroupORM).where(
                 schemas.GroupORM.namespace.has(schemas.NamespaceORM.slug == slug.lower())
             )
-            if load_members:
-                stmt = stmt.options(joinedload(schemas.GroupORM.members))
             group = await session.scalar(stmt)
-            if group:
-                return group
-            stmt_old_ns = (
-                select(schemas.NamespaceOldORM)
-                .where(schemas.NamespaceOldORM.slug == slug.lower())
-                .order_by(schemas.NamespaceOldORM.created_at.desc())
-                .limit(1)
-                .options(
-                    joinedload(schemas.NamespaceOldORM.latest_slug)
-                    .joinedload(schemas.NamespaceORM.group)
-                    .joinedload(schemas.GroupORM.namespace)
+            if not group:
+                stmt_old_ns = (
+                    select(schemas.NamespaceOldORM)
+                    .where(schemas.NamespaceOldORM.slug == slug.lower())
+                    .order_by(schemas.NamespaceOldORM.created_at.desc())
+                    .limit(1)
+                    .options(
+                        joinedload(schemas.NamespaceOldORM.latest_slug)
+                        .joinedload(schemas.NamespaceORM.group)
+                        .joinedload(schemas.GroupORM.namespace)
+                    )
                 )
-            )
-            if load_members:
-                stmt_old_ns = stmt_old_ns.options(
-                    joinedload(schemas.NamespaceOldORM.latest_slug)
-                    .joinedload(schemas.NamespaceORM.group)
-                    .joinedload(schemas.GroupORM.members)
-                )
-            old_ns = await session.scalar(stmt_old_ns)
-            if not old_ns or not old_ns.latest_slug.group:
+                old_ns = await session.scalar(stmt_old_ns)
+                if old_ns is not None and old_ns.latest_slug.group is not None:
+                    group = old_ns.latest_slug.group
+            if not group:
                 raise errors.MissingResourceError(message=f"The group with slug {slug} does not exist")
-            return old_ns.latest_slug.group
+            members = []
+            if load_members:
+                members = await self.authz.members(user, ResourceType.group, group.id)
+            return group, members
 
-    async def get_group(self, slug: str) -> models.Group:
+    async def get_group(self, user: base_models.APIUser, slug: str) -> models.Group:
         """Get a group from the DB."""
         async with self.session_maker() as session:
-            group_orm = await self._get_group(session, slug)
+            group_orm, _ = await self._get_group(session, user, slug)
         return group_orm.dump()
 
-    async def get_group_members(self, user: base_models.APIUser, slug: str) -> list[models.GroupMemberDetails]:
+    @with_db_transaction
+    async def get_group_members(
+        self, session: AsyncSession, user: base_models.APIUser, slug: str
+    ) -> list[models.GroupMemberDetails]:
         """Get all the users that are direct members of a group."""
-        async with self.session_maker() as session, session.begin():
-            group = await self._get_group(session, slug)
-            if user.id != group.created_by and not user.is_admin:
-                # TODO: implement a more fine-grained authorization scheme
-                raise errors.Unauthorized(message="Only the owner and admins can list the members of a group")
-            stmt = (
-                select(schemas.GroupMemberORM, user_schemas.UserORM)
-                .where(schemas.GroupMemberORM.group.has(schemas.GroupORM.id == group.id))
-                .join(user_schemas.UserORM, schemas.GroupMemberORM.user_id == user_schemas.UserORM.keycloak_id)
+        _, members = await self._get_group(session, user, slug, load_members=True)
+        members_dict = {i.user_id: i for i in members}
+        stmt = select(user_schemas.UserORM).where(user_schemas.UserORM.keycloak_id.in_(members_dict.keys()))
+        result = await session.scalars(stmt)
+        return [
+            models.GroupMemberDetails(
+                id=member.keycloak_id,
+                role=members_dict[member.keycloak_id].role,
+                email=member.email,
+                first_name=member.first_name,
+                last_name=member.last_name,
             )
-            result = await session.execute(stmt)
-            return [
-                models.GroupMemberDetails(
-                    id=details.keycloak_id,
-                    role=models.GroupRole(member.role),
-                    email=details.email,
-                    first_name=details.first_name,
-                    last_name=details.last_name,
-                )
-                for member, details in result.all()
-            ]
+            for member in result
+        ]
 
     async def update_group(self, user: base_models.APIUser, slug: str, payload: dict[str, str]) -> models.Group:
         """Update a group in the DB."""
         async with self.session_maker() as session, session.begin():
-            group = await self._get_group(session, slug)
+            group, _ = await self._get_group(session, user, slug)
             if user.id != group.created_by and not user.is_admin:
                 raise errors.Unauthorized(message="Only the owner and admins can modify groups")
             if group.namespace.slug != slug.lower():
@@ -164,46 +171,37 @@ class GroupRepository:
                         group.name = v
             return group.dump()
 
+    @with_db_transaction
+    @dispatch_message(AmbiguousEvent.GROUP_MEMBERSHIP_CHANGED)
     async def update_group_members(
         self,
+        session: AsyncSession,
         user: base_models.APIUser,
         slug: str,
         payload: apispec.GroupMemberPatchRequestList,
-    ) -> list[models.GroupMember]:
+    ) -> list[MembershipChange]:
         """Update group members."""
-        async with self.session_maker() as session, session.begin():
-            group = await self._get_group(session, slug, True)
-            if user.id != group.created_by and not user.is_admin:
-                raise errors.Unauthorized(message="Only the owner and admins can modify groups")
-            if group.namespace.slug != slug.lower():
-                raise errors.UpdatingWithStaleContentError(
-                    message=f"You cannot update group members by using an old group slug {slug}.",
-                    detail=f"The latest slug is {group.namespace.slug}, please use this for updates.",
-                )
-            output = []
-            for new_member in payload.root:
-                role = models.GroupRole.from_str(new_member.role.value)
-                if new_member.id in group.members:
-                    # The member exists in the group already, check if properties should be updated
-                    if group.members[new_member.id].role != role.value:
-                        group.members[new_member.id].role = role.value
-                    output.append(group.members[new_member.id].dump())
-                else:
-                    # The memeber does not exist in the group at all, make a new entry and add it to the group
-                    member_orm = schemas.GroupMemberORM(user_id=new_member.id, role=role)
-                    group.members[new_member.id] = member_orm
-                    output.append(member_orm.dump())
-            return output
+        group, existing_members = await self._get_group(session, user, slug, load_members=True)
+        if group.namespace.slug != slug.lower():
+            raise errors.UpdatingWithStaleContentError(
+                message=f"You cannot update group members by using an old group slug {slug}.",
+                detail=f"The latest slug is {group.namespace.slug}, please use this for updates.",
+            )
+        members = [Member(Role.from_group_role(member.role), member.id, group.id) for member in payload.root]
+        output = await self.authz.upsert_group_members(
+            user=user, resource_type=ResourceType.group, resource_id=group.id, members=members
+        )
+        return output
 
-    async def delete_group(self, user: base_models.APIUser, slug: str):
+    @with_db_transaction
+    @Authz.authz_change(AuthzOperation.delete, ResourceType.group)
+    async def delete_group(self, session: AsyncSession, user: base_models.APIUser, slug: str) -> models.Group | None:
         """Delete a specific group."""
         async with self.session_maker() as session, session.begin():
             try:
-                group = await self._get_group(session, slug)
+                group, _ = await self._get_group(session, user, slug)
             except errors.MissingResourceError:
-                return
-            if user.id != group.created_by and not user.is_admin:
-                raise errors.Unauthorized(message="Only the owner and admins can modify groups")
+                return None
             if group.namespace.slug != slug.lower():
                 raise errors.UpdatingWithStaleContentError(
                     message=f"You cannot delete a group by using an old group slug {slug}.",
@@ -215,78 +213,59 @@ class GroupRepository:
             # trigger and procedure that does the cleanup when a slug is removed.
             stmt = delete(schemas.GroupORM).where(schemas.GroupORM.id == group.id)
             await session.execute(stmt)
-
-    async def delete_group_member(self, user: base_models.APIUser, slug: str, user_id_to_delete: str):
-        """Delete a specific group member."""
-        async with self.session_maker() as session, session.begin():
-            if not user.id:
-                raise errors.Unauthorized(message="Users need to be authenticated in order to remove group members.")
-            group = await self._get_group(session, slug, load_members=True)
-            if not group:
-                raise errors.MissingResourceError(message=f"The group with slug {slug} does not exist")
-            group_member = group.members.get(user.id)
-            user_is_owner = group_member is not None and group_member.role == models.GroupRole.owner.value
-            if not user_is_owner and not user.is_admin:
-                raise errors.Unauthorized(message="Only the owner and admins can modify groups")
-            if group.namespace.slug != slug.lower():
-                raise errors.UpdatingWithStaleContentError(
-                    message=f"You cannot remove a group member by using an old group slug {slug}.",
-                    detail=f"The latest slug is {group.namespace.slug}, please retry the request with it.",
-                )
-            total_owners = sum([member.role == models.GroupRole.owner.value for member in group.members.values()])
-            user_to_remove = group.members.get(user_id_to_delete)
-            if not user_to_remove:
-                return
-            user_to_remove_is_owner = user_to_remove.role == models.GroupRole.owner
-            if user_to_remove_is_owner and total_owners == 1:
-                raise errors.GeneralBadRequest(
-                    message="You cannot remove the single group owner, "
-                    "please designate an additional user as owner and then retry the removal."
-                )
-            stmt = (
-                delete(schemas.GroupMemberORM)
-                .where(schemas.GroupMemberORM.user_id == user_id_to_delete)
-                .where(schemas.GroupMemberORM.group.has(schemas.GroupORM.id == group.id))
-            )
-            await session.execute(stmt)
-
-    async def insert_group(self, user: base_models.APIUser, payload: apispec.GroupPostRequest) -> models.Group:
-        """Insert a new group."""
-        async with self.session_maker() as session, session.begin():
-            if not user.id:
-                raise errors.Unauthorized(message="Users need to be authenticated in order to create groups.")
-            creation_date = datetime.now(UTC).replace(microsecond=0)
-            member = schemas.GroupMemberORM(user.id, models.GroupRole.owner.value)
-            group = schemas.GroupORM(
-                name=payload.name,
-                description=payload.description,
-                created_by=user.id,
-                creation_date=creation_date,
-                members={user.id: member},
-            )
-            session.add(group)
-            ns = schemas.NamespaceORM(slug=payload.slug.lower(), group_id=group.id)
-            session.add(ns)
-            try:
-                await session.flush()
-            except IntegrityError as err:
-                if len(err.args) > 0 and "UniqueViolationError" in err.args[0] and "slug" in err.args[0]:
-                    raise errors.ValidationError(
-                        message="The slug for the group should be unique but it already exists in the database",
-                        detail="Please modify the slug field and then retry",
-                    )
-            # NOTE: This is needed to populate the relationship fields in the group after inserting the ID above
-            await session.refresh(group)
             return group.dump()
+
+    @with_db_transaction
+    @dispatch_message(AmbiguousEvent.GROUP_MEMBERSHIP_CHANGED)
+    async def delete_group_member(
+        self, session: AsyncSession, user: base_models.APIUser, slug: str, user_id_to_delete: str
+    ) -> list[MembershipChange]:
+        """Delete a specific group member."""
+        if not user.id:
+            raise errors.Unauthorized(message="Users need to be authenticated in order to remove group members.")
+        group, _ = await self._get_group(session, user, slug)
+        output = await self.authz.remove_group_members(
+            user=user, resource_type=ResourceType.group, resource_id=group.id, user_ids=[user_id_to_delete]
+        )
+        return output
+
+    @with_db_transaction
+    @Authz.authz_change(AuthzOperation.create, ResourceType.group)
+    async def insert_group(
+        self, session: AsyncSession, user: base_models.APIUser, payload: apispec.GroupPostRequest
+    ) -> models.Group:
+        """Insert a new group."""
+        if not user.id:
+            raise errors.Unauthorized(message="Users need to be authenticated in order to create groups.")
+        creation_date = datetime.now(UTC).replace(microsecond=0)
+        group = schemas.GroupORM(
+            name=payload.name,
+            description=payload.description,
+            created_by=user.id,
+            creation_date=creation_date,
+        )
+        session.add(group)
+        ns = schemas.NamespaceORM(slug=payload.slug.lower(), group_id=group.id)
+        session.add(ns)
+        try:
+            await session.flush()
+        except IntegrityError as err:
+            if len(err.args) > 0 and "UniqueViolationError" in err.args[0] and "slug" in err.args[0]:
+                raise errors.ValidationError(
+                    message="The slug for the group should be unique but it already exists in the database",
+                    detail="Please modify the slug field and then retry",
+                )
+        # NOTE: This is needed to populate the relationship fields in the group after inserting the ID above
+        await session.refresh(group)
+        return group.dump()
 
     async def get_namespaces(
         self, user: base_models.APIUser, pagination: PaginationRequest
     ) -> tuple[list[models.Namespace], int]:
         """Get all namespaces."""
         async with self.session_maker() as session, session.begin():
-            group_ns_stmt = select(schemas.NamespaceORM).where(
-                schemas.NamespaceORM.group.has(schemas.GroupORM.members.any(schemas.GroupMemberORM.user_id == user.id))
-            )
+            group_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.group, Scope.READ)
+            group_ns_stmt = select(schemas.NamespaceORM).where(schemas.NamespaceORM.group_id.in_(group_ids))
             output = []
             if pagination.page == 1:
                 personal_ns_stmt = select(schemas.NamespaceORM).where(schemas.NamespaceORM.user_id == user.id)
@@ -308,40 +287,24 @@ class GroupRepository:
     async def get_namespace(self, user: base_models.APIUser, slug: str) -> models.Namespace | None:
         """Get the namespace for a slug."""
         async with self.session_maker() as session, session.begin():
-            ns = await session.scalar(
-                select(schemas.NamespaceORM)
-                .where(schemas.NamespaceORM.slug == slug.lower())
-                .where(
-                    or_(
-                        schemas.NamespaceORM.user_id == user.id,
-                        schemas.NamespaceORM.group.has(
-                            schemas.GroupORM.members.any(schemas.GroupMemberORM.user_id == user.id)
-                        ),
-                    )
-                )
-            )
+            ns = await session.scalar(select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == slug.lower()))
             old_ns = None
             if not ns:
                 old_ns = await session.scalar(
                     select(schemas.NamespaceOldORM)
                     .where(schemas.NamespaceOldORM.slug == slug.lower())
-                    .where(
-                        or_(
-                            schemas.NamespaceOldORM.latest_slug.has(schemas.NamespaceORM.user_id == user.id),
-                            schemas.NamespaceOldORM.latest_slug.has(
-                                schemas.NamespaceORM.group.has(
-                                    schemas.GroupORM.members.any(schemas.GroupMemberORM.user_id == user.id)
-                                )
-                            ),
-                        )
-                    )
                     .order_by(schemas.NamespaceOldORM.created_at.desc())
                     .limit(1)
                 )
                 if not old_ns:
                     return None
                 ns = old_ns.latest_slug
-            if ns.group:
+            if ns.group and ns.group_id:
+                is_allowed = await self.authz.has_permission(user, ResourceType.group, ns.group_id, Scope.READ)
+                if not is_allowed:
+                    raise errors.MissingResourceError(
+                        message=f"The group with slug {slug} does not exist or you do not have permissions to view it"
+                    )
                 return models.Namespace(
                     id=ns.id,
                     name=ns.group.name,
@@ -351,8 +314,13 @@ class GroupRepository:
                     slug=old_ns.slug if old_ns else ns.slug,
                     latest_slug=ns.slug,
                 )
-            if not ns.user:
+            if not ns.user or not ns.user_id:
                 raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
+            is_allowed = await self.authz.has_permission(user, ResourceType.user_namespace, ns.id, Scope.READ)
+            if not is_allowed:
+                raise errors.MissingResourceError(
+                    message=f"The namespace with slug {slug} does not exist or you do not have permissions to view it"
+                )
             name: str | None
             if ns.user.first_name and ns.user.last_name:
                 name = f"{ns.user.first_name} {ns.user.last_name}"
@@ -367,11 +335,32 @@ class GroupRepository:
                 latest_slug=ns.slug,
             )
 
-    async def insert_user_namespace(
-        self, user: schemas.UserORM, session: AsyncSession, retry_enumerate: int = 0, retry_random: bool = False
+    async def _get_user_namespace(self, user_id: str) -> models.Namespace | None:
+        """Get the namespace for a slug."""
+        async with self.session_maker() as session, session.begin():
+            ns = await session.scalar(select(schemas.NamespaceORM).where(schemas.NamespaceORM.user_id == user_id))
+            if ns is None:
+                return None
+            if not ns.user or not ns.user_id:
+                raise errors.ProgrammingError(message="Found a namespace that has no user associated with it.")
+            name: str | None
+            if ns.user.first_name and ns.user.last_name:
+                name = f"{ns.user.first_name} {ns.user.last_name}"
+            else:
+                name = ns.user.first_name or ns.user.last_name
+            return models.Namespace(
+                id=ns.id,
+                name=name,
+                created_by=ns.user.keycloak_id,
+                kind=models.NamespaceKind.user,
+                slug=ns.slug,
+                latest_slug=ns.slug,
+            )
+
+    async def _insert_user_namespace(
+        self, session: AsyncSession, user: schemas.UserORM, retry_enumerate: int = 0, retry_random: bool = False
     ) -> models.Namespace:
         """Insert a new namespace for the user and optionally retry different variatioins to avoid collisions."""
-        # session.add(user)  # reattach the user to the session
         original_slug = user.to_slug()
         for inc in range(0, retry_enumerate + 1):
             # NOTE: on iteration 0 we try with the optimal slug value derived from the user data without any suffix.

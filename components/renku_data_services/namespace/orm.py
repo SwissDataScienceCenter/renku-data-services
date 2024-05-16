@@ -3,8 +3,8 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import CheckConstraint, DateTime, Integer, MetaData, String, func
-from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, attribute_keyed_dict, mapped_column, relationship
+from sqlalchemy import CheckConstraint, DateTime, MetaData, String, func
+from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
 from ulid import ULID
 
@@ -29,13 +29,6 @@ class GroupORM(BaseORM):
     creation_date: Mapped[datetime] = mapped_column("creation_date", DateTime(timezone=True), server_default=func.now())
     namespace: Mapped["NamespaceORM"] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
     description: Mapped[Optional[str]] = mapped_column("description", String(500), default=None)
-    members: Mapped[dict[str, "GroupMemberORM"]] = relationship(
-        # NOTE: the members of a group are keyed by the Keycloak ID
-        back_populates="group",
-        collection_class=attribute_keyed_dict("user_id"),
-        default_factory=dict,
-        repr=False,
-    )
 
     def dump(self) -> models.Group:
         """Create a group model from the GroupORM."""
@@ -46,36 +39,6 @@ class GroupORM(BaseORM):
             created_by=self.created_by,
             creation_date=self.creation_date,
             description=self.description,
-        )
-
-
-class GroupMemberORM(BaseORM):
-    """Renku group members."""
-
-    __tablename__ = "group_members"
-
-    id: Mapped[int] = mapped_column("id", Integer, primary_key=True, default=None, init=False)
-    user_id: Mapped[str] = mapped_column(ForeignKey(UserORM.keycloak_id, ondelete="CASCADE"), nullable=False)
-    role: Mapped[int] = mapped_column("role", Integer)
-    group_id: Mapped[str] = mapped_column(
-        ForeignKey("groups.id", ondelete="CASCADE"), index=True, nullable=False, init=False
-    )
-    group: Mapped[GroupORM] = relationship(back_populates="members", init=False, repr=False)
-
-    @classmethod
-    def load(cls, member: models.GroupMember):
-        """Create GroupMemberORM from the model."""
-        return cls(
-            role=member.role.value,
-            user_id=member.user_id,
-        )
-
-    def dump(self) -> models.GroupMember:
-        """Create a group member model from the ORM."""
-        return models.GroupMember(
-            role=models.GroupRole(self.role),
-            user_id=self.user_id,
-            group_id=self.group_id,
         )
 
 

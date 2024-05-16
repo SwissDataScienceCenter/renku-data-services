@@ -41,9 +41,9 @@ definition group {
 definition user_namespace {
     relation user_namespace_platform: platform
     relation owner: user
-    permission read = is_owner
-    permission write = is_owner
-    permission is_owner = owner + user_namespace_platform->is_admin
+    permission read = delete
+    permission write = delete
+    permission delete = owner + user_namespace_platform->is_admin
 }
 
 definition anonymous_user {}
@@ -62,18 +62,5 @@ definition project {
     permission read = viewer + write + project_namespace->read
     permission write = editor + delete + project_namespace->write
     permission change_membership = delete
-    permission delete = owner + project_platform->is_admin + project_namespace->delete + project_namespace->is_owner
-	relation admin: user
-	permission is_admin = admin
-}
-
-definition project {
-	relation project_platform: platform
-	relation owner: user
-        relation editor: user
-	relation viewer: user | user:* | anonymous_user:*
-	permission read = viewer + write
-	permission write = editor + delete
-        permission change_membership = delete
-	permission delete = owner + project_platform->is_admin
+    permission delete = owner + project_platform->is_admin + project_namespace->delete
 }"""

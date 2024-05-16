@@ -1,7 +1,8 @@
 """Projects authorization adapter."""
 
+import asyncio
 import logging
-from collections.abc import AsyncIterable, Awaitable, Callable, Iterable
+from collections.abc import AsyncIterable, Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import wraps
@@ -34,8 +35,9 @@ from renku_data_services import base_models
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.authz.models import Change, Member, MembershipChange, Role, Scope, Visibility
 from renku_data_services.errors import errors
-from renku_data_services.namespace.models import Group, GroupUpdate, Namespace, NamespaceUpdate
+from renku_data_services.namespace.models import Group, GroupUpdate, Namespace, NamespaceKind, NamespaceUpdate
 from renku_data_services.project.models import Project, ProjectUpdate
+from renku_data_services.users.models import UserWithNamespace, UserWithNamespaceUpdate
 
 
 @dataclass
@@ -48,6 +50,12 @@ class _AuthzChange:
 
     apply: WriteRelationshipsRequest = field(default_factory=WriteRelationshipsRequest)
     undo: WriteRelationshipsRequest = field(default_factory=WriteRelationshipsRequest)
+
+    def extend(self, other: "_AuthzChange"):
+        self.apply.updates.extend(other.apply.updates)
+        self.apply.optional_preconditions.extend(other.apply.optional_preconditions)
+        self.undo.updates.extend(other.undo.updates)
+        self.undo.optional_preconditions.extend(other.undo.optional_preconditions)
 
 
 class _Relation(StrEnum):
@@ -101,6 +109,8 @@ class AuthzOperation(StrEnum):
     create: str = "create"
     delete: str = "delete"
     update: str = "update"
+    update_or_insert: str = "update_or_insert"
+    insert_many: str = "insert_many"
 
 
 class _AuthzConverter:
@@ -151,6 +161,10 @@ class _AuthzConverter:
                 return _AuthzConverter.user(sid)
             case (ResourceType.anonymous_user, _):
                 return _AuthzConverter.anonymous_users()
+            case (ResourceType.user_namespace, rid) if isinstance(rid, str):
+                return _AuthzConverter.user_namespace(rid)
+            case (ResourceType.group, rid) if isinstance(rid, str):
+                return _AuthzConverter.group(rid)
         raise errors.ProgrammingError(
             message=f"Unexpected or unknown resource type when checking permissions {resource_type}"
         )
@@ -161,45 +175,38 @@ def _is_allowed_on_resource(operation: Scope, resource_type: ResourceType):
 
     def decorator(f):
         @wraps(f)
-        async def decorated_function(self: "Authz", *args, **kwargs):
-            if len(args) > 0:
-                raise errors.ProgrammingError(
-                    message="The decorator for checking permissions for authorization database operations "
-                    "does not allow any variadic arguments but only keywords arguments."
-                )
-            user = kwargs.get("user")
+        async def decorated_function(self: "Authz", user: base_models.APIUser, *args, **kwargs):
             if not isinstance(user, base_models.APIUser):
                 raise errors.ProgrammingError(
                     message="The decorator for checking permissions for authorization database operations "
                     "needs to access the user in the decorated function keyword arguments but it did not find it"
                 )
-            resource = None
+            if len(args) == 0:
+                raise errors.ProgrammingError(
+                    message="The authorization decorator needs to have at least one positional argument after 'user'"
+                )
+            potential_resource = args[0]
+            resource: Project | Group | Namespace | None = None
             match resource_type:
-                case ResourceType.project:
-                    resource = kwargs.get("project")
-                case ResourceType.group:
-                    resource = kwargs.get("group")
-                case ResourceType.user_namespace:
-                    resource = kwargs.get("namespace")
+                case ResourceType.project if isinstance(potential_resource, Project):
+                    resource = potential_resource
+                case ResourceType.group if isinstance(potential_resource, Group):
+                    resource = potential_resource
+                case ResourceType.user_namespace if isinstance(potential_resource, Namespace):
+                    resource = potential_resource
                 case _:
                     raise errors.ProgrammingError(
                         message="The decorator for checking permissions for authorization database operations "
-                        "failed to find the expected argument in the decorated function "
-                        f"for the {resource_type} resource"
+                        "failed to find the expected positional argument in the decorated function "
+                        f"for the {resource_type} resource, it found {type(resource)}"
                     )
-            if not resource:
-                raise errors.ProgrammingError(
-                    message="The decorator for checking permissions for authorization database operations "
-                    "failed to find the expected resource in the decorated function "
-                    f"for the {resource_type} resource"
-                )
             allowed, zed_token = await self._has_permission(user, resource_type, resource.id, operation)
             if not allowed:
                 raise errors.MissingResourceError(
                     message=f"The user with ID {user.id} cannot perform operation {operation} "
                     f"on resource {resource_type} with ID {resource.id} or the resource does not exist."
                 )
-            return await f(self, *args, **kwargs, zed_token=zed_token)
+            return await f(self, user, *args, **kwargs, zed_token=zed_token)
 
         return decorated_function
 
@@ -374,33 +381,45 @@ class Authz:
             @property
             def authz(self) -> Authz: ...
 
-        def decorator(f: Callable[..., Awaitable[Project | ProjectUpdate]]):
+        def _extract_user_from_args(*args, **kwargs) -> base_models.APIUser:
+            potential_user: base_models.APIUser | None = None
+            if len(args) == 0:
+                potential_user = kwargs.get("user")
+                if not potential_user:
+                    potential_user = kwargs.get("requested_by")
+            else:
+                potential_user = args[0]
+            if not isinstance(potential_user, base_models.APIUser):
+                raise errors.ProgrammingError(
+                    message="The authorization database decorator needs the APIUser as the first argument in the list "
+                    f"of positional arguements, but the first positional argument is of type {type(potential_user)}"
+                )
+            return potential_user
+
+        def decorator(
+            f: Callable[
+                ...,
+                Awaitable[
+                    Project
+                    | ProjectUpdate
+                    | Group
+                    | GroupUpdate
+                    | Namespace
+                    | NamespaceUpdate
+                    | UserWithNamespace
+                    | UserWithNamespaceUpdate
+                    | list[UserWithNamespace]
+                ],
+            ],
+        ):
             @wraps(f)
-            async def decorated_function(db_repo: WithAuthz, *args, **kwargs):
+            async def decorated_function(db_repo: WithAuthz, session: AsyncSession, *args, **kwargs):
                 # NOTE: db_repo is the "self" of the project postgres DB repository method that this function decorates.
                 # I did not call it "self" here to avoid confusion with the self of the Authz class,
                 # even though this is a static method.
-                session: AsyncSession | None = kwargs.get("session")
-                if not session:
-                    raise errors.ProgrammingError(
-                        message="The authorization database update decorator needs to have a session in the keyword "
-                        "arguments but none was found"
-                    )
                 if not session.in_transaction():
                     raise errors.ProgrammingError(
-                        message="Updating the project authorization database without a postgres transaction "
-                        "is not allowed",
-                    )
-                if len(args) > 0:
-                    raise errors.ProgrammingError(
-                        message="The authorization database update decorators expect only keyword arguments but "
-                        f"{len(args)} variadic arguments were found."
-                    )
-                user: base_models.APIUser | None = kwargs.get("user")
-                if not user:
-                    raise errors.ProgrammingError(
-                        message="The authorization database update decorator needs to have a user in the keyword "
-                        "arguments but none was found"
+                        message="The authroization database decorator needs a session with an open transaction."
                     )
 
                 authz_change = _AuthzChange()
@@ -413,38 +432,46 @@ class Authz:
                     # See https://authzed.com/docs/spicedb/concepts/relationships#writing-relationships
                     # If this order of operations is changed you can get a case where for a short period of time
                     # resources exists in the postgres DB without any authorization information in the Authzed DB.
-                    result = await f(db_repo, *args, **kwargs)
+
+                    result = await f(db_repo, session, *args, **kwargs)
                     match op, resource:
                         case AuthzOperation.create, ResourceType.project if isinstance(result, Project):
                             authz_change = db_repo.authz._add_project(result)
                         case AuthzOperation.delete, ResourceType.project if isinstance(result, Project):
+                            user = _extract_user_from_args(*args, **kwargs)
                             authz_change = await db_repo.authz._remove_project(user, result)
                         case AuthzOperation.delete, ResourceType.project if result is None:
                             # NOTE: This means that the project does not exist in the first place so nothing was deleted
                             pass
                         case AuthzOperation.update, ResourceType.project if isinstance(result, ProjectUpdate):
+                            authz_change = _AuthzChange()
                             if result.old.visibility != result.new.visibility:
-                                authz_change = await db_repo.authz._update_project_visibility(user, result.new)
+                                user = _extract_user_from_args(*args, **kwargs)
+                                authz_change.extend(await db_repo.authz._update_project_visibility(user, result.new))
+                            if result.old.namespace.id != result.new.namespace.id:
+                                user = _extract_user_from_args(*args, **kwargs)
+                                authz_change.extend(await db_repo.authz._update_project_namespace(user, result.new))
                         case AuthzOperation.create, ResourceType.group if isinstance(result, Group):
                             authz_change = db_repo.authz._add_group(result)
                         case AuthzOperation.delete, ResourceType.group if isinstance(result, Group):
+                            user = _extract_user_from_args(*args, **kwargs)
                             authz_change = await db_repo.authz._remove_group(user, result)
                         case AuthzOperation.delete, ResourceType.group if result is None:
                             # NOTE: This means that the group does not exist in the first place so nothing was deleted
                             pass
-                        case AuthzOperation.update, ResourceType.group if isinstance(result, GroupUpdate):
-                            # TODO: fillin
-                            pass
-                        case AuthzOperation.create, ResourceType.user_namespace if isinstance(result, Namespace):
-                            authz_change = db_repo.authz._add_user_namespace(result)
-                        case AuthzOperation.delete, ResourceType.user_namespace if isinstance(result, Namespace):
-                            authz_change = await db_repo.authz._remove_user_namespace(user, result)
-                        case AuthzOperation.delete, ResourceType.user_namespace if result is None:
-                            # NOTE: This means that the group does not exist in the first place so nothing was deleted
-                            pass
-                        case AuthzOperation.update, ResourceType.user_namespace if isinstance(result, NamespaceUpdate):
-                            # TODO: fillin
-                            pass
+                        case AuthzOperation.update_or_insert, ResourceType.user if isinstance(
+                            result, UserWithNamespaceUpdate
+                        ):
+                            if result.old is None:
+                                authz_change = db_repo.authz._add_user_namespace(result.new.namespace)
+                        case AuthzOperation.insert_many, ResourceType.user_namespace if isinstance(result, list):
+                            for res in result:
+                                if not isinstance(res, UserWithNamespace):
+                                    raise errors.ProgrammingError(
+                                        message="Expected list of UserWithNamespace when generating authorization "
+                                        f"database updates for inserting namespaces but found {type(res)}"
+                                    )
+                                authz_change.extend(db_repo.authz._add_user_namespace(res.namespace))
                         case _:
                             resource_id: str | None = "unknown"
                             if isinstance(result, (Project, Namespace, Group)):
@@ -463,10 +490,10 @@ class Authz:
                     try:
                         # NOTE: If the rollback fails do not stop just continue to make sure the resource
                         # from the Authzed DB is also removed
-                        await session.rollback()
+                        await asyncio.shield(session.rollback())
                     except Exception as _db_rollback_err:
                         db_rollback_err = _db_rollback_err
-                    await db_repo.authz.client.WriteRelationships(authz_change.undo)
+                    await asyncio.shield(db_repo.authz.client.WriteRelationships(authz_change.undo))
                     if db_rollback_err:
                         raise db_rollback_err from err
                     raise err
@@ -486,12 +513,22 @@ class Authz:
         creator_is_owner = Relationship(resource=project_res, relation=_Relation.owner.value, subject=creator)
         all_users = SubjectReference(object=_AuthzConverter.all_users())
         all_anon_users = SubjectReference(object=_AuthzConverter.anonymous_users())
+        project_namespace = SubjectReference(
+            object=_AuthzConverter.user_namespace(project.namespace.id)
+            if project.namespace.kind == NamespaceKind.user
+            else _AuthzConverter.group(project.namespace.id)
+        )
         project_in_platform = Relationship(
             resource=project_res,
             relation=_Relation.project_platform.value,
             subject=SubjectReference(object=self._platform),
         )
-        relationships = [creator_is_owner, project_in_platform]
+        project_in_namespace = Relationship(
+            resource=project_res,
+            relation=_Relation.project_namespace,
+            subject=project_namespace,
+        )
+        relationships = [creator_is_owner, project_in_platform, project_in_namespace]
         if project.visibility == Visibility.PUBLIC:
             all_users_are_viewers = Relationship(
                 resource=project_res,
@@ -620,6 +657,65 @@ class Authz:
             message=f"Encountered unknown project visibility {project.visibility} when trying to "
             f"make a visibility change for project with ID {project.id}",
         )
+
+    # NOTE changing namespace is the same access level as removal
+    @_is_allowed_on_resource(Scope.DELETE, ResourceType.project)
+    async def _update_project_namespace(
+        self, user: base_models.APIUser, project: Project, zed_token: ZedToken
+    ) -> _AuthzChange:
+        """Update the namespace/group of the project in the authorization database."""
+        project_res = _AuthzConverter.project(project.id)  # type: ignore[arg-type]
+        project_namespace_filter = RelationshipFilter(
+            resource_type=ResourceType.project.value,
+            optional_resource_id=project.id,
+            optional_relation=_Relation.project_namespace.value,
+        )
+        current_namespace: ReadRelationshipsResponse | None = await anext(
+            aiter(
+                self.client.ReadRelationships(ReadRelationshipsRequest(relationship_filter=project_namespace_filter))
+            ),
+            None,
+        )
+        if not current_namespace:
+            raise errors.ProgrammingError(
+                message=f"The project with ID {project.id} whose namespace is being updated "
+                "does not currently have a namespace"
+            )
+        if current_namespace.relationship.subject.object.object_id == project.namespace.id:
+            return _AuthzChange()
+        new_namespace_sub = (
+            SubjectReference(object=_AuthzConverter.group(project.namespace.id))
+            if project.namespace.kind == NamespaceKind.group
+            else SubjectReference(object=_AuthzConverter.user_namespace(project.namespace.id))
+        )
+        old_namespace_sub = (
+            SubjectReference(object=_AuthzConverter.group(current_namespace.relationship.subject.object.object_id))
+            if current_namespace.relationship.subject.object.object_type == ResourceType.group.value
+            else SubjectReference(
+                object=_AuthzConverter.user_namespace(current_namespace.relationship.subject.object.object_id)
+            )
+        )
+        new_namespace = Relationship(
+            resource=project_res,
+            relation=_Relation.project_namespace.value,
+            subject=new_namespace_sub,
+        )
+        old_namespace = Relationship(
+            resource=project_res,
+            relation=_Relation.project_namespace.value,
+            subject=old_namespace_sub,
+        )
+        apply_change = WriteRelationshipsRequest(
+            updates=[
+                RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=new_namespace),
+            ]
+        )
+        undo_change = WriteRelationshipsRequest(
+            updates=[
+                RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=old_namespace),
+            ]
+        )
+        return _AuthzChange(apply=apply_change, undo=undo_change)
 
     @_is_allowed(Scope.CHANGE_MEMBERSHIP)
     async def upsert_project_members(
@@ -864,16 +960,16 @@ class Authz:
         return _AuthzChange(apply=apply, undo=undo)
 
     @_is_allowed_on_resource(Scope.DELETE, ResourceType.group)
-    def _remove_group(self, user: base_models.APIUser, group: Group, zed_token: ZedToken) -> _AuthzChange:
+    async def _remove_group(self, user: base_models.APIUser, group: Group, zed_token: ZedToken) -> _AuthzChange:
         """Remove the group from the authorization database."""
         rel_filter = RelationshipFilter(resource_type=ResourceType.group.value, optional_resource_id=group.id)
-        responses: Iterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
+        responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
             ReadRelationshipsRequest(
                 consistency=Consistency(at_least_as_fresh=zed_token), relationship_filter=rel_filter
             )
         )
         rels: list[Relationship] = []
-        for response in responses:
+        async for response in responses:
             rels.append(response.relationship)
         apply = WriteRelationshipsRequest(
             updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=i) for i in rels]
@@ -884,7 +980,7 @@ class Authz:
         return _AuthzChange(apply=apply, undo=undo)
 
     @_is_allowed(Scope.CHANGE_MEMBERSHIP)
-    def upsert_group_members(
+    async def upsert_group_members(
         self,
         user: base_models.APIUser,
         resource_type: ResourceType,
@@ -911,14 +1007,13 @@ class Authz:
                     subject_type=ResourceType.user, optional_subject_id=member.user_id
                 ),
             )
-            existing_rels: list[ReadRelationshipsResponse] = list(
-                self.client.ReadRelationships(
-                    ReadRelationshipsRequest(
-                        consistency=Consistency(at_least_as_fresh=zed_token), relationship_filter=existing_rel_filter
-                    )
+            existing_rels_result: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
+                ReadRelationshipsRequest(
+                    consistency=Consistency(at_least_as_fresh=zed_token), relationship_filter=existing_rel_filter
                 )
             )
-            existing_rels = [i for i in existing_rels if i.relationship.relation in expected_user_roles]
+
+            existing_rels = [i async for i in existing_rels_result if i.relationship.relation in expected_user_roles]
             if len(existing_rels) > 0:
                 # The existing relationships should be deleted if all goes well and added back in if we have to undo
                 existing_rel = existing_rels[0]
@@ -968,7 +1063,7 @@ class Authz:
         change = _AuthzChange(
             apply=WriteRelationshipsRequest(updates=add_members), undo=WriteRelationshipsRequest(updates=undo)
         )
-        self.client.WriteRelationships(change.apply)
+        await self.client.WriteRelationships(change.apply)
         return output
 
     @_is_allowed(Scope.CHANGE_MEMBERSHIP)
@@ -1009,14 +1104,15 @@ class Authz:
             async for existing_rel in existing_rels:
                 if existing_rel.relationship.relation == _Relation.owner.value:
                     if existing_owners_rels is None:
-                        existing_owners_rels = list(
-                            self.client.ReadRelationships(
+                        existing_owners_rels = [
+                            i
+                            async for i in self.client.ReadRelationships(
                                 ReadRelationshipsRequest(
                                     consistency=Consistency(at_least_as_fresh=zed_token),
                                     relationship_filter=existing_owners_filter,
                                 )
                             )
-                        )
+                        ]
                     if len(existing_owners_rels) == 1:
                         raise errors.Unauthorized(
                             message="You are trying to remove the single last owner of the group, "
@@ -1075,17 +1171,15 @@ class Authz:
         )
         return _AuthzChange(apply=apply, undo=undo)
 
-    @_is_allowed_on_resource(Scope.DELETE, ResourceType.user_namespace)
-    async def _remove_user_namespace(
-        self, user: base_models.APIUser, namespace: Namespace, zed_token: ZedToken
-    ) -> _AuthzChange:
+    async def _remove_user_namespace(self, user_id: str, zed_token: ZedToken | None = None) -> _AuthzChange:
         """Remove the user namespace from the authorization database."""
-        rel_filter = RelationshipFilter(
-            resource_type=ResourceType.user_namespace.value, optional_resource_id=namespace.id
-        )
+        rel_filter = RelationshipFilter(resource_type=ResourceType.user_namespace.value, optional_resource_id=user_id)
         responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
             ReadRelationshipsRequest(
-                consistency=Consistency(at_least_as_fresh=zed_token), relationship_filter=rel_filter
+                consistency=Consistency(at_least_as_fresh=zed_token)
+                if zed_token
+                else Consistency(fully_consistent=True),
+                relationship_filter=rel_filter,
             )
         )
         rels: list[Relationship] = []

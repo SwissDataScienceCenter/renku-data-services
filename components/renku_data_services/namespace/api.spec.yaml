@@ -485,8 +485,9 @@ components:
       description: Possible roles of members in a group
       type: string
       enum:
-        - member
         - owner
+        - editor
+        - viewer
     NamespaceKind:
       description: Possible kinds of namespaces
       type: string
