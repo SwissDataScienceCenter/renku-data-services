@@ -41,6 +41,17 @@ class ConnectedAccount(BaseModel):
     username: str
     web_url: str
 
+@dataclass(frozen=True, eq=True, kw_only=True)
+class GitHubConnectedAccount(BaseModel):
+    """OAuth2 connected account model for GitHub."""
+
+    login: str
+    html_url: str
+
+    def to_connected_account(self) -> ConnectedAccount:
+        """Returns the corresponding ConnectedAccount object."""
+        return ConnectedAccount(username=self.login, web_url=self.html_url)
+
 
 class OAuth2TokenSet(dict):
     """OAuth2 token set model."""
