@@ -67,7 +67,15 @@ class _ProjectEventConverter:
                             creationDate=project.creation_date,
                             keywords=project.keywords or [],
                         ),
-                    )
+                    ),
+                    Event(
+                        "projectAuth.added",
+                        v2.ProjectMemberAdded(
+                            projectId=project.id,
+                            userId=project.created_by,
+                            role=v2.MemberRole.OWNER,
+                        ),
+                    ),
                 ]
             case v2.ProjectUpdated:
                 return [
@@ -112,7 +120,7 @@ class _UserEventConverter:
                     )
                 ]
             case v2.UserRemoved if isinstance(user, user_models.UserInfo):
-                return [Event("user.removed", v1.UserRemoved(id=user.id))]
+                return [Event("user.removed", v2.UserRemoved(id=user.id))]
             case v2.UserUpdated | AmbiguousEvent.INSERT_USER_NAMESPACE if isinstance(
                 user, user_models.UserWithNamespace
             ):
