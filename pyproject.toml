@@ -7,7 +7,7 @@ readme = "README.md"
 license = "Apache License 2.0"
 packages = [
   { include = "renku_data_services/data_api", from = "bases" },
-  { include = "renku_data_services/keycloak_sync", from = "bases" },
+  { include = "renku_data_services/background_jobs", from = "bases" },
   { include = "renku_data_services/authn", from = "components" },
   { include = "renku_data_services/db_config", from = "components" },
   { include = "renku_data_services/app_config", from = "components" },

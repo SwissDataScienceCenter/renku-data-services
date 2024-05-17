@@ -34,11 +34,8 @@ class EventRepository:
             return list(events_orm)
 
     async def send_pending_events(self) -> None:
-        """Get all pending events and resend them.
-
-        This is to ensure that an event is sent at least once.
-        """
-        logger.info("resending missed events.")
+        """Get all pending events and send them."""
+        logger.info("sending pending events.")
 
         async with self.session_maker() as session:
             # we only consider events older than 5 seconds so we don't accidentally interfere with an ongoing operation
@@ -50,7 +47,7 @@ class EventRepository:
 
             num_events = len(events_orm)
             if num_events == 0:
-                logger.info("no missed events to send")
+                logger.info("no events to send")
                 return
             for event in events_orm:
                 try:
@@ -58,9 +55,9 @@ class EventRepository:
 
                     await self.delete_event(event.id)
                 except Exception as e:
-                    logger.warning(f"couldn't resend event {event.payload} on queue {event.queue}: {e}")
+                    logger.warning(f"couldn't send event {event.payload} on queue {event.queue}: {e}")
 
-        logger.info(f"resent {num_events} events")
+        logger.info(f"sent {num_events} events")
 
     async def store_event(self, session: AsyncSession, queue: str, message: dict[str, Any]) -> int:
         """Store an event."""

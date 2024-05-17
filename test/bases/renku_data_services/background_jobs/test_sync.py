@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import pytest
 
-from bases.renku_data_services.keycloak_sync.config import SyncConfig
+from bases.renku_data_services.background_jobs.config import SyncConfig
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.authz.authz import Authz
 from renku_data_services.authz.config import AuthzConfig

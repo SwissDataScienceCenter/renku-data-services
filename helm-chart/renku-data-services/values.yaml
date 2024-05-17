@@ -2,9 +2,9 @@ dataService:
   image:
     repository: renku/renku-data-service
     tag:
-  keycloakSync:
+  backgroundJobs:
     image:
-      repository: renku/keycloak-sync
+      repository: renku/background-jobs
       tag:
 secretsStorage:
   image:

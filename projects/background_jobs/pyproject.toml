@@ -1,12 +1,12 @@
 [tool.poetry]
-name = "keycloak_sync"
+name = "background_jobs"
 version = "0.1.0"
 description = ""
 authors = ['Swiss Data Science Center <contact@datascience.ch>']
 license = ""
 
 packages = [
-  { include = "renku_data_services/keycloak_sync", from = "../../bases" },
+  { include = "renku_data_services/background_jobs", from = "../../bases" },
   { include = "renku_data_services/users", from = "../../components" },
   { include = "renku_data_services/errors", from = "../../components" },
   { include = "renku_data_services/base_api", from = "../../components" },

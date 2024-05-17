@@ -1,4 +1,5 @@
 """Configurations for Keycloak syncing."""
+
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -17,7 +18,7 @@ from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
 
 @dataclass
 class SyncConfig:
-    """Main configuration."""
+    """User sync configuration."""
 
     syncer: UsersSync
     kc_api: IKeycloakAPI
@@ -41,9 +42,7 @@ class SyncConfig:
         # Therefore, we want to consume very few connections and we can wait for an available connection
         # much longer than the default 30 seconds. In our tests syncing 15 users times out with the default.
         engine = create_async_engine(async_sqlalchemy_url, pool_size=4, max_overflow=0, pool_timeout=600)
-        session_maker: Callable[..., AsyncSession] = sessionmaker(
-            engine, class_=AsyncSession, expire_on_commit=False
-        )  # type: ignore[call-overload]
+        session_maker: Callable[..., AsyncSession] = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)  # type: ignore[call-overload]
         redis = RedisConfig.from_env(prefix)
         message_queue = RedisQueue(redis)
 
@@ -58,3 +57,35 @@ class SyncConfig:
         total_user_sync = os.environ.get(f"{prefix}TOTAL_USER_SYNC", "false").lower() == "true"
         authz_config = AuthzConfig.from_env()
         return cls(syncer, kc_api, authz_config, total_user_sync)
+
+
+@dataclass
+class QueueConfig:
+    """Message queue send configuration."""
+
+    event_repo: EventRepository
+
+    @classmethod
+    def from_env(cls, prefix: str = ""):
+        """Generate a configuration from environment variables."""
+        pg_host = os.environ.get(f"{prefix}DB_HOST", "localhost")
+        pg_user = os.environ.get(f"{prefix}DB_USER", "renku")
+        pg_port = os.environ.get(f"{prefix}DB_PORT", "5432")
+        db_name = os.environ.get(f"{prefix}DB_NAME", "renku")
+        pg_password = os.environ.get(f"{prefix}DB_PASSWORD")
+        if pg_password is None:
+            raise errors.ConfigurationError(
+                message="Please provide a database password in the 'DB_PASSWORD' environment variable."
+            )
+        async_sqlalchemy_url = f"postgresql+asyncpg://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{db_name}"
+        # NOTE: the pool here is not used to serve HTTP requests, it is only used in background jobs.
+        # Therefore, we want to consume very few connections and we can wait for an available connection
+        # much longer than the default 30 seconds. In our tests syncing 15 users times out with the default.
+        engine = create_async_engine(async_sqlalchemy_url, pool_size=4, max_overflow=0, pool_timeout=600)
+        session_maker: Callable[..., AsyncSession] = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)  # type: ignore[call-overload]
+        redis = RedisConfig.from_env(prefix)
+        message_queue = RedisQueue(redis)
+
+        event_repo = EventRepository(session_maker=session_maker, message_queue=message_queue)
+
+        return cls(event_repo)
