@@ -37,6 +37,7 @@ packages = [
   { include = "renku_data_services/events_migrations", from = "components" },
   { include = "renku_data_services/message_queue", from = "components" },
   { include = "renku_data_services/secrets", from = "components" },
+  { include = "renku_data_services/connected_services", from = "components" },
 ]
 
 [tool.poetry.dependencies]
@@ -56,7 +57,7 @@ python-gitlab = "^3.15.0"
 psycopg = { version = "^3.1.13", extras = ["binary"] }
 urllib3 = "^2.2.1"
 deepmerge = "^1.1.0"
-authlib = "^1.2.1"
+authlib = "^1.3.0"
 redis = "^5.0.1"
 dataclasses-avroschema = "^0.57.4"
 undictify = "^0.11.3"
@@ -179,14 +180,15 @@ check_untyped_defs = true
 [[tool.mypy.overrides]]
 module = [
   "renku_data_services.crc.apispec",
+  "renku_data_services.connected_services.apispec",
   "renku_data_services.storage.apispec",
   "renku_data_services.project.apispec",
+  "renku_data_services.secrets.apispec",
   "renku_data_services.session.apispec",
   "renku_data_services.user_preferences.apispec",
   "renku_data_services.users.apispec",
   "renku_data_services.data_api.error_handler",
   "renku_data_services.namespace.apispec",
-  "renku_data_services.secrets.apispec",
 ]
 ignore_errors = true
 
@@ -204,6 +206,7 @@ module = [
   "prometheus_sanic.*",
   "authzed.*",
   "grpcutil.*",
+  "authlib.integrations.httpx_client",
 ]
 ignore_missing_imports = true
 
