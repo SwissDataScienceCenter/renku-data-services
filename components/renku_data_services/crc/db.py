@@ -300,9 +300,7 @@ class ResourcePoolRepository(_Base):
         return cls.dump()
 
     @_only_admins
-    async def update_resource_pool(
-        self, api_user: base_models.APIUser, id: int, put: bool, **kwargs
-    ) -> models.ResourcePool:
+    async def update_resource_pool(self, api_user: base_models.APIUser, id: int, **kwargs) -> models.ResourcePool:
         """Update an existing resource pool in the database."""
         rp: Optional[schemas.ResourcePoolORM] = None
         async with self.session_maker() as session, session.begin():
@@ -372,7 +370,7 @@ class ResourcePoolRepository(_Base):
                                 )
                             new_classes_coroutines.append(
                                 self.update_resource_class(
-                                    api_user, resource_pool_id=id, resource_class_id=class_id, put=put, **cls
+                                    api_user, resource_pool_id=id, resource_class_id=class_id, **cls
                                 )
                             )
                     case _:
@@ -418,7 +416,7 @@ class ResourcePoolRepository(_Base):
 
     @_only_admins
     async def update_resource_class(
-        self, api_user: base_models.APIUser, resource_pool_id: int, resource_class_id: int, put: bool, **kwargs
+        self, api_user: base_models.APIUser, resource_pool_id: int, resource_class_id: int, **kwargs
     ) -> models.ResourceClass:
         """Update a specific resource class."""
         async with self.session_maker() as session, session.begin():
