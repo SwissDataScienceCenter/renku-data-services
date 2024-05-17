@@ -334,10 +334,13 @@ class ConnectedServicesRepository:
         async with HttpClient() as http:
             adapter = get_provider_adapter(client)
             request_url = adapter.get_repository_api_url(repository_url)
+            logger.info(f"[Anon] GET {request_url}")
             headers = adapter.api_common_headers or dict()
             if etag:
                 headers["If-None-Match"] = etag
             response = await http.get(request_url, headers=headers)
+
+            logger.info(f"Got response {response.status_code}")
 
             if response.status_code == 304:
                 return "304"
@@ -346,10 +349,13 @@ class ConnectedServicesRepository:
                     provider_id=client.id, connection_id=None, repository_metadata=None
                 )
 
-            repository = adapter.api_validate_repository_response(response)
-            return models.RepositoryProviderMatch(
+            repository = adapter.api_validate_repository_response(response, is_anonymous=True)
+            logger.info(f"Repo model {repository}")
+            result = models.RepositoryProviderMatch(
                 provider_id=client.id, connection_id=None, repository_metadata=repository
             )
+            logger.info(f"Result {result}")
+            return result
 
     async def _get_repository_authenticated(
         self, connection_id: str, repository_url: str, user: base_models.APIUser, etag: str | None
@@ -357,10 +363,13 @@ class ConnectedServicesRepository:
         """Get the metadata about a repository using an OAuth2 connection."""
         async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (oauth2_client, _, adapter):
             request_url = adapter.get_repository_api_url(repository_url)
+            logger.info(f"[Logged] GET {request_url}")
             headers = adapter.api_common_headers or dict()
             if etag:
                 headers["If-None-Match"] = etag
             response = await oauth2_client.get(request_url, headers=headers)
+
+            logger.info(f"Got response {response.status_code}")
 
             if response.status_code == 304:
                 return "304"
@@ -369,10 +378,13 @@ class ConnectedServicesRepository:
                     provider_id=adapter.client.id, connection_id=connection_id, repository_metadata=None
                 )
 
-            repository = adapter.api_validate_repository_response(response)
-            return models.RepositoryProviderMatch(
+            repository = adapter.api_validate_repository_response(response, is_anonymous=False)
+            logger.info(f"Repo model {repository}")
+            result = models.RepositoryProviderMatch(
                 provider_id=adapter.client.id, connection_id=connection_id, repository_metadata=repository
             )
+            logger.info(f"Result {result}")
+            return result
 
     @asynccontextmanager
     async def get_async_oauth2_client(self, connection_id: str, user: base_models.APIUser):
