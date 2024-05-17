@@ -4,8 +4,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel
-
 from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind
 
 
@@ -35,22 +33,11 @@ class OAuth2Connection:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class ConnectedAccount(BaseModel):
+class ConnectedAccount:
     """OAuth2 connected account model."""
 
     username: str
     web_url: str
-
-@dataclass(frozen=True, eq=True, kw_only=True)
-class GitHubConnectedAccount(BaseModel):
-    """OAuth2 connected account model for GitHub."""
-
-    login: str
-    html_url: str
-
-    def to_connected_account(self) -> ConnectedAccount:
-        """Returns the corresponding ConnectedAccount object."""
-        return ConnectedAccount(username=self.login, web_url=self.html_url)
 
 
 class OAuth2TokenSet(dict):
@@ -91,3 +78,35 @@ class OAuth2TokenSet(dict):
         if self.expires_at is None:
             return None
         return datetime.fromtimestamp(self.expires_at, UTC).isoformat()
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class RepositoryPermissions:
+    """Repository permissions for git operations."""
+
+    pull: bool
+    push: bool
+
+    @classmethod
+    def default(cls):
+        """Default permissions."""
+        return cls(pull=False, push=False)
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class RepositoryMetadata:
+    """Repository metadata."""
+
+    etag: str | None
+    git_http_url: str
+    web_url: str
+    permissions: RepositoryPermissions
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class RepositoryProviderMatch:
+    """Repository provider match data."""
+
+    provider_id: str
+    connection_id: str | None
+    repository_metadata: RepositoryMetadata | None

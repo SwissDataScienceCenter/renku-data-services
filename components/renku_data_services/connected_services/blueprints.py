@@ -1,14 +1,16 @@
 """Connected services blueprint."""
 
 from dataclasses import dataclass
-from urllib.parse import urlunparse
+from urllib.parse import unquote, urlunparse
 
 from sanic import HTTPResponse, Request, json, redirect
+from sanic.log import logger
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_admins, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_api.etag import extract_if_none_match
 from renku_data_services.connected_services import apispec
 from renku_data_services.connected_services.apispec_base import AuthorizeParams
 from renku_data_services.connected_services.db import ConnectedServicesRepository
@@ -173,3 +175,31 @@ class OAuth2ConnectionsBP(CustomBlueprint):
             return json(token.dump_for_api())
 
         return "/oauth2/connections/<connection_id>/token", ["GET"], _get_token
+
+    def get_one_repository(self) -> BlueprintFactoryResponse:
+        """Get the metadata available about a repository."""
+
+        @authenticate(self.authenticator)
+        @extract_if_none_match
+        async def _get_one_repository(
+            _: Request, repository_url: str, user: base_models.APIUser, etag: str | None = None
+        ):
+            repository_url = unquote(repository_url)
+            logger.info(f"Requested repository_url={repository_url}")
+
+            result = await self.connected_services_repo.get_repository(
+                repository_url=repository_url, user=user, etag=etag
+            )
+            if result == "304":
+                return HTTPResponse(status=304)
+            headers = (
+                {"ETag": result.repository_metadata.etag}
+                if result.repository_metadata and result.repository_metadata.etag is not None
+                else None
+            )
+            return json(
+                apispec.RepositoryProviderMatch.model_validate(result).model_dump(exclude_none=True, mode="json"),
+                headers=headers,
+            )
+
+        return "/oauth2/api/repository/<repository_url>", ["GET"], _get_one_repository
