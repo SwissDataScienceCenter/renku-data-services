@@ -6,19 +6,19 @@ from contextlib import asynccontextmanager
 from typing import Any, Literal
 from urllib.parse import urlencode, urljoin, urlparse
 
+import renku_data_services.base_models as base_models
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from httpx import AsyncClient as HttpClient
-from sanic.log import logger
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-
-import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.connected_services import apispec, models
 from renku_data_services.connected_services import orm as schemas
 from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind
+from renku_data_services.connected_services.provider_adapters import get_provider_adapter
 from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
+from sanic.log import logger
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 
 class ConnectedServicesRepository:
@@ -150,6 +150,7 @@ class ConnectedServicesRepository:
                 query = urlencode([("next_url", next_url)])
                 callback_url = f"{callback_url}?{query}"
 
+            adapter = get_provider_adapter(client)
             client_secret = (
                 decrypt_string(self.encryption_key, client.created_by_id, client.client_secret)
                 if client.client_secret
@@ -161,7 +162,7 @@ class ConnectedServicesRepository:
                 scope=client.scope,
                 redirect_uri=callback_url,
             ) as oauth2_client:
-                url, state = oauth2_client.create_authorization_url(client.authorization_url)
+                url, state = oauth2_client.create_authorization_url(adapter.authorization_url)
 
                 result_conn = await session.scalars(
                     select(schemas.OAuth2ConnectionORM)
@@ -211,6 +212,7 @@ class ConnectedServicesRepository:
                 callback_url = f"{callback_url}?{query}"
 
             client = connection.client
+            adapter = get_provider_adapter(client)
             client_secret = (
                 decrypt_string(self.encryption_key, client.created_by_id, client.client_secret)
                 if client.client_secret
@@ -223,7 +225,7 @@ class ConnectedServicesRepository:
                 redirect_uri=callback_url,
                 state=connection.state,
             ) as oauth2_client:
-                token = await oauth2_client.fetch_token(client.token_endpoint_url, authorization_response=raw_url)
+                token = await oauth2_client.fetch_token(adapter.token_endpoint_url, authorization_response=raw_url)
 
                 logger.info(f"Token for client {client.id} has keys: {", ".join(token.keys())}")
 
@@ -273,25 +275,14 @@ class ConnectedServicesRepository:
     ) -> models.ConnectedAccount:
         """Get the account information from a OAuth2 connection."""
         async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (oauth2_client, _, client):
-            request_url = urljoin(client.api_url, "user")
-            headers = (
-                {
-                    "Accept": "application/vnd.github+json",
-                    "X-GitHub-Api-Version": "2022-11-28",
-                }
-                if client.kind == ProviderKind.github
-                else None
-            )
-            response = await oauth2_client.get(request_url, headers=headers)
+            adapter = get_provider_adapter(client)
+            request_url = urljoin(adapter.api_url, "user")
+            response = await oauth2_client.get(request_url, headers=adapter.api_common_headers)
 
             if response.status_code > 200:
                 raise errors.Unauthorized(message="Could not get account information.")
 
-            account = (
-                models.GitHubConnectedAccount.model_validate(response.json()).to_connected_account()
-                if client.kind == ProviderKind.github
-                else models.ConnectedAccount.model_validate(response.json())
-            )
+            account = adapter.api_validate_account_response(response)
             return account
 
     async def get_oauth2_connection_token(self, connection_id: str, user: base_models.APIUser) -> models.OAuth2TokenSet:
@@ -464,6 +455,7 @@ class ConnectedServicesRepository:
                 await session.refresh(connection)
                 logger.info("Token refreshed!")
 
+        adapter = get_provider_adapter(client)
         client_secret = (
             decrypt_string(self.encryption_key, client.created_by_id, client.client_secret)
             if client.client_secret
@@ -473,7 +465,7 @@ class ConnectedServicesRepository:
             client_id=client.client_id,
             client_secret=client_secret,
             scope=client.scope,
-            token_endpoint=client.token_endpoint_url,
+            token_endpoint=adapter.token_endpoint_url,
             token=token,
             update_token=update_token,
         ), connection, client

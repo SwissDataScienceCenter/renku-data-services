@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, ClassVar
+from typing import Any
 
 from pydantic import BaseModel
 

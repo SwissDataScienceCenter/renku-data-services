@@ -61,16 +61,19 @@ def deserialize_binary(data: bytes, model: type[T]) -> T:
     return obj
 
 
-def create_header(message_type: str, content_type: str = "application/avro+binary") -> Header:
+def create_header(
+    message_type: str, content_type: str = "application/avro+binary", schema_version: str = "1"
+) -> Header:
     """Create a message header."""
     return Header(
         type=message_type,
         source="renku-data-services",
         dataContentType=content_type,
-        schemaVersion="1",
+        schemaVersion=schema_version,
         time=datetime.utcnow(),
         requestId=ULID().hex,
     )
+
 
 def dispatch_message(event_type: type[AvroModel] | AmbiguousEvent):
     """Sends a message on the message queue.
@@ -105,7 +108,8 @@ def dispatch_message(event_type: type[AvroModel] | AmbiguousEvent):
 
             for event in events:
                 message_id = ULID().hex
-                headers = create_header(event.queue).serialize_json()
+                schema_version = "2" if event_type == AmbiguousEvent.PROJECT_MEMBERSHIP_CHANGED else "1"
+                headers = create_header(event.queue, schema_version=schema_version).serialize_json()
                 message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
                     "id": message_id,
                     "headers": headers,

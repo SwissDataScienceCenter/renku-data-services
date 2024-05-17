@@ -66,6 +66,14 @@ class _ProjectEventConverter:
                             creationDate=project.creation_date,
                             keywords=project.keywords or [],
                         ),
+                    ),
+                    Event(
+                        "projectAuth.added",
+                        v1.ProjectAuthorizationAdded(
+                            projectId=project.id,
+                            userId=project.created_by,
+                            role=v1.ProjectMemberRole.OWNER,
+                        ),
                     )
                 ]
             case v1.ProjectUpdated:

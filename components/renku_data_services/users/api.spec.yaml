@@ -1,9 +1,10 @@
 ---
 openapi: 3.0.2
 info:
-  title: Renku data services.
+  title: Renku Data Services API
   description: |
-    Endpoints that provide different information from different backends.
+    This service is the main backend for Renku. It provides information about users, projects,
+    cloud storage, access to compute resources and many other things.
   version: v1
 servers:
   - url: /api/data

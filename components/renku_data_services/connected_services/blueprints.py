@@ -3,10 +3,6 @@
 from dataclasses import dataclass
 from urllib.parse import unquote, urlunparse
 
-from sanic import HTTPResponse, Request, json, redirect
-from sanic.log import logger
-from sanic_ext import validate
-
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_admins, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
@@ -14,6 +10,9 @@ from renku_data_services.base_api.etag import extract_if_none_match
 from renku_data_services.connected_services import apispec
 from renku_data_services.connected_services.apispec_base import AuthorizeParams
 from renku_data_services.connected_services.db import ConnectedServicesRepository
+from sanic import HTTPResponse, Request, json, redirect
+from sanic.log import logger
+from sanic_ext import validate
 
 
 @dataclass(kw_only=True)
