@@ -304,6 +304,14 @@ class ConnectedServicesRepository:
 
         matched_client = next(filter(lambda x: urlparse(x.url).netloc == repository_netloc, clients), None)
 
+        # # TODO: configure this from os.env through app config.
+        # GITLAB_URL = 'https://gitlab.dev.renku.ch'
+        # internal_gitlab_netloc = urlparse(GITLAB_URL).netloc
+        # if matched_client is None and internal_gitlab_netloc == repository_netloc:
+        #     return await self._get_repository_from_internal_gitlab(
+        #         repository_url=repository_url, user=user, etag=etag
+        #     )
+
         if matched_client is None:
             raise errors.MissingResourceError(message=f"No OAuth2 Client found for repository {repository_url}.")
 
@@ -385,6 +393,7 @@ class ConnectedServicesRepository:
             )
             logger.info(f"Result {result}")
             return result
+
 
     @asynccontextmanager
     async def get_async_oauth2_client(self, connection_id: str, user: base_models.APIUser):
