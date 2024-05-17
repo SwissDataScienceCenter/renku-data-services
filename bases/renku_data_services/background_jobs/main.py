@@ -25,7 +25,9 @@ async def user_sync(args):
 async def send_messages(args):
     """Send pending message queue messages."""
     config = QueueConfig.from_env()
-    await config.event_repo.send_pending_events()
+    while True:
+        await config.event_repo.send_pending_events()
+        await asyncio.sleep(1.0)
 
 
 async def main():

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from sanic.log import logger
@@ -39,9 +39,7 @@ class EventRepository:
 
         async with self.session_maker() as session:
             # we only consider events older than 5 seconds so we don't accidentally interfere with an ongoing operation
-            stmt = select(schemas.EventORM).where(
-                schemas.EventORM.timestamp_utc < datetime.utcnow() - timedelta(seconds=5)
-            )
+            stmt = select(schemas.EventORM).order_by(schemas.EventORM.timestamp_utc)
             result = await session.scalars(stmt)
             events_orm = result.all()
 
