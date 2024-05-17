@@ -2,16 +2,15 @@
 
 from datetime import datetime
 from typing import Any
-from urllib.parse import quote, urljoin, urlparse, urlunparse
 
-from renku_data_services import errors
-from renku_data_services.connected_services import models
-from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind
 from sqlalchemy import JSON, DateTime, ForeignKey, LargeBinary, MetaData, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import UniqueConstraint
 from ulid import ULID
+
+from renku_data_services.connected_services import models
+from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind
 
 JSONVariant = JSON().with_variant(JSONB(), "postgresql")
 

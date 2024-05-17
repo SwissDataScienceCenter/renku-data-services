@@ -6,19 +6,20 @@ from contextlib import asynccontextmanager
 from typing import Any, Literal
 from urllib.parse import urlencode, urljoin, urlparse
 
-import renku_data_services.base_models as base_models
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from httpx import AsyncClient as HttpClient
-from renku_data_services import errors
-from renku_data_services.connected_services import apispec, models
-from renku_data_services.connected_services import orm as schemas
-from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind
-from renku_data_services.connected_services.provider_adapters import get_provider_adapter
-from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
 from sanic.log import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+
+import renku_data_services.base_models as base_models
+from renku_data_services import errors
+from renku_data_services.connected_services import apispec, models
+from renku_data_services.connected_services import orm as schemas
+from renku_data_services.connected_services.apispec import ConnectionStatus
+from renku_data_services.connected_services.provider_adapters import get_provider_adapter
+from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
 
 
 class ConnectedServicesRepository:
@@ -274,8 +275,7 @@ class ConnectedServicesRepository:
         self, connection_id: str, user: base_models.APIUser
     ) -> models.ConnectedAccount:
         """Get the account information from a OAuth2 connection."""
-        async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (oauth2_client, _, client):
-            adapter = get_provider_adapter(client)
+        async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (oauth2_client, _, adapter):
             request_url = urljoin(adapter.api_url, "user")
             response = await oauth2_client.get(request_url, headers=adapter.api_common_headers)
 
@@ -332,15 +332,9 @@ class ConnectedServicesRepository:
     ) -> models.RepositoryProviderMatch | Literal["304"]:
         """Get the metadata about a repository without using credentials."""
         async with HttpClient() as http:
-            request_url = client.get_repository_api_url(repository_url)
-            headers: dict[str, str] = (
-                {
-                    "Accept": "application/vnd.github+json",
-                    "X-GitHub-Api-Version": "2022-11-28",
-                }
-                if client.kind == ProviderKind.github
-                else dict()
-            )
+            adapter = get_provider_adapter(client)
+            request_url = adapter.get_repository_api_url(repository_url)
+            headers = adapter.api_common_headers or dict()
             if etag:
                 headers["If-None-Match"] = etag
             response = await http.get(request_url, headers=headers)
@@ -352,24 +346,7 @@ class ConnectedServicesRepository:
                     provider_id=client.id, connection_id=None, repository_metadata=None
                 )
 
-            model: models.GitLabRepository | models.GitHubRepository
-            if client.kind == ProviderKind.gitlab:
-                model = models.GitLabRepository.model_validate(response.json())
-                logger.info(f"Got gitlab data: {model}")
-            if client.kind == ProviderKind.github:
-                model = models.GitHubRepository.model_validate(response.json())
-                logger.info(f"Got github data: {model}")
-
-            new_etag = response.headers.get("ETag")
-            repository = (
-                models.GitHubRepository.model_validate(response.json()).to_repository(etag=new_etag)
-                if client.kind == ProviderKind.github
-                else models.GitLabRepository.model_validate(response.json()).to_repository(
-                    etag=new_etag,
-                    # NOTE: we assume the "pull" permission if a GitLab repository is publicly visible
-                    default_permissions=models.RepositoryPermissions(pull=True, push=False),
-                )
-            )
+            repository = adapter.api_validate_repository_response(response)
             return models.RepositoryProviderMatch(
                 provider_id=client.id, connection_id=None, repository_metadata=repository
             )
@@ -378,16 +355,9 @@ class ConnectedServicesRepository:
         self, connection_id: str, repository_url: str, user: base_models.APIUser, etag: str | None
     ) -> models.RepositoryProviderMatch | Literal["304"]:
         """Get the metadata about a repository using an OAuth2 connection."""
-        async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (oauth2_client, _, client):
-            request_url = client.get_repository_api_url(repository_url)
-            headers: dict[str, str] = (
-                {
-                    "Accept": "application/vnd.github+json",
-                    "X-GitHub-Api-Version": "2022-11-28",
-                }
-                if client.kind == ProviderKind.github
-                else dict()
-            )
+        async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (oauth2_client, _, adapter):
+            request_url = adapter.get_repository_api_url(repository_url)
+            headers = adapter.api_common_headers or dict()
             if etag:
                 headers["If-None-Match"] = etag
             response = await oauth2_client.get(request_url, headers=headers)
@@ -396,25 +366,12 @@ class ConnectedServicesRepository:
                 return "304"
             if response.status_code > 200:
                 return models.RepositoryProviderMatch(
-                    provider_id=client.id, connection_id=connection_id, repository_metadata=None
+                    provider_id=adapter.client.id, connection_id=connection_id, repository_metadata=None
                 )
 
-            model: models.GitLabRepository | models.GitHubRepository
-            if client.kind == ProviderKind.gitlab:
-                model = models.GitLabRepository.model_validate(response.json())
-                logger.info(f"Got gitlab data: {model}")
-            if client.kind == ProviderKind.github:
-                model = models.GitHubRepository.model_validate(response.json())
-                logger.info(f"Got github data: {model}")
-
-            new_etag = response.headers.get("ETag")
-            repository = (
-                models.GitHubRepository.model_validate(response.json()).to_repository(etag=new_etag)
-                if client.kind == ProviderKind.github
-                else models.GitLabRepository.model_validate(response.json()).to_repository(etag=new_etag)
-            )
+            repository = adapter.api_validate_repository_response(response)
             return models.RepositoryProviderMatch(
-                provider_id=client.id, connection_id=connection_id, repository_metadata=repository
+                provider_id=adapter.client.id, connection_id=connection_id, repository_metadata=repository
             )
 
     @asynccontextmanager
@@ -468,7 +425,7 @@ class ConnectedServicesRepository:
             token_endpoint=adapter.token_endpoint_url,
             token=token,
             update_token=update_token,
-        ), connection, client
+        ), connection, adapter
 
     def _encrypt_token_set(self, token: dict[str, Any], user_id: str) -> models.OAuth2TokenSet:
         """Encrypts sensitive fields of token set before persisting at rest."""

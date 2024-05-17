@@ -2,10 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, ClassVar
 from typing import Any
-
-from pydantic import BaseModel
 
 from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind
 
@@ -36,23 +33,11 @@ class OAuth2Connection:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class ConnectedAccount(BaseModel):
+class ConnectedAccount:
     """OAuth2 connected account model."""
 
     username: str
     web_url: str
-
-
-@dataclass(frozen=True, eq=True, kw_only=True)
-class GitHubConnectedAccount(BaseModel):
-    """OAuth2 connected account model for GitHub."""
-
-    login: str
-    html_url: str
-
-    def to_connected_account(self) -> ConnectedAccount:
-        """Returns the corresponding ConnectedAccount object."""
-        return ConnectedAccount(username=self.login, web_url=self.html_url)
 
 
 class OAuth2TokenSet(dict):
@@ -125,95 +110,3 @@ class RepositoryProviderMatch:
     provider_id: str
     connection_id: str | None
     repository_metadata: RepositoryMetadata | None
-
-
-class GitLabRepositoryPermissionAccess(BaseModel):
-    """Repository permission access level from a GitLab provider."""
-
-    access_level: int
-
-
-class GitLabRepositoryPermissions(BaseModel):
-    """Repository permissions from a GitLab provider."""
-
-    GUEST_ACCESS_LEVEL: ClassVar[int] = 10
-    DEVELOPER_ACCESS_LEVEL: ClassVar[int] = 30
-    PUBLIC_VISIBILITY: ClassVar[str] = "public"
-    INTERNAL_VISIBILITY: ClassVar[str] = "internal"
-
-    project_access: GitLabRepositoryPermissionAccess | None
-    group_access: GitLabRepositoryPermissionAccess | None
-
-    def to_permissions(self, visibility: str | None) -> RepositoryPermissions:
-        """Returns the corresponding RepositoryPermissions object."""
-        pull = False
-        push = False
-        if visibility in [self.PUBLIC_VISIBILITY, self.INTERNAL_VISIBILITY]:
-            pull = True
-        if self.project_access is not None and self.project_access.access_level >= self.GUEST_ACCESS_LEVEL:
-            pull = True
-        if self.project_access is not None and self.project_access.access_level >= self.DEVELOPER_ACCESS_LEVEL:
-            push = True
-        if self.group_access is not None and self.group_access.access_level >= self.GUEST_ACCESS_LEVEL:
-            pull = True
-        if self.group_access is not None and self.group_access.access_level >= self.DEVELOPER_ACCESS_LEVEL:
-            push = True
-        return RepositoryPermissions(pull=pull, push=push)
-
-
-@dataclass(frozen=True, eq=True, kw_only=True)
-class GitLabRepository(BaseModel):
-    """Repository metadata from a GitLab provider."""
-
-    http_url_to_repo: str
-    web_url: str
-    permissions: GitLabRepositoryPermissions | None = None
-    visibility: str | None = None
-
-    def to_repository(
-        self, etag: str | None, default_permissions: RepositoryPermissions | None = None
-    ) -> RepositoryMetadata:
-        """Returns the corresponding Repository object."""
-        return RepositoryMetadata(
-            etag=etag or None,
-            git_http_url=self.http_url_to_repo,
-            web_url=self.web_url,
-            permissions=(
-                self.permissions.to_permissions(visibility=self.visibility)
-                if self.permissions is not None
-                else default_permissions or RepositoryPermissions.default()
-            ),
-        )
-
-
-class GitHubRepositoryPermissions(BaseModel):
-    """Repository permissions from a GitHub provider."""
-
-    pull: bool
-    push: bool
-
-    def to_permissions(self) -> RepositoryPermissions:
-        """Returns the corresponding RepositoryPermissions object."""
-        return RepositoryPermissions(pull=self.pull, push=self.push)
-
-
-@dataclass(frozen=True, eq=True, kw_only=True)
-class GitHubRepository(BaseModel):
-    """Repository metadata from a GitHub provider."""
-
-    clone_url: str
-    html_url: str
-    permissions: GitHubRepositoryPermissions | None
-    visibility: str
-
-    def to_repository(self, etag: str | None) -> RepositoryMetadata:
-        """Returns the corresponding Repository object."""
-
-        return RepositoryMetadata(
-            etag=etag if etag else None,
-            git_http_url=self.clone_url,
-            web_url=self.html_url,
-            permissions=(
-                self.permissions.to_permissions() if self.permissions is not None else RepositoryPermissions.default()
-            ),
-        )
