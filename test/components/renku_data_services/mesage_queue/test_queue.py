@@ -4,10 +4,12 @@ import asyncio
 import contextlib
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.authz.models import Visibility
 from renku_data_services.message_queue.avro_models.io.renku.events.v2.project_removed import ProjectRemoved
 from renku_data_services.message_queue.redis_queue import dispatch_message
+from renku_data_services.namespace.models import Namespace, NamespaceKind
 from renku_data_services.project.models import Project
 from renku_data_services.utils.core import with_db_transaction
 
@@ -32,12 +34,12 @@ async def test_queue_resend(app_config, monkeypatch):
 
         @with_db_transaction
         @dispatch_message(ProjectRemoved)
-        async def fake_db_method(self, session, some_arg):
+        async def fake_db_method(self, some_arg, *, session: AsyncSession | None = None):
             return Project(
                 id="sample-id-1",
                 name="name",
                 slug="slug",
-                namespace="name",
+                namespace=Namespace("namespace", "namespace", NamespaceKind.user),
                 visibility=Visibility.PRIVATE,
                 created_by="some-user",
             )

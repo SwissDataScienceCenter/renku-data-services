@@ -34,7 +34,10 @@ class GroupRepository:
     """Repository for groups."""
 
     def __init__(
-        self, session_maker: Callable[..., AsyncSession], event_repo: EventRepository, group_authz: Authz,
+        self,
+        session_maker: Callable[..., AsyncSession],
+        event_repo: EventRepository,
+        group_authz: Authz,
     ):
         self.session_maker = session_maker  # type: ignore[call-overload]
         self.authz: Authz = group_authz
@@ -43,8 +46,12 @@ class GroupRepository:
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.insert_many, ResourceType.user_namespace)
     @dispatch_message(AmbiguousEvent.INSERT_USER_NAMESPACE)
-    async def generate_user_namespaces(self, session: AsyncSession) -> list[user_models.UserWithNamespace]:
+    async def generate_user_namespaces(
+        self, *, session: AsyncSession | None = None
+    ) -> list[user_models.UserWithNamespace]:
         """Generate user namespaces if the user table has data and the namespaces table is empty."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required")
         # NOTE: lock to make sure another instance of the data service cannot insert/update but can read
         output: list[user_models.UserWithNamespace] = []
         await session.execute(text("LOCK TABLE common.namespaces IN EXCLUSIVE MODE"))
@@ -117,9 +124,11 @@ class GroupRepository:
 
     @with_db_transaction
     async def get_group_members(
-        self, session: AsyncSession, user: base_models.APIUser, slug: str
+        self, user: base_models.APIUser, slug: str, *, session: AsyncSession | None = None
     ) -> list[models.GroupMemberDetails]:
         """Get all the users that are direct members of a group."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required")
         _, members = await self._get_group(session, user, slug, load_members=True)
         members_dict = {i.user_id: i for i in members}
         stmt = select(user_schemas.UserORM).where(user_schemas.UserORM.keycloak_id.in_(members_dict.keys()))
@@ -175,12 +184,15 @@ class GroupRepository:
     @dispatch_message(AmbiguousEvent.GROUP_MEMBERSHIP_CHANGED)
     async def update_group_members(
         self,
-        session: AsyncSession,
         user: base_models.APIUser,
         slug: str,
         payload: apispec.GroupMemberPatchRequestList,
+        *,
+        session: AsyncSession | None = None,
     ) -> list[MembershipChange]:
         """Update group members."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required")
         group, existing_members = await self._get_group(session, user, slug, load_members=True)
         if group.namespace.slug != slug.lower():
             raise errors.UpdatingWithStaleContentError(
@@ -188,53 +200,57 @@ class GroupRepository:
                 detail=f"The latest slug is {group.namespace.slug}, please use this for updates.",
             )
         members = [Member(Role.from_group_role(member.role), member.id, group.id) for member in payload.root]
-        output = await self.authz.upsert_group_members(
-            user=user, resource_type=ResourceType.group, resource_id=group.id, members=members
-        )
+        output = await self.authz.upsert_group_members(user, ResourceType.group, group.id, members)
         return output
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.delete, ResourceType.group)
-    async def delete_group(self, session: AsyncSession, user: base_models.APIUser, slug: str) -> models.Group | None:
+    async def delete_group(
+        self, user: base_models.APIUser, slug: str, *, session: AsyncSession | None = None
+    ) -> models.Group | None:
         """Delete a specific group."""
-        async with self.session_maker() as session, session.begin():
-            try:
-                group, _ = await self._get_group(session, user, slug)
-            except errors.MissingResourceError:
-                return None
-            if group.namespace.slug != slug.lower():
-                raise errors.UpdatingWithStaleContentError(
-                    message=f"You cannot delete a group by using an old group slug {slug}.",
-                    detail=f"The latest slug is {group.namespace.slug}, please use this for deletions.",
-                )
-            # NOTE: We have a stored procedure that gets triggered when a project slug is removed to remove the project.
-            # This is required because the slug has a foreign key pointing to the project, so when a project is removed
-            # the slug is removed but the converse is not true. The stored procedure in migration 89aa4573cfa9 has the
-            # trigger and procedure that does the cleanup when a slug is removed.
-            stmt = delete(schemas.GroupORM).where(schemas.GroupORM.id == group.id)
-            await session.execute(stmt)
-            return group.dump()
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required")
+        group: None | schemas.GroupORM = None
+        try:
+            group, _ = await self._get_group(session, user, slug)
+        except errors.MissingResourceError:
+            return None
+        if group.namespace.slug != slug.lower():
+            raise errors.UpdatingWithStaleContentError(
+                message=f"You cannot delete a group by using an old group slug {slug}.",
+                detail=f"The latest slug is {group.namespace.slug}, please use this for deletions.",
+            )
+        # NOTE: We have a stored procedure that gets triggered when a project slug is removed to remove the project.
+        # This is required because the slug has a foreign key pointing to the project, so when a project is removed
+        # the slug is removed but the converse is not true. The stored procedure in migration 89aa4573cfa9 has the
+        # trigger and procedure that does the cleanup when a slug is removed.
+        stmt = delete(schemas.GroupORM).where(schemas.GroupORM.id == group.id)
+        await session.execute(stmt)
+        return group.dump()
 
     @with_db_transaction
     @dispatch_message(AmbiguousEvent.GROUP_MEMBERSHIP_CHANGED)
     async def delete_group_member(
-        self, session: AsyncSession, user: base_models.APIUser, slug: str, user_id_to_delete: str
+        self, user: base_models.APIUser, slug: str, user_id_to_delete: str, *, session: AsyncSession | None = None
     ) -> list[MembershipChange]:
         """Delete a specific group member."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required")
         if not user.id:
             raise errors.Unauthorized(message="Users need to be authenticated in order to remove group members.")
         group, _ = await self._get_group(session, user, slug)
-        output = await self.authz.remove_group_members(
-            user=user, resource_type=ResourceType.group, resource_id=group.id, user_ids=[user_id_to_delete]
-        )
+        output = await self.authz.remove_group_members(user, ResourceType.group, group.id, [user_id_to_delete])
         return output
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.create, ResourceType.group)
     async def insert_group(
-        self, session: AsyncSession, user: base_models.APIUser, payload: apispec.GroupPostRequest
+        self, user: base_models.APIUser, payload: apispec.GroupPostRequest, *, session: AsyncSession | None = None,
     ) -> models.Group:
         """Insert a new group."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required")
         if not user.id:
             raise errors.Unauthorized(message="Users need to be authenticated in order to create groups.")
         creation_date = datetime.now(UTC).replace(microsecond=0)

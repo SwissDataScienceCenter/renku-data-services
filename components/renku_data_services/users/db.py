@@ -60,9 +60,11 @@ class UserRepo:
             raise errors.Unauthorized(message="The user has to be authenticated to be inserted in the DB.")
         await self._users_sync.update_or_insert_user(
             user_id=user.id,
-            first_name=user.first_name,
-            last_name=user.last_name,
-            email=user.email,
+            payload=dict(
+                first_name=user.first_name,
+                last_name=user.last_name,
+                email=user.email,
+            ),
         )
         return UserInfo(
             id=user.id,
@@ -166,14 +168,18 @@ class UsersSync:
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.update_or_insert, ResourceType.user)
     @dispatch_message(AmbiguousEvent.UPDATE_OR_INSERT_USER)
-    async def update_or_insert_user(self, session: AsyncSession, user_id: str, **kwargs) -> UserWithNamespaceUpdate:
+    async def update_or_insert_user(
+        self, user_id: str, payload: dict[str, Any], *, session: AsyncSession | None = None
+    ) -> UserWithNamespaceUpdate:
         """Update a user or insert it if it does not exist."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required")
         res = await session.execute(select(UserORM).where(UserORM.keycloak_id == user_id))
         existing_user = res.scalar_one_or_none()
         if existing_user:
-            return await self._update_user(session=session, user_id=user_id, existing_user=existing_user, **kwargs)
+            return await self._update_user(session=session, user_id=user_id, existing_user=existing_user, **payload)
         else:
-            return await self._insert_user(session=session, user_id=user_id, **kwargs)
+            return await self._insert_user(session=session, user_id=user_id, **payload)
 
     async def _insert_user(self, session: AsyncSession, user_id: str, **kwargs) -> UserWithNamespaceUpdate:
         """Insert a user."""
@@ -216,8 +222,10 @@ class UsersSync:
 
     @with_db_transaction
     @dispatch_message(avro_schema_v2.UserRemoved)
-    async def _remove_user(self, session: AsyncSession, user_id: str) -> UserInfo | None:
+    async def _remove_user(self, user_id: str, *, session: AsyncSession | None = None) -> UserInfo | None:
         """Remove a user from the database."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required")
         logging.info(f"Trying to remove user with ID {user_id}")
         stmt = delete(UserORM).where(UserORM.keycloak_id == user_id).returning(UserORM)
         user = await session.scalar(stmt)
@@ -241,7 +249,7 @@ class UsersSync:
             db_user = await self._get_user(kc_user.id)
             if db_user != kc_user:
                 logging.info(f"Inserting or updating user {db_user} -> {kc_user}")
-                await self.update_or_insert_user(kc_user.id, **asdict(kc_user))
+                await self.update_or_insert_user(kc_user.id, asdict(kc_user))
 
         # NOTE: If asyncio.gather is used here you quickly exhaust all DB connections
         # or timeout on waiting for available connections
@@ -286,7 +294,7 @@ class UsersSync:
             latest_delete_timestamp = None
             for update in parsed_updates:
                 logging.info(f"Processing update event {update}")
-                await self.update_or_insert_user(update.user_id, **{update.field_name: update.new_value})
+                await self.update_or_insert_user(update.user_id, {update.field_name: update.new_value})
                 latest_update_timestamp = update.timestamp_utc
             for deletion in parsed_deletions:
                 logging.info(f"Processing deletion event {deletion}")

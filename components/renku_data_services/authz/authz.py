@@ -6,7 +6,7 @@ from collections.abc import AsyncIterable, Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import wraps
-from typing import ClassVar, Protocol
+from typing import ClassVar, Concatenate, ParamSpec, Protocol, TypeAlias, TypeVar
 
 from authzed.api.v1 import (  # type: ignore[attr-defined]
     AsyncClient,
@@ -38,6 +38,22 @@ from renku_data_services.errors import errors
 from renku_data_services.namespace.models import Group, GroupUpdate, Namespace, NamespaceKind, NamespaceUpdate
 from renku_data_services.project.models import Project, ProjectUpdate
 from renku_data_services.users.models import UserWithNamespace, UserWithNamespaceUpdate
+
+_P = ParamSpec("_P")
+
+
+class WithAuthz(Protocol):
+    """Protcol for a class that has a authorization database client as property."""
+
+    @property
+    def authz(self) -> "Authz":
+        """Returns the authorization database client."""
+        ...
+
+
+_T = TypeVar("_T")
+_WithAuthz = TypeVar("_WithAuthz", bound=WithAuthz)
+_AuthzChangeFunc: TypeAlias = Callable[Concatenate[_WithAuthz, _P], Awaitable[_T]]
 
 
 @dataclass
@@ -170,12 +186,17 @@ class _AuthzConverter:
         )
 
 
-def _is_allowed_on_resource(operation: Scope, resource_type: ResourceType):
+_IsAllowedOnResourceFunc: TypeAlias = Callable[Concatenate["Authz", base_models.APIUser, _P], Awaitable[_T]]
+
+
+def _is_allowed_on_resource(
+    operation: Scope, resource_type: ResourceType
+) -> Callable[[_IsAllowedOnResourceFunc], _IsAllowedOnResourceFunc]:
     """A decorator that checks if the operation on a specific resource type is allowed or not."""
 
-    def decorator(f):
+    def decorator(f: _IsAllowedOnResourceFunc) -> _IsAllowedOnResourceFunc:
         @wraps(f)
-        async def decorated_function(self: "Authz", user: base_models.APIUser, *args, **kwargs):
+        async def decorated_function(self: "Authz", user: base_models.APIUser, *args: _P.args, **kwargs: _P.kwargs):
             if not isinstance(user, base_models.APIUser):
                 raise errors.ProgrammingError(
                     message="The decorator for checking permissions for authorization database operations "
@@ -213,13 +234,23 @@ def _is_allowed_on_resource(operation: Scope, resource_type: ResourceType):
     return decorator
 
 
-def _is_allowed(operation: Scope):
+_IsAllowedFunc: TypeAlias = Callable[Concatenate["Authz", base_models.APIUser, ResourceType, str, _P], Awaitable[_T]]
+
+
+def _is_allowed(
+    operation: Scope,
+) -> Callable[[_IsAllowedFunc], _IsAllowedFunc]:
     """A decorator that checks if the operation on a resource is allowed or not."""
 
-    def decorator(f):
+    def decorator(f: _IsAllowedFunc) -> _IsAllowedFunc:
         @wraps(f)
         async def decorated_function(
-            self: "Authz", user: base_models.APIUser, resource_type: ResourceType, resource_id: str, *args, **kwargs
+            self: "Authz",
+            user: base_models.APIUser,
+            resource_type: ResourceType,
+            resource_id: str,
+            *args: _P.args,
+            **kwargs: _P.kwargs,
         ):
             allowed, zed_token = await self._has_permission(user, resource_type, resource_id, operation)
             if not allowed:
@@ -374,12 +405,8 @@ class Authz:
         return members
 
     @staticmethod
-    def authz_change(op: AuthzOperation, resource: ResourceType):
+    def authz_change(op: AuthzOperation, resource: ResourceType) -> Callable[[_AuthzChangeFunc], _AuthzChangeFunc]:
         """A decorator that updates the authorization database for different types of operations."""
-
-        class WithAuthz(Protocol):
-            @property
-            def authz(self) -> Authz: ...
 
         def _extract_user_from_args(*args, **kwargs) -> base_models.APIUser:
             potential_user: base_models.APIUser | None = None
@@ -396,24 +423,15 @@ class Authz:
                 )
             return potential_user
 
-        def decorator(
-            f: Callable[
-                ...,
-                Awaitable[
-                    Project
-                    | ProjectUpdate
-                    | Group
-                    | GroupUpdate
-                    | Namespace
-                    | NamespaceUpdate
-                    | UserWithNamespace
-                    | UserWithNamespaceUpdate
-                    | list[UserWithNamespace]
-                ],
-            ],
-        ):
+        def decorator(f: _AuthzChangeFunc) -> _AuthzChangeFunc:
             @wraps(f)
-            async def decorated_function(db_repo: WithAuthz, session: AsyncSession, *args, **kwargs):
+            async def decorated_function(db_repo: _WithAuthz, *args: _P.args, **kwargs: _P.kwargs):
+                session = kwargs.get("session")
+                if not isinstance(session, AsyncSession):
+                    raise errors.ProgrammingError(
+                        message="The authorization change decorator requires a DB session in the function "
+                        "keyword arguments"
+                    )
                 # NOTE: db_repo is the "self" of the project postgres DB repository method that this function decorates.
                 # I did not call it "self" here to avoid confusion with the self of the Authz class,
                 # even though this is a static method.
@@ -433,7 +451,7 @@ class Authz:
                     # If this order of operations is changed you can get a case where for a short period of time
                     # resources exists in the postgres DB without any authorization information in the Authzed DB.
 
-                    result = await f(db_repo, session, *args, **kwargs)
+                    result = await f(db_repo, *args, **kwargs)
                     match op, resource:
                         case AuthzOperation.create, ResourceType.project if isinstance(result, Project):
                             authz_change = db_repo.authz._add_project(result)
@@ -554,7 +572,9 @@ class Authz:
         return _AuthzChange(apply=apply, undo=undo)
 
     @_is_allowed_on_resource(Scope.DELETE, ResourceType.project)
-    async def _remove_project(self, user: base_models.APIUser, project: Project, zed_token: ZedToken) -> _AuthzChange:
+    async def _remove_project(
+        self, user: base_models.APIUser, project: Project, *, zed_token: ZedToken | None = None
+    ) -> _AuthzChange:
         """Remove the relationships associated with the project."""
         rel_filter = RelationshipFilter(resource_type=ResourceType.project.value, optional_resource_id=project.id)
         responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
@@ -576,7 +596,7 @@ class Authz:
     # NOTE changing visibility is the same access level as removal
     @_is_allowed_on_resource(Scope.DELETE, ResourceType.project)
     async def _update_project_visibility(
-        self, user: base_models.APIUser, project: Project, zed_token: ZedToken
+        self, user: base_models.APIUser, project: Project, *, zed_token: ZedToken | None = None
     ) -> _AuthzChange:
         """Update the visibility of the project in the authorization database."""
         project_res = _AuthzConverter.project(project.id)  # type: ignore[arg-type]

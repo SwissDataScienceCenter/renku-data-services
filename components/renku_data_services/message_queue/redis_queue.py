@@ -5,12 +5,13 @@ import copy
 import glob
 import json
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
 from functools import wraps
 from io import BytesIO
 from pathlib import Path
-from typing import TypeVar
+from typing import Concatenate, ParamSpec, Protocol, TypeAlias, TypeVar
 
 from dataclasses_avroschema.schema_generator import AvroModel
 from dataclasses_avroschema.utils import standardize_custom_type
@@ -18,10 +19,12 @@ from fastavro import parse_schema, schemaless_reader, schemaless_writer
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
+from renku_data_services.errors import errors
 from renku_data_services.message_queue import AmbiguousEvent
 from renku_data_services.message_queue.avro_models.io.renku.events.v1.header import Header
 from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.message_queue.converters import EventConverter
+from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 
 _root = Path(__file__).parent.resolve()
@@ -46,10 +49,10 @@ def serialize_binary(obj: AvroModel) -> bytes:
     return fo.getvalue()
 
 
-T = TypeVar("T", bound=AvroModel)
+TAvro = TypeVar("TAvro", bound=AvroModel)
 
 
-def deserialize_binary(data: bytes, model: type[T]) -> T:
+def deserialize_binary(data: bytes, model: type[TAvro]) -> TAvro:
     """Deserialize an avro binary message, using the original schema."""
     input_stream = BytesIO(data)
     schema = parse_schema(schema=json.loads(getattr(model, "_schema", model.avro_schema())), named_schemas=_schemas)
@@ -75,7 +78,29 @@ def create_header(
     )
 
 
-def dispatch_message(event_type: type[AvroModel] | AmbiguousEvent):
+class WithMessageQueue(Protocol):
+    """The protcol required for a class to send messages to a message queue."""
+
+    @property
+    def event_repo(self) -> EventRepository:
+        """Returns the event repository."""
+        ...
+
+    @property
+    def message_queue(self) -> IMessageQueue:
+        """Returns the message queue client."""
+        ...
+
+
+_P = ParamSpec("_P")
+_T = TypeVar("_T")
+_WithMessageQueue = TypeVar("_WithMessageQueue", bound=WithMessageQueue)
+_DispatchMessageFunc: TypeAlias = Callable[Concatenate[_WithMessageQueue, _P], Awaitable[_T]]
+
+
+def dispatch_message(
+    event_type: type[AvroModel] | AmbiguousEvent,
+) -> Callable[[_DispatchMessageFunc], _DispatchMessageFunc]:
     """Sends a message on the message queue.
 
     The transform method is called with the arguments and result of the wrapped method. It is responsible for
@@ -98,10 +123,16 @@ def dispatch_message(event_type: type[AvroModel] | AmbiguousEvent):
       update. Order can be maintained due to the timestamps in the messages.
     """
 
-    def decorator(f):
+    def decorator(f: _DispatchMessageFunc) -> _DispatchMessageFunc:
         @wraps(f)
-        async def message_wrapper(self, session: AsyncSession, *args, **kwargs):
-            result = await f(self, session, *args, **kwargs)
+        async def message_wrapper(self, *args: _P.args, **kwargs: _P.kwargs):
+            session = kwargs.get("session")
+            if not isinstance(session, AsyncSession):
+                raise errors.ProgrammingError(
+                    message="The decorator that populates the message queue expects a valid database session "
+                    f"in the keyword arguments instead it got {type(session)}."
+                )
+            result = await f(self, *args, **kwargs)
             if result is None:
                 return result
             events = EventConverter.to_events(result, event_type)

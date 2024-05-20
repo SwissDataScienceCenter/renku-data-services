@@ -174,7 +174,7 @@ class ProjectsBP(CustomBlueprint):
             body_dict = body.model_dump(exclude_none=True)
 
             project_update = await self.project_repo.update_project(
-                user=user, project_id=project_id, etag=etag, **body_dict
+                user=user, project_id=project_id, etag=etag, payload=body_dict
             )
             if not isinstance(project_update, project_models.ProjectUpdate):
                 raise errors.ProgrammingError(

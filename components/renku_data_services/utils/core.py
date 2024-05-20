@@ -3,8 +3,8 @@
 import functools
 import os
 import ssl
-from collections.abc import Callable
-from typing import Any, Protocol
+from collections.abc import Awaitable, Callable
+from typing import Any, Concatenate, ParamSpec, Protocol, TypeAlias, TypeVar
 
 import httpx
 from deepmerge import Merger
@@ -57,15 +57,44 @@ def merge_api_specs(*args):
 class WithSessionMaker(Protocol):
     """Protocol for classes that wrap a session maker."""
 
-    session_maker: Callable[..., AsyncSession]
+    def session_maker(self) -> AsyncSession:
+        """Returns an async session."""
+        ...
 
 
-def with_db_transaction(f):
+def with_db_transaction_old(f):
     """Initializes a transaction and commits it on successful exit of the wrapped function."""
 
     @functools.wraps(f)
     async def transaction_wrapper(self: WithSessionMaker, *args, **kwargs):
         async with self.session_maker() as session, session.begin():
             return await f(self, session, *args, **kwargs)
+
+    return transaction_wrapper
+
+
+P = ParamSpec("P")
+T = TypeVar("T")
+_WithSessionMaker = TypeVar("_WithSessionMaker", bound=WithSessionMaker)
+_WithTransactionFunc: TypeAlias = Callable[Concatenate[_WithSessionMaker, P], Awaitable[T]]
+
+
+def with_db_transaction(f: _WithTransactionFunc) -> _WithTransactionFunc:
+    """Initializes a transaction and commits it on successful exit of the wrapped function."""
+
+    @functools.wraps(f)
+    async def transaction_wrapper(self: _WithSessionMaker, *args: P.args, **kwargs: P.kwargs):
+        session_kwarg = kwargs.get("session")
+        if "session" in kwargs and session_kwarg is not None and not isinstance(session_kwarg, AsyncSession):
+            raise errors.ProgrammingError(
+                message="The decorator that starts a DB transaction expects the session keyword to be "
+                "present in the function arguments"
+            )
+        if session_kwarg is None:
+            async with self.session_maker() as session, session.begin():
+                kwargs["session"] = session
+                return await f(self, *args, **kwargs)
+        else:
+            return await f(self, *args, **kwargs)
 
     return transaction_wrapper

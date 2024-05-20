@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import functools
 from asyncio import gather
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
-from typing import cast
+from typing import Any, Concatenate, ParamSpec, TypeAlias, TypeVar, cast
 
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -123,9 +123,11 @@ class ProjectRepository:
     @Authz.authz_change(AuthzOperation.create, ResourceType.project)
     @dispatch_message(avro_schema_v2.ProjectCreated)
     async def insert_project(
-        self, session: AsyncSession, user: base_models.APIUser, project: project_apispec.ProjectPost
+        self, user: base_models.APIUser, project: project_apispec.ProjectPost, *, session: AsyncSession | None = None
     ) -> models.Project:
         """Insert a new project entry."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required")
         ns = await self.group_repo.get_namespace(user, project.namespace)
         if not ns:
             raise errors.MissingResourceError(
@@ -165,9 +167,17 @@ class ProjectRepository:
     @Authz.authz_change(AuthzOperation.update, ResourceType.project)
     @dispatch_message(avro_schema_v2.ProjectUpdated)
     async def update_project(
-        self, session: AsyncSession, user: base_models.APIUser, project_id: str, etag: str | None = None, **payload
+        self,
+        user: base_models.APIUser,
+        project_id: str,
+        payload: dict[str, Any],
+        etag: str | None = None,
+        *,
+        session: AsyncSession | None = None,
     ) -> models.ProjectUpdate:
         """Update a project entry."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required")
         result = await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
         project = result.one_or_none()
         if project is None:
@@ -230,9 +240,11 @@ class ProjectRepository:
     @Authz.authz_change(AuthzOperation.delete, ResourceType.project)
     @dispatch_message(avro_schema_v2.ProjectRemoved)
     async def delete_project(
-        self, session: AsyncSession, user: base_models.APIUser, project_id: str
+        self, user: base_models.APIUser, project_id: str, *, session: AsyncSession | None = None
     ) -> models.Project | None:
         """Delete a project."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required")
         authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.DELETE)
         if not authorized:
             raise errors.MissingResourceError(
@@ -254,25 +266,37 @@ class ProjectRepository:
         return project.dump()
 
 
-def _project_exists(f):
+_P = ParamSpec("_P")
+_T = TypeVar("_T")
+_ProjectExistsFunc: TypeAlias = Callable[
+    Concatenate["ProjectMemberRepository", base_models.APIUser, str, _P], Awaitable[_T]
+]
+
+
+def _project_exists(f: _ProjectExistsFunc) -> _ProjectExistsFunc:
     """Checks if the project exists when adding or modifying project members."""
 
     @functools.wraps(f)
     async def decorated_func(
         self: ProjectMemberRepository,
-        session: AsyncSession,
         user: base_models.APIUser,
         project_id: str,
-        *args,
-        **kwargs,
+        *args: _P.args,
+        **kwargs: _P.kwargs,
     ):
+        session = kwargs.get("session")
+        if not isinstance(session, AsyncSession):
+            raise errors.ProgrammingError(
+                message="The decorator that checks if a project exists requires a database session in the "
+                f"keyword arguments, but instead it got {type(session)}"
+            )
         stmt = select(schemas.ProjectORM.id).where(schemas.ProjectORM.id == project_id)
         res = await session.scalar(stmt)
         if not res:
             raise errors.MissingResourceError(
                 message=f"Project with ID {project_id} does not exist or you do not have access to it."
             )
-        return await f(self, session, user, project_id, *args, **kwargs)
+        return await f(self, user, project_id, *args, **kwargs)
 
     return decorated_func
 
@@ -294,7 +318,9 @@ class ProjectMemberRepository:
 
     @with_db_transaction
     @_project_exists
-    async def get_members(self, session: AsyncSession, user: base_models.APIUser, project_id: str) -> list[Member]:
+    async def get_members(
+        self, user: base_models.APIUser, project_id: str, *, session: AsyncSession | None = None
+    ) -> list[Member]:
         """Get all members of a project."""
         members = await self.authz.members(user, ResourceType.project, project_id)
         members = [member for member in members if member.user_id and member.user_id != "*"]
@@ -304,9 +330,16 @@ class ProjectMemberRepository:
     @_project_exists
     @dispatch_message(AmbiguousEvent.PROJECT_MEMBERSHIP_CHANGED)
     async def update_members(
-        self, session: AsyncSession, user: base_models.APIUser, project_id: str, members: list[Member]
+        self,
+        user: base_models.APIUser,
+        project_id: str,
+        members: list[Member],
+        *,
+        session: AsyncSession | None = None,
     ) -> list[MembershipChange]:
         """Update project's members."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required")
         if len(members) == 0:
             raise errors.ValidationError(message="Please request at least 1 member to be added to the project")
 
@@ -328,7 +361,7 @@ class ProjectMemberRepository:
     @_project_exists
     @dispatch_message(AmbiguousEvent.PROJECT_MEMBERSHIP_CHANGED)
     async def delete_members(
-        self, session: AsyncSession, user: base_models.APIUser, project_id: str, user_ids: list[str]
+        self, user: base_models.APIUser, project_id: str, user_ids: list[str], *, session: AsyncSession | None = None
     ) -> list[MembershipChange]:
         """Delete members from a project."""
         if len(user_ids) == 0:
