@@ -25,9 +25,12 @@ from renku_data_services.utils.cryptography import decrypt_string, encrypt_strin
 class ConnectedServicesRepository:
     """Repository for connected services."""
 
-    def __init__(self, session_maker: Callable[..., AsyncSession], encryption_key: bytes):
+    def __init__(
+        self, session_maker: Callable[..., AsyncSession], encryption_key: bytes, internal_gitlab_url: str | None
+    ):
         self.session_maker = session_maker  # type: ignore[call-overload]
         self.encryption_key = encryption_key
+        self.internal_gitlab_url = internal_gitlab_url.rstrip("/") if internal_gitlab_url else None
 
     async def get_oauth2_clients(
         self,
@@ -308,14 +311,16 @@ class ConnectedServicesRepository:
 
         matched_client = next(filter(lambda x: urlparse(x.url).netloc == repository_netloc, clients), None)
 
-        # TODO: configure this from os.env through app config.
-        GITLAB_URL = "https://gitlab.dev.renku.ch"
-        internal_gitlab_netloc = urlparse(GITLAB_URL).netloc
-        if matched_client is None and internal_gitlab_netloc == repository_netloc:
-            gitlab_user = await get_internal_gitlab_user()
-            return await self._get_repository_from_internal_gitlab(
-                repository_url=repository_url, user=gitlab_user, etag=etag
-            )
+        if self.internal_gitlab_url:
+            internal_gitlab_netloc = urlparse(self.internal_gitlab_url).netloc
+            if matched_client is None and internal_gitlab_netloc == repository_netloc:
+                gitlab_user = await get_internal_gitlab_user()
+                return await self._get_repository_from_internal_gitlab(
+                    repository_url=repository_url,
+                    user=gitlab_user,
+                    etag=etag,
+                    internal_gitlab_url=self.internal_gitlab_url,
+                )
 
         if matched_client is None:
             raise errors.MissingResourceError(message=f"No OAuth2 Client found for repository {repository_url}.")
@@ -400,11 +405,11 @@ class ConnectedServicesRepository:
             return result
 
     async def _get_repository_from_internal_gitlab(
-        self, repository_url: str, user: base_models.APIUser, etag: str | None
+        self, repository_url: str, user: base_models.APIUser, etag: str | None, internal_gitlab_url: str
     ) -> models.RepositoryProviderMatch | Literal["304"]:
         """Get the metadata about a repository from the internal GitLab instance."""
         async with HttpClient() as http:
-            adapter = get_internal_gitlab_adapter()
+            adapter = get_internal_gitlab_adapter(internal_gitlab_url)
             request_url = adapter.get_repository_api_url(repository_url)
             is_anonymous = not bool(user.access_token)
             logger.info(f"[{"Anon" if is_anonymous else "Logged"}/INTERNAL GITLAB] GET {request_url}")

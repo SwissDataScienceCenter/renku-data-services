@@ -123,6 +123,7 @@ class Config:
     gitlab_client: base_models.GitlabAPIProtocol
     kc_api: IKeycloakAPI
     message_queue: IMessageQueue
+    gitlab_url: str | None
 
     secrets_service_public_key: rsa.RSAPublicKey
     """The public key of the secrets service, used to encrypt user secrets that only it can decrypt."""
@@ -321,7 +322,9 @@ class Config:
         """The DB adapter for connected services."""
         if not self._connected_services_repo:
             self._connected_services_repo = ConnectedServicesRepository(
-                session_maker=self.db.async_session_maker, encryption_key=self.encryption_key
+                session_maker=self.db.async_session_maker,
+                encryption_key=self.encryption_key,
+                internal_gitlab_url=self.gitlab_url,
             )
         return self._connected_services_repo
 
@@ -343,6 +346,7 @@ class Config:
         db = DBConfig.from_env(prefix)
         kc_api: IKeycloakAPI
         secrets_service_public_key: PublicKeyTypes
+        gitlab_url: str | None
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
             encryption_key = secrets.token_bytes(32)
@@ -367,6 +371,7 @@ class Config:
             ]
             kc_api = DummyKeycloakAPI(users=[i._to_keycloak_dict() for i in dummy_users])
             redis = RedisConfig.fake()
+            gitlab_url = None
         else:
             encryption_key_path = os.getenv(f"{prefix}ENCRYPTION_KEY_PATH", "/encryption-key")
             encryption_key = Path(encryption_key_path).read_bytes()
@@ -433,4 +438,5 @@ class Config:
             message_queue=message_queue,
             encryption_key=encryption_key,
             secrets_service_public_key=secrets_service_public_key,
+            gitlab_url=gitlab_url,
         )

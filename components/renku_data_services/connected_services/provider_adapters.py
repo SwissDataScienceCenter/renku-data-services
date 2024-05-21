@@ -170,9 +170,8 @@ def get_provider_adapter(client: schemas.OAuth2ClientORM):
     return adapter_class(client=client)
 
 
-def get_internal_gitlab_adapter():
+def get_internal_gitlab_adapter(internal_gitlab_url: str):
     """Returns an adapter instance corresponding to the internal GitLab provider."""
-    GITLAB_URL = "https://gitlab.dev.renku.ch"
     client = schemas.OAuth2ClientORM(
         id="INTERNAL_GITLAB",
         client_id="INTERNAL_GITLAB",
@@ -180,7 +179,7 @@ def get_internal_gitlab_adapter():
         created_by_id="",
         kind=ProviderKind.gitlab,
         scope="",
-        url=GITLAB_URL,
+        url=internal_gitlab_url,
         client_secret=None,
         creation_date=datetime.now(),
         updated_at=datetime.now(),
