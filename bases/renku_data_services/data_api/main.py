@@ -3,10 +3,12 @@
 import argparse
 import asyncio
 from os import environ
+from types import SimpleNamespace
+from typing import Any
 
 import sentry_sdk
 from prometheus_sanic import monitor
-from sanic import Sanic
+from sanic import Sanic, Config as SanicConfig
 from sanic.log import logger
 from sanic.worker.loader import AppLoader
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
@@ -26,7 +28,7 @@ from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.utils.middleware import validate_null_byte
 
 
-def create_app() -> Sanic:
+def create_app() -> Sanic[SanicConfig, SimpleNamespace]:
     """Create a Sanic application."""
     config = Config.from_env()
     app = Sanic(config.app_name)
@@ -41,7 +43,7 @@ def create_app() -> Sanic:
     if config.sentry.enabled:
         logger.info("enabling sentry")
 
-        def filter_error(event, hint):
+        def filter_error(event: Any, hint: Any) -> Any:
             if "exc_info" in hint:
                 exc_type, exc_value, tb = hint["exc_info"]
                 if isinstance(
@@ -51,7 +53,7 @@ def create_app() -> Sanic:
             return event
 
         @app.before_server_start
-        async def setup_sentry(_):
+        async def setup_sentry(app: Sanic[SanicConfig, SimpleNamespace]) -> None:
             sentry_sdk.init(
                 dsn=config.sentry.dsn,
                 environment=config.sentry.environment,
@@ -81,7 +83,7 @@ def create_app() -> Sanic:
     app.register_middleware(validate_null_byte, "request")
 
     @app.main_process_start
-    async def do_migrations(*_):
+    async def do_migrations(app: Sanic[SanicConfig, SimpleNamespace]) -> None:
         logger.info("running migrations")
         run_migrations_for_app("common")
         config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
@@ -91,11 +93,11 @@ def create_app() -> Sanic:
         await config.event_repo.send_pending_events()
 
     @app.before_server_start
-    async def setup_rclone_validator(app, _):
+    async def setup_rclone_validator(app: Sanic[SanicConfig, SimpleNamespace]) -> None:
         validator = RCloneValidator()
         app.ext.dependency(validator)
 
-    async def send_pending_events(app):
+    async def send_pending_events(app: Sanic[SanicConfig, SimpleNamespace]) -> None:
         """Send pending messages in case sending in a handler failed."""
         while True:
             try:
@@ -105,6 +107,8 @@ def create_app() -> Sanic:
                 return
             except Exception as e:
                 logger.warning(f"Background task failed: {e}")
+
+    app.add_task(send_pending_events(app))
 
     return app
 
