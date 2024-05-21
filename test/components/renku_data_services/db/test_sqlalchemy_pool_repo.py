@@ -47,9 +47,7 @@ async def test_resource_pool_update_name(
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
-        updated_rp = await pool_repo.update_resource_pool(
-            id=inserted_rp.id, name=new_name, put=False, api_user=admin_user
-        )
+        updated_rp = await pool_repo.update_resource_pool(id=inserted_rp.id, name=new_name, api_user=admin_user)
         assert updated_rp.id == inserted_rp.id
         assert updated_rp.name == new_name
         retrieved_rps = await pool_repo.get_resource_pools(id=inserted_rp.id, api_user=admin_user)
@@ -75,7 +73,6 @@ async def test_resource_pool_update_quota(rp: models.ResourcePool, app_config: C
             id=inserted_rp.id,
             quota={"cpu": 999, "memory": 999, "gpu": 999},
             api_user=admin_user,
-            put=False,
         )
         assert updated_rp.id == inserted_rp.id
         assert updated_rp.quota is not None
@@ -110,7 +107,7 @@ async def test_resource_pool_update_classes(
         )
 
         updated_rp = await pool_repo.update_resource_pool(
-            id=inserted_rp.id, classes=new_classes_dicts, api_user=admin_user, put=False
+            id=inserted_rp.id, classes=new_classes_dicts, api_user=admin_user
         )
 
         assert updated_rp.id == inserted_rp.id
@@ -346,7 +343,7 @@ async def test_insert_class_in_nonexisting_rp(
 @pytest.mark.asyncio
 async def test_update_quota_in_nonexisting_rp(app_config: Config, new_quota_id: str, admin_user: base_models.APIUser):
     with pytest.raises(errors.MissingResourceError):
-        await app_config.rp_repo.update_resource_pool(id=99999, api_user=admin_user, quota=new_quota_id, put=False)
+        await app_config.rp_repo.update_resource_pool(id=99999, api_user=admin_user, quota=new_quota_id)
 
 
 @given(public_rp=public_rp_strat, private_rp=private_rp_strat)

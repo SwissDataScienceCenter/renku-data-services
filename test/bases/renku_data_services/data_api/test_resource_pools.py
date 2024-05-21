@@ -558,7 +558,7 @@ async def test_patch_tolerations(
     _, res = await sanic_client.patch(
         f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
         headers=admin_headers,
-        data=json.dumps({"tolerations": ["toleration2"]}),
+        data=json.dumps({"tolerations": ["toleration1", "toleration2"]}),
     )
     assert res.status_code == 200
     assert "toleration2" in res.json["tolerations"]
@@ -566,7 +566,7 @@ async def test_patch_tolerations(
     _, res = await sanic_client.patch(
         f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
         headers=admin_headers,
-        data=json.dumps({"tolerations": ["toleration1"]}),
+        data=json.dumps({"tolerations": ["toleration1", "toleration2", "toleration1"]}),
     )
     assert res.status_code == 200
     assert len(res.json["tolerations"]) == 2
@@ -600,7 +600,7 @@ async def test_patch_affinities(
     _, res = await sanic_client.patch(
         f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
         headers=admin_headers,
-        data=json.dumps({"node_affinities": [new_affinity]}),
+        data=json.dumps({"node_affinities": res_class["node_affinities"] + [new_affinity]}),
     )
     assert res.status_code == 200
     assert len(res.json["node_affinities"]) == 2
@@ -611,7 +611,7 @@ async def test_patch_affinities(
     _, res = await sanic_client.patch(
         f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
         headers=admin_headers,
-        data=json.dumps({"node_affinities": [new_affinity]}),
+        data=json.dumps({"node_affinities": res_class["node_affinities"] + [new_affinity, new_affinity]}),
     )
     assert res.status_code == 200
     assert len(res.json["node_affinities"]) == 2
@@ -620,7 +620,7 @@ async def test_patch_affinities(
     _, res = await sanic_client.patch(
         f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
         headers=admin_headers,
-        data=json.dumps({"node_affinities": [new_affinity]}),
+        data=json.dumps({"node_affinities": res_class["node_affinities"] + [new_affinity]}),
     )
     assert res.status_code == 200
     assert len(res.json["node_affinities"]) == 2

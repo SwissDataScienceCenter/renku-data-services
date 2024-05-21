@@ -300,9 +300,7 @@ class ResourcePoolRepository(_Base):
         return cls.dump()
 
     @_only_admins
-    async def update_resource_pool(
-        self, api_user: base_models.APIUser, id: int, put: bool, **kwargs
-    ) -> models.ResourcePool:
+    async def update_resource_pool(self, api_user: base_models.APIUser, id: int, **kwargs) -> models.ResourcePool:
         """Update an existing resource pool in the database."""
         rp: Optional[schemas.ResourcePoolORM] = None
         async with self.session_maker() as session, session.begin():
@@ -372,7 +370,7 @@ class ResourcePoolRepository(_Base):
                                 )
                             new_classes_coroutines.append(
                                 self.update_resource_class(
-                                    api_user, resource_pool_id=id, resource_class_id=class_id, put=put, **cls
+                                    api_user, resource_pool_id=id, resource_class_id=class_id, **cls
                                 )
                             )
                     case _:
@@ -418,7 +416,7 @@ class ResourcePoolRepository(_Base):
 
     @_only_admins
     async def update_resource_class(
-        self, api_user: base_models.APIUser, resource_pool_id: int, resource_class_id: int, put: bool, **kwargs
+        self, api_user: base_models.APIUser, resource_pool_id: int, resource_class_id: int, **kwargs
     ) -> models.ResourceClass:
         """Update a specific resource class."""
         async with self.session_maker() as session, session.begin():
@@ -461,11 +459,10 @@ class ResourcePoolRepository(_Base):
                             else:
                                 # CREATE a brand new affinity
                                 cls.node_affinities.append(new_affinity)
-                        if put:
-                            # REMOVE an affinity
-                            for existing_affinity_key, existing_affinity in existing_affinities.items():
-                                if existing_affinity_key not in new_affinities:
-                                    cls.node_affinities.remove(existing_affinity)
+                        # REMOVE an affinity
+                        for existing_affinity_key, existing_affinity in existing_affinities.items():
+                            if existing_affinity_key not in new_affinities:
+                                cls.node_affinities.remove(existing_affinity)
                     case "tolerations":
                         v = cast(list[str], v)
                         existing_tolerations: dict[str, schemas.TolerationORM] = {
@@ -478,11 +475,10 @@ class ResourcePoolRepository(_Base):
                             if new_tol_key not in existing_tolerations:
                                 # CREATE a brand new toleration
                                 cls.tolerations.append(new_tol)
-                        if put:
-                            # REMOVE a toleration
-                            for existing_tol_key, existing_tol in existing_tolerations.items():
-                                if existing_tol_key not in new_tolerations:
-                                    cls.tolerations.remove(existing_tol)
+                        # REMOVE a toleration
+                        for existing_tol_key, existing_tol in existing_tolerations.items():
+                            if existing_tol_key not in new_tolerations:
+                                cls.tolerations.remove(existing_tol)
                     case _:
                         setattr(cls, k, v)
             if cls.resource_pool is None:

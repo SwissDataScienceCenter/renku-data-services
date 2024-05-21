@@ -95,7 +95,6 @@ class ResourcePoolsBP(CustomBlueprint):
             res = await self.rp_repo.update_resource_pool(
                 api_user=user,
                 id=resource_pool_id,
-                put=True,
                 **body.model_dump(exclude_none=True),
             )
             if res is None:
@@ -117,7 +116,6 @@ class ResourcePoolsBP(CustomBlueprint):
             res = await self.rp_repo.update_resource_pool(
                 api_user=user,
                 id=resource_pool_id,
-                put=False,
                 **body.model_dump(exclude_none=True),
             )
             if res is None:
