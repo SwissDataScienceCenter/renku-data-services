@@ -4,6 +4,8 @@ from pathlib import Path
 from marshmallow import Schema, ValidationError, fields
 from ulid import ULID
 
+BLACKLISTED_PATHS = ["bin", "sbin", "usr", "dev", "proc", "sys", "lib", "var"]
+
 
 class PathField(fields.Field):
     def _serialize(self, value, attr, obj, **kwargs):
@@ -15,6 +17,10 @@ class PathField(fields.Field):
         path = Path(value)
         if not path.is_absolute():
             raise ValidationError("Path is not aboslute")
+
+        if path.parts[0] in BLACKLISTED_PATHS:
+            raise ValidationError(f"Secrets are not allowed to be mounted in {path.parts[0]}")
+
         return str(path)
 
 
