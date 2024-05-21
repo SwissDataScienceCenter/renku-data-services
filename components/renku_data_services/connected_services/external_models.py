@@ -111,7 +111,9 @@ class GitHubRepository(BaseModel):
     permissions: GitHubRepositoryPermissions | None = None
     visibility: str
 
-    def to_repository(self, etag: str | None) -> models.RepositoryMetadata:
+    def to_repository(
+        self, etag: str | None, default_permissions: models.RepositoryPermissions | None = None
+    ) -> models.RepositoryMetadata:
         """Returns the corresponding Repository object."""
 
         return models.RepositoryMetadata(
@@ -121,6 +123,6 @@ class GitHubRepository(BaseModel):
             permissions=(
                 self.permissions.to_permissions(visibility=self.visibility)
                 if self.permissions is not None
-                else models.RepositoryPermissions.default()
+                else default_permissions or models.RepositoryPermissions.default()
             ),
         )

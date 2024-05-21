@@ -149,7 +149,11 @@ class GitHubAdapter(ProviderAdapter):
         model = external_models.GitHubRepository.model_validate(response.json())
         logger.info(f"Got github data: {model}")
         new_etag = response.headers.get("ETag")
-        return model.to_repository(etag=new_etag)
+        return model.to_repository(
+            etag=new_etag,
+            # NOTE: we assume the "pull" permission if a GitLab repository is publicly visible
+            default_permissions=models.RepositoryPermissions(pull=True, push=False) if is_anonymous else None,
+        )
 
 
 _adapter_map: dict[ProviderKind, type[ProviderAdapter]] = {
