@@ -181,24 +181,8 @@ class OAuth2ConnectionsBP(CustomBlueprint):
         """Get the metadata available about a repository."""
 
         @authenticate(self.internal_gitlab_authenticator)
-        async def _get_one_repository_from_internal_gitlab(
-            _: Request, repository_url: str, user: base_models.APIUser, etag: str | None
-        ):
-            logger.info("Using internal gitlab handler")
-            result = await self.connected_services_repo.get_repository_from_internal_gitlab(
-                repository_url=repository_url, user=user, etag=etag
-            )
-            if result == "304":
-                return HTTPResponse(status=304)
-            headers = (
-                {"ETag": result.repository_metadata.etag}
-                if result.repository_metadata and result.repository_metadata.etag is not None
-                else None
-            )
-            return json(
-                apispec.RepositoryProviderMatch.model_validate(result).model_dump(exclude_none=True, mode="json"),
-                headers=headers,
-            )
+        async def _get_internal_gitlab_user(_: Request, user: base_models.APIUser):
+            return user
 
         @authenticate(self.authenticator)
         @extract_if_none_match
@@ -208,13 +192,14 @@ class OAuth2ConnectionsBP(CustomBlueprint):
             repository_url = unquote(repository_url)
             logger.info(f"Requested repository_url={repository_url}")
 
+            async def get_internal_gitlab_user():
+                return await _get_internal_gitlab_user(request)
+
             result = await self.connected_services_repo.get_repository(
-                repository_url=repository_url, user=user, etag=etag
+                repository_url=repository_url, user=user, etag=etag, get_internal_gitlab_user=get_internal_gitlab_user
             )
             if result == "304":
                 return HTTPResponse(status=304)
-            if result == "INTERNAL_GITLAB":
-                return await _get_one_repository_from_internal_gitlab(request, repository_url=repository_url, etag=etag)
             headers = (
                 {"ETag": result.repository_metadata.etag}
                 if result.repository_metadata and result.repository_metadata.etag is not None
