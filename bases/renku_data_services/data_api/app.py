@@ -120,6 +120,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         url_prefix=url_prefix,
         connected_services_repo=config.connected_services_repo,
         authenticator=config.authenticator,
+        internal_gitlab_authenticator=config.gitlab_authenticator,
     )
     app.blueprint(
         [

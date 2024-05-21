@@ -1,6 +1,7 @@
 """Adapters for each kind of OAuth2 client."""
 
 from abc import ABC, abstractmethod
+from datetime import datetime
 from urllib.parse import quote, urljoin, urlparse, urlunparse
 
 from httpx import Response
@@ -163,3 +164,21 @@ def get_provider_adapter(client: schemas.OAuth2ClientORM):
 
     adapter_class = _adapter_map[client.kind]
     return adapter_class(client=client)
+
+
+def get_internal_gitlab_adapter():
+    """Returns an adapter instance corresponding to the internal GitLab provider."""
+    GITLAB_URL = "https://gitlab.dev.renku.ch"
+    client = schemas.OAuth2ClientORM(
+        id="INTERNAL_GITLAB",
+        client_id="INTERNAL_GITLAB",
+        display_name="INTERNAL_GITLAB",
+        created_by_id="",
+        kind=ProviderKind.gitlab,
+        scope="",
+        url=GITLAB_URL,
+        client_secret=None,
+        creation_date=datetime.now(),
+        updated_at=datetime.now(),
+    )
+    return GitLabAdapter(client)
