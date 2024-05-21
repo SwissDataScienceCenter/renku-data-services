@@ -2,16 +2,12 @@
 
 import argparse
 import asyncio
+from multiprocessing import Queue
 from os import environ
+from queue import Empty
 
 import sentry_sdk
 from prometheus_sanic import monitor
-from sanic import Sanic
-from sanic.log import logger
-from sanic.worker.loader import AppLoader
-from sentry_sdk.integrations.asyncio import AsyncioIntegration
-from sentry_sdk.integrations.sanic import SanicIntegration, _hub_enter, _hub_exit, _set_transaction
-
 from renku_data_services.app_config import Config
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.data_api.app import register_all_handlers
@@ -24,6 +20,11 @@ from renku_data_services.errors.errors import (
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.utils.middleware import validate_null_byte
+from sanic import Sanic
+from sanic.log import logger
+from sanic.worker.loader import AppLoader
+from sentry_sdk.integrations.asyncio import AsyncioIntegration
+from sentry_sdk.integrations.sanic import SanicIntegration, _hub_enter, _hub_exit, _set_transaction
 
 
 def create_app() -> Sanic:
@@ -81,6 +82,11 @@ def create_app() -> Sanic:
     app.register_middleware(validate_null_byte, "request")
 
     @app.main_process_start
+    async def create_shared_context(app: Sanic, _):
+        logger.info("create_shared_context")
+        app.shared_ctx.queue = Queue()
+
+    @app.main_process_start
     async def do_migrations(*_):
         logger.info("running migrations")
         run_migrations_for_app("common")
@@ -89,6 +95,10 @@ def create_app() -> Sanic:
         await sync_admins_from_keycloak(config.kc_api, config.authz)
         await config.group_repo.generate_user_namespaces()
         await config.event_repo.send_pending_events()
+
+    @app.main_process_ready
+    async def start_queue_handler(app: Sanic, _):
+        app.manager.manage("QueueHandler", queue_handler, {"queue": app.shared_ctx.queue}, transient=True)
 
     @app.before_server_start
     async def setup_rclone_validator(app, _):
@@ -107,6 +117,23 @@ def create_app() -> Sanic:
                 logger.warning(f"Background task failed: {e}")
 
     return app
+
+
+def queue_handler(queue: Queue, **kwargs):
+    try:
+        from time import sleep
+
+        app = Sanic("queue_handler")
+
+        while True:
+            sleep(1)
+            try:
+                msg = queue.get(block=False)
+            except Empty:
+                msg = None
+            logger.info(f"msg = {msg}")
+    except KeyboardInterrupt:
+        logger.info("Done")
 
 
 if __name__ == "__main__":

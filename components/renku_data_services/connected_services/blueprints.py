@@ -25,7 +25,9 @@ class OAuth2ClientsBP(CustomBlueprint):
         """List all OAuth2 Clients."""
 
         @authenticate(self.authenticator)
-        async def _get_all(_: Request, user: base_models.APIUser):
+        async def _get_all(request: Request, user: base_models.APIUser):
+            request.app.shared_ctx.queue.put("Hello!")
+
             clients = await self.connected_services_repo.get_oauth2_clients(user=user)
             return json(
                 [apispec.Provider.model_validate(c).model_dump(exclude_none=True, mode="json") for c in clients]
