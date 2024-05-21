@@ -17,6 +17,13 @@ def main(server: "UserServer"):
     gl_project_path = gitlab_project.path if gitlab_project else None
     commit_sha = getattr(server, "commit_sha", None)
 
+    volume_mount = {
+        "mountPath": server.work_dir.absolute().as_posix(),
+        "name": "workspace",
+    }
+    if gl_project_path:
+        volume_mount["subPath"] = f"{gl_project_path}"
+
     patches = [
         {
             "type": "application/json-patch+json",
@@ -40,7 +47,7 @@ def main(server: "UserServer"):
                         "env": [
                             {
                                 "name": "GIT_RPC_MOUNT_PATH",
-                                "value": f"/work/{gl_project_path}",
+                                "value": server.work_dir.absolute().as_posix(),
                             },
                             {
                                 "name": "GIT_RPC_PORT",
@@ -98,13 +105,7 @@ def main(server: "UserServer"):
                             "runAsUser": 1000,
                             "runAsNonRoot": True,
                         },
-                        "volumeMounts": [
-                            {
-                                "mountPath": f"/work/{gl_project_path}/",
-                                "name": "workspace",
-                                "subPath": f"{gl_project_path}",
-                            }
-                        ],
+                        "volumeMounts": [volume_mount],
                         "livenessProbe": {
                             "httpGet": {
                                 "port": config.sessions.git_rpc_server.port,
