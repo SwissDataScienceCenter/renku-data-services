@@ -90,12 +90,17 @@ class GitLabRepository(BaseModel):
 class GitHubRepositoryPermissions(BaseModel):
     """Repository permissions from a GitHub provider."""
 
+    PUBLIC_VISIBILITY: ClassVar[str] = "public"
+
     pull: bool
     push: bool
 
-    def to_permissions(self) -> models.RepositoryPermissions:
+    def to_permissions(self, visibility: str | None) -> models.RepositoryPermissions:
         """Returns the corresponding models.RepositoryPermissions object."""
-        return models.RepositoryPermissions(pull=self.pull, push=self.push)
+        pull = self.pull
+        if visibility == self.PUBLIC_VISIBILITY:
+            pull = True
+        return models.RepositoryPermissions(pull=pull, push=self.push)
 
 
 class GitHubRepository(BaseModel):
@@ -103,7 +108,7 @@ class GitHubRepository(BaseModel):
 
     clone_url: str
     html_url: str
-    permissions: GitHubRepositoryPermissions | None
+    permissions: GitHubRepositoryPermissions | None = None
     visibility: str
 
     def to_repository(self, etag: str | None) -> models.RepositoryMetadata:
@@ -114,7 +119,7 @@ class GitHubRepository(BaseModel):
             git_http_url=self.clone_url,
             web_url=self.html_url,
             permissions=(
-                self.permissions.to_permissions()
+                self.permissions.to_permissions(visibility=self.visibility)
                 if self.permissions is not None
                 else models.RepositoryPermissions.default()
             ),

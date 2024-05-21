@@ -312,7 +312,6 @@ class ConnectedServicesRepository:
         GITLAB_URL = "https://gitlab.dev.renku.ch"
         internal_gitlab_netloc = urlparse(GITLAB_URL).netloc
         if matched_client is None and internal_gitlab_netloc == repository_netloc:
-            # return "INTERNAL_GITLAB"
             gitlab_user = await get_internal_gitlab_user()
             return await self._get_repository_from_internal_gitlab(
                 repository_url=repository_url, user=gitlab_user, etag=etag
