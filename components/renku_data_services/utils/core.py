@@ -4,7 +4,7 @@ import functools
 import os
 import ssl
 from collections.abc import Awaitable, Callable
-from typing import Any, Concatenate, ParamSpec, Protocol, TypeAlias, TypeVar
+from typing import Any, Concatenate, ParamSpec, Protocol, TypeVar
 
 import httpx
 from deepmerge import Merger
@@ -62,33 +62,23 @@ class WithSessionMaker(Protocol):
         ...
 
 
-def with_db_transaction_old(f):
-    """Initializes a transaction and commits it on successful exit of the wrapped function."""
-
-    @functools.wraps(f)
-    async def transaction_wrapper(self: WithSessionMaker, *args, **kwargs):
-        async with self.session_maker() as session, session.begin():
-            return await f(self, session, *args, **kwargs)
-
-    return transaction_wrapper
-
-
-P = ParamSpec("P")
-T = TypeVar("T")
+_P = ParamSpec("_P")
+_T = TypeVar("_T")
 _WithSessionMaker = TypeVar("_WithSessionMaker", bound=WithSessionMaker)
-_WithTransactionFunc: TypeAlias = Callable[Concatenate[_WithSessionMaker, P], Awaitable[T]]
 
 
-def with_db_transaction(f: _WithTransactionFunc) -> _WithTransactionFunc:
+def with_db_transaction(
+    f: Callable[Concatenate[_WithSessionMaker, _P], Awaitable[_T]],
+) -> Callable[Concatenate[_WithSessionMaker, _P], Awaitable[_T]]:
     """Initializes a transaction and commits it on successful exit of the wrapped function."""
 
     @functools.wraps(f)
-    async def transaction_wrapper(self: _WithSessionMaker, *args: P.args, **kwargs: P.kwargs):
+    async def transaction_wrapper(self: _WithSessionMaker, *args: _P.args, **kwargs: _P.kwargs):
         session_kwarg = kwargs.get("session")
         if "session" in kwargs and session_kwarg is not None and not isinstance(session_kwarg, AsyncSession):
             raise errors.ProgrammingError(
-                message="The decorator that starts a DB transaction expects the session keyword to be "
-                "present in the function arguments"
+                message="The decorator that starts a DB transaction encountered an existing session "
+                f"in the keyword arguments but the session is of an unexpected type {type(session_kwarg)}"
             )
         if session_kwarg is None:
             async with self.session_maker() as session, session.begin():

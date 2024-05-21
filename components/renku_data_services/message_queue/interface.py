@@ -1,6 +1,6 @@
 """Interface for message queue client."""
 
-from typing import Protocol
+from typing import Any, Protocol
 
 
 class IMessageQueue(Protocol):
@@ -9,7 +9,7 @@ class IMessageQueue(Protocol):
     async def send_message(
         self,
         channel: str,
-        message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float],
+        message: dict[str, Any],
     ):
         """Send a message on a channel."""
         ...

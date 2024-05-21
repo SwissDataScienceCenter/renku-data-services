@@ -1,6 +1,6 @@
 """Converter of models to Avro schemas for events."""
 
-from typing import NamedTuple, TypeAlias, cast
+from typing import NamedTuple, TypeVar
 
 from dataclasses_avroschema.schema_generator import AvroModel
 
@@ -259,54 +259,56 @@ class _GroupAuthzEventConverter:
         return output
 
 
-_ModelTypes: TypeAlias = (
-    project_models.Project
-    | project_models.ProjectUpdate
-    | user_models.UserInfo
-    | user_models.UserWithNamespace
-    | user_models.UserWithNamespaceUpdate
-    | list[authz_models.MembershipChange]
-    | list[user_models.UserWithNamespace]
-    | None
-)
+_T = TypeVar("_T")
 
 
 class EventConverter:
     """Generates events from any type of data service models."""
 
     @staticmethod
-    def to_events(input: _ModelTypes, event_type: type[AvroModel] | AmbiguousEvent) -> list[Event]:
+    def to_events(input: _T, event_type: type[AvroModel] | AmbiguousEvent) -> list[Event]:
         """Generate an event for a data service model based on an event type."""
         if isinstance(input, project_models.Project):
-            input = cast(project_models.Project, input)
             return _ProjectEventConverter.to_events(input, event_type)
         elif isinstance(input, project_models.ProjectUpdate):
-            input = cast(project_models.Project, input.new)
-            return _ProjectEventConverter.to_events(input, event_type)
+            return _ProjectEventConverter.to_events(input.new, event_type)
         elif isinstance(input, (user_models.UserInfo, user_models.UserWithNamespace)):
             return _UserEventConverter.to_events(input, event_type)
-        elif input is None and event_type == type(v2.UserRemoved):
+        elif input is None and event_type == type(v2.UserRemoved):  # type: ignore[unreachable]
             # NOTE: The user that was supposed to be removed is not in the database at all, so dont send the event
+            # The code is definitely reachable it is just that mypy thinks it is not
+            return []  # type: ignore[unreachable]
+        elif (
+            isinstance(input, list)
+            and len(input) > 0
+            and all([isinstance(i, authz_models.MembershipChange) for i in input])
+        ):
+            if event_type == AmbiguousEvent.PROJECT_MEMBERSHIP_CHANGED:
+                return _ProjectAuthzEventConverter.to_events(input)
+            elif event_type == AmbiguousEvent.GROUP_MEMBERSHIP_CHANGED:
+                return _GroupAuthzEventConverter.to_events(input)
+            else:
+                raise errors.ProgrammingError(
+                    message="Found unknown event type when processing membership change list in the message queue "
+                    f"decorator, {type(event_type)}"
+                )
+        elif isinstance(input, list) and len(input) == 0:
             return []
-        elif isinstance(input, list) and event_type == AmbiguousEvent.PROJECT_MEMBERSHIP_CHANGED:
-            input = cast(list[authz_models.MembershipChange], input)
-            return _ProjectAuthzEventConverter.to_events(input)
-        elif isinstance(input, list) and event_type == AmbiguousEvent.GROUP_MEMBERSHIP_CHANGED:
-            input = cast(list[authz_models.MembershipChange], input)
-            return _GroupAuthzEventConverter.to_events(input)
         elif (
             isinstance(input, user_models.UserWithNamespaceUpdate)
             and event_type == AmbiguousEvent.UPDATE_OR_INSERT_USER
         ):
             return _UserEventConverter.to_events(input, event_type)
-        elif isinstance(input, list) and event_type == AmbiguousEvent.INSERT_USER_NAMESPACE:
-            input = cast(list[user_models.UserWithNamespace], input)
+        elif (
+            isinstance(input, list)
+            and event_type == AmbiguousEvent.INSERT_USER_NAMESPACE
+            and len(input) > 0
+            and all([isinstance(i, user_models.UserWithNamespace) for i in input])
+        ):
             output: list[Event] = []
             for namespace in input:
                 output.extend(_UserEventConverter.to_events(namespace, event_type))
             return output
-        elif isinstance(input, list) and len(input) == 0:
-            return []
         else:
             raise errors.EventError(
                 message=f"Trying to convert an uknown model of type {type(input)} to an event type {event_type}"

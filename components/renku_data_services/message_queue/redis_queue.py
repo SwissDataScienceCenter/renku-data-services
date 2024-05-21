@@ -11,7 +11,7 @@ from datetime import datetime
 from functools import wraps
 from io import BytesIO
 from pathlib import Path
-from typing import Concatenate, ParamSpec, Protocol, TypeAlias, TypeVar
+from typing import Any, Concatenate, ParamSpec, Protocol, TypeVar
 
 from dataclasses_avroschema.schema_generator import AvroModel
 from dataclasses_avroschema.utils import standardize_custom_type
@@ -86,21 +86,18 @@ class WithMessageQueue(Protocol):
         """Returns the event repository."""
         ...
 
-    @property
-    def message_queue(self) -> IMessageQueue:
-        """Returns the message queue client."""
-        ...
-
 
 _P = ParamSpec("_P")
 _T = TypeVar("_T")
 _WithMessageQueue = TypeVar("_WithMessageQueue", bound=WithMessageQueue)
-_DispatchMessageFunc: TypeAlias = Callable[Concatenate[_WithMessageQueue, _P], Awaitable[_T]]
 
 
 def dispatch_message(
     event_type: type[AvroModel] | AmbiguousEvent,
-) -> Callable[[_DispatchMessageFunc], _DispatchMessageFunc]:
+) -> Callable[
+    [Callable[Concatenate[_WithMessageQueue, _P], Awaitable[_T]]],
+    Callable[Concatenate[_WithMessageQueue, _P], Awaitable[_T]],
+]:
     """Sends a message on the message queue.
 
     The transform method is called with the arguments and result of the wrapped method. It is responsible for
@@ -123,9 +120,11 @@ def dispatch_message(
       update. Order can be maintained due to the timestamps in the messages.
     """
 
-    def decorator(f: _DispatchMessageFunc) -> _DispatchMessageFunc:
+    def decorator(
+        f: Callable[Concatenate[_WithMessageQueue, _P], Awaitable[_T]],
+    ) -> Callable[Concatenate[_WithMessageQueue, _P], Awaitable[_T]]:
         @wraps(f)
-        async def message_wrapper(self, *args: _P.args, **kwargs: _P.kwargs):
+        async def message_wrapper(self: _WithMessageQueue, *args: _P.args, **kwargs: _P.kwargs):
             session = kwargs.get("session")
             if not isinstance(session, AsyncSession):
                 raise errors.ProgrammingError(
@@ -134,14 +133,14 @@ def dispatch_message(
                 )
             result = await f(self, *args, **kwargs)
             if result is None:
-                return result
+                return result  # type: ignore[unreachable]
             events = EventConverter.to_events(result, event_type)
 
             for event in events:
                 message_id = ULID().hex
                 schema_version = "2"
                 headers = create_header(event.queue, schema_version=schema_version).serialize_json()
-                message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float] = {
+                message: dict[str, Any] = {
                     "id": message_id,
                     "headers": headers,
                     "payload": base64.b64encode(serialize_binary(event.payload)).decode(),
@@ -149,7 +148,7 @@ def dispatch_message(
                 event_id = await self.event_repo.store_event(session, event.queue, message)
 
                 try:
-                    await self.message_queue.send_message(event.queue, message)
+                    await self.event_repo.message_queue.send_message(event.queue, message)
                 except Exception as err:
                     logging.warning(
                         f"Could not insert event message to redis queue because of {err} "
@@ -173,7 +172,7 @@ class RedisQueue(IMessageQueue):
     async def send_message(
         self,
         channel: str,
-        message: dict[bytes | memoryview | str | int | float, bytes | memoryview | str | int | float],
+        message: dict[str, Any],
     ):
         """Send a message on a channel."""
         message = copy.copy(message)
