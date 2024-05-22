@@ -21,6 +21,7 @@ from renku_data_services.errors.errors import (
     Unauthorized,
     ValidationError,
 )
+from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.utils.middleware import validate_null_byte
@@ -95,16 +96,26 @@ def create_app() -> Sanic:
         validator = RCloneValidator()
         app.ext.dependency(validator)
 
-    async def send_pending_events(app):
+    def send_pending_events(event_repo: EventRepository) -> None:
         """Send pending messages in case sending in a handler failed."""
-        while True:
-            try:
-                await asyncio.sleep(30)
-                await config.event_repo.send_pending_events()
-            except asyncio.CancelledError:
-                return
-            except Exception as e:
-                logger.warning(f"Background task failed: {e}")
+
+        async def _send_messages(event_repo: EventRepository) -> None:
+            while True:
+                try:
+                    await config.event_repo.send_pending_events()
+                    await asyncio.sleep(1)
+                except (asyncio.CancelledError, KeyboardInterrupt):
+                    return
+                except Exception as e:
+                    logger.warning(f"Background task failed: {e}")
+                    raise
+
+        asyncio.run(_send_messages(event_repo))
+
+    @app.main_process_ready
+    async def ready(app: Sanic, _):
+        """Application ready event handler."""
+        app.manager.manage("SendEvents", send_pending_events, {"event_repo": config.event_repo})
 
     return app
 

@@ -6,7 +6,7 @@ import logging
 
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.authz.authz import Authz
-from renku_data_services.background_jobs.config import QueueConfig, SyncConfig
+from renku_data_services.background_jobs.config import SyncConfig
 
 logging.basicConfig(level=logging.INFO)
 
@@ -22,14 +22,6 @@ async def user_sync(args):
         await sync_admins_from_keycloak(config.kc_api, Authz(config.authz_config))
 
 
-async def send_messages(args):
-    """Send pending message queue messages."""
-    config = QueueConfig.from_env()
-    while True:
-        await config.event_repo.send_pending_events()
-        await asyncio.sleep(1.0)
-
-
 async def main():
     """Run data services background jobs."""
     parser = argparse.ArgumentParser(prog="Data Service Background Jobs")
@@ -37,9 +29,6 @@ async def main():
 
     user_sync_parser = subparsers.add_parser("user_sync", help="sync users from keycloak into data services")
     user_sync_parser.set_defaults(func=user_sync)
-
-    send_messages_parser = subparsers.add_parser("send_messages", help="send outstanding message queue messages")
-    send_messages_parser.set_defaults(func=send_messages)
 
     args = parser.parse_args()
     await args.func(args)
