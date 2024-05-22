@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, LargeBinary, MetaData, String, func
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, LargeBinary, MetaData, String, false, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import UniqueConstraint
@@ -34,6 +34,7 @@ class OAuth2ClientORM(BaseORM):
     kind: Mapped[ProviderKind]
     scope: Mapped[str] = mapped_column("scope", String())
     url: Mapped[str] = mapped_column("url", String())
+    use_pkce: Mapped[bool] = mapped_column("use_pkce", Boolean(), server_default=false())
     client_secret: Mapped[bytes | None] = mapped_column("client_secret", LargeBinary(), default=None, repr=False)
     creation_date: Mapped[datetime] = mapped_column(
         "creation_date", DateTime(timezone=True), default=None, server_default=func.now(), nullable=False
@@ -60,6 +61,7 @@ class OAuth2ClientORM(BaseORM):
             display_name=self.display_name,
             scope=self.scope,
             url=self.url,
+            use_pkce=self.use_pkce,
             created_by_id=self.created_by_id,
             creation_date=self.creation_date,
             updated_at=self.updated_at,
@@ -77,6 +79,7 @@ class OAuth2ConnectionORM(BaseORM):
     token: Mapped[dict[str, Any] | None] = mapped_column("token", JSONVariant)
     state: Mapped[str | None] = mapped_column("state", String(), index=True, unique=True)
     status: Mapped[ConnectionStatus]
+    extra_data: Mapped[dict[str, Any] | None] = mapped_column("extra_data", JSONVariant)
     creation_date: Mapped[datetime] = mapped_column(
         "creation_date", DateTime(timezone=True), default=None, server_default=func.now(), nullable=False
     )
