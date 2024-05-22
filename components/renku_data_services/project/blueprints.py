@@ -6,7 +6,7 @@ from sanic import HTTPResponse, Request, json
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
-from renku_data_services.authz.models import Member, Role, Visibility
+from renku_data_services.authz.models import Member, Role
 from renku_data_services.base_api.auth import (
     authenticate,
     only_authenticated,
@@ -43,7 +43,7 @@ class ProjectsBP(CustomBlueprint):
                 dict(
                     id=p.id,
                     name=p.name,
-                    namespace=p.namespace,
+                    namespace=p.namespace.slug,
                     slug=p.slug,
                     creation_date=p.creation_date.isoformat(),
                     created_by=p.created_by,
@@ -65,26 +65,12 @@ class ProjectsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.ProjectPost)
         async def _post(_: Request, *, user: base_models.APIUser, body: apispec.ProjectPost):
-            keywords = [kw.root for kw in body.keywords] if body.keywords is not None else []
-            project = project_models.Project(
-                id=None,
-                name=body.name,
-                namespace=body.namespace,
-                slug=body.slug or base_models.Slug.from_name(body.name).value,
-                description=body.description,
-                repositories=body.repositories or [],
-                created_by=user.id,  # type: ignore[arg-type]
-                visibility=Visibility(body.visibility)
-                if isinstance(body.visibility, str)
-                else Visibility(body.visibility.value),
-                keywords=keywords,
-            )
-            result = await self.project_repo.insert_project(user=user, project=project)
+            result = await self.project_repo.insert_project(user=user, project=body)
             return json(
                 dict(
                     id=result.id,
                     name=result.name,
-                    namespace=result.namespace,
+                    namespace=result.namespace.slug,
                     slug=result.slug,
                     creation_date=result.creation_date.isoformat(),
                     created_by=result.created_by,
@@ -116,7 +102,7 @@ class ProjectsBP(CustomBlueprint):
                 dict(
                     id=project.id,
                     name=project.name,
-                    namespace=project.namespace,
+                    namespace=project.namespace.slug,
                     slug=project.slug,
                     creation_date=project.creation_date.isoformat(),
                     created_by=project.created_by,
@@ -147,7 +133,7 @@ class ProjectsBP(CustomBlueprint):
                 dict(
                     id=project.id,
                     name=project.name,
-                    namespace=project.namespace,
+                    namespace=project.namespace.slug,
                     slug=project.slug,
                     creation_date=project.creation_date.isoformat(),
                     created_by=project.created_by,
@@ -188,7 +174,7 @@ class ProjectsBP(CustomBlueprint):
             body_dict = body.model_dump(exclude_none=True)
 
             project_update = await self.project_repo.update_project(
-                user=user, project_id=project_id, etag=etag, **body_dict
+                user=user, project_id=project_id, etag=etag, payload=body_dict
             )
             if not isinstance(project_update, project_models.ProjectUpdate):
                 raise errors.ProgrammingError(
@@ -201,7 +187,7 @@ class ProjectsBP(CustomBlueprint):
                 dict(
                     id=updated_project.id,
                     name=updated_project.name,
-                    namespace=updated_project.namespace,
+                    namespace=updated_project.namespace.slug,
                     slug=updated_project.slug,
                     creation_date=updated_project.creation_date.isoformat(),
                     created_by=updated_project.created_by,
@@ -222,7 +208,7 @@ class ProjectsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @validate_path_project_id
         async def _get_all_members(_: Request, *, user: base_models.APIUser, project_id: str):
-            members = await self.project_member_repo.get_members(user=user, project_id=project_id)
+            members = await self.project_member_repo.get_members(user, project_id)
 
             users = []
 
@@ -253,11 +239,7 @@ class ProjectsBP(CustomBlueprint):
         async def _update_members(request: Request, *, user: base_models.APIUser, project_id: str):
             body_dump = apispec.ProjectMemberListPatchRequest.model_validate(request.json)
             members = [Member(Role(i.role.value), i.id, project_id) for i in body_dump.root]
-            await self.project_member_repo.update_members(
-                user=user,
-                project_id=project_id,
-                members=members,
-            )
+            await self.project_member_repo.update_members(user, project_id, members)
             return HTTPResponse(status=200)
 
         return "/projects/<project_id>/members", ["PATCH"], _update_members
@@ -269,7 +251,7 @@ class ProjectsBP(CustomBlueprint):
         @validate_path_project_id
         @validate_path_user_id
         async def _delete_member(_: Request, *, user: base_models.APIUser, project_id: str, member_id: str):
-            await self.project_member_repo.delete_members(user=user, project_id=project_id, user_ids=[member_id])
+            await self.project_member_repo.delete_members(user, project_id, [member_id])
             return HTTPResponse(status=204)
 
         return "/projects/<project_id>/members/<member_id>", ["DELETE"], _delete_member

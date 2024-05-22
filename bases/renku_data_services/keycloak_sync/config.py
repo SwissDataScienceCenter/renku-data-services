@@ -1,4 +1,5 @@
 """Configurations for Keycloak syncing."""
+
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -6,6 +7,7 @@ from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
+from renku_data_services.authz.authz import Authz
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.errors import errors
 from renku_data_services.message_queue.config import RedisConfig
@@ -41,20 +43,24 @@ class SyncConfig:
         # Therefore, we want to consume very few connections and we can wait for an available connection
         # much longer than the default 30 seconds. In our tests syncing 15 users times out with the default.
         engine = create_async_engine(async_sqlalchemy_url, pool_size=4, max_overflow=0, pool_timeout=600)
-        session_maker: Callable[..., AsyncSession] = sessionmaker(
-            engine, class_=AsyncSession, expire_on_commit=False
-        )  # type: ignore[call-overload]
+        session_maker: Callable[..., AsyncSession] = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)  # type: ignore[call-overload]
         redis = RedisConfig.from_env(prefix)
         message_queue = RedisQueue(redis)
 
+        authz_config = AuthzConfig.from_env()
         event_repo = EventRepository(session_maker=session_maker, message_queue=message_queue)
-        group_repo = GroupRepository(session_maker)
-        syncer = UsersSync(session_maker, message_queue=message_queue, event_repo=event_repo, group_repo=group_repo)
+        group_repo = GroupRepository(session_maker, event_repo, Authz(authz_config))
+        syncer = UsersSync(
+            session_maker,
+            message_queue=message_queue,
+            event_repo=event_repo,
+            group_repo=group_repo,
+            authz=Authz(authz_config),
+        )
         keycloak_url = os.environ[f"{prefix}KEYCLOAK_URL"]
         client_id = os.environ[f"{prefix}KEYCLOAK_CLIENT_ID"]
         client_secret = os.environ[f"{prefix}KEYCLOAK_CLIENT_SECRET"]
         realm = os.environ.get(f"{prefix}KEYCLOAK_REALM", "Renku")
         kc_api = KeycloakAPI(keycloak_url=keycloak_url, client_id=client_id, client_secret=client_secret, realm=realm)
         total_user_sync = os.environ.get(f"{prefix}TOTAL_USER_SYNC", "false").lower() == "true"
-        authz_config = AuthzConfig.from_env()
         return cls(syncer, kc_api, authz_config, total_user_sync)

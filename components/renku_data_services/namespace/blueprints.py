@@ -52,7 +52,7 @@ class GroupsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _get_one(_: Request, *, user: base_models.APIUser, slug: str):
-            result = await self.group_repo.get_group(slug=slug)
+            result = await self.group_repo.get_group(user=user, slug=slug)
             return json(apispec.GroupResponse.model_validate(result).model_dump(exclude_none=True, mode="json"))
 
         return "/groups/<slug>", ["GET"], _get_one
@@ -95,7 +95,7 @@ class GroupsBP(CustomBlueprint):
                         email=m.email,
                         first_name=m.first_name,
                         last_name=m.last_name,
-                        role=apispec.GroupRole(m.role.name),
+                        role=apispec.GroupRole(m.role.value),
                     ).model_dump(exclude_none=True, mode="json")
                     for m in members
                 ]
@@ -123,8 +123,8 @@ class GroupsBP(CustomBlueprint):
             return json(
                 [
                     apispec.GroupMemberPatchRequest(
-                        id=m.user_id,
-                        role=apispec.GroupRole(m.role.name),
+                        id=m.member.user_id,
+                        role=apispec.GroupRole(m.member.role.value),
                     ).model_dump(exclude_none=True, mode="json")
                     for m in res
                 ]

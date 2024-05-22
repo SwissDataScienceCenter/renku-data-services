@@ -3,6 +3,9 @@
 from dataclasses import dataclass
 from enum import Enum
 
+from renku_data_services.errors import errors
+from renku_data_services.namespace.apispec import GroupRole
+
 
 class Role(Enum):
     """Membership role."""
@@ -11,6 +14,28 @@ class Role(Enum):
     VIEWER: str = "viewer"
     EDITOR: str = "editor"
 
+    @classmethod
+    def from_group_role(cls, role: GroupRole):
+        """Convert a group role into an authorization role."""
+        match role:
+            case GroupRole.owner:
+                return cls.OWNER
+            case GroupRole.editor:
+                return cls.EDITOR
+            case GroupRole.viewer:
+                return cls.VIEWER
+
+    def to_group_role(self) -> GroupRole:
+        """Convert a group role into an authorization role."""
+        match self:
+            case self.OWNER:
+                return GroupRole.owner
+            case self.EDITOR:
+                return GroupRole.editor
+            case self.VIEWER:
+                return GroupRole.viewer
+            case _:
+                raise errors.ProgrammingError(message=f"Could not convert role {self} into a group role")
 
 class Scope(Enum):
     """Types of permissions - i.e. scope."""
