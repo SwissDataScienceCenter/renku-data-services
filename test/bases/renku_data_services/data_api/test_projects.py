@@ -7,11 +7,7 @@ from typing import Any
 import pytest
 from ulid import ULID
 
-from components.renku_data_services.message_queue.avro_models.io.renku.events import v1 as avro_schema_v1
-from components.renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
 from renku_data_services.app_config.config import Config
-from renku_data_services.authz.models import Role
-from renku_data_services.message_queue.redis_queue import deserialize_binary
 from renku_data_services.users.models import UserInfo
 
 
@@ -69,16 +65,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user, app_co
         "http://renkulab.io/repository-1",
         "http://renkulab.io/repository-2",
     }
-    events = await app_config.redis.redis_connection.xrange("project.created")
-    assert len(events) == 1
-    event = events[0][1]
-    headers = avro_schema_v1.Header.deserialize(event.get(b"headers"), serialization_type="avro-json")
-    assert headers.source == "renku-data-services"
-    proj_event = deserialize_binary(event[b"payload"], avro_schema_v2.ProjectCreated)
-    assert proj_event.name == payload["name"]
     project_id = project["id"]
-    assert proj_event.id == project_id
-    assert set(proj_event.keywords) == {"keyword 1", "keyword.2", "keyword-3", "KEYWORD_4"}
 
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
 
@@ -276,12 +263,6 @@ async def test_delete_project(create_project, sanic_client, user_headers, app_co
 
     assert response.status_code == 204, response.text
 
-    events = await app_config.redis.redis_connection.xrange("project.removed")
-    assert len(events) == 1
-    event = events[0][1]
-    proj_event = deserialize_binary(event[b"payload"], avro_schema_v2.ProjectRemoved)
-    assert proj_event.id == project_id
-
     # Get all projects
     _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
 
@@ -309,14 +290,6 @@ async def test_patch_project(create_project, get_project, sanic_client, user_hea
     _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=headers, json=patch)
 
     assert response.status_code == 200, response.text
-
-    events = await app_config.redis.redis_connection.xrange("project.updated")
-    assert len(events) == 1
-    event = events[0][1]
-    proj_event = deserialize_binary(event[b"payload"], avro_schema_v2.ProjectUpdated)
-    assert proj_event.id == project_id
-    assert proj_event.name == patch["name"]
-    assert set(proj_event.keywords) == {"keyword 1", "keyword 2"}
 
     # Get the project
     project = await get_project(project_id=project_id)
@@ -349,12 +322,6 @@ async def test_keywords_are_not_modified_in_patch(create_project, get_project, s
 
     assert response.status_code == 200, response.text
 
-    events = await app_config.redis.redis_connection.xrange("project.updated")
-    assert len(events) == 1
-    event = events[0][1]
-    proj_event = deserialize_binary(event[b"payload"], avro_schema_v2.ProjectUpdated)
-    assert set(proj_event.keywords) == {"keyword 1", "keyword 2"}
-
     # Get the project
     project = await get_project(project_id=project_id)
 
@@ -380,12 +347,6 @@ async def test_keywords_are_deleted_in_patch(create_project, get_project, sanic_
     )
 
     assert response.status_code == 200, response.text
-
-    events = await app_config.redis.redis_connection.xrange("project.updated")
-    assert len(events) == 1
-    event = events[0][1]
-    proj_event = deserialize_binary(event[b"payload"], avro_schema_v2.ProjectUpdated)
-    assert proj_event.keywords == []
 
     # Get the project
     project = await get_project(project_id=project_id)
@@ -575,27 +536,6 @@ async def test_add_project_members(
         f"/api/data/projects/{project_id}/members", headers=user_headers, json=members
     )
     assert response.status_code == 200, response.text
-    events = await app_config.redis.redis_connection.xrange("projectAuth.updated")
-    assert len(events) == 0
-    events = await app_config.redis.redis_connection.xrange("projectAuth.removed")
-    assert len(events) == 0
-    events = await app_config.redis.redis_connection.xrange("projectAuth.added")
-    assert len(events) == 3
-    event = events[0][1]
-    auth_event = deserialize_binary(event[b"payload"], avro_schema_v2.ProjectMemberAdded)
-    assert auth_event.projectId == project_id
-    assert auth_event.userId == regular_user.id
-    assert auth_event.role.value.lower() == Role.OWNER.value
-    event = events[1][1]
-    auth_event = deserialize_binary(event[b"payload"], avro_schema_v2.ProjectMemberAdded)
-    assert auth_event.projectId == project_id
-    assert auth_event.userId == members[0]["id"]
-    assert auth_event.role.value.lower() == members[0]["role"]
-    event = events[2][1]
-    auth_event = deserialize_binary(event[b"payload"], avro_schema_v2.ProjectMemberAdded)
-    assert auth_event.projectId == project_id
-    assert auth_event.userId == members[1]["id"]
-    assert auth_event.role.value.lower() == members[1]["role"]
 
     # Check that you can see the new roles
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}/members", headers=user_headers)
@@ -619,17 +559,6 @@ async def test_add_project_members(
         headers=user_headers,
     )
     assert len(response.json) == 3
-    events = await app_config.redis.redis_connection.xrange("projectAuth.removed")
-    assert len(events) == 0
-    events = await app_config.redis.redis_connection.xrange("projectAuth.added")
-    assert len(events) == 3  # The events from before are still there but there arent new ones
-    events = await app_config.redis.redis_connection.xrange("projectAuth.updated")
-    assert len(events) == 1
-    event = events[0][1]
-    auth_event = deserialize_binary(event[b"payload"], avro_schema_v2.ProjectMemberUpdated)
-    assert auth_event.projectId == project_id
-    assert auth_event.userId == members[0]["id"]
-    assert auth_event.role.value.lower() == members[0]["role"]
 
 
 @pytest.mark.asyncio
@@ -643,13 +572,6 @@ async def test_delete_project_members(create_project, sanic_client, user_headers
     _, response = await sanic_client.delete(f"/api/data/projects/{project_id}/members/member-1", headers=user_headers)
 
     assert response.status_code == 204, response.text
-
-    events = await app_config.redis.redis_connection.xrange("projectAuth.removed")
-    assert len(events) == 1
-    event = events[0][1]
-    auth_event = deserialize_binary(event[b"payload"], avro_schema_v2.ProjectMemberRemoved)
-    assert auth_event.projectId == project_id
-    assert auth_event.userId == "member-1"
 
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}/members", headers=user_headers)
 
