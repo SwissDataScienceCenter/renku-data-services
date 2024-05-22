@@ -123,7 +123,7 @@ async def test_group_members(sanic_client, user_headers):
     assert len(res_json) == 1
     assert res_json[0]["id"] == "user"
     assert res_json[0]["role"] == "owner"
-    new_members = [{"id": "member-1", "role": "member"}]
+    new_members = [{"id": "member-1", "role": "viewer"}]
     _, response = await sanic_client.patch("/api/data/groups/group-1/members", headers=user_headers, json=new_members)
     assert response.status_code == 200
     _, response = await sanic_client.get("/api/data/groups/group-1/members", headers=user_headers)
@@ -132,11 +132,11 @@ async def test_group_members(sanic_client, user_headers):
     assert len(res_json) == 2
     find_member = list(filter(lambda x: x["id"] == "member-1", res_json))
     assert len(find_member) == 1
-    assert find_member[0]["role"] == "member"
+    assert find_member[0]["role"] == "viewer"
 
 
 @pytest.mark.asyncio
-async def test_removing_single_group_owner_not_allowed(sanic_client, user_headers):
+async def test_removing_single_group_owner_not_allowed(sanic_client, user_headers, member_1_headers):
     payload = {
         "name": "Group1",
         "slug": "group-1",
@@ -150,7 +150,7 @@ async def test_removing_single_group_owner_not_allowed(sanic_client, user_header
     res_json = response.json
     assert len(res_json) == 1
     # Add a member
-    new_members = [{"id": "member-1", "role": "member"}]
+    new_members = [{"id": "member-1", "role": "editor"}]
     _, response = await sanic_client.patch("/api/data/groups/group-1/members", headers=user_headers, json=new_members)
     assert response.status_code == 200
     _, response = await sanic_client.get("/api/data/groups/group-1/members", headers=user_headers)
@@ -159,7 +159,7 @@ async def test_removing_single_group_owner_not_allowed(sanic_client, user_header
     assert len(res_json) == 2
     # Trying to remove the single owner from the group will fail
     _, response = await sanic_client.delete("/api/data/groups/group-1/members/user", headers=user_headers)
-    assert response.status_code == 400
+    assert response.status_code == 401
     # Make the other member owner
     new_members = [{"id": "member-1", "role": "owner"}]
     _, response = await sanic_client.patch("/api/data/groups/group-1/members", headers=user_headers, json=new_members)
@@ -168,7 +168,7 @@ async def test_removing_single_group_owner_not_allowed(sanic_client, user_header
     _, response = await sanic_client.delete("/api/data/groups/group-1/members/user", headers=user_headers)
     assert response.status_code == 204
     # Check that only one member remains
-    _, response = await sanic_client.get("/api/data/groups/group-1/members", headers=user_headers)
+    _, response = await sanic_client.get("/api/data/groups/group-1/members", headers=member_1_headers)
     assert response.status_code == 200, response.text
     assert len(response.json) == 1
     assert response.json[0]["id"] == "member-1"

@@ -7,7 +7,9 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, TypeAlias
+from typing import Any, NamedTuple
+
+from renku_data_services.namespace.models import Namespace
 
 
 class KeycloakEvent(Enum):
@@ -248,4 +250,16 @@ class UserInfo:
             },
         }
 
-UserInfosType: TypeAlias = list[UserInfo]
+
+class UserWithNamespace(NamedTuple):
+    """A tuple used to convey information about a user and their namespace."""
+
+    user: UserInfo
+    namespace: Namespace
+
+
+class UserWithNamespaceUpdate(NamedTuple):
+    """Used to convey information about an update of a user or their namespace."""
+
+    old: UserWithNamespace | None
+    new: UserWithNamespace

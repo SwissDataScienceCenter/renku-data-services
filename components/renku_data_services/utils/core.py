@@ -3,8 +3,8 @@
 import functools
 import os
 import ssl
-from collections.abc import Callable
-from typing import Any, Protocol
+from collections.abc import Awaitable, Callable
+from typing import Any, Concatenate, ParamSpec, Protocol, TypeVar
 
 import httpx
 from deepmerge import Merger
@@ -57,15 +57,34 @@ def merge_api_specs(*args):
 class WithSessionMaker(Protocol):
     """Protocol for classes that wrap a session maker."""
 
-    session_maker: Callable[..., AsyncSession]
+    def session_maker(self) -> AsyncSession:
+        """Returns an async session."""
+        ...
 
 
-def with_db_transaction(f):
+_P = ParamSpec("_P")
+_T = TypeVar("_T")
+_WithSessionMaker = TypeVar("_WithSessionMaker", bound=WithSessionMaker)
+
+
+def with_db_transaction(
+    f: Callable[Concatenate[_WithSessionMaker, _P], Awaitable[_T]],
+) -> Callable[Concatenate[_WithSessionMaker, _P], Awaitable[_T]]:
     """Initializes a transaction and commits it on successful exit of the wrapped function."""
 
     @functools.wraps(f)
-    async def transaction_wrapper(self: WithSessionMaker, *args, **kwargs):
-        async with self.session_maker() as session, session.begin():
-            return await f(self, session, *args, **kwargs)
+    async def transaction_wrapper(self: _WithSessionMaker, *args: _P.args, **kwargs: _P.kwargs):
+        session_kwarg = kwargs.get("session")
+        if "session" in kwargs and session_kwarg is not None and not isinstance(session_kwarg, AsyncSession):
+            raise errors.ProgrammingError(
+                message="The decorator that starts a DB transaction encountered an existing session "
+                f"in the keyword arguments but the session is of an unexpected type {type(session_kwarg)}"
+            )
+        if session_kwarg is None:
+            async with self.session_maker() as session, session.begin():
+                kwargs["session"] = session
+                return await f(self, *args, **kwargs)
+        else:
+            return await f(self, *args, **kwargs)
 
     return transaction_wrapper

@@ -1,5 +1,6 @@
 """Fixtures for testing."""
 
+import logging
 import os
 import secrets
 import socket
@@ -47,6 +48,7 @@ def authz_config(monkeypatch, free_port) -> Iterator[AuthzConfig]:
             f":{port}",
             "--readonly-grpc-enabled=false",
             "--skip-release-check=true",
+            "--log-level=debug",
         ]
     )
     monkeypatch.setenv("AUTHZ_DB_HOST", "127.0.0.1")
@@ -56,7 +58,8 @@ def authz_config(monkeypatch, free_port) -> Iterator[AuthzConfig]:
     yield AuthzConfig.from_env()
     try:
         proc.terminate()
-    except Exception:
+    except Exception as err:
+        logging.error(f"Encountered error when shutting down Authzed DB for testing {err}")
         proc.kill()
 
 
@@ -84,6 +87,7 @@ def db_config(monkeypatch, worker_id, authz_config) -> Iterator[DBConfig]:
     ):
         run_migrations_for_app("common")
         yield DBConfig.from_env()
+        DBConfig.dispose_connection()
         DBConfig._async_engine = None
 
 

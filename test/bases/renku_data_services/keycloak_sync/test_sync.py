@@ -31,12 +31,13 @@ def get_app_configs(db_config: DBConfig, authz_config: AuthzConfig):
         redis = RedisConfig.fake()
         message_queue = RedisQueue(redis)
         event_repo = EventRepository(db_config.async_session_maker, message_queue=message_queue)
-        group_repo = GroupRepository(db_config.async_session_maker)
+        group_repo = GroupRepository(db_config.async_session_maker, event_repo, Authz(authz_config))
         users_sync = UsersSync(
             db_config.async_session_maker,
             message_queue=message_queue,
             event_repo=event_repo,
             group_repo=group_repo,
+            authz=Authz(authz_config),
         )
         config = SyncConfig(
             syncer=users_sync, kc_api=kc_api, total_user_sync=total_user_sync, authz_config=authz_config
@@ -47,6 +48,7 @@ def get_app_configs(db_config: DBConfig, authz_config: AuthzConfig):
             event_repo=event_repo,
             group_repo=group_repo,
             encryption_key=secrets.token_bytes(32),
+            authz=Authz(authz_config),
         )
         return config, user_repo
 

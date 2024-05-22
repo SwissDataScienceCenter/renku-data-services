@@ -18,6 +18,7 @@ def config_dummy_fixture(monkeypatch):
     # NOTE: _async_engine is a class variable and it persist across tests because pytest loads
     # all things once at the beginning of hte tests. So we reset it here so that it does not affect
     # subsequent tests.
+    DBConfig.dispose_connection()
     DBConfig._async_engine = None
 
 
@@ -71,6 +72,7 @@ def config_no_dummy_fixture(monkeypatch, secrets_key_pair, tmp_path):
     # NOTE: _async_engine is a class variable and it persist across tests because pytest loads
     # all things once at the beginning of hte tests. So we reset it here so that it does not affect
     # subsequent tests.
+    DBConfig.dispose_connection()
     DBConfig._async_engine = None
 
 
