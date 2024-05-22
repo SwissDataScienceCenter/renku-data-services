@@ -76,6 +76,7 @@ def version():
             application/json:
               schema: VersionResponse
     """
+    culling = config.sessions.culling
     info = {
         "name": "renku-notebooks",
         "versions": [
@@ -86,6 +87,16 @@ def version():
                     "cloudstorageEnabled": config.cloud_storage.enabled,
                     "cloudstorageClass": config.cloud_storage.storage_class,
                     "sshEnabled": config.ssh_enabled,
+                    "defaultCullingThresholds": {
+                        "registered": {
+                            "idle": culling.registered.idle_seconds,
+                            "hibernation": culling.registered.hibernated_seconds,
+                        },
+                        "anonymous": {
+                            "idle": culling.anonymous.idle_seconds,
+                            "hibernation": culling.anonymous.hibernated_seconds,
+                        },
+                    },
                 },
             }
         ],

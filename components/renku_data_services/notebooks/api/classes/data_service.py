@@ -131,6 +131,8 @@ class CRCValidator:
         if storage > res_class.get("max_storage"):
             raise InvalidComputeResourceError(message="The requested storage surpasses the maximum value allowed.")
         options = ServerOptions.from_resource_class(res_class)
+        options.idle_threshold_seconds = pool.get("idle_threshold")
+        options.hibernation_threshold_seconds = pool.get("hibernation_threshold")
         options.set_storage(storage, gigabytes=True)
         quota = pool.get("quota")
         if quota is not None and isinstance(quota, dict):

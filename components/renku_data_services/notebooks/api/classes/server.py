@@ -59,16 +59,24 @@ class UserServer(ABC):
         self.work_dir = work_dir
         self.cloudstorage: list[ICloudStorageRequest] | None = cloudstorage
         self.is_image_private = is_image_private
-        self.idle_seconds_threshold: int = (
-            config.sessions.culling.registered.idle_seconds
-            if isinstance(self._user, RegisteredUser)
-            else config.sessions.culling.anonymous.idle_seconds
-        )
-        self.hibernated_seconds_threshold: int = (
-            config.sessions.culling.registered.hibernated_seconds
-            if isinstance(user, RegisteredUser)
-            else config.sessions.culling.anonymous.hibernated_seconds
-        )
+
+        if self.server_options.idle_threshold_seconds is not None:
+            self.idle_seconds_threshold = self.server_options.idle_threshold_seconds
+        else:
+            self.idle_seconds_threshold: int = (
+                config.sessions.culling.registered.idle_seconds
+                if isinstance(self._user, RegisteredUser)
+                else config.sessions.culling.anonymous.idle_seconds
+            )
+
+        if self.server_options.hibernation_threshold_seconds is not None:
+            self.hibernated_seconds_threshold: int = self.server_options.hibernation_threshold_seconds
+        else:
+            self.hibernated_seconds_threshold: int = (
+                config.sessions.culling.registered.hibernated_seconds
+                if isinstance(user, RegisteredUser)
+                else config.sessions.culling.anonymous.hibernated_seconds
+            )
         self._repositories: list[Repository] = repositories
         self._git_providers: list[GitProvider] | None = None
         self._has_configured_git_providers = False
