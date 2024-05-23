@@ -73,7 +73,7 @@ class ProjectRepository:
 
     async def get_project(self, user: base_models.APIUser, project_id: str) -> models.Project:
         """Get one project from the database."""
-        authorized = self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
+        authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
         if not authorized:
             raise errors.MissingResourceError(
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
@@ -111,7 +111,7 @@ class ProjectRepository:
             if project_orm is None:
                 raise errors.MissingResourceError(message=not_found_msg)
 
-            authorized = self.authz.has_permission(
+            authorized = await self.authz.has_permission(
                 user=user, resource_type=ResourceType.project, resource_id=project_orm.id, scope=Scope.READ
             )
             if not authorized:
@@ -194,7 +194,7 @@ class ProjectRepository:
         if "namespace" in payload and payload["namespace"] != old_project.namespace:
             # NOTE: changing the namespace requires the user to be owner which means they should have DELETE permission
             required_scope = Scope.DELETE
-        authorized = self.authz.has_permission(user, ResourceType.project, project_id, required_scope)
+        authorized = await self.authz.has_permission(user, ResourceType.project, project_id, required_scope)
         if not authorized:
             raise errors.MissingResourceError(
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
