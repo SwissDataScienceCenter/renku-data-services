@@ -91,7 +91,7 @@ class _ProjectEventConverter:
             case v2.ProjectRemoved:
                 return [Event("project.removed", v2.ProjectRemoved(id=project.id))]
             case _:
-                raise errors.EventError(message=f"Trying to convert a project to an uknown event type {event_type}")
+                raise errors.EventError(message=f"Trying to convert a project to an unknown event type {event_type}")
 
 
 class _UserEventConverter:
@@ -131,7 +131,7 @@ class _UserEventConverter:
                 ]
             case _:
                 raise errors.EventError(
-                    message=f"Trying to convert a user of type {type(user)} to an uknown event type {event_type}"
+                    message=f"Trying to convert a user of type {type(user)} to an unknown event type {event_type}"
                 )
 
 
@@ -187,7 +187,7 @@ class _ProjectAuthzEventConverter:
                     )
                 case _:
                     raise errors.EventError(
-                        message="Trying to convert a project membership change to an uknown event type with "
+                        message="Trying to convert a project membership change to an unknown event type with "
                         f"unkonwn change {change.change}"
                     )
         return output
@@ -233,7 +233,7 @@ class _GroupAuthzEventConverter:
                     )
                 case _:
                     raise errors.EventError(
-                        message="Trying to convert a project membership change to an uknown event type with "
+                        message="Trying to convert a project membership change to an unknown event type with "
                         f"unkonwn change {change.change}"
                     )
         return output
@@ -269,7 +269,7 @@ class _GroupEventConverter:
                 ]
             case _:
                 raise errors.ProgrammingError(
-                    message=f"Received an uknown event type {event_type} when generating group events"
+                    message=f"Received an unknown event type {event_type} when generating group events"
                 )
 
 
@@ -327,5 +327,5 @@ class EventConverter:
             return _GroupEventConverter.to_events(input, event_type)
         else:
             raise errors.EventError(
-                message=f"Trying to convert an uknown model of type {type(input)} to an event type {event_type}"
+                message=f"Trying to convert an unknown model of type {type(input)} to an event type {event_type}"
             )
