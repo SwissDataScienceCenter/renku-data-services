@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import functools
-import logging
 from asyncio import gather
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any, Concatenate, ParamSpec, TypeAlias, TypeVar, cast
 
-from sanic.log import logger
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -56,8 +54,6 @@ class ProjectRepository:
     ) -> tuple[list[models.Project], int]:
         """Get all projects from the database."""
         project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
-        logger.info("getting projects sanic")
-        logging.info("getting projects native")
 
         async with self.session_maker() as session:
             # NOTE: without awaiting the connnection below there are failures about how a connection has not

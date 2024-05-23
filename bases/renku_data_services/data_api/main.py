@@ -33,7 +33,8 @@ async def _send_messages() -> None:
         try:
             await config.event_repo.send_pending_events()
             await asyncio.sleep(1)
-        except (asyncio.CancelledError, KeyboardInterrupt):
+        except (asyncio.CancelledError, KeyboardInterrupt) as e:
+            logger.warning(f"Exiting: {e}")
             return
         except Exception as e:
             logger.warning(f"Background task failed: {e}")
@@ -42,6 +43,8 @@ async def _send_messages() -> None:
 
 def send_pending_events() -> None:
     """Send pending messages in case sending in a handler failed."""
+    app = Sanic("send_events")  # we need a dummy app for logging to work.  # noqa: F841
+
     logger.info("running events sending loop.")
 
     asyncio.set_event_loop(uvloop.new_event_loop())

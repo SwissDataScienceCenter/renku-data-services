@@ -37,12 +37,11 @@ class EventRepository:
 
         We lock rows that get sent and keep sending until there are no more events.
         """
-        logger.info("sending pending events.")
-        events_count = 0
         while True:
-            async with self.session_maker() as session:
+            async with self.session_maker() as session, session.begin():
                 stmt = (
                     select(schemas.EventORM)
+                    # lock retrieved rows, skip already locked ones, to deal with concurrency
                     .with_for_update(skip_locked=True)
                     .limit(100)
                     .order_by(schemas.EventORM.timestamp_utc)
@@ -54,17 +53,15 @@ class EventRepository:
                 if new_events_count == 0:
                     break
 
-                events_count += new_events_count
-
                 for event in events_orm:
                     try:
                         await self.message_queue.send_message(event.dump())
 
-                        await self.delete_event(event.id)
+                        await session.delete(event)  # this has to be done in the same transaction to not get a deadlock
                     except Exception as e:
                         logger.warning(f"couldn't send event {event.payload} on queue {event.queue}: {e}")
 
-        logger.info(f"sent {events_count} events")
+                logger.info(f"sent {new_events_count} events")
 
     async def store_event(self, session: AsyncSession | Session, event: Event) -> int:
         """Store an event."""
