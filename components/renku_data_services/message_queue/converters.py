@@ -1,6 +1,6 @@
 """Converter of models to Avro schemas for events."""
 
-from typing import NamedTuple, TypeVar
+from typing import TypeVar
 
 from dataclasses_avroschema.schema_generator import AvroModel
 
@@ -8,15 +8,10 @@ from renku_data_services.authz import models as authz_models
 from renku_data_services.errors import errors
 from renku_data_services.message_queue import AmbiguousEvent
 from renku_data_services.message_queue.avro_models.io.renku.events import v1, v2
+from renku_data_services.message_queue.models import Event
+from renku_data_services.namespace.models import Group
 from renku_data_services.project import models as project_models
 from renku_data_services.users import models as user_models
-
-
-class Event(NamedTuple):
-    """An event that should be sent to the message queue."""
-
-    queue: str
-    payload: AvroModel
 
 
 class _ProjectEventConverter:
@@ -96,7 +91,7 @@ class _ProjectEventConverter:
             case v2.ProjectRemoved:
                 return [Event("project.removed", v2.ProjectRemoved(id=project.id))]
             case _:
-                raise errors.EventError(message=f"Trying to convert a project to an uknown event type {event_type}")
+                raise errors.EventError(message=f"Trying to convert a project to an unknown event type {event_type}")
 
 
 class _UserEventConverter:
@@ -106,7 +101,7 @@ class _UserEventConverter:
         event_type: type[AvroModel] | AmbiguousEvent,
     ) -> list[Event]:
         match event_type:
-            case v2.UserAdded if isinstance(user, user_models.UserWithNamespace):
+            case v2.UserAdded | AmbiguousEvent.INSERT_USER_NAMESPACE if isinstance(user, user_models.UserWithNamespace):
                 return [
                     Event(
                         "user.added",
@@ -121,21 +116,6 @@ class _UserEventConverter:
                 ]
             case v2.UserRemoved if isinstance(user, user_models.UserInfo):
                 return [Event("user.removed", v2.UserRemoved(id=user.id))]
-            case v2.UserUpdated | AmbiguousEvent.INSERT_USER_NAMESPACE if isinstance(
-                user, user_models.UserWithNamespace
-            ):
-                return [
-                    Event(
-                        "user.updated",
-                        v2.UserUpdated(
-                            id=user.user.id,
-                            firstName=user.user.first_name,
-                            lastName=user.user.last_name,
-                            email=user.user.email,
-                            namespace=user.namespace.slug,
-                        ),
-                    )
-                ]
             case AmbiguousEvent.UPDATE_OR_INSERT_USER if isinstance(user, user_models.UserWithNamespaceUpdate):
                 return [
                     Event(
@@ -151,7 +131,7 @@ class _UserEventConverter:
                 ]
             case _:
                 raise errors.EventError(
-                    message=f"Trying to convert a user of type {type(user)} to an uknown event type {event_type}"
+                    message=f"Trying to convert a user of type {type(user)} to an unknown event type {event_type}"
                 )
 
 
@@ -207,7 +187,7 @@ class _ProjectAuthzEventConverter:
                     )
                 case _:
                     raise errors.EventError(
-                        message="Trying to convert a project membership change to an uknown event type with "
+                        message="Trying to convert a project membership change to an unknown event type with "
                         f"unkonwn change {change.change}"
                     )
         return output
@@ -253,10 +233,44 @@ class _GroupAuthzEventConverter:
                     )
                 case _:
                     raise errors.EventError(
-                        message="Trying to convert a project membership change to an uknown event type with "
+                        message="Trying to convert a project membership change to an unknown event type with "
                         f"unkonwn change {change.change}"
                     )
         return output
+
+
+class _GroupEventConverter:
+    @staticmethod
+    def to_events(input: Group, event_type: type[AvroModel] | AmbiguousEvent) -> list[Event]:
+        if input.id is None:
+            raise errors.ProgrammingError(
+                message="Cannot send group events to the message queue for a group that does not have an ID"
+            )
+        match event_type:
+            case v2.GroupAdded:
+                return [
+                    Event(
+                        "group.added",
+                        v2.GroupAdded(
+                            id=input.id, name=input.name, description=input.description, namespace=input.slug
+                        ),
+                    )
+                ]
+            case v2.GroupRemoved:
+                return [Event("group.removed", v2.GroupRemoved(id=input.id))]
+            case v2.GroupUpdated:
+                return [
+                    Event(
+                        "group.updated",
+                        v2.GroupUpdated(
+                            id=input.id, name=input.name, description=input.description, namespace=input.slug
+                        ),
+                    )
+                ]
+            case _:
+                raise errors.ProgrammingError(
+                    message=f"Received an unknown event type {event_type} when generating group events"
+                )
 
 
 _T = TypeVar("_T")
@@ -309,7 +323,9 @@ class EventConverter:
             for namespace in input:
                 output.extend(_UserEventConverter.to_events(namespace, event_type))
             return output
+        elif isinstance(input, Group):
+            return _GroupEventConverter.to_events(input, event_type)
         else:
             raise errors.EventError(
-                message=f"Trying to convert an uknown model of type {type(input)} to an event type {event_type}"
+                message=f"Trying to convert an unknown model of type {type(input)} to an event type {event_type}"
             )

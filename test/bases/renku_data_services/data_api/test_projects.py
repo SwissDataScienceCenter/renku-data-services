@@ -11,7 +11,7 @@ from components.renku_data_services.message_queue.avro_models.io.renku.events im
 from components.renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
 from renku_data_services.app_config.config import Config
 from renku_data_services.authz.models import Role
-from renku_data_services.message_queue.redis_queue import deserialize_binary
+from renku_data_services.message_queue.models import deserialize_binary
 from renku_data_services.users.models import UserInfo
 
 
