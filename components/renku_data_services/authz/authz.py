@@ -283,7 +283,7 @@ class Authz:
     _client: AsyncClient | None = field(default=None, init=False)
 
     @property
-    def client(self):
+    def client(self) -> AsyncClient:
         """The authzed DB asynchronous client."""
         if not self._client:
             self._client = self.authz_config.authz_async_client()

@@ -19,7 +19,6 @@ import renku_data_services.base_models as base_models
 from renku_data_services.app_config import Config as DataConfig
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.db_config.config import DBConfig
-from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.secrets.config import Config as SecretsConfig
 
 settings.register_profile("ci", deadline=400, max_examples=5)
@@ -85,7 +84,6 @@ def db_config(monkeypatch, worker_id, authz_config) -> Iterator[DBConfig]:
         "16.2",
         password,
     ):
-        run_migrations_for_app("common")
         yield DBConfig.from_env()
         DBConfig.dispose_connection()
         DBConfig._async_engine = None

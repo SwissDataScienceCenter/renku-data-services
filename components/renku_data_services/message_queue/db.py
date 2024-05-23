@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, timedelta
-from typing import Any
+from datetime import UTC, datetime, timedelta
 
 from sanic.log import logger
 from sqlalchemy import delete, select
@@ -12,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.message_queue import orm as schemas
 from renku_data_services.message_queue.interface import IMessageQueue
+from renku_data_services.message_queue.models import Event
 
 
 class EventRepository:
@@ -25,13 +25,13 @@ class EventRepository:
         self.session_maker = session_maker  # type: ignore[call-overload]
         self.message_queue: IMessageQueue = message_queue
 
-    async def get_pending_events(self) -> list[schemas.EventORM]:
+    async def _get_pending_events(self, older_than: timedelta = timedelta(0)) -> list[schemas.EventORM]:
         """Get all pending events."""
         async with self.session_maker() as session:
-            stmt = select(schemas.EventORM)
-            result = await session.execute(stmt)
-            events_orm = result.scalars().all()
-            return list(events_orm)
+            now = datetime.now(UTC).replace(tzinfo=None)
+            stmt = select(schemas.EventORM).where(schemas.EventORM.timestamp_utc < now - older_than)
+            events_orm = await session.scalars(stmt)
+            return list(events_orm.all())
 
     async def send_pending_events(self) -> None:
         """Get all pending events and resend them.
@@ -40,34 +40,28 @@ class EventRepository:
         """
         logger.info("resending missed events.")
 
-        async with self.session_maker() as session:
-            # we only consider events older than 5 seconds so we don't accidentally interfere with an ongoing operation
-            stmt = select(schemas.EventORM).where(
-                schemas.EventORM.timestamp_utc < datetime.utcnow() - timedelta(seconds=5)
-            )
-            result = await session.scalars(stmt)
-            events_orm = result.all()
+        # we only consider events older than 5 seconds so we don't accidentally interfere with an ongoing operation
+        events_orm = await self._get_pending_events(older_than=timedelta(seconds=5))
 
-            num_events = len(events_orm)
-            if num_events == 0:
-                logger.info("no missed events to send")
-                return
-            for event in events_orm:
-                try:
-                    await self.message_queue.send_message(event.queue, event.payload)  # type:ignore
-
-                    await self.delete_event(event.id)
-                except Exception as e:
-                    logger.warning(f"couldn't resend event {event.payload} on queue {event.queue}: {e}")
+        num_events = len(events_orm)
+        if num_events == 0:
+            logger.info("no missed events to send")
+            return
+        for event in events_orm:
+            try:
+                await self.message_queue.send_message(event.dump())
+                await self.delete_event(event.id)
+            except Exception as e:
+                logger.warning(f"couldn't resend event {event.payload} on queue {event.queue}: {e}")
 
         logger.info(f"resent {num_events} events")
 
-    async def store_event(self, session: AsyncSession, queue: str, message: dict[str, Any]) -> int:
+    async def store_event(self, session: AsyncSession, event: Event) -> int:
         """Store an event."""
-        event = schemas.EventORM(datetime.utcnow(), queue, message)
-        session.add(event)
+        event_orm = schemas.EventORM.load(event)
+        session.add(event_orm)
 
-        return event.id
+        return event_orm.id
 
     async def delete_event(self, id: int):
         """Delete an event."""
