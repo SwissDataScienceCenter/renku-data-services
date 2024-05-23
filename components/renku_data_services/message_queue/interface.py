@@ -1,6 +1,6 @@
 """Interface for message queue client."""
 
-from typing import Any, Protocol
+from typing import Protocol
 
 from renku_data_services.message_queue.models import Event
 

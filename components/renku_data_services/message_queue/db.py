@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from sanic.log import logger
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from renku_data_services.message_queue import orm as schemas
 from renku_data_services.message_queue.interface import IMessageQueue
@@ -56,7 +57,7 @@ class EventRepository:
 
         logger.info(f"resent {num_events} events")
 
-    async def store_event(self, session: AsyncSession, event: Event) -> int:
+    async def store_event(self, session: AsyncSession | Session, event: Event) -> int:
         """Store an event."""
         event_orm = schemas.EventORM.load(event)
         session.add(event_orm)

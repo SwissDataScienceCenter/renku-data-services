@@ -269,7 +269,7 @@ class _GroupEventConverter:
                 ]
             case _:
                 raise errors.ProgrammingError(
-                    message="Received an uknown event type {event_type} when generating gruop events"
+                    message=f"Received an uknown event type {event_type} when generating group events"
                 )
 
 
