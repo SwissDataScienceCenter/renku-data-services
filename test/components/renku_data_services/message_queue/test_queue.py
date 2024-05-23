@@ -5,6 +5,7 @@ import pytest
 from renku_data_services.authz.models import Visibility
 from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_removed import ProjectRemoved
 from renku_data_services.message_queue.redis_queue import dispatch_message
+from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.namespace.models import Namespace, NamespaceKind
 from renku_data_services.project.models import Project
 from renku_data_services.utils.core import with_db_transaction
@@ -13,6 +14,7 @@ from renku_data_services.utils.core import with_db_transaction
 @pytest.mark.asyncio
 async def test_queue_send(app_config, monkeypatch):
     """Test that sending messages works."""
+    run_migrations_for_app("common")
 
     class FakeRepo:
         session_maker = app_config.db.async_session_maker

@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime
-from typing import Any
 
 from sanic.log import logger
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from renku_data_services.message_queue import orm as schemas
 from renku_data_services.message_queue.interface import IMessageQueue
+from renku_data_services.message_queue.models import Event
 
 
 class EventRepository:
@@ -25,13 +25,12 @@ class EventRepository:
         self.session_maker = session_maker  # type: ignore[call-overload]
         self.message_queue: IMessageQueue = message_queue
 
-    async def get_pending_events(self) -> list[schemas.EventORM]:
+    async def _get_pending_events(self) -> list[schemas.EventORM]:
         """Get all pending events."""
         async with self.session_maker() as session:
             stmt = select(schemas.EventORM)
-            result = await session.execute(stmt)
-            events_orm = result.scalars().all()
-            return list(events_orm)
+            events_orm = await session.scalars(stmt)
+            return list(events_orm.all())
 
     async def send_pending_events(self) -> None:
         """Get all pending events and send them.
@@ -59,7 +58,7 @@ class EventRepository:
 
                 for event in events_orm:
                     try:
-                        await self.message_queue.send_message(event.queue, event.payload)  # type:ignore
+                        await self.message_queue.send_message(event.dump())
 
                         await self.delete_event(event.id)
                     except Exception as e:
@@ -67,12 +66,12 @@ class EventRepository:
 
         logger.info(f"sent {events_count} events")
 
-    async def store_event(self, session: AsyncSession, queue: str, message: dict[str, Any]) -> int:
+    async def store_event(self, session: AsyncSession | Session, event: Event) -> int:
         """Store an event."""
-        event = schemas.EventORM(datetime.utcnow(), queue, message)
-        session.add(event)
+        event_orm = schemas.EventORM.load(event)
+        session.add(event_orm)
 
-        return event.id
+        return event_orm.id
 
     async def delete_event(self, id: int):
         """Delete an event."""

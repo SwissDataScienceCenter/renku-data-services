@@ -13,6 +13,7 @@ from renku_data_services.authz.authz import ResourceType, _AuthzConverter
 from renku_data_services.authz.models import Member, Role, Scope, Visibility
 from renku_data_services.base_models import APIUser
 from renku_data_services.errors import errors
+from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.namespace.models import Namespace, NamespaceKind
 from renku_data_services.project.models import Project
 
@@ -24,6 +25,7 @@ regular_user2 = APIUser(is_admin=False, id="user2-id", access_token="some-token2
 
 @pytest_asyncio.fixture
 async def bootstrap_admins(app_config: Config):
+    run_migrations_for_app("common")
     authz = app_config.authz
     admins = [admin_user]
     rels: list[RelationshipUpdate] = []

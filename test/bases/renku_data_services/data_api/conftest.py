@@ -10,8 +10,10 @@ from sanic_testing.testing import SanicASGITestClient
 
 from components.renku_data_services.utils.middleware import validate_null_byte
 from renku_data_services.app_config.config import Config
+from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.authz.authz import _AuthzConverter
 from renku_data_services.data_api.app import register_all_handlers
+from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.secrets.config import Config as SecretsConfig
 from renku_data_services.secrets_storage_api.app import register_all_handlers as register_secrets_handlers
 from renku_data_services.storage.rclone import RCloneValidator
@@ -106,16 +108,30 @@ def bootstrap_admins(app_config: Config, admin_user: UserInfo):
 
 
 @pytest_asyncio.fixture
-async def sanic_app(app_config: Config, users: list[UserInfo], bootstrap_admins) -> Sanic:
-    app_config.kc_api = DummyKeycloakAPI(users=get_kc_users(users))
+async def sanic_app_no_migrations(
+    app_config: Config, users: list[UserInfo], bootstrap_admins, admin_user: UserInfo
+) -> Sanic:
+    app_config.kc_api = DummyKeycloakAPI(users=get_kc_users(users), user_roles={admin_user.id: ["renku-admin"]})
     app = Sanic(app_config.app_name)
     app = register_all_handlers(app, app_config)
     app.register_middleware(validate_null_byte, "request")
-    await app_config.kc_user_repo.initialize(app_config.kc_api)
-    await app_config.group_repo.generate_user_namespaces()
     validator = RCloneValidator()
     app.ext.dependency(validator)
     return app
+
+
+@pytest_asyncio.fixture
+async def sanic_client_no_migrations(sanic_app_no_migrations: Sanic) -> SanicASGITestClient:
+    return SanicASGITestClient(sanic_app_no_migrations)
+
+
+@pytest_asyncio.fixture
+async def sanic_app(sanic_app_no_migrations: Sanic, app_config: Config) -> Sanic:
+    run_migrations_for_app("common")
+    await app_config.kc_user_repo.initialize(app_config.kc_api)
+    await sync_admins_from_keycloak(app_config.kc_api, app_config.authz)
+    await app_config.group_repo.generate_user_namespaces()
+    return sanic_app_no_migrations
 
 
 @pytest_asyncio.fixture

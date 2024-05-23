@@ -1,10 +1,15 @@
 """SQLAlchemy schemas for the CRC database."""
-from datetime import datetime
+
+import base64
+from copy import deepcopy
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import JSON, DateTime, MetaData, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
+
+from renku_data_services.message_queue.models import Event
 
 JSONVariant = JSON().with_variant(JSONB(), "postgresql")
 
@@ -39,3 +44,19 @@ class EventORM(BaseORM):
 
     payload: Mapped[dict[str, Any]] = mapped_column("payload", JSONVariant)
     """The message payload."""
+
+    @classmethod
+    def load(cls, event: Event):
+        """Create an ORM object from an event."""
+        message = event.serialize()
+        if "payload" in message and isinstance(message["payload"], bytes):
+            message["payload"] = base64.b64encode(message["payload"]).decode()
+        now_utc = datetime.now(UTC).replace(tzinfo=None)
+        return cls(timestamp_utc=now_utc, queue=event.queue, payload=message)
+
+    def dump(self) -> Event[dict[str, Any]]:
+        """Create an event from the ORM object."""
+        message = deepcopy(self.payload)
+        if "payload" in message and isinstance(message["payload"], bytes):
+            message["payload"] = base64.b64decode(message["payload"])
+        return Event(self.queue, message)

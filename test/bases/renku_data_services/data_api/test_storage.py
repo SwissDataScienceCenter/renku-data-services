@@ -8,6 +8,7 @@ from sanic_testing.testing import SanicASGITestClient
 from renku_data_services.app_config import Config
 from renku_data_services.authn.dummy import DummyAuthenticator
 from renku_data_services.data_api.app import register_all_handlers
+from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.storage.rclone import RCloneValidator
 
 _valid_storage: dict[str, Any] = {
@@ -30,6 +31,7 @@ def valid_storage_payload() -> dict[str, Any]:
 
 @pytest.fixture
 def storage_test_client(app_config: Config) -> SanicASGITestClient:
+    run_migrations_for_app("common")
     gitlab_auth = DummyAuthenticator()
     app_config.gitlab_authenticator = gitlab_auth
     app = Sanic(app_config.app_name)
