@@ -8,12 +8,14 @@ from sanic.log import logger
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
+from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate, only_admins, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.etag import extract_if_none_match
 from renku_data_services.connected_services import apispec
 from renku_data_services.connected_services.apispec_base import AuthorizeParams
 from renku_data_services.connected_services.db import ConnectedServicesRepository
+from renku_data_services.connected_services.utils import probe_repository
 
 
 @dataclass(kw_only=True)
@@ -210,4 +212,21 @@ class OAuth2ConnectionsBP(CustomBlueprint):
                 headers=headers,
             )
 
-        return "/oauth2/api/repository/<repository_url>", ["GET"], _get_one_repository
+        return "/oauth2/api/repositories/<repository_url>", ["GET"], _get_one_repository
+
+    def get_one_repository_probe(self) -> BlueprintFactoryResponse:
+        """Probe a repository to check if it is publicly available."""
+
+        async def _get_one_repository_probe(_: Request, repository_url: str):
+            repository_url = unquote(repository_url)
+            logger.info(f"Requested repository_url={repository_url}")
+
+            result = await probe_repository(repository_url)
+
+            if not result:
+                raise errors.MissingResourceError(
+                    message=f"The repository at {repository_url} does not seem to be publicly accessible."
+                )
+            return HTTPResponse(status=200)
+
+        return "/oauth2/api/repositories/<repository_url>/probe", ["GET"], _get_one_repository_probe
