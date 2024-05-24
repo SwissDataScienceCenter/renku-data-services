@@ -4,8 +4,9 @@ from dataclasses import dataclass
 from urllib.parse import urlunparse
 
 from sanic import HTTPResponse, Request, json, redirect
-from sanic_ext import validate
 from sanic.log import logger
+from sanic_ext import validate
+
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_admins, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
@@ -25,7 +26,10 @@ class OAuth2ClientsBP(CustomBlueprint):
         """List all OAuth2 Clients."""
 
         @authenticate(self.authenticator)
-        async def _get_all(_: Request, user: base_models.APIUser):
+        async def _get_all(r: Request, user: base_models.APIUser):
+            test_url = r.url_for(f"{self.name}.get_all")
+            logger.info(f"test_url = {test_url}")
+
             clients = await self.connected_services_repo.get_oauth2_clients(user=user)
             return json(
                 [apispec.Provider.model_validate(c).model_dump(exclude_none=True, mode="json") for c in clients]
@@ -113,9 +117,10 @@ class OAuth2ClientsBP(CustomBlueprint):
 
         return "/oauth2/callback", ["GET"], _callback
 
-    @staticmethod
-    def _get_callback_url(request: Request) -> str:
-        test_url = request.url_for("renku_data_services.oauth2_clients.authorize_callback")
+    def _get_callback_url(self, request: Request) -> str:
+        # test_url = request.url_for("renku_data_services.oauth2_clients.authorize_callback")
+        # logger.info(f"test_url = {test_url}")
+        test_url = request.url_for(f"{self.name}.authorize_callback")
         logger.info(f"test_url = {test_url}")
 
         callback_path = "/api/data/oauth2/callback"

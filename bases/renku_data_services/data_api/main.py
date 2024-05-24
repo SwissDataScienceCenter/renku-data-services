@@ -98,7 +98,7 @@ def create_app() -> Sanic:
     @app.after_server_start
     async def after_server_start(app: Sanic):
         logger.info("Printing all routes by name")
-        for key in app.router.name_index.keys():
+        for key in app.router.name_index:
             logger.info(f"Route: {key}")
 
     async def send_pending_events(app):
