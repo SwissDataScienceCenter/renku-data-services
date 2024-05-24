@@ -118,13 +118,16 @@ class OAuth2ClientsBP(CustomBlueprint):
         return "/oauth2/callback", ["GET"], _callback
 
     def _get_callback_url(self, request: Request) -> str:
-        # test_url = request.url_for("renku_data_services.oauth2_clients.authorize_callback")
-        # logger.info(f"test_url = {test_url}")
-        test_url = request.url_for(f"{self.name}.authorize_callback")
+        test_url = request.url_for(f"{self.name}.authorize_callback", _scheme="https")
         logger.info(f"test_url = {test_url}")
 
         callback_path = "/api/data/oauth2/callback"
-        return urlunparse(("https", request.host, callback_path, None, None, None))
+        ref_url = urlunparse(("https", request.host, callback_path, None, None, None))
+        logger.info(f"ref_url = {ref_url}")
+
+        logger.info(f"Check test_url = {test_url == ref_url}")
+
+        return ref_url
 
 
 @dataclass(kw_only=True)
