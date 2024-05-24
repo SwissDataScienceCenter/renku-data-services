@@ -27,9 +27,8 @@ class OAuth2ClientsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _get_all(r: Request, user: base_models.APIUser):
-            test_url = r.url_for(f"{self.name}.{self.authorize_callback.__name__}")
-            test_url = urlunparse(urlparse(test_url)._replace(scheme="https"))
-            logger.info(f"test_url = {test_url}")
+            for h in r.headers:
+                logger.info(f"Header: {h} = {r.headers.get_all(h)}")
 
             clients = await self.connected_services_repo.get_oauth2_clients(user=user)
             return json(
@@ -119,17 +118,8 @@ class OAuth2ClientsBP(CustomBlueprint):
         return "/oauth2/callback", ["GET"], _callback
 
     def _get_callback_url(self, request: Request) -> str:
-        test_url = request.url_for(f"{self.name}.{self.authorize_callback.__name__}")
-        test_url = urlunparse(urlparse(test_url)._replace(scheme="https"))
-        logger.info(f"test_url = {test_url}")
-
-        callback_path = "/api/data/oauth2/callback"
-        ref_url = urlunparse(("https", request.host, callback_path, None, None, None))
-        logger.info(f"ref_url = {ref_url}")
-
-        logger.info(f"Check test_url = {test_url == ref_url}")
-
-        return ref_url
+        callback_url = request.url_for(f"{self.name}.{self.authorize_callback.__name__}")
+        return urlunparse(urlparse(callback_url)._replace(scheme="https"))
 
 
 @dataclass(kw_only=True)
