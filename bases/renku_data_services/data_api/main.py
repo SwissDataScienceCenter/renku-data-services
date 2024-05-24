@@ -30,6 +30,11 @@ def create_app() -> Sanic:
     """Create a Sanic application."""
     config = Config.from_env()
     app = Sanic(config.app_name)
+
+    # TODO: configure this
+    app.config.PROXIES_COUNT = 2
+    app.config.REAL_IP_HEADER = "x-real-ip"
+
     if "COVERAGE_RUN" in environ:
         app.config.TOUCHUP = False
         # NOTE: in single process mode where we usually run schemathesis to get coverage the db migrations

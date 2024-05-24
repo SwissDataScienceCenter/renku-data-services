@@ -27,8 +27,9 @@ class OAuth2ClientsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _get_all(r: Request, user: base_models.APIUser):
-            for h in r.headers:
-                logger.info(f"Header: {h} = {r.headers.get_all(h)}")
+            logger.info(f"scheme = {r.scheme}")
+            # for h in r.headers:
+            #     logger.info(f"Header: {h} = {r.headers.get_all(h)}")
 
             clients = await self.connected_services_repo.get_oauth2_clients(user=user)
             return json(
