@@ -33,7 +33,6 @@ class APIUser:
     last_name: Optional[str] = None
     email: Optional[str] = None
 
-
     @property
     def is_authenticated(self):
         """Indicates whether the user has successfully logged in."""

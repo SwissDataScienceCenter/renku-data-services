@@ -19,6 +19,7 @@ from renku_data_services.db_config import DBConfig
 from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.redis_queue import RedisQueue
+from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.users.db import UserRepo, UsersSync
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
@@ -31,12 +32,13 @@ def get_app_configs(db_config: DBConfig, authz_config: AuthzConfig):
         redis = RedisConfig.fake()
         message_queue = RedisQueue(redis)
         event_repo = EventRepository(db_config.async_session_maker, message_queue=message_queue)
-        group_repo = GroupRepository(db_config.async_session_maker)
+        group_repo = GroupRepository(db_config.async_session_maker, event_repo, Authz(authz_config))
         users_sync = UsersSync(
             db_config.async_session_maker,
             message_queue=message_queue,
             event_repo=event_repo,
             group_repo=group_repo,
+            authz=Authz(authz_config),
         )
         config = SyncConfig(
             syncer=users_sync, kc_api=kc_api, total_user_sync=total_user_sync, authz_config=authz_config
@@ -47,7 +49,9 @@ def get_app_configs(db_config: DBConfig, authz_config: AuthzConfig):
             event_repo=event_repo,
             group_repo=group_repo,
             encryption_key=secrets.token_bytes(32),
+            authz=Authz(authz_config),
         )
+        run_migrations_for_app("common")
         return config, user_repo
 
     yield _get_app_configs

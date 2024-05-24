@@ -11,7 +11,7 @@ from components.renku_data_services.message_queue.avro_models.io.renku.events im
 from components.renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
 from renku_data_services.app_config.config import Config
 from renku_data_services.authz.models import Role
-from renku_data_services.message_queue.redis_queue import deserialize_binary
+from renku_data_services.message_queue.models import deserialize_binary
 from renku_data_services.users.models import UserInfo
 
 
@@ -74,7 +74,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user, app_co
     event = events[0][1]
     headers = avro_schema_v1.Header.deserialize(event.get(b"headers"), serialization_type="avro-json")
     assert headers.source == "renku-data-services"
-    proj_event = deserialize_binary(event[b"payload"], avro_schema_v1.ProjectCreated)
+    proj_event = deserialize_binary(event[b"payload"], avro_schema_v2.ProjectCreated)
     assert proj_event.name == payload["name"]
     project_id = project["id"]
     assert proj_event.id == project_id
@@ -279,7 +279,7 @@ async def test_delete_project(create_project, sanic_client, user_headers, app_co
     events = await app_config.redis.redis_connection.xrange("project.removed")
     assert len(events) == 1
     event = events[0][1]
-    proj_event = deserialize_binary(event[b"payload"], avro_schema_v1.ProjectRemoved)
+    proj_event = deserialize_binary(event[b"payload"], avro_schema_v2.ProjectRemoved)
     assert proj_event.id == project_id
 
     # Get all projects
@@ -313,7 +313,7 @@ async def test_patch_project(create_project, get_project, sanic_client, user_hea
     events = await app_config.redis.redis_connection.xrange("project.updated")
     assert len(events) == 1
     event = events[0][1]
-    proj_event = deserialize_binary(event[b"payload"], avro_schema_v1.ProjectUpdated)
+    proj_event = deserialize_binary(event[b"payload"], avro_schema_v2.ProjectUpdated)
     assert proj_event.id == project_id
     assert proj_event.name == patch["name"]
     assert set(proj_event.keywords) == {"keyword 1", "keyword 2"}
@@ -352,7 +352,7 @@ async def test_keywords_are_not_modified_in_patch(create_project, get_project, s
     events = await app_config.redis.redis_connection.xrange("project.updated")
     assert len(events) == 1
     event = events[0][1]
-    proj_event = deserialize_binary(event[b"payload"], avro_schema_v1.ProjectUpdated)
+    proj_event = deserialize_binary(event[b"payload"], avro_schema_v2.ProjectUpdated)
     assert set(proj_event.keywords) == {"keyword 1", "keyword 2"}
 
     # Get the project
@@ -384,7 +384,7 @@ async def test_keywords_are_deleted_in_patch(create_project, get_project, sanic_
     events = await app_config.redis.redis_connection.xrange("project.updated")
     assert len(events) == 1
     event = events[0][1]
-    proj_event = deserialize_binary(event[b"payload"], avro_schema_v1.ProjectUpdated)
+    proj_event = deserialize_binary(event[b"payload"], avro_schema_v2.ProjectUpdated)
     assert proj_event.keywords == []
 
     # Get the project
@@ -582,7 +582,7 @@ async def test_add_project_members(
     events = await app_config.redis.redis_connection.xrange("projectAuth.added")
     assert len(events) == 3
     event = events[0][1]
-    auth_event = deserialize_binary(event[b"payload"], avro_schema_v1.ProjectAuthorizationAdded)
+    auth_event = deserialize_binary(event[b"payload"], avro_schema_v2.ProjectMemberAdded)
     assert auth_event.projectId == project_id
     assert auth_event.userId == regular_user.id
     assert auth_event.role.value.lower() == Role.OWNER.value

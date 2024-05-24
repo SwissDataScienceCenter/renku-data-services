@@ -7,10 +7,12 @@ from renku_data_services.app_config import Config
 from renku_data_services.base_models import APIUser
 from renku_data_services.connected_services import apispec
 from renku_data_services.connected_services import orm as schemas
+from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.utils.cryptography import decrypt_string
 
 
 def test_token_encryption(app_config: Config):
+    run_migrations_for_app("common")
     connected_services_repo = app_config.connected_services_repo
     token = dict(access_token="ACCESS TOKEN", refresh_token="REFRESH TOKEN", expires_at=12345)  # nosec
     user_id = "USER-1"
@@ -32,6 +34,7 @@ def test_token_encryption(app_config: Config):
 
 @pytest.mark.asyncio
 async def test_client_secret_encryption(app_config: Config, admin_user: APIUser):
+    run_migrations_for_app("common")
     connected_services_repo = app_config.connected_services_repo
     new_client = apispec.ProviderPost(
         id="provider",

@@ -275,7 +275,9 @@ class Config:
     def group_repo(self) -> GroupRepository:
         """The DB adapter for Renku groups."""
         if not self._group_repo:
-            self._group_repo = GroupRepository(session_maker=self.db.async_session_maker)
+            self._group_repo = GroupRepository(
+                session_maker=self.db.async_session_maker, event_repo=self.event_repo, group_authz=self.authz
+            )
         return self._group_repo
 
     @property
@@ -305,6 +307,7 @@ class Config:
                 event_repo=self.event_repo,
                 group_repo=self.group_repo,
                 encryption_key=self.encryption_key,
+                authz=self.authz,
             )
         return self._kc_user_repo
 

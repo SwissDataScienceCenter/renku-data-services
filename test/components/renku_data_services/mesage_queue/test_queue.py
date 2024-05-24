@@ -4,10 +4,13 @@ import asyncio
 import contextlib
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.authz.models import Visibility
-from renku_data_services.message_queue.avro_models.io.renku.events.v1.project_removed import ProjectRemoved
+from renku_data_services.message_queue.avro_models.io.renku.events.v2.project_removed import ProjectRemoved
 from renku_data_services.message_queue.redis_queue import dispatch_message
+from renku_data_services.migrations.core import run_migrations_for_app
+from renku_data_services.namespace.models import Namespace, NamespaceKind
 from renku_data_services.project.models import Project
 from renku_data_services.utils.core import with_db_transaction
 
@@ -15,6 +18,8 @@ from renku_data_services.utils.core import with_db_transaction
 @pytest.mark.asyncio
 async def test_queue_resend(app_config, monkeypatch):
     """Test that resending failed requests works."""
+
+    run_migrations_for_app("common")
 
     class FakeException(Exception):
         pass
@@ -32,12 +37,12 @@ async def test_queue_resend(app_config, monkeypatch):
 
         @with_db_transaction
         @dispatch_message(ProjectRemoved)
-        async def fake_db_method(self, session, some_arg):
+        async def fake_db_method(self, some_arg, *, session: AsyncSession | None = None):
             return Project(
                 id="sample-id-1",
                 name="name",
                 slug="slug",
-                namespace="name",
+                namespace=Namespace("namespace", "namespace", NamespaceKind.user),
                 visibility=Visibility.PRIVATE,
                 created_by="some-user",
             )
@@ -48,7 +53,7 @@ async def test_queue_resend(app_config, monkeypatch):
 
     events = await app_config.redis.redis_connection.xrange("project.removed")
     assert len(events) == 0
-    pending_events = await app_config.event_repo.get_pending_events()
+    pending_events = await app_config.event_repo._get_pending_events()
     assert len(pending_events) == 1
 
     monkeypatch.setattr(app_config.message_queue, "send_message", send_msg)
@@ -57,7 +62,7 @@ async def test_queue_resend(app_config, monkeypatch):
 
     events = await app_config.redis.redis_connection.xrange("project.removed")
     assert len(events) == 0
-    pending_events = await app_config.event_repo.get_pending_events()
+    pending_events = await app_config.event_repo._get_pending_events()
     assert len(pending_events) == 1
 
     # make sure event is not immeciately resent
@@ -65,7 +70,7 @@ async def test_queue_resend(app_config, monkeypatch):
 
     events = await app_config.redis.redis_connection.xrange("project.removed")
     assert len(events) == 0
-    pending_events = await app_config.event_repo.get_pending_events()
+    pending_events = await app_config.event_repo._get_pending_events()
     assert len(pending_events) == 1
 
     # ensure it is resent if older than 5 seconds
@@ -74,5 +79,5 @@ async def test_queue_resend(app_config, monkeypatch):
 
     events = await app_config.redis.redis_connection.xrange("project.removed")
     assert len(events) == 1
-    pending_events = await app_config.event_repo.get_pending_events()
+    pending_events = await app_config.event_repo._get_pending_events()
     assert len(pending_events) == 0

@@ -1,5 +1,6 @@
 """Fixtures for testing."""
 
+import logging
 import os
 import secrets
 import socket
@@ -18,7 +19,6 @@ import renku_data_services.base_models as base_models
 from renku_data_services.app_config import Config as DataConfig
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.db_config.config import DBConfig
-from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.secrets.config import Config as SecretsConfig
 
 settings.register_profile("ci", deadline=400, max_examples=5)
@@ -47,6 +47,7 @@ def authz_config(monkeypatch, free_port) -> Iterator[AuthzConfig]:
             f":{port}",
             "--readonly-grpc-enabled=false",
             "--skip-release-check=true",
+            "--log-level=debug",
         ]
     )
     monkeypatch.setenv("AUTHZ_DB_HOST", "127.0.0.1")
@@ -56,7 +57,8 @@ def authz_config(monkeypatch, free_port) -> Iterator[AuthzConfig]:
     yield AuthzConfig.from_env()
     try:
         proc.terminate()
-    except Exception:
+    except Exception as err:
+        logging.error(f"Encountered error when shutting down Authzed DB for testing {err}")
         proc.kill()
 
 
@@ -82,8 +84,8 @@ def db_config(monkeypatch, worker_id, authz_config) -> Iterator[DBConfig]:
         "16.2",
         password,
     ):
-        run_migrations_for_app("common")
         yield DBConfig.from_env()
+        DBConfig.dispose_connection()
         DBConfig._async_engine = None
 
 

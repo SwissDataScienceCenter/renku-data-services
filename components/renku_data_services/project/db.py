@@ -4,20 +4,20 @@ from __future__ import annotations
 
 import functools
 from asyncio import gather
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
-from typing import cast
+from typing import Any, Concatenate, ParamSpec, TypeAlias, TypeVar, cast
 
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
-from renku_data_services.authz.authz import Authz, ProjectAuthzOperation, ResourceType
+from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.authz.models import Member, MembershipChange, Scope
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.message_queue import AmbiguousEvent
-from renku_data_services.message_queue.avro_models.io.renku.events import v1 as avro_schema_v1
+from renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import dispatch_message
@@ -58,7 +58,7 @@ class ProjectRepository:
         async with self.session_maker() as session:
             # NOTE: without awaiting the connnection below there are failures about how a connection has not
             # been established in the DB but the query is getting executed.
-            _ = await session.connection()
+            # _ = await session.connection()
             stmt = select(schemas.ProjectORM)
             stmt = stmt.where(schemas.ProjectORM.id.in_(project_ids))
             stmt = stmt.limit(pagination.per_page).offset(pagination.offset)
@@ -73,7 +73,7 @@ class ProjectRepository:
 
     async def get_project(self, user: base_models.APIUser, project_id: str) -> models.Project:
         """Get one project from the database."""
-        authorized = self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
+        authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
         if not authorized:
             raise errors.MissingResourceError(
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
@@ -111,7 +111,7 @@ class ProjectRepository:
             if project_orm is None:
                 raise errors.MissingResourceError(message=not_found_msg)
 
-            authorized = self.authz.has_permission(
+            authorized = await self.authz.has_permission(
                 user=user, resource_type=ResourceType.project, resource_id=project_orm.id, scope=Scope.READ
             )
             if not authorized:
@@ -120,12 +120,14 @@ class ProjectRepository:
             return project_orm.dump()
 
     @with_db_transaction
-    @Authz.project_change(ProjectAuthzOperation.create)
-    @dispatch_message(avro_schema_v1.ProjectCreated)
+    @Authz.authz_change(AuthzOperation.create, ResourceType.project)
+    @dispatch_message(avro_schema_v2.ProjectCreated)
     async def insert_project(
-        self, session: AsyncSession, user: base_models.APIUser, project=project_apispec.ProjectPost
+        self, user: base_models.APIUser, project: project_apispec.ProjectPost, *, session: AsyncSession | None = None
     ) -> models.Project:
         """Insert a new project entry."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required")
         ns = await self.group_repo.get_namespace(user, project.namespace)
         if not ns:
             raise errors.MissingResourceError(
@@ -146,7 +148,7 @@ class ProjectRepository:
             description=project.description,
             repositories=repositories,
             creation_date=datetime.now(UTC).replace(microsecond=0),
-            keywords=project.keywords,
+            keywords=[kw.root for kw in project.keywords or []],
         )
         project_slug = schemas.ProjectSlug(slug, project_id=project_orm.id, namespace_id=ns.id)
 
@@ -162,12 +164,20 @@ class ProjectRepository:
         return project_dump
 
     @with_db_transaction
-    @Authz.project_change(ProjectAuthzOperation.update)
-    @dispatch_message(avro_schema_v1.ProjectUpdated)
+    @Authz.authz_change(AuthzOperation.update, ResourceType.project)
+    @dispatch_message(avro_schema_v2.ProjectUpdated)
     async def update_project(
-        self, session: AsyncSession, user: base_models.APIUser, project_id: str, etag: str | None = None, **payload
+        self,
+        user: base_models.APIUser,
+        project_id: str,
+        payload: dict[str, Any],
+        etag: str | None = None,
+        *,
+        session: AsyncSession | None = None,
     ) -> models.ProjectUpdate:
         """Update a project entry."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required")
         result = await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
         project = result.one_or_none()
         if project is None:
@@ -184,7 +194,7 @@ class ProjectRepository:
         if "namespace" in payload and payload["namespace"] != old_project.namespace:
             # NOTE: changing the namespace requires the user to be owner which means they should have DELETE permission
             required_scope = Scope.DELETE
-        authorized = self.authz.has_permission(user, ResourceType.project, project_id, required_scope)
+        authorized = await self.authz.has_permission(user, ResourceType.project, project_id, required_scope)
         if not authorized:
             raise errors.MissingResourceError(
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
@@ -227,12 +237,14 @@ class ProjectRepository:
         )
 
     @with_db_transaction
-    @Authz.project_change(ProjectAuthzOperation.delete)
-    @dispatch_message(avro_schema_v1.ProjectRemoved)
+    @Authz.authz_change(AuthzOperation.delete, ResourceType.project)
+    @dispatch_message(avro_schema_v2.ProjectRemoved)
     async def delete_project(
-        self, session: AsyncSession, user: base_models.APIUser, project_id: str
+        self, user: base_models.APIUser, project_id: str, *, session: AsyncSession | None = None
     ) -> models.Project | None:
         """Delete a project."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required")
         authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.DELETE)
         if not authorized:
             raise errors.MissingResourceError(
@@ -254,25 +266,37 @@ class ProjectRepository:
         return project.dump()
 
 
-def _project_exists(f):
+_P = ParamSpec("_P")
+_T = TypeVar("_T")
+_ProjectExistsFunc: TypeAlias = Callable[
+    Concatenate["ProjectMemberRepository", base_models.APIUser, str, _P], Awaitable[_T]
+]
+
+
+def _project_exists(f: _ProjectExistsFunc) -> _ProjectExistsFunc:
     """Checks if the project exists when adding or modifying project members."""
 
     @functools.wraps(f)
     async def decorated_func(
         self: ProjectMemberRepository,
-        session: AsyncSession,
         user: base_models.APIUser,
         project_id: str,
-        *args,
-        **kwargs,
+        *args: _P.args,
+        **kwargs: _P.kwargs,
     ):
+        session = kwargs.get("session")
+        if not isinstance(session, AsyncSession):
+            raise errors.ProgrammingError(
+                message="The decorator that checks if a project exists requires a database session in the "
+                f"keyword arguments, but instead it got {type(session)}"
+            )
         stmt = select(schemas.ProjectORM.id).where(schemas.ProjectORM.id == project_id)
         res = await session.scalar(stmt)
         if not res:
             raise errors.MissingResourceError(
                 message=f"Project with ID {project_id} does not exist or you do not have access to it."
             )
-        return await f(self, session, user, project_id, *args, **kwargs)
+        return await f(self, user, project_id, *args, **kwargs)
 
     return decorated_func
 
@@ -294,7 +318,9 @@ class ProjectMemberRepository:
 
     @with_db_transaction
     @_project_exists
-    async def get_members(self, session: AsyncSession, user: base_models.APIUser, project_id: str) -> list[Member]:
+    async def get_members(
+        self, user: base_models.APIUser, project_id: str, *, session: AsyncSession | None = None
+    ) -> list[Member]:
         """Get all members of a project."""
         members = await self.authz.members(user, ResourceType.project, project_id)
         members = [member for member in members if member.user_id and member.user_id != "*"]
@@ -304,9 +330,16 @@ class ProjectMemberRepository:
     @_project_exists
     @dispatch_message(AmbiguousEvent.PROJECT_MEMBERSHIP_CHANGED)
     async def update_members(
-        self, session: AsyncSession, user: base_models.APIUser, project_id: str, members: list[Member]
+        self,
+        user: base_models.APIUser,
+        project_id: str,
+        members: list[Member],
+        *,
+        session: AsyncSession | None = None,
     ) -> list[MembershipChange]:
         """Update project's members."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required")
         if len(members) == 0:
             raise errors.ValidationError(message="Please request at least 1 member to be added to the project")
 
@@ -328,7 +361,7 @@ class ProjectMemberRepository:
     @_project_exists
     @dispatch_message(AmbiguousEvent.PROJECT_MEMBERSHIP_CHANGED)
     async def delete_members(
-        self, session: AsyncSession, user: base_models.APIUser, project_id: str, user_ids: list[str]
+        self, user: base_models.APIUser, project_id: str, user_ids: list[str], *, session: AsyncSession | None = None
     ) -> list[MembershipChange]:
         """Delete members from a project."""
         if len(user_ids) == 0:

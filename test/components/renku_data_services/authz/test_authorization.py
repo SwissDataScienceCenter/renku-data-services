@@ -13,6 +13,8 @@ from renku_data_services.authz.authz import ResourceType, _AuthzConverter
 from renku_data_services.authz.models import Member, Role, Scope, Visibility
 from renku_data_services.base_models import APIUser
 from renku_data_services.errors import errors
+from renku_data_services.migrations.core import run_migrations_for_app
+from renku_data_services.namespace.models import Namespace, NamespaceKind
 from renku_data_services.project.models import Project
 
 admin_user = APIUser(is_admin=True, id="admin-id", access_token="some-token", full_name="admin")  # nosec B106
@@ -23,6 +25,7 @@ regular_user2 = APIUser(is_admin=False, id="user2-id", access_token="some-token2
 
 @pytest_asyncio.fixture
 async def bootstrap_admins(app_config: Config):
+    run_migrations_for_app("common")
     authz = app_config.authz
     admins = [admin_user]
     rels: list[RelationshipUpdate] = []
@@ -49,7 +52,7 @@ async def test_adding_deleting_project(app_config: Config, bootstrap_admins, pub
         id=project_id,
         name=project_id,
         slug="slug",
-        namespace="namespace",
+        namespace=Namespace("namespace", "namespace", NamespaceKind.user),
         visibility=Visibility.PUBLIC if public_project else Visibility.PRIVATE,
         created_by=project_owner.id,
     )
@@ -93,7 +96,7 @@ async def test_granting_access(app_config: Config, bootstrap_admins, public_proj
         id=project_id,
         name=project_id,
         slug="slug",
-        namespace="namespace",
+        namespace=Namespace("namespace", "namespace", NamespaceKind.user),
         visibility=Visibility.PUBLIC if public_project else Visibility.PRIVATE,
         created_by=project_owner.id,
     )
@@ -132,7 +135,7 @@ async def test_listing_users_with_access(app_config: Config, public_project: boo
         id=project1_id,
         name=project1_id,
         slug=project1_id,
-        namespace=project_owner.id,
+        namespace=Namespace(project_owner.id, project_owner.id, NamespaceKind.user),
         visibility=Visibility.PUBLIC if public_project else Visibility.PRIVATE,
         created_by=project_owner.id,
     )
@@ -141,7 +144,7 @@ async def test_listing_users_with_access(app_config: Config, public_project: boo
         id=project2_id,
         name=project2_id,
         slug=project2_id,
-        namespace=regular_user2.id,
+        namespace=Namespace(regular_user2.id, regular_user2.id, NamespaceKind.user),
         visibility=Visibility.PRIVATE,
         created_by=regular_user2.id,
     )
@@ -164,13 +167,14 @@ async def test_listing_projects_with_access(app_config: Config, bootstrap_admins
     private_project_id1 = str(ULID())
     private_project_id2 = str(ULID())
     project_owner = regular_user1
+    namespace = Namespace(project_owner.id, project_owner.id, NamespaceKind.user)
     assert project_owner.id
     assert regular_user2.id
     public_project = Project(
         id=public_project_id,
         name=public_project_id,
         slug=public_project_id,
-        namespace=project_owner.id,
+        namespace=namespace,
         visibility=Visibility.PUBLIC,
         created_by=project_owner.id,
     )
@@ -178,7 +182,7 @@ async def test_listing_projects_with_access(app_config: Config, bootstrap_admins
         id=private_project_id1,
         name=private_project_id1,
         slug=private_project_id1,
-        namespace=project_owner.id,
+        namespace=namespace,
         visibility=Visibility.PRIVATE,
         created_by=project_owner.id,
     )
@@ -186,7 +190,7 @@ async def test_listing_projects_with_access(app_config: Config, bootstrap_admins
         id=private_project_id2,
         name=private_project_id2,
         slug=private_project_id2,
-        namespace=project_owner.id,
+        namespace=namespace,
         visibility=Visibility.PRIVATE,
         created_by=project_owner.id,
     )

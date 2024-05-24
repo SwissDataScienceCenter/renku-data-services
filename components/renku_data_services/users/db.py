@@ -10,15 +10,23 @@ from typing import Any
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.base_api.auth import APIUser, only_authenticated
 from renku_data_services.errors import errors
-from renku_data_services.message_queue.avro_models.io.renku.events import v1 as avro_schema_v1
+from renku_data_services.message_queue import AmbiguousEvent
+from renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import dispatch_message
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.users.kc_api import IKeycloakAPI
-from renku_data_services.users.models import KeycloakAdminEvent, UserInfo, UserInfoUpdate
+from renku_data_services.users.models import (
+    KeycloakAdminEvent,
+    UserInfo,
+    UserInfoUpdate,
+    UserWithNamespace,
+    UserWithNamespaceUpdate,
+)
 from renku_data_services.users.orm import LastKeycloakEventTimestamp, UserORM
 from renku_data_services.utils.core import with_db_transaction
 from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
@@ -34,10 +42,11 @@ class UserRepo:
         event_repo: EventRepository,
         group_repo: GroupRepository,
         encryption_key: bytes,
+        authz: Authz,
     ):
         self.session_maker = session_maker
         self.encryption_key = encryption_key
-        self._users_sync = UsersSync(self.session_maker, message_queue, event_repo, group_repo)
+        self._users_sync = UsersSync(self.session_maker, message_queue, event_repo, group_repo, authz)
 
     async def initialize(self, kc_api: IKeycloakAPI):
         """Do a total sync of users from Keycloak if there is nothing in the DB."""
@@ -51,9 +60,11 @@ class UserRepo:
             raise errors.Unauthorized(message="The user has to be authenticated to be inserted in the DB.")
         await self._users_sync.update_or_insert_user(
             user_id=user.id,
-            first_name=user.first_name,
-            last_name=user.last_name,
-            email=user.email,
+            payload=dict(
+                first_name=user.first_name,
+                last_name=user.last_name,
+                email=user.email,
+            ),
         )
         return UserInfo(
             id=user.id,
@@ -138,11 +149,13 @@ class UsersSync:
         message_queue: IMessageQueue,
         event_repo: EventRepository,
         group_repo: GroupRepository,
+        authz: Authz,
     ):
         self.session_maker = session_maker
         self.message_queue: IMessageQueue = message_queue
         self.event_repo: EventRepository = event_repo
         self.group_repo = group_repo
+        self.authz = authz
 
     async def _get_user(self, id) -> UserInfo | None:
         """Get a specific user."""
@@ -152,33 +165,37 @@ class UsersSync:
             orm = res.scalar_one_or_none()
             return orm.dump() if orm else None
 
-    async def update_or_insert_user(self, user_id: str, **kwargs) -> UserORM:
-        """Update a user or insert it if it does not exist."""
-        async with self.session_maker() as session, session.begin():
-            res = await session.execute(select(UserORM).where(UserORM.keycloak_id == user_id))
-            existing_user = res.scalar_one_or_none()
-        if existing_user:
-            return await self.update_user(user_id=user_id, existing_user=existing_user, **kwargs)
-        else:
-            return await self.insert_user(user_id=user_id, **kwargs)
-
     @with_db_transaction
-    @dispatch_message(avro_schema_v1.UserAdded)
-    async def insert_user(self, session: AsyncSession, user_id: str, **kwargs) -> UserInfo:
+    @Authz.authz_change(AuthzOperation.update_or_insert, ResourceType.user)
+    @dispatch_message(AmbiguousEvent.UPDATE_OR_INSERT_USER)
+    async def update_or_insert_user(
+        self, user_id: str, payload: dict[str, Any], *, session: AsyncSession | None = None
+    ) -> UserWithNamespaceUpdate:
+        """Update a user or insert it if it does not exist."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required")
+        res = await session.execute(select(UserORM).where(UserORM.keycloak_id == user_id))
+        existing_user = res.scalar_one_or_none()
+        if existing_user:
+            return await self._update_user(session=session, user_id=user_id, existing_user=existing_user, **payload)
+        else:
+            return await self._insert_user(session=session, user_id=user_id, **payload)
+
+    async def _insert_user(self, session: AsyncSession, user_id: str, **kwargs) -> UserWithNamespaceUpdate:
         """Insert a user."""
         kwargs.pop("keycloak_id", None)
         kwargs.pop("id", None)
         new_user = UserORM(keycloak_id=user_id, **kwargs)
         session.add(new_user)
         await session.flush()
-        await self.group_repo.insert_user_namespace(new_user, session, retry_enumerate=5, retry_random=True)
-        return new_user.dump()
+        namespace = await self.group_repo._insert_user_namespace(
+            session, new_user, retry_enumerate=5, retry_random=True
+        )
+        return UserWithNamespaceUpdate(None, UserWithNamespace(new_user.dump(), namespace))
 
-    @with_db_transaction
-    @dispatch_message(avro_schema_v1.UserUpdated)
-    async def update_user(
+    async def _update_user(
         self, session: AsyncSession, user_id: str, existing_user: UserORM | None, **kwargs
-    ) -> UserInfo:
+    ) -> UserWithNamespaceUpdate:
         """Update a user."""
         if not existing_user:
             async with self.session_maker() as session, session.begin():
@@ -186,6 +203,7 @@ class UsersSync:
                 existing_user = res.scalar_one_or_none()
         if not existing_user:
             raise errors.MissingResourceError(message=f"The user with id '{user_id}' cannot be found")
+        old_user = existing_user.dump()
 
         kwargs.pop("keycloak_id", None)
         kwargs.pop("id", None)
@@ -193,34 +211,50 @@ class UsersSync:
         for field_name, field_value in kwargs.items():
             if getattr(existing_user, field_name, None) != field_value:
                 setattr(existing_user, field_name, field_value)
-        return existing_user.dump()
+        namespace = await self.group_repo._get_user_namespace(user_id)
+        if not namespace:
+            raise errors.ProgrammingError(
+                message=f"Cannot find a user namespace for user {user_id} when updating the user."
+            )
+        return UserWithNamespaceUpdate(
+            UserWithNamespace(old_user, namespace), UserWithNamespace(existing_user.dump(), namespace)
+        )
 
     @with_db_transaction
-    @dispatch_message(avro_schema_v1.UserRemoved)
-    async def _remove_user(self, session: AsyncSession, user_id: str):
+    @dispatch_message(avro_schema_v2.UserRemoved)
+    async def _remove_user(self, user_id: str, *, session: AsyncSession | None = None) -> UserInfo | None:
         """Remove a user from the database."""
-        logging.info(f"Removing user with ID {user_id}")
-        stmt = delete(UserORM).where(UserORM.keycloak_id == user_id)
-        await session.execute(stmt)
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required")
+        logging.info(f"Trying to remove user with ID {user_id}")
+        stmt = delete(UserORM).where(UserORM.keycloak_id == user_id).returning(UserORM)
+        user = await session.scalar(stmt)
+        await self.authz._remove_user_namespace(user_id)
+        if not user:
+            logging.info(f"User with ID {user_id} was not found.")
+            return None
+        logging.info(f"User with ID {user_id} was removed from the database.")
+        removed_user = user.dump()
+        logging.info(f"User namespace with ID {user_id} was removed from the authorization database.")
+        return removed_user
 
     async def users_sync(self, kc_api: IKeycloakAPI):
         """Sync all users from Keycloak into the users database."""
-        async with self.session_maker() as session, session.begin():
-            logging.info("Starting a total user database sync.")
-            kc_users = kc_api.get_users()
+        logging.info("Starting a total user database sync.")
+        kc_users = kc_api.get_users()
 
-            async def _do_update(raw_kc_user: dict[str, Any]):
-                kc_user = UserInfo.from_kc_user_payload(raw_kc_user)
-                logging.info(f"Checking user with Keycloak ID {kc_user.id}")
-                db_user = await self._get_user(kc_user.id)
-                if db_user != kc_user:
-                    logging.info(f"Inserting or updating user {db_user} -> {kc_user}")
-                    await self.update_or_insert_user(kc_user.id, **asdict(kc_user))
+        async def _do_update(raw_kc_user: dict[str, Any]):
+            kc_user = UserInfo.from_kc_user_payload(raw_kc_user)
+            logging.info(f"Checking user with Keycloak ID {kc_user.id}")
+            db_user = await self._get_user(kc_user.id)
+            if db_user != kc_user:
+                logging.info(f"Inserting or updating user {db_user} -> {kc_user}")
+                await self.update_or_insert_user(kc_user.id, asdict(kc_user))
 
-            # NOTE: If asyncio.gather is used here you quickly exhaust all DB connections
-            # or timeout on waiting for available connections
-            for user in kc_users:
-                await _do_update(user)
+        # NOTE: If asyncio.gather is used here you quickly exhaust all DB connections
+        # or timeout on waiting for available connections
+        for user in kc_users:
+            await _do_update(user)
 
     async def events_sync(self, kc_api: IKeycloakAPI):
         """Use the events from Keycloak to update the users database."""
@@ -260,7 +294,7 @@ class UsersSync:
             latest_delete_timestamp = None
             for update in parsed_updates:
                 logging.info(f"Processing update event {update}")
-                await self.update_or_insert_user(update.user_id, **{update.field_name: update.new_value})
+                await self.update_or_insert_user(update.user_id, {update.field_name: update.new_value})
                 latest_update_timestamp = update.timestamp_utc
             for deletion in parsed_deletions:
                 logging.info(f"Processing deletion event {deletion}")
