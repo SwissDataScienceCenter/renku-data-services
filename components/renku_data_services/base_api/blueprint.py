@@ -32,7 +32,7 @@ class CustomBlueprint:
             if name != "blueprint" and not name.startswith("_"):
                 method_factory = cast(BlueprintFactory, method)
                 url, http_methods, handler = method_factory()
-                bp.add_route(handler=handler, uri=url, methods=http_methods)
+                bp.add_route(handler=handler, uri=url, methods=http_methods, name=name)
         for req_mw in self.request_middlewares:
             bp.middleware("request")(req_mw)
         for res_mw in self.response_middlewares:

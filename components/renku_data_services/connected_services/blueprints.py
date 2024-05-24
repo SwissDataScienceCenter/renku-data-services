@@ -5,7 +5,7 @@ from urllib.parse import urlunparse
 
 from sanic import HTTPResponse, Request, json, redirect
 from sanic_ext import validate
-
+from sanic.log import logger
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_admins, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
@@ -115,6 +115,9 @@ class OAuth2ClientsBP(CustomBlueprint):
 
     @staticmethod
     def _get_callback_url(request: Request) -> str:
+        test_url = request.url_for("renku_data_services.oauth2_clients.authorize_callback")
+        logger.info(f"test_url = {test_url}")
+
         callback_path = "/api/data/oauth2/callback"
         return urlunparse(("https", request.host, callback_path, None, None, None))
 
