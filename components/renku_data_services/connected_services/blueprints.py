@@ -1,7 +1,7 @@
 """Connected services blueprint."""
 
 from dataclasses import dataclass
-from urllib.parse import urlunparse
+from urllib.parse import urlparse, urlunparse
 
 from sanic import HTTPResponse, Request, json, redirect
 from sanic.log import logger
@@ -27,7 +27,8 @@ class OAuth2ClientsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _get_all(r: Request, user: base_models.APIUser):
-            test_url = r.url_for(f"{self.name}.get_all")
+            test_url = r.url_for(f"{self.name}.{self.authorize_callback.__name__}")
+            test_url = urlunparse(urlparse(test_url)._replace(scheme="https"))
             logger.info(f"test_url = {test_url}")
 
             clients = await self.connected_services_repo.get_oauth2_clients(user=user)
@@ -118,7 +119,8 @@ class OAuth2ClientsBP(CustomBlueprint):
         return "/oauth2/callback", ["GET"], _callback
 
     def _get_callback_url(self, request: Request) -> str:
-        test_url = request.url_for(f"{self.name}.authorize_callback", _scheme="https")
+        test_url = request.url_for(f"{self.name}.{self.authorize_callback.__name__}")
+        test_url = urlunparse(urlparse(test_url)._replace(scheme="https"))
         logger.info(f"test_url = {test_url}")
 
         callback_path = "/api/data/oauth2/callback"
