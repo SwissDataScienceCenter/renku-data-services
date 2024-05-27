@@ -107,19 +107,26 @@ class SentryConfig:
 
         return cls(enabled, dsn=dsn, environment=environment, sample_rate=sample_rate)
 
+
 @dataclass
-class ReverseProxyConfig:
+class TrustedProxiesConfig:
     """Configuration for trusted reverse proxies."""
 
+    forwarded_secret: str | None = None
     proxies_count: int | None = None
     real_ip_header: str | None = None
 
     @classmethod
     def from_env(cls, prefix: str = ""):
         """Create a config from environment variables."""
+        forwarded_secret = os.environ.get(f"{prefix}FORWARDED_SECRET")
         proxies_count = int(os.environ.get(f"{prefix}PROXIES_COUNT", "0"))
         real_ip_header = os.environ.get(f"{prefix}REAL_IP_HEADER")
-        return cls(proxies_count=proxies_count or None, real_ip_header=real_ip_header or None)
+        return cls(
+            forwarded_secret=forwarded_secret or None,
+            proxies_count=proxies_count or None,
+            real_ip_header=real_ip_header or None,
+        )
 
 
 @dataclass
@@ -134,7 +141,7 @@ class Config:
     db: DBConfig
     redis: RedisConfig
     sentry: SentryConfig
-    reverse_proxy: ReverseProxyConfig
+    trusted_proxies: TrustedProxiesConfig
     gitlab_client: base_models.GitlabAPIProtocol
     kc_api: IKeycloakAPI
     message_queue: IMessageQueue
@@ -432,7 +439,7 @@ class Config:
             raise errors.ConfigurationError(message="Secret service public key is not an RSAPublicKey")
 
         sentry = SentryConfig.from_env(prefix)
-        reverse_proxy = ReverseProxyConfig.from_env(prefix)
+        trusted_proxies = TrustedProxiesConfig.from_env(prefix)
         message_queue = RedisQueue(redis)
 
         return cls(
@@ -443,7 +450,7 @@ class Config:
             user_store=user_store,
             quota_repo=quota_repo,
             sentry=sentry,
-            reverse_proxy=reverse_proxy,
+            trusted_proxies=trusted_proxies,
             server_defaults_file=server_defaults_file,
             server_options_file=server_options_file,
             user_preferences_config=user_preferences_config,

@@ -66,11 +66,14 @@ def create_app() -> Sanic:
         app.signal("http.lifecycle.request")(_hub_enter)
         app.signal("http.lifecycle.response")(_hub_exit)
         app.signal("http.routing.after")(_set_transaction)
-    if config.reverse_proxy.proxies_count is not None and config.reverse_proxy.proxies_count > 0:
-        app.config.PROXIES_COUNT = config.reverse_proxy.proxies_count
+    if config.trusted_proxies.forwarded_secret:
+        app.config.FORWARDED_SECRET = config.trusted_proxies.forwarded_secret
+        logger.info(f"FORWARDED_SECRET = {app.config.FORWARDED_SECRET}")
+    if config.trusted_proxies.proxies_count is not None and config.trusted_proxies.proxies_count > 0:
+        app.config.PROXIES_COUNT = config.trusted_proxies.proxies_count
         logger.info(f"PROXIES_COUNT = {app.config.PROXIES_COUNT}")
-    if config.reverse_proxy.real_ip_header:
-        app.config.REAL_IP_HEADER = config.reverse_proxy.real_ip_header
+    if config.trusted_proxies.real_ip_header:
+        app.config.REAL_IP_HEADER = config.trusted_proxies.real_ip_header
         logger.info(f"REAL_IP_HEADER = {app.config.REAL_IP_HEADER}")
 
     app = register_all_handlers(app, config)
