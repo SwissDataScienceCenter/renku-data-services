@@ -46,7 +46,7 @@ class EventORM(BaseORM):
     """The message payload."""
 
     @classmethod
-    def load(cls, event: Event):
+    def load(cls, event: Event) -> "EventORM":
         """Create an ORM object from an event."""
         message = event.serialize()
         if "payload" in message and isinstance(message["payload"], bytes):

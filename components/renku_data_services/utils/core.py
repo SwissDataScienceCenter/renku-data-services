@@ -25,7 +25,7 @@ def oidc_discovery(url: str, realm: str) -> dict[str, Any]:
 
 
 @functools.lru_cache(1)
-def get_ssl_context():
+def get_ssl_context() -> ssl.SSLContext:
     """Get an SSL context supporting mounted custom certificates."""
     context = ssl.create_default_context()
     custom_cert_file = os.environ.get("SSL_CERT_FILE", None)

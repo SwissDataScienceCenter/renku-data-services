@@ -4,7 +4,8 @@ The purpose of this is to be able to create resource
 pools and classes based on the old server options until the admin UI interface
 is added.
 """
-from typing import Any
+
+from typing import Any, Union
 
 from pydantic import BaseModel, ByteSize, Field, validator
 
@@ -38,7 +39,7 @@ class _ServerOptionsCpu(BaseModel):
         extra = "ignore"
 
     @validator("options", pre=False, each_item=True)
-    def greater_than_zero(cls, val):
+    def greater_than_zero(cls, val: Union[float, int]) -> Union[float, int]:
         return _check_greater_than_zero(cls, val)
 
 
@@ -69,7 +70,7 @@ class _ServerOptionsBytes(BaseModel):
         return vals
 
     @validator("options", pre=False, each_item=True)
-    def greater_than_zero(cls, val):
+    def greater_than_zero(cls, val: Union[float, int]) -> Union[float, int]:
         return _check_greater_than_zero(cls, val)
 
 

@@ -36,7 +36,8 @@ def execute_coroutine(coro: Coroutine[Any, Any, _T]) -> _T:
         future: Future[_T] = executor.submit(asyncio.run, coro)
         return future.result()
 
-async def add_events(session: Session, app_config: AppConfig, events: list[Event]):
+
+async def add_events(session: Session, app_config: AppConfig, events: list[Event]) -> None:
     for event in events:
         await app_config.event_repo.store_event(session, event)
 

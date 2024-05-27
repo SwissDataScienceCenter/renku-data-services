@@ -38,7 +38,7 @@ class GroupRepository:
         session_maker: Callable[..., AsyncSession],
         event_repo: EventRepository,
         group_authz: Authz,
-    ):
+    ) -> None:
         self.session_maker = session_maker  # type: ignore[call-overload]
         self.authz: Authz = group_authz
         self.event_repo: EventRepository = event_repo
@@ -246,7 +246,11 @@ class GroupRepository:
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.create, ResourceType.group)
     async def insert_group(
-        self, user: base_models.APIUser, payload: apispec.GroupPostRequest, *, session: AsyncSession | None = None,
+        self,
+        user: base_models.APIUser,
+        payload: apispec.GroupPostRequest,
+        *,
+        session: AsyncSession | None = None,
     ) -> models.Group:
         """Insert a new group."""
         if not session:

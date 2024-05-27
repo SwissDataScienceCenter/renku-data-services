@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 from os import environ
+from typing import Any
 
 import sentry_sdk
 from prometheus_sanic import monitor
@@ -118,7 +119,7 @@ if __name__ == "__main__":
     parser.add_argument("--fast", action="store_true", help="Enable Sanic fast mode")
     parser.add_argument("-d", "--dev", action="store_true", help="Enable Sanic development mode")
     parser.add_argument("--single-process", action="store_true", help="Do not use multiprocessing.")
-    args = vars(parser.parse_args())
+    args: dict[str, Any] = vars(parser.parse_args())
     loader = AppLoader(factory=create_app)
     app = loader.load()
     app.prepare(**args)

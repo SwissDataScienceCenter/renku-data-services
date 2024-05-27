@@ -27,7 +27,7 @@ class SyncConfig:
     total_user_sync: bool = False
 
     @classmethod
-    def from_env(cls, prefix: str = ""):
+    def from_env(cls, prefix: str = "") -> "SyncConfig":
         """Generate a configuration from environment variables."""
         pg_host = os.environ.get(f"{prefix}DB_HOST", "localhost")
         pg_user = os.environ.get(f"{prefix}DB_USER", "renku")

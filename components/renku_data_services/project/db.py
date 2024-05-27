@@ -40,7 +40,7 @@ class ProjectRepository:
         event_repo: EventRepository,
         group_repo: GroupRepository,
         authz: Authz,
-    ):
+    ) -> None:
         self.session_maker = session_maker  # type: ignore[call-overload]
         self.message_queue: IMessageQueue = message_queue
         self.event_repo: EventRepository = event_repo
@@ -310,7 +310,7 @@ class ProjectMemberRepository:
         event_repo: EventRepository,
         authz: Authz,
         message_queue: IMessageQueue,
-    ):
+    ) -> None:
         self.session_maker = session_maker  # type: ignore[call-overload]
         self.event_repo = event_repo
         self.authz = authz

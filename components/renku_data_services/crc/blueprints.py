@@ -4,6 +4,7 @@ import asyncio
 from dataclasses import asdict, dataclass
 
 from sanic import HTTPResponse, Request, empty, json
+from sanic.response.types import JSONResponse
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
@@ -180,7 +181,7 @@ class ResourcePoolUsersBP(CustomBlueprint):
 
     async def _put_post(
         self, api_user: base_models.APIUser, resource_pool_id: int, body: apispec.PoolUsersWithId, post: bool = True
-    ):
+    ) -> JSONResponse:
         user_ids_to_add = set([user.id for user in body.root])
         users_checks: list[UserInfo | None] = await asyncio.gather(
             *[self.kc_user_repo.get_user(requested_by=api_user, id=id) for id in user_ids_to_add]
@@ -464,7 +465,7 @@ class QuotaBP(CustomBlueprint):
 
     async def _put_patch(
         self, resource_pool_id: int, body: apispec.QuotaPatch | apispec.QuotaWithId, api_user: base_models.APIUser
-    ):
+    ) -> JSONResponse:
         rps = await self.rp_repo.get_resource_pools(api_user=api_user, id=resource_pool_id)
         if len(rps) < 1:
             raise errors.MissingResourceError(message=f"Cannot find the resource pool with ID {resource_pool_id}.")
@@ -527,7 +528,7 @@ class UserResourcePoolsBP(CustomBlueprint):
 
     async def _post_put(
         self, user_id: str, resource_pool_ids: apispec.IntegerIds, api_user: base_models.APIUser, post: bool = True
-    ):
+    ) -> JSONResponse:
         user_check = await self.kc_user_repo.get_user(requested_by=api_user, id=user_id)
         if not user_check:
             raise errors.MissingResourceError(message=f"User with user ID {user_id} cannot be found")

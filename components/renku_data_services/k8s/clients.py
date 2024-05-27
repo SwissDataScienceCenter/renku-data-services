@@ -16,7 +16,7 @@ from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface, K8
 class K8sCoreClient(K8sCoreClientInterface):  # pragma:nocover
     """Real k8s core API client that exposes the required functions."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         try:
             InClusterConfigLoader(
                 token_filename=SERVICE_TOKEN_FILENAME,
@@ -58,7 +58,7 @@ class K8sCoreClient(K8sCoreClientInterface):  # pragma:nocover
 class K8sSchedulingClient(K8sSchedudlingClientInterface):  # pragma:nocover
     """Real k8s scheduling API client that exposes the required functions."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         try:
             InClusterConfigLoader(
                 token_filename=SERVICE_TOKEN_FILENAME,
@@ -83,7 +83,7 @@ class DummyCoreClient(K8sCoreClientInterface):
     Not suitable for production - to be used only for testing and development.
     """
 
-    def __init__(self, quotas: dict[str, client.V1ResourceQuota], secrets: dict[str, client.V1Secret]):
+    def __init__(self, quotas: dict[str, client.V1ResourceQuota], secrets: dict[str, client.V1Secret]) -> None:
         self.quotas = quotas
         self.secrets = secrets
         self.__lock: LockType | None = None
@@ -170,7 +170,7 @@ class DummySchedulingClient(K8sSchedudlingClientInterface):
     Not suitable for production - to be used only for testing and development.
     """
 
-    def __init__(self, pcs: dict[str, client.V1PriorityClass]):
+    def __init__(self, pcs: dict[str, client.V1PriorityClass]) -> None:
         self.pcs = pcs
         self.__lock: LockType | None = None
 

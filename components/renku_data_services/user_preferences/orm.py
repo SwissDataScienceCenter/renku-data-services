@@ -1,4 +1,5 @@
 """SQLAlchemy schemas for the user preferences database."""
+
 from typing import Any
 
 from sqlalchemy import JSON, Integer, MetaData, String
@@ -33,7 +34,7 @@ class UserPreferencesORM(BaseORM):
     """Pinned projects."""
 
     @classmethod
-    def load(cls, user_preferences: models.UserPreferences):
+    def load(cls, user_preferences: models.UserPreferences) -> "UserPreferencesORM":
         """Create UserPreferencesORM from the user preferences model."""
         return cls(
             user_id=user_preferences.user_id,

@@ -7,7 +7,7 @@ from renku_data_services.users.models import UserInfo
 
 
 @pytest.mark.asyncio
-async def test_group_creation_basic(sanic_client, user_headers):
+async def test_group_creation_basic(sanic_client, user_headers) -> None:
     payload = {
         "name": "Group1",
         "slug": "group-1",
@@ -40,7 +40,7 @@ async def test_group_creation_basic(sanic_client, user_headers):
 
 
 @pytest.mark.asyncio
-async def test_group_pagination(sanic_client, user_headers, admin_headers):
+async def test_group_pagination(sanic_client, user_headers, admin_headers) -> None:
     for i in range(5):
         payload = {"name": f"group{i}", "slug": f"group{i}"}
         _, response = await sanic_client.post("/api/data/groups", headers=admin_headers, json=payload)
@@ -69,7 +69,7 @@ async def test_group_pagination(sanic_client, user_headers, admin_headers):
 
 
 @pytest.mark.asyncio
-async def test_group_patch_delete(sanic_client, user_headers):
+async def test_group_patch_delete(sanic_client, user_headers) -> None:
     payload = {
         "name": "GroupOther",
         "slug": "group-other",
@@ -109,7 +109,7 @@ async def test_group_patch_delete(sanic_client, user_headers):
 
 
 @pytest.mark.asyncio
-async def test_group_members(sanic_client, user_headers):
+async def test_group_members(sanic_client, user_headers) -> None:
     payload = {
         "name": "Group1",
         "slug": "group-1",
@@ -136,7 +136,7 @@ async def test_group_members(sanic_client, user_headers):
 
 
 @pytest.mark.asyncio
-async def test_removing_single_group_owner_not_allowed(sanic_client, user_headers, member_1_headers):
+async def test_removing_single_group_owner_not_allowed(sanic_client, user_headers, member_1_headers) -> None:
     payload = {
         "name": "Group1",
         "slug": "group-1",
@@ -176,7 +176,7 @@ async def test_removing_single_group_owner_not_allowed(sanic_client, user_header
 
 
 @pytest.mark.asyncio
-async def test_moving_project_across_groups(sanic_client, user_headers, regular_user: UserInfo):
+async def test_moving_project_across_groups(sanic_client, user_headers, regular_user: UserInfo) -> None:
     payload = {
         "name": "Group1",
         "slug": "group-1",
@@ -194,7 +194,7 @@ async def test_moving_project_across_groups(sanic_client, user_headers, regular_
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
     assert response.status_code == 200, response.text
     assert response.json["namespace"] == user_namespace
-    headers = merge_headers(user_headers, {"If-Match":response.json["etag"]})
+    headers = merge_headers(user_headers, {"If-Match": response.json["etag"]})
     _, response = await sanic_client.patch(
         f"/api/data/projects/{project_id}", headers=headers, json={"namespace": "group-1"}
     )
@@ -206,7 +206,7 @@ async def test_moving_project_across_groups(sanic_client, user_headers, regular_
 
 
 @pytest.mark.asyncio
-async def test_removing_group_removes_projects(sanic_client, user_headers, regular_user: UserInfo):
+async def test_removing_group_removes_projects(sanic_client, user_headers, regular_user: UserInfo) -> None:
     payload = {
         "name": "Group1",
         "slug": "group-1",

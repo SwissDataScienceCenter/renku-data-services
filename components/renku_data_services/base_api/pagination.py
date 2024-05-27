@@ -16,7 +16,7 @@ class PaginationRequest(NamedTuple):
     page: int
     per_page: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         # NOTE: Postgres will fail if a value higher than what can fit in signed int64 is present in the query
         if self.page > 2**63 - 1:
             raise errors.ValidationError(message="Pagination parameter 'page' is too large")
@@ -81,7 +81,7 @@ def paginate(f: Callable[Concatenate[Request, ...], Awaitable[tuple[Sequence[Any
 
         pagination_req = PaginationRequest(page, per_page)
         items, db_count = await f(request, *args, **kwargs, pagination=pagination_req)
-        total_pages = ceil(db_count/per_page)
+        total_pages = ceil(db_count / per_page)
 
         pagination = PaginationResponse(page, per_page, db_count, total_pages)
         return json(items, headers=pagination.as_header())

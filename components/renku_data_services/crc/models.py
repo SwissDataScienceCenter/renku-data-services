@@ -51,16 +51,16 @@ class ResourcesCompareMixin:
         results.append(compare_func(self_storage, other_storage))
         return all(results)
 
-    def __ge__(self, other: ResourcesProtocol):
+    def __ge__(self, other: ResourcesProtocol) -> bool:
         return self.__compare(other, lambda x, y: x >= y)
 
-    def __gt__(self, other: ResourcesProtocol):
+    def __gt__(self, other: ResourcesProtocol) -> bool:
         return self.__compare(other, lambda x, y: x > y)
 
-    def __lt__(self, other: ResourcesProtocol):
+    def __lt__(self, other: ResourcesProtocol) -> bool:
         return self.__compare(other, lambda x, y: x < y)
 
-    def __le__(self, other: ResourcesProtocol):
+    def __le__(self, other: ResourcesProtocol) -> bool:
         return self.__compare(other, lambda x, y: x <= y)
 
 
@@ -93,7 +93,7 @@ class ResourceClass(ResourcesCompareMixin):
     node_affinities: list[NodeAffinity] = field(default_factory=list)
     tolerations: list[str] = field(default_factory=list)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if len(self.name) > 40:
             raise ValidationError(message="'name' cannot be longer than 40 characters.")
         if self.default_storage > self.max_storage:
@@ -178,7 +178,7 @@ class ResourcePool:
     default: bool = False
     public: bool = False
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate the resource pool after initialization."""
         if len(self.name) > 40:
             raise ValidationError(message="'name' cannot be longer than 40 characters.")

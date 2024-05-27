@@ -70,7 +70,7 @@ class _AuthzChange:
     apply: WriteRelationshipsRequest = field(default_factory=WriteRelationshipsRequest)
     undo: WriteRelationshipsRequest = field(default_factory=WriteRelationshipsRequest)
 
-    def extend(self, other: "_AuthzChange"):
+    def extend(self, other: "_AuthzChange") -> None:
         self.apply.updates.extend(other.apply.updates)
         self.apply.optional_preconditions.extend(other.apply.optional_preconditions)
         self.undo.updates.extend(other.undo.updates)
@@ -90,7 +90,7 @@ class _Relation(StrEnum):
     project_namespace: str = "project_namespace"
 
     @classmethod
-    def from_role(cls, role: Role):
+    def from_role(cls, role: Role) -> "_Relation":
         match role:
             case Role.OWNER:
                 return cls.owner

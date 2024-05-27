@@ -27,7 +27,7 @@ from renku_data_services.users.db import UserRepo
 
 
 class _Base:
-    def __init__(self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository):
+    def __init__(self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository) -> None:
         self.session_maker = session_maker  # type: ignore[call-overload]
         self.quotas_repo = quotas_repo
 
@@ -139,7 +139,7 @@ def _only_admins(f):
 class ResourcePoolRepository(_Base):
     """The adapter used for accessing resource pools with SQLAlchemy."""
 
-    def initialize(self, sync_connection_url: str, rp: models.ResourcePool):
+    def initialize(self, sync_connection_url: str, rp: models.ResourcePool) -> None:
         """Add the default resource pool if it does not already exist."""
         engine = create_engine(sync_connection_url, poolclass=NullPool)
         session_maker = sessionmaker(
@@ -399,7 +399,9 @@ class ResourcePoolRepository(_Base):
             return None
 
     @_only_admins
-    async def delete_resource_class(self, api_user: base_models.APIUser, resource_pool_id: int, resource_class_id: int):
+    async def delete_resource_class(
+        self, api_user: base_models.APIUser, resource_pool_id: int, resource_class_id: int
+    ) -> None:
         """Delete a specific resource class."""
         async with self.session_maker() as session, session.begin():
             stmt = (
@@ -509,7 +511,7 @@ class ResourcePoolRepository(_Base):
             return [i.key for i in res.scalars().all()]
 
     @_only_admins
-    async def delete_tolerations(self, api_user: base_models.APIUser, resource_pool_id: int, class_id: int):
+    async def delete_tolerations(self, api_user: base_models.APIUser, resource_pool_id: int, class_id: int) -> None:
         """Delete all tolerations for a specific resource class."""
         async with self.session_maker() as session, session.begin():
             res_classes = await self.get_classes(api_user, class_id, resource_pool_id=resource_pool_id)
@@ -538,7 +540,7 @@ class ResourcePoolRepository(_Base):
             return [i.dump() for i in res.scalars().all()]
 
     @_only_admins
-    async def delete_affinities(self, api_user: base_models.APIUser, resource_pool_id: int, class_id: int):
+    async def delete_affinities(self, api_user: base_models.APIUser, resource_pool_id: int, class_id: int) -> None:
         """Delete all affinities from a resource class."""
         async with self.session_maker() as session, session.begin():
             res_classes = await self.get_classes(api_user, class_id, resource_pool_id=resource_pool_id)
@@ -563,7 +565,9 @@ class RespositoryUsers:
 class UserRepository(_Base):
     """The adapter used for accessing resource pool users with SQLAlchemy."""
 
-    def __init__(self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository, user_repo: UserRepo):
+    def __init__(
+        self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository, user_repo: UserRepo
+    ) -> None:
         super().__init__(session_maker, quotas_repo)
         self.kc_user_repo = user_repo
 
@@ -705,7 +709,9 @@ class UserRepository(_Base):
             return output
 
     @_only_admins
-    async def delete_resource_pool_user(self, api_user: base_models.APIUser, resource_pool_id: int, keycloak_id: str):
+    async def delete_resource_pool_user(
+        self, api_user: base_models.APIUser, resource_pool_id: int, keycloak_id: str
+    ) -> None:
         """Remove a user from a specific resource pool."""
         async with self.session_maker() as session, session.begin():
             sub = (

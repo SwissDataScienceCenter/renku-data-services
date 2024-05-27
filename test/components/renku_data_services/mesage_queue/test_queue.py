@@ -16,7 +16,7 @@ from renku_data_services.utils.core import with_db_transaction
 
 
 @pytest.mark.asyncio
-async def test_queue_resend(app_config, monkeypatch):
+async def test_queue_resend(app_config, monkeypatch) -> None:
     """Test that resending failed requests works."""
 
     run_migrations_for_app("common")

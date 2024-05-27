@@ -94,7 +94,7 @@ def unauthorized_headers() -> dict[str, str]:
 
 
 @pytest.fixture
-def bootstrap_admins(app_config: Config, admin_user: UserInfo):
+def bootstrap_admins(app_config: Config, admin_user: UserInfo) -> None:
     authz = app_config.authz
     rels: list[RelationshipUpdate] = []
     sub = SubjectReference(object=_AuthzConverter.user(admin_user.id))

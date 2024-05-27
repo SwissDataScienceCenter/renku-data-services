@@ -43,12 +43,12 @@ class UserRepo:
         group_repo: GroupRepository,
         encryption_key: bytes,
         authz: Authz,
-    ):
+    ) -> None:
         self.session_maker = session_maker
         self.encryption_key = encryption_key
         self._users_sync = UsersSync(self.session_maker, message_queue, event_repo, group_repo, authz)
 
-    async def initialize(self, kc_api: IKeycloakAPI):
+    async def initialize(self, kc_api: IKeycloakAPI) -> None:
         """Do a total sync of users from Keycloak if there is nothing in the DB."""
         users = await self._get_users()
         if len(users) > 0:
@@ -150,7 +150,7 @@ class UsersSync:
         event_repo: EventRepository,
         group_repo: GroupRepository,
         authz: Authz,
-    ):
+    ) -> None:
         self.session_maker = session_maker
         self.message_queue: IMessageQueue = message_queue
         self.event_repo: EventRepository = event_repo
@@ -238,7 +238,7 @@ class UsersSync:
         logging.info(f"User namespace with ID {user_id} was removed from the authorization database.")
         return removed_user
 
-    async def users_sync(self, kc_api: IKeycloakAPI):
+    async def users_sync(self, kc_api: IKeycloakAPI) -> None:
         """Sync all users from Keycloak into the users database."""
         logging.info("Starting a total user database sync.")
         kc_users = kc_api.get_users()
@@ -256,7 +256,7 @@ class UsersSync:
         for user in kc_users:
             await _do_update(user)
 
-    async def events_sync(self, kc_api: IKeycloakAPI):
+    async def events_sync(self, kc_api: IKeycloakAPI) -> None:
         """Use the events from Keycloak to update the users database."""
         async with self.session_maker() as session, session.begin():
             res_count = await session.execute(select(func.count()).select_from(UserORM))

@@ -44,7 +44,7 @@ def get_project(sanic_client, user_headers, admin_headers):
 
 
 @pytest.mark.asyncio
-async def test_project_creation(sanic_client, user_headers, regular_user, app_config):
+async def test_project_creation(sanic_client, user_headers, regular_user, app_config) -> None:
     payload = {
         "name": "Renku Native Project",
         "slug": "project-slug",
@@ -108,7 +108,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user, app_co
 
 
 @pytest.mark.asyncio
-async def test_project_creation_with_default_values(sanic_client, user_headers, regular_user, get_project):
+async def test_project_creation_with_default_values(sanic_client, user_headers, regular_user, get_project) -> None:
     payload = {
         "name": "Project with Default Values",
         "namespace": f"{regular_user.first_name}.{regular_user.last_name}",
@@ -130,7 +130,7 @@ async def test_project_creation_with_default_values(sanic_client, user_headers, 
 
 
 @pytest.mark.asyncio
-async def test_create_project_with_invalid_visibility(sanic_client, user_headers):
+async def test_create_project_with_invalid_visibility(sanic_client, user_headers) -> None:
     _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json={"visibility": "random"})
 
     assert response.status_code == 422, response.text
@@ -139,7 +139,7 @@ async def test_create_project_with_invalid_visibility(sanic_client, user_headers
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("keyword", ["invalid chars '", "Nön English"])
-async def test_create_project_with_invalid_keywords(sanic_client, user_headers, keyword):
+async def test_create_project_with_invalid_keywords(sanic_client, user_headers, keyword) -> None:
     _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json={"keywords": [keyword]})
 
     assert response.status_code == 422, response.text
@@ -147,7 +147,7 @@ async def test_create_project_with_invalid_keywords(sanic_client, user_headers, 
 
 
 @pytest.mark.asyncio
-async def test_get_a_project(create_project, get_project):
+async def test_get_a_project(create_project, get_project) -> None:
     # Create some projects
     await create_project("Project 1")
     project = await create_project("Project 2")
@@ -160,7 +160,7 @@ async def test_get_a_project(create_project, get_project):
 
 
 @pytest.mark.asyncio
-async def test_get_all_projects_with_pagination(create_project, sanic_client, user_headers):
+async def test_get_all_projects_with_pagination(create_project, sanic_client, user_headers) -> None:
     # Create some projects
     for i in range(1, 10):
         await create_project(f"Project {i}")
@@ -193,7 +193,7 @@ async def test_get_all_projects_with_pagination(create_project, sanic_client, us
 
 
 @pytest.mark.asyncio
-async def test_default_pagination(create_project, sanic_client, user_headers):
+async def test_default_pagination(create_project, sanic_client, user_headers) -> None:
     # Create some projects
     await create_project("Project 1")
     await create_project("Project 2")
@@ -210,7 +210,7 @@ async def test_default_pagination(create_project, sanic_client, user_headers):
 
 
 @pytest.mark.asyncio
-async def test_pagination_with_non_existing_page(create_project, sanic_client, user_headers):
+async def test_pagination_with_non_existing_page(create_project, sanic_client, user_headers) -> None:
     # Create some projects
     await create_project("Project 1")
     await create_project("Project 2")
@@ -230,7 +230,7 @@ async def test_pagination_with_non_existing_page(create_project, sanic_client, u
 
 
 @pytest.mark.asyncio
-async def test_pagination_with_invalid_page(create_project, sanic_client, user_headers):
+async def test_pagination_with_invalid_page(create_project, sanic_client, user_headers) -> None:
     parameters = {"page": 0}
     _, response = await sanic_client.get("/api/data/projects", headers=user_headers, params=parameters)
 
@@ -238,7 +238,7 @@ async def test_pagination_with_invalid_page(create_project, sanic_client, user_h
 
 
 @pytest.mark.asyncio
-async def test_pagination_with_invalid_per_page(create_project, sanic_client, user_headers):
+async def test_pagination_with_invalid_per_page(create_project, sanic_client, user_headers) -> None:
     parameters = {"per_page": 0}
     _, response = await sanic_client.get("/api/data/projects", headers=user_headers, params=parameters)
 
@@ -246,7 +246,7 @@ async def test_pagination_with_invalid_per_page(create_project, sanic_client, us
 
 
 @pytest.mark.asyncio
-async def test_result_is_sorted_by_creation_date(create_project, sanic_client, user_headers):
+async def test_result_is_sorted_by_creation_date(create_project, sanic_client, user_headers) -> None:
     # Create some projects
     for i in range(1, 5):
         await create_project(f"Project {i}")
@@ -262,7 +262,7 @@ async def test_result_is_sorted_by_creation_date(create_project, sanic_client, u
 
 
 @pytest.mark.asyncio
-async def test_delete_project(create_project, sanic_client, user_headers, app_config):
+async def test_delete_project(create_project, sanic_client, user_headers, app_config) -> None:
     # Create some projects
     await create_project("Project 1")
     await create_project("Project 2")
@@ -290,7 +290,7 @@ async def test_delete_project(create_project, sanic_client, user_headers, app_co
 
 
 @pytest.mark.asyncio
-async def test_patch_project(create_project, get_project, sanic_client, user_headers, app_config):
+async def test_patch_project(create_project, get_project, sanic_client, user_headers, app_config) -> None:
     # Create some projects
     await create_project("Project 1")
     project = await create_project("Project 2", repositories=["http://renkulab.io/repository-0"], keywords=["keyword"])
@@ -333,7 +333,9 @@ async def test_patch_project(create_project, get_project, sanic_client, user_hea
 
 
 @pytest.mark.asyncio
-async def test_keywords_are_not_modified_in_patch(create_project, get_project, sanic_client, user_headers, app_config):
+async def test_keywords_are_not_modified_in_patch(
+    create_project, get_project, sanic_client, user_headers, app_config
+) -> None:
     # Create some projects
     await create_project("Project 1")
     project = await create_project("Project 2", keywords=["keyword 1", "keyword 2"])
@@ -362,7 +364,9 @@ async def test_keywords_are_not_modified_in_patch(create_project, get_project, s
 
 
 @pytest.mark.asyncio
-async def test_keywords_are_deleted_in_patch(create_project, get_project, sanic_client, user_headers, app_config):
+async def test_keywords_are_deleted_in_patch(
+    create_project, get_project, sanic_client, user_headers, app_config
+) -> None:
     # Create some projects
     await create_project("Project 1")
     project = await create_project("Project 2", keywords=["keyword 1", "keyword 2"])
@@ -394,7 +398,9 @@ async def test_keywords_are_deleted_in_patch(create_project, get_project, sanic_
 
 
 @pytest.mark.asyncio
-async def test_patch_visibility_to_private_hides_project(create_project, admin_headers, sanic_client, user_headers):
+async def test_patch_visibility_to_private_hides_project(
+    create_project, admin_headers, sanic_client, user_headers
+) -> None:
     project = await create_project("Project 1", admin=True, visibility="public")
 
     _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
@@ -414,7 +420,9 @@ async def test_patch_visibility_to_private_hides_project(create_project, admin_h
 
 
 @pytest.mark.asyncio
-async def test_patch_visibility_to_public_shows_project(create_project, admin_headers, sanic_client, user_headers):
+async def test_patch_visibility_to_public_shows_project(
+    create_project, admin_headers, sanic_client, user_headers
+) -> None:
     project = await create_project("Project 1", admin=True, visibility="private")
 
     _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
@@ -435,7 +443,7 @@ async def test_patch_visibility_to_public_shows_project(create_project, admin_he
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("field", ["id", "slug", "created_by", "creation_date"])
-async def test_cannot_patch_reserved_fields(create_project, get_project, sanic_client, user_headers, field):
+async def test_cannot_patch_reserved_fields(create_project, get_project, sanic_client, user_headers, field) -> None:
     project = await create_project("Project 1")
     original_value = project[field]
 
@@ -457,7 +465,7 @@ async def test_cannot_patch_reserved_fields(create_project, get_project, sanic_c
 
 
 @pytest.mark.asyncio
-async def test_cannot_patch_without_if_match_header(create_project, get_project, sanic_client, user_headers):
+async def test_cannot_patch_without_if_match_header(create_project, get_project, sanic_client, user_headers) -> None:
     project = await create_project("Project 1")
     original_value = project["name"]
 
@@ -480,7 +488,7 @@ async def test_cannot_patch_without_if_match_header(create_project, get_project,
 @pytest.mark.asyncio
 async def test_get_all_projects_for_specific_user(
     create_project, sanic_client, user_headers, admin_headers, unauthorized_headers
-):
+) -> None:
     await create_project("Project 1", visibility="private")
     await create_project("Project 2", visibility="public")
     await create_project("Project 3", admin=True)
@@ -514,7 +522,7 @@ async def test_get_all_projects_for_specific_user(
 @pytest.mark.asyncio
 async def test_unauthorized_user_cannot_create_delete_or_modify_projects(
     create_project, sanic_client, unauthorized_headers
-):
+) -> None:
     payload = {
         "name": "Renku Native Project",
         "slug": "project-slug",
@@ -537,7 +545,7 @@ async def test_unauthorized_user_cannot_create_delete_or_modify_projects(
 
 
 @pytest.mark.asyncio
-async def test_creator_is_added_as_owner_members(sanic_client, create_project, user_headers):
+async def test_creator_is_added_as_owner_members(sanic_client, create_project, user_headers) -> None:
     project = await create_project("project-name")
     project_id = project["id"]
 
@@ -565,7 +573,7 @@ async def test_add_project_members(
     app_config,
     member_1_user: UserInfo,
     member_2_user: UserInfo,
-):
+) -> None:
     project = await create_project("Project 1")
     project_id = project["id"]
 
@@ -633,7 +641,7 @@ async def test_add_project_members(
 
 
 @pytest.mark.asyncio
-async def test_delete_project_members(create_project, sanic_client, user_headers, app_config: Config):
+async def test_delete_project_members(create_project, sanic_client, user_headers, app_config: Config) -> None:
     project = await create_project("Project 1")
     project_id = project["id"]
 
@@ -666,7 +674,7 @@ async def test_delete_project_members(create_project, sanic_client, user_headers
 
 
 @pytest.mark.asyncio
-async def test_null_byte_middleware(sanic_client, user_headers, regular_user, app_config):
+async def test_null_byte_middleware(sanic_client, user_headers, regular_user, app_config) -> None:
     payload = {
         "name": "Renku Native \x00Project",
         "slug": "project-slug",
@@ -683,7 +691,7 @@ async def test_null_byte_middleware(sanic_client, user_headers, regular_user, ap
 
 
 @pytest.mark.asyncio
-async def test_cannot_change_membership_non_existent_resources(create_project, sanic_client, user_headers):
+async def test_cannot_change_membership_non_existent_resources(create_project, sanic_client, user_headers) -> None:
     project = await create_project("Project 1")
     project_id = project["id"]
 
@@ -711,7 +719,7 @@ async def test_project_owner_cannot_remove_themselves_if_no_other_owner(
     regular_user: UserInfo,
     member_1_user: UserInfo,
     member_1_headers: dict,
-):
+) -> None:
     owner = regular_user
     project = await create_project("Project 1")
     project_id = project["id"]

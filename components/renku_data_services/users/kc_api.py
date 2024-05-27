@@ -54,7 +54,7 @@ class KeycloakAPI:
     _http_client: requests.Session = field(init=False, repr=False)
     admin_role: ClassVar[str] = "renku-admin"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.keycloak_url = self.keycloak_url.rstrip("/")
         retry_strategy = Retry(
             total=5,

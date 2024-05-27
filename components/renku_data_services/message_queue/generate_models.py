@@ -26,7 +26,7 @@ from pyavro_gen.modules.avsc_schema_dependency_checker import AvscSchemaDependen
 
 
 # monkey patch writer to get correct namespaces
-def getv(self):
+def getv(self) -> str:
     """Fake getter."""
     return "renku_data_services.message_queue.avro_models"
 
@@ -36,7 +36,7 @@ def setv(self, value) -> None:
     pass
 
 
-def deletev(self):
+def deletev(self) -> None:
     """Fake delete."""
     pass
 
@@ -140,7 +140,7 @@ class DependencyChecker(AvscSchemaDependenciesChecker):
         self.schemas.output_writers = OrderedDict((key, self.schemas.output_writers[key]) for key in keys)
 
 
-def generate_schemas():
+def generate_schemas() -> None:
     """Generate pythons files from avro."""
 
     from avro_preprocessor.avro_paths import AvroPaths

@@ -1,4 +1,5 @@
 """The adapter used to create/delete/update/get resource quotas and priority classes in k8s."""
+
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -119,7 +120,7 @@ class QuotaRepository:
         self.core_client.create_namespaced_resource_quota(self.namespace, quota_manifest)
         return quota
 
-    def delete_quota(self, name: str):
+    def delete_quota(self, name: str) -> None:
         """Delete a resource quota and priority class."""
         try:
             self.scheduling_client.delete_priority_class(

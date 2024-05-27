@@ -1,4 +1,5 @@
 """Custom blueprint wrapper for Sanic."""
+
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from inspect import getmembers, ismethod

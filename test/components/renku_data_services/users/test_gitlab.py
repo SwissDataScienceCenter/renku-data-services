@@ -13,8 +13,8 @@ def mock_gl_api(
     user_state: str = "active",
     project_exists: bool = True,
     is_member: bool = True,
-    access_level=30,
-):
+    access_level: int = 30,
+) -> MagicMock:
     gl_api = MagicMock()
     gl_api.return_value = gl_api
     if not has_user:
@@ -38,7 +38,7 @@ def mock_gl_api(
     return gl_api
 
 
-def mock_request(json: bool = True):
+def mock_request(json: bool = True) -> MagicMock:
     request = MagicMock()
     request.headers.get.return_value = "abcdefg"
     if json:
@@ -52,7 +52,7 @@ def mock_request(json: bool = True):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("json", [True, False])
-async def test_gitlab_auth(json, monkeypatch):
+async def test_gitlab_auth(json: bool, monkeypatch) -> None:
     gl_mock = mock_gl_api()
     with monkeypatch.context() as monkey:
         monkey.setattr(gitlab.gitlab, "Gitlab", gl_mock)
@@ -65,7 +65,7 @@ async def test_gitlab_auth(json, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_gitlab_auth_no_user(monkeypatch):
+async def test_gitlab_auth_no_user(monkeypatch) -> None:
     gl_mock = mock_gl_api(has_user=False)
     with monkeypatch.context() as monkey:
         monkey.setattr(gitlab.gitlab, "Gitlab", gl_mock)
@@ -78,7 +78,7 @@ async def test_gitlab_auth_no_user(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_gitlab_auth_not_active(monkeypatch):
+async def test_gitlab_auth_not_active(monkeypatch) -> None:
     gl_mock = mock_gl_api(user_state="inactive")
     with monkeypatch.context() as monkey:
         monkey.setattr(gitlab.gitlab, "Gitlab", gl_mock)
@@ -129,7 +129,7 @@ async def test_gitlab_auth_not_active(monkeypatch):
         },
     ),
 )
-async def test_gitlab_user(monkeypatch):
+async def test_gitlab_user(monkeypatch) -> None:
     import renku_data_services.base_models as base_models
 
     gitlab_client = GitlabAPI(gitlab_url="https://gitlab.url.com")

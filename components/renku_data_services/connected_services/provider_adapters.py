@@ -14,7 +14,7 @@ from renku_data_services.connected_services.apispec import ProviderKind
 class ProviderAdapter(ABC):
     """Defines the functionality of OAuth2 client adapters."""
 
-    def __init__(self, client: schemas.OAuth2ClientORM):
+    def __init__(self, client: schemas.OAuth2ClientORM) -> None:
         if not client.url:
             raise errors.ValidationError(message=f"URL not defined for provider {client.id}.")
         self.client = client

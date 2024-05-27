@@ -1,4 +1,5 @@
 """Common blueprints."""
+
 from dataclasses import dataclass
 from functools import wraps
 from typing import Any

@@ -1,4 +1,5 @@
 """SQLAlchemy schemas for the cloud storage database."""
+
 from typing import Any
 
 from sqlalchemy import JSON, Boolean, MetaData, String
@@ -60,7 +61,7 @@ class CloudStorageORM(BaseORM):
     )
 
     @classmethod
-    def load(cls, storage: models.CloudStorage):
+    def load(cls, storage: models.CloudStorage) -> "CloudStorageORM":
         """Create CloudStorageORM from the cloud storage model."""
         return cls(
             project_id=storage.project_id,

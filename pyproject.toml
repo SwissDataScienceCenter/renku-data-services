@@ -98,6 +98,9 @@ output-format = "full"
 include = ["*.py", "*.pyi"]
 exclude = ["*/avro_models/*"]
 
+[tool.ruff.format]
+exclude = ["apispec.py"]
+
 [tool.ruff.lint]
 select = [
   # isort

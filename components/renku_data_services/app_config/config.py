@@ -98,7 +98,7 @@ class SentryConfig:
     sample_rate: float = 0.2
 
     @classmethod
-    def from_env(cls, prefix: str = ""):
+    def from_env(cls, prefix: str = "") -> "SentryConfig":
         """Create a config from environment variables."""
         enabled = os.environ.get(f"{prefix}SENTRY_ENABLED", "false").lower() == "true"
         dsn = os.environ.get(f"{prefix}SENTRY_DSN", "")
@@ -151,7 +151,7 @@ class Config:
     _project_member_repo: ProjectMemberRepository | None = field(default=None, repr=False, init=False)
     _connected_services_repo: ConnectedServicesRepository | None = field(default=None, repr=False, init=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         spec_file = Path(renku_data_services.crc.__file__).resolve().parent / "api.spec.yaml"
         with open(spec_file) as f:
             crc_spec = safe_load(f)
@@ -329,7 +329,7 @@ class Config:
         return self._connected_services_repo
 
     @classmethod
-    def from_env(cls, prefix: str = ""):
+    def from_env(cls, prefix: str = "") -> "Config":
         """Create a config from environment variables."""
 
         user_store: base_models.UserStore

@@ -1,4 +1,5 @@
 """User preferences app."""
+
 from dataclasses import dataclass
 
 from sanic import Request, json

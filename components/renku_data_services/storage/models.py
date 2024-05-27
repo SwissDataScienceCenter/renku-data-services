@@ -28,22 +28,19 @@ class RCloneConfig(BaseModel, MutableMapping):
         """Serialize model by returning contained dict."""
         return self.config
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.config)
 
     def __getitem__(self, k):
         return self.config[k]
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key, value) -> None:
         self.config[key] = value
         self._validator.validate(self.config)
 
-    def __delitem__(self, key):
+    def __delitem__(self, key) -> None:
         del self.config[key]
         self._validator.validate(self.config)
-
-    def __iter__(self):
-        return iter(self.config)
 
 
 class CloudStorage(BaseModel):

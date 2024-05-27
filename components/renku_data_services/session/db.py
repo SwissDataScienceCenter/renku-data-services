@@ -20,7 +20,7 @@ from renku_data_services.session.apispec import EnvironmentKind
 class SessionRepository:
     """Repository for sessions."""
 
-    def __init__(self, session_maker: Callable[..., AsyncSession], project_authz: Authz):
+    def __init__(self, session_maker: Callable[..., AsyncSession], project_authz: Authz) -> None:
         self.session_maker = session_maker
         self.project_authz: Authz = project_authz
 

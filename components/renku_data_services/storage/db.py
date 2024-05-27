@@ -16,7 +16,7 @@ from renku_data_services.storage import orm as schemas
 class _Base:
     """Base class for repositories."""
 
-    def __init__(self, session_maker: Callable[..., AsyncSession]):
+    def __init__(self, session_maker: Callable[..., AsyncSession]) -> None:
         self.session_maker = session_maker  # type: ignore[call-overload]
 
 
@@ -26,7 +26,7 @@ class BaseStorageRepository(_Base):
     def __init__(
         self,
         session_maker: Callable[..., AsyncSession],
-    ):
+    ) -> None:
         super().__init__(session_maker)
 
     async def filter_projects_by_access_level(
@@ -150,7 +150,7 @@ class StorageRepository(BaseStorageRepository):
         self,
         gitlab_client: base_models.GitlabAPIProtocol,
         session_maker: Callable[..., AsyncSession],
-    ):
+    ) -> None:
         super().__init__(session_maker)
         self.gitlab_client = gitlab_client
 
@@ -174,7 +174,7 @@ class StorageV2Repository(BaseStorageRepository):
         self,
         project_authz: Authz,
         session_maker: Callable[..., AsyncSession],
-    ):
+    ) -> None:
         super().__init__(session_maker)
         self.project_authz: Authz = project_authz
 

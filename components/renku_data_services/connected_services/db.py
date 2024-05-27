@@ -336,14 +336,18 @@ class ConnectedServicesRepository:
             if client.client_secret
             else None
         )
-        yield AsyncOAuth2Client(
-            client_id=client.client_id,
-            client_secret=client_secret,
-            scope=client.scope,
-            token_endpoint=adapter.token_endpoint_url,
-            token=token,
-            update_token=update_token,
-        ), connection, client
+        yield (
+            AsyncOAuth2Client(
+                client_id=client.client_id,
+                client_secret=client_secret,
+                scope=client.scope,
+                token_endpoint=adapter.token_endpoint_url,
+                token=token,
+                update_token=update_token,
+            ),
+            connection,
+            client,
+        )
 
     def _encrypt_token_set(self, token: dict[str, Any], user_id: str) -> models.OAuth2TokenSet:
         """Encrypts sensitive fields of token set before persisting at rest."""

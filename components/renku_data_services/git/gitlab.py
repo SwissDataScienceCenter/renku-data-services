@@ -1,4 +1,5 @@
 """Gitlab API."""
+
 from dataclasses import dataclass, field
 
 import httpx
@@ -15,7 +16,7 @@ class GitlabAPI:
     gitlab_url: str
     gitlab_graphql_url: str = field(init=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Sets the graphql url for gitlab."""
         gitlab_url = self.gitlab_url
 

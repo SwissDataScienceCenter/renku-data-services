@@ -102,7 +102,7 @@ class RedisQueue(IMessageQueue):
 
     config: RedisConfig
 
-    async def send_message(self, event: Event):
+    async def send_message(self, event: Event) -> None:
         """Send a message on a channel."""
         message = copy.copy(event.serialize())
 

@@ -58,11 +58,11 @@ class ApiSpec(Protocol[BErrorResponse, BError]):
 class CustomErrorHandler(ErrorHandler):
     """Central error handling."""
 
-    def __init__(self, api_spec: ApiSpec, base: type[BaseRenderer] = TextRenderer):
+    def __init__(self, api_spec: ApiSpec, base: type[BaseRenderer] = TextRenderer) -> None:
         self.api_spec = api_spec
         super().__init__(base)
 
-    def _log_unhandled_exception(self, exception: Exception):
+    def _log_unhandled_exception(self, exception: Exception) -> None:
         if self.debug:
             logger.exception("An unknown or unhandled exception occurred", exc_info=exception)
         logger.error("An unknown or unhandled exception of type %s occurred", type(exception).__name__)
