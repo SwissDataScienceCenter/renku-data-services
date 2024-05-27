@@ -1,6 +1,10 @@
 """Custom migrations env file to support modular migrations."""
 
-from collections.abc import Sequence
+import asyncio
+import threading
+from asyncio.events import AbstractEventLoop
+from collections.abc import Coroutine, Sequence
+from typing import Any, TypeVar
 
 from alembic import context
 from sqlalchemy import Connection, MetaData, NullPool, create_engine
@@ -139,3 +143,33 @@ def run_migrations(metadata: Sequence[MetaData]):
         run_migrations_offline(metadata, sync_sqlalchemy_url)
     else:
         run_migrations_online(metadata, sync_sqlalchemy_url)
+
+
+_T = TypeVar("_T")
+
+
+def _run_event_loop(loop: asyncio.AbstractEventLoop):
+    asyncio.set_event_loop(loop)
+    loop.run_forever()
+
+
+def _prepare_event_loop() -> tuple[AbstractEventLoop, threading.Thread]:
+    loop = asyncio.new_event_loop()
+    thread = threading.Thread(target=_run_event_loop, args=(loop,), daemon=True)
+    thread.start()
+    return loop, thread
+
+
+class UtilityEventLoop:
+    """Allows you to run a coroutine in a synchronous way by utilizing a separate event loop in a separate thread."""
+
+    _loop, _thread = _prepare_event_loop()
+
+    @classmethod
+    def run(cls, coro: Coroutine[Any, Any, _T]) -> _T:
+        """Executes the specific coroutine in a separate thread with its own event loop.
+
+        Note that this will block until the coroutine completes. Async/await should be used if you have the chance.
+        """
+        future = asyncio.run_coroutine_threadsafe(coro, cls._loop)
+        return future.result()
