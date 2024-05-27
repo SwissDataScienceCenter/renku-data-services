@@ -35,7 +35,6 @@ from renku_data_services.authn.keycloak import KcUserStore, KeycloakAuthenticato
 from renku_data_services.authz.authz import Authz
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.connected_services.db import ConnectedServicesRepository
-from renku_data_services.connected_services.dummy_async_oauth2_client import DummyAsyncOAuth2Client
 from renku_data_services.crc import models
 from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
 from renku_data_services.data_api.server_options import (
@@ -125,7 +124,6 @@ class Config:
     gitlab_client: base_models.GitlabAPIProtocol
     kc_api: IKeycloakAPI
     message_queue: IMessageQueue
-    async_oauth2_client_class: type[AsyncOAuth2Client]
 
     secrets_service_public_key: rsa.RSAPublicKey
     """The public key of the secrets service, used to encrypt user secrets that only it can decrypt."""
@@ -140,6 +138,7 @@ class Config:
     default_resource_pool: models.ResourcePool = default_resource_pool
     server_options_file: Optional[str] = None
     server_defaults_file: Optional[str] = None
+    async_oauth2_client_class: type[AsyncOAuth2Client] = AsyncOAuth2Client
     _user_repo: UserRepository | None = field(default=None, repr=False, init=False)
     _rp_repo: ResourcePoolRepository | None = field(default=None, repr=False, init=False)
     _storage_repo: StorageRepository | None = field(default=None, repr=False, init=False)
@@ -342,7 +341,6 @@ class Config:
         gitlab_authenticator: base_models.Authenticator
         gitlab_client: base_models.GitlabAPIProtocol
         user_preferences_config: UserPreferencesConfig
-        async_oauth2_client_class: type[AsyncOAuth2Client]
         version = os.environ.get(f"{prefix}VERSION", "0.0.1")
         server_options_file = os.environ.get("SERVER_OPTIONS")
         server_defaults_file = os.environ.get("SERVER_DEFAULTS")
@@ -376,7 +374,6 @@ class Config:
             ]
             kc_api = DummyKeycloakAPI(users=[i._to_keycloak_dict() for i in dummy_users])
             redis = RedisConfig.fake()
-            async_oauth2_client_class = DummyAsyncOAuth2Client
         else:
             encryption_key_path = os.getenv(f"{prefix}ENCRYPTION_KEY_PATH", "/encryption-key")
             encryption_key = Path(encryption_key_path).read_bytes()
@@ -419,7 +416,6 @@ class Config:
                 realm=keycloak_realm,
             )
             redis = RedisConfig.from_env(prefix)
-            async_oauth2_client_class = AsyncOAuth2Client
 
         if not isinstance(secrets_service_public_key, rsa.RSAPublicKey):
             raise errors.ConfigurationError(message="Secret service public key is not an RSAPublicKey")
@@ -444,5 +440,4 @@ class Config:
             message_queue=message_queue,
             encryption_key=encryption_key,
             secrets_service_public_key=secrets_service_public_key,
-            async_oauth2_client_class=async_oauth2_client_class,
         )
