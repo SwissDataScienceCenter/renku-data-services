@@ -31,7 +31,7 @@ class RCloneConfig(BaseModel, MutableMapping):
     def __len__(self) -> int:
         return len(self.config)
 
-    def __getitem__(self, k):
+    def __getitem__(self, k: str) -> str:
         return self.config[k]
 
     def __setitem__(self, key, value) -> None:

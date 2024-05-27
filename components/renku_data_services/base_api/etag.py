@@ -1,5 +1,6 @@
 """Enitity tag decorators for Sanic."""
 
+from collections.abc import Callable
 from functools import wraps
 
 from sanic import Request
@@ -7,7 +8,7 @@ from sanic import Request
 from renku_data_services import errors
 
 
-def if_match_required(f):
+def if_match_required(f: Callable) -> Callable:
     """Decorator that errors out if the "If-Match" header is not present."""
 
     @wraps(f)

@@ -1,6 +1,7 @@
 """Authentication decorators for Sanic."""
 
 import re
+from collections.abc import Callable
 from functools import wraps
 
 from sanic import Request
@@ -9,7 +10,7 @@ from renku_data_services import errors
 from renku_data_services.base_models import APIUser, Authenticator
 
 
-def authenticate(authenticator: Authenticator):
+def authenticate(authenticator: Authenticator) -> Callable:
     """Decorator for a Sanic handler that adds the APIUser model to the context.
 
     The APIUser is present for admins, non-admins and users who are not logged in.
@@ -32,7 +33,7 @@ def authenticate(authenticator: Authenticator):
     return decorator
 
 
-def validate_path_project_id(f):
+def validate_path_project_id(f: Callable) -> Callable:
     """Decorator for a Sanic handler that validates the project_id path parameter."""
     _path_project_id_regex = re.compile(r"^[A-Za-z0-9]{26}$")
 
@@ -54,7 +55,7 @@ def validate_path_project_id(f):
     return decorated_function
 
 
-def validate_path_user_id(f):
+def validate_path_user_id(f: Callable) -> Callable:
     """Decorator for a Sanic handler that validates the user_id or member_id path parameter."""
     _path_user_id_regex = re.compile(r"^[A-Za-z0-9]{1}[A-Za-z0-9-]+$")
 
@@ -85,7 +86,7 @@ def validate_path_user_id(f):
     return decorated_function
 
 
-def only_admins(f):
+def only_admins(f: Callable) -> Callable:
     """Decorator for a Sanic handler that errors out if the user is not an admin."""
 
     @wraps(f)
@@ -102,7 +103,7 @@ def only_admins(f):
     return decorated_function
 
 
-def only_authenticated(f):
+def only_authenticated(f: Callable) -> Callable:
     """Decorator that errors out if the user is not authenticated.
 
     It looks for APIUser in the named or unnamed poarameters.

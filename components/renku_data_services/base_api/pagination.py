@@ -52,7 +52,7 @@ class PaginationResponse(NamedTuple):
         }
 
 
-def paginate(f: Callable[Concatenate[Request, ...], Awaitable[tuple[Sequence[Any], int]]]):
+def paginate(f: Callable[Concatenate[Request, ...], Awaitable[tuple[Sequence[Any], int]]]) -> Callable:
     """Serializes the response to JSON and adds the required pagination headers to the response.
 
     The handler should return first the list of items and then the total count from the DB.

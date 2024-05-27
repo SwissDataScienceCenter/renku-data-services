@@ -34,7 +34,7 @@ def get_ssl_context() -> ssl.SSLContext:
     return context
 
 
-def merge_api_specs(*args):
+def merge_api_specs(*args) -> dict[str, Any]:
     """Merges API spec files into a single one."""
     merger = Merger(
         type_strategies=[(list, "append_unique"), (dict, "merge"), (set, "union")],

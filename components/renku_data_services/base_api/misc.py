@@ -1,5 +1,6 @@
 """Common blueprints."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import wraps
 from typing import Any
@@ -42,7 +43,7 @@ class MiscBP(CustomBlueprint):
         return "/version", ["GET"], _get_version
 
 
-def validate_db_ids(f):
+def validate_db_ids(f: Callable) -> Callable:
     """Decorator for a Sanic handler that errors out if passed in IDs are outside of the valid range for postgres."""
 
     @wraps(f)

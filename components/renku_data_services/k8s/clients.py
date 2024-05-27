@@ -1,5 +1,6 @@
 """Different implementations of k8s clients."""
 
+import multiprocessing.synchronize
 from copy import deepcopy
 from multiprocessing import Lock
 from multiprocessing.synchronize import Lock as LockType
@@ -89,7 +90,7 @@ class DummyCoreClient(K8sCoreClientInterface):
         self.__lock: LockType | None = None
 
     @property
-    def _lock(self):
+    def _lock(self) -> multiprocessing.synchronize.Lock:
         # NOTE: If this is a regular attribute and initialized when the class in initialized
         # then Sanic fails to start properly because it clashes with the multiprocessing Lock
         # used here. This way Sanic starts without a problem because the Lock is initialized
@@ -175,7 +176,7 @@ class DummySchedulingClient(K8sSchedudlingClientInterface):
         self.__lock: LockType | None = None
 
     @property
-    def _lock(self):
+    def _lock(self) -> multiprocessing.synchronize.Lock:
         # NOTE: If this is a regular attribute and initialized when the class in initialized
         # then Sanic fails to start properly because it clashes with the multiprocessing Lock
         # used here. This way Sanic starts without a problem because the Lock is initialized

@@ -50,7 +50,7 @@ class _ServerOptionsGpu(BaseModel):
         extra = "ignore"
 
     @validator("options", pre=False, each_item=True)
-    def greater_than_or_equal_to_zero(cls, v):
+    def greater_than_or_equal_to_zero(cls, v: int) -> int:
         if v < 0:
             raise ValueError(f"The provided value should be greater than or equal to zero, instead it was {v}.")
         return v
@@ -63,7 +63,7 @@ class _ServerOptionsBytes(BaseModel):
         extra = "ignore"
 
     @validator("options", pre=True)
-    def convert_units(cls, vals):
+    def convert_units(cls, vals: list[str]) -> list[str]:
         for ival, val in enumerate(vals):
             if isinstance(val, str) and val.strip().endswith("i"):
                 vals[ival] = val.strip() + "b"

@@ -1,7 +1,7 @@
 """Adapters for connected services database classes."""
 
 from base64 import b64decode, b64encode
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 from urllib.parse import urlencode, urljoin
@@ -293,7 +293,9 @@ class ConnectedServicesRepository:
             return token_model
 
     @asynccontextmanager
-    async def get_async_oauth2_client(self, connection_id: str, user: base_models.APIUser):
+    async def get_async_oauth2_client(
+        self, connection_id: str, user: base_models.APIUser
+    ) -> AsyncGenerator[AsyncOAuth2Client, None]:
         """Get the AsyncOAuth2Client for the given connection_id and user."""
         if not user.is_authenticated or user.id is None:
             raise errors.MissingResourceError(

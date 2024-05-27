@@ -157,7 +157,7 @@ class UsersSync:
         self.group_repo = group_repo
         self.authz = authz
 
-    async def _get_user(self, id) -> UserInfo | None:
+    async def _get_user(self, id: str) -> UserInfo | None:
         """Get a specific user."""
         async with self.session_maker() as session, session.begin():
             stmt = select(UserORM).where(UserORM.keycloak_id == id)

@@ -110,7 +110,7 @@ _adapter_map: dict[ProviderKind, type[ProviderAdapter]] = {
 }
 
 
-def get_provider_adapter(client: schemas.OAuth2ClientORM):
+def get_provider_adapter(client: schemas.OAuth2ClientORM) -> ProviderAdapter:
     """Returns a new ProviderAdapter instance corresponding to the given client."""
     global _adapter_map
 

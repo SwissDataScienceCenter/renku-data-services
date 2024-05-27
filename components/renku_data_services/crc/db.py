@@ -112,7 +112,7 @@ def _classes_user_access_control(
     return output
 
 
-def _only_admins(f):
+def _only_admins(f: Callable) -> Callable:
     """Decorator that errors out if the user is not an admin.
 
     It expects the APIUser model to be a named parameter in the decorated function or
