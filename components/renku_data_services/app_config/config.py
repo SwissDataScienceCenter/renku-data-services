@@ -120,7 +120,7 @@ class TrustedProxiesConfig:
     def from_env(cls, prefix: str = ""):
         """Create a config from environment variables."""
         forwarded_secret = os.environ.get(f"{prefix}FORWARDED_SECRET")
-        proxies_count = int(os.environ.get(f"{prefix}PROXIES_COUNT", "0"))
+        proxies_count = int(os.environ.get(f"{prefix}PROXIES_COUNT") or "0")
         real_ip_header = os.environ.get(f"{prefix}REAL_IP_HEADER")
         return cls(
             forwarded_secret=forwarded_secret or None,
