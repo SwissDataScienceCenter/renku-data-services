@@ -30,11 +30,6 @@ def create_app() -> Sanic:
     """Create a Sanic application."""
     config = Config.from_env()
     app = Sanic(config.app_name)
-
-    # TODO: configure this
-    app.config.PROXIES_COUNT = 2
-    app.config.REAL_IP_HEADER = "x-real-ip"
-
     if "COVERAGE_RUN" in environ:
         app.config.TOUCHUP = False
         # NOTE: in single process mode where we usually run schemathesis to get coverage the db migrations
@@ -99,12 +94,6 @@ def create_app() -> Sanic:
     async def setup_rclone_validator(app, _):
         validator = RCloneValidator()
         app.ext.dependency(validator)
-
-    @app.after_server_start
-    async def after_server_start(app: Sanic):
-        logger.info("Printing all routes by name")
-        for key in app.router.name_index:
-            logger.info(f"Route: {key}")
 
     async def send_pending_events(app):
         """Send pending messages in case sending in a handler failed."""

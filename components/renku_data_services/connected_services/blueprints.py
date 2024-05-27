@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from urllib.parse import urlparse, urlunparse
 
 from sanic import HTTPResponse, Request, json, redirect
-from sanic.log import logger
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
@@ -26,11 +25,7 @@ class OAuth2ClientsBP(CustomBlueprint):
         """List all OAuth2 Clients."""
 
         @authenticate(self.authenticator)
-        async def _get_all(r: Request, user: base_models.APIUser):
-            logger.info(f"scheme = {r.scheme}")
-            # for h in r.headers:
-            #     logger.info(f"Header: {h} = {r.headers.get_all(h)}")
-
+        async def _get_all(_: Request, user: base_models.APIUser):
             clients = await self.connected_services_repo.get_oauth2_clients(user=user)
             return json(
                 [apispec.Provider.model_validate(c).model_dump(exclude_none=True, mode="json") for c in clients]
@@ -120,7 +115,10 @@ class OAuth2ClientsBP(CustomBlueprint):
 
     def _get_callback_url(self, request: Request) -> str:
         callback_url = request.url_for(f"{self.name}.{self.authorize_callback.__name__}")
-        return urlunparse(urlparse(callback_url)._replace(scheme="https"))
+        # TODO: configure the server to trust the reverse proxy so that the request scheme is always "https".
+        # TODO: see also https://github.com/SwissDataScienceCenter/renku-data-services/pull/225
+        https_callback_url = urlunparse(urlparse(callback_url)._replace(scheme="https"))
+        return https_callback_url
 
 
 @dataclass(kw_only=True)
