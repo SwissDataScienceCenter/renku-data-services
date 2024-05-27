@@ -19,12 +19,14 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.app_config import Config
 from renku_data_services.crc import models
+from renku_data_services.migrations.core import run_migrations_for_app
 
 
 @given(rp=rp_strat())
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_pool_insert_get(rp: models.ResourcePool, app_config: Config, admin_user: base_models.APIUser):
+    run_migrations_for_app("common")
     inserted_rp = None
     pool_repo = app_config.rp_repo
     try:
@@ -42,6 +44,7 @@ async def test_resource_pool_insert_get(rp: models.ResourcePool, app_config: Con
 async def test_resource_pool_update_name(
     rp: models.ResourcePool, app_config: Config, new_name: str, admin_user: base_models.APIUser
 ):
+    run_migrations_for_app("common")
     inserted_rp = None
     pool_repo = app_config.rp_repo
     try:
@@ -64,6 +67,7 @@ async def test_resource_pool_update_name(
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_pool_update_quota(rp: models.ResourcePool, app_config: Config, admin_user: base_models.APIUser):
+    run_migrations_for_app("common")
     pool_repo = app_config.rp_repo
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
@@ -94,6 +98,7 @@ async def test_resource_pool_update_quota(rp: models.ResourcePool, app_config: C
 async def test_resource_pool_update_classes(
     rp: models.ResourcePool, app_config: Config, data, admin_user: base_models.APIUser
 ):
+    run_migrations_for_app("common")
     inserted_rp = None
     pool_repo = app_config.rp_repo
     try:
@@ -128,6 +133,7 @@ async def test_resource_pool_update_classes(
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_get_classes(rp: models.ResourcePool, app_config: Config, admin_user: base_models.APIUser):
+    run_migrations_for_app("common")
     inserted_rp = None
     pool_repo = app_config.rp_repo
     try:
@@ -146,6 +152,7 @@ async def test_get_classes(rp: models.ResourcePool, app_config: Config, admin_us
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_get_class_by_id(rp: models.ResourcePool, app_config: Config, admin_user: base_models.APIUser):
+    run_migrations_for_app("common")
     inserted_rp = None
     pool_repo = app_config.rp_repo
     try:
@@ -167,6 +174,7 @@ async def test_get_class_by_id(rp: models.ResourcePool, app_config: Config, admi
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_get_class_by_name(rp: models.ResourcePool, app_config: Config, admin_user: base_models.APIUser):
+    run_migrations_for_app("common")
     inserted_rp = None
     pool_repo = app_config.rp_repo
     try:
@@ -188,6 +196,7 @@ async def test_get_class_by_name(rp: models.ResourcePool, app_config: Config, ad
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_pool_delete(rp: models.ResourcePool, app_config: Config, admin_user: base_models.APIUser):
+    run_migrations_for_app("common")
     pool_repo = app_config.rp_repo
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
@@ -208,6 +217,7 @@ async def test_resource_class_create(
     app_config: Config,
     admin_user: base_models.APIUser,
 ):
+    run_migrations_for_app("common")
     inserted_rp = None
     pool_repo = app_config.rp_repo
     try:
@@ -236,6 +246,7 @@ async def test_resource_class_create(
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_class_delete(rp: models.ResourcePool, app_config: Config, admin_user: base_models.APIUser):
+    run_migrations_for_app("common")
     inserted_rp = None
     pool_repo = app_config.rp_repo
     try:
@@ -269,6 +280,7 @@ async def test_resource_class_delete(rp: models.ResourcePool, app_config: Config
 async def test_resource_class_update(
     rp: models.ResourcePool, app_config: Config, admin_user: base_models.APIUser, rc_update: dict
 ):
+    run_migrations_for_app("common")
     inserted_rp = None
     pool_repo = app_config.rp_repo
     try:
@@ -313,6 +325,7 @@ async def test_resource_class_update(
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_lookup_rp_by_name(rp: models.ResourcePool, app_config: Config, admin_user: base_models.APIUser):
+    run_migrations_for_app("common")
     inserted_rp = None
     pool_repo = app_config.rp_repo
     try:
@@ -334,6 +347,7 @@ async def test_lookup_rp_by_name(rp: models.ResourcePool, app_config: Config, ad
 async def test_insert_class_in_nonexisting_rp(
     app_config: Config, rc: models.ResourceClass, admin_user: base_models.APIUser
 ):
+    run_migrations_for_app("common")
     with pytest.raises(errors.MissingResourceError):
         await app_config.rp_repo.insert_resource_class(resource_class=rc, resource_pool_id=99999, api_user=admin_user)
 
@@ -342,6 +356,7 @@ async def test_insert_class_in_nonexisting_rp(
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_update_quota_in_nonexisting_rp(app_config: Config, new_quota_id: str, admin_user: base_models.APIUser):
+    run_migrations_for_app("common")
     with pytest.raises(errors.MissingResourceError):
         await app_config.rp_repo.update_resource_pool(id=99999, api_user=admin_user, quota=new_quota_id)
 
@@ -356,6 +371,7 @@ async def test_resource_pools_access_control(
     loggedin_user: base_models.APIUser,
     app_config: Config,
 ):
+    run_migrations_for_app("common")
     inserted_public_rp = None
     inserted_private_rp = None
     pool_repo = app_config.rp_repo
@@ -398,6 +414,7 @@ async def test_classes_filtering(
     admin_user: base_models.APIUser,
     app_config: Config,
 ):
+    run_migrations_for_app("common")
     inserted_rp1 = None
     inserted_rp2 = None
     pool_repo = app_config.rp_repo

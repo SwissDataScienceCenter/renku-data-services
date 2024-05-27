@@ -1,81 +1,22 @@
 """Message queue implementation for redis streams."""
 
-import base64
 import copy
-import glob
-import json
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime
 from functools import wraps
-from io import BytesIO
-from pathlib import Path
-from typing import Any, Concatenate, ParamSpec, Protocol, TypeVar
+from typing import Concatenate, ParamSpec, Protocol, TypeVar
 
 from dataclasses_avroschema.schema_generator import AvroModel
-from dataclasses_avroschema.utils import standardize_custom_type
-from fastavro import parse_schema, schemaless_reader, schemaless_writer
 from sqlalchemy.ext.asyncio import AsyncSession
-from ulid import ULID
 
 from renku_data_services.errors import errors
 from renku_data_services.message_queue import AmbiguousEvent
-from renku_data_services.message_queue.avro_models.io.renku.events.v1.header import Header
 from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.message_queue.converters import EventConverter
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
-
-_root = Path(__file__).parent.resolve()
-_filter = f"{_root}/schemas/**/*.avsc"
-_schemas = {}
-for file in glob.glob(_filter, recursive=True):
-    with open(file) as f:
-        _schema = json.load(f)
-        if "name" in _schema:
-            _name = _schema["name"]
-            _namespace = _schema.get("namespace")
-            if _namespace:
-                _name = f"{_namespace}.{_name}"
-            _schemas[_name] = _schema
-
-
-def serialize_binary(obj: AvroModel) -> bytes:
-    """Serialize a message with avro, making sure to use the original schema."""
-    schema = parse_schema(schema=json.loads(getattr(obj, "_schema", obj.avro_schema())), named_schemas=_schemas)
-    fo = BytesIO()
-    schemaless_writer(fo, schema, obj.asdict(standardize_factory=standardize_custom_type))
-    return fo.getvalue()
-
-
-TAvro = TypeVar("TAvro", bound=AvroModel)
-
-
-def deserialize_binary(data: bytes, model: type[TAvro]) -> TAvro:
-    """Deserialize an avro binary message, using the original schema."""
-    input_stream = BytesIO(data)
-    schema = parse_schema(schema=json.loads(getattr(model, "_schema", model.avro_schema())), named_schemas=_schemas)
-
-    payload = schemaless_reader(input_stream, schema, schema)
-    input_stream.flush()
-    obj = model.parse_obj(payload)  # type: ignore
-
-    return obj
-
-
-def create_header(
-    message_type: str, content_type: str = "application/avro+binary", schema_version: str = "1"
-) -> Header:
-    """Create a message header."""
-    return Header(
-        type=message_type,
-        source="renku-data-services",
-        dataContentType=content_type,
-        schemaVersion=schema_version,
-        time=datetime.utcnow(),
-        requestId=ULID().hex,
-    )
+from renku_data_services.message_queue.models import Event
 
 
 class WithMessageQueue(Protocol):
@@ -137,18 +78,10 @@ def dispatch_message(
             events = EventConverter.to_events(result, event_type)
 
             for event in events:
-                message_id = ULID().hex
-                schema_version = "2"
-                headers = create_header(event.queue, schema_version=schema_version).serialize_json()
-                message: dict[str, Any] = {
-                    "id": message_id,
-                    "headers": headers,
-                    "payload": base64.b64encode(serialize_binary(event.payload)).decode(),
-                }
-                event_id = await self.event_repo.store_event(session, event.queue, message)
+                event_id = await self.event_repo.store_event(session, event)
 
                 try:
-                    await self.event_repo.message_queue.send_message(event.queue, message)
+                    await self.event_repo.message_queue.send_message(event)
                 except Exception as err:
                     logging.warning(
                         f"Could not insert event message to redis queue because of {err} "
@@ -169,14 +102,8 @@ class RedisQueue(IMessageQueue):
 
     config: RedisConfig
 
-    async def send_message(
-        self,
-        channel: str,
-        message: dict[str, Any],
-    ):
+    async def send_message(self, event: Event):
         """Send a message on a channel."""
-        message = copy.copy(message)
-        if "payload" in message:
-            message["payload"] = base64.b64decode(message["payload"])  # type: ignore
+        message = copy.copy(event.serialize())
 
-        await self.config.redis_connection.xadd(channel, message)
+        await self.config.redis_connection.xadd(event.queue, message)

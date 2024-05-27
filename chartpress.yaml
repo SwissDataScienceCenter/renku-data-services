@@ -11,7 +11,7 @@ charts:
       - components
       - projects
     images:
-      renku-data-services:
+      renku-data-service:
         contextPath: .
         dockerfilePath: projects/renku_data_service/Dockerfile
         valuesPath: dataService.image

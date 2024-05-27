@@ -119,3 +119,28 @@ jobs:
           labels: ${{ steps.meta-keycloak-sync.outputs.labels }}
           cache-from: type=registry,ref=renku/keycloak-sync:buildcache
           cache-to: type=registry,ref=renku/keycloak-sync:buildcache,mode=max
+      - name: Docker meta secrets
+        id: meta-secrets-storage
+        uses: docker/metadata-action@v4
+        with:
+          # list of Docker images to use as base name for tags
+          images: |
+            renku/secrets-storage
+          # generate Docker tags based on the following events/attributes
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+      - name: Build and push secrets image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./projects/secrets_storage/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta-secrets-storage.outputs.tags }}
+          labels: ${{ steps.meta-secrets-storage.outputs.labels }}
+          cache-from: type=registry,ref=renku/secrets-storage:buildcache
+          cache-to: type=registry,ref=renku/secrets-storage:buildcache,mode=max
