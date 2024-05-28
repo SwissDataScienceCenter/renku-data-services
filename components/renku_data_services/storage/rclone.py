@@ -343,7 +343,7 @@ class RCloneOption(BaseModel):
             and not any(e.value == str(value) and (not e.provider or e.provider == provider) for e in self.examples)
         ):
             raise errors.ValidationError(message=f"Value '{value}' is not valid for field {self.name}")
-        return value
+        return cast(int | bool | dict | str, value)
 
 
 class RCloneProviderSchema(BaseModel):
@@ -388,7 +388,7 @@ class RCloneProviderSchema(BaseModel):
     ) -> None:
         """Validate an RClone config."""
         keys = set(configuration.keys()) - {"type"}
-        provider: str | None = configuration.get("provider")  # type: ignore
+        provider: str | None = configuration.get("provider")
 
         missing: list[str] = []
 
@@ -451,7 +451,7 @@ class RCloneProviderSchema(BaseModel):
         self, configuration: Union["RCloneConfig", dict[str, Any]]
     ) -> Generator[RCloneOption, None, None]:
         """Get private field descriptions for storage."""
-        provider: str | None = configuration.get("provider")  # type: ignore
+        provider: str | None = configuration.get("provider")
 
         for option in self.options:
             if not option.is_sensitive:

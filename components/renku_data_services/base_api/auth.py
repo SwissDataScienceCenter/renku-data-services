@@ -1,8 +1,9 @@
 """Authentication decorators for Sanic."""
 
 import re
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from functools import wraps
+from typing import ParamSpec, TypeVar
 
 from sanic import Request
 
@@ -103,14 +104,18 @@ def only_admins(f: Callable) -> Callable:
     return decorated_function
 
 
-def only_authenticated(f: Callable) -> Callable:
+_P = ParamSpec("_P")
+_T = TypeVar("_T")
+
+
+def only_authenticated(f: Callable[_P, Awaitable[_T]]) -> Callable[_P, Awaitable[_T]]:
     """Decorator that errors out if the user is not authenticated.
 
     It looks for APIUser in the named or unnamed poarameters.
     """
 
     @wraps(f)
-    async def decorated_function(self, *args, **kwargs):
+    async def decorated_function(*args: _P.args, **kwargs: _P.kwargs) -> _T:
         api_user = None
         if "requested_by" in kwargs and isinstance(kwargs["requested_by"], APIUser):
             api_user = kwargs["requested_by"]
@@ -130,7 +135,7 @@ def only_authenticated(f: Callable) -> Callable:
             raise errors.Unauthorized(message="You have to be authenticated to perform this operation.")
 
         # the user is authenticated
-        response = await f(self, *args, **kwargs)
+        response = await f(*args, **kwargs)
         return response
 
     return decorated_function

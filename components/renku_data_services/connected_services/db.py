@@ -25,7 +25,7 @@ class ConnectedServicesRepository:
     """Repository for connected services."""
 
     def __init__(self, session_maker: Callable[..., AsyncSession], encryption_key: bytes):
-        self.session_maker = session_maker  # type: ignore[call-overload]
+        self.session_maker = session_maker
         self.encryption_key = encryption_key
 
     async def get_oauth2_clients(
@@ -162,6 +162,8 @@ class ConnectedServicesRepository:
                 scope=client.scope,
                 redirect_uri=callback_url,
             ) as oauth2_client:
+                url: str
+                state: str
                 url, state = oauth2_client.create_authorization_url(adapter.authorization_url)
 
                 result_conn = await session.scalars(

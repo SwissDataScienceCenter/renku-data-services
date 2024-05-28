@@ -23,7 +23,7 @@ class EventRepository:
         session_maker: Callable[..., AsyncSession],
         message_queue: IMessageQueue,
     ) -> None:
-        self.session_maker = session_maker  # type: ignore[call-overload]
+        self.session_maker = session_maker
         self.message_queue: IMessageQueue = message_queue
 
     async def _get_pending_events(self, older_than: timedelta = timedelta(0)) -> list[schemas.EventORM]:

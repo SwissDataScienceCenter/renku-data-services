@@ -39,7 +39,7 @@ class GroupRepository:
         event_repo: EventRepository,
         group_authz: Authz,
     ) -> None:
-        self.session_maker = session_maker  # type: ignore[call-overload]
+        self.session_maker = session_maker
         self.authz: Authz = group_authz
         self.event_repo: EventRepository = event_repo
 

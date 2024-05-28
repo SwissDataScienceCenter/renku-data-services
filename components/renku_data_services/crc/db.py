@@ -7,10 +7,10 @@ it all in one place.
 """
 
 from asyncio import gather
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Collection, Sequence
 from dataclasses import dataclass, field
 from functools import wraps
-from typing import Optional, cast
+from typing import Optional, ParamSpec, TypeVar, cast
 
 from sqlalchemy import NullPool, create_engine, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,7 +28,7 @@ from renku_data_services.users.db import UserRepo
 
 class _Base:
     def __init__(self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository) -> None:
-        self.session_maker = session_maker  # type: ignore[call-overload]
+        self.session_maker = session_maker
         self.quotas_repo = quotas_repo
 
 
@@ -49,7 +49,7 @@ def _resource_pool_access_control(
                     and_(schemas.RPUserORM.keycloak_id == api_user.id, schemas.RPUserORM.no_default_access == true())
                 )
                 .exists()
-            )  # type: ignore[var-annotated]
+            )
             output = output.join(schemas.RPUserORM, schemas.ResourcePoolORM.users, isouter=True).where(
                 or_(
                     schemas.RPUserORM.keycloak_id == api_user.id,  # the user is part of the pool
@@ -88,7 +88,7 @@ def _classes_user_access_control(
                     and_(schemas.RPUserORM.keycloak_id == api_user.id, schemas.RPUserORM.no_default_access == true())
                 )
                 .exists()
-            )  # type: ignore[var-annotated]
+            )
             output = output.join(schemas.RPUserORM, schemas.ResourcePoolORM.users, isouter=True).where(
                 or_(
                     schemas.RPUserORM.keycloak_id == api_user.id,  # the user is part of the pool
@@ -112,7 +112,11 @@ def _classes_user_access_control(
     return output
 
 
-def _only_admins(f: Callable) -> Callable:
+_P = ParamSpec("_P")
+_T = TypeVar("_T")
+
+
+def _only_admins(f: Callable[_P, Awaitable[_T]]) -> Callable[_P, Awaitable[_T]]:
     """Decorator that errors out if the user is not an admin.
 
     It expects the APIUser model to be a named parameter in the decorated function or
@@ -120,17 +124,17 @@ def _only_admins(f: Callable) -> Callable:
     """
 
     @wraps(f)
-    async def decorated_function(self, *args, **kwargs):
+    async def decorated_function(*args: _P.args, **kwargs: _P.kwargs) -> _T:
         api_user = None
         if "api_user" in kwargs:
             api_user = kwargs["api_user"]
         elif len(args) >= 1:
             api_user = args[0]
-        if api_user is None or not api_user.is_admin:
+        if api_user is None or not isinstance(api_user, base_models.APIUser) or not api_user.is_admin:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
         # the user is authenticated and is an admin
-        response = await f(self, *args, **kwargs)
+        response = await f(*args, **kwargs)
         return response
 
     return decorated_function
@@ -146,7 +150,7 @@ class ResourcePoolRepository(_Base):
             engine,
             class_=Session,
             expire_on_commit=True,
-        )  # type: ignore[call-overload]
+        )
         with session_maker() as session, session.begin():
             stmt = select(schemas.ResourcePoolORM.default == true())
             res = session.execute(stmt)
@@ -725,7 +729,7 @@ class UserRepository(_Base):
 
     @_only_admins
     async def update_resource_pool_users(
-        self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: list[str], append: bool = True
+        self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: Collection[str], append: bool = True
     ) -> list[base_models.User]:
         """Update the users to have access to a specific resource pool."""
         async with self.session_maker() as session, session.begin():

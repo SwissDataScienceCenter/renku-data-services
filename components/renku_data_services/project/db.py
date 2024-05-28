@@ -6,7 +6,7 @@ import functools
 from asyncio import gather
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
-from typing import Any, Concatenate, ParamSpec, TypeAlias, TypeVar, cast
+from typing import Any, Concatenate, ParamSpec, TypeAlias, TypeVar
 
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,7 +41,7 @@ class ProjectRepository:
         group_repo: GroupRepository,
         authz: Authz,
     ) -> None:
-        self.session_maker = session_maker  # type: ignore[call-overload]
+        self.session_maker = session_maker
         self.message_queue: IMessageQueue = message_queue
         self.event_repo: EventRepository = event_repo
         self.group_repo: GroupRepository = group_repo
@@ -68,7 +68,7 @@ class ProjectRepository:
             )
             results = await gather(session.execute(stmt), session.execute(stmt_count))
             projects_orm = results[0].scalars().all()
-            total_elements = cast(int, results[1].scalar() or 0)
+            total_elements = results[1].scalar() or 0
             return [p.dump() for p in projects_orm], total_elements
 
     async def get_project(self, user: base_models.APIUser, project_id: str) -> models.Project:
@@ -311,7 +311,7 @@ class ProjectMemberRepository:
         authz: Authz,
         message_queue: IMessageQueue,
     ) -> None:
-        self.session_maker = session_maker  # type: ignore[call-overload]
+        self.session_maker = session_maker
         self.event_repo = event_repo
         self.authz = authz
         self.message_queue = message_queue

@@ -45,6 +45,8 @@ class KCUsersBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _get_self(request: Request, user: base_models.APIUser):
+            if user.id is None:
+                raise errors.ValidationError(message="No user id provided")
             user_info = await self.repo.get_or_create_user(requested_by=user, id=user.id)
             if not user_info:
                 raise errors.MissingResourceError(message=f"The user with ID {user.id} cannot be found.")

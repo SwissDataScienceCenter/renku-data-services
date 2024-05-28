@@ -4,7 +4,7 @@ import functools
 import os
 import ssl
 from collections.abc import Awaitable, Callable
-from typing import Any, Concatenate, ParamSpec, Protocol, TypeVar
+from typing import Any, Concatenate, ParamSpec, Protocol, TypeVar, cast
 
 import httpx
 from deepmerge import Merger
@@ -20,7 +20,7 @@ def oidc_discovery(url: str, realm: str) -> dict[str, Any]:
     url = f"{url}/realms/{realm}/.well-known/openid-configuration"
     res = httpx.get(url, verify=get_ssl_context())
     if res.status_code == 200:
-        return res.json()
+        return cast(dict[str, Any], res.json())
     raise errors.ConfigurationError(message=f"Cannot successfully do OIDC discovery with url {url}.")
 
 

@@ -6,10 +6,10 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, ClassVar, Protocol, cast
 
-import requests  # type: ignore[import-untyped, import]
-from authlib.integrations.requests_client import OAuth2Session  # type: ignore[import-untyped, import]
-from authlib.oauth2.rfc7523 import ClientSecretJWT  # type: ignore[import-untyped, import]
-from requests.adapters import HTTPAdapter  # type: ignore[import-untyped, import]
+import requests
+from authlib.integrations.requests_client import OAuth2Session
+from authlib.oauth2.rfc7523 import ClientSecretJWT
+from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 
 from renku_data_services.users.models import KeycloakAdminEvent, KeycloakEvent

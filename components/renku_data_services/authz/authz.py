@@ -563,7 +563,7 @@ class Authz:
                 message="Cannot create a project in the authorization database if its ID is missing."
             )
         creator = SubjectReference(object=_AuthzConverter.user(project.created_by))
-        project_res = _AuthzConverter.project(project.id)  # type: ignore[arg-type]
+        project_res = _AuthzConverter.project(project.id)
         creator_is_owner = Relationship(resource=project_res, relation=_Relation.owner.value, subject=creator)
         all_users = SubjectReference(object=_AuthzConverter.all_users())
         all_anon_users = SubjectReference(object=_AuthzConverter.anonymous_users())
@@ -1010,7 +1010,7 @@ class Authz:
                 message="Cannot create a group in the authorization database if its ID is missing."
             )
         creator = SubjectReference(object=_AuthzConverter.user(group.created_by))
-        group_res = _AuthzConverter.group(group.id)  # type: ignore[arg-type]
+        group_res = _AuthzConverter.group(group.id)
         creator_is_owner = Relationship(resource=group_res, relation=_Relation.owner.value, subject=creator)
         group_in_platform = Relationship(
             resource=group_res,
@@ -1223,7 +1223,7 @@ class Authz:
                 message="Cannot create a user namespace in the authorization database if its ID is missing."
             )
         creator = SubjectReference(object=_AuthzConverter.user(namespace.created_by))
-        namespace_res = _AuthzConverter.user_namespace(namespace.id)  # type: ignore[arg-type]
+        namespace_res = _AuthzConverter.user_namespace(namespace.id)
         creator_is_owner = Relationship(resource=namespace_res, relation=_Relation.owner.value, subject=creator)
         namespace_in_platform = Relationship(
             resource=namespace_res,
