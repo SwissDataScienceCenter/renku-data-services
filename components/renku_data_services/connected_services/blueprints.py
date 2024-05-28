@@ -1,7 +1,7 @@
 """Connected services blueprint."""
 
 from dataclasses import dataclass
-from urllib.parse import urlunparse
+from urllib.parse import urlparse, urlunparse
 
 from sanic import HTTPResponse, Request, json, redirect
 from sanic_ext import validate
@@ -113,10 +113,12 @@ class OAuth2ClientsBP(CustomBlueprint):
 
         return "/oauth2/callback", ["GET"], _callback
 
-    @staticmethod
-    def _get_callback_url(request: Request) -> str:
-        callback_path = "/api/data/oauth2/callback"
-        return urlunparse(("https", request.host, callback_path, None, None, None))
+    def _get_callback_url(self, request: Request) -> str:
+        callback_url = request.url_for(f"{self.name}.{self.authorize_callback.__name__}")
+        # TODO: configure the server to trust the reverse proxy so that the request scheme is always "https".
+        # TODO: see also https://github.com/SwissDataScienceCenter/renku-data-services/pull/225
+        https_callback_url = urlunparse(urlparse(callback_url)._replace(scheme="https"))
+        return https_callback_url
 
 
 @dataclass(kw_only=True)
