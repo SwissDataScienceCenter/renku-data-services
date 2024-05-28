@@ -206,7 +206,7 @@ module = [
   "prometheus_sanic.*",
   "authzed.*",
   "grpcutil.*",
-  "authlib.integrations.httpx_client",
+  "authlib.*",
 ]
 ignore_missing_imports = true
 
