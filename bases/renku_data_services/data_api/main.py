@@ -43,7 +43,7 @@ async def _send_messages() -> None:
 
 def send_pending_events() -> None:
     """Send pending messages in case sending in a handler failed."""
-    app = Sanic("send_events")  # we need a dummy app for logging to work.  # noqa: F841
+    _ = Sanic("send_events")  # we need a dummy app for logging to work.
 
     logger.info("running events sending loop.")
 

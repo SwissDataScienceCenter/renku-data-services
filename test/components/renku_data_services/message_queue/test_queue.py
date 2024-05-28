@@ -48,7 +48,6 @@ async def test_queue_send(app_config, monkeypatch):
     pending_events = await app_config.event_repo._get_pending_events()
     assert len(pending_events) == 0
 
-    # ensure it is resent if older than 5 seconds
     await app_config.event_repo.send_pending_events()
 
     events = await app_config.redis.redis_connection.xrange("project.removed")
