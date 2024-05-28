@@ -24,9 +24,15 @@ from renku_data_services.utils.cryptography import decrypt_string, encrypt_strin
 class ConnectedServicesRepository:
     """Repository for connected services."""
 
-    def __init__(self, session_maker: Callable[..., AsyncSession], encryption_key: bytes):
+    def __init__(
+        self,
+        session_maker: Callable[..., AsyncSession],
+        encryption_key: bytes,
+        async_oauth2_client_class: type[AsyncOAuth2Client],
+    ):
         self.session_maker = session_maker
         self.encryption_key = encryption_key
+        self.async_oauth2_client_class = async_oauth2_client_class
 
     async def get_oauth2_clients(
         self,
@@ -158,7 +164,7 @@ class ConnectedServicesRepository:
                 if client.client_secret
                 else None
             )
-            async with AsyncOAuth2Client(
+            async with self.async_oauth2_client_class(
                 client_id=client.client_id,
                 client_secret=client_secret,
                 scope=client.scope,
@@ -222,7 +228,7 @@ class ConnectedServicesRepository:
                 if client.client_secret
                 else None
             )
-            async with AsyncOAuth2Client(
+            async with self.async_oauth2_client_class(
                 client_id=client.client_id,
                 client_secret=client_secret,
                 scope=client.scope,
@@ -343,7 +349,7 @@ class ConnectedServicesRepository:
             else None
         )
         yield (
-            AsyncOAuth2Client(
+            self.async_oauth2_client_class(
                 client_id=client.client_id,
                 client_secret=client_secret,
                 scope=client.scope,
