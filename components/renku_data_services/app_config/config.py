@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
+from authlib.integrations.httpx_client import AsyncOAuth2Client
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.types import PublicKeyTypes
@@ -153,6 +154,7 @@ class Config:
     default_resource_pool: models.ResourcePool = default_resource_pool
     server_options_file: Optional[str] = None
     server_defaults_file: Optional[str] = None
+    async_oauth2_client_class: type[AsyncOAuth2Client] = AsyncOAuth2Client
     _user_repo: UserRepository | None = field(default=None, repr=False, init=False)
     _rp_repo: ResourcePoolRepository | None = field(default=None, repr=False, init=False)
     _storage_repo: StorageRepository | None = field(default=None, repr=False, init=False)
@@ -340,7 +342,9 @@ class Config:
         """The DB adapter for connected services."""
         if not self._connected_services_repo:
             self._connected_services_repo = ConnectedServicesRepository(
-                session_maker=self.db.async_session_maker, encryption_key=self.encryption_key
+                session_maker=self.db.async_session_maker,
+                encryption_key=self.encryption_key,
+                async_oauth2_client_class=self.async_oauth2_client_class,
             )
         return self._connected_services_repo
 
