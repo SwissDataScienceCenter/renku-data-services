@@ -5,6 +5,7 @@ pools and classes based on the old server options until the admin UI interface
 is added.
 """
 
+from collections.abc import Generator
 from typing import Any, Union
 
 from pydantic import BaseModel, ByteSize, Field, validator
@@ -94,7 +95,7 @@ class ServerOptions(BaseModel):
         return largest_list
 
 
-def _get_classname():
+def _get_classname() -> Generator[str, None, None]:
     yield "small"
     yield "medium"
     yield "large"

@@ -21,6 +21,7 @@ import pyavro_gen.modules.fields_collector
 import pyavro_gen.schema_and_classes_container
 from avro_preprocessor.avro_domain import Avro
 from avro_preprocessor.preprocessor_module import PreprocessorModule
+from pyavro_gen import generation_classes
 from pyavro_gen.codewriters.utils import namespace_name
 from pyavro_gen.modules.avsc_schema_dependency_checker import AvscSchemaDependenciesChecker
 
@@ -49,8 +50,10 @@ original_get_from_name = pyavro_gen.modules.fields_collector.FieldsCollector.get
 
 
 def _patched_get_class_writer_from_name(
-    self, fully_qualified_name, writer_type=pyavro_gen.generation_classes.GenerationClassesType.RECORD_CLASS
-):
+    self: pyavro_gen.modules.fields_collector.FieldsCollector,
+    fully_qualified_name: str,
+    writer_type: generation_classes.GenerationClassesType = generation_classes.GenerationClassesType.RECORD_CLASS,
+) -> pyavro_gen.codewriters.core.ClassWriter:
     """Patched version that properly handles enum references."""
     if (
         fully_qualified_name in self.writers

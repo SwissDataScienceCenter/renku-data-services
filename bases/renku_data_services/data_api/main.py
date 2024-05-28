@@ -3,7 +3,7 @@
 import argparse
 import asyncio
 from os import environ
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import sentry_sdk
 from prometheus_sanic import monitor
@@ -26,6 +26,9 @@ from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.utils.middleware import validate_null_byte
 
+if TYPE_CHECKING:
+    import sentry_sdk._types
+
 
 def create_app() -> Sanic:
     """Create a Sanic application."""
@@ -42,7 +45,9 @@ def create_app() -> Sanic:
     if config.sentry.enabled:
         logger.info("enabling sentry")
 
-        def filter_error(event, hint):
+        def filter_error(
+            event: sentry_sdk._types.Event, hint: sentry_sdk._types.Hint
+        ) -> sentry_sdk._types.Event | None:
             if "exc_info" in hint:
                 exc_type, exc_value, tb = hint["exc_info"]
                 if isinstance(
@@ -52,7 +57,7 @@ def create_app() -> Sanic:
             return event
 
         @app.before_server_start
-        async def setup_sentry(_):
+        async def setup_sentry(_: Sanic) -> None:
             sentry_sdk.init(
                 dsn=config.sentry.dsn,
                 environment=config.sentry.environment,
@@ -82,7 +87,7 @@ def create_app() -> Sanic:
     app.register_middleware(validate_null_byte, "request")
 
     @app.main_process_start
-    async def do_migrations(*_):
+    async def do_migrations(_: Sanic) -> None:
         logger.info("running migrations")
         run_migrations_for_app("common")
         config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
@@ -92,11 +97,11 @@ def create_app() -> Sanic:
         await config.event_repo.send_pending_events()
 
     @app.before_server_start
-    async def setup_rclone_validator(app, _):
+    async def setup_rclone_validator(app: Sanic) -> None:
         validator = RCloneValidator()
         app.ext.dependency(validator)
 
-    async def send_pending_events(app):
+    async def send_pending_events(app: Sanic) -> None:
         """Send pending messages in case sending in a handler failed."""
         while True:
             try:
