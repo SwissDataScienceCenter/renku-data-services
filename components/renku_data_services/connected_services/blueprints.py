@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from urllib.parse import urlunparse
 
 from sanic import HTTPResponse, Request, json, redirect
+from sanic.response import JSONResponse
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
@@ -25,7 +26,7 @@ class OAuth2ClientsBP(CustomBlueprint):
         """List all OAuth2 Clients."""
 
         @authenticate(self.authenticator)
-        async def _get_all(_: Request, user: base_models.APIUser):
+        async def _get_all(_: Request, user: base_models.APIUser) -> JSONResponse:
             clients = await self.connected_services_repo.get_oauth2_clients(user=user)
             return json(
                 [apispec.Provider.model_validate(c).model_dump(exclude_none=True, mode="json") for c in clients]
@@ -37,7 +38,7 @@ class OAuth2ClientsBP(CustomBlueprint):
         """Get a specific OAuth2 Client."""
 
         @authenticate(self.authenticator)
-        async def _get_one(_: Request, provider_id: str, user: base_models.APIUser):
+        async def _get_one(_: Request, user: base_models.APIUser, provider_id: str) -> JSONResponse:
             client = await self.connected_services_repo.get_oauth2_client(provider_id=provider_id, user=user)
             return json(apispec.Provider.model_validate(client).model_dump(exclude_none=True, mode="json"))
 
@@ -49,7 +50,7 @@ class OAuth2ClientsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         @validate(json=apispec.ProviderPost)
-        async def _post(_: Request, body: apispec.ProviderPost, user: base_models.APIUser):
+        async def _post(_: Request, user: base_models.APIUser, body: apispec.ProviderPost) -> JSONResponse:
             client = await self.connected_services_repo.insert_oauth2_client(user=user, new_client=body)
             return json(apispec.Provider.model_validate(client).model_dump(exclude_none=True, mode="json"), 201)
 
@@ -61,7 +62,9 @@ class OAuth2ClientsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         @validate(json=apispec.ProviderPatch)
-        async def _patch(_: Request, provider_id: str, body: apispec.ProviderPatch, user: base_models.APIUser):
+        async def _patch(
+            _: Request, user: base_models.APIUser, provider_id: str, body: apispec.ProviderPatch
+        ) -> JSONResponse:
             body_dict = body.model_dump(exclude_none=True)
             client = await self.connected_services_repo.update_oauth2_client(
                 user=user, provider_id=provider_id, **body_dict
@@ -75,7 +78,7 @@ class OAuth2ClientsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        async def _delete(_: Request, provider_id: str, user: base_models.APIUser):
+        async def _delete(_: Request, user: base_models.APIUser, provider_id: str) -> HTTPResponse:
             await self.connected_services_repo.delete_oauth2_client(user=user, provider_id=provider_id)
             return HTTPResponse(status=204)
 
@@ -86,7 +89,7 @@ class OAuth2ClientsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _authorize(request: Request, provider_id: str, user: base_models.APIUser):
+        async def _authorize(request: Request, user: base_models.APIUser, provider_id: str) -> HTTPResponse:
             params = AuthorizeParams.model_validate(dict(request.query_args))
             callback_url = self._get_callback_url(request)
             url = await self.connected_services_repo.authorize_client(
@@ -99,7 +102,7 @@ class OAuth2ClientsBP(CustomBlueprint):
     def authorize_callback(self) -> BlueprintFactoryResponse:
         """OAuth2 authorization callback."""
 
-        async def _callback(request: Request):
+        async def _callback(request: Request) -> HTTPResponse:
             params = AuthorizeParams.model_validate(dict(request.query_args))
 
             callback_url = self._get_callback_url(request)
@@ -130,7 +133,7 @@ class OAuth2ConnectionsBP(CustomBlueprint):
         """List all OAuth2 connections."""
 
         @authenticate(self.authenticator)
-        async def _get_all(_: Request, user: base_models.APIUser):
+        async def _get_all(_: Request, user: base_models.APIUser) -> JSONResponse:
             connections = await self.connected_services_repo.get_oauth2_connections(user=user)
             return json(
                 [apispec.Connection.model_validate(c).model_dump(exclude_none=True, mode="json") for c in connections]
@@ -142,7 +145,7 @@ class OAuth2ConnectionsBP(CustomBlueprint):
         """Get a specific OAuth2 connection."""
 
         @authenticate(self.authenticator)
-        async def _get_one(_: Request, connection_id: str, user: base_models.APIUser):
+        async def _get_one(_: Request, user: base_models.APIUser, connection_id: str) -> JSONResponse:
             connection = await self.connected_services_repo.get_oauth2_connection(
                 connection_id=connection_id, user=user
             )
@@ -154,7 +157,7 @@ class OAuth2ConnectionsBP(CustomBlueprint):
         """Get the account information for a specific OAuth2 connection."""
 
         @authenticate(self.authenticator)
-        async def _get_account(_: Request, connection_id: str, user: base_models.APIUser):
+        async def _get_account(_: Request, user: base_models.APIUser, connection_id: str) -> JSONResponse:
             account = await self.connected_services_repo.get_oauth2_connected_account(
                 connection_id=connection_id, user=user
             )
@@ -166,7 +169,7 @@ class OAuth2ConnectionsBP(CustomBlueprint):
         """Get the access token for a specific OAuth2 connection."""
 
         @authenticate(self.authenticator)
-        async def _get_token(_: Request, connection_id: str, user: base_models.APIUser):
+        async def _get_token(_: Request, user: base_models.APIUser, connection_id: str) -> JSONResponse:
             token = await self.connected_services_repo.get_oauth2_connection_token(
                 connection_id=connection_id, user=user
             )

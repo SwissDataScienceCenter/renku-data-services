@@ -10,7 +10,7 @@ from asyncio import gather
 from collections.abc import Awaitable, Callable, Collection, Sequence
 from dataclasses import dataclass, field
 from functools import wraps
-from typing import Optional, ParamSpec, TypeVar, cast
+from typing import Any, Optional, ParamSpec, TypeVar, cast
 
 from sqlalchemy import NullPool, create_engine, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -304,7 +304,7 @@ class ResourcePoolRepository(_Base):
         return cls.dump()
 
     @_only_admins
-    async def update_resource_pool(self, api_user: base_models.APIUser, id: int, **kwargs) -> models.ResourcePool:
+    async def update_resource_pool(self, api_user: base_models.APIUser, id: int, **kwargs: Any) -> models.ResourcePool:
         """Update an existing resource pool in the database."""
         rp: Optional[schemas.ResourcePoolORM] = None
         async with self.session_maker() as session, session.begin():
@@ -422,7 +422,7 @@ class ResourcePoolRepository(_Base):
 
     @_only_admins
     async def update_resource_class(
-        self, api_user: base_models.APIUser, resource_pool_id: int, resource_class_id: int, **kwargs
+        self, api_user: base_models.APIUser, resource_pool_id: int, resource_class_id: int, **kwargs: Any
     ) -> models.ResourceClass:
         """Update a specific resource class."""
         async with self.session_maker() as session, session.begin():
@@ -776,7 +776,7 @@ class UserRepository(_Base):
             return [usr.dump() for usr in rp.users]
 
     @_only_admins
-    async def update_user(self, api_user: base_models.APIUser, keycloak_id: str, **kwargs) -> base_models.User:
+    async def update_user(self, api_user: base_models.APIUser, keycloak_id: str, **kwargs: Any) -> base_models.User:
         """Update a specific user."""
         async with self.session_maker() as session, session.begin():
             stmt = select(schemas.RPUserORM).where(schemas.RPUserORM.keycloak_id == keycloak_id)

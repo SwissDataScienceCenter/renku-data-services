@@ -68,7 +68,9 @@ class SessionRepository:
             session.add(environment)
             return environment.dump()
 
-    async def update_environment(self, user: base_models.APIUser, environment_id: str, **kwargs) -> models.Environment:
+    async def update_environment(
+        self, user: base_models.APIUser, environment_id: str, **kwargs: dict
+    ) -> models.Environment:
         """Update a session environment entry."""
         if not user.is_admin:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
@@ -210,7 +212,9 @@ class SessionRepository:
             session.add(launcher)
             return launcher.dump()
 
-    async def update_launcher(self, user: base_models.APIUser, launcher_id: str, **kwargs) -> models.SessionLauncher:
+    async def update_launcher(
+        self, user: base_models.APIUser, launcher_id: str, **kwargs: dict
+    ) -> models.SessionLauncher:
         """Update a session launcher entry."""
         if not user.is_authenticated or user.id is None:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")

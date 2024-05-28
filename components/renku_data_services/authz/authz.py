@@ -426,8 +426,7 @@ class Authz:
     ]:
         """A decorator that updates the authorization database for different types of operations."""
 
-        def _extract_user_from_args(*args, **kwargs) -> base_models.APIUser:
-            potential_user: base_models.APIUser | None = None
+        def _extract_user_from_args(*args: _P.args, **kwargs: _P.kwargs) -> base_models.APIUser:
             if len(args) == 0:
                 user_kwarg = kwargs.get("user")
                 requested_by_kwarg = kwargs.get("requested_by")

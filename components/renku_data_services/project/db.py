@@ -6,7 +6,7 @@ import functools
 from asyncio import gather
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
-from typing import Any, Concatenate, ParamSpec, TypeAlias, TypeVar
+from typing import Any, Concatenate, ParamSpec, TypeVar
 
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -268,12 +268,11 @@ class ProjectRepository:
 
 _P = ParamSpec("_P")
 _T = TypeVar("_T")
-_ProjectExistsFunc: TypeAlias = Callable[
-    Concatenate["ProjectMemberRepository", base_models.APIUser, str, _P], Awaitable[_T]
-]
 
 
-def _project_exists(f: _ProjectExistsFunc) -> _ProjectExistsFunc:
+def _project_exists(
+    f: Callable[Concatenate[ProjectMemberRepository, base_models.APIUser, str, _P], Awaitable[_T]],
+) -> Callable[Concatenate[ProjectMemberRepository, base_models.APIUser, str, _P], Awaitable[_T]]:
     """Checks if the project exists when adding or modifying project members."""
 
     @functools.wraps(f)
@@ -283,7 +282,7 @@ def _project_exists(f: _ProjectExistsFunc) -> _ProjectExistsFunc:
         project_id: str,
         *args: _P.args,
         **kwargs: _P.kwargs,
-    ):
+    ) -> _T:
         session = kwargs.get("session")
         if not isinstance(session, AsyncSession):
             raise errors.ProgrammingError(

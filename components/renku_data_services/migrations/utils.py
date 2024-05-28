@@ -1,16 +1,30 @@
 """Custom migrations env file to support modular migrations."""
 
 from collections.abc import Sequence
+from typing import Literal
 
 from alembic import context
 from sqlalchemy import Connection, MetaData, NullPool, create_engine
-from sqlalchemy.schema import CreateSchema
+from sqlalchemy.schema import CreateSchema, SchemaItem
 from sqlalchemy.sql import text
 
 from renku_data_services.db_config import DBConfig
 
 
-def include_object(obj, name, type_, reflected, compare_to) -> bool:
+def include_object(
+    obj: SchemaItem,
+    name: str | None,
+    type_: Literal[
+        "schema",
+        "table",
+        "column",
+        "index",
+        "unique_constraint",
+        "foreign_key_constraint",
+    ],
+    reflected: bool,
+    compare_to: SchemaItem | None,
+) -> bool:
     """Prevents from alembic migrating the alembic_version tables."""
     if type_ == "table" and name == "alembic_version":
         return False

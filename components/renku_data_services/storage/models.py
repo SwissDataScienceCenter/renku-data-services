@@ -34,11 +34,11 @@ class RCloneConfig(BaseModel, MutableMapping):
     def __getitem__(self, k: str) -> Any:
         return self.config[k]
 
-    def __setitem__(self, key, value) -> None:
+    def __setitem__(self, key: str, value: Any) -> None:
         self.config[key] = value
         self._validator.validate(self.config)
 
-    def __delitem__(self, key) -> None:
+    def __delitem__(self, key: str) -> None:
         del self.config[key]
         self._validator.validate(self.config)
 

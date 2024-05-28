@@ -1,6 +1,7 @@
 """Adapters for storage database classes."""
 
 from collections.abc import Callable
+from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -93,7 +94,7 @@ class BaseStorageRepository(_Base):
             session.add(orm)
         return orm.dump()
 
-    async def update_storage(self, storage_id: str, user: base_models.APIUser, **kwargs) -> models.CloudStorage:
+    async def update_storage(self, storage_id: str, user: base_models.APIUser, **kwargs: dict) -> models.CloudStorage:
         """Update a cloud storage entry."""
         async with self.session_maker() as session, session.begin():
             res = await session.execute(
@@ -105,9 +106,9 @@ class BaseStorageRepository(_Base):
                 raise errors.MissingResourceError(message=f"The storage with id '{storage_id}' cannot be found")
             if not await self.filter_projects_by_access_level(user, [storage.project_id], authz_models.Role.OWNER):
                 raise errors.Unauthorized(message="User does not have access to this project")
-            if "project_id" in kwargs and kwargs["project_id"] != storage.project_id:
+            if "project_id" in kwargs and cast(str, kwargs.get("project_id")) != storage.project_id:
                 raise errors.ValidationError(message="Cannot change project id of existing storage.")
-            name = kwargs.get("name", storage.name)
+            name = cast(str, kwargs.get("name", storage.name))
             if storage.name != name:
                 existing_storage = await self.get_storage(user, project_id=storage.project_id, name=name)
                 if existing_storage:

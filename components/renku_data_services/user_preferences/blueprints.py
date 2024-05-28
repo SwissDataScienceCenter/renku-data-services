@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 from sanic import Request, json
+from sanic.response import JSONResponse
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
@@ -24,7 +25,7 @@ class UserPreferencesBP(CustomBlueprint):
         """Get user preferences for the logged in user."""
 
         @authenticate(self.authenticator)
-        async def _get(_: Request, user: base_models.APIUser):
+        async def _get(_: Request, user: base_models.APIUser) -> JSONResponse:
             user_preferences: models.UserPreferences | None
             user_preferences = await self.user_preferences_repo.get_user_preferences(user=user)
             return json(apispec.UserPreferences.model_validate(user_preferences).model_dump())
@@ -36,7 +37,7 @@ class UserPreferencesBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @validate(json=apispec.AddPinnedProject)
-        async def _post(_: Request, body: apispec.AddPinnedProject, user: base_models.APIUser):
+        async def _post(_: Request, user: base_models.APIUser, body: apispec.AddPinnedProject) -> JSONResponse:
             res = await self.user_preferences_repo.add_pinned_project(user=user, project_slug=body.project_slug)
             return json(apispec.UserPreferences.model_validate(res).model_dump())
 
@@ -46,7 +47,7 @@ class UserPreferencesBP(CustomBlueprint):
         """Remove a pinned project from user preferences for the logged in user."""
 
         @authenticate(self.authenticator)
-        async def _delete(request: Request, user: base_models.APIUser):
+        async def _delete(request: Request, user: base_models.APIUser) -> JSONResponse:
             res_filter = PinnedProjectFilter.model_validate(dict(request.query_args))
             res = await self.user_preferences_repo.remove_pinned_project(user=user, **res_filter.model_dump())
             return json(apispec.UserPreferences.model_validate(res).model_dump())

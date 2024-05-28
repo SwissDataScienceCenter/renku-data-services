@@ -8,7 +8,6 @@ import string
 from collections.abc import Callable
 from contextlib import nullcontext
 from datetime import UTC, datetime
-from typing import cast
 
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import IntegrityError
@@ -82,7 +81,7 @@ class GroupRepository:
 
             stmt_count = select(func.count()).select_from(schemas.GroupORM)
             result = await session.execute(stmt_count)
-            n_total_elements = cast(int, result.scalar() or 0)
+            n_total_elements = result.scalar() or 0
             return [g.dump() for g in groups_orm], n_total_elements
 
     async def _get_group(

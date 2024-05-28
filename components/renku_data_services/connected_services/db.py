@@ -3,7 +3,7 @@
 from base64 import b64decode, b64encode
 from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlencode, urljoin
 
 from authlib.integrations.httpx_client import AsyncOAuth2Client
@@ -87,7 +87,9 @@ class ConnectedServicesRepository:
             await session.refresh(client)
             return client.dump(user_is_admin=user.is_admin)
 
-    async def update_oauth2_client(self, user: base_models.APIUser, provider_id: str, **kwargs) -> models.OAuth2Client:
+    async def update_oauth2_client(
+        self, user: base_models.APIUser, provider_id: str, **kwargs: dict
+    ) -> models.OAuth2Client:
         """Update an OAuth2 Client entry."""
         if not user.is_admin:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
@@ -102,7 +104,7 @@ class ConnectedServicesRepository:
 
             if kwargs.get("client_secret"):
                 client.client_secret = encrypt_string(
-                    self.encryption_key, client.created_by_id, kwargs["client_secret"]
+                    self.encryption_key, client.created_by_id, cast(str, kwargs["client_secret"])
                 )
 
             for key, value in kwargs.items():
@@ -323,7 +325,7 @@ class ConnectedServicesRepository:
             client = connection.client
             token = self._decrypt_token_set(token=connection.token, user_id=user.id)
 
-        async def update_token(token: dict[str, Any], refresh_token: str | None = None):
+        async def update_token(token: dict[str, Any], refresh_token: str | None = None) -> None:
             if refresh_token is None:
                 return
             async with self.session_maker() as session, session.begin():

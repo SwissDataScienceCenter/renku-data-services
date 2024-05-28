@@ -27,31 +27,31 @@ class K8sCoreClient(K8sCoreClientInterface):  # pragma:nocover
             config.load_config()
         self.client = client.CoreV1Api()
 
-    def read_namespaced_resource_quota(self, name: Any, namespace: Any, **kwargs: Any) -> Any:
+    def read_namespaced_resource_quota(self, name: str, namespace: str, **kwargs: dict) -> Any:
         """Get a resource quota."""
         return self.client.read_namespaced_resource_quota(name, namespace, **kwargs)
 
-    def list_namespaced_resource_quota(self, namespace: Any, **kwargs: Any) -> Any:
+    def list_namespaced_resource_quota(self, namespace: str, **kwargs: dict) -> Any:
         """List resource quotas."""
         return self.client.list_namespaced_resource_quota(namespace, **kwargs)
 
-    def create_namespaced_resource_quota(self, namespace: Any, body: Any, **kwargs: Any) -> Any:
+    def create_namespaced_resource_quota(self, namespace: str, body: dict, **kwargs: dict) -> Any:
         """Create a resource quota."""
         return self.client.create_namespaced_resource_quota(namespace, body, **kwargs)
 
-    def delete_namespaced_resource_quota(self, name: Any, namespace: Any, **kwargs: Any) -> Any:
+    def delete_namespaced_resource_quota(self, name: str, namespace: str, **kwargs: dict) -> Any:
         """Delete a resource quota."""
         return self.client.delete_namespaced_resource_quota(name, namespace, **kwargs)
 
-    def patch_namespaced_resource_quota(self, name: Any, namespace: Any, body: Any, **kwargs: Any) -> Any:
+    def patch_namespaced_resource_quota(self, name: str, namespace: str, body: dict, **kwargs: dict) -> Any:
         """Update a resource quota."""
         return self.client.patch_namespaced_resource_quota(name, namespace, body, **kwargs)
 
-    def delete_namespaced_secret(self, name: Any, namespace: Any, **kwargs: Any) -> Any:
+    def delete_namespaced_secret(self, name: str, namespace: str, **kwargs: dict) -> Any:
         """Delete a secret."""
         return self.client.delete_namespaced_secret(name, namespace, **kwargs)
 
-    def create_namespaced_secret(self, namespace: Any, body: Any, **kwargs: Any) -> Any:
+    def create_namespaced_secret(self, namespace: str, body: dict, **kwargs: dict) -> Any:
         """Create a secret."""
         return self.client.create_namespaced_secret(namespace, body, **kwargs)
 

@@ -181,7 +181,7 @@ class UsersSync:
         else:
             return await self._insert_user(session=session, user_id=user_id, **payload)
 
-    async def _insert_user(self, session: AsyncSession, user_id: str, **kwargs) -> UserWithNamespaceUpdate:
+    async def _insert_user(self, session: AsyncSession, user_id: str, **kwargs: Any) -> UserWithNamespaceUpdate:
         """Insert a user."""
         kwargs.pop("keycloak_id", None)
         kwargs.pop("id", None)
@@ -194,7 +194,7 @@ class UsersSync:
         return UserWithNamespaceUpdate(None, UserWithNamespace(new_user.dump(), namespace))
 
     async def _update_user(
-        self, session: AsyncSession, user_id: str, existing_user: UserORM | None, **kwargs
+        self, session: AsyncSession, user_id: str, existing_user: UserORM | None, **kwargs: Any
     ) -> UserWithNamespaceUpdate:
         """Update a user."""
         if not existing_user:
@@ -243,7 +243,7 @@ class UsersSync:
         logging.info("Starting a total user database sync.")
         kc_users = kc_api.get_users()
 
-        async def _do_update(raw_kc_user: dict[str, Any]):
+        async def _do_update(raw_kc_user: dict[str, Any]) -> None:
             kc_user = UserInfo.from_kc_user_payload(raw_kc_user)
             logging.info(f"Checking user with Keycloak ID {kc_user.id}")
             db_user = await self._get_user(kc_user.id)

@@ -26,17 +26,17 @@ from pyavro_gen.modules.avsc_schema_dependency_checker import AvscSchemaDependen
 
 
 # monkey patch writer to get correct namespaces
-def getv(self) -> str:
+def getv(self) -> str:  # type: ignore[no-untyped-def]
     """Fake getter."""
     return "renku_data_services.message_queue.avro_models"
 
 
-def setv(self, value) -> None:
+def setv(self, value) -> None:  # type: ignore[no-untyped-def]
     """Fake setter."""
     pass
 
 
-def deletev(self) -> None:
+def deletev(self) -> None:  # type: ignore[no-untyped-def]
     """Fake delete."""
     pass
 
@@ -69,10 +69,10 @@ def _patched_get_class_writer_from_name(
 pyavro_gen.modules.fields_collector.FieldsCollector.get_class_writer_from_name = _patched_get_class_writer_from_name
 
 
-class SchemaFixer(PreprocessorModule):
+class SchemaFixer(PreprocessorModule):  # type: ignore[misc]
     """Removes _schema property from enums, which breaks avro serialization."""
 
-    def __init__(self, schemas) -> None:
+    def __init__(self, schemas) -> None:  # type: ignore[no-untyped-def]
         super().__init__(schemas)
 
         self.writers = schemas.output_writers
@@ -93,7 +93,7 @@ class SchemaFixer(PreprocessorModule):
             writer.attributes = [a for a in writer.attributes if a.name != "_schema"]
 
 
-class DependencyChecker(AvscSchemaDependenciesChecker):
+class DependencyChecker(AvscSchemaDependenciesChecker):  # type: ignore[misc]
     """Fixes dependency checks."""
 
     def store_dependencies_of_field(self, node: Avro.Node) -> None:

@@ -3,7 +3,8 @@
 from dataclasses import dataclass
 from typing import Any
 
-from sanic import Request, empty, json
+from sanic import HTTPResponse, Request, empty, json
+from sanic.response import JSONResponse
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
@@ -37,7 +38,7 @@ class StorageBP(CustomBlueprint):
         """Get cloud storage for a repository."""
 
         @authenticate(self.authenticator)
-        async def _get(request: Request, validator: RCloneValidator, user: base_models.APIUser):
+        async def _get(request: Request, user: base_models.APIUser, validator: RCloneValidator) -> JSONResponse:
             res_filter = RepositoryFilter.model_validate(dict(request.query_args))
             storage: list[models.CloudStorage]
             storage = await self.storage_repo.get_storage(user=user, **res_filter.model_dump())
@@ -52,10 +53,10 @@ class StorageBP(CustomBlueprint):
         @authenticate(self.authenticator)
         async def _get_one(
             request: Request,
+            user: base_models.APIUser,
             storage_id: str,
             validator: RCloneValidator,
-            user: base_models.APIUser,
-        ):
+        ) -> JSONResponse:
             storage = await self.storage_repo.get_storage_by_id(storage_id, user=user)
 
             return json(dump_storage_with_sensitive_fields(storage, validator))
@@ -66,7 +67,7 @@ class StorageBP(CustomBlueprint):
         """Create a new cloud storage entry."""
 
         @authenticate(self.authenticator)
-        async def _post(request: Request, validator: RCloneValidator, user: base_models.APIUser):
+        async def _post(request: Request, user: base_models.APIUser, validator: RCloneValidator) -> JSONResponse:
             storage: models.CloudStorage
             if not isinstance(request.json, dict):
                 body_type = type(request.json)
@@ -99,10 +100,10 @@ class StorageBP(CustomBlueprint):
         @authenticate(self.authenticator)
         async def _put(
             request: Request,
+            user: base_models.APIUser,
             storage_id: str,
             validator: RCloneValidator,
-            user: base_models.APIUser,
-        ):
+        ) -> JSONResponse:
             if not request.json:
                 raise errors.ValidationError(message="The request body is empty. Please provide a valid JSON object.")
             if not isinstance(request.json, dict):
@@ -135,11 +136,11 @@ class StorageBP(CustomBlueprint):
         @validate(json=apispec.CloudStoragePatch)
         async def _patch(
             request: Request,
+            user: base_models.APIUser,
             storage_id: str,
             body: apispec.CloudStoragePatch,
             validator: RCloneValidator,
-            user: base_models.APIUser,
-        ):
+        ) -> JSONResponse:
             existing_storage = await self.storage_repo.get_storage_by_id(storage_id, user=user)
             if body.configuration is not None:
                 # we need to apply the patch to the existing storage to properly validate it
@@ -162,7 +163,7 @@ class StorageBP(CustomBlueprint):
         """Delete a storage entry."""
 
         @authenticate(self.authenticator)
-        async def _delete(request: Request, storage_id: str, user: base_models.APIUser):
+        async def _delete(request: Request, user: base_models.APIUser, storage_id: str) -> HTTPResponse:
             await self.storage_repo.delete_storage(storage_id=storage_id, user=user)
             return empty(204)
 
@@ -180,7 +181,7 @@ class StoragesV2BP(CustomBlueprint):
         """Get cloud storage for a repository."""
 
         @authenticate(self.authenticator)
-        async def _get(request: Request, validator: RCloneValidator, user: base_models.APIUser):
+        async def _get(request: Request, user: base_models.APIUser, validator: RCloneValidator) -> JSONResponse:
             res_filter = RepositoryFilter.model_validate(dict(request.query_args))
             storage: list[models.CloudStorage]
             storage = await self.storage_v2_repo.get_storage(user=user, **res_filter.model_dump())
@@ -195,10 +196,10 @@ class StoragesV2BP(CustomBlueprint):
         @authenticate(self.authenticator)
         async def _get_one(
             request: Request,
+            user: base_models.APIUser,
             storage_id: str,
             validator: RCloneValidator,
-            user: base_models.APIUser,
-        ):
+        ) -> JSONResponse:
             storage = await self.storage_v2_repo.get_storage_by_id(storage_id, user=user)
 
             return json(dump_storage_with_sensitive_fields(storage, validator))
@@ -209,7 +210,7 @@ class StoragesV2BP(CustomBlueprint):
         """Create a new cloud storage entry."""
 
         @authenticate(self.authenticator)
-        async def _post(request: Request, validator: RCloneValidator, user: base_models.APIUser):
+        async def _post(request: Request, user: base_models.APIUser, validator: RCloneValidator) -> JSONResponse:
             storage: models.CloudStorage
             if not isinstance(request.json, dict):
                 body_type = type(request.json)
@@ -243,11 +244,11 @@ class StoragesV2BP(CustomBlueprint):
         @validate(json=apispec.CloudStoragePatch)
         async def _patch(
             request: Request,
+            user: base_models.APIUser,
             storage_id: str,
             body: apispec.CloudStoragePatch,
             validator: RCloneValidator,
-            user: base_models.APIUser,
-        ):
+        ) -> JSONResponse:
             existing_storage = await self.storage_v2_repo.get_storage_by_id(storage_id, user=user)
             if body.configuration is not None:
                 # we need to apply the patch to the existing storage to properly validate it
@@ -270,7 +271,7 @@ class StoragesV2BP(CustomBlueprint):
         """Delete a storage entry."""
 
         @authenticate(self.authenticator)
-        async def _delete(request: Request, storage_id: str, user: base_models.APIUser):
+        async def _delete(request: Request, user: base_models.APIUser, storage_id: str) -> HTTPResponse:
             await self.storage_v2_repo.delete_storage(storage_id=storage_id, user=user)
             return empty(204)
 
@@ -284,7 +285,7 @@ class StorageSchemaBP(CustomBlueprint):
     def get(self) -> BlueprintFactoryResponse:
         """Get cloud storage for a repository."""
 
-        async def _get(_: Request, validator: RCloneValidator):
+        async def _get(_: Request, validator: RCloneValidator) -> JSONResponse:
             return json(validator.asdict())
 
         return "/storage_schema", ["GET"], _get
@@ -292,7 +293,7 @@ class StorageSchemaBP(CustomBlueprint):
     def test_connection(self) -> BlueprintFactoryResponse:
         """Validate an RClone config."""
 
-        async def _test_connection(request: Request, validator: RCloneValidator):
+        async def _test_connection(request: Request, validator: RCloneValidator) -> HTTPResponse:
             if not request.json:
                 raise errors.ValidationError(message="The request body is empty. Please provide a valid JSON object.")
             if not isinstance(request.json, dict):
@@ -317,7 +318,7 @@ class StorageSchemaBP(CustomBlueprint):
     def validate(self) -> BlueprintFactoryResponse:
         """Validate an RClone config."""
 
-        async def _validate(request: Request, validator: RCloneValidator):
+        async def _validate(request: Request, validator: RCloneValidator) -> HTTPResponse:
             if not request.json:
                 raise errors.ValidationError(message="The request body is empty. Please provide a valid JSON object.")
             if not isinstance(request.json, dict):
@@ -330,7 +331,7 @@ class StorageSchemaBP(CustomBlueprint):
     def obscure(self) -> BlueprintFactoryResponse:
         """Obscure values in config."""
 
-        async def _obscure(request: Request, validator: RCloneValidator):
+        async def _obscure(request: Request, validator: RCloneValidator) -> JSONResponse:
             if not request.json:
                 raise errors.ValidationError(message="The request body is empty. Please provide a valid JSON object.")
             if not isinstance(request.json, dict):

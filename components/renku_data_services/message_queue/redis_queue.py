@@ -65,7 +65,7 @@ def dispatch_message(
         f: Callable[Concatenate[_WithMessageQueue, _P], Awaitable[_T]],
     ) -> Callable[Concatenate[_WithMessageQueue, _P], Awaitable[_T]]:
         @wraps(f)
-        async def message_wrapper(self: _WithMessageQueue, *args: _P.args, **kwargs: _P.kwargs):
+        async def message_wrapper(self: _WithMessageQueue, *args: _P.args, **kwargs: _P.kwargs) -> _T:
             session = kwargs.get("session")
             if not isinstance(session, AsyncSession):
                 raise errors.ProgrammingError(
