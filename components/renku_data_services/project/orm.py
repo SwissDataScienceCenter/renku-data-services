@@ -9,7 +9,6 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_co
 from sqlalchemy.schema import ForeignKey
 from ulid import ULID
 
-from renku_data_services import base_models
 from renku_data_services.authz import models as authz_models
 from renku_data_services.namespace.orm import NamespaceORM
 from renku_data_services.project import models
@@ -54,7 +53,7 @@ class ProjectORM(BaseORM):
     def dump(self) -> models.Project:
         """Create a project model from the ProjectORM."""
         return models.Project(
-            id=base_models.Id(self.id),
+            id=self.id,
             name=self.name,
             slug=self.slug.slug,
             namespace=self.slug.namespace.dump(),
