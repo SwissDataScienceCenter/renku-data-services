@@ -1,34 +1,22 @@
 """Converter of models to Avro schemas for events."""
 
-from typing import TypeVar
+from typing import TypeVar, cast
 
 from dataclasses_avroschema.schema_generator import AvroModel
 
 from renku_data_services.authz import models as authz_models
 from renku_data_services.errors import errors
-from renku_data_services.message_queue import AmbiguousEvent
-from renku_data_services.message_queue.avro_models.io.renku.events import v1, v2
+from renku_data_services.message_queue import events
+from renku_data_services.message_queue.avro_models.io.renku.events import v2
 from renku_data_services.message_queue.models import Event
-from renku_data_services.namespace.models import Group
+from renku_data_services.namespace import models as group_models
 from renku_data_services.project import models as project_models
 from renku_data_services.users import models as user_models
 
 
 class _ProjectEventConverter:
     @staticmethod
-    def _convert_project_visibility(visibility: authz_models.Visibility) -> v1.Visibility:
-        match visibility:
-            case authz_models.Visibility.PUBLIC:
-                return v1.Visibility.PUBLIC
-            case authz_models.Visibility.PRIVATE:
-                return v1.Visibility.PRIVATE
-            case _:
-                raise errors.EventError(
-                    message=f"Trying to convert an unknown project visibility {visibility} to message visibility"
-                )
-
-    @staticmethod
-    def _convert_project_visibility_v2(visibility: authz_models.Visibility) -> v2.Visibility:
+    def _convert_project_visibility(visibility: authz_models.Visibility) -> v2.Visibility:
         match visibility:
             case authz_models.Visibility.PUBLIC:
                 return v2.Visibility.PUBLIC
@@ -40,7 +28,9 @@ class _ProjectEventConverter:
                 )
 
     @staticmethod
-    def to_events(project: project_models.Project, event_type: type[AvroModel] | AmbiguousEvent) -> list[Event]:
+    def to_events(
+        project: project_models.Project, event_type: type[AvroModel] | type[events.AmbiguousEvent]
+    ) -> list[Event]:
         if project.id is None:
             raise errors.EventError(
                 message=f"Cannot create an event of type {event_type} for a project which has no ID"
@@ -56,7 +46,7 @@ class _ProjectEventConverter:
                             namespace=project.namespace.slug,
                             slug=project.slug,
                             repositories=project.repositories,
-                            visibility=_ProjectEventConverter._convert_project_visibility_v2(project.visibility),
+                            visibility=_ProjectEventConverter._convert_project_visibility(project.visibility),
                             description=project.description,
                             createdBy=project.created_by,
                             creationDate=project.creation_date,
@@ -82,7 +72,7 @@ class _ProjectEventConverter:
                             namespace=project.namespace.slug,
                             slug=project.slug,
                             repositories=project.repositories,
-                            visibility=_ProjectEventConverter._convert_project_visibility_v2(project.visibility),
+                            visibility=_ProjectEventConverter._convert_project_visibility(project.visibility),
                             description=project.description,
                             keywords=project.keywords or [],
                         ),
@@ -98,10 +88,11 @@ class _UserEventConverter:
     @staticmethod
     def to_events(
         user: user_models.UserInfo | user_models.UserWithNamespace | user_models.UserWithNamespaceUpdate,
-        event_type: type[AvroModel] | AmbiguousEvent,
+        event_type: type[AvroModel] | type[events.AmbiguousEvent],
     ) -> list[Event]:
         match event_type:
-            case v2.UserAdded | AmbiguousEvent.INSERT_USER_NAMESPACE if isinstance(user, user_models.UserWithNamespace):
+            case v2.UserAdded | events.InsertUserNamespace:
+                user = cast(user_models.UserWithNamespace, user)
                 return [
                     Event(
                         "user.added",
@@ -114,9 +105,11 @@ class _UserEventConverter:
                         ),
                     )
                 ]
-            case v2.UserRemoved if isinstance(user, user_models.UserInfo):
+            case v2.UserRemoved:
+                user = cast(user_models.UserInfo, user)
                 return [Event("user.removed", v2.UserRemoved(id=user.id))]
-            case AmbiguousEvent.UPDATE_OR_INSERT_USER if isinstance(user, user_models.UserWithNamespaceUpdate):
+            case events.UpdateOrInsertUser:
+                user = cast(user_models.UserWithNamespaceUpdate, user)
                 return [
                     Event(
                         "user.added" if user.old is None else "user.updated",
@@ -241,7 +234,7 @@ class _GroupAuthzEventConverter:
 
 class _GroupEventConverter:
     @staticmethod
-    def to_events(group: Group, event_type: type[AvroModel] | AmbiguousEvent) -> list[Event]:
+    def to_events(group: group_models.Group, event_type: type[AvroModel] | type[events.AmbiguousEvent]) -> list[Event]:
         if group.id is None:
             raise errors.ProgrammingError(
                 message="Cannot send group events to the message queue for a group that does not have an ID"
@@ -288,52 +281,42 @@ class EventConverter:
     """Generates events from any type of data service models."""
 
     @staticmethod
-    def to_events(input: _T, event_type: type[AvroModel] | AmbiguousEvent) -> list[Event]:
+    def to_events(input: _T, event_type: type[AvroModel] | type[events.AmbiguousEvent]) -> list[Event]:
         """Generate an event for a data service model based on an event type."""
-        if isinstance(input, project_models.Project):
-            return _ProjectEventConverter.to_events(input, event_type)
-        elif isinstance(input, project_models.ProjectUpdate):
-            return _ProjectEventConverter.to_events(input.new, event_type)
-        elif isinstance(input, (user_models.UserInfo, user_models.UserWithNamespace)):
-            return _UserEventConverter.to_events(input, event_type)
-        elif input is None and event_type == type(v2.UserRemoved):  # type: ignore[unreachable]
-            # NOTE: The user that was supposed to be removed is not in the database at all, so don't send the event
-            # The code is definitely reachable it is just that mypy thinks it is not
-            return []  # type: ignore[unreachable]
-        elif (
-            isinstance(input, list)
-            and len(input) > 0
-            and all([isinstance(i, authz_models.MembershipChange) for i in input])
-        ):
-            if event_type == AmbiguousEvent.PROJECT_MEMBERSHIP_CHANGED:
-                return _ProjectAuthzEventConverter.to_events(input)
-            elif event_type == AmbiguousEvent.GROUP_MEMBERSHIP_CHANGED:
-                return _GroupAuthzEventConverter.to_events(input)
-            else:
-                raise errors.ProgrammingError(
-                    message="Found unknown event type when processing membership change list in the message queue "
-                    f"decorator, {type(event_type)}"
-                )
-        elif isinstance(input, list) and len(input) == 0:
+        if not input:
             return []
-        elif (
-            isinstance(input, user_models.UserWithNamespaceUpdate)
-            and event_type == AmbiguousEvent.UPDATE_OR_INSERT_USER
-        ):
-            return _UserEventConverter.to_events(input, event_type)
-        elif (
-            isinstance(input, list)
-            and event_type == AmbiguousEvent.INSERT_USER_NAMESPACE
-            and len(input) > 0
-            and all([isinstance(i, user_models.UserWithNamespace) for i in input])
-        ):
-            output: list[Event] = []
-            for namespace in input:
-                output.extend(_UserEventConverter.to_events(namespace, event_type))
-            return output
-        elif isinstance(input, Group):
-            return _GroupEventConverter.to_events(input, event_type)
-        else:
-            raise errors.EventError(
-                message=f"Trying to convert an unknown model of type {type(input)} to an event type {event_type}"
-            )
+
+        match event_type:
+            case v2.ProjectCreated | v2.ProjectRemoved:
+                project = cast(project_models.Project, input)
+                return _ProjectEventConverter.to_events(project, event_type)
+            case v2.ProjectUpdated:
+                project_update = cast(project_models.ProjectUpdate, input)
+                project = cast(project_models.Project, project_update.new)
+                return _ProjectEventConverter.to_events(project, event_type)
+            case events.ProjectMembershipChanged:
+                project_authz = cast(list[authz_models.MembershipChange], input)
+                return _ProjectAuthzEventConverter.to_events(project_authz)
+            case v2.GroupAdded | v2.GroupUpdated | v2.GroupRemoved:
+                group = cast(group_models.Group, input)
+                return _GroupEventConverter.to_events(group, event_type)
+            case events.GroupMembershipChanged:
+                group_authz = cast(list[authz_models.MembershipChange], input)
+                return _GroupAuthzEventConverter.to_events(group_authz)
+            case v2.UserAdded:
+                user_with_namespace = cast(user_models.UserWithNamespace, input)
+                return _UserEventConverter.to_events(user_with_namespace, event_type)
+            case v2.UserRemoved:
+                user_info = cast(user_models.UserInfo, input)
+                return _UserEventConverter.to_events(user_info, event_type)
+            case events.UpdateOrInsertUser:
+                user_with_namespace_update = cast(user_models.UserWithNamespaceUpdate, input)
+                return _UserEventConverter.to_events(user_with_namespace_update, event_type)
+            case events.InsertUserNamespace:
+                user_namespaces = cast(list[user_models.UserWithNamespace], input)
+                output: list[Event] = []
+                for namespace in user_namespaces:
+                    output.extend(_UserEventConverter.to_events(namespace, event_type))
+                return output
+            case _:
+                raise errors.EventError(message=f"Trying to convert an unknown event type {event_type}")

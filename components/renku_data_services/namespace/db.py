@@ -20,7 +20,7 @@ from renku_data_services import errors
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.authz.models import Member, MembershipChange, Role, Scope
 from renku_data_services.base_api.pagination import PaginationRequest
-from renku_data_services.message_queue import AmbiguousEvent
+from renku_data_services.message_queue import events
 from renku_data_services.message_queue.avro_models.io.renku.events.v2 import GroupAdded, GroupRemoved, GroupUpdated
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
@@ -49,7 +49,7 @@ class GroupRepository:
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.insert_many, ResourceType.user_namespace)
-    @dispatch_message(AmbiguousEvent.INSERT_USER_NAMESPACE)
+    @dispatch_message(events.InsertUserNamespace)
     async def generate_user_namespaces(
         self, *, session: AsyncSession | None = None
     ) -> list[user_models.UserWithNamespace]:
@@ -190,7 +190,7 @@ class GroupRepository:
         return group.dump()
 
     @with_db_transaction
-    @dispatch_message(AmbiguousEvent.GROUP_MEMBERSHIP_CHANGED)
+    @dispatch_message(events.GroupMembershipChanged)
     async def update_group_members(
         self,
         user: base_models.APIUser,
@@ -240,7 +240,7 @@ class GroupRepository:
         return group.dump()
 
     @with_db_transaction
-    @dispatch_message(AmbiguousEvent.GROUP_MEMBERSHIP_CHANGED)
+    @dispatch_message(events.GroupMembershipChanged)
     async def delete_group_member(
         self, user: base_models.APIUser, slug: str, user_id_to_delete: str, *, session: AsyncSession | None = None
     ) -> list[MembershipChange]:

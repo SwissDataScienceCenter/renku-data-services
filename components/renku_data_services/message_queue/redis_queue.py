@@ -10,7 +10,7 @@ from dataclasses_avroschema.schema_generator import AvroModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.errors import errors
-from renku_data_services.message_queue import AmbiguousEvent
+from renku_data_services.message_queue import events
 from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.message_queue.converters import EventConverter
 from renku_data_services.message_queue.db import EventRepository
@@ -33,7 +33,7 @@ _WithMessageQueue = TypeVar("_WithMessageQueue", bound=WithMessageQueue)
 
 
 def dispatch_message(
-    event_type: type[AvroModel] | AmbiguousEvent,
+    event_type: type[AvroModel] | type[events.AmbiguousEvent],
 ) -> Callable[
     [Callable[Concatenate[_WithMessageQueue, _P], Awaitable[_T]]],
     Callable[Concatenate[_WithMessageQueue, _P], Awaitable[_T]],

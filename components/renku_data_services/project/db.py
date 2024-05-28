@@ -16,7 +16,7 @@ from renku_data_services import errors
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.authz.models import Member, MembershipChange, Scope
 from renku_data_services.base_api.pagination import PaginationRequest
-from renku_data_services.message_queue import AmbiguousEvent
+from renku_data_services.message_queue import events
 from renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
@@ -328,7 +328,7 @@ class ProjectMemberRepository:
 
     @with_db_transaction
     @_project_exists
-    @dispatch_message(AmbiguousEvent.PROJECT_MEMBERSHIP_CHANGED)
+    @dispatch_message(events.ProjectMembershipChanged)
     async def update_members(
         self,
         user: base_models.APIUser,
@@ -359,7 +359,7 @@ class ProjectMemberRepository:
 
     @with_db_transaction
     @_project_exists
-    @dispatch_message(AmbiguousEvent.PROJECT_MEMBERSHIP_CHANGED)
+    @dispatch_message(events.ProjectMembershipChanged)
     async def delete_members(
         self, user: base_models.APIUser, project_id: str, user_ids: list[str], *, session: AsyncSession | None = None
     ) -> list[MembershipChange]:
