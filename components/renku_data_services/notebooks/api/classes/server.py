@@ -292,8 +292,6 @@ class UserServer(ABC):
         return config.session_get_endpoint_annotations.renku_annotation_prefix
 
     def _get_patches(self) -> list[dict[str, Any]]:
-        has_repository = bool(self.repositories)
-
         return list(
             chain(
                 general_patches.test(self),
@@ -308,19 +306,15 @@ class UserServer(ABC):
                 jupyter_server_patches.disable_service_links(),
                 jupyter_server_patches.rstudio_env_variables(self),
                 jupyter_server_patches.user_secrets(self),
-                (
-                    git_proxy_patches.main(self)
-                    if has_repository and not self.user.anonymous
-                    else []
-                ),
-                git_sidecar_patches.main(self) if has_repository else [],
+                git_proxy_patches.main(self),
+                git_sidecar_patches.main(self),
                 general_patches.oidc_unverified_email(self),
                 ssh_patches.main(),
                 # init container for certs must come before all other init containers
                 # so that it runs first before all other init containers
                 init_containers_patches.certificates(),
                 init_containers_patches.download_image(self),
-                init_containers_patches.git_clone(self) if has_repository else [],
+                init_containers_patches.git_clone(self),
                 inject_certificates_patches.proxy(self),
                 # Cloud Storage needs to patch the git clone sidecar spec and so should come after
                 # the sidecars

@@ -10,6 +10,9 @@ if TYPE_CHECKING:
 
 
 def main(server: "UserServer"):
+    if server.user.anonymous or not server.repositories:
+        return []
+
     etc_cert_volume_mount = get_certificates_volume_mounts(
         custom_certs=False,
         etc_certs=True,

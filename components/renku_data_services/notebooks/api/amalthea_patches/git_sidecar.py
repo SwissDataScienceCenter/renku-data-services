@@ -12,6 +12,8 @@ def main(server: "UserServer"):
     # NOTE: Sessions can be persisted only for registered users
     if not isinstance(server.user, RegisteredUser):
         return []
+    if not server.repositories:
+        return []
 
     gitlab_project = getattr(server, "gitlab_project", None)
     gl_project_path = gitlab_project.path if gitlab_project else None

@@ -14,6 +14,9 @@ if TYPE_CHECKING:
 
 
 def git_clone(server: "UserServer"):
+    if not server.repositories:
+        return []
+
     etc_cert_volume_mount = get_certificates_volume_mounts(
         custom_certs=False,
         etc_certs=True,

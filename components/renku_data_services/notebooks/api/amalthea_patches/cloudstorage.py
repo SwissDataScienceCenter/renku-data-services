@@ -16,19 +16,20 @@ def main(server: "UserServer") -> list[dict[str, Any]]:
                 f"{server.server_name}-ds-{i}", server.k8s_client.preferred_namespace
             )
         )
-        cloud_storage_patches.append(
-            {
-                "type": "application/json-patch+json",
-                "patch": [
-                    {
-                        "op": "add",
-                        "path": "/statefulset/spec/template/spec/initContainers/2/env/-",
-                        "value": {
-                            "name": f"GIT_CLONE_STORAGE_MOUNTS_{i}",
-                            "value": cloud_storage_request.mount_folder,
+        if server.repositories:
+            cloud_storage_patches.append(
+                {
+                    "type": "application/json-patch+json",
+                    "patch": [
+                        {
+                            "op": "add",
+                            "path": "/statefulset/spec/template/spec/initContainers/2/env/-",
+                            "value": {
+                                "name": f"GIT_CLONE_STORAGE_MOUNTS_{i}",
+                                "value": cloud_storage_request.mount_folder,
+                            },
                         },
-                    },
-                ],
-            },
-        )
+                    ],
+                },
+            )
     return cloud_storage_patches
