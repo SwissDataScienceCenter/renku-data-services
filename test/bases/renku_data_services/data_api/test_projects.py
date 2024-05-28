@@ -1,13 +1,17 @@
 """Tests for projects blueprint."""
 
 import time
+from base64 import b64decode
 from test.bases.renku_data_services.data_api.utils import merge_headers
 from typing import Any
 
 import pytest
 from ulid import ULID
 
+from components.renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
 from renku_data_services.app_config.config import Config
+from renku_data_services.message_queue.avro_models.io.renku.events.v2.member_role import MemberRole
+from renku_data_services.message_queue.models import deserialize_binary
 from renku_data_services.users.models import UserInfo
 
 
@@ -66,6 +70,22 @@ async def test_project_creation(sanic_client, user_headers, regular_user, app_co
         "http://renkulab.io/repository-2",
     }
     project_id = project["id"]
+
+    events = await app_config.event_repo._get_pending_events()
+    assert len(events) == 6
+    project_created_event = next((e for e in events if e.queue == "project.created"), None)
+    assert project_created_event
+    created_event = deserialize_binary(
+        b64decode(project_created_event.payload["payload"]), avro_schema_v2.ProjectCreated
+    )
+    assert created_event.name == payload["name"]
+    assert created_event.slug == payload["slug"]
+    assert created_event.repositories == payload["repositories"]
+    project_auth_added = next((e for e in events if e.queue == "projectAuth.added"), None)
+    assert project_auth_added
+    auth_event = deserialize_binary(b64decode(project_auth_added.payload["payload"]), avro_schema_v2.ProjectMemberAdded)
+    assert auth_event.userId == "user"
+    assert auth_event.role == MemberRole.OWNER
 
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
 
@@ -263,6 +283,15 @@ async def test_delete_project(create_project, sanic_client, user_headers, app_co
 
     assert response.status_code == 204, response.text
 
+    events = await app_config.event_repo._get_pending_events()
+    assert len(events) == 15
+    project_removed_event = next((e for e in events if e.queue == "project.removed"), None)
+    assert project_removed_event
+    removed_event = deserialize_binary(
+        b64decode(project_removed_event.payload["payload"]), avro_schema_v2.ProjectRemoved
+    )
+    assert removed_event.id == project_id
+
     # Get all projects
     _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
 
@@ -290,6 +319,17 @@ async def test_patch_project(create_project, get_project, sanic_client, user_hea
     _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=headers, json=patch)
 
     assert response.status_code == 200, response.text
+
+    events = await app_config.event_repo._get_pending_events()
+    assert len(events) == 11
+    project_updated_event = next((e for e in events if e.queue == "project.updated"), None)
+    assert project_updated_event
+    updated_event = deserialize_binary(
+        b64decode(project_updated_event.payload["payload"]), avro_schema_v2.ProjectUpdated
+    )
+    assert updated_event.name == patch["name"]
+    assert updated_event.description == patch["description"]
+    assert updated_event.repositories == patch["repositories"]
 
     # Get the project
     project = await get_project(project_id=project_id)
