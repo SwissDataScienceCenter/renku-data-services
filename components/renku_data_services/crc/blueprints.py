@@ -441,7 +441,7 @@ class QuotaBP(CustomBlueprint):
         return "/resource_pools/<resource_pool_id>/quota", ["GET"], _get
 
     def put(self) -> BlueprintFactoryResponse:
-        """Update all fields of a the quota of a specific resource pool."""
+        """Update all fields of a quota of a specific resource pool."""
 
         @authenticate(self.authenticator)
         @only_admins
@@ -534,4 +534,7 @@ class UserResourcePoolsBP(CustomBlueprint):
         rps = await self.repo.update_user_resource_pools(
             keycloak_id=user_id, resource_pool_ids=resource_pool_ids.root, append=post, api_user=api_user
         )
-        return json([apispec.ResourcePoolWithId.model_validate(rp).model_dump(exclude_none=True) for rp in rps])
+        return json(
+            [apispec.ResourcePoolWithId.model_validate(rp).model_dump(exclude_none=True) for rp in rps],
+            status=201 if post else 200,
+        )
