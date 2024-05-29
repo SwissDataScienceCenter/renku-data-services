@@ -1,9 +1,9 @@
+from base64 import b64decode
 from datetime import datetime
 from test.bases.renku_data_services.data_api.utils import merge_headers
 
 import pytest
 
-from components.renku_data_services.message_queue.avro_models.io.renku.events.header import Header
 from renku_data_services.message_queue.avro_models.io.renku.events.v2 import (
     GroupAdded,
     GroupMemberAdded,
@@ -34,23 +34,19 @@ async def test_group_creation_basic(sanic_client, user_headers, app_config):
     assert group["created_by"] == "user"
     datetime.fromisoformat(group["creation_date"])
 
-    events = await app_config.redis.redis_connection.xrange("group.added")
-    assert len(events) == 1
-    event = events[0][1]
-    headers = Header.deserialize(event.get(b"headers"), serialization_type="avro-json")
-    assert headers.source == "renku-data-services"
-    group_event = deserialize_binary(event[b"payload"], GroupAdded)
+    events = await app_config.event_repo._get_pending_events()
+
+    group_events = [e for e in events if e.queue == "group.added"]
+    assert len(group_events) == 1
+    group_event = deserialize_binary(b64decode(group_events[0].payload["payload"]), GroupAdded)
     assert group_event.id == group["id"]
     assert group_event.name == group["name"]
     assert group_event.description == group["description"]
     assert group_event.namespace == group["slug"]
 
-    events = await app_config.redis.redis_connection.xrange("memberGroup.added")
-    assert len(events) == 1
-    event = events[0][1]
-    headers = Header.deserialize(event.get(b"headers"), serialization_type="avro-json")
-    assert headers.source == "renku-data-services"
-    group_event = deserialize_binary(event[b"payload"], GroupMemberAdded)
+    group_events = [e for e in events if e.queue == "memberGroup.added"]
+    assert len(group_events) == 1
+    group_event = deserialize_binary(b64decode(group_events[0].payload["payload"]), GroupMemberAdded)
     assert group_event.userId == "user"
     assert group_event.groupId == group["id"]
     assert group_event.role.value == "OWNER"
@@ -132,12 +128,11 @@ async def test_group_patch_delete(sanic_client, user_headers, app_config):
     assert group["slug"] == new_payload["slug"]
     assert group["description"] == new_payload["description"]
 
-    events = await app_config.redis.redis_connection.xrange("group.updated")
-    assert len(events) == 1
-    event = events[0][1]
-    headers = Header.deserialize(event.get(b"headers"), serialization_type="avro-json")
-    assert headers.source == "renku-data-services"
-    group_event = deserialize_binary(event[b"payload"], GroupUpdated)
+    events = await app_config.event_repo._get_pending_events()
+
+    group_events = [e for e in events if e.queue == "group.updated"]
+    assert len(group_events) == 1
+    group_event = deserialize_binary(b64decode(group_events[0].payload["payload"]), GroupUpdated)
     assert group_event.id == group["id"]
     assert group_event.name == group["name"]
     assert group_event.description == group["description"]
@@ -150,12 +145,11 @@ async def test_group_patch_delete(sanic_client, user_headers, app_config):
     _, response = await sanic_client.delete("/api/data/groups/group-2", headers=user_headers)
     assert response.status_code == 204
 
-    events = await app_config.redis.redis_connection.xrange("group.removed")
-    assert len(events) == 1
-    event = events[0][1]
-    headers = Header.deserialize(event.get(b"headers"), serialization_type="avro-json")
-    assert headers.source == "renku-data-services"
-    group_event = deserialize_binary(event[b"payload"], GroupRemoved)
+    events = await app_config.event_repo._get_pending_events()
+
+    group_events = [e for e in events if e.queue == "group.removed"]
+    assert len(group_events) == 1
+    group_event = deserialize_binary(b64decode(group_events[0].payload["payload"]), GroupRemoved)
     assert group_event.id == group["id"]
 
     _, response = await sanic_client.get("/api/data/groups/group-2", headers=user_headers)
@@ -189,12 +183,11 @@ async def test_group_members(sanic_client, user_headers, app_config):
     assert member_1 is not None
     assert member_1["role"] == "viewer"
 
-    events = await app_config.redis.redis_connection.xrange("memberGroup.added")
-    assert len(events) == 2
-    event = events[1][1]
-    headers = Header.deserialize(event.get(b"headers"), serialization_type="avro-json")
-    assert headers.source == "renku-data-services"
-    group_event = deserialize_binary(event[b"payload"], GroupMemberAdded)
+    events = await app_config.event_repo._get_pending_events()
+
+    group_events = sorted([e for e in events if e.queue == "memberGroup.added"], key=lambda e: e.id)
+    assert len(group_events) == 2
+    group_event = deserialize_binary(b64decode(group_events[1].payload["payload"]), GroupMemberAdded)
     assert group_event.userId == member_1["id"]
     assert group_event.groupId == group["id"]
     assert group_event.role.value == "VIEWER"
@@ -232,12 +225,11 @@ async def test_removing_single_group_owner_not_allowed(sanic_client, user_header
     _, response = await sanic_client.patch("/api/data/groups/group-1/members", headers=user_headers, json=new_members)
     assert response.status_code == 200
 
-    events = await app_config.redis.redis_connection.xrange("memberGroup.updated")
-    assert len(events) == 1
-    event = events[0][1]
-    headers = Header.deserialize(event.get(b"headers"), serialization_type="avro-json")
-    assert headers.source == "renku-data-services"
-    group_event = deserialize_binary(event[b"payload"], GroupMemberUpdated)
+    events = await app_config.event_repo._get_pending_events()
+
+    group_events = [e for e in events if e.queue == "memberGroup.updated"]
+    assert len(group_events) == 1
+    group_event = deserialize_binary(b64decode(group_events[0].payload["payload"]), GroupMemberUpdated)
     assert group_event.userId == "member-1"
     assert group_event.groupId == group["id"]
     assert group_event.role.value == "OWNER"
@@ -246,12 +238,11 @@ async def test_removing_single_group_owner_not_allowed(sanic_client, user_header
     _, response = await sanic_client.delete("/api/data/groups/group-1/members/user", headers=user_headers)
     assert response.status_code == 204
 
-    events = await app_config.redis.redis_connection.xrange("memberGroup.removed")
-    assert len(events) == 1
-    event = events[0][1]
-    headers = Header.deserialize(event.get(b"headers"), serialization_type="avro-json")
-    assert headers.source == "renku-data-services"
-    group_event = deserialize_binary(event[b"payload"], GroupMemberRemoved)
+    events = await app_config.event_repo._get_pending_events()
+
+    group_events = [e for e in events if e.queue == "memberGroup.removed"]
+    assert len(group_events) == 1
+    group_event = deserialize_binary(b64decode(group_events[0].payload["payload"]), GroupMemberRemoved)
     assert group_event.userId == "user"
     assert group_event.groupId == group["id"]
 
@@ -282,7 +273,7 @@ async def test_moving_project_across_groups(sanic_client, user_headers, regular_
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
     assert response.status_code == 200, response.text
     assert response.json["namespace"] == user_namespace
-    headers = merge_headers(user_headers, {"If-Match":response.json["etag"]})
+    headers = merge_headers(user_headers, {"If-Match": response.json["etag"]})
     _, response = await sanic_client.patch(
         f"/api/data/projects/{project_id}", headers=headers, json={"namespace": "group-1"}
     )
