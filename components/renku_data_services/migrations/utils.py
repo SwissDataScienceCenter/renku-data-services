@@ -173,3 +173,10 @@ class UtilityEventLoop:
         """
         future = asyncio.run_coroutine_threadsafe(coro, cls._loop)
         return future.result()
+
+    def __del__(self):
+        self._loop.stop()
+        self._loop.close()
+        self._thread.join()
+        del self._loop
+        del self._thread
