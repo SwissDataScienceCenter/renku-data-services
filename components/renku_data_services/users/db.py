@@ -1,12 +1,12 @@
 """Database adapters and helpers for users."""
 
-import logging
 import secrets
 from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime, timedelta
 from typing import Any
 
+from sanic.log import logger
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -226,29 +226,29 @@ class UsersSync:
         """Remove a user from the database."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
-        logging.info(f"Trying to remove user with ID {user_id}")
+        logger.info(f"Trying to remove user with ID {user_id}")
         stmt = delete(UserORM).where(UserORM.keycloak_id == user_id).returning(UserORM)
         user = await session.scalar(stmt)
         await self.authz._remove_user_namespace(user_id)
         if not user:
-            logging.info(f"User with ID {user_id} was not found.")
+            logger.info(f"User with ID {user_id} was not found.")
             return None
-        logging.info(f"User with ID {user_id} was removed from the database.")
+        logger.info(f"User with ID {user_id} was removed from the database.")
         removed_user = user.dump()
-        logging.info(f"User namespace with ID {user_id} was removed from the authorization database.")
+        logger.info(f"User namespace with ID {user_id} was removed from the authorization database.")
         return removed_user
 
     async def users_sync(self, kc_api: IKeycloakAPI):
         """Sync all users from Keycloak into the users database."""
-        logging.info("Starting a total user database sync.")
+        logger.info("Starting a total user database sync.")
         kc_users = kc_api.get_users()
 
         async def _do_update(raw_kc_user: dict[str, Any]):
             kc_user = UserInfo.from_kc_user_payload(raw_kc_user)
-            logging.info(f"Checking user with Keycloak ID {kc_user.id}")
+            logger.info(f"Checking user with Keycloak ID {kc_user.id}")
             db_user = await self._get_user(kc_user.id)
             if db_user != kc_user:
-                logging.info(f"Inserting or updating user {db_user} -> {kc_user}")
+                logger.info(f"Inserting or updating user {db_user} -> {kc_user}")
                 await self.update_or_insert_user(kc_user.id, asdict(kc_user))
 
         # NOTE: If asyncio.gather is used here you quickly exhaust all DB connections
@@ -263,16 +263,16 @@ class UsersSync:
             count = res_count.scalar() or 0
             if count == 0:
                 await self.users_sync(kc_api)
-            logging.info("Starting periodic event sync.")
+            logger.info("Starting periodic event sync.")
             stmt = select(LastKeycloakEventTimestamp)
             latest_utc_timestamp_orm = (await session.execute(stmt)).scalar_one_or_none()
             previous_sync_latest_utc_timestamp = (
                 latest_utc_timestamp_orm.timestamp_utc if latest_utc_timestamp_orm is not None else None
             )
-            logging.info(f"The previous sync latest event is {previous_sync_latest_utc_timestamp} UTC")
+            logger.info(f"The previous sync latest event is {previous_sync_latest_utc_timestamp} UTC")
             now_utc = datetime.utcnow()
             start_date = now_utc.date() - timedelta(days=1)
-            logging.info(f"Pulling events with a start date of {start_date} UTC")
+            logger.info(f"Pulling events with a start date of {start_date} UTC")
             user_events = kc_api.get_user_events(start_date=start_date)
             update_admin_events = kc_api.get_admin_events(
                 start_date=start_date, event_types=[KeycloakAdminEvent.CREATE, KeycloakAdminEvent.UPDATE]
@@ -287,17 +287,17 @@ class UsersSync:
             parsed_deletions = sorted(parsed_deletions, key=lambda x: x.timestamp_utc)
             if previous_sync_latest_utc_timestamp is not None:
                 # Some events have already been processed - filter out old events we have seen
-                logging.info(f"Filtering events older than {previous_sync_latest_utc_timestamp}")
+                logger.info(f"Filtering events older than {previous_sync_latest_utc_timestamp}")
                 parsed_updates = [u for u in parsed_updates if u.timestamp_utc > previous_sync_latest_utc_timestamp]
                 parsed_deletions = [u for u in parsed_deletions if u.timestamp_utc > previous_sync_latest_utc_timestamp]
             latest_update_timestamp = None
             latest_delete_timestamp = None
             for update in parsed_updates:
-                logging.info(f"Processing update event {update}")
+                logger.info(f"Processing update event {update}")
                 await self.update_or_insert_user(update.user_id, {update.field_name: update.new_value})
                 latest_update_timestamp = update.timestamp_utc
             for deletion in parsed_deletions:
-                logging.info(f"Processing deletion event {deletion}")
+                logger.info(f"Processing deletion event {deletion}")
                 await self._remove_user(deletion.user_id)
                 latest_delete_timestamp = deletion.timestamp_utc
             # Update the latest processed event timestamp
@@ -309,11 +309,11 @@ class UsersSync:
             if current_sync_latest_utc_timestamp is not None:
                 if latest_utc_timestamp_orm is None:
                     session.add(LastKeycloakEventTimestamp(current_sync_latest_utc_timestamp))
-                    logging.info(
+                    logger.info(
                         f"Inserted the latest sync event timestamp in the database: {current_sync_latest_utc_timestamp}"
                     )
                 else:
                     latest_utc_timestamp_orm.timestamp_utc = current_sync_latest_utc_timestamp
-                    logging.info(
+                    logger.info(
                         f"Updated the latest sync event timestamp in the database: {current_sync_latest_utc_timestamp}"
                     )

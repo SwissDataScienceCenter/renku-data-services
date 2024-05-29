@@ -5,6 +5,7 @@ import asyncio
 from os import environ
 
 import sentry_sdk
+import uvloop
 from prometheus_sanic import monitor
 from sanic import Sanic
 from sanic.log import logger
@@ -24,6 +25,30 @@ from renku_data_services.errors.errors import (
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.utils.middleware import validate_null_byte
+
+
+async def _send_messages() -> None:
+    config = Config.from_env()
+    while True:
+        try:
+            await config.event_repo.send_pending_events()
+            await asyncio.sleep(1)
+        except (asyncio.CancelledError, KeyboardInterrupt) as e:
+            logger.warning(f"Exiting: {e}")
+            return
+        except Exception as e:
+            logger.warning(f"Background task failed: {e}")
+            raise
+
+
+def send_pending_events() -> None:
+    """Send pending messages in case sending in a handler failed."""
+    _ = Sanic("send_events")  # we need a dummy app for logging to work.
+
+    logger.info("running events sending loop.")
+
+    asyncio.set_event_loop(uvloop.new_event_loop())
+    asyncio.run(_send_messages())
 
 
 def create_app() -> Sanic:
@@ -87,30 +112,24 @@ def create_app() -> Sanic:
     app.register_middleware(validate_null_byte, "request")
 
     @app.main_process_start
-    async def do_migrations(*_):
+    async def main_process_start(app: Sanic):
         logger.info("running migrations")
         run_migrations_for_app("common")
         config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
         await config.kc_user_repo.initialize(config.kc_api)
         await sync_admins_from_keycloak(config.kc_api, config.authz)
         await config.group_repo.generate_user_namespaces()
-        await config.event_repo.send_pending_events()
 
     @app.before_server_start
     async def setup_rclone_validator(app, _):
         validator = RCloneValidator()
         app.ext.dependency(validator)
 
-    async def send_pending_events(app):
-        """Send pending messages in case sending in a handler failed."""
-        while True:
-            try:
-                await asyncio.sleep(30)
-                await config.event_repo.send_pending_events()
-            except asyncio.CancelledError:
-                return
-            except Exception as e:
-                logger.warning(f"Background task failed: {e}")
+    @app.main_process_ready
+    async def ready(app: Sanic, _):
+        """Application ready event handler."""
+        logger.info("starting events background job.")
+        app.manager.manage("SendEvents", send_pending_events, {}, transient=True)
 
     return app
 
