@@ -10,6 +10,11 @@ define test_apispec_up_to_date
 	exit ${RESULT}
 endef
 
+define test_unique_migrations_head
+	DUMMY_STORES=true poetry run alembic -c components/renku_data_services/migrations/alembic.ini --name=common heads > "/tmp/alembic_heads.txt"
+	if [ $(shell cat "/tmp/alembic_heads.txt" | wc -l) != "1" ]; then exit 1; fi
+endef
+
 components/renku_data_services/crc/apispec.py: components/renku_data_services/crc/api.spec.yaml
 	poetry run datamodel-codegen --input components/renku_data_services/crc/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/crc/apispec.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.crc.apispec_base.BaseAPISpec
 components/renku_data_services/storage/apispec.py: components/renku_data_services/storage/api.spec.yaml
@@ -74,6 +79,8 @@ tests:
 	@rm -f coverage.lcov .coverage
 	poetry run pytest -m "not schemathesis" -n auto
 	poetry run pytest -m "schemathesis" --cov-append
+	@echo "===========================================TEST UNIQUE MIGRATION HEAD==========================================="
+	@$(call test_unique_migrations_head)
 	@echo "===========================================TEST DOWNGRADE/UPGRADE==========================================="
 	DUMMY_STORES=true poetry run coverage run -a -m alembic -c components/renku_data_services/migrations/alembic.ini --name=common upgrade heads
 	DUMMY_STORES=true poetry run coverage run -a -m alembic -c components/renku_data_services/migrations/alembic.ini --name=common downgrade base
