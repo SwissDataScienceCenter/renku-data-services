@@ -58,7 +58,7 @@ class ProjectRepository:
         async with self.session_maker() as session:
             # NOTE: without awaiting the connnection below there are failures about how a connection has not
             # been established in the DB but the query is getting executed.
-            # _ = await session.connection()
+            _ = await session.connection()
             stmt = select(schemas.ProjectORM)
             stmt = stmt.where(schemas.ProjectORM.id.in_(project_ids))
             stmt = stmt.limit(pagination.per_page).offset(pagination.offset)
@@ -123,12 +123,16 @@ class ProjectRepository:
     @Authz.authz_change(AuthzOperation.create, ResourceType.project)
     @dispatch_message(avro_schema_v2.ProjectCreated)
     async def insert_project(
-        self, user: base_models.APIUser, project: project_apispec.ProjectPost, *, session: AsyncSession | None = None
+        self,
+        user: base_models.APIUser,
+        project: models.UnsavedProject,
+        *,
+        session: AsyncSession | None = None,
     ) -> models.Project:
         """Insert a new project entry."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
-        ns = await self.group_repo.get_namespace(user, project.namespace)
+        ns = await self.group_repo.get_namespace_by_slug(user, project.namespace)
         if not ns:
             raise errors.MissingResourceError(
                 message=f"The project cannot be created because the namespace {project.namespace} does not exist"
@@ -148,7 +152,7 @@ class ProjectRepository:
             description=project.description,
             repositories=repositories,
             creation_date=datetime.now(UTC).replace(microsecond=0),
-            keywords=[kw.root for kw in project.keywords or []],
+            keywords=project.keywords,
         )
         project_slug = schemas.ProjectSlug(slug, project_id=project_orm.id, namespace_id=ns.id)
 
@@ -157,11 +161,7 @@ class ProjectRepository:
         await session.flush()
         await session.refresh(project_orm)
 
-        project_dump = project_orm.dump()
-        if project_dump.id is None:
-            raise errors.BaseError(detail="The created project does not have an ID but it should.")
-
-        return project_dump
+        return project_orm.dump()
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.update, ResourceType.project)
@@ -223,7 +223,7 @@ class ProjectRepository:
 
         if "namespace" in payload:
             ns_slug = payload["namespace"]
-            ns = await self.group_repo.get_namespace(user, ns_slug)
+            ns = await self.group_repo.get_namespace_by_slug(user, ns_slug)
             if not ns:
                 raise errors.MissingResourceError(message=f"The namespace with slug {ns_slug} does not exist")
             project.slug.namespace_id = ns.id

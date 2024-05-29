@@ -1,7 +1,6 @@
 """Projects authorization adapter."""
 
 import asyncio
-import logging
 from collections.abc import AsyncIterable, Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -29,6 +28,7 @@ from authzed.api.v1 import (  # type: ignore[attr-defined]
     ZedToken,
 )
 from authzed.api.v1.permission_service_pb2 import LOOKUP_PERMISSIONSHIP_HAS_PERMISSION
+from sanic.log import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services import base_models
@@ -634,7 +634,7 @@ class Authz:
     ) -> _AuthzChange:
         """Update the visibility of the project in the authorization database."""
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
-        project_res = _AuthzConverter.project(project.id)  # type: ignore[arg-type]
+        project_res = _AuthzConverter.project(project.id)
         all_users_sub = SubjectReference(object=_AuthzConverter.all_users())
         anon_users_sub = SubjectReference(object=_AuthzConverter.anonymous_users())
         all_users_are_viewers = Relationship(
@@ -718,7 +718,7 @@ class Authz:
     ) -> _AuthzChange:
         """Update the namespace/group of the project in the authorization database."""
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
-        project_res = _AuthzConverter.project(project.id)  # type: ignore[arg-type]
+        project_res = _AuthzConverter.project(project.id)
         project_namespace_filter = RelationshipFilter(
             resource_type=ResourceType.project.value,
             optional_resource_id=project.id,
@@ -843,7 +843,7 @@ class Authz:
                 for rel_to_remove in existing_rels[1:]:
                     # NOTE: This means that the user has more than 1 role on the project - which should not happen
                     # But if this does occur then we simply delete the extra roles of the user here.
-                    logging.warning(
+                    logger.warning(
                         f"Removing additional unexpected role {rel_to_remove.relationship.relation} "
                         f"of user {member.user_id} on project {resource_id}, "
                         f"kept role {existing_rel.relationship.relation} which will be updated to {rel.relation}."
@@ -1104,7 +1104,7 @@ class Authz:
                 for rel_to_remove in existing_rels[1:]:
                     # NOTE: This means that the user has more than 1 role on the group - which should not happen
                     # But if this does occur then we simply delete the extra roles of the user here.
-                    logging.warning(
+                    logger.warning(
                         f"Removing additional unexpected role {rel_to_remove.relationship.relation} "
                         f"of user {member.user_id} on group {resource_id}, "
                         f"kept role {existing_rel.relationship.relation} which will be updated to {rel.relation}."

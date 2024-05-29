@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
 
 from sanic.log import logger
 from sqlalchemy import delete, select
@@ -26,36 +25,43 @@ class EventRepository:
         self.session_maker = session_maker
         self.message_queue: IMessageQueue = message_queue
 
-    async def _get_pending_events(self, older_than: timedelta = timedelta(0)) -> list[schemas.EventORM]:
+    async def _get_pending_events(self) -> list[schemas.EventORM]:
         """Get all pending events."""
         async with self.session_maker() as session:
-            now = datetime.now(UTC).replace(tzinfo=None)
-            stmt = select(schemas.EventORM).where(schemas.EventORM.timestamp_utc < now - older_than)
+            stmt = select(schemas.EventORM)
             events_orm = await session.scalars(stmt)
             return list(events_orm.all())
 
     async def send_pending_events(self) -> None:
-        """Get all pending events and resend them.
+        """Get all pending events and send them.
 
-        This is to ensure that an event is sent at least once.
+        We lock rows that get sent and keep sending until there are no more events.
         """
-        logger.info("resending missed events.")
+        while True:
+            async with self.session_maker() as session, session.begin():
+                stmt = (
+                    select(schemas.EventORM)
+                    # lock retrieved rows, skip already locked ones, to deal with concurrency
+                    .with_for_update(skip_locked=True)
+                    .limit(100)
+                    .order_by(schemas.EventORM.timestamp_utc)
+                )
+                result = await session.scalars(stmt)
+                events_orm = result.all()
 
-        # we only consider events older than 5 seconds so we don't accidentally interfere with an ongoing operation
-        events_orm = await self._get_pending_events(older_than=timedelta(seconds=5))
+                new_events_count = len(events_orm)
+                if new_events_count == 0:
+                    break
 
-        num_events = len(events_orm)
-        if num_events == 0:
-            logger.info("no missed events to send")
-            return
-        for event in events_orm:
-            try:
-                await self.message_queue.send_message(event.dump())
-                await self.delete_event(event.id)
-            except Exception as e:
-                logger.warning(f"couldn't resend event {event.payload} on queue {event.queue}: {e}")
+                for event in events_orm:
+                    try:
+                        await self.message_queue.send_message(event.dump())
 
-        logger.info(f"resent {num_events} events")
+                        await session.delete(event)  # this has to be done in the same transaction to not get a deadlock
+                    except Exception as e:
+                        logger.warning(f"couldn't send event {event.payload} on queue {event.queue}: {e}")
+
+                logger.info(f"sent {new_events_count} events")
 
     async def store_event(self, session: AsyncSession | Session, event: Event) -> int:
         """Store an event."""

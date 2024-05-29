@@ -6,6 +6,7 @@ from os import environ
 from typing import TYPE_CHECKING, Any
 
 import sentry_sdk
+import uvloop
 from prometheus_sanic import monitor
 from sanic import Sanic
 from sanic.log import logger
@@ -28,6 +29,30 @@ from renku_data_services.utils.middleware import validate_null_byte
 
 if TYPE_CHECKING:
     import sentry_sdk._types
+
+
+async def _send_messages() -> None:
+    config = Config.from_env()
+    while True:
+        try:
+            await config.event_repo.send_pending_events()
+            await asyncio.sleep(1)
+        except (asyncio.CancelledError, KeyboardInterrupt) as e:
+            logger.warning(f"Exiting: {e}")
+            return
+        except Exception as e:
+            logger.warning(f"Background task failed: {e}")
+            raise
+
+
+def send_pending_events() -> None:
+    """Send pending messages in case sending in a handler failed."""
+    _ = Sanic("send_events")  # we need a dummy app for logging to work.
+
+    logger.info("running events sending loop.")
+
+    asyncio.set_event_loop(uvloop.new_event_loop())
+    asyncio.run(_send_messages())
 
 
 def create_app() -> Sanic:
@@ -72,6 +97,12 @@ def create_app() -> Sanic:
         app.signal("http.lifecycle.request")(_hub_enter)
         app.signal("http.lifecycle.response")(_hub_exit)
         app.signal("http.routing.after")(_set_transaction)
+    if config.trusted_proxies.proxies_count is not None and config.trusted_proxies.proxies_count > 0:
+        app.config.PROXIES_COUNT = config.trusted_proxies.proxies_count
+    logger.info(f"PROXIES_COUNT = {app.config.PROXIES_COUNT}")
+    if config.trusted_proxies.real_ip_header:
+        app.config.REAL_IP_HEADER = config.trusted_proxies.real_ip_header
+    logger.info(f"REAL_IP_HEADER = {app.config.REAL_IP_HEADER}")
 
     app = register_all_handlers(app, config)
 
@@ -94,23 +125,17 @@ def create_app() -> Sanic:
         await config.kc_user_repo.initialize(config.kc_api)
         await sync_admins_from_keycloak(config.kc_api, config.authz)
         await config.group_repo.generate_user_namespaces()
-        await config.event_repo.send_pending_events()
 
     @app.before_server_start
     async def setup_rclone_validator(app: Sanic) -> None:
         validator = RCloneValidator()
         app.ext.dependency(validator)
 
-    async def send_pending_events(app: Sanic) -> None:
-        """Send pending messages in case sending in a handler failed."""
-        while True:
-            try:
-                await asyncio.sleep(30)
-                await config.event_repo.send_pending_events()
-            except asyncio.CancelledError:
-                return
-            except Exception as e:
-                logger.warning(f"Background task failed: {e}")
+    @app.main_process_ready
+    async def ready(app: Sanic) -> None:
+        """Application ready event handler."""
+        logger.info("starting events background job.")
+        app.manager.manage("SendEvents", send_pending_events, {}, transient=True)
 
     return app
 

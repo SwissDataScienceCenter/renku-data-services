@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import logging
 import random
 import string
 from collections.abc import Callable
 from contextlib import nullcontext
 from datetime import UTC, datetime
 
+from sanic.log import logger
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -56,15 +56,15 @@ class GroupRepository:
         await session.execute(text("LOCK TABLE common.namespaces IN EXCLUSIVE MODE"))
         at_least_one_namespace = (await session.execute(select(schemas.NamespaceORM).limit(1))).one_or_none()
         if at_least_one_namespace:
-            logging.info("Found at least one user namespace, skipping creation")
+            logger.info("Found at least one user namespace, skipping creation")
             return output
-        logging.info("Found zero user namespaces, will try to create them from users table")
+        logger.info("Found zero user namespaces, will try to create them from users table")
         res = await session.scalars(select(user_schemas.UserORM))
         for user in res:
             ns = await self._insert_user_namespace(session, user, retry_enumerate=10, retry_random=True)
-            logging.info(f"Creating user namespace {ns}")
+            logger.info(f"Creating user namespace {ns}")
             output.append(user_models.UserWithNamespace(user.dump(), ns))
-        logging.info(f"Created {len(output)} user namespaces")
+        logger.info(f"Created {len(output)} user namespaces")
         return output
 
     async def get_groups(
@@ -303,7 +303,7 @@ class GroupRepository:
                 output.append(ns_orm.dump())
             return output, group_count
 
-    async def get_namespace(self, user: base_models.APIUser, slug: str) -> models.Namespace | None:
+    async def get_namespace_by_slug(self, user: base_models.APIUser, slug: str) -> models.Namespace | None:
         """Get the namespace for a slug."""
         async with self.session_maker() as session, session.begin():
             ns = await session.scalar(select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == slug.lower()))

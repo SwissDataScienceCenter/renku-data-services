@@ -1,13 +1,14 @@
 """Base models for users."""
 
 import json
-import logging
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from typing import Any, NamedTuple
+
+from sanic.log import logger
 
 from renku_data_services.namespace.models import Namespace
 
@@ -46,14 +47,14 @@ class UserInfoUpdate:
             user_id = event.get("userId")
             timestamp_epoch = event.get("time")
             if not timestamp_epoch:
-                logging.warning("Expected response from keycloak events to have a time field.")
+                logger.warning("Expected response from keycloak events to have a time field.")
                 continue
             timestamp_utc = datetime.utcfromtimestamp(timestamp_epoch / 1000)
             if not details:
-                logging.warning("Expected response from keycloak events to have a details field.")
+                logger.warning("Expected response from keycloak events to have a details field.")
                 continue
             if not user_id:
-                logging.warning("Expected response from keycloak events to have a userId field.")
+                logger.warning("Expected response from keycloak events to have a userId field.")
                 continue
             match event.get("type"):
                 case KeycloakEvent.REGISTER.value:
@@ -125,7 +126,7 @@ class UserInfoUpdate:
                             )
                         )
                 case _:
-                    logging.warning(f"Skipping unknown event when parsing Keycloak user events: {event.get('type')}")
+                    logger.warning(f"Skipping unknown event when parsing Keycloak user events: {event.get('type')}")
         return output
 
     @classmethod
@@ -135,7 +136,7 @@ class UserInfoUpdate:
         for event in val:
             timestamp_epoch = event.get("time")
             if not timestamp_epoch:
-                logging.warning("Expected response from keycloak events to have a time field.")
+                logger.warning("Expected response from keycloak events to have a time field.")
                 continue
             timestamp_utc = datetime.utcfromtimestamp(timestamp_epoch / 1000)
             resource = event.get("resourceType")
@@ -143,19 +144,19 @@ class UserInfoUpdate:
                 continue
             operation = event.get("operationType")
             if not operation:
-                logging.warning(f"Skipping unknown operation {operation}")
+                logger.warning(f"Skipping unknown operation {operation}")
                 continue
             resource_path = event.get("resourcePath")
             if not resource_path:
-                logging.warning("Cannot find resource path in events response")
+                logger.warning("Cannot find resource path in events response")
                 continue
             user_id_match = re.match(r"^users/(.+)", resource_path)
             if not user_id_match:
-                logging.warning("No match for user ID in resource path")
+                logger.warning("No match for user ID in resource path")
                 continue
             user_id = user_id_match.group(1)
             if not isinstance(user_id, str) or user_id is None or len(user_id) == 0:
-                logging.warning("Could not extract user ID from match in resource path")
+                logger.warning("Could not extract user ID from match in resource path")
                 continue
             match operation:
                 case KeycloakAdminEvent.CREATE.value | KeycloakAdminEvent.UPDATE.value:
@@ -200,7 +201,7 @@ class UserInfoUpdate:
                         )
                     )
                 case _:
-                    logging.warning(f"Skipping unknown admin event operation when parsing Keycloak events: {operation}")
+                    logger.warning(f"Skipping unknown admin event operation when parsing Keycloak events: {operation}")
         return output
 
 
