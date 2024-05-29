@@ -8,7 +8,7 @@ Create Date: 2024-05-09 18:14:51.256194
 
 import logging
 
-from authzed.api.v1 import WriteSchemaRequest  # type: ignore[attr-defined]
+from authzed.api.v1 import ReadSchemaRequest, WriteSchemaRequest  # type: ignore[attr-defined]
 
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.authz.schemas import v2
@@ -23,6 +23,12 @@ depends_on = None
 def upgrade() -> None:
     config = AuthzConfig.from_env()
     client = config.authz_client()
+    existing_schema = client.ReadSchema(ReadSchemaRequest())
+
+    if "definition group" in existing_schema.schema_text:
+        logging.info(f"Skipping {revision}, as Authz is likely already populated.")
+        return
+
     res = client.WriteSchema(WriteSchemaRequest(schema=v2))
     logging.info(
         f"Finished adding groups and namespaces to Authz schema migration, revision {revision}, response: {res}"

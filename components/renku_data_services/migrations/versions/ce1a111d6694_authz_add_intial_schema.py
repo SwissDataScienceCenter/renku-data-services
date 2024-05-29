@@ -8,7 +8,7 @@ Create Date: 2024-04-11 09:05:15.645542
 
 import logging
 
-from authzed.api.v1 import WriteSchemaRequest  # type: ignore[attr-defined]
+from authzed.api.v1 import ReadSchemaRequest, WriteSchemaRequest  # type: ignore[attr-defined]
 
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.authz.schemas import v1
@@ -23,6 +23,12 @@ depends_on = None
 def upgrade() -> None:
     config = AuthzConfig.from_env()
     client = config.authz_client()
+    existing_schema = client.ReadSchema(ReadSchemaRequest())
+
+    if "definition user" in existing_schema.schema_text:
+        logging.info(f"Skipping {revision}, as Authz is likely already populated.")
+        return
+
     res = client.WriteSchema(WriteSchemaRequest(schema=v1))
     logging.info(f"Finished initial Authz schema migration, revision {revision}, response: {res}")
 
