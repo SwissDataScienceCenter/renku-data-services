@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from urllib.parse import urlparse, urlunparse
 
 from sanic import HTTPResponse, Request, json, redirect
+from sanic.log import logger
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
@@ -117,6 +118,8 @@ class OAuth2ClientsBP(CustomBlueprint):
         # TODO: configure the server to trust the reverse proxy so that the request scheme is always "https".
         # TODO: see also https://github.com/SwissDataScienceCenter/renku-data-services/pull/225
         https_callback_url = urlunparse(urlparse(callback_url)._replace(scheme="https"))
+        if https_callback_url != callback_url:
+            logger.warning("Forcing the callback URL to use https. Trusted proxies configuration may be incorrect.")
         return https_callback_url
 
 
