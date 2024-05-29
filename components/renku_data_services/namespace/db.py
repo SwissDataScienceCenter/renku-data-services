@@ -304,7 +304,7 @@ class GroupRepository:
                 output.append(ns_orm.dump())
             return output, group_count
 
-    async def get_namespace(self, user: base_models.APIUser, slug: str) -> models.Namespace | None:
+    async def get_namespace_by_slug(self, user: base_models.APIUser, slug: str) -> models.Namespace | None:
         """Get the namespace for a slug."""
         async with self.session_maker() as session, session.begin():
             ns = await session.scalar(select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == slug.lower()))
