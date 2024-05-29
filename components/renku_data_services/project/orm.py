@@ -65,7 +65,7 @@ class ProjectORM(BaseORM):
             updated_at=self.updated_at,
             repositories=[models.Repository(r.url) for r in self.repositories],
             description=self.description,
-            keywords=self.keywords
+            keywords=self.keywords,
         )
 
 
