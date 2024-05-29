@@ -10,7 +10,7 @@ from asyncio import gather
 from collections.abc import Awaitable, Callable, Collection, Sequence
 from dataclasses import dataclass, field
 from functools import wraps
-from typing import Any, Optional, ParamSpec, TypeVar, cast
+from typing import Any, Concatenate, Optional, ParamSpec, TypeVar, cast
 
 from sqlalchemy import NullPool, create_engine, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -116,7 +116,7 @@ _P = ParamSpec("_P")
 _T = TypeVar("_T")
 
 
-def _only_admins(f: Callable[_P, Awaitable[_T]]) -> Callable[_P, Awaitable[_T]]:
+def _only_admins(f: Callable[Concatenate[Any, _P], Awaitable[_T]]) -> Callable[Concatenate[Any, _P], Awaitable[_T]]:
     """Decorator that errors out if the user is not an admin.
 
     It expects the APIUser model to be a named parameter in the decorated function or
@@ -124,17 +124,19 @@ def _only_admins(f: Callable[_P, Awaitable[_T]]) -> Callable[_P, Awaitable[_T]]:
     """
 
     @wraps(f)
-    async def decorated_function(*args: _P.args, **kwargs: _P.kwargs) -> _T:
+    async def decorated_function(self: Any, *args: _P.args, **kwargs: _P.kwargs) -> _T:
         api_user = None
         if "api_user" in kwargs:
             api_user = kwargs["api_user"]
         elif len(args) >= 1:
             api_user = args[0]
-        if api_user is None or not isinstance(api_user, base_models.APIUser) or not api_user.is_admin:
+        if api_user is not None and not isinstance(api_user, base_models.APIUser):
+            raise errors.ProgrammingError(message="Expected user parameter is not of type APIUser.")
+        if api_user is None or not api_user.is_admin:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
         # the user is authenticated and is an admin
-        response = await f(*args, **kwargs)
+        response = await f(self, *args, **kwargs)
         return response
 
     return decorated_function

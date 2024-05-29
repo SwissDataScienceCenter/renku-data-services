@@ -1,6 +1,6 @@
 """Models for cloud storage."""
 
-from collections.abc import MutableMapping
+from collections.abc import Generator, MutableMapping
 from typing import Any
 from urllib.parse import ParseResult, urlparse
 
@@ -41,6 +41,13 @@ class RCloneConfig(BaseModel, MutableMapping):
     def __delitem__(self, key: str) -> None:
         del self.config[key]
         self._validator.validate(self.config)
+
+    def __iter__(self) -> Generator[str, None, None]:  # type: ignore[override]
+        """Iterate method.
+
+        Needed for pydantic to properly serialize the object.
+        """
+        yield from self.config.keys()
 
 
 class CloudStorage(BaseModel):
