@@ -1,6 +1,7 @@
 import base64
 
 import pytest
+from alembic.script import ScriptDirectory
 from authzed.api.v1 import Consistency, ReadRelationshipsRequest, RelationshipFilter
 from sanic_testing.testing import SanicASGITestClient
 
@@ -9,7 +10,18 @@ from renku_data_services.authz.authz import ResourceType
 from renku_data_services.authz.models import Role
 from renku_data_services.message_queue.avro_models.io.renku.events import v2
 from renku_data_services.message_queue.models import deserialize_binary
-from renku_data_services.migrations.core import run_migrations_for_app
+from renku_data_services.migrations.core import get_alembic_config, run_migrations_for_app
+
+
+@pytest.mark.asyncio
+async def test_unique_migration_head():
+    cfg = get_alembic_config(name="common")
+    script = ScriptDirectory.from_config(cfg)
+
+    heads = script.get_revisions(script.get_heads())
+    heads = [h.revision for h in heads]
+
+    assert len(heads) == 1
 
 
 @pytest.mark.asyncio
