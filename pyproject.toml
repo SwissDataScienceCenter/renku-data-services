@@ -207,6 +207,7 @@ module = [
   "authzed.*",
   "grpcutil.*",
   "authlib.*",
+  "grpc.*",
 ]
 ignore_missing_imports = true
 

@@ -9,6 +9,7 @@ Create Date: 2024-05-09 18:14:51.256194
 import logging
 
 from authzed.api.v1 import ReadSchemaRequest, WriteSchemaRequest  # type: ignore[attr-defined]
+from grpc import RpcError
 
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.authz.schemas import v2
@@ -25,9 +26,13 @@ def upgrade() -> None:
     client = config.authz_client()
     existing_schema = client.ReadSchema(ReadSchemaRequest())
 
-    if "definition group" in existing_schema.schema_text:
-        logging.info(f"Skipping {revision}, as Authz is likely already populated.")
-        return
+    try:
+        existing_schema = client.ReadSchema(ReadSchemaRequest())
+        if "definition group" in existing_schema.schema_text:
+            logging.info(f"Skipping {revision}, as Authz is likely already populated.")
+            return
+    except RpcError:
+        pass
 
     res = client.WriteSchema(WriteSchemaRequest(schema=v2))
     logging.info(
