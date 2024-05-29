@@ -250,7 +250,6 @@ components:
         - display_name
         - scope
         - url
-        - use_pkce
     ProviderPatch:
       type: object
       additionalProperties: false
@@ -342,6 +341,7 @@ components:
         Whether or not to use PKCE during authorization flows.
       type: boolean
       example: false
+      default: false
     ConnectionStatus:
       type: string
       enum:

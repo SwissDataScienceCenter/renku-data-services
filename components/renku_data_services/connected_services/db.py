@@ -78,7 +78,7 @@ class ConnectedServicesRepository:
             display_name=new_client.display_name,
             scope=new_client.scope,
             url=new_client.url,
-            use_pkce=new_client.use_pkce,
+            use_pkce=new_client.use_pkce or False,
             created_by_id=user.id,
         )
 
