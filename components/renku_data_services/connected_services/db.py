@@ -156,8 +156,6 @@ class ConnectedServicesRepository:
             if client is None:
                 raise errors.MissingResourceError(message=f"OAuth2 Client with id '{provider_id}' does not exist.")
 
-            extra_data = dict(next_url=next_url) if next_url else dict()
-
             adapter = get_provider_adapter(client)
             client_secret = (
                 decrypt_string(self.encryption_key, client.created_by_id, client.client_secret)
@@ -165,8 +163,6 @@ class ConnectedServicesRepository:
                 else None
             )
             code_verifier = generate_code_verifier() if client.use_pkce else None
-            if code_verifier:
-                extra_data["code_verifier"] = code_verifier
             code_challenge_method = "S256" if client.use_pkce else None
             async with self.async_oauth2_client_class(
                 client_id=client.client_id,
@@ -193,13 +189,15 @@ class ConnectedServicesRepository:
                         token=None,
                         state=state,
                         status=schemas.ConnectionStatus.pending,
-                        extra_data=extra_data,
+                        code_verifier=code_verifier,
+                        next_url=next_url,
                     )
                     session.add(connection)
                 else:
                     connection.state = state
                     connection.status = schemas.ConnectionStatus.pending
-                    connection.extra_data = extra_data
+                    connection.code_verifier = code_verifier
+                    connection.next_url = next_url
 
                 await session.flush()
                 await session.refresh(connection)
@@ -232,8 +230,7 @@ class ConnectedServicesRepository:
                 if client.client_secret
                 else None
             )
-            extra_data = connection.extra_data or dict()
-            code_verifier = extra_data.get("code_verifier")
+            code_verifier = connection.code_verifier
             code_challenge_method = "S256" if code_verifier else None
             async with self.async_oauth2_client_class(
                 client_id=client.client_id,
@@ -249,12 +246,14 @@ class ConnectedServicesRepository:
 
                 logger.info(f"Token for client {client.id} has keys: {", ".join(token.keys())}")
 
+                next_url = connection.next_url
+
                 connection.token = self._encrypt_token_set(token=token, user_id=connection.user_id)
                 connection.state = None
                 connection.status = schemas.ConnectionStatus.connected
+                connection.next_url = None
 
-                extra_data = connection.extra_data or dict()
-                return extra_data.get("next_url")
+                return next_url
 
     async def get_oauth2_connections(
         self,
@@ -357,8 +356,7 @@ class ConnectedServicesRepository:
             if client.client_secret
             else None
         )
-        extra_data = connection.extra_data or dict()
-        code_verifier = extra_data.get("code_verifier")
+        code_verifier = connection.code_verifier
         code_challenge_method = "S256" if code_verifier else None
         yield self.async_oauth2_client_class(
             client_id=client.client_id,

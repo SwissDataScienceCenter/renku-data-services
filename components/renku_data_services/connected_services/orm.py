@@ -79,7 +79,8 @@ class OAuth2ConnectionORM(BaseORM):
     token: Mapped[dict[str, Any] | None] = mapped_column("token", JSONVariant)
     state: Mapped[str | None] = mapped_column("state", String(), index=True, unique=True)
     status: Mapped[ConnectionStatus]
-    extra_data: Mapped[dict[str, Any] | None] = mapped_column("extra_data", JSONVariant)
+    code_verifier: Mapped[str | None] = mapped_column("code_verifier", String())
+    next_url: Mapped[str | None] = mapped_column("next_url", String())
     creation_date: Mapped[datetime] = mapped_column(
         "creation_date", DateTime(timezone=True), default=None, server_default=func.now(), nullable=False
     )
