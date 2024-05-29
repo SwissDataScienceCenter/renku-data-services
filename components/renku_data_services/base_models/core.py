@@ -4,7 +4,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import ClassVar, Optional, Protocol
+from typing import ClassVar, Literal, Optional, Protocol
 
 from sanic import Request
 
@@ -37,6 +37,13 @@ class APIUser:
     def is_authenticated(self) -> bool:
         """Indicates whether the user has successfully logged in."""
         return self.id is not None
+
+
+@dataclass
+class InternalServiceAdmin:
+    """Used to gain complete admin access by internal code components when performing tasks not started by users."""
+
+    id: Literal["migrations"]
 
 
 class GitlabAccessLevel(Enum):
