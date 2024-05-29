@@ -24,4 +24,14 @@ class AuthorizeParams(BaseAPISpec):
         extra = "ignore"
 
     next_url: str = Field(default="")
+
+
+class CallbackParams(BaseAPISpec):
+    """The schema for the query parameters used in the authorize callback request."""
+
+    class Config:
+        """Configuration."""
+
+        extra = "ignore"
+
     state: str = Field(default="")
