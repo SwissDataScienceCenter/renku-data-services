@@ -695,7 +695,7 @@ class UserRepository(_Base):
                         message=f"User with keycloak id {keycloak_id} cannot access the default resource pool"
                     )
             if append:
-                user_rp_ids = [rp.id for rp in user.resource_pools]
+                user_rp_ids = {rp.id for rp in user.resource_pools}
                 rps_to_add = [rp for rp in rps_to_add if rp.id not in user_rp_ids]
                 user.resource_pools.extend(rps_to_add)
             else:
@@ -762,7 +762,7 @@ class UserRepository(_Base):
                 schemas.RPUserORM(keycloak_id=user_id) for user_id in user_ids if user_id not in user_ids_to_add_exist
             ]
             if append:
-                rp_user_ids = [rp.id for rp in rp.users]
+                rp_user_ids = {rp.id for rp in rp.users}
                 users_to_add = [u for u in list(users_to_add_exist) + users_to_add_missing if u.id not in rp_user_ids]
                 rp.users.extend(users_to_add)
             else:
