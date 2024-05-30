@@ -23,6 +23,11 @@ class DummyAsyncOAuth2Client(AsyncOAuth2Client):  # type: ignore[misc]
         if parsed.path == "/api/v4/user":
             return self._get_account_response()
 
+        print(f"URL = {url}")
+
+        if parsed.path == "/api/v4/projects/username%2Fmy_repo":
+            return self._get_repository_response()
+
         return Response(500, json=dict())
 
     @staticmethod
@@ -32,3 +37,16 @@ class DummyAsyncOAuth2Client(AsyncOAuth2Client):  # type: ignore[misc]
             web_url="https://example.org/USERNAME",
         )
         return Response(200, json=user)
+
+    @staticmethod
+    def _get_repository_response() -> Response:
+        repository = dict(
+            http_url_to_repo="https://example.org/username/my_repo.git",
+            web_url="https://example.org/username/my_repo",
+            permissions=dict(
+                project_access=dict(access_level=20),
+                group_access=None,
+            ),
+            visibility="private",
+        )
+        return Response(200, json=repository)
