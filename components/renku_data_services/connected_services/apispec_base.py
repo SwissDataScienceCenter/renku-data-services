@@ -1,6 +1,6 @@
 """Base models for API specifications."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 
 
 class BaseAPISpec(BaseModel):
@@ -35,3 +35,14 @@ class CallbackParams(BaseAPISpec):
         extra = "ignore"
 
     state: str = Field(default="")
+
+
+class RepositoryParams(BaseAPISpec):
+    """The schema for the path parameters used in the repository requests."""
+
+    class Config:
+        """Configuration."""
+
+        extra = "ignore"
+
+    repository_url: HttpUrl = Field(...)

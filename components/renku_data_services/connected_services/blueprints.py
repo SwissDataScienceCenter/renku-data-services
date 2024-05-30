@@ -14,7 +14,7 @@ from renku_data_services.base_api.auth import authenticate, only_admins, only_au
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.etag import extract_if_none_match
 from renku_data_services.connected_services import apispec
-from renku_data_services.connected_services.apispec_base import AuthorizeParams, CallbackParams
+from renku_data_services.connected_services.apispec_base import AuthorizeParams, CallbackParams, RepositoryParams
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.connected_services.utils import probe_repository
 
@@ -198,6 +198,7 @@ class OAuth2ConnectionsBP(CustomBlueprint):
             request: Request, user: base_models.APIUser, repository_url: str, etag: str | None
         ) -> JSONResponse | HTTPResponse:
             repository_url = unquote(repository_url)
+            RepositoryParams.model_validate(dict(repository_url=repository_url))
 
             async def get_internal_gitlab_user() -> base_models.APIUser:
                 return await _get_internal_gitlab_user(request)
@@ -224,6 +225,7 @@ class OAuth2ConnectionsBP(CustomBlueprint):
 
         async def _get_one_repository_probe(_: Request, repository_url: str) -> HTTPResponse:
             repository_url = unquote(repository_url)
+            RepositoryParams.model_validate(dict(repository_url=repository_url))
 
             result = await probe_repository(repository_url)
 
