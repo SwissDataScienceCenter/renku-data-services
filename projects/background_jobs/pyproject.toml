@@ -7,6 +7,7 @@ license = ""
 
 packages = [
   { include = "renku_data_services/background_jobs", from = "../../bases" },
+  { include = "renku_data_services/data_api", from = "../../bases" },
   { include = "renku_data_services/users", from = "../../components" },
   { include = "renku_data_services/errors", from = "../../components" },
   { include = "renku_data_services/base_api", from = "../../components" },
@@ -28,7 +29,6 @@ packages = [
   { include = "renku_data_services/app_config", from = "../../components" },
   { include = "renku_data_services/git", from = "../../components" },
   { include = "renku_data_services/connected_services", from = "../../components" },
-  { include = "renku_data_services/data_api", from = "../../components" },
   { include = "renku_data_services/migrations", from = "../../components" },
   { include = "renku_data_services/session", from = "../../components" },
 ]

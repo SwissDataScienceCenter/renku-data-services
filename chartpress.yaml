@@ -15,7 +15,7 @@ charts:
         contextPath: .
         dockerfilePath: projects/renku_data_service/Dockerfile
         valuesPath: dataService.image
-      background-jobs:
+      data-service-background-jobs:
         contextPath: .
         dockerfilePath: projects/background_jobs/Dockerfile
         valuesPath: dataService.backgroundJobs.image
