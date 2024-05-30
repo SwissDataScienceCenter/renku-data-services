@@ -52,7 +52,7 @@ class RPUserORM(BaseORM):
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
 
     @classmethod
-    def load(cls, user: base_models.User):
+    def load(cls, user: base_models.User) -> "RPUserORM":
         """Create an ORM object from a user model."""
         return cls(keycloak_id=user.keycloak_id, no_default_access=user.no_default_access)
 
@@ -91,7 +91,7 @@ class ResourceClassORM(BaseORM):
     )
 
     @classmethod
-    def load(cls, resource_class: models.ResourceClass):
+    def load(cls, resource_class: models.ResourceClass) -> "ResourceClassORM":
         """Create a ORM object from the resource class model."""
         return cls(
             name=resource_class.name,
@@ -152,7 +152,7 @@ class ResourcePoolORM(BaseORM):
     id: Mapped[int] = mapped_column("id", Integer, primary_key=True, default=None, init=False)
 
     @classmethod
-    def load(cls, resource_pool: models.ResourcePool):
+    def load(cls, resource_pool: models.ResourcePool) -> "ResourcePoolORM":
         """Create an ORM object from the resource pool model."""
         quota = None
         if isinstance(resource_pool.quota, models.Quota):
@@ -224,7 +224,7 @@ class NodeAffintyORM(BaseORM):
     id: Mapped[int] = mapped_column("id", Integer, primary_key=True, default=None, init=False)
 
     @classmethod
-    def load(cls, affinity: models.NodeAffinity):
+    def load(cls, affinity: models.NodeAffinity) -> "NodeAffintyORM":
         """Create an ORM object from the node affinity model."""
         return cls(
             key=affinity.key,

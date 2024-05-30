@@ -21,7 +21,7 @@ class RedisConfig:
     _connection: redis.Redis | None = None
 
     @classmethod
-    def from_env(cls, prefix: str = ""):
+    def from_env(cls, prefix: str = "") -> "RedisConfig":
         """Create a config from environment variables."""
         is_sentinel = os.environ.get(f"{prefix}REDIS_IS_SENTINEL", "false")
         host = os.environ.get(f"{prefix}REDIS_HOST", "localhost")
@@ -40,7 +40,7 @@ class RedisConfig:
         )
 
     @classmethod
-    def fake(cls):
+    def fake(cls) -> "RedisConfig":
         """Create a config using fake redis."""
         import fakeredis
 

@@ -23,7 +23,7 @@ class DBConfig:
     _async_engine: ClassVar[AsyncEngine | None] = field(default=None, repr=False, init=False)
 
     @classmethod
-    def from_env(cls, prefix: str = ""):
+    def from_env(cls, prefix: str = "") -> "DBConfig":
         """Create a database configuration from environment variables."""
 
         pg_host = os.environ.get(f"{prefix}DB_HOST")
@@ -57,7 +57,7 @@ class DBConfig:
         return async_sessionmaker(DBConfig._async_engine, expire_on_commit=False)
 
     @staticmethod
-    def dispose_connection():
+    def dispose_connection() -> None:
         """Dispose of the main database connection pool."""
 
         if DBConfig._async_engine:

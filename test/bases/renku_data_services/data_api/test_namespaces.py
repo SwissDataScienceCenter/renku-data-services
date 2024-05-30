@@ -2,7 +2,7 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_list_namespaces(sanic_client, user_headers):
+async def test_list_namespaces(sanic_client, user_headers) -> None:
     payload = {
         "name": "Group1",
         "slug": "group-1",
@@ -21,7 +21,7 @@ async def test_list_namespaces(sanic_client, user_headers):
 
 
 @pytest.mark.asyncio
-async def test_get_namespace_by_slug(sanic_client, user_headers):
+async def test_get_namespace_by_slug(sanic_client, user_headers) -> None:
     payload = {
         "name": "Group1",
         "slug": "group-1",

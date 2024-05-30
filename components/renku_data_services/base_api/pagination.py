@@ -3,9 +3,10 @@
 from collections.abc import Awaitable, Callable, Sequence
 from functools import wraps
 from math import ceil
-from typing import Any, Concatenate, NamedTuple, cast
+from typing import Any, Concatenate, NamedTuple, ParamSpec, cast
 
 from sanic import Request, json
+from sanic.response import JSONResponse
 
 from renku_data_services import errors
 
@@ -16,7 +17,7 @@ class PaginationRequest(NamedTuple):
     page: int
     per_page: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         # NOTE: Postgres will fail if a value higher than what can fit in signed int64 is present in the query
         if self.page > 2**63 - 1:
             raise errors.ValidationError(message="Pagination parameter 'page' is too large")
@@ -52,14 +53,19 @@ class PaginationResponse(NamedTuple):
         }
 
 
-def paginate(f: Callable[Concatenate[Request, ...], Awaitable[tuple[Sequence[Any], int]]]):
+_P = ParamSpec("_P")
+
+
+def paginate(
+    f: Callable[Concatenate[Request, _P], Awaitable[tuple[Sequence[Any], int]]],
+) -> Callable[Concatenate[Request, _P], Awaitable[JSONResponse]]:
     """Serializes the response to JSON and adds the required pagination headers to the response.
 
     The handler should return first the list of items and then the total count from the DB.
     """
 
     @wraps(f)
-    async def decorated_function(request: Request, *args, **kwargs):
+    async def decorated_function(request: Request, *args: _P.args, **kwargs: _P.kwargs) -> JSONResponse:
         default_page_number = 1
         default_number_of_elements_per_page = 20
         query_args: dict[str, str] = request.get_args() or {}
@@ -80,8 +86,9 @@ def paginate(f: Callable[Concatenate[Request, ...], Awaitable[tuple[Sequence[Any
             raise errors.ValidationError(message="Parameter 'per_page' must be between 1 and 100")
 
         pagination_req = PaginationRequest(page, per_page)
-        items, db_count = await f(request, *args, **kwargs, pagination=pagination_req)
-        total_pages = ceil(db_count/per_page)
+        kwargs["pagination"] = pagination_req
+        items, db_count = await f(request, *args, **kwargs)
+        total_pages = ceil(db_count / per_page)
 
         pagination = PaginationResponse(page, per_page, db_count, total_pages)
         return json(items, headers=pagination.as_header())

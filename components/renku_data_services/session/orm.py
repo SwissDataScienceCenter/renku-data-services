@@ -47,7 +47,7 @@ class EnvironmentORM(BaseORM):
     """Default URL path to open in a session."""
 
     @classmethod
-    def load(cls, environment: models.Environment):
+    def load(cls, environment: models.Environment) -> "EnvironmentORM":
         """Create EnvironmentORM from the session environment model."""
         return cls(
             name=environment.name,
@@ -114,7 +114,7 @@ class SessionLauncherORM(BaseORM):
     """Id of the session environment."""
 
     @classmethod
-    def load(cls, launcher: models.SessionLauncher):
+    def load(cls, launcher: models.SessionLauncher) -> "SessionLauncherORM":
         """Create SessionLauncherORM from the session launcher model."""
         return cls(
             name=launcher.name,

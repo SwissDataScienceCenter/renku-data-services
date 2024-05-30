@@ -33,9 +33,7 @@ class Session(BaseAPISpec):
 
 class Error(BaseAPISpec):
     code: int = Field(..., example=1404, gt=0)
-    detail: Optional[str] = Field(
-        None, example="A more detailed optional message showing what the problem was"
-    )
+    detail: Optional[str] = Field(None, example="A more detailed optional message showing what the problem was")
     message: str = Field(..., example="Something went wrong - please try again later")
 
 
@@ -63,9 +61,7 @@ class Environment(BaseAPISpec):
         description="The date and time the session was created (time is always in UTC)",
         example="2023-11-01T17:32:28Z",
     )
-    description: Optional[str] = Field(
-        None, description="A description for session", max_length=500
-    )
+    description: Optional[str] = Field(None, description="A description for session", max_length=500)
     container_image: str = Field(
         ...,
         description="A container image",
@@ -88,9 +84,7 @@ class EnvironmentPost(BaseAPISpec):
         max_length=99,
         min_length=1,
     )
-    description: Optional[str] = Field(
-        None, description="A description for session", max_length=500
-    )
+    description: Optional[str] = Field(None, description="A description for session", max_length=500)
     container_image: str = Field(
         ...,
         description="A container image",
@@ -116,9 +110,7 @@ class EnvironmentPatch(BaseAPISpec):
         max_length=99,
         min_length=1,
     )
-    description: Optional[str] = Field(
-        None, description="A description for session", max_length=500
-    )
+    description: Optional[str] = Field(None, description="A description for session", max_length=500)
     container_image: Optional[str] = Field(
         None,
         description="A container image",
@@ -160,9 +152,7 @@ class SessionLauncher(BaseAPISpec):
         description="The date and time the session was created (time is always in UTC)",
         example="2023-11-01T17:32:28Z",
     )
-    description: Optional[str] = Field(
-        None, description="A description for session", max_length=500
-    )
+    description: Optional[str] = Field(None, description="A description for session", max_length=500)
     environment_kind: EnvironmentKind
     environment_id: Optional[str] = Field(
         None,
@@ -202,9 +192,7 @@ class SessionLauncherPost(BaseAPISpec):
         min_length=26,
         pattern="^[A-Z0-9]{26}$",
     )
-    description: Optional[str] = Field(
-        None, description="A description for session", max_length=500
-    )
+    description: Optional[str] = Field(None, description="A description for session", max_length=500)
     environment_kind: EnvironmentKind
     environment_id: Optional[str] = Field(
         None,
@@ -237,9 +225,7 @@ class SessionLauncherPatch(BaseAPISpec):
         max_length=99,
         min_length=1,
     )
-    description: Optional[str] = Field(
-        None, description="A description for session", max_length=500
-    )
+    description: Optional[str] = Field(None, description="A description for session", max_length=500)
     environment_kind: Optional[EnvironmentKind] = None
     environment_id: Optional[str] = Field(
         None,
@@ -265,9 +251,7 @@ class SessionStart(BaseAPISpec):
     model_config = ConfigDict(
         extra="allow",
     )
-    resource_class_id: Optional[int] = Field(
-        None, description="The identifier of a resource class"
-    )
+    resource_class_id: Optional[int] = Field(None, description="The identifier of a resource class")
 
 
 class EnvironmentList(RootModel[list[Environment]]):

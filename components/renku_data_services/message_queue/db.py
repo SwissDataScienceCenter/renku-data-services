@@ -21,8 +21,8 @@ class EventRepository:
         self,
         session_maker: Callable[..., AsyncSession],
         message_queue: IMessageQueue,
-    ):
-        self.session_maker = session_maker  # type: ignore[call-overload]
+    ) -> None:
+        self.session_maker = session_maker
         self.message_queue: IMessageQueue = message_queue
 
     async def _get_pending_events(self) -> list[schemas.EventORM]:
@@ -70,7 +70,7 @@ class EventRepository:
 
         return event_orm.id
 
-    async def delete_event(self, id: int):
+    async def delete_event(self, id: int) -> None:
         """Delete an event."""
         async with self.session_maker() as session, session.begin():
             stmt = delete(schemas.EventORM).where(schemas.EventORM.id == id)

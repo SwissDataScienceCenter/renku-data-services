@@ -46,7 +46,7 @@ def api_user() -> APIUser:
 @pytest.mark.asyncio
 async def test_get_user_preferences(
     sanic_client: SanicASGITestClient, valid_add_pinned_project_payload: dict[str, Any], api_user: APIUser
-):
+) -> None:
     _, res = await create_user_preferences(sanic_client, valid_add_pinned_project_payload, api_user)
     assert res.status_code == 200
 
@@ -67,7 +67,7 @@ async def test_get_user_preferences(
 @pytest.mark.asyncio
 async def test_post_user_preferences_pinned_projects(
     sanic_client: SanicASGITestClient, valid_add_pinned_project_payload: dict[str, Any], api_user: APIUser
-):
+) -> None:
     _, res = await create_user_preferences(sanic_client, valid_add_pinned_project_payload, api_user)
     assert res.status_code == 200
 
@@ -90,7 +90,7 @@ async def test_post_user_preferences_pinned_projects(
 @pytest.mark.asyncio
 async def test_post_user_preferences_pinned_projects_existing(
     sanic_client: SanicASGITestClient, valid_add_pinned_project_payload: dict[str, Any], api_user: APIUser
-):
+) -> None:
     _, res = await create_user_preferences(sanic_client, valid_add_pinned_project_payload, api_user)
     assert res.status_code == 200
 
@@ -112,7 +112,7 @@ async def test_post_user_preferences_pinned_projects_existing(
 @pytest.mark.asyncio
 async def test_delete_user_preferences_pinned_projects(
     sanic_client: SanicASGITestClient, valid_add_pinned_project_payload: dict[str, Any], api_user: APIUser
-):
+) -> None:
     _, res = await create_user_preferences(sanic_client, valid_add_pinned_project_payload, api_user)
     assert res.status_code == 200
 
@@ -132,7 +132,7 @@ async def test_delete_user_preferences_pinned_projects(
 @pytest.mark.asyncio
 async def test_delete_user_preferences_pinned_projects_unknown(
     sanic_client: SanicASGITestClient, valid_add_pinned_project_payload: dict[str, Any], api_user: APIUser
-):
+) -> None:
     _, res = await create_user_preferences(sanic_client, valid_add_pinned_project_payload, api_user)
     assert res.status_code == 200
 

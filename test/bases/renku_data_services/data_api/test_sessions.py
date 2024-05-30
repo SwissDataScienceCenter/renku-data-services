@@ -46,7 +46,7 @@ def create_session_launcher(sanic_client: SanicASGITestClient, user_headers):
 @pytest.mark.asyncio
 async def test_get_all_session_environments(
     sanic_client: SanicASGITestClient, unauthorized_headers, create_session_environment
-):
+) -> None:
     await create_session_environment("Environment 1")
     await create_session_environment("Environment 2")
     await create_session_environment("Environment 3")
@@ -66,7 +66,7 @@ async def test_get_all_session_environments(
 @pytest.mark.asyncio
 async def test_get_session_environment(
     sanic_client: SanicASGITestClient, unauthorized_headers, create_session_environment
-):
+) -> None:
     env = await create_session_environment(
         "Environment 1",
         description="Some environment.",
@@ -84,7 +84,7 @@ async def test_get_session_environment(
 
 
 @pytest.mark.asyncio
-async def test_post_session_environment(sanic_client: SanicASGITestClient, admin_headers):
+async def test_post_session_environment(sanic_client: SanicASGITestClient, admin_headers) -> None:
     payload = {
         "name": "Environment 1",
         "description": "A session environment.",
@@ -101,7 +101,7 @@ async def test_post_session_environment(sanic_client: SanicASGITestClient, admin
 
 
 @pytest.mark.asyncio
-async def test_post_session_environment_unauthorized(sanic_client: SanicASGITestClient, user_headers):
+async def test_post_session_environment_unauthorized(sanic_client: SanicASGITestClient, user_headers) -> None:
     payload = {
         "name": "Environment 1",
         "description": "A session environment.",
@@ -114,7 +114,9 @@ async def test_post_session_environment_unauthorized(sanic_client: SanicASGITest
 
 
 @pytest.mark.asyncio
-async def test_patch_session_environment(sanic_client: SanicASGITestClient, admin_headers, create_session_environment):
+async def test_patch_session_environment(
+    sanic_client: SanicASGITestClient, admin_headers, create_session_environment
+) -> None:
     env = await create_session_environment("Environment 1")
     environment_id = env["id"]
 
@@ -136,7 +138,7 @@ async def test_patch_session_environment(sanic_client: SanicASGITestClient, admi
 @pytest.mark.asyncio
 async def test_patch_session_environment_unauthorized(
     sanic_client: SanicASGITestClient, user_headers, create_session_environment
-):
+) -> None:
     env = await create_session_environment("Environment 1")
     environment_id = env["id"]
 
@@ -152,7 +154,9 @@ async def test_patch_session_environment_unauthorized(
 
 
 @pytest.mark.asyncio
-async def test_delete_session_environment(sanic_client: SanicASGITestClient, admin_headers, create_session_environment):
+async def test_delete_session_environment(
+    sanic_client: SanicASGITestClient, admin_headers, create_session_environment
+) -> None:
     env = await create_session_environment("Environment 1")
     environment_id = env["id"]
 
@@ -164,7 +168,7 @@ async def test_delete_session_environment(sanic_client: SanicASGITestClient, adm
 @pytest.mark.asyncio
 async def test_delete_session_environment_unauthorized(
     sanic_client: SanicASGITestClient, user_headers, create_session_environment
-):
+) -> None:
     env = await create_session_environment("Environment 1")
     environment_id = env["id"]
 
@@ -179,7 +183,7 @@ async def test_get_all_session_launchers(
     user_headers,
     create_project,
     create_session_launcher,
-):
+) -> None:
     project_1 = await create_project("Project 1")
     project_2 = await create_project("Project 2")
 
@@ -206,7 +210,7 @@ async def test_get_session_launcher(
     create_project,
     create_session_environment,
     create_session_launcher,
-):
+) -> None:
     project = await create_project("Some project", visibility="public")
     env = await create_session_environment("Some environment")
     launcher = await create_session_launcher(
@@ -236,7 +240,7 @@ async def test_get_project_launchers(
     user_headers,
     create_project,
     create_session_launcher,
-):
+) -> None:
     project_1 = await create_project("Project 1")
     project_2 = await create_project("Project 2")
 
@@ -253,7 +257,7 @@ async def test_get_project_launchers(
 
 
 @pytest.mark.asyncio
-async def test_post_session_launcher(sanic_client: SanicASGITestClient, user_headers, create_project):
+async def test_post_session_launcher(sanic_client: SanicASGITestClient, user_headers, create_project) -> None:
     project = await create_project("Some project")
     payload = {
         "name": "Launcher 1",
@@ -281,7 +285,7 @@ async def test_delete_session_launcher(
     user_headers,
     create_project,
     create_session_launcher,
-):
+) -> None:
     project = await create_project("Some project")
     launcher = await create_session_launcher("Launcher 1", project_id=project["id"])
     launcher_id = launcher["id"]

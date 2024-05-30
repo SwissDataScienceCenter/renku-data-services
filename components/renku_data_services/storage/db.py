@@ -1,6 +1,7 @@
 """Adapters for storage database classes."""
 
 from collections.abc import Callable
+from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,8 +17,8 @@ from renku_data_services.storage import orm as schemas
 class _Base:
     """Base class for repositories."""
 
-    def __init__(self, session_maker: Callable[..., AsyncSession]):
-        self.session_maker = session_maker  # type: ignore[call-overload]
+    def __init__(self, session_maker: Callable[..., AsyncSession]) -> None:
+        self.session_maker = session_maker
 
 
 class BaseStorageRepository(_Base):
@@ -26,7 +27,7 @@ class BaseStorageRepository(_Base):
     def __init__(
         self,
         session_maker: Callable[..., AsyncSession],
-    ):
+    ) -> None:
         super().__init__(session_maker)
 
     async def filter_projects_by_access_level(
@@ -69,16 +70,15 @@ class BaseStorageRepository(_Base):
     async def get_storage_by_id(self, storage_id: str, user: base_models.APIUser) -> models.CloudStorage:
         """Get a single storage by id."""
         async with self.session_maker() as session:
-            res = await session.execute(
+            storage = await session.scalar(
                 select(schemas.CloudStorageORM).where(schemas.CloudStorageORM.storage_id == storage_id)
             )
-            storage = res.one_or_none()
 
             if storage is None:
                 raise errors.MissingResourceError(message=f"The storage with id '{storage_id}' cannot be found")
-            if not await self.filter_projects_by_access_level(user, [storage[0].project_id], authz_models.Role.VIEWER):
+            if not await self.filter_projects_by_access_level(user, [storage.project_id], authz_models.Role.VIEWER):
                 raise errors.Unauthorized(message="User does not have access to this project")
-            return storage[0].dump()
+            return storage.dump()
 
     async def insert_storage(self, storage: models.CloudStorage, user: base_models.APIUser) -> models.CloudStorage:
         """Insert a new cloud storage entry."""
@@ -94,7 +94,7 @@ class BaseStorageRepository(_Base):
             session.add(orm)
         return orm.dump()
 
-    async def update_storage(self, storage_id: str, user: base_models.APIUser, **kwargs) -> models.CloudStorage:
+    async def update_storage(self, storage_id: str, user: base_models.APIUser, **kwargs: dict) -> models.CloudStorage:
         """Update a cloud storage entry."""
         async with self.session_maker() as session, session.begin():
             res = await session.execute(
@@ -106,9 +106,9 @@ class BaseStorageRepository(_Base):
                 raise errors.MissingResourceError(message=f"The storage with id '{storage_id}' cannot be found")
             if not await self.filter_projects_by_access_level(user, [storage.project_id], authz_models.Role.OWNER):
                 raise errors.Unauthorized(message="User does not have access to this project")
-            if "project_id" in kwargs and kwargs["project_id"] != storage.project_id:
+            if "project_id" in kwargs and cast(str, kwargs.get("project_id")) != storage.project_id:
                 raise errors.ValidationError(message="Cannot change project id of existing storage.")
-            name = kwargs.get("name", storage.name)
+            name = cast(str, kwargs.get("name", storage.name))
             if storage.name != name:
                 existing_storage = await self.get_storage(user, project_id=storage.project_id, name=name)
                 if existing_storage:
@@ -150,7 +150,7 @@ class StorageRepository(BaseStorageRepository):
         self,
         gitlab_client: base_models.GitlabAPIProtocol,
         session_maker: Callable[..., AsyncSession],
-    ):
+    ) -> None:
         super().__init__(session_maker)
         self.gitlab_client = gitlab_client
 
@@ -174,7 +174,7 @@ class StorageV2Repository(BaseStorageRepository):
         self,
         project_authz: Authz,
         session_maker: Callable[..., AsyncSession],
-    ):
+    ) -> None:
         super().__init__(session_maker)
         self.project_authz: Authz = project_authz
 

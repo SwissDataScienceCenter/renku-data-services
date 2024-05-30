@@ -1,30 +1,42 @@
 """Authentication decorators for Sanic."""
 
 import re
+from collections.abc import Awaitable, Callable, Coroutine
 from functools import wraps
+from typing import Any, Concatenate, ParamSpec, TypeVar, cast
 
 from sanic import Request
 
 from renku_data_services import errors
 from renku_data_services.base_models import APIUser, Authenticator
 
+_T = TypeVar("_T")
+_P = ParamSpec("_P")
 
-def authenticate(authenticator: Authenticator):
+
+def authenticate(
+    authenticator: Authenticator,
+) -> Callable[
+    [Callable[Concatenate[Request, APIUser, _P], Awaitable[_T]]],
+    Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]],
+]:
     """Decorator for a Sanic handler that adds the APIUser model to the context.
 
     The APIUser is present for admins, non-admins and users who are not logged in.
     """
 
-    def decorator(f):
+    def decorator(
+        f: Callable[Concatenate[Request, APIUser, _P], Awaitable[_T]],
+    ) -> Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]]:
         @wraps(f)
-        async def decorated_function(request: Request, *args, **kwargs):
+        async def decorated_function(request: Request, *args: _P.args, **kwargs: _P.kwargs) -> _T:
             token = request.headers.get(authenticator.token_field)
             user = APIUser()
             if token is not None and len(token) >= 8:
                 token = token.removeprefix("Bearer ").removeprefix("bearer ")
                 user = await authenticator.authenticate(token, request)
 
-            response = await f(request, *args, **kwargs, user=user)
+            response = await f(request, user, *args, **kwargs)
             return response
 
         return decorated_function
@@ -32,13 +44,15 @@ def authenticate(authenticator: Authenticator):
     return decorator
 
 
-def validate_path_project_id(f):
+def validate_path_project_id(
+    f: Callable[Concatenate[Request, _P], Awaitable[_T]],
+) -> Callable[Concatenate[Request, _P], Awaitable[_T]]:
     """Decorator for a Sanic handler that validates the project_id path parameter."""
     _path_project_id_regex = re.compile(r"^[A-Za-z0-9]{26}$")
 
     @wraps(f)
-    async def decorated_function(request: Request, *args, **kwargs):
-        project_id = kwargs.get("project_id")
+    async def decorated_function(request: Request, *args: _P.args, **kwargs: _P.kwargs) -> _T:
+        project_id = cast(str | None, kwargs.get("project_id"))
         if not project_id:
             raise errors.ProgrammingError(
                 message="Could not find 'project_id' in the keyword arguments for the handler in order to validate it."
@@ -54,14 +68,16 @@ def validate_path_project_id(f):
     return decorated_function
 
 
-def validate_path_user_id(f):
+def validate_path_user_id(
+    f: Callable[Concatenate[Request, _P], Awaitable[_T]],
+) -> Callable[Concatenate[Request, _P], Awaitable[_T]]:
     """Decorator for a Sanic handler that validates the user_id or member_id path parameter."""
     _path_user_id_regex = re.compile(r"^[A-Za-z0-9]{1}[A-Za-z0-9-]+$")
 
     @wraps(f)
-    async def decorated_function(request: Request, *args, **kwargs):
-        user_id: str | None = kwargs.get("user_id")
-        member_id: str | None = kwargs.get("member_id")
+    async def decorated_function(request: Request, *args: _P.args, **kwargs: _P.kwargs) -> _T:
+        user_id: str | None = cast(str | None, kwargs.get("user_id"))
+        member_id: str | None = cast(str | None, kwargs.get("member_id"))
         if user_id and member_id:
             raise errors.ProgrammingError(
                 message="Validating the user ID in a request path failed because matches for both"
@@ -85,31 +101,33 @@ def validate_path_user_id(f):
     return decorated_function
 
 
-def only_admins(f):
+def only_admins(
+    f: Callable[Concatenate[Request, APIUser, _P], Awaitable[_T]],
+) -> Callable[Concatenate[Request, APIUser, _P], Awaitable[_T]]:
     """Decorator for a Sanic handler that errors out if the user is not an admin."""
 
     @wraps(f)
-    async def decorated_function(request: Request, user: APIUser, *args, **kwargs):
+    async def decorated_function(request: Request, user: APIUser, *args: _P.args, **kwargs: _P.kwargs) -> _T:
         if user is None or user.access_token is None:
             raise errors.Unauthorized(message="Please provide valid access credentials in the Authorization header.")
         if not user.is_admin:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
         # the user is authenticated and is an admin
-        response = await f(request, *args, **kwargs, user=user)
+        response = await f(request, user, *args, **kwargs)
         return response
 
     return decorated_function
 
 
-def only_authenticated(f):
+def only_authenticated(f: Callable[_P, Awaitable[_T]]) -> Callable[_P, Awaitable[_T]]:
     """Decorator that errors out if the user is not authenticated.
 
     It looks for APIUser in the named or unnamed poarameters.
     """
 
     @wraps(f)
-    async def decorated_function(self, *args, **kwargs):
+    async def decorated_function(*args: _P.args, **kwargs: _P.kwargs) -> _T:
         api_user = None
         if "requested_by" in kwargs and isinstance(kwargs["requested_by"], APIUser):
             api_user = kwargs["requested_by"]
@@ -129,7 +147,7 @@ def only_authenticated(f):
             raise errors.Unauthorized(message="You have to be authenticated to perform this operation.")
 
         # the user is authenticated
-        response = await f(self, *args, **kwargs)
+        response = await f(*args, **kwargs)
         return response
 
     return decorated_function

@@ -4,7 +4,9 @@ The purpose of this is to be able to create resource
 pools and classes based on the old server options until the admin UI interface
 is added.
 """
-from typing import Any
+
+from collections.abc import Generator
+from typing import Any, Union
 
 from pydantic import BaseModel, ByteSize, Field, validator
 
@@ -38,7 +40,7 @@ class _ServerOptionsCpu(BaseModel):
         extra = "ignore"
 
     @validator("options", pre=False, each_item=True)
-    def greater_than_zero(cls, val):
+    def greater_than_zero(cls, val: Union[float, int]) -> Union[float, int]:
         return _check_greater_than_zero(cls, val)
 
 
@@ -49,7 +51,7 @@ class _ServerOptionsGpu(BaseModel):
         extra = "ignore"
 
     @validator("options", pre=False, each_item=True)
-    def greater_than_or_equal_to_zero(cls, v):
+    def greater_than_or_equal_to_zero(cls, v: int) -> int:
         if v < 0:
             raise ValueError(f"The provided value should be greater than or equal to zero, instead it was {v}.")
         return v
@@ -62,14 +64,14 @@ class _ServerOptionsBytes(BaseModel):
         extra = "ignore"
 
     @validator("options", pre=True)
-    def convert_units(cls, vals):
+    def convert_units(cls, vals: list[str]) -> list[str]:
         for ival, val in enumerate(vals):
             if isinstance(val, str) and val.strip().endswith("i"):
                 vals[ival] = val.strip() + "b"
         return vals
 
     @validator("options", pre=False, each_item=True)
-    def greater_than_zero(cls, val):
+    def greater_than_zero(cls, val: Union[float, int]) -> Union[float, int]:
         return _check_greater_than_zero(cls, val)
 
 
@@ -93,7 +95,7 @@ class ServerOptions(BaseModel):
         return largest_list
 
 
-def _get_classname():
+def _get_classname() -> Generator[str, None, None]:
     yield "small"
     yield "medium"
     yield "large"

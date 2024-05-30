@@ -7,7 +7,6 @@ import string
 from collections.abc import Callable
 from contextlib import nullcontext
 from datetime import UTC, datetime
-from typing import cast
 
 from sanic.log import logger
 from sqlalchemy import delete, func, select, text
@@ -41,8 +40,8 @@ class GroupRepository:
         event_repo: EventRepository,
         group_authz: Authz,
         message_queue: IMessageQueue,
-    ):
-        self.session_maker = session_maker  # type: ignore[call-overload]
+    ) -> None:
+        self.session_maker = session_maker
         self.authz: Authz = group_authz
         self.event_repo: EventRepository = event_repo
         self.message_queue: IMessageQueue = message_queue
@@ -86,7 +85,7 @@ class GroupRepository:
 
             stmt_count = select(func.count()).select_from(schemas.GroupORM)
             result = await session.execute(stmt_count)
-            n_total_elements = cast(int, result.scalar() or 0)
+            n_total_elements = result.scalar() or 0
             return [g.dump() for g in groups_orm], n_total_elements
 
     async def _get_group(
@@ -179,9 +178,7 @@ class GroupRepository:
                         raise errors.ValidationError(
                             message=f"The slug {v} is already in use, please try a different one"
                         )
-                    session.add(
-                        schemas.NamespaceOldORM(slug=group.namespace.slug, latest_slug_id=group.namespace.id)
-                    )
+                    session.add(schemas.NamespaceOldORM(slug=group.namespace.slug, latest_slug_id=group.namespace.id))
                     group.namespace.slug = new_slug_str
                 case "description":
                     group.description = v

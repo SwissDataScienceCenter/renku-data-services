@@ -65,6 +65,7 @@ style_checks:
 	@echo "checking connected_services apispec is up to date"
 	@$(call test_apispec_up_to_date,"connected_services")
 	poetry run mypy
+	poetry run ruff format --check
 	poetry run ruff check .
 	poetry run bandit -c pyproject.toml -r .
 	poetry poly check

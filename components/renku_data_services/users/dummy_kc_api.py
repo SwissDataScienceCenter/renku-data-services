@@ -37,10 +37,7 @@ class DummyKeycloakAPI:
         for event in self.admin_events:
             if isinstance(event, Exception):
                 raise event
-            if (
-                KeycloakAdminEvent(event["operationType"]) in event_types_
-                and event["resourceType"] in resource_types_
-            ):
+            if KeycloakAdminEvent(event["operationType"]) in event_types_ and event["resourceType"] in resource_types_:
                 yield event
         return
 
