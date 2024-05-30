@@ -49,7 +49,12 @@ class SyncConfig:
 
         authz_config = AuthzConfig.from_env()
         event_repo = EventRepository(session_maker=session_maker, message_queue=message_queue)
-        group_repo = GroupRepository(session_maker, event_repo, Authz(authz_config))
+        group_repo = GroupRepository(
+            session_maker,
+            event_repo=event_repo,
+            group_authz=Authz(authz_config),
+            message_queue=message_queue,
+        )
         syncer = UsersSync(
             session_maker,
             message_queue=message_queue,

@@ -11,7 +11,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_admins, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.connected_services import apispec
-from renku_data_services.connected_services.apispec_base import AuthorizeParams
+from renku_data_services.connected_services.apispec_base import AuthorizeParams, CallbackParams
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 
 
@@ -101,13 +101,12 @@ class OAuth2ClientsBP(CustomBlueprint):
         """OAuth2 authorization callback."""
 
         async def _callback(request: Request):
-            params = AuthorizeParams.model_validate(dict(request.query_args))
+            params = CallbackParams.model_validate(dict(request.query_args))
 
             callback_url = self._get_callback_url(request)
-            next_url = params.next_url
 
-            await self.connected_services_repo.authorize_callback(
-                state=params.state, raw_url=request.url, callback_url=callback_url, next_url=next_url
+            next_url = await self.connected_services_repo.authorize_callback(
+                state=params.state, raw_url=request.url, callback_url=callback_url
             )
 
             return redirect(to=next_url) if next_url else json({"status": "OK"})
