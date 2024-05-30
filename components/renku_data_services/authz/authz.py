@@ -810,6 +810,13 @@ class Authz:
         undo: list[RelationshipUpdate] = []
         output: list[MembershipChange] = []
         expected_user_roles = [_Relation.viewer.value, _Relation.owner.value, _Relation.editor.value]
+        existing_owners_filter = RelationshipFilter(
+            resource_type=resource_type.value,
+            optional_resource_id=resource_id,
+            optional_subject_filter=SubjectFilter(subject_type=ResourceType.user),
+            optional_relation=_Relation.owner.value,
+        )
+        existing_owners_rels: list[ReadRelationshipsResponse] | None = None
         for member in members:
             rel = Relationship(
                 resource=project_res,
@@ -831,6 +838,25 @@ class Authz:
                 # The existing relationships should be deleted if all goes well and added back in if we have to undo
                 existing_rel = existing_rels[0]
                 if existing_rel.relationship != rel:
+                    if existing_rel.relationship.relation == _Relation.owner.value:
+                        if existing_owners_rels is None:
+                            existing_owners_rels = [
+                                i
+                                async for i in self.client.ReadRelationships(
+                                    ReadRelationshipsRequest(
+                                        consistency=consistency,
+                                        relationship_filter=existing_owners_filter,
+                                    )
+                                )
+                            ]
+                        if len(existing_owners_rels) == 1:
+                            new_owners = [m for m in members if m.role == Role.OWNER]
+                            if not new_owners:
+                                raise errors.Unauthorized(
+                                    message="You are trying to change the role of the last owner of the project, "
+                                    "which is not allowed. Assign another user as owner and then retry."
+                                )
+
                     add_members.extend(
                         [
                             RelationshipUpdate(
@@ -1087,7 +1113,14 @@ class Authz:
         add_members: list[RelationshipUpdate] = []
         undo: list[RelationshipUpdate] = []
         output: list[MembershipChange] = []
-        expected_user_roles = [_Relation.viewer.value, _Relation.owner.value, _Relation.editor.value]
+        expected_user_roles = {_Relation.viewer.value, _Relation.owner.value, _Relation.editor.value}
+        existing_owners_filter = RelationshipFilter(
+            resource_type=resource_type.value,
+            optional_resource_id=resource_id,
+            optional_subject_filter=SubjectFilter(subject_type=ResourceType.user),
+            optional_relation=_Relation.owner.value,
+        )
+        existing_owners_rels: list[ReadRelationshipsResponse] | None = None
         for member in members:
             rel = Relationship(
                 resource=group_res,
@@ -1110,16 +1143,50 @@ class Authz:
                 # The existing relationships should be deleted if all goes well and added back in if we have to undo
                 existing_rel = existing_rels[0]
                 if existing_rel.relationship != rel:
-                    add_members.append(
-                        RelationshipUpdate(
-                            operation=RelationshipUpdate.OPERATION_TOUCH,
-                            relationship=rel,
-                        ),
+                    if existing_rel.relationship.relation == _Relation.owner.value:
+                        if existing_owners_rels is None:
+                            existing_owners_rels = [
+                                i
+                                async for i in self.client.ReadRelationships(
+                                    ReadRelationshipsRequest(
+                                        consistency=consistency,
+                                        relationship_filter=existing_owners_filter,
+                                    )
+                                )
+                            ]
+                        if len(existing_owners_rels) == 1:
+                            new_owners = [m for m in members if m.role == Role.OWNER]
+                            if not new_owners:
+                                raise errors.Unauthorized(
+                                    message="You are trying to change the role of the last owner of the group, "
+                                    "which is not allowed. Assign another user as owner and then retry."
+                                )
+
+                    add_members.extend(
+                        [
+                            RelationshipUpdate(
+                                operation=RelationshipUpdate.OPERATION_TOUCH,
+                                relationship=rel,
+                            ),
+                            # NOTE: The old role for the user still exists and we have to remove it
+                            # if not both the old and new role for the same user will be present in the database
+                            RelationshipUpdate(
+                                operation=RelationshipUpdate.OPERATION_DELETE,
+                                relationship=existing_rel.relationship,
+                            ),
+                        ]
                     )
-                    undo.append(
-                        RelationshipUpdate(
-                            operation=RelationshipUpdate.OPERATION_TOUCH, relationship=existing_rel.relationship
-                        ),
+                    undo.extend(
+                        [
+                            RelationshipUpdate(
+                                operation=RelationshipUpdate.OPERATION_TOUCH,
+                                relationship=existing_rel.relationship,
+                            ),
+                            RelationshipUpdate(
+                                operation=RelationshipUpdate.OPERATION_DELETE,
+                                relationship=rel,
+                            ),
+                        ]
                     )
                     output.append(MembershipChange(member, Change.UPDATE))
                 for rel_to_remove in existing_rels[1:]:

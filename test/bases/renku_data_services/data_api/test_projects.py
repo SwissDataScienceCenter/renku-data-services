@@ -698,10 +698,33 @@ async def test_project_owner_cannot_remove_themselves_if_no_other_owner(
     )
     assert response.status_code == 200
 
-    # Now an owner can remove themselsevs
+    # Now an owner can remove themselves
     _, response = await sanic_client.delete(f"/api/data/projects/{project_id}/members/{owner.id}", headers=user_headers)
     assert response.status_code == 204
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}/members", headers=member_1_headers)
     assert response.status_code == 200
     assert len(response.json) == 1
     assert response.json[0]["id"] == member_1_user.id
+
+
+@pytest.mark.asyncio
+async def test_cannot_change_role_for_last_project_owner(
+    create_project, sanic_client, user_headers, regular_user: UserInfo
+) -> None:
+    project = await create_project("Project 1")
+    project_id = project["id"]
+
+    # Cannot change the role of the last project owner
+    members = [{"id": regular_user.id, "role": "editor"}]
+    _, response = await sanic_client.patch(
+        f"/api/data/projects/{project_id}/members", headers=user_headers, json=members
+    )
+    assert response.status_code == 401
+
+    # Can change the owner role if another owner is added during an update
+    members.append({"id": "member-1", "role": "owner"})
+    _, response = await sanic_client.patch(
+        f"/api/data/projects/{project_id}/members", headers=user_headers, json=members
+    )
+
+    assert response.status_code == 200
