@@ -239,7 +239,7 @@ async def test_put_resource_class(
 
 
 @pytest.mark.asyncio
-async def test_restriced_default_resource_pool_access(
+async def test_restricted_default_resource_pool_access(
     sanic_client: SanicASGITestClient, admin_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
 ) -> None:
     valid_resource_pool_payload["default"] = True
@@ -272,11 +272,11 @@ async def test_restriced_default_resource_pool_access(
     default_access_user = existing_users[1]
     user_id = default_access_user["id"]
     access_token = json.dumps({"id": user_id})
-    # Ensure non-authenticated users have acess to the default pool
+    # Ensure non-authenticated users have access to the default pool
     _, res = await sanic_client.get(f"/api/data/resource_pools/{rp_default['id']}")
     assert res.status_code == 200
     assert res.json == rp_default
-    # Ensure non-authenticated users have acess to the public pool
+    # Ensure non-authenticated users have access to the public pool
     _, res = await sanic_client.get(f"/api/data/resource_pools/{rp_public['id']}")
     assert res.status_code == 200
     assert res.json == rp_public
@@ -310,7 +310,7 @@ async def test_restriced_default_resource_pool_access(
 
 
 @pytest.mark.asyncio
-async def test_restriced_default_resource_pool_access_changes(
+async def test_restricted_default_resource_pool_access_changes(
     sanic_client: SanicASGITestClient, admin_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
 ) -> None:
     valid_resource_pool_payload["default"] = True
@@ -511,7 +511,7 @@ async def test_user_resource_pools(
         headers=admin_headers,
         json=[rp_private["id"]],
     )
-    res.status_code == 201
+    assert res.status_code == 201
     # Check the user can see the private pool
     _, res = await sanic_client.get(f"/api/data/resource_pools/{rp_private['id']}", headers=user_headers)
     assert res.status_code == 200
@@ -528,7 +528,7 @@ async def test_user_resource_pools(
         headers=admin_headers,
         json=[rp_public["id"]],
     )
-    res.status_code == 200
+    assert res.status_code == 200
     # Check only the public pool appears in the list of pools for the user
     _, res = await sanic_client.get(f"/api/data/users/{user_id}/resource_pools", headers=admin_headers)
     assert res.status_code == 200
@@ -539,6 +539,52 @@ async def test_user_resource_pools(
     assert res.status_code == 200
     assert len(res.json) == 1
     assert res.json[0]["id"] == rp_public["id"]
+
+
+@pytest.mark.asyncio
+async def test_adding_existing_user_does_not_fail(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    member_1_user,
+):
+    # Create private resource pool
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = False
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp_private = res.json
+    user_id = member_1_user.id
+
+    # Give access to the user to the private pool
+    _, res = await sanic_client.post(
+        f"/api/data/users/{user_id}/resource_pools", headers=admin_headers, json=[rp_private["id"]]
+    )
+    assert res.status_code == 201
+
+    # Re-add the same user to the resource pool
+    _, res = await sanic_client.post(
+        f"/api/data/users/{user_id}/resource_pools", headers=admin_headers, json=[rp_private["id"]]
+    )
+    assert res.status_code == 201
+
+    # Re-add the same user to the resource pool using PUT
+    _, res = await sanic_client.put(
+        f"/api/data/users/{user_id}/resource_pools", headers=admin_headers, json=[rp_private["id"]]
+    )
+    assert res.status_code == 200
+
+    # Re-add the same user to the resource pool using the resource pool endpoint
+    _, res = await sanic_client.post(
+        f"/api/data/resource_pools/{rp_private['id']}/users", headers=admin_headers, json=[{"id": user_id}]
+    )
+    assert res.status_code == 201
+
+    # Re-add the same user to the resource pool using the resource pool endpoint PUT
+    _, res = await sanic_client.put(
+        f"/api/data/resource_pools/{rp_private['id']}/users", headers=admin_headers, json=[{"id": user_id}]
+    )
+    assert res.status_code == 200
 
 
 @pytest.mark.asyncio
@@ -615,7 +661,7 @@ async def test_patch_affinities(
     )
     assert res.status_code == 200
     assert len(res.json["node_affinities"]) == 2
-    # Updating an affinitiy required_during_scheduling field
+    # Updating an affinity required_during_scheduling field
     new_affinity = {"key": "affinity2", "required_during_scheduling": True}
     _, res = await sanic_client.patch(
         f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
