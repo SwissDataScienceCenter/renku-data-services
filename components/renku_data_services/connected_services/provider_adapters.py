@@ -1,7 +1,6 @@
 """Adapters for each kind of OAuth2 client."""
 
 from abc import ABC, abstractmethod
-from datetime import datetime
 from urllib.parse import quote, urljoin, urlparse, urlunparse
 
 from httpx import Response
@@ -16,10 +15,8 @@ from renku_data_services.connected_services.apispec import ProviderKind
 class ProviderAdapter(ABC):
     """Defines the functionality of OAuth2 client adapters."""
 
-    def __init__(self, client: schemas.OAuth2ClientORM) -> None:
-        if not client.url:
-            raise errors.ValidationError(message=f"URL not defined for provider {client.id}.")
-        self.client = client
+    def __init__(self, client_url: str) -> None:
+        self.client_url = client_url
 
     @property
     @abstractmethod
@@ -68,17 +65,17 @@ class GitLabAdapter(ProviderAdapter):
     @property
     def authorization_url(self) -> str:
         """The authorization URL for the OAuth2 protocol."""
-        return urljoin(self.client.url, "oauth/authorize")
+        return urljoin(self.client_url, "oauth/authorize")
 
     @property
     def token_endpoint_url(self) -> str:
         """The token endpoint URL for the OAuth2 protocol."""
-        return urljoin(self.client.url, "oauth/token")
+        return urljoin(self.client_url, "oauth/token")
 
     @property
     def api_url(self) -> str:
         """The URL used for API calls on the Resource Server."""
-        return urljoin(self.client.url, "api/v4/")
+        return urljoin(self.client_url, "api/v4/")
 
     def api_validate_account_response(self, response: Response) -> models.ConnectedAccount:
         """Validates and returns the connected account response from the Resource Server."""
@@ -110,17 +107,17 @@ class GitHubAdapter(ProviderAdapter):
     @property
     def authorization_url(self) -> str:
         """The authorization URL for the OAuth2 protocol."""
-        return urljoin(self.client.url, "login/oauth/authorize")
+        return urljoin(self.client_url, "login/oauth/authorize")
 
     @property
     def token_endpoint_url(self) -> str:
         """The token endpoint URL for the OAuth2 protocol."""
-        return urljoin(self.client.url, "login/oauth/access_token")
+        return urljoin(self.client_url, "login/oauth/access_token")
 
     @property
     def api_url(self) -> str:
         """The URL used for API calls on the Resource Server."""
-        url = urlparse(self.client.url)
+        url = urlparse(self.client_url)
         url = url._replace(netloc=f"api.{url.netloc}")
         return urlunparse(url)
 
@@ -166,23 +163,14 @@ def get_provider_adapter(client: schemas.OAuth2ClientORM) -> ProviderAdapter:
     """Returns a new ProviderAdapter instance corresponding to the given client."""
     global _adapter_map
 
+    if not client.url:
+        raise errors.ValidationError(message=f"URL not defined for provider {client.id}.")
+
     adapter_class = _adapter_map[client.kind]
-    return adapter_class(client=client)
+    return adapter_class(client_url=client.url)
 
 
 def get_internal_gitlab_adapter(internal_gitlab_url: str) -> GitLabAdapter:
     """Returns an adapter instance corresponding to the internal GitLab provider."""
-    client = schemas.OAuth2ClientORM(
-        id="INTERNAL_GITLAB",
-        client_id="INTERNAL_GITLAB",
-        display_name="INTERNAL_GITLAB",
-        created_by_id="",
-        kind=ProviderKind.gitlab,
-        scope="",
-        url=internal_gitlab_url,
-        use_pkce=False,
-        client_secret=None,
-        creation_date=datetime.now(),
-        updated_at=datetime.now(),
-    )
-    return GitLabAdapter(client)
+    client_url = internal_gitlab_url
+    return GitLabAdapter(client_url=client_url)

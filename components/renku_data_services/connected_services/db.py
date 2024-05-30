@@ -407,7 +407,11 @@ class ConnectedServicesRepository:
         self, connection_id: str, repository_url: str, user: base_models.APIUser, etag: str | None
     ) -> models.RepositoryProviderMatch | Literal["304"]:
         """Get the metadata about a repository using an OAuth2 connection."""
-        async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (oauth2_client, _, adapter):
+        async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (
+            oauth2_client,
+            connection,
+            adapter,
+        ):
             request_url = adapter.get_repository_api_url(repository_url)
             logger.info(f"[Logged] GET {request_url}")
             headers = adapter.api_common_headers or dict()
@@ -421,13 +425,13 @@ class ConnectedServicesRepository:
                 return "304"
             if response.status_code > 200:
                 return models.RepositoryProviderMatch(
-                    provider_id=adapter.client.id, connection_id=connection_id, repository_metadata=None
+                    provider_id=connection.client.id, connection_id=connection_id, repository_metadata=None
                 )
 
             repository = adapter.api_validate_repository_response(response, is_anonymous=False)
             logger.info(f"Repo model {repository}")
             result = models.RepositoryProviderMatch(
-                provider_id=adapter.client.id, connection_id=connection_id, repository_metadata=repository
+                provider_id=connection.client.id, connection_id=connection_id, repository_metadata=repository
             )
             logger.info(f"Result {result}")
             return result
