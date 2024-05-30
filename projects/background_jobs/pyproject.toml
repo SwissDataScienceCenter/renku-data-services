@@ -31,14 +31,14 @@ packages = [
   { include = "renku_data_services/connected_services", from = "../../components" },
   { include = "renku_data_services/migrations", from = "../../components" },
   { include = "renku_data_services/session", from = "../../components" },
-  { include = "renku_data_services/crc_migrations", from = "components" },
-  { include = "renku_data_services/storage_migrations", from = "components" },
-  { include = "renku_data_services/user_preferences_migrations", from = "components" },
-  { include = "renku_data_services/users_migrations", from = "components" },
-  { include = "renku_data_services/project_migrations", from = "components" },
-  { include = "renku_data_services/events_migrations", from = "components" },
-  { include = "renku_data_services/session_migrations", from = "components" },
-  { include = "renku_data_services/events_migrations", from = "components" },
+  { include = "renku_data_services/crc_migrations", from = "../../components" },
+  { include = "renku_data_services/storage_migrations", from = "../../components" },
+  { include = "renku_data_services/user_preferences_migrations", from = "../../components" },
+  { include = "renku_data_services/users_migrations", from = "../../components" },
+  { include = "renku_data_services/project_migrations", from = "../../components" },
+  { include = "renku_data_services/events_migrations", from = "../../components" },
+  { include = "renku_data_services/session_migrations", from = "../../components" },
+  { include = "renku_data_services/events_migrations", from = "../../components" },
 ]
 
 [tool.poetry.dependencies]
