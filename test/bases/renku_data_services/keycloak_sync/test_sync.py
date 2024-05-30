@@ -32,7 +32,12 @@ def get_app_configs(db_config: DBConfig, authz_config: AuthzConfig):
         redis = RedisConfig.fake()
         message_queue = RedisQueue(redis)
         event_repo = EventRepository(db_config.async_session_maker, message_queue=message_queue)
-        group_repo = GroupRepository(db_config.async_session_maker, event_repo, Authz(authz_config))
+        group_repo = GroupRepository(
+            session_maker=db_config.async_session_maker,
+            event_repo=event_repo,
+            group_authz=Authz(authz_config),
+            message_queue=message_queue,
+        )
         users_sync = UsersSync(
             db_config.async_session_maker,
             message_queue=message_queue,

@@ -148,7 +148,7 @@ class GroupsBP(CustomBlueprint):
         return "/groups/<slug>/members/<user_id>", ["DELETE"], _delete_member
 
     def get_namespaces(self) -> BlueprintFactoryResponse:
-        """Get all all namespaces."""
+        """Get all namespaces."""
 
         @authenticate(self.authenticator)
         @only_authenticated
