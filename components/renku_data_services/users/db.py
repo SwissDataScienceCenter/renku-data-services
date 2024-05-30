@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.base_api.auth import APIUser, only_authenticated
 from renku_data_services.errors import errors
-from renku_data_services.message_queue import AmbiguousEvent
+from renku_data_services.message_queue import events
 from renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
@@ -167,7 +167,7 @@ class UsersSync:
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.update_or_insert, ResourceType.user)
-    @dispatch_message(AmbiguousEvent.UPDATE_OR_INSERT_USER)
+    @dispatch_message(events.UpdateOrInsertUser)
     async def update_or_insert_user(
         self, user_id: str, payload: dict[str, Any], *, session: AsyncSession | None = None
     ) -> UserWithNamespaceUpdate:
