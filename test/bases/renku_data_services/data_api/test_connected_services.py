@@ -31,6 +31,7 @@ def create_oauth2_provider(sanic_client: SanicASGITestClient, admin_headers):
         payload["display_name"] = payload.get("display_name") or "my oauth2 application"
         payload["scope"] = payload.get("scope") or "api"
         payload["url"] = payload.get("url") or "https://example.org"
+        payload["use_pkce"] = payload.get("use_pkce") or False
         _, res = await sanic_client.post("/api/data/oauth2/providers", headers=admin_headers, json=payload)
 
         assert res.status_code == 201, res.text
@@ -122,6 +123,7 @@ async def test_post_oauth2_provider(sanic_client: SanicASGITestClient, admin_hea
         "display_name": "Some external service",
         "scope": "api",
         "url": "https://example.org",
+        "use_pkce": False,
     }
 
     _, res = await sanic_client.post("/api/data/oauth2/providers", headers=admin_headers, json=payload)
@@ -258,7 +260,12 @@ async def test_callback_oauth2_authorization_flow(
     provider = await create_oauth2_provider("provider_1")
     provider_id = provider["id"]
 
-    _, res = await oauth2_test_client.get(f"/api/data/oauth2/providers/{provider_id}/authorize", headers=user_headers)
+    next_url = "https://example.org"
+    qs = f"next_url={quote(next_url)}"
+
+    _, res = await oauth2_test_client.get(
+        f"/api/data/oauth2/providers/{provider_id}/authorize?{qs}", headers=user_headers
+    )
 
     assert res.status_code == 302, res.text
     assert "location" in res.headers
@@ -267,8 +274,7 @@ async def test_callback_oauth2_authorization_flow(
     state = query.get("state", [None])[0]
     assert state != ""
 
-    next_url = "https://example.org"
-    qs = f"state={quote(state)}&next_url={quote(next_url)}"
+    qs = f"state={quote(state)}"
 
     _, res = await oauth2_test_client.get(f"/api/data/oauth2/callback?{qs}")
 

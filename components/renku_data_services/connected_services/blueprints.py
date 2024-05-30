@@ -13,7 +13,7 @@ from renku_data_services.base_api.auth import authenticate, only_admins, only_au
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.etag import extract_if_none_match
 from renku_data_services.connected_services import apispec
-from renku_data_services.connected_services.apispec_base import AuthorizeParams
+from renku_data_services.connected_services.apispec_base import AuthorizeParams, CallbackParams
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.connected_services.utils import probe_repository
 
@@ -104,13 +104,12 @@ class OAuth2ClientsBP(CustomBlueprint):
         """OAuth2 authorization callback."""
 
         async def _callback(request: Request):
-            params = AuthorizeParams.model_validate(dict(request.query_args))
+            params = CallbackParams.model_validate(dict(request.query_args))
 
             callback_url = self._get_callback_url(request)
-            next_url = params.next_url
 
-            await self.connected_services_repo.authorize_callback(
-                state=params.state, raw_url=request.url, callback_url=callback_url, next_url=next_url
+            next_url = await self.connected_services_repo.authorize_callback(
+                state=params.state, raw_url=request.url, callback_url=callback_url
             )
 
             return redirect(to=next_url) if next_url else json({"status": "OK"})
@@ -122,6 +121,8 @@ class OAuth2ClientsBP(CustomBlueprint):
         # TODO: configure the server to trust the reverse proxy so that the request scheme is always "https".
         # TODO: see also https://github.com/SwissDataScienceCenter/renku-data-services/pull/225
         https_callback_url = urlunparse(urlparse(callback_url)._replace(scheme="https"))
+        if https_callback_url != callback_url:
+            logger.warning("Forcing the callback URL to use https. Trusted proxies configuration may be incorrect.")
         return https_callback_url
 
 

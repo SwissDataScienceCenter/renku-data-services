@@ -180,6 +180,7 @@ def get_internal_gitlab_adapter(internal_gitlab_url: str):
         kind=ProviderKind.gitlab,
         scope="",
         url=internal_gitlab_url,
+        use_pkce=False,
         client_secret=None,
         creation_date=datetime.now(),
         updated_at=datetime.now(),

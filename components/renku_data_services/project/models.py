@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Optional, TypeAlias
+from typing import Optional
 
 from renku_data_services.authz.models import Visibility
 from renku_data_services.namespace.models import Namespace
@@ -12,13 +12,11 @@ Repository = str
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class Project:
-    """Project model."""
+class BaseProject:
+    """Base Project model."""
 
-    id: Optional[str]
     name: str
     slug: str
-    namespace: Namespace
     visibility: Visibility
     created_by: str
     creation_date: datetime = field(default_factory=lambda: datetime.now(UTC).replace(microsecond=0))
@@ -35,7 +33,19 @@ class Project:
         return compute_etag_from_timestamp(self.updated_at)
 
 
-ProjectsType: TypeAlias = list[Project]
+@dataclass(frozen=True, eq=True, kw_only=True)
+class Project(BaseProject):
+    """Base Project model."""
+
+    id: str
+    namespace: Namespace
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedProject(BaseProject):
+    """A project that hasn't been stored in the database."""
+
+    namespace: str
 
 
 @dataclass

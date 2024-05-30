@@ -144,7 +144,7 @@ class GroupsBP(CustomBlueprint):
         return "/groups/<slug>/members/<user_id>", ["DELETE"], _delete_member
 
     def get_namespaces(self) -> BlueprintFactoryResponse:
-        """Get all all namespaces."""
+        """Get all namespaces."""
 
         @authenticate(self.authenticator)
         @only_authenticated
@@ -171,7 +171,7 @@ class GroupsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_authenticated
         async def _get_namespace(_: Request, *, user: base_models.APIUser, slug: str):
-            ns = await self.group_repo.get_namespace(user=user, slug=slug)
+            ns = await self.group_repo.get_namespace_by_slug(user=user, slug=slug)
             if not ns:
                 raise errors.MissingResourceError(message=f"The namespace with slug {slug} does not exist")
             return json(

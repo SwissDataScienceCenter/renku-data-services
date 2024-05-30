@@ -1,7 +1,6 @@
 """Projects authorization adapter."""
 
 import asyncio
-import logging
 from collections.abc import AsyncIterable, Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -29,6 +28,7 @@ from authzed.api.v1 import (  # type: ignore[attr-defined]
     ZedToken,
 )
 from authzed.api.v1.permission_service_pb2 import LOOKUP_PERMISSIONSHIP_HAS_PERMISSION
+from sanic.log import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services import base_models
@@ -192,18 +192,23 @@ class _AuthzConverter:
 def _is_allowed_on_resource(
     operation: Scope, resource_type: ResourceType
 ) -> Callable[
-    [Callable[Concatenate["Authz", base_models.APIUser, _P], Awaitable[_T]]],
-    Callable[Concatenate["Authz", base_models.APIUser, _P], Awaitable[_T]],
+    [Callable[Concatenate["Authz", base_models.APIUser | base_models.InternalServiceAdmin, _P], Awaitable[_T]]],
+    Callable[Concatenate["Authz", base_models.APIUser | base_models.InternalServiceAdmin, _P], Awaitable[_T]],
 ]:
     """A decorator that checks if the operation on a specific resource type is allowed or not."""
 
     def decorator(
-        f: Callable[Concatenate["Authz", base_models.APIUser, _P], Awaitable[_T]],
-    ) -> Callable[Concatenate["Authz", base_models.APIUser, _P], Awaitable[_T]]:
+        f: Callable[Concatenate["Authz", base_models.APIUser | base_models.InternalServiceAdmin, _P], Awaitable[_T]],
+    ) -> Callable[Concatenate["Authz", base_models.APIUser | base_models.InternalServiceAdmin, _P], Awaitable[_T]]:
         @wraps(f)
         async def decorated_function(
-            self: "Authz", user: base_models.APIUser, *args: _P.args, **kwargs: _P.kwargs
+            self: "Authz",
+            user: base_models.APIUser | base_models.InternalServiceAdmin,
+            *args: _P.args,
+            **kwargs: _P.kwargs,
         ) -> _T:
+            if isinstance(user, base_models.InternalServiceAdmin):
+                return await f(self, user, *args, **kwargs)
             if not isinstance(user, base_models.APIUser):
                 raise errors.ProgrammingError(
                     message="The decorator for checking permissions for authorization database operations "
@@ -609,7 +614,11 @@ class Authz:
 
     @_is_allowed_on_resource(Scope.DELETE, ResourceType.project)
     async def _remove_project(
-        self, user: base_models.APIUser, project: Project, *, zed_token: ZedToken | None = None
+        self,
+        user: base_models.APIUser | base_models.InternalServiceAdmin,
+        project: Project,
+        *,
+        zed_token: ZedToken | None = None,
     ) -> _AuthzChange:
         """Remove the relationships associated with the project."""
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
@@ -631,7 +640,11 @@ class Authz:
     # NOTE changing visibility is the same access level as removal
     @_is_allowed_on_resource(Scope.DELETE, ResourceType.project)
     async def _update_project_visibility(
-        self, user: base_models.APIUser, project: Project, *, zed_token: ZedToken | None = None
+        self,
+        user: base_models.APIUser | base_models.InternalServiceAdmin,
+        project: Project,
+        *,
+        zed_token: ZedToken | None = None,
     ) -> _AuthzChange:
         """Update the visibility of the project in the authorization database."""
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
@@ -715,7 +728,11 @@ class Authz:
     # NOTE changing namespace is the same access level as removal
     @_is_allowed_on_resource(Scope.DELETE, ResourceType.project)
     async def _update_project_namespace(
-        self, user: base_models.APIUser, project: Project, *, zed_token: ZedToken | None = None
+        self,
+        user: base_models.APIUser | base_models.InternalServiceAdmin,
+        project: Project,
+        *,
+        zed_token: ZedToken | None = None,
     ) -> _AuthzChange:
         """Update the namespace/group of the project in the authorization database."""
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
@@ -844,7 +861,7 @@ class Authz:
                 for rel_to_remove in existing_rels[1:]:
                     # NOTE: This means that the user has more than 1 role on the project - which should not happen
                     # But if this does occur then we simply delete the extra roles of the user here.
-                    logging.warning(
+                    logger.warning(
                         f"Removing additional unexpected role {rel_to_remove.relationship.relation} "
                         f"of user {member.user_id} on project {resource_id}, "
                         f"kept role {existing_rel.relationship.relation} which will be updated to {rel.relation}."
@@ -1032,12 +1049,16 @@ class Authz:
 
     @_is_allowed_on_resource(Scope.DELETE, ResourceType.group)
     async def _remove_group(
-        self, user: base_models.APIUser, group: Group, *, zed_token: ZedToken | None = None
+        self,
+        user: base_models.APIUser | base_models.InternalServiceAdmin,
+        group: Group,
+        *,
+        zed_token: ZedToken | None = None,
     ) -> _AuthzChange:
         """Remove the group from the authorization database."""
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
         rel_filter = RelationshipFilter(resource_type=ResourceType.group.value, optional_resource_id=group.id)
-        responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
+        responses = self.client.ReadRelationships(
             ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
         )
         rels: list[Relationship] = []
@@ -1105,7 +1126,7 @@ class Authz:
                 for rel_to_remove in existing_rels[1:]:
                     # NOTE: This means that the user has more than 1 role on the group - which should not happen
                     # But if this does occur then we simply delete the extra roles of the user here.
-                    logging.warning(
+                    logger.warning(
                         f"Removing additional unexpected role {rel_to_remove.relationship.relation} "
                         f"of user {member.user_id} on group {resource_id}, "
                         f"kept role {existing_rel.relationship.relation} which will be updated to {rel.relation}."

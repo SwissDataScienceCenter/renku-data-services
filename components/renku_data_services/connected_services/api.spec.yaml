@@ -254,6 +254,8 @@ components:
           $ref: "#/components/schemas/ApiScope"
         url:
           $ref: "#/components/schemas/ProviderUrl"
+        use_pkce:
+          $ref: "#/components/schemas/UsePKCE"
       required:
         - id
         - kind
@@ -261,6 +263,7 @@ components:
         - display_name
         - scope
         - url
+        - use_pkce
     ProviderPost:
       type: object
       additionalProperties: false
@@ -279,6 +282,8 @@ components:
           $ref: "#/components/schemas/ApiScope"
         url:
           $ref: "#/components/schemas/ProviderUrl"
+        use_pkce:
+          $ref: "#/components/schemas/UsePKCE"
       required:
         - id
         - kind
@@ -302,6 +307,8 @@ components:
           $ref: "#/components/schemas/ApiScope"
         url:
           $ref: "#/components/schemas/ProviderUrl"
+        use_pkce:
+          $ref: "#/components/schemas/UsePKCE"
     ConnectionList:
       type: array
       items:
@@ -407,6 +414,12 @@ components:
         The base URL of the OAuth2 Resource Server, e.g. "https://gitlab.com".
       type: string
       example: "https://example.org"
+    UsePKCE:
+      description: |
+        Whether or not to use PKCE during authorization flows.
+      type: boolean
+      example: false
+      default: false
     ConnectionStatus:
       type: string
       enum:
