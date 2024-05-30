@@ -1064,9 +1064,7 @@ class Authz:
     ) -> _AuthzChange:
         """Remove the group from the authorization database."""
         if not group.id:
-            raise errors.ProgrammingError(
-                message="Cannot a group in the authorization database if the group has no ID"
-            )
+            raise errors.ProgrammingError(message="Cannot a group in the authorization database if the group has no ID")
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
         rel_filter = RelationshipFilter(resource_type=ResourceType.group.value, optional_resource_id=group.id)
         responses = self.client.ReadRelationships(

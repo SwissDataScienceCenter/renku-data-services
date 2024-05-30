@@ -43,7 +43,7 @@ class UserRepo:
     encryption_key: bytes = field(repr=False)
     authz: Authz
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self._users_sync = UsersSync(
             self.session_maker, self.message_queue, self.event_repo, self.group_repo, self.authz
         )

@@ -13,7 +13,7 @@ from renku_data_services.migrations.core import run_migrations_for_app
 logging.basicConfig(level=logging.INFO)
 
 
-async def main():
+async def main() -> None:
     """Synchronize data from Keycloak and the user database."""
     parser = argparse.ArgumentParser()
     parser.add_argument(

@@ -10,7 +10,7 @@ from renku_data_services.message_queue.avro_models.io.renku.events import v2
 from renku_data_services.message_queue.converters import EventConverter
 
 
-async def sync_user_namespaces(config: SyncConfig):
+async def sync_user_namespaces(config: SyncConfig) -> None:
     """Lists all user namespaces in the database and adds them to Authzed and the event queue."""
     authz = Authz(config.authz_config)
     user_namespaces = await config.group_repo._get_user_namespaces()
@@ -35,7 +35,7 @@ async def sync_user_namespaces(config: SyncConfig):
     logging.info(f"Wrote authorization changes and events for {len(user_namespaces)} user namespaces")
 
 
-async def bootstrap_user_namespaces(config: SyncConfig):
+async def bootstrap_user_namespaces(config: SyncConfig) -> None:
     """Sycnhornize user namespaces to the authorization database only if none are already present."""
     authz = Authz(config.authz_config)
     rels = aiter(

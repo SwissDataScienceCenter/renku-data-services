@@ -320,7 +320,6 @@ class GroupRepository:
             )
             return [ns.dump_user() for ns in namespaces]
 
-    async def get_namespace(self, user: base_models.APIUser, slug: str) -> models.Namespace | None:
     async def get_namespace_by_slug(self, user: base_models.APIUser, slug: str) -> models.Namespace | None:
         """Get the namespace for a slug."""
         async with self.session_maker() as session, session.begin():
