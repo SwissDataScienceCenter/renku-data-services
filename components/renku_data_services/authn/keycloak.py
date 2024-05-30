@@ -1,4 +1,5 @@
 """Keycloak user store."""
+
 from dataclasses import dataclass
 from typing import Any, Optional, cast
 
@@ -19,7 +20,7 @@ class KcUserStore:
     keycloak_url: str
     realm: str = "Renku"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.keycloak_url = self.keycloak_url.rstrip("/")
 
     async def get_user_by_id(self, id: str, access_token: str) -> Optional[base_models.User]:
@@ -41,18 +42,21 @@ class KeycloakAuthenticator:
     admin_role: str = "renku-admin"
     token_field: str = "Authorization"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if len(self.algorithms) == 0:
             raise errors.ConfigurationError(message="At least one algorithm for token validation has to be specified.")
 
     def _validate(self, token: str) -> dict[str, Any]:
         sk = self.jwks.get_signing_key_from_jwt(token)
-        return jwt.decode(
-            token,
-            key=sk.key,
-            algorithms=self.algorithms,
-            audience=["renku", "renku-ui", "renku-cli", "swagger"],
-            verify=True,
+        return cast(
+            dict[str, Any],
+            jwt.decode(
+                token,
+                key=sk.key,
+                algorithms=self.algorithms,
+                audience=["renku", "renku-ui", "renku-cli", "swagger"],
+                verify=True,
+            ),
         )
 
     async def authenticate(self, access_token: str, request: Request) -> base_models.APIUser:

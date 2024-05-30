@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from cryptography.hazmat.primitives.asymmetric import rsa
 from kubernetes import client as k8s_client
 from sanic import Request, json
+from sanic.response import JSONResponse
 from sanic_ext import validate
 from sqlalchemy.util import b64encode
 
@@ -33,7 +34,7 @@ class K8sSecretsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_authenticated
         @validate(json=apispec.K8sSecret)
-        async def _post(_: Request, *, user: base_models.APIUser, body: apispec.K8sSecret):
+        async def _post(_: Request, user: base_models.APIUser, body: apispec.K8sSecret) -> JSONResponse:
             secrets = await self.user_secrets_repo.get_secrets_by_ids(
                 requested_by=user, secret_ids=[id.root for id in body.secret_ids]
             )

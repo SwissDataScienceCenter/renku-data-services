@@ -1,19 +1,14 @@
 """Adapters for connected services database classes."""
 
 from base64 import b64decode, b64encode
-from collections.abc import Callable, Coroutine
+from collections.abc import AsyncGenerator, Callable, Coroutine
 from contextlib import asynccontextmanager
-from typing import Any, Literal
+from typing import Any, Literal, cast
 from urllib.parse import urljoin, urlparse
 
+import renku_data_services.base_models as base_models
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from httpx import AsyncClient as HttpClient
-from sanic.log import logger
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-
-import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.connected_services import apispec, models
 from renku_data_services.connected_services import orm as schemas
@@ -21,6 +16,10 @@ from renku_data_services.connected_services.apispec import ConnectionStatus
 from renku_data_services.connected_services.provider_adapters import get_internal_gitlab_adapter, get_provider_adapter
 from renku_data_services.connected_services.utils import generate_code_verifier
 from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
+from sanic.log import logger
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 
 class ConnectedServicesRepository:
@@ -33,7 +32,7 @@ class ConnectedServicesRepository:
         async_oauth2_client_class: type[AsyncOAuth2Client],
         internal_gitlab_url: str | None,
     ):
-        self.session_maker = session_maker  # type: ignore[call-overload]
+        self.session_maker = session_maker
         self.encryption_key = encryption_key
         self.async_oauth2_client_class = async_oauth2_client_class
         self.internal_gitlab_url = internal_gitlab_url.rstrip("/") if internal_gitlab_url else None
@@ -98,7 +97,9 @@ class ConnectedServicesRepository:
             await session.refresh(client)
             return client.dump(user_is_admin=user.is_admin)
 
-    async def update_oauth2_client(self, user: base_models.APIUser, provider_id: str, **kwargs) -> models.OAuth2Client:
+    async def update_oauth2_client(
+        self, user: base_models.APIUser, provider_id: str, **kwargs: dict
+    ) -> models.OAuth2Client:
         """Update an OAuth2 Client entry."""
         if not user.is_admin:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
@@ -111,11 +112,12 @@ class ConnectedServicesRepository:
             if client is None:
                 raise errors.MissingResourceError(message=f"OAuth2 Client with id '{provider_id}' does not exist.")
 
-            if kwargs.get("client_secret"):
+            client_secret = cast(str | None, kwargs.get("client_secret"))
+            if client_secret:
                 client.client_secret = encrypt_string(
-                    self.encryption_key, client.created_by_id, kwargs["client_secret"]
+                    self.encryption_key, client.created_by_id, cast(str, kwargs["client_secret"])
                 )
-            elif kwargs.get("client_secret") == "":
+            elif client_secret == "":  # nosec B105
                 client.client_secret = None
 
             for key, value in kwargs.items():
@@ -174,6 +176,8 @@ class ConnectedServicesRepository:
                 redirect_uri=callback_url,
                 code_challenge_method=code_challenge_method,
             ) as oauth2_client:
+                url: str
+                state: str
                 url, state = oauth2_client.create_authorization_url(
                     adapter.authorization_url, code_verifier=code_verifier
                 )
@@ -457,7 +461,9 @@ class ConnectedServicesRepository:
             return result
 
     @asynccontextmanager
-    async def get_async_oauth2_client(self, connection_id: str, user: base_models.APIUser):
+    async def get_async_oauth2_client(
+        self, connection_id: str, user: base_models.APIUser
+    ) -> AsyncGenerator[AsyncOAuth2Client, None]:
         """Get the AsyncOAuth2Client for the given connection_id and user."""
         if not user.is_authenticated or user.id is None:
             raise errors.MissingResourceError(
@@ -483,7 +489,7 @@ class ConnectedServicesRepository:
             client = connection.client
             token = self._decrypt_token_set(token=connection.token, user_id=user.id)
 
-        async def update_token(token: dict[str, Any], refresh_token: str | None = None):
+        async def update_token(token: dict[str, Any], refresh_token: str | None = None) -> None:
             if refresh_token is None:
                 return
             async with self.session_maker() as session, session.begin():
@@ -502,15 +508,19 @@ class ConnectedServicesRepository:
         )
         code_verifier = connection.code_verifier
         code_challenge_method = "S256" if code_verifier else None
-        yield self.async_oauth2_client_class(
-            client_id=client.client_id,
-            client_secret=client_secret,
-            scope=client.scope,
-            code_challenge_method=code_challenge_method,
-            token_endpoint=adapter.token_endpoint_url,
-            token=token,
-            update_token=update_token,
-        ), connection, adapter
+        yield (
+            self.async_oauth2_client_class(
+                client_id=client.client_id,
+                client_secret=client_secret,
+                scope=client.scope,
+                code_challenge_method=code_challenge_method,
+                token_endpoint=adapter.token_endpoint_url,
+                token=token,
+                update_token=update_token,
+            ),
+            connection,
+            adapter,
+        )
 
     def _encrypt_token_set(self, token: dict[str, Any], user_id: str) -> models.OAuth2TokenSet:
         """Encrypts sensitive fields of token set before persisting at rest."""

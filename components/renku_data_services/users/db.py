@@ -43,12 +43,12 @@ class UserRepo:
         group_repo: GroupRepository,
         encryption_key: bytes,
         authz: Authz,
-    ):
+    ) -> None:
         self.session_maker = session_maker
         self.encryption_key = encryption_key
         self._users_sync = UsersSync(self.session_maker, message_queue, event_repo, group_repo, authz)
 
-    async def initialize(self, kc_api: IKeycloakAPI):
+    async def initialize(self, kc_api: IKeycloakAPI) -> None:
         """Do a total sync of users from Keycloak if there is nothing in the DB."""
         users = await self._get_users()
         if len(users) > 0:
@@ -150,14 +150,14 @@ class UsersSync:
         event_repo: EventRepository,
         group_repo: GroupRepository,
         authz: Authz,
-    ):
+    ) -> None:
         self.session_maker = session_maker
         self.message_queue: IMessageQueue = message_queue
         self.event_repo: EventRepository = event_repo
         self.group_repo = group_repo
         self.authz = authz
 
-    async def _get_user(self, id) -> UserInfo | None:
+    async def _get_user(self, id: str) -> UserInfo | None:
         """Get a specific user."""
         async with self.session_maker() as session, session.begin():
             stmt = select(UserORM).where(UserORM.keycloak_id == id)
@@ -181,7 +181,7 @@ class UsersSync:
         else:
             return await self._insert_user(session=session, user_id=user_id, **payload)
 
-    async def _insert_user(self, session: AsyncSession, user_id: str, **kwargs) -> UserWithNamespaceUpdate:
+    async def _insert_user(self, session: AsyncSession, user_id: str, **kwargs: Any) -> UserWithNamespaceUpdate:
         """Insert a user."""
         kwargs.pop("keycloak_id", None)
         kwargs.pop("id", None)
@@ -194,7 +194,7 @@ class UsersSync:
         return UserWithNamespaceUpdate(None, UserWithNamespace(new_user.dump(), namespace))
 
     async def _update_user(
-        self, session: AsyncSession, user_id: str, existing_user: UserORM | None, **kwargs
+        self, session: AsyncSession, user_id: str, existing_user: UserORM | None, **kwargs: Any
     ) -> UserWithNamespaceUpdate:
         """Update a user."""
         if not existing_user:
@@ -238,12 +238,12 @@ class UsersSync:
         logger.info(f"User namespace with ID {user_id} was removed from the authorization database.")
         return removed_user
 
-    async def users_sync(self, kc_api: IKeycloakAPI):
+    async def users_sync(self, kc_api: IKeycloakAPI) -> None:
         """Sync all users from Keycloak into the users database."""
         logger.info("Starting a total user database sync.")
         kc_users = kc_api.get_users()
 
-        async def _do_update(raw_kc_user: dict[str, Any]):
+        async def _do_update(raw_kc_user: dict[str, Any]) -> None:
             kc_user = UserInfo.from_kc_user_payload(raw_kc_user)
             logger.info(f"Checking user with Keycloak ID {kc_user.id}")
             db_user = await self._get_user(kc_user.id)
@@ -256,7 +256,7 @@ class UsersSync:
         for user in kc_users:
             await _do_update(user)
 
-    async def events_sync(self, kc_api: IKeycloakAPI):
+    async def events_sync(self, kc_api: IKeycloakAPI) -> None:
         """Use the events from Keycloak to update the users database."""
         async with self.session_maker() as session, session.begin():
             res_count = await session.execute(select(func.count()).select_from(UserORM))

@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 from sanic import HTTPResponse, Request, json
+from sanic.response import JSONResponse
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
@@ -22,7 +23,7 @@ class EnvironmentsBP(CustomBlueprint):
     def get_all(self) -> BlueprintFactoryResponse:
         """List all session environments."""
 
-        async def _get_all(_: Request):
+        async def _get_all(_: Request) -> JSONResponse:
             environments = await self.session_repo.get_environments()
             return json(
                 [apispec.Environment.model_validate(e).model_dump(exclude_none=True, mode="json") for e in environments]
@@ -33,7 +34,7 @@ class EnvironmentsBP(CustomBlueprint):
     def get_one(self) -> BlueprintFactoryResponse:
         """Get a specific session environment."""
 
-        async def _get_one(_: Request, environment_id: str):
+        async def _get_one(_: Request, environment_id: str) -> JSONResponse:
             environment = await self.session_repo.get_environment(environment_id=environment_id)
             return json(apispec.Environment.model_validate(environment).model_dump(exclude_none=True, mode="json"))
 
@@ -44,7 +45,7 @@ class EnvironmentsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @validate(json=apispec.EnvironmentPost)
-        async def _post(_: Request, body: apispec.EnvironmentPost, user: base_models.APIUser):
+        async def _post(_: Request, user: base_models.APIUser, body: apispec.EnvironmentPost) -> JSONResponse:
             environment = await self.session_repo.insert_environment(user=user, new_environment=body)
             return json(apispec.Environment.model_validate(environment).model_dump(exclude_none=True, mode="json"), 201)
 
@@ -55,7 +56,9 @@ class EnvironmentsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @validate(json=apispec.EnvironmentPatch)
-        async def _patch(_: Request, environment_id: str, body: apispec.EnvironmentPatch, user: base_models.APIUser):
+        async def _patch(
+            _: Request, user: base_models.APIUser, environment_id: str, body: apispec.EnvironmentPatch
+        ) -> JSONResponse:
             body_dict = body.model_dump(exclude_none=True)
             environment = await self.session_repo.update_environment(
                 user=user, environment_id=environment_id, **body_dict
@@ -68,7 +71,7 @@ class EnvironmentsBP(CustomBlueprint):
         """Delete a specific session environment."""
 
         @authenticate(self.authenticator)
-        async def _delete(_: Request, environment_id: str, user: base_models.APIUser):
+        async def _delete(_: Request, user: base_models.APIUser, environment_id: str) -> HTTPResponse:
             await self.session_repo.delete_environment(user=user, environment_id=environment_id)
             return HTTPResponse(status=204)
 
@@ -86,7 +89,7 @@ class SessionLaunchersBP(CustomBlueprint):
         """List all session launcher visible to user."""
 
         @authenticate(self.authenticator)
-        async def _get_all(_: Request, user: base_models.APIUser):
+        async def _get_all(_: Request, user: base_models.APIUser) -> JSONResponse:
             launchers = await self.session_repo.get_launchers(user=user)
             return json(
                 [
@@ -101,7 +104,7 @@ class SessionLaunchersBP(CustomBlueprint):
         """Get a specific session launcher."""
 
         @authenticate(self.authenticator)
-        async def _get_one(_: Request, launcher_id: str, user: base_models.APIUser):
+        async def _get_one(_: Request, user: base_models.APIUser, launcher_id: str) -> JSONResponse:
             launcher = await self.session_repo.get_launcher(user=user, launcher_id=launcher_id)
             return json(apispec.SessionLauncher.model_validate(launcher).model_dump(exclude_none=True, mode="json"))
 
@@ -112,7 +115,7 @@ class SessionLaunchersBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @validate(json=apispec.SessionLauncherPost)
-        async def _post(_: Request, body: apispec.SessionLauncherPost, user: base_models.APIUser):
+        async def _post(_: Request, user: base_models.APIUser, body: apispec.SessionLauncherPost) -> JSONResponse:
             launcher = await self.session_repo.insert_launcher(user=user, new_launcher=body)
             return json(
                 apispec.SessionLauncher.model_validate(launcher).model_dump(exclude_none=True, mode="json"), 201
@@ -125,7 +128,9 @@ class SessionLaunchersBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @validate(json=apispec.SessionLauncherPatch)
-        async def _patch(_: Request, launcher_id: str, body: apispec.SessionLauncherPatch, user: base_models.APIUser):
+        async def _patch(
+            _: Request, user: base_models.APIUser, launcher_id: str, body: apispec.SessionLauncherPatch
+        ) -> JSONResponse:
             body_dict = body.model_dump(exclude_none=True)
             launcher = await self.session_repo.update_launcher(user=user, launcher_id=launcher_id, **body_dict)
             return json(apispec.SessionLauncher.model_validate(launcher).model_dump(exclude_none=True, mode="json"))
@@ -136,7 +141,7 @@ class SessionLaunchersBP(CustomBlueprint):
         """Delete a specific session launcher."""
 
         @authenticate(self.authenticator)
-        async def _delete(_: Request, launcher_id: str, user: base_models.APIUser):
+        async def _delete(_: Request, user: base_models.APIUser, launcher_id: str) -> HTTPResponse:
             await self.session_repo.delete_launcher(user=user, launcher_id=launcher_id)
             return HTTPResponse(status=204)
 
@@ -147,7 +152,7 @@ class SessionLaunchersBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @validate_path_project_id
-        async def _get_launcher(_: Request, project_id: str, user: base_models.APIUser):
+        async def _get_launcher(_: Request, user: base_models.APIUser, project_id: str) -> JSONResponse:
             launchers = await self.session_repo.get_project_launchers(user=user, project_id=project_id)
             return json(
                 [

@@ -1,4 +1,5 @@
 """SQLAlchemy schemas for the user preferences database."""
+
 from typing import Any
 
 from sqlalchemy import JSON, Integer, MetaData, String
@@ -33,14 +34,14 @@ class UserPreferencesORM(BaseORM):
     """Pinned projects."""
 
     @classmethod
-    def load(cls, user_preferences: models.UserPreferences):
+    def load(cls, user_preferences: models.UserPreferences) -> "UserPreferencesORM":
         """Create UserPreferencesORM from the user preferences model."""
         return cls(
             user_id=user_preferences.user_id,
             pinned_projects=user_preferences.pinned_projects.model_dump(),
         )
 
-    def dump(self):
+    def dump(self) -> models.UserPreferences:
         """Create a user preferences model from the ORM object."""
         return models.UserPreferences(
             user_id=self.user_id, pinned_projects=models.PinnedProjects.from_dict(self.pinned_projects)

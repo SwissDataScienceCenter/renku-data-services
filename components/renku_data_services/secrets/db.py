@@ -19,7 +19,7 @@ class UserSecretsRepo:
     def __init__(
         self,
         session_maker: Callable[..., AsyncSession],
-    ):
+    ) -> None:
         self.session_maker = session_maker
 
     @only_authenticated

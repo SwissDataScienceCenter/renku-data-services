@@ -3,6 +3,7 @@
 from logging.config import fileConfig
 
 from alembic import context
+from alembic.config import Config
 
 from renku_data_services.authz.orm import BaseORM as authz
 from renku_data_services.connected_services.orm import BaseORM as connected_services
@@ -19,7 +20,7 @@ from renku_data_services.users.orm import BaseORM as users
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
-config = context.config
+config: Config = context.config
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

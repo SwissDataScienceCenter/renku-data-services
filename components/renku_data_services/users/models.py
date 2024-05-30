@@ -215,7 +215,7 @@ class UserInfo:
     email: str | None = None
 
     @classmethod
-    def from_kc_user_payload(self, payload: dict[str, Any]):
+    def from_kc_user_payload(self, payload: dict[str, Any]) -> "UserInfo":
         """Create a user object from the user payload from the Keycloak admin API."""
         return UserInfo(
             id=payload["id"],

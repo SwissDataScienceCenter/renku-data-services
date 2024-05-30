@@ -15,7 +15,7 @@ from renku_data_services.migrations.core import run_migrations_for_app
 @pytest.mark.asyncio
 async def test_migration_to_f34b87ddd954(
     sanic_client_no_migrations: SanicASGITestClient, app_config: Config, user_headers, admin_headers
-):
+) -> None:
     run_migrations_for_app("common", "d8676f0cde53")
     await app_config.kc_user_repo.initialize(app_config.kc_api)
     await app_config.group_repo.generate_user_namespaces()

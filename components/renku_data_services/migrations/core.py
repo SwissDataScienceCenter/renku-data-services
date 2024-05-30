@@ -5,7 +5,7 @@ from pathlib import Path
 from alembic import command, config
 
 
-def run_migrations_for_app(name: str, revision: str = "heads"):
+def run_migrations_for_app(name: str, revision: str = "heads") -> None:
     """Perform migrations for app `name`.
 
     From: https://alembic.sqlalchemy.org/en/latest/cookbook.html#programmatic-api-use-connection-sharing-with-asyncio

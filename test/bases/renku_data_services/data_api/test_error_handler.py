@@ -26,7 +26,7 @@ def _trigger_error(err: Exception | Callable | Awaitable) -> RouteHandler:
     return _handler
 
 
-def _generate_pydantic_error():
+def _generate_pydantic_error() -> None:
     apispec.QuotaPatch.model_validate({"cpu": -1.0})
 
 
@@ -104,7 +104,7 @@ def _generate_pydantic_error():
         ),
     ],
 )
-def test_error_handler(err: Exception | Callable, expected_response: dict[str, Any], expected_status_code: int):
+def test_error_handler(err: Exception | Callable, expected_response: dict[str, Any], expected_status_code: int) -> None:
     app = Sanic("test-error-handler")
     app.error_handler = CustomErrorHandler(apispec)
     app.get("/")(_trigger_error(err))  # type: ignore[unused-coroutine]

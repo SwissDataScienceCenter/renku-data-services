@@ -292,7 +292,7 @@ class EventConverter:
                 return _ProjectEventConverter.to_events(project, event_type)
             case v2.ProjectUpdated:
                 project_update = cast(project_models.ProjectUpdate, input)
-                project = cast(project_models.Project, project_update.new)
+                project = project_update.new
                 return _ProjectEventConverter.to_events(project, event_type)
             case events.ProjectMembershipChanged:
                 project_authz = cast(list[authz_models.MembershipChange], input)

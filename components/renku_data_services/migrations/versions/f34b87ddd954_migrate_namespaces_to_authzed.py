@@ -25,7 +25,7 @@ branch_labels = None
 depends_on = None
 
 
-async def add_events(session: Session, app_config: AppConfig, events: list[Event]):
+async def add_events(session: Session, app_config: AppConfig, events: list[Event]) -> None:
     for event in events:
         await app_config.event_repo.store_event(session, event)
 

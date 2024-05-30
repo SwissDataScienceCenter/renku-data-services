@@ -90,7 +90,7 @@ def db_config(monkeypatch, worker_id, authz_config) -> Iterator[DBConfig]:
 
 
 @pytest.fixture
-def secrets_key_pair(monkeypatch, tmp_path):
+def secrets_key_pair(monkeypatch, tmp_path) -> None:
     """Create a public/private key pair to be used for secrets service tests."""
 
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)

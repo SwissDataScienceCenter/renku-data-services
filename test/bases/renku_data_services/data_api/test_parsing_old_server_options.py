@@ -73,7 +73,7 @@ expected_rp = models.ResourcePool(
 )
 
 
-def test_server_options_parsing():
+def test_server_options_parsing() -> None:
     options = ServerOptions.model_validate(safe_load(StringIO(server_options_yaml)))
     defaults = ServerOptionsDefaults.model_validate(safe_load(StringIO(server_defaults_yaml)))
     rp = generate_default_resource_pool(options, defaults)

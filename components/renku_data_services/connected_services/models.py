@@ -45,7 +45,7 @@ class OAuth2TokenSet(dict):
     """OAuth2 token set model."""
 
     @classmethod
-    def from_dict(cls, token_set: dict[str, Any]):
+    def from_dict(cls, token_set: dict[str, Any]) -> "OAuth2TokenSet":
         """Create an OAuth2 token set from a dictionary."""
         if isinstance(token_set, dict) and not isinstance(token_set, cls):
             return cls(token_set)

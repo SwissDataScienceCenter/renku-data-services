@@ -1,4 +1,5 @@
 """Base models for API specifications."""
+
 from pydantic import BaseModel, Field
 
 

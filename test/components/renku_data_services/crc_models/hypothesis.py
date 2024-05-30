@@ -1,3 +1,5 @@
+from typing import Union
+
 from hypothesis import assume
 from hypothesis import strategies as st
 
@@ -6,13 +8,13 @@ from renku_data_services import errors
 from renku_data_services.crc import models
 
 
-def make_cpu_float(data) -> dict[str, int | float]:
+def make_cpu_float(data: dict[str, Union[float, int]]) -> dict[str, int | float]:
     if "cpu" in data:
         data["cpu"] = float(data["cpu"])
     return data
 
 
-SQL_BIGINT_MAX = 9_223_372_036_854_775_807
+SQL_BIGINT_MAX: int = 9_223_372_036_854_775_807
 SQL_INT_MAX = 2_147_483_647
 # NOTE: A quota always has to have resource that are greater than a class
 a_rc_cpu = st.floats(min_value=0.0, max_value=10)

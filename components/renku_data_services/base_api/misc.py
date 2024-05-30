@@ -1,9 +1,12 @@
 """Common blueprints."""
+
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any
+from typing import Any, NoReturn, ParamSpec, TypeVar, cast
 
 from sanic import Request, json
+from sanic.response import JSONResponse
 
 from renku_data_services import errors
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
@@ -19,7 +22,7 @@ class MiscBP(CustomBlueprint):
     def get_apispec(self) -> BlueprintFactoryResponse:
         """Servers the OpenAPI specification."""
 
-        async def _get_apispec(_: Request):
+        async def _get_apispec(_: Request) -> JSONResponse:
             return json(self.apispec)
 
         return "/spec.json", ["GET"], _get_apispec
@@ -27,7 +30,7 @@ class MiscBP(CustomBlueprint):
     def get_error(self) -> BlueprintFactoryResponse:
         """Returns a sample error response."""
 
-        async def _get_error(_: Request):
+        async def _get_error(_: Request) -> NoReturn:
             raise errors.ValidationError(message="Sample validation error")
 
         return "/error", ["GET"], _get_error
@@ -35,19 +38,23 @@ class MiscBP(CustomBlueprint):
     def get_version(self) -> BlueprintFactoryResponse:
         """Returns the version."""
 
-        async def _get_version(_: Request):
+        async def _get_version(_: Request) -> JSONResponse:
             return json({"version": self.version})
 
         return "/version", ["GET"], _get_version
 
 
-def validate_db_ids(f):
+_T = TypeVar("_T")
+_P = ParamSpec("_P")
+
+
+def validate_db_ids(f: Callable[_P, Awaitable[_T]]) -> Callable[_P, Awaitable[_T]]:
     """Decorator for a Sanic handler that errors out if passed in IDs are outside of the valid range for postgres."""
 
     @wraps(f)
-    async def decorated_function(*args, **kwargs):
-        resource_pool_id = kwargs.get("resource_pool_id")
-        class_id = kwargs.get("class_id")
+    async def decorated_function(*args: _P.args, **kwargs: _P.kwargs) -> _T:
+        resource_pool_id = cast(int | None, kwargs.get("resource_pool_id"))
+        class_id = cast(int | None, kwargs.get("class_id"))
         min_val = 1  # postgres primary keys start at 1
         max_val = 2_147_483_647  # the max value for a default postgres primary key sequence
         if resource_pool_id and not min_val <= resource_pool_id <= max_val:
