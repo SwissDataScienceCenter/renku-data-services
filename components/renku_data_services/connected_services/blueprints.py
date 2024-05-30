@@ -198,7 +198,6 @@ class OAuth2ConnectionsBP(CustomBlueprint):
             request: Request, user: base_models.APIUser, repository_url: str, etag: str | None
         ) -> JSONResponse | HTTPResponse:
             repository_url = unquote(repository_url)
-            logger.info(f"Requested repository_url={repository_url}")
 
             async def get_internal_gitlab_user() -> base_models.APIUser:
                 return await _get_internal_gitlab_user(request)
@@ -225,7 +224,6 @@ class OAuth2ConnectionsBP(CustomBlueprint):
 
         async def _get_one_repository_probe(_: Request, repository_url: str) -> HTTPResponse:
             repository_url = unquote(repository_url)
-            logger.info(f"Requested repository_url={repository_url}")
 
             result = await probe_repository(repository_url)
 

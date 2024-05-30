@@ -380,13 +380,10 @@ class ConnectedServicesRepository:
         async with HttpClient() as http:
             adapter = get_provider_adapter(client)
             request_url = adapter.get_repository_api_url(repository_url)
-            logger.info(f"[Anon] GET {request_url}")
             headers = adapter.api_common_headers or dict()
             if etag:
                 headers["If-None-Match"] = etag
             response = await http.get(request_url, headers=headers)
-
-            logger.info(f"Got response {response.status_code}")
 
             if response.status_code == 304:
                 return "304"
@@ -396,12 +393,9 @@ class ConnectedServicesRepository:
                 )
 
             repository = adapter.api_validate_repository_response(response, is_anonymous=True)
-            logger.info(f"Repo model {repository}")
-            result = models.RepositoryProviderMatch(
+            return models.RepositoryProviderMatch(
                 provider_id=client.id, connection_id=None, repository_metadata=repository
             )
-            logger.info(f"Result {result}")
-            return result
 
     async def _get_repository_authenticated(
         self, connection_id: str, repository_url: str, user: base_models.APIUser, etag: str | None
@@ -413,13 +407,10 @@ class ConnectedServicesRepository:
             adapter,
         ):
             request_url = adapter.get_repository_api_url(repository_url)
-            logger.info(f"[Logged] GET {request_url}")
             headers = adapter.api_common_headers or dict()
             if etag:
                 headers["If-None-Match"] = etag
             response = await oauth2_client.get(request_url, headers=headers)
-
-            logger.info(f"Got response {response.status_code}")
 
             if response.status_code == 304:
                 return "304"
@@ -429,12 +420,9 @@ class ConnectedServicesRepository:
                 )
 
             repository = adapter.api_validate_repository_response(response, is_anonymous=False)
-            logger.info(f"Repo model {repository}")
-            result = models.RepositoryProviderMatch(
+            return models.RepositoryProviderMatch(
                 provider_id=connection.client.id, connection_id=connection_id, repository_metadata=repository
             )
-            logger.info(f"Result {result}")
-            return result
 
     async def _get_repository_from_internal_gitlab(
         self, repository_url: str, user: base_models.APIUser, etag: str | None, internal_gitlab_url: str
@@ -444,15 +432,12 @@ class ConnectedServicesRepository:
             adapter = get_internal_gitlab_adapter(internal_gitlab_url)
             request_url = adapter.get_repository_api_url(repository_url)
             is_anonymous = not bool(user.access_token)
-            logger.info(f"[{"Anon" if is_anonymous else "Logged"}/INTERNAL GITLAB] GET {request_url}")
             headers = adapter.api_common_headers or dict()
             if user.access_token:
                 headers["Authorization"] = f"Bearer {user.access_token}"
             if etag:
                 headers["If-None-Match"] = etag
             response = await http.get(request_url, headers=headers)
-
-            logger.info(f"Got response {response.status_code}")
 
             if response.status_code == 304:
                 return "304"
@@ -462,12 +447,9 @@ class ConnectedServicesRepository:
                 )
 
             repository = adapter.api_validate_repository_response(response, is_anonymous=is_anonymous)
-            logger.info(f"Repo model {repository}")
-            result = models.RepositoryProviderMatch(
+            return models.RepositoryProviderMatch(
                 provider_id="INTERNAL_GITLAB", connection_id=None, repository_metadata=repository
             )
-            logger.info(f"Result {result}")
-            return result
 
     @asynccontextmanager
     async def get_async_oauth2_client(
