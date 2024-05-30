@@ -6,20 +6,25 @@ from contextlib import asynccontextmanager
 from typing import Any, Literal, cast
 from urllib.parse import urljoin, urlparse
 
-import renku_data_services.base_models as base_models
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from httpx import AsyncClient as HttpClient
-from renku_data_services import errors
-from renku_data_services.connected_services import apispec, models
-from renku_data_services.connected_services import orm as schemas
-from renku_data_services.connected_services.apispec import ConnectionStatus
-from renku_data_services.connected_services.provider_adapters import get_internal_gitlab_adapter, get_provider_adapter
-from renku_data_services.connected_services.utils import generate_code_verifier
-from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
 from sanic.log import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+
+import renku_data_services.base_models as base_models
+from renku_data_services import errors
+from renku_data_services.connected_services import apispec, models
+from renku_data_services.connected_services import orm as schemas
+from renku_data_services.connected_services.apispec import ConnectionStatus
+from renku_data_services.connected_services.provider_adapters import (
+    ProviderAdapter,
+    get_internal_gitlab_adapter,
+    get_provider_adapter,
+)
+from renku_data_services.connected_services.utils import generate_code_verifier
+from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
 
 
 class ConnectedServicesRepository:
@@ -463,7 +468,7 @@ class ConnectedServicesRepository:
     @asynccontextmanager
     async def get_async_oauth2_client(
         self, connection_id: str, user: base_models.APIUser
-    ) -> AsyncGenerator[AsyncOAuth2Client, None]:
+    ) -> AsyncGenerator[tuple[AsyncOAuth2Client, schemas.OAuth2ConnectionORM, ProviderAdapter], None]:
         """Get the AsyncOAuth2Client for the given connection_id and user."""
         if not user.is_authenticated or user.id is None:
             raise errors.MissingResourceError(

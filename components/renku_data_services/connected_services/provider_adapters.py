@@ -170,7 +170,7 @@ def get_provider_adapter(client: schemas.OAuth2ClientORM) -> ProviderAdapter:
     return adapter_class(client=client)
 
 
-def get_internal_gitlab_adapter(internal_gitlab_url: str):
+def get_internal_gitlab_adapter(internal_gitlab_url: str) -> GitLabAdapter:
     """Returns an adapter instance corresponding to the internal GitLab provider."""
     client = schemas.OAuth2ClientORM(
         id="INTERNAL_GITLAB",

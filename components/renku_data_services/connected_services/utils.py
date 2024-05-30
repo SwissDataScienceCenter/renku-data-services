@@ -19,4 +19,4 @@ async def probe_repository(repository_url: str) -> bool:
         res = await client.get(url=url)
         if res.status_code != 200:
             return False
-        return res.headers.get("Content-Type") == "application/x-git-upload-pack-advertisement"
+        return bool(res.headers.get("Content-Type") == "application/x-git-upload-pack-advertisement")

@@ -189,18 +189,18 @@ class OAuth2ConnectionsBP(CustomBlueprint):
         """Get the metadata available about a repository."""
 
         @authenticate(self.internal_gitlab_authenticator)
-        async def _get_internal_gitlab_user(_: Request, user: base_models.APIUser):
+        async def _get_internal_gitlab_user(_: Request, user: base_models.APIUser) -> base_models.APIUser:
             return user
 
         @authenticate(self.authenticator)
         @extract_if_none_match
         async def _get_one_repository(
-            request: Request, repository_url: str, user: base_models.APIUser, etag: str | None
-        ):
+            request: Request, user: base_models.APIUser, repository_url: str, etag: str | None
+        ) -> JSONResponse | HTTPResponse:
             repository_url = unquote(repository_url)
             logger.info(f"Requested repository_url={repository_url}")
 
-            async def get_internal_gitlab_user():
+            async def get_internal_gitlab_user() -> base_models.APIUser:
                 return await _get_internal_gitlab_user(request)
 
             result = await self.connected_services_repo.get_repository(
@@ -223,7 +223,7 @@ class OAuth2ConnectionsBP(CustomBlueprint):
     def get_one_repository_probe(self) -> BlueprintFactoryResponse:
         """Probe a repository to check if it is publicly available."""
 
-        async def _get_one_repository_probe(_: Request, repository_url: str):
+        async def _get_one_repository_probe(_: Request, repository_url: str) -> HTTPResponse:
             repository_url = unquote(repository_url)
             logger.info(f"Requested repository_url={repository_url}")
 

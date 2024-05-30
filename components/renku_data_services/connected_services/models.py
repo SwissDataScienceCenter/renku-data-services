@@ -89,7 +89,7 @@ class RepositoryPermissions:
     push: bool
 
     @classmethod
-    def default(cls):
+    def default(cls) -> "RepositoryPermissions":
         """Default permissions."""
         return cls(pull=False, push=False)
 
