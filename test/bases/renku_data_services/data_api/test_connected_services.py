@@ -1,7 +1,7 @@
 """Tests for connected services blueprints."""
 
 from typing import Any
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import parse_qs, quote, quote_plus, urlparse
 
 import pytest
 from sanic import Sanic
@@ -321,3 +321,45 @@ async def test_get_account(oauth2_test_client: SanicASGITestClient, user_headers
     account = res.json
     assert account.get("username") == "USERNAME"
     assert account.get("web_url") == "https://example.org/USERNAME"
+
+
+@pytest.mark.asyncio
+async def test_get_one_repository(oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_connection):
+    connection = await create_oauth2_connection("provider_1")
+    repository_url = "https://example.org/username/my_repo.git"
+
+    _, res = await oauth2_test_client.get(
+        f"/api/data/oauth2/api/repositories/{quote_plus(repository_url)}", headers=user_headers
+    )
+
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    result = res.json
+    assert result.get("connection_id") == connection["id"]
+    assert result.get("provider_id") == "provider_1"
+    assert result.get("repository_metadata") is not None
+    repository_metadata = result["repository_metadata"]
+    assert repository_metadata.get("git_http_url") == repository_url
+    assert repository_metadata.get("permissions") is not None
+    permissions = repository_metadata["permissions"]
+    assert permissions.get("pull")
+    assert not permissions.get("push")
+
+
+@pytest.mark.asyncio
+async def test_get_one_repository_not_found(
+    oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_connection
+):
+    connection = await create_oauth2_connection("provider_1")
+    repository_url = "https://example.org/username/another_repo.git"
+
+    _, res = await oauth2_test_client.get(
+        f"/api/data/oauth2/api/repositories/{quote_plus(repository_url)}", headers=user_headers
+    )
+
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    result = res.json
+    assert result.get("connection_id") == connection["id"]
+    assert result.get("provider_id") == "provider_1"
+    assert result.get("repository_metadata") is None
