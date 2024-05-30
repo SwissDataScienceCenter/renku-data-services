@@ -24,7 +24,7 @@ class GitlabAuthenticator:
 
     token_field: str = "Gitlab-Access-Token"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Properly set gitlab url."""
         parsed_url = parse.urlparse(self.gitlab_url)
 

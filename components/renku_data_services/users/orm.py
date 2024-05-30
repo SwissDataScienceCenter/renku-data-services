@@ -37,7 +37,7 @@ class UserORM(BaseORM):
         )
 
     @classmethod
-    def load(cls, user: UserInfo):
+    def load(cls, user: UserInfo) -> "UserORM":
         """Create an ORM object from the user object."""
         return cls(
             keycloak_id=user.id,

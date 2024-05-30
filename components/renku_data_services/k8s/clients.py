@@ -1,5 +1,6 @@
 """Different implementations of k8s clients."""
 
+import multiprocessing.synchronize
 from copy import deepcopy
 from multiprocessing import Lock
 from multiprocessing.synchronize import Lock as LockType
@@ -16,7 +17,7 @@ from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface, K8
 class K8sCoreClient(K8sCoreClientInterface):  # pragma:nocover
     """Real k8s core API client that exposes the required functions."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         try:
             InClusterConfigLoader(
                 token_filename=SERVICE_TOKEN_FILENAME,
@@ -26,31 +27,31 @@ class K8sCoreClient(K8sCoreClientInterface):  # pragma:nocover
             config.load_config()
         self.client = client.CoreV1Api()
 
-    def read_namespaced_resource_quota(self, name: Any, namespace: Any, **kwargs: Any) -> Any:
+    def read_namespaced_resource_quota(self, name: str, namespace: str, **kwargs: dict) -> Any:
         """Get a resource quota."""
         return self.client.read_namespaced_resource_quota(name, namespace, **kwargs)
 
-    def list_namespaced_resource_quota(self, namespace: Any, **kwargs: Any) -> Any:
+    def list_namespaced_resource_quota(self, namespace: str, **kwargs: dict) -> Any:
         """List resource quotas."""
         return self.client.list_namespaced_resource_quota(namespace, **kwargs)
 
-    def create_namespaced_resource_quota(self, namespace: Any, body: Any, **kwargs: Any) -> Any:
+    def create_namespaced_resource_quota(self, namespace: str, body: dict, **kwargs: dict) -> Any:
         """Create a resource quota."""
         return self.client.create_namespaced_resource_quota(namespace, body, **kwargs)
 
-    def delete_namespaced_resource_quota(self, name: Any, namespace: Any, **kwargs: Any) -> Any:
+    def delete_namespaced_resource_quota(self, name: str, namespace: str, **kwargs: dict) -> Any:
         """Delete a resource quota."""
         return self.client.delete_namespaced_resource_quota(name, namespace, **kwargs)
 
-    def patch_namespaced_resource_quota(self, name: Any, namespace: Any, body: Any, **kwargs: Any) -> Any:
+    def patch_namespaced_resource_quota(self, name: str, namespace: str, body: dict, **kwargs: dict) -> Any:
         """Update a resource quota."""
         return self.client.patch_namespaced_resource_quota(name, namespace, body, **kwargs)
 
-    def delete_namespaced_secret(self, name: Any, namespace: Any, **kwargs: Any) -> Any:
+    def delete_namespaced_secret(self, name: str, namespace: str, **kwargs: dict) -> Any:
         """Delete a secret."""
         return self.client.delete_namespaced_secret(name, namespace, **kwargs)
 
-    def create_namespaced_secret(self, namespace: Any, body: Any, **kwargs: Any) -> Any:
+    def create_namespaced_secret(self, namespace: str, body: dict, **kwargs: dict) -> Any:
         """Create a secret."""
         return self.client.create_namespaced_secret(namespace, body, **kwargs)
 
@@ -58,7 +59,7 @@ class K8sCoreClient(K8sCoreClientInterface):  # pragma:nocover
 class K8sSchedulingClient(K8sSchedudlingClientInterface):  # pragma:nocover
     """Real k8s scheduling API client that exposes the required functions."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         try:
             InClusterConfigLoader(
                 token_filename=SERVICE_TOKEN_FILENAME,
@@ -83,13 +84,13 @@ class DummyCoreClient(K8sCoreClientInterface):
     Not suitable for production - to be used only for testing and development.
     """
 
-    def __init__(self, quotas: dict[str, client.V1ResourceQuota], secrets: dict[str, client.V1Secret]):
+    def __init__(self, quotas: dict[str, client.V1ResourceQuota], secrets: dict[str, client.V1Secret]) -> None:
         self.quotas = quotas
         self.secrets = secrets
         self.__lock: LockType | None = None
 
     @property
-    def _lock(self):
+    def _lock(self) -> multiprocessing.synchronize.Lock:
         # NOTE: If this is a regular attribute and initialized when the class in initialized
         # then Sanic fails to start properly because it clashes with the multiprocessing Lock
         # used here. This way Sanic starts without a problem because the Lock is initialized
@@ -170,12 +171,12 @@ class DummySchedulingClient(K8sSchedudlingClientInterface):
     Not suitable for production - to be used only for testing and development.
     """
 
-    def __init__(self, pcs: dict[str, client.V1PriorityClass]):
+    def __init__(self, pcs: dict[str, client.V1PriorityClass]) -> None:
         self.pcs = pcs
         self.__lock: LockType | None = None
 
     @property
-    def _lock(self):
+    def _lock(self) -> multiprocessing.synchronize.Lock:
         # NOTE: If this is a regular attribute and initialized when the class in initialized
         # then Sanic fails to start properly because it clashes with the multiprocessing Lock
         # used here. This way Sanic starts without a problem because the Lock is initialized

@@ -6,11 +6,6 @@ Create Date: 2024-05-22 07:56:17.839732
 
 """
 
-import asyncio
-from collections.abc import Coroutine
-from concurrent.futures import Future, ThreadPoolExecutor
-from typing import Any, TypeVar
-
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.orm import Session
@@ -27,15 +22,8 @@ down_revision = "d8676f0cde53"
 branch_labels = None
 depends_on = None
 
-_T = TypeVar("_T")
 
-
-def execute_coroutine(coro: Coroutine[Any, Any, _T]) -> _T:
-    with ThreadPoolExecutor(1) as executor:
-        future: Future[_T] = executor.submit(asyncio.run, coro)
-        return future.result()
-
-async def add_events(session: Session, app_config: AppConfig, events: list[Event]):
+async def add_events(session: Session, app_config: AppConfig, events: list[Event]) -> None:
     for event in events:
         await app_config.event_repo.store_event(session, event)
 

@@ -42,7 +42,7 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.12"
-sanic = { extras = ["ext"], version = "^23.3.0" }
+sanic = { extras = ["ext"], version = "^23.12.0" }
 pydantic = {extras = ["email"], version = "^2.6.4"}
 datamodel-code-generator = "^0.24.2"
 sqlalchemy = { extras = ["asyncio"], version = "^2.0.9" }
@@ -69,7 +69,7 @@ cryptography = "^42.0.5"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.7.5"
-mypy = "~1.9"  # NOTE: Mypy 1.10.0 has problems with our decorators, see https://github.com/python/mypy/issues/17166 
+mypy = "~1.9"  # NOTE: Mypy 1.10.0 has problems with our decorators, see https://github.com/python/mypy/issues/17166
 pytest = "^7.2.2"
 pytest-cov = "^4.0.0"
 pre-commit = "^3.2.2"
@@ -86,6 +86,7 @@ fakeredis = "^2.21.1"
 ruff = "^0.3.4"
 debugpy = "^1.8.1"
 pytest-xdist = {version = "^3.5.0", extras = ["psutil"]}
+types-requests = "^2.32.0.20240523"
 
 [build-system]
 requires = ["poetry-core"]
@@ -97,6 +98,9 @@ target-version = "py311"
 output-format = "full"
 include = ["*.py", "*.pyi"]
 exclude = ["*/avro_models/*"]
+
+[tool.ruff.format]
+exclude = ["apispec.py"]
 
 [tool.ruff.lint]
 select = [
@@ -174,8 +178,18 @@ pretty = true
 show_column_numbers = true
 show_error_codes = true
 show_error_context = true
+
 warn_unreachable = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+strict_equality = true
 check_untyped_defs = true
+allow_redefinition = true
+disallow_subclassing_any = true
+disallow_untyped_decorators = true
+disallow_incomplete_defs = true
+disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
 module = [

@@ -46,7 +46,7 @@ class EventORM(BaseORM):
     """The message payload."""
 
     @classmethod
-    def load(cls, event: Event):
+    def load(cls, event: Event) -> "EventORM":
         """Create an ORM object from an event."""
         message = event.serialize()
         if "payload" in message and isinstance(message["payload"], bytes):
@@ -57,6 +57,6 @@ class EventORM(BaseORM):
     def dump(self) -> Event[dict[str, Any]]:
         """Create an event from the ORM object."""
         message = deepcopy(self.payload)
-        if "payload" in message and isinstance(message["payload"], bytes):
+        if "payload" in message and isinstance(message["payload"], str):
             message["payload"] = base64.b64decode(message["payload"])
         return Event(self.queue, message)

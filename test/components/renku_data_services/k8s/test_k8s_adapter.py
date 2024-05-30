@@ -9,7 +9,7 @@ from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClie
 from renku_data_services.k8s.quota import QuotaRepository
 
 
-def test_dummy_core_client():
+def test_dummy_core_client() -> None:
     core_client = DummyCoreClient({}, {})
     quotas = core_client.list_namespaced_resource_quota("default")
     assert len(quotas.items) == 0
@@ -28,7 +28,7 @@ def test_dummy_core_client():
     assert len(core_client.quotas) == 0
 
 
-def test_dummy_scheduling_client():
+def test_dummy_scheduling_client() -> None:
     scheduling_client = DummySchedulingClient({})
     assert len(scheduling_client.pcs) == 0
     pc_name = "test"
@@ -40,7 +40,7 @@ def test_dummy_scheduling_client():
 
 
 @given(quota=quota_strat)
-def test_get_insert_quota(quota: models.Quota):
+def test_get_insert_quota(quota: models.Quota) -> None:
     core_client = DummyCoreClient({}, {})
     scheduling_client = DummySchedulingClient({})
     quota_repo = QuotaRepository(core_client, scheduling_client)
@@ -61,7 +61,7 @@ def test_get_insert_quota(quota: models.Quota):
 
 
 @given(quota=quota_strat)
-def test_delete_quota(quota: models.Quota):
+def test_delete_quota(quota: models.Quota) -> None:
     core_client = DummyCoreClient({}, {})
     scheduling_client = DummySchedulingClient({})
     quota_repo = QuotaRepository(core_client, scheduling_client)
@@ -76,7 +76,7 @@ def test_delete_quota(quota: models.Quota):
 
 
 @given(old_quota=quota_strat, new_quota=quota_strat)
-def test_update_quota(old_quota: models.Quota, new_quota: models.Quota):
+def test_update_quota(old_quota: models.Quota, new_quota: models.Quota) -> None:
     try:
         core_client = DummyCoreClient({}, {})
         scheduling_client = DummySchedulingClient({})

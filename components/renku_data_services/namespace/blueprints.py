@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 from sanic import HTTPResponse, Request, json
+from sanic.response import JSONResponse
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
@@ -26,7 +27,9 @@ class GroupsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @paginate
-        async def _get_all(_: Request, *, user: base_models.APIUser, pagination: PaginationRequest):
+        async def _get_all(
+            _: Request, user: base_models.APIUser, pagination: PaginationRequest
+        ) -> tuple[list[dict], int]:
             groups, rec_count = await self.group_repo.get_groups(user=user, pagination=pagination)
             return (
                 [apispec.GroupResponse.model_validate(g).model_dump(exclude_none=True, mode="json") for g in groups],
@@ -41,7 +44,7 @@ class GroupsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_authenticated
         @validate(json=apispec.GroupPostRequest)
-        async def _post(_: Request, *, user: base_models.APIUser, body: apispec.GroupPostRequest):
+        async def _post(_: Request, user: base_models.APIUser, body: apispec.GroupPostRequest) -> JSONResponse:
             result = await self.group_repo.insert_group(user=user, payload=body)
             return json(apispec.GroupResponse.model_validate(result).model_dump(exclude_none=True, mode="json"), 201)
 
@@ -51,7 +54,7 @@ class GroupsBP(CustomBlueprint):
         """Get a specific group."""
 
         @authenticate(self.authenticator)
-        async def _get_one(_: Request, *, user: base_models.APIUser, slug: str):
+        async def _get_one(_: Request, user: base_models.APIUser, slug: str) -> JSONResponse:
             result = await self.group_repo.get_group(user=user, slug=slug)
             return json(apispec.GroupResponse.model_validate(result).model_dump(exclude_none=True, mode="json"))
 
@@ -62,7 +65,7 @@ class GroupsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _delete(_: Request, *, user: base_models.APIUser, slug: str):
+        async def _delete(_: Request, user: base_models.APIUser, slug: str) -> HTTPResponse:
             await self.group_repo.delete_group(user=user, slug=slug)
             return HTTPResponse(status=204)
 
@@ -74,7 +77,9 @@ class GroupsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_authenticated
         @validate(json=apispec.GroupPatchRequest)
-        async def _patch(_: Request, *, user: base_models.APIUser, slug: str, body: apispec.GroupPatchRequest):
+        async def _patch(
+            _: Request, user: base_models.APIUser, slug: str, body: apispec.GroupPatchRequest
+        ) -> JSONResponse:
             body_dict = body.model_dump(exclude_none=True)
             res = await self.group_repo.update_group(user=user, slug=slug, payload=body_dict)
             return json(apispec.GroupResponse.model_validate(res).model_dump(exclude_none=True, mode="json"))
@@ -86,7 +91,7 @@ class GroupsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _get_all_members(_: Request, *, user: base_models.APIUser, slug: str):
+        async def _get_all_members(_: Request, user: base_models.APIUser, slug: str) -> JSONResponse:
             members = await self.group_repo.get_group_members(user, slug)
             return json(
                 [
@@ -110,10 +115,9 @@ class GroupsBP(CustomBlueprint):
         @only_authenticated
         async def _update_members(
             request: Request,
-            *,
             user: base_models.APIUser,
             slug: str,
-        ):
+        ) -> JSONResponse:
             body_validated = apispec.GroupMemberPatchRequestList.model_validate(request.json)
             res = await self.group_repo.update_group_members(
                 user=user,
@@ -137,19 +141,21 @@ class GroupsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _delete_member(_: Request, *, user: base_models.APIUser, slug: str, user_id: str):
+        async def _delete_member(_: Request, user: base_models.APIUser, slug: str, user_id: str) -> HTTPResponse:
             await self.group_repo.delete_group_member(user=user, slug=slug, user_id_to_delete=user_id)
             return HTTPResponse(status=204)
 
         return "/groups/<slug>/members/<user_id>", ["DELETE"], _delete_member
 
     def get_namespaces(self) -> BlueprintFactoryResponse:
-        """Get all all namespaces."""
+        """Get all namespaces."""
 
         @authenticate(self.authenticator)
         @only_authenticated
         @paginate
-        async def _get_namespaces(_: Request, *, user: base_models.APIUser, pagination: PaginationRequest):
+        async def _get_namespaces(
+            _: Request, user: base_models.APIUser, pagination: PaginationRequest
+        ) -> tuple[list[dict], int]:
             nss, total_count = await self.group_repo.get_namespaces(user=user, pagination=pagination)
             return [
                 apispec.NamespaceResponse(
@@ -170,8 +176,8 @@ class GroupsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _get_namespace(_: Request, *, user: base_models.APIUser, slug: str):
-            ns = await self.group_repo.get_namespace(user=user, slug=slug)
+        async def _get_namespace(_: Request, user: base_models.APIUser, slug: str) -> JSONResponse:
+            ns = await self.group_repo.get_namespace_by_slug(user=user, slug=slug)
             if not ns:
                 raise errors.MissingResourceError(message=f"The namespace with slug {slug} does not exist")
             return json(

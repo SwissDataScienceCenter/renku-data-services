@@ -1,19 +1,19 @@
 """Database adapters and helpers for users."""
 
-import logging
 import secrets
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
+from sanic.log import logger
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.base_api.auth import APIUser, only_authenticated
 from renku_data_services.errors import errors
-from renku_data_services.message_queue import AmbiguousEvent
+from renku_data_services.message_queue import events
 from renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
@@ -48,7 +48,7 @@ class UserRepo:
             self.session_maker, self.message_queue, self.event_repo, self.group_repo, self.authz
         )
 
-    async def initialize(self, kc_api: IKeycloakAPI):
+    async def initialize(self, kc_api: IKeycloakAPI) -> None:
         """Do a total sync of users from Keycloak if there is nothing in the DB."""
         users = await self._get_users()
         if len(users) > 0:
@@ -150,14 +150,14 @@ class UsersSync:
         event_repo: EventRepository,
         group_repo: GroupRepository,
         authz: Authz,
-    ):
+    ) -> None:
         self.session_maker = session_maker
         self.message_queue: IMessageQueue = message_queue
         self.event_repo: EventRepository = event_repo
         self.group_repo = group_repo
         self.authz = authz
 
-    async def _get_user(self, id) -> UserInfo | None:
+    async def _get_user(self, id: str) -> UserInfo | None:
         """Get a specific user."""
         async with self.session_maker() as session, session.begin():
             stmt = select(UserORM).where(UserORM.keycloak_id == id)
@@ -167,7 +167,7 @@ class UsersSync:
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.update_or_insert, ResourceType.user)
-    @dispatch_message(AmbiguousEvent.UPDATE_OR_INSERT_USER)
+    @dispatch_message(events.UpdateOrInsertUser)
     async def update_or_insert_user(
         self, user_id: str, payload: dict[str, Any], *, session: AsyncSession | None = None
     ) -> UserWithNamespaceUpdate:
@@ -181,7 +181,7 @@ class UsersSync:
         else:
             return await self._insert_user(session=session, user_id=user_id, **payload)
 
-    async def _insert_user(self, session: AsyncSession, user_id: str, **kwargs) -> UserWithNamespaceUpdate:
+    async def _insert_user(self, session: AsyncSession, user_id: str, **kwargs: Any) -> UserWithNamespaceUpdate:
         """Insert a user."""
         kwargs.pop("keycloak_id", None)
         kwargs.pop("id", None)
@@ -194,7 +194,7 @@ class UsersSync:
         return UserWithNamespaceUpdate(None, UserWithNamespace(new_user.dump(), namespace))
 
     async def _update_user(
-        self, session: AsyncSession, user_id: str, existing_user: UserORM | None, **kwargs
+        self, session: AsyncSession, user_id: str, existing_user: UserORM | None, **kwargs: Any
     ) -> UserWithNamespaceUpdate:
         """Update a user."""
         if not existing_user:
@@ -226,29 +226,29 @@ class UsersSync:
         """Remove a user from the database."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
-        logging.info(f"Trying to remove user with ID {user_id}")
+        logger.info(f"Trying to remove user with ID {user_id}")
         stmt = delete(UserORM).where(UserORM.keycloak_id == user_id).returning(UserORM)
         user = await session.scalar(stmt)
         await self.authz._remove_user_namespace(user_id)
         if not user:
-            logging.info(f"User with ID {user_id} was not found.")
+            logger.info(f"User with ID {user_id} was not found.")
             return None
-        logging.info(f"User with ID {user_id} was removed from the database.")
+        logger.info(f"User with ID {user_id} was removed from the database.")
         removed_user = user.dump()
-        logging.info(f"User namespace with ID {user_id} was removed from the authorization database.")
+        logger.info(f"User namespace with ID {user_id} was removed from the authorization database.")
         return removed_user
 
-    async def users_sync(self, kc_api: IKeycloakAPI):
+    async def users_sync(self, kc_api: IKeycloakAPI) -> None:
         """Sync all users from Keycloak into the users database."""
-        logging.info("Starting a total user database sync.")
+        logger.info("Starting a total user database sync.")
         kc_users = kc_api.get_users()
 
-        async def _do_update(raw_kc_user: dict[str, Any]):
+        async def _do_update(raw_kc_user: dict[str, Any]) -> None:
             kc_user = UserInfo.from_kc_user_payload(raw_kc_user)
-            logging.info(f"Checking user with Keycloak ID {kc_user.id}")
+            logger.info(f"Checking user with Keycloak ID {kc_user.id}")
             db_user = await self._get_user(kc_user.id)
             if db_user != kc_user:
-                logging.info(f"Inserting or updating user {db_user} -> {kc_user}")
+                logger.info(f"Inserting or updating user {db_user} -> {kc_user}")
                 await self.update_or_insert_user(kc_user.id, asdict(kc_user))
 
         # NOTE: If asyncio.gather is used here you quickly exhaust all DB connections
@@ -256,23 +256,23 @@ class UsersSync:
         for user in kc_users:
             await _do_update(user)
 
-    async def events_sync(self, kc_api: IKeycloakAPI):
+    async def events_sync(self, kc_api: IKeycloakAPI) -> None:
         """Use the events from Keycloak to update the users database."""
         async with self.session_maker() as session, session.begin():
             res_count = await session.execute(select(func.count()).select_from(UserORM))
             count = res_count.scalar() or 0
             if count == 0:
                 await self.users_sync(kc_api)
-            logging.info("Starting periodic event sync.")
+            logger.info("Starting periodic event sync.")
             stmt = select(LastKeycloakEventTimestamp)
             latest_utc_timestamp_orm = (await session.execute(stmt)).scalar_one_or_none()
             previous_sync_latest_utc_timestamp = (
                 latest_utc_timestamp_orm.timestamp_utc if latest_utc_timestamp_orm is not None else None
             )
-            logging.info(f"The previous sync latest event is {previous_sync_latest_utc_timestamp} UTC")
+            logger.info(f"The previous sync latest event is {previous_sync_latest_utc_timestamp} UTC")
             now_utc = datetime.utcnow()
             start_date = now_utc.date() - timedelta(days=1)
-            logging.info(f"Pulling events with a start date of {start_date} UTC")
+            logger.info(f"Pulling events with a start date of {start_date} UTC")
             user_events = kc_api.get_user_events(start_date=start_date)
             update_admin_events = kc_api.get_admin_events(
                 start_date=start_date, event_types=[KeycloakAdminEvent.CREATE, KeycloakAdminEvent.UPDATE]
@@ -287,17 +287,17 @@ class UsersSync:
             parsed_deletions = sorted(parsed_deletions, key=lambda x: x.timestamp_utc)
             if previous_sync_latest_utc_timestamp is not None:
                 # Some events have already been processed - filter out old events we have seen
-                logging.info(f"Filtering events older than {previous_sync_latest_utc_timestamp}")
+                logger.info(f"Filtering events older than {previous_sync_latest_utc_timestamp}")
                 parsed_updates = [u for u in parsed_updates if u.timestamp_utc > previous_sync_latest_utc_timestamp]
                 parsed_deletions = [u for u in parsed_deletions if u.timestamp_utc > previous_sync_latest_utc_timestamp]
             latest_update_timestamp = None
             latest_delete_timestamp = None
             for update in parsed_updates:
-                logging.info(f"Processing update event {update}")
+                logger.info(f"Processing update event {update}")
                 await self.update_or_insert_user(update.user_id, {update.field_name: update.new_value})
                 latest_update_timestamp = update.timestamp_utc
             for deletion in parsed_deletions:
-                logging.info(f"Processing deletion event {deletion}")
+                logger.info(f"Processing deletion event {deletion}")
                 await self._remove_user(deletion.user_id)
                 latest_delete_timestamp = deletion.timestamp_utc
             # Update the latest processed event timestamp
@@ -309,11 +309,11 @@ class UsersSync:
             if current_sync_latest_utc_timestamp is not None:
                 if latest_utc_timestamp_orm is None:
                     session.add(LastKeycloakEventTimestamp(current_sync_latest_utc_timestamp))
-                    logging.info(
+                    logger.info(
                         f"Inserted the latest sync event timestamp in the database: {current_sync_latest_utc_timestamp}"
                     )
                 else:
                     latest_utc_timestamp_orm.timestamp_utc = current_sync_latest_utc_timestamp
-                    logging.info(
+                    logger.info(
                         f"Updated the latest sync event timestamp in the database: {current_sync_latest_utc_timestamp}"
                     )

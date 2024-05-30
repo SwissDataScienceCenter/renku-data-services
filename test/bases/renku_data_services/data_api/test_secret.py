@@ -55,7 +55,7 @@ def create_secret(sanic_client: SanicASGITestClient, user_headers):
 
 
 @pytest.mark.asyncio
-async def test_create_secrets(sanic_client: SanicASGITestClient, user_headers):
+async def test_create_secrets(sanic_client: SanicASGITestClient, user_headers) -> None:
     payload = {
         "name": "my-secret",
         "value": "42",
@@ -70,7 +70,7 @@ async def test_create_secrets(sanic_client: SanicASGITestClient, user_headers):
 
 
 @pytest.mark.asyncio
-async def test_get_one_secret(sanic_client: SanicASGITestClient, user_headers, create_secret):
+async def test_get_one_secret(sanic_client: SanicASGITestClient, user_headers, create_secret) -> None:
     await create_secret("secret-1", "value-1")
     secret = await create_secret("secret-2", "value-2")
     await create_secret("secret-3", "value-3")
@@ -87,7 +87,7 @@ async def test_get_one_secret(sanic_client: SanicASGITestClient, user_headers, c
 
 
 @pytest.mark.asyncio
-async def test_get_all_secrets(sanic_client: SanicASGITestClient, user_headers, create_secret):
+async def test_get_all_secrets(sanic_client: SanicASGITestClient, user_headers, create_secret) -> None:
     await create_secret("secret-1", "value-1")
     await create_secret("secret-2", "value-2")
     await create_secret("secret-3", "value-3")
@@ -100,7 +100,7 @@ async def test_get_all_secrets(sanic_client: SanicASGITestClient, user_headers, 
 
 
 @pytest.mark.asyncio
-async def test_get_delete_a_secret(sanic_client: SanicASGITestClient, user_headers, create_secret):
+async def test_get_delete_a_secret(sanic_client: SanicASGITestClient, user_headers, create_secret) -> None:
     await create_secret("secret-1", "value-1")
     secret = await create_secret("secret-2", "value-2")
     await create_secret("secret-3", "value-3")
@@ -119,7 +119,7 @@ async def test_get_delete_a_secret(sanic_client: SanicASGITestClient, user_heade
 
 
 @pytest.mark.asyncio
-async def test_get_update_a_secret(sanic_client: SanicASGITestClient, user_headers, create_secret):
+async def test_get_update_a_secret(sanic_client: SanicASGITestClient, user_headers, create_secret) -> None:
     await create_secret("secret-1", "value-1")
     secret = await create_secret("secret-2", "value-2")
     await create_secret("secret-3", "value-3")
@@ -142,7 +142,7 @@ async def test_get_update_a_secret(sanic_client: SanicASGITestClient, user_heade
 @pytest.mark.asyncio
 async def test_cannot_get_another_user_secret(
     sanic_client: SanicASGITestClient, user_headers, admin_headers, create_secret
-):
+) -> None:
     await create_secret("secret-1", "value-1")
     secret = await create_secret("secret-2", "value-2")
     await create_secret("secret-3", "value-3")
@@ -161,7 +161,7 @@ async def test_cannot_get_another_user_secret(
 
 
 @pytest.mark.asyncio
-async def test_anonymous_users_cannot_create_secrets(sanic_client: SanicASGITestClient, unauthorized_headers):
+async def test_anonymous_users_cannot_create_secrets(sanic_client: SanicASGITestClient, unauthorized_headers) -> None:
     payload = {
         "name": "my-secret",
         "value": "42",
@@ -179,7 +179,7 @@ async def test_secret_encryption_decryption(
     secrets_storage_app_config,
     user_headers,
     create_secret,
-):
+) -> None:
     """Test adding a secret and decrypting it in the secret service."""
     secret1 = await create_secret("secret-1", "value-1")
     secret1_id = secret1["id"]

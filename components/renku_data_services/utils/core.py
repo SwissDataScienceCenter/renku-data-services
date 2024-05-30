@@ -4,7 +4,7 @@ import functools
 import os
 import ssl
 from collections.abc import Awaitable, Callable
-from typing import Any, Concatenate, ParamSpec, Protocol, TypeVar
+from typing import Any, Concatenate, ParamSpec, Protocol, TypeVar, cast
 
 import httpx
 from deepmerge import Merger
@@ -20,12 +20,12 @@ def oidc_discovery(url: str, realm: str) -> dict[str, Any]:
     url = f"{url}/realms/{realm}/.well-known/openid-configuration"
     res = httpx.get(url, verify=get_ssl_context())
     if res.status_code == 200:
-        return res.json()
+        return cast(dict[str, Any], res.json())
     raise errors.ConfigurationError(message=f"Cannot successfully do OIDC discovery with url {url}.")
 
 
 @functools.lru_cache(1)
-def get_ssl_context():
+def get_ssl_context() -> ssl.SSLContext:
     """Get an SSL context supporting mounted custom certificates."""
     context = ssl.create_default_context()
     custom_cert_file = os.environ.get("SSL_CERT_FILE", None)
@@ -34,8 +34,10 @@ def get_ssl_context():
     return context
 
 
-def merge_api_specs(*args):
+def merge_api_specs(*args: list[dict[str, Any]]) -> dict[str, Any]:
     """Merges API spec files into a single one."""
+    if any(not isinstance(arg, dict) for arg in args):
+        raise errors.ConfigurationError(message="API Spec isn't of type 'dict'")
     merger = Merger(
         type_strategies=[(list, "append_unique"), (dict, "merge"), (set, "union")],
         fallback_strategies=["use_existing"],
@@ -47,11 +49,11 @@ def merge_api_specs(*args):
         return merged_spec
     merged_spec = args[0]
     if len(args) == 1:
-        return merged_spec
+        return cast(dict[str, Any], merged_spec)
     for to_merge in args[1:]:
         merger.merge(merged_spec, to_merge)
 
-    return merged_spec
+    return cast(dict[str, Any], merged_spec)
 
 
 class WithSessionMaker(Protocol):
@@ -73,7 +75,7 @@ def with_db_transaction(
     """Initializes a transaction and commits it on successful exit of the wrapped function."""
 
     @functools.wraps(f)
-    async def transaction_wrapper(self: _WithSessionMaker, *args: _P.args, **kwargs: _P.kwargs):
+    async def transaction_wrapper(self: _WithSessionMaker, *args: _P.args, **kwargs: _P.kwargs) -> _T:
         session_kwarg = kwargs.get("session")
         if "session" in kwargs and session_kwarg is not None and not isinstance(session_kwarg, AsyncSession):
             raise errors.ProgrammingError(

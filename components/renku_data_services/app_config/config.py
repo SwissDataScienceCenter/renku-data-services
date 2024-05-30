@@ -99,7 +99,7 @@ class SentryConfig:
     sample_rate: float = 0.2
 
     @classmethod
-    def from_env(cls, prefix: str = ""):
+    def from_env(cls, prefix: str = "") -> "SentryConfig":
         """Create a config from environment variables."""
         enabled = os.environ.get(f"{prefix}SENTRY_ENABLED", "false").lower() == "true"
         dsn = os.environ.get(f"{prefix}SENTRY_DSN", "")
@@ -117,7 +117,7 @@ class TrustedProxiesConfig:
     real_ip_header: str | None = None
 
     @classmethod
-    def from_env(cls, prefix: str = ""):
+    def from_env(cls, prefix: str = "") -> "TrustedProxiesConfig":
         """Create a config from environment variables."""
         proxies_count = int(os.environ.get(f"{prefix}PROXIES_COUNT") or "0")
         real_ip_header = os.environ.get(f"{prefix}REAL_IP_HEADER")
@@ -169,7 +169,7 @@ class Config:
     _project_member_repo: ProjectMemberRepository | None = field(default=None, repr=False, init=False)
     _connected_services_repo: ConnectedServicesRepository | None = field(default=None, repr=False, init=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         spec_file = Path(renku_data_services.crc.__file__).resolve().parent / "api.spec.yaml"
         with open(spec_file) as f:
             crc_spec = safe_load(f)
@@ -293,7 +293,10 @@ class Config:
         """The DB adapter for Renku groups."""
         if not self._group_repo:
             self._group_repo = GroupRepository(
-                session_maker=self.db.async_session_maker, event_repo=self.event_repo, group_authz=self.authz
+                session_maker=self.db.async_session_maker,
+                event_repo=self.event_repo,
+                group_authz=self.authz,
+                message_queue=self.message_queue,
             )
         return self._group_repo
 
@@ -349,7 +352,7 @@ class Config:
         return self._connected_services_repo
 
     @classmethod
-    def from_env(cls, prefix: str = ""):
+    def from_env(cls, prefix: str = "") -> "Config":
         """Create a config from environment variables."""
 
         user_store: base_models.UserStore

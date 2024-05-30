@@ -16,7 +16,9 @@ from renku_data_services.migrations.core import run_migrations_for_app
 @given(project_slug=project_slug_strat)
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
-async def test_user_preferences_insert_get(project_slug: str, app_config: Config, loggedin_user: base_models.APIUser):
+async def test_user_preferences_insert_get(
+    project_slug: str, app_config: Config, loggedin_user: base_models.APIUser
+) -> None:
     run_migrations_for_app("common")
     user_preferences_repo = app_config.user_preferences_repo
     try:
@@ -30,7 +32,7 @@ async def test_user_preferences_insert_get(project_slug: str, app_config: Config
 @pytest.mark.asyncio
 async def test_user_preferences_add_pinned_project(
     project_slugs: list[str], app_config: Config, loggedin_user: base_models.APIUser
-):
+) -> None:
     run_migrations_for_app("common")
     target(len(project_slugs))
     user_preferences_repo = app_config.user_preferences_repo
@@ -53,7 +55,7 @@ async def test_user_preferences_add_pinned_project(
 @pytest.mark.asyncio
 async def test_user_preferences_add_pinned_project_existing(
     project_slugs: list[str], app_config: Config, loggedin_user: base_models.APIUser
-):
+) -> None:
     run_migrations_for_app("common")
     target(len(project_slugs))
     user_preferences_repo = app_config.user_preferences_repo
@@ -77,7 +79,7 @@ async def test_user_preferences_add_pinned_project_existing(
 @pytest.mark.asyncio
 async def test_user_preferences_delete_pinned_project(
     project_slugs: list[str], app_config: Config, loggedin_user: base_models.APIUser
-):
+) -> None:
     run_migrations_for_app("common")
     target(len(project_slugs))
     user_preferences_repo = app_config.user_preferences_repo
@@ -102,7 +104,7 @@ async def test_user_preferences_delete_pinned_project(
 @pytest.mark.asyncio
 async def test_user_preferences_add_pinned_project_respects_maximum(
     project_slugs: list[str], app_config: Config, loggedin_user: base_models.APIUser
-):
+) -> None:
     run_migrations_for_app("common")
     target(len(project_slugs))
     user_preferences_repo = app_config.user_preferences_repo

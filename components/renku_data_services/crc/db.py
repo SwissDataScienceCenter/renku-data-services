@@ -7,10 +7,10 @@ it all in one place.
 """
 
 from asyncio import gather
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Collection, Sequence
 from dataclasses import dataclass, field
 from functools import wraps
-from typing import Optional, cast
+from typing import Any, Concatenate, Optional, ParamSpec, TypeVar, cast
 
 from sqlalchemy import NullPool, create_engine, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,8 +27,8 @@ from renku_data_services.users.db import UserRepo
 
 
 class _Base:
-    def __init__(self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository):
-        self.session_maker = session_maker  # type: ignore[call-overload]
+    def __init__(self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository) -> None:
+        self.session_maker = session_maker
         self.quotas_repo = quotas_repo
 
 
@@ -49,7 +49,7 @@ def _resource_pool_access_control(
                     and_(schemas.RPUserORM.keycloak_id == api_user.id, schemas.RPUserORM.no_default_access == true())
                 )
                 .exists()
-            )  # type: ignore[var-annotated]
+            )
             output = output.join(schemas.RPUserORM, schemas.ResourcePoolORM.users, isouter=True).where(
                 or_(
                     schemas.RPUserORM.keycloak_id == api_user.id,  # the user is part of the pool
@@ -88,7 +88,7 @@ def _classes_user_access_control(
                     and_(schemas.RPUserORM.keycloak_id == api_user.id, schemas.RPUserORM.no_default_access == true())
                 )
                 .exists()
-            )  # type: ignore[var-annotated]
+            )
             output = output.join(schemas.RPUserORM, schemas.ResourcePoolORM.users, isouter=True).where(
                 or_(
                     schemas.RPUserORM.keycloak_id == api_user.id,  # the user is part of the pool
@@ -112,7 +112,11 @@ def _classes_user_access_control(
     return output
 
 
-def _only_admins(f):
+_P = ParamSpec("_P")
+_T = TypeVar("_T")
+
+
+def _only_admins(f: Callable[Concatenate[Any, _P], Awaitable[_T]]) -> Callable[Concatenate[Any, _P], Awaitable[_T]]:
     """Decorator that errors out if the user is not an admin.
 
     It expects the APIUser model to be a named parameter in the decorated function or
@@ -120,12 +124,14 @@ def _only_admins(f):
     """
 
     @wraps(f)
-    async def decorated_function(self, *args, **kwargs):
+    async def decorated_function(self: Any, *args: _P.args, **kwargs: _P.kwargs) -> _T:
         api_user = None
         if "api_user" in kwargs:
             api_user = kwargs["api_user"]
         elif len(args) >= 1:
             api_user = args[0]
+        if api_user is not None and not isinstance(api_user, base_models.APIUser):
+            raise errors.ProgrammingError(message="Expected user parameter is not of type APIUser.")
         if api_user is None or not api_user.is_admin:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
@@ -139,14 +145,14 @@ def _only_admins(f):
 class ResourcePoolRepository(_Base):
     """The adapter used for accessing resource pools with SQLAlchemy."""
 
-    def initialize(self, sync_connection_url: str, rp: models.ResourcePool):
+    def initialize(self, sync_connection_url: str, rp: models.ResourcePool) -> None:
         """Add the default resource pool if it does not already exist."""
         engine = create_engine(sync_connection_url, poolclass=NullPool)
         session_maker = sessionmaker(
             engine,
             class_=Session,
             expire_on_commit=True,
-        )  # type: ignore[call-overload]
+        )
         with session_maker() as session, session.begin():
             stmt = select(schemas.ResourcePoolORM.default == true())
             res = session.execute(stmt)
@@ -300,7 +306,7 @@ class ResourcePoolRepository(_Base):
         return cls.dump()
 
     @_only_admins
-    async def update_resource_pool(self, api_user: base_models.APIUser, id: int, **kwargs) -> models.ResourcePool:
+    async def update_resource_pool(self, api_user: base_models.APIUser, id: int, **kwargs: Any) -> models.ResourcePool:
         """Update an existing resource pool in the database."""
         rp: Optional[schemas.ResourcePoolORM] = None
         async with self.session_maker() as session, session.begin():
@@ -399,7 +405,9 @@ class ResourcePoolRepository(_Base):
             return None
 
     @_only_admins
-    async def delete_resource_class(self, api_user: base_models.APIUser, resource_pool_id: int, resource_class_id: int):
+    async def delete_resource_class(
+        self, api_user: base_models.APIUser, resource_pool_id: int, resource_class_id: int
+    ) -> None:
         """Delete a specific resource class."""
         async with self.session_maker() as session, session.begin():
             stmt = (
@@ -416,7 +424,7 @@ class ResourcePoolRepository(_Base):
 
     @_only_admins
     async def update_resource_class(
-        self, api_user: base_models.APIUser, resource_pool_id: int, resource_class_id: int, **kwargs
+        self, api_user: base_models.APIUser, resource_pool_id: int, resource_class_id: int, **kwargs: Any
     ) -> models.ResourceClass:
         """Update a specific resource class."""
         async with self.session_maker() as session, session.begin():
@@ -509,7 +517,7 @@ class ResourcePoolRepository(_Base):
             return [i.key for i in res.scalars().all()]
 
     @_only_admins
-    async def delete_tolerations(self, api_user: base_models.APIUser, resource_pool_id: int, class_id: int):
+    async def delete_tolerations(self, api_user: base_models.APIUser, resource_pool_id: int, class_id: int) -> None:
         """Delete all tolerations for a specific resource class."""
         async with self.session_maker() as session, session.begin():
             res_classes = await self.get_classes(api_user, class_id, resource_pool_id=resource_pool_id)
@@ -538,7 +546,7 @@ class ResourcePoolRepository(_Base):
             return [i.dump() for i in res.scalars().all()]
 
     @_only_admins
-    async def delete_affinities(self, api_user: base_models.APIUser, resource_pool_id: int, class_id: int):
+    async def delete_affinities(self, api_user: base_models.APIUser, resource_pool_id: int, class_id: int) -> None:
         """Delete all affinities from a resource class."""
         async with self.session_maker() as session, session.begin():
             res_classes = await self.get_classes(api_user, class_id, resource_pool_id=resource_pool_id)
@@ -563,7 +571,9 @@ class RespositoryUsers:
 class UserRepository(_Base):
     """The adapter used for accessing resource pool users with SQLAlchemy."""
 
-    def __init__(self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository, user_repo: UserRepo):
+    def __init__(
+        self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository, user_repo: UserRepo
+    ) -> None:
         super().__init__(session_maker, quotas_repo)
         self.kc_user_repo = user_repo
 
@@ -695,6 +705,8 @@ class UserRepository(_Base):
                         message=f"User with keycloak id {keycloak_id} cannot access the default resource pool"
                     )
             if append:
+                user_rp_ids = {rp.id for rp in user.resource_pools}
+                rps_to_add = [rp for rp in rps_to_add if rp.id not in user_rp_ids]
                 user.resource_pools.extend(rps_to_add)
             else:
                 user.resource_pools = list(rps_to_add)
@@ -705,7 +717,9 @@ class UserRepository(_Base):
             return output
 
     @_only_admins
-    async def delete_resource_pool_user(self, api_user: base_models.APIUser, resource_pool_id: int, keycloak_id: str):
+    async def delete_resource_pool_user(
+        self, api_user: base_models.APIUser, resource_pool_id: int, keycloak_id: str
+    ) -> None:
         """Remove a user from a specific resource pool."""
         async with self.session_maker() as session, session.begin():
             sub = (
@@ -719,7 +733,7 @@ class UserRepository(_Base):
 
     @_only_admins
     async def update_resource_pool_users(
-        self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: list[str], append: bool = True
+        self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: Collection[str], append: bool = True
     ) -> list[base_models.User]:
         """Update the users to have access to a specific resource pool."""
         async with self.session_maker() as session, session.begin():
@@ -760,13 +774,15 @@ class UserRepository(_Base):
                 schemas.RPUserORM(keycloak_id=user_id) for user_id in user_ids if user_id not in user_ids_to_add_exist
             ]
             if append:
-                rp.users.extend(list(users_to_add_exist) + users_to_add_missing)
+                rp_user_ids = {rp.id for rp in rp.users}
+                users_to_add = [u for u in list(users_to_add_exist) + users_to_add_missing if u.id not in rp_user_ids]
+                rp.users.extend(users_to_add)
             else:
                 rp.users = list(users_to_add_exist) + users_to_add_missing
             return [usr.dump() for usr in rp.users]
 
     @_only_admins
-    async def update_user(self, api_user: base_models.APIUser, keycloak_id: str, **kwargs) -> base_models.User:
+    async def update_user(self, api_user: base_models.APIUser, keycloak_id: str, **kwargs: Any) -> base_models.User:
         """Update a specific user."""
         async with self.session_maker() as session, session.begin():
             stmt = select(schemas.RPUserORM).where(schemas.RPUserORM.keycloak_id == keycloak_id)

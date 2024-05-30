@@ -12,19 +12,19 @@ def project_members(member_1_user: UserInfo, member_2_user: UserInfo) -> list[di
 
 
 @pytest.fixture
-def project_owner_member_headers(member_2_headers) -> dict[str, str]:
+def project_owner_member_headers(member_2_headers: dict[str, str]) -> dict[str, str]:
     """Authentication headers for a normal project owner user."""
     return member_2_headers
 
 
 @pytest.fixture
-def project_non_member_headers(unauthorized_headers) -> dict[str, str]:
+def project_non_member_headers(unauthorized_headers: dict[str, str]) -> dict[str, str]:
     """Authentication headers for a user that isn't a member of a project."""
     return unauthorized_headers
 
 
 @pytest.fixture
-def project_normal_member_headers(member_1_headers) -> dict[str, str]:
+def project_normal_member_headers(member_1_headers: dict[str, str]) -> dict[str, str]:
     """Authentication headers for a user that isn't a member of a project."""
     return member_1_headers
 
@@ -62,7 +62,7 @@ def create_storage(sanic_client, user_headers, admin_headers, create_project, pr
 @pytest.mark.parametrize("headers_name", ["admin_headers", "user_headers", "project_owner_member_headers"])
 async def test_storage_v2_can_create_as_admin_or_owner(
     sanic_client, create_project, project_members, headers_name, request
-):
+) -> None:
     headers = request.getfixturevalue(headers_name)
     # Create some projects
     await create_project("Project 1")
@@ -98,7 +98,7 @@ async def test_storage_v2_can_create_as_admin_or_owner(
 )
 async def test_storage_v2_create_cannot_as_unauthorized_or_non_owner_or_non_member(
     sanic_client, create_project, project_members, headers_name, request
-):
+) -> None:
     headers = request.getfixturevalue(headers_name)
     # Create some projects
     await create_project("Project 1")
@@ -129,7 +129,7 @@ async def test_storage_v2_create_cannot_as_unauthorized_or_non_owner_or_non_memb
 )
 async def test_storage_v2_can_get_as_admin_or_project_members(
     sanic_client, create_storage, create_project, project_members, headers_name, request
-):
+) -> None:
     headers = request.getfixturevalue(headers_name)
     await create_project("Project 1")
     project_2 = await create_project("Project 2", members=project_members)
@@ -158,7 +158,7 @@ async def test_storage_v2_can_get_as_admin_or_project_members(
 @pytest.mark.parametrize("headers_name", ["unauthorized_headers", "project_non_member_headers"])
 async def test_storage_v2_cannot_get_as_unauthorized_or_non_member(
     sanic_client, create_storage, create_project, project_members, headers_name, request
-):
+) -> None:
     headers = request.getfixturevalue(headers_name)
     project = await create_project("Project", members=project_members)
     project_id = project["id"]
@@ -173,7 +173,7 @@ async def test_storage_v2_cannot_get_as_unauthorized_or_non_member(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("headers_name", ["user_headers", "project_owner_member_headers"])
-async def test_storage_v2_can_delete_as_owner(sanic_client, create_storage, headers_name, request):
+async def test_storage_v2_can_delete_as_owner(sanic_client, create_storage, headers_name, request) -> None:
     headers = request.getfixturevalue(headers_name)
     storage = await create_storage()
     storage_id = storage["storage"]["storage_id"]
@@ -188,7 +188,9 @@ async def test_storage_v2_can_delete_as_owner(sanic_client, create_storage, head
 
 
 @pytest.mark.asyncio
-async def test_storage_v2_cannot_delete_as_normal_member(sanic_client, create_storage, project_normal_member_headers):
+async def test_storage_v2_cannot_delete_as_normal_member(
+    sanic_client, create_storage, project_normal_member_headers
+) -> None:
     storage = await create_storage()
     storage_id = storage["storage"]["storage_id"]
 
@@ -207,7 +209,7 @@ async def test_storage_v2_cannot_delete_as_normal_member(sanic_client, create_st
 @pytest.mark.parametrize("headers_name", ["unauthorized_headers", "project_non_member_headers"])
 async def test_storage_v2_cannot_delete_as_unauthorized_or_non_member(
     sanic_client, create_storage, headers_name, request
-):
+) -> None:
     headers = request.getfixturevalue(headers_name)
     storage = await create_storage()
     storage_id = storage["storage"]["storage_id"]
@@ -219,7 +221,7 @@ async def test_storage_v2_cannot_delete_as_unauthorized_or_non_member(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("headers_name", ["user_headers", "project_owner_member_headers"])
-async def test_storage_v2_can_patch_as_owner(sanic_client, create_storage, headers_name, request):
+async def test_storage_v2_can_patch_as_owner(sanic_client, create_storage, headers_name, request) -> None:
     headers = request.getfixturevalue(headers_name)
     storage = await create_storage()
     storage_id = storage["storage"]["storage_id"]
@@ -238,7 +240,9 @@ async def test_storage_v2_can_patch_as_owner(sanic_client, create_storage, heade
 
 
 @pytest.mark.asyncio
-async def test_storage_v2_cannot_patch_as_normal_member(sanic_client, create_storage, project_normal_member_headers):
+async def test_storage_v2_cannot_patch_as_normal_member(
+    sanic_client, create_storage, project_normal_member_headers
+) -> None:
     storage = await create_storage()
     storage_id = storage["storage"]["storage_id"]
 
@@ -265,7 +269,7 @@ async def test_storage_v2_cannot_patch_as_normal_member(sanic_client, create_sto
 @pytest.mark.parametrize("headers_name", ["unauthorized_headers", "project_non_member_headers"])
 async def test_storage_v2_cannot_patch_as_unauthorized_or_non_member(
     sanic_client, create_storage, headers_name, request
-):
+) -> None:
     headers = request.getfixturevalue(headers_name)
     storage = await create_storage()
     storage_id = storage["storage"]["storage_id"]
@@ -281,7 +285,9 @@ async def test_storage_v2_cannot_patch_as_unauthorized_or_non_member(
 
 
 @pytest.mark.asyncio
-async def test_storage_v2_is_deleted_if_project_is_deleted(sanic_client, create_storage, create_project, user_headers):
+async def test_storage_v2_is_deleted_if_project_is_deleted(
+    sanic_client, create_storage, create_project, user_headers
+) -> None:
     project = await create_project("Project")
     project_id = project["id"]
     storage = await create_storage(project_id=project_id)

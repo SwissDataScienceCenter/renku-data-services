@@ -47,7 +47,7 @@ class SecretORM(BaseORM):
         return secret
 
     @classmethod
-    def load(cls, secret: models.Secret):
+    def load(cls, secret: models.Secret) -> "SecretORM":
         """Create an ORM object from the user object."""
         return cls(
             name=secret.name,

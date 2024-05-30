@@ -10,7 +10,7 @@ on:
     branches:
 
 jobs:
-  test:
+  style-checks:
     runs-on: ubuntu-latest
 
     steps:
@@ -34,28 +34,116 @@ jobs:
           runCmd: make style_checks
           push: never
           skipContainerUserIdUpdate: false
-      - name: Tests
+  test-main:
+    runs-on: ubuntu-latest
+    needs: 
+      - style-checks
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Set Git config
+        shell: bash
+        run: |
+          git config --add user.name "Renku Bot"
+          git config --add user.email "renku@datascience.ch"
+      - name: Test setup
         uses: devcontainers/ci@v0.3
         with:
           runCmd: |
-            make tests
+            make test_setup
+          push: never
+          skipContainerUserIdUpdate: false
+      - name: Main tests
+        uses: devcontainers/ci@v0.3
+        with:
+          runCmd: |
+            make main_tests
+          push: never
+          skipContainerUserIdUpdate: false
+      - name: Migration tests
+        uses: devcontainers/ci@v0.3
+        with:
+          runCmd: |
+            make migration_tests
+          push: never
+          skipContainerUserIdUpdate: false
+      - name: Combine coverage data
+        uses: devcontainers/ci@v0.3
+        with:
+          runCmd: |
+            make collect_coverage
+          push: never
+          skipContainerUserIdUpdate: false
+      - name: Coveralls Parallel
+        uses: coverallsapp/github-action@v2
+        with:
+          flag-name: run-main-tests
+          parallel: true
+          path-to-lcov: coverage.lcov
+  test-schemathesis:
+    runs-on: ubuntu-latest
+    needs: 
+      - style-checks
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Set Git config
+        shell: bash
+        run: |
+          git config --add user.name "Renku Bot"
+          git config --add user.email "renku@datascience.ch"
+      - name: Test setup
+        uses: devcontainers/ci@v0.3
+        with:
+          runCmd: |
+            make test_setup
+          push: never
+          skipContainerUserIdUpdate: false
+      - name: Schemathesis Tests
+        uses: devcontainers/ci@v0.3
+        with:
+          runCmd: |
+            make schemathesis_tests
           push: never
           skipContainerUserIdUpdate: false
           env: |
             HYPOTHESIS_PROFILE=ci
-      - name: Coveralls
+      - name: Combine coverage data
+        uses: devcontainers/ci@v0.3
+        with:
+          runCmd: |
+            make collect_coverage
+          push: never
+          skipContainerUserIdUpdate: false
+      - name: Coveralls Parallel
+        uses: coverallsapp/github-action@v2
+        with:
+          flag-name: run-schemathesis-tests
+          parallel: true
+          path-to-lcov: coverage.lcov
+  coveralls:
+    needs: 
+      - test-main
+      - test-schemathesis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Coveralls Finished
         uses: coverallsapp/github-action@v2
         env:
           COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
           COVERALLS_SERVICE_NAME: gihub-action
         with:
-          path-to-lcov: coverage.lcov
+          parallel-finished: true
+          carryforward: "run-main-tests,run-schemathesis-tests"
         continue-on-error: true
 
   publish:
     runs-on: ubuntu-latest
     needs:
-      - test
+      - test-main
+      - test-schemathesis
 
     steps:
       - name: Checkout

@@ -15,7 +15,7 @@ class Role(Enum):
     EDITOR: str = "editor"
 
     @classmethod
-    def from_group_role(cls, role: GroupRole):
+    def from_group_role(cls, role: GroupRole) -> "Role":
         """Convert a group role into an authorization role."""
         match role:
             case GroupRole.owner:
@@ -24,6 +24,8 @@ class Role(Enum):
                 return cls.EDITOR
             case GroupRole.viewer:
                 return cls.VIEWER
+            case _:
+                raise errors.ProgrammingError(message=f"Could not convert group role {role} into a role")
 
     def to_group_role(self) -> GroupRole:
         """Convert a group role into an authorization role."""
@@ -36,6 +38,7 @@ class Role(Enum):
                 return GroupRole.viewer
             case _:
                 raise errors.ProgrammingError(message=f"Could not convert role {self} into a group role")
+
 
 class Scope(Enum):
     """Types of permissions - i.e. scope."""
