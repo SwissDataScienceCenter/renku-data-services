@@ -7,7 +7,7 @@ from renku_data_services.users.models import UserInfo
 
 
 @pytest.mark.asyncio
-async def test_get_all_users_as_admin(sanic_client, users):
+async def test_get_all_users_as_admin(sanic_client, users) -> None:
     admin = UserInfo(
         id="admin-id",
         first_name="Admin",
@@ -45,13 +45,13 @@ async def test_get_all_users_as_admin(sanic_client, users):
 
 
 @pytest.mark.asyncio
-async def test_get_all_users_as_anonymous(sanic_client):
+async def test_get_all_users_as_anonymous(sanic_client) -> None:
     _, res = await sanic_client.get("/api/data/users")
     assert res.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_get_all_users_as_non_admin(sanic_client, users):
+async def test_get_all_users_as_non_admin(sanic_client, users) -> None:
     user = users[0]
     access_token = {"id": user.id, "is_admin": False}
     _, res = await sanic_client.get(
@@ -62,7 +62,7 @@ async def test_get_all_users_as_non_admin(sanic_client, users):
 
 
 @pytest.mark.asyncio
-async def test_get_logged_in_user(sanic_client, users):
+async def test_get_logged_in_user(sanic_client, users) -> None:
     user = users[0]
     access_token = {"id": user.id, "is_admin": False}
     _, res = await sanic_client.get(
@@ -86,7 +86,7 @@ async def test_get_logged_in_user(sanic_client, users):
 
 
 @pytest.mark.asyncio
-async def test_logged_in_users_can_get_other_users(sanic_client, users):
+async def test_logged_in_users_can_get_other_users(sanic_client, users) -> None:
     user = users[0]
     other_user = users[1]
     access_token = {"id": user.id, "is_admin": False}
@@ -100,7 +100,7 @@ async def test_logged_in_users_can_get_other_users(sanic_client, users):
 
 
 @pytest.mark.asyncio
-async def test_logged_in_user_check_adds_user_if_missing(sanic_client, users, admin_headers):
+async def test_logged_in_user_check_adds_user_if_missing(sanic_client, users, admin_headers) -> None:
     user = UserInfo(
         id=str(uuid4()),
         first_name="Peter",

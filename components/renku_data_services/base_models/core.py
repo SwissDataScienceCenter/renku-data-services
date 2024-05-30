@@ -34,7 +34,7 @@ class APIUser:
     email: Optional[str] = None
 
     @property
-    def is_authenticated(self):
+    def is_authenticated(self) -> bool:
         """Indicates whether the user has successfully logged in."""
         return self.id is not None
 
@@ -102,13 +102,13 @@ class Slug:
     # - has to start with letter or number
     _regex: ClassVar[str] = "^(?!.*\\.git$|.*\\.atom$|.*[\\-._][\\-._].*)[a-zA-Z0-9][a-zA-Z0-9\\-_.]*$"
 
-    def __init__(self, value: str):
+    def __init__(self, value: str) -> None:
         if not re.match(self._regex, value):
             raise errors.ValidationError(message=f"The slug {value} does not match the regex {self._regex}")
         object.__setattr__(self, "value", value.lower())
 
     @classmethod
-    def from_name(cls, name: str):
+    def from_name(cls, name: str) -> "Slug":
         """Takes a name with any amount of invalid characters and transforms it in a valid slug."""
         lower_case = name.lower()
         no_space = re.sub(r"\s+", "-", lower_case)

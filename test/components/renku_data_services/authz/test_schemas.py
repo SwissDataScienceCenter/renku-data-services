@@ -16,7 +16,7 @@ class SpiceDBSchema:
     assertions: dict[str, list[str]] = field(default_factory=dict)
     validation: dict[str, list[str]] = field(default_factory=dict)
 
-    def to_yaml(self, path: Path):
+    def to_yaml(self, path: Path) -> None:
         output = asdict(self)
         if output["relationships"]:
             output["relationships"] = LiteralScalarString("\n".join(self.relationships))
@@ -133,6 +133,7 @@ def v1_schema() -> SpiceDBSchema:
             ],
         },
     )
+
 
 @pytest.fixture
 def v2_schema() -> SpiceDBSchema:
@@ -299,13 +300,13 @@ def v2_schema() -> SpiceDBSchema:
     )
 
 
-
-def test_v1_schema(tmp_path: Path, v1_schema: SpiceDBSchema):
+def test_v1_schema(tmp_path: Path, v1_schema: SpiceDBSchema) -> None:
     validation_file = tmp_path / "validate.yaml"
     v1_schema.to_yaml(validation_file)
     check_call(["zed", "validate", validation_file.as_uri()])
 
-def test_v2_schema(tmp_path: Path, v2_schema: SpiceDBSchema):
+
+def test_v2_schema(tmp_path: Path, v2_schema: SpiceDBSchema) -> None:
     validation_file = tmp_path / "validate.yaml"
     v2_schema.to_yaml(validation_file)
     check_call(["zed", "validate", validation_file.as_uri()])

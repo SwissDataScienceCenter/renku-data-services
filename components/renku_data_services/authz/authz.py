@@ -70,7 +70,7 @@ class _AuthzChange:
     apply: WriteRelationshipsRequest = field(default_factory=WriteRelationshipsRequest)
     undo: WriteRelationshipsRequest = field(default_factory=WriteRelationshipsRequest)
 
-    def extend(self, other: "_AuthzChange"):
+    def extend(self, other: "_AuthzChange") -> None:
         self.apply.updates.extend(other.apply.updates)
         self.apply.optional_preconditions.extend(other.apply.optional_preconditions)
         self.undo.updates.extend(other.undo.updates)
@@ -90,7 +90,7 @@ class _Relation(StrEnum):
     project_namespace: str = "project_namespace"
 
     @classmethod
-    def from_role(cls, role: Role):
+    def from_role(cls, role: Role) -> "_Relation":
         match role:
             case Role.OWNER:
                 return cls.owner
@@ -431,8 +431,7 @@ class Authz:
     ]:
         """A decorator that updates the authorization database for different types of operations."""
 
-        def _extract_user_from_args(*args, **kwargs) -> base_models.APIUser:
-            potential_user: base_models.APIUser | None = None
+        def _extract_user_from_args(*args: _P.args, **kwargs: _P.kwargs) -> base_models.APIUser:
             if len(args) == 0:
                 user_kwarg = kwargs.get("user")
                 requested_by_kwarg = kwargs.get("requested_by")
@@ -568,7 +567,7 @@ class Authz:
                 message="Cannot create a project in the authorization database if its ID is missing."
             )
         creator = SubjectReference(object=_AuthzConverter.user(project.created_by))
-        project_res = _AuthzConverter.project(project.id)  # type: ignore[arg-type]
+        project_res = _AuthzConverter.project(project.id)
         creator_is_owner = Relationship(resource=project_res, relation=_Relation.owner.value, subject=creator)
         all_users = SubjectReference(object=_AuthzConverter.all_users())
         all_anon_users = SubjectReference(object=_AuthzConverter.anonymous_users())
@@ -648,7 +647,7 @@ class Authz:
     ) -> _AuthzChange:
         """Update the visibility of the project in the authorization database."""
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
-        project_res = _AuthzConverter.project(project.id)  # type: ignore[arg-type]
+        project_res = _AuthzConverter.project(project.id)
         all_users_sub = SubjectReference(object=_AuthzConverter.all_users())
         anon_users_sub = SubjectReference(object=_AuthzConverter.anonymous_users())
         all_users_are_viewers = Relationship(
@@ -736,7 +735,7 @@ class Authz:
     ) -> _AuthzChange:
         """Update the namespace/group of the project in the authorization database."""
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
-        project_res = _AuthzConverter.project(project.id)  # type: ignore[arg-type]
+        project_res = _AuthzConverter.project(project.id)
         project_namespace_filter = RelationshipFilter(
             resource_type=ResourceType.project.value,
             optional_resource_id=project.id,
@@ -1027,7 +1026,7 @@ class Authz:
                 message="Cannot create a group in the authorization database if its ID is missing."
             )
         creator = SubjectReference(object=_AuthzConverter.user(group.created_by))
-        group_res = _AuthzConverter.group(group.id)  # type: ignore[arg-type]
+        group_res = _AuthzConverter.group(group.id)
         creator_is_owner = Relationship(resource=group_res, relation=_Relation.owner.value, subject=creator)
         group_in_platform = Relationship(
             resource=group_res,
@@ -1244,7 +1243,7 @@ class Authz:
                 message="Cannot create a user namespace in the authorization database if its ID is missing."
             )
         creator = SubjectReference(object=_AuthzConverter.user(namespace.created_by))
-        namespace_res = _AuthzConverter.user_namespace(namespace.id)  # type: ignore[arg-type]
+        namespace_res = _AuthzConverter.user_namespace(namespace.id)
         creator_is_owner = Relationship(resource=namespace_res, relation=_Relation.owner.value, subject=creator)
         namespace_in_platform = Relationship(
             resource=namespace_res,

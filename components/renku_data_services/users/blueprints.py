@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from cryptography.hazmat.primitives.asymmetric import rsa
 from sanic import HTTPResponse, Request, json
+from sanic.response import JSONResponse
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
@@ -28,7 +29,7 @@ class KCUsersBP(CustomBlueprint):
         """Get all users or search by email."""
 
         @authenticate(self.authenticator)
-        async def _get_all(request: Request, user: base_models.APIUser):
+        async def _get_all(request: Request, user: base_models.APIUser) -> JSONResponse:
             email_filter = request.args.get("exact_email")
             users = await self.repo.get_users(requested_by=user, email=email_filter)
             return json(
@@ -44,7 +45,9 @@ class KCUsersBP(CustomBlueprint):
         """Get info about the logged in user."""
 
         @authenticate(self.authenticator)
-        async def _get_self(request: Request, user: base_models.APIUser):
+        async def _get_self(request: Request, user: base_models.APIUser) -> JSONResponse:
+            if user.id is None:
+                raise errors.ValidationError(message="No user id provided")
             user_info = await self.repo.get_or_create_user(requested_by=user, id=user.id)
             if not user_info:
                 raise errors.MissingResourceError(message=f"The user with ID {user.id} cannot be found.")
@@ -66,7 +69,7 @@ class KCUsersBP(CustomBlueprint):
         """
 
         @authenticate(self.authenticator)
-        async def _get_secret_key(request: Request, user: base_models.APIUser):
+        async def _get_secret_key(request: Request, user: base_models.APIUser) -> JSONResponse:
             secret_key = await self.repo.get_or_create_user_secret_key(requested_by=user)
             return json({"secret_key": secret_key})
 
@@ -76,7 +79,7 @@ class KCUsersBP(CustomBlueprint):
         """Get info about a specific user."""
 
         @authenticate(self.authenticator)
-        async def _get_one(request: Request, user_id: str, user: base_models.APIUser):
+        async def _get_one(request: Request, user: base_models.APIUser, user_id: str) -> JSONResponse:
             user_info = await self.repo.get_or_create_user(requested_by=user, id=user_id)
             if not user_info:
                 raise errors.MissingResourceError(message=f"The user with ID {user_id} cannot be found.")
@@ -132,7 +135,7 @@ class UserSecretsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _get_all(request: Request, user: base_models.APIUser):
+        async def _get_all(request: Request, user: base_models.APIUser) -> JSONResponse:
             secrets = await self.secret_repo.get_secrets(requested_by=user)
             return json(
                 apispec.SecretsList(
@@ -148,7 +151,7 @@ class UserSecretsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _get_one(request: Request, secret_id: str, user: base_models.APIUser):
+        async def _get_one(request: Request, user: base_models.APIUser, secret_id: str) -> JSONResponse:
             secret = await self.secret_repo.get_secret_by_id(requested_by=user, secret_id=secret_id)
             if not secret:
                 raise errors.MissingResourceError(message=f"The secret with id {secret_id} cannot be found.")
@@ -163,7 +166,7 @@ class UserSecretsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_authenticated
         @validate(json=apispec.SecretPost)
-        async def _post(_: Request, *, user: base_models.APIUser, body: apispec.SecretPost):
+        async def _post(_: Request, user: base_models.APIUser, body: apispec.SecretPost) -> JSONResponse:
             encrypted_value, encrypted_key = await self._encrypt_user_secret(requested_by=user, secret_value=body.value)
             secret = Secret(name=body.name, encrypted_value=encrypted_value, encrypted_key=encrypted_key)
             result = await self.secret_repo.insert_secret(requested_by=user, secret=secret)
@@ -177,7 +180,9 @@ class UserSecretsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_authenticated
         @validate(json=apispec.SecretPatch)
-        async def _patch(_: Request, *, user: base_models.APIUser, secret_id: str, body: apispec.SecretPatch):
+        async def _patch(
+            _: Request, user: base_models.APIUser, secret_id: str, body: apispec.SecretPatch
+        ) -> JSONResponse:
             encrypted_value, encrypted_key = await self._encrypt_user_secret(requested_by=user, secret_value=body.value)
             updated_secret = await self.secret_repo.update_secret(
                 requested_by=user, secret_id=secret_id, encrypted_value=encrypted_value, encrypted_key=encrypted_key
@@ -192,7 +197,7 @@ class UserSecretsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _delete(_: Request, *, user: base_models.APIUser, secret_id: str):
+        async def _delete(_: Request, user: base_models.APIUser, secret_id: str) -> HTTPResponse:
             await self.secret_repo.delete_secret(requested_by=user, secret_id=secret_id)
             return HTTPResponse(status=204)
 

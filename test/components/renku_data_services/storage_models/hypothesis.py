@@ -1,3 +1,5 @@
+from typing import Any
+
 from hypothesis import strategies as st
 from hypothesis.provisional import urls
 
@@ -44,7 +46,7 @@ def azure_configuration(draw):
 
 
 @st.composite
-def storage_strat(draw):
+def storage_strat(draw) -> dict[str, Any]:
     project_id = draw(a_project_id)
     storage_name = draw(a_storage_name)
     source_path = draw(a_path)

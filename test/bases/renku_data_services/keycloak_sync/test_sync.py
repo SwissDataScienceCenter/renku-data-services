@@ -4,7 +4,7 @@ import secrets
 from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime
-from typing import Any
+from typing import Any, Union
 from uuid import uuid4
 
 import pytest
@@ -36,7 +36,7 @@ def get_app_configs(db_config: DBConfig, authz_config: AuthzConfig):
             session_maker=db_config.async_session_maker,
             event_repo=event_repo,
             group_authz=Authz(authz_config),
-            message_queue=message_queue
+            message_queue=message_queue,
         )
         users_sync = UsersSync(
             db_config.async_session_maker,
@@ -147,7 +147,7 @@ def get_kc_admin_events(updates: list[tuple[UserInfo, KeycloakAdminEvent]]) -> l
     return output
 
 
-def get_kc_roles(role_names: list[str]):
+def get_kc_roles(role_names: list[str]) -> dict[str, list[dict[str, Union[bool, str]]]]:
     return {
         "realmMappings": [
             {
@@ -163,7 +163,9 @@ def get_kc_roles(role_names: list[str]):
 
 
 @pytest.mark.asyncio
-async def test_total_users_sync(get_app_configs: Callable[..., tuple[SyncConfig, UserRepo]], admin_user: APIUser):
+async def test_total_users_sync(
+    get_app_configs: Callable[..., tuple[SyncConfig, UserRepo]], admin_user: APIUser
+) -> None:
     user1 = UserInfo("user-1-id", "John", "Doe", "john.doe@gmail.com")
     user2 = UserInfo("user-2-id", "Jane", "Doe", "jane.doe@gmail.com")
     assert admin_user.id
@@ -213,7 +215,7 @@ async def test_total_users_sync(get_app_configs: Callable[..., tuple[SyncConfig,
 
 
 @pytest.mark.asyncio
-async def test_user_events_update(get_app_configs, admin_user: APIUser):
+async def test_user_events_update(get_app_configs, admin_user: APIUser) -> None:
     kc_api = DummyKeycloakAPI()
     user1 = UserInfo("user-1-id", "John", "Doe", "john.doe@gmail.com")
     assert admin_user.id
@@ -259,7 +261,7 @@ async def test_user_events_update(get_app_configs, admin_user: APIUser):
 
 
 @pytest.mark.asyncio
-async def test_admin_events(get_app_configs, admin_user: APIUser):
+async def test_admin_events(get_app_configs, admin_user: APIUser) -> None:
     kc_api = DummyKeycloakAPI()
     user1 = UserInfo("user-1-id", "John", "Doe", "john.doe@gmail.com")
     user2 = UserInfo("user-2-id", "Jane", "Doe", "jane.doe@gmail.com")
@@ -305,7 +307,7 @@ async def test_admin_events(get_app_configs, admin_user: APIUser):
 
 
 @pytest.mark.asyncio
-async def test_events_update_error(get_app_configs, admin_user: APIUser):
+async def test_events_update_error(get_app_configs, admin_user: APIUser) -> None:
     kc_api = DummyKeycloakAPI()
     user1 = UserInfo("user-1-id", "John", "Doe", "john.doe@gmail.com")
     user2 = UserInfo("user-2-id", "Jane", "Doe", "jane.doe@gmail.com")
@@ -353,7 +355,7 @@ async def test_events_update_error(get_app_configs, admin_user: APIUser):
 
 
 @pytest.mark.asyncio
-async def test_removing_non_existent_user(get_app_configs, admin_user: APIUser):
+async def test_removing_non_existent_user(get_app_configs, admin_user: APIUser) -> None:
     kc_api = DummyKeycloakAPI()
     user1 = UserInfo("user-1-id", "John", "Doe", "john.doe@gmail.com")
     non_existent_user = UserInfo("non-existent-id", "Not", "Exist", "not.exist@gmail.com")
@@ -386,7 +388,7 @@ async def test_removing_non_existent_user(get_app_configs, admin_user: APIUser):
 @pytest.mark.asyncio
 async def test_avoiding_namespace_slug_duplicates(
     get_app_configs: Callable[..., tuple[SyncConfig, UserRepo]], admin_user: APIUser
-):
+) -> None:
     kc_api = DummyKeycloakAPI()
     num_users = 10
     users = [UserInfo(f"user-{i}-id", "John", "Doe", "john.doe@gmail.com") for i in range(1, num_users + 1)]
@@ -422,7 +424,7 @@ async def test_avoiding_namespace_slug_duplicates(
 
 
 @pytest.mark.asyncio
-async def test_authz_admin_sync(get_app_configs, admin_user: APIUser):
+async def test_authz_admin_sync(get_app_configs, admin_user: APIUser) -> None:
     kc_api = DummyKeycloakAPI()
     user1 = UserInfo("user-1-id", "John", "Doe", "john.doe@gmail.com")
     assert admin_user.id

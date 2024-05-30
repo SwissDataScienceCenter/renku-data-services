@@ -19,7 +19,7 @@ from renku_data_services.base_models.core import APIUser
 from renku_data_services.migrations.core import run_migrations_for_app
 
 
-def get_user(storage, valid=True):
+def get_user(storage, valid: bool = True):
     """Get an api user for a storage."""
     if valid:
         user = APIUser(
@@ -44,7 +44,7 @@ def get_user(storage, valid=True):
 @given(storage=storage_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
-async def test_storage_insert_get(storage: dict[str, Any], app_config: Config):
+async def test_storage_insert_get(storage: dict[str, Any], app_config: Config) -> None:
     run_migrations_for_app("common")
     storage_repo = app_config.storage_repo
     with contextlib.suppress(ValidationError, errors.ValidationError):
@@ -56,7 +56,7 @@ async def test_storage_insert_get(storage: dict[str, Any], app_config: Config):
 @pytest.mark.asyncio
 async def test_storage_update_path(
     storage: dict[str, Any], new_source_path: str, new_target_path: str, app_config: Config
-):
+) -> None:
     run_migrations_for_app("common")
     storage_repo = app_config.storage_repo
     try:
@@ -77,7 +77,7 @@ async def test_storage_update_path(
 @given(storage=storage_strat(), new_config=st.one_of(s3_configuration(), azure_configuration()))
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
-async def test_storage_update_config(storage: dict[str, Any], new_config: dict[str, Any], app_config: Config):
+async def test_storage_update_config(storage: dict[str, Any], new_config: dict[str, Any], app_config: Config) -> None:
     run_migrations_for_app("common")
     storage_repo = app_config.storage_repo
     try:
@@ -97,7 +97,7 @@ async def test_storage_update_config(storage: dict[str, Any], new_config: dict[s
 @given(storage=storage_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
-async def test_storage_delete(storage: dict[str, Any], app_config: Config):
+async def test_storage_delete(storage: dict[str, Any], app_config: Config) -> None:
     run_migrations_for_app("common")
     storage_repo = app_config.storage_repo
     try:

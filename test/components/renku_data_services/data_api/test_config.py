@@ -22,7 +22,7 @@ def config_dummy_fixture(monkeypatch):
     DBConfig._async_engine = None
 
 
-def test_config_dummy(config_dummy_fixture: conf.Config):
+def test_config_dummy(config_dummy_fixture: conf.Config) -> None:
     config = config_dummy_fixture
     assert config.authenticator is not None
     assert isinstance(config.authenticator, DummyAuthenticator)
@@ -33,6 +33,7 @@ def test_config_dummy(config_dummy_fixture: conf.Config):
     assert config.session_repo is not None
     assert config.user_preferences_repo is not None
     assert config.version == "9.9.9"
+
 
 @pytest.fixture
 def config_no_dummy_fixture(monkeypatch, secrets_key_pair, tmp_path):
@@ -76,7 +77,7 @@ def config_no_dummy_fixture(monkeypatch, secrets_key_pair, tmp_path):
     DBConfig._async_engine = None
 
 
-def test_config_no_dummy(config_no_dummy_fixture: conf.Config):
+def test_config_no_dummy(config_no_dummy_fixture: conf.Config) -> None:
     config = config_no_dummy_fixture
     assert config.authenticator is not None
     assert config.storage_repo is not None

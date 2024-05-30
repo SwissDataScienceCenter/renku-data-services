@@ -10,7 +10,7 @@ from renku_data_services.keycloak_sync.config import SyncConfig
 logging.basicConfig(level=logging.INFO)
 
 
-async def main():
+async def main() -> None:
     """Synchronize data from Keycloak and the user database."""
     config = SyncConfig.from_env()
     if config.total_user_sync:

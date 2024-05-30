@@ -1,4 +1,5 @@
 """Configuration for user preferences."""
+
 from dataclasses import dataclass
 
 

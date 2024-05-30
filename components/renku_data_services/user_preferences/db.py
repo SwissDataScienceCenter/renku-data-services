@@ -16,14 +16,16 @@ from renku_data_services.user_preferences.config import UserPreferencesConfig
 class _Base:
     """Base class for repositories."""
 
-    def __init__(self, session_maker: Callable[..., AsyncSession]):
+    def __init__(self, session_maker: Callable[..., AsyncSession]) -> None:
         self.session_maker = session_maker
 
 
 class UserPreferencesRepository(_Base):
     """Repository for user preferences."""
 
-    def __init__(self, user_preferences_config: UserPreferencesConfig, session_maker: Callable[..., AsyncSession]):
+    def __init__(
+        self, user_preferences_config: UserPreferencesConfig, session_maker: Callable[..., AsyncSession]
+    ) -> None:
         super().__init__(session_maker)
         self.user_preferences_config = user_preferences_config
 

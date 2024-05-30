@@ -4,24 +4,37 @@ import asyncio
 import threading
 from asyncio.events import AbstractEventLoop
 from collections.abc import Coroutine, Sequence
-from typing import Any, TypeVar
+from typing import Any, Literal, TypeVar
 
 from alembic import context
 from sqlalchemy import Connection, MetaData, NullPool, create_engine
-from sqlalchemy.schema import CreateSchema
+from sqlalchemy.schema import CreateSchema, SchemaItem
 from sqlalchemy.sql import text
 
 from renku_data_services.db_config import DBConfig
 
 
-def include_object(obj, name, type_, reflected, compare_to):
+def include_object(
+    obj: SchemaItem,
+    name: str | None,
+    type_: Literal[
+        "schema",
+        "table",
+        "column",
+        "index",
+        "unique_constraint",
+        "foreign_key_constraint",
+    ],
+    reflected: bool,
+    compare_to: SchemaItem | None,
+) -> bool:
     """Prevents from alembic migrating the alembic_version tables."""
     if type_ == "table" and name == "alembic_version":
         return False
     return True
 
 
-def combine_version_tables(conn: Connection, metadata_schema: str | None):
+def combine_version_tables(conn: Connection, metadata_schema: str | None) -> None:
     """Used to combine all alembic version tables into one."""
     schemas = {
         # NOTE: These are the revisions that each schema will be when the version table is moved
@@ -133,7 +146,7 @@ def run_migrations_online(target_metadata: Sequence[MetaData], sync_sqlalchemy_u
             context.run_migrations()
 
 
-def run_migrations(metadata: Sequence[MetaData]):
+def run_migrations(metadata: Sequence[MetaData]) -> None:
     """Run migrations for a specific base model class."""
     # this is the Alembic Config object, which provides
     # access to the values within the .ini file in use.
@@ -148,7 +161,7 @@ def run_migrations(metadata: Sequence[MetaData]):
 _T = TypeVar("_T")
 
 
-def _run_event_loop(loop: asyncio.AbstractEventLoop):
+def _run_event_loop(loop: asyncio.AbstractEventLoop) -> None:
     asyncio.set_event_loop(loop)
     loop.run_forever()
 
@@ -174,7 +187,7 @@ class UtilityEventLoop:
         future = asyncio.run_coroutine_threadsafe(coro, cls._loop)
         return future.result()
 
-    def __del__(self):
+    def __del__(self) -> None:
         self._loop.stop()
         self._loop.close()
         self._thread.join()

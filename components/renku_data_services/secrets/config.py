@@ -35,7 +35,7 @@ class Config:
     spec: dict[str, Any] = field(init=False, default_factory=dict)
     _user_secrets_repo: UserSecretsRepo | None = field(default=None, repr=False, init=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         spec_file = Path(renku_data_services.secrets.__file__).resolve().parent / "api.spec.yaml"
         with open(spec_file) as f:
             self.spec = safe_load(f)
@@ -50,7 +50,7 @@ class Config:
         return self._user_secrets_repo
 
     @classmethod
-    def from_env(cls, prefix: str = ""):
+    def from_env(cls, prefix: str = "") -> "Config":
         """Create a config from environment variables."""
         authenticator: base_models.Authenticator
         core_client: K8sCoreClientInterface

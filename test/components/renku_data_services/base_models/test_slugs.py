@@ -21,7 +21,7 @@ from renku_data_services.errors import errors
         ("連句1", "1"),
     ],
 )
-def test_slug_generation_from_invalid_name(input: str, expected: str):
+def test_slug_generation_from_invalid_name(input: str, expected: str) -> None:
     with pytest.raises(errors.ValidationError):
         Slug(input)
     assert Slug.from_name(input).value == expected
@@ -37,7 +37,7 @@ def test_slug_generation_from_invalid_name(input: str, expected: str):
         ("some-value.com", "some-value.com"),
     ],
 )
-def test_valid_slug(input: str, expected: str):
+def test_valid_slug(input: str, expected: str) -> None:
     assert Slug(input).value == expected
     assert Slug.from_name(input).value == expected
 
@@ -52,7 +52,7 @@ def test_valid_slug(input: str, expected: str):
         "",
     ],
 )
-def test_slug_generation_unrecoverable(input: str):
+def test_slug_generation_unrecoverable(input: str) -> None:
     with pytest.raises(errors.ValidationError):
         Slug(input)
         Slug.from_name(input)

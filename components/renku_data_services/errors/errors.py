@@ -13,11 +13,11 @@ class BaseError(Exception):
     message: str = "An unexpected error occurred"
     detail: Optional[str] = None
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """String representation of the error."""
         return f"{self.__class__.__qualname__}: {self.message}"
 
-    def __str__(self):
+    def __str__(self) -> str:
         """String representation of the error."""
         return f"{self.__class__.__qualname__}: {self.message}"
 

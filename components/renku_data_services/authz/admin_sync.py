@@ -4,7 +4,7 @@ from renku_data_services.authz.authz import Authz
 from renku_data_services.users.kc_api import IKeycloakAPI
 
 
-async def sync_admins_from_keycloak(kc_api: IKeycloakAPI, authz: Authz):
+async def sync_admins_from_keycloak(kc_api: IKeycloakAPI, authz: Authz) -> None:
     """Query keycloak for all admin users, add or remove any admins from the authorization database as needed."""
     kc_admin_user_ids = [payload["id"] for payload in kc_api.get_admin_users()]
     for admin_id in kc_admin_user_ids:

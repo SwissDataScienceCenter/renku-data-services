@@ -1,5 +1,7 @@
 """Gitlab API."""
+
 from dataclasses import dataclass, field
+from typing import Any, cast
 
 import httpx
 
@@ -15,7 +17,7 @@ class GitlabAPI:
     gitlab_url: str
     gitlab_graphql_url: str = field(init=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Sets the graphql url for gitlab."""
         gitlab_url = self.gitlab_url
 
@@ -63,12 +65,12 @@ class GitlabAPI:
             """
         }
 
-        async def _query_gitlab_graphql(body, header):
+        async def _query_gitlab_graphql(body: dict[str, Any], header: dict[str, Any]) -> dict[str, Any]:
             async with httpx.AsyncClient(verify=get_ssl_context()) as client:
                 resp = await client.post(self.gitlab_graphql_url, json=body, headers=header, timeout=10)
             if resp.status_code != 200:
                 raise errors.BaseError(message=f"Error querying Gitlab api {self.gitlab_graphql_url}: {resp.text}")
-            result = resp.json()
+            result = cast(dict[str, Any], resp.json())
 
             if "data" not in result or "projects" not in result["data"]:
                 raise errors.BaseError(message=f"Got unexpected response from Gitlab: {result}")
@@ -77,7 +79,9 @@ class GitlabAPI:
         resp_body = await _query_gitlab_graphql(body, header)
         result: list[str] = []
 
-        def _process_projects(resp_body, min_access_level, result):
+        def _process_projects(
+            resp_body: dict[str, Any], min_access_level: GitlabAccessLevel, result: list[str]
+        ) -> None:
             for project in resp_body["data"]["projects"]["nodes"]:
                 if min_access_level != GitlabAccessLevel.PUBLIC:
                     if not project["projectMembers"]["nodes"]:

@@ -1,4 +1,5 @@
 """SQLAlchemy schemas for the CRC database."""
+
 from typing import Optional
 
 from sqlalchemy import MetaData, String
