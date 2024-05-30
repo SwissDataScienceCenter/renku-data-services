@@ -4,7 +4,7 @@ import asyncio
 import threading
 from asyncio.events import AbstractEventLoop
 from collections.abc import Coroutine, Sequence
-from typing import Any, TypeVar, Literal
+from typing import Any, Literal, TypeVar
 
 from alembic import context
 from sqlalchemy import Connection, MetaData, NullPool, create_engine

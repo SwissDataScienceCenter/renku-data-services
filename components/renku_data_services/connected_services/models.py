@@ -20,6 +20,7 @@ class OAuth2Client:
     display_name: str
     scope: str
     url: str
+    use_pkce: bool
     created_by_id: str
     creation_date: datetime
     updated_at: datetime

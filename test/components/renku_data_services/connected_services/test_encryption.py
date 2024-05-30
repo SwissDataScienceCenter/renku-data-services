@@ -44,6 +44,7 @@ async def test_client_secret_encryption(app_config: Config, admin_user: APIUser)
         display_name="My Provider",
         scope="api",
         url="https://example.org",
+        use_pkce=False,
     )
 
     client = await connected_services_repo.insert_oauth2_client(user=admin_user, new_client=new_client)

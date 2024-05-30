@@ -4,7 +4,7 @@ from base64 import b64decode, b64encode
 from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from typing import Any, cast
-from urllib.parse import urlencode, urljoin
+from urllib.parse import urljoin
 
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from sanic.log import logger
@@ -18,6 +18,7 @@ from renku_data_services.connected_services import apispec, models
 from renku_data_services.connected_services import orm as schemas
 from renku_data_services.connected_services.apispec import ConnectionStatus
 from renku_data_services.connected_services.provider_adapters import get_provider_adapter
+from renku_data_services.connected_services.utils import generate_code_verifier
 from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
 
 
@@ -77,6 +78,7 @@ class ConnectedServicesRepository:
             display_name=new_client.display_name,
             scope=new_client.scope,
             url=new_client.url,
+            use_pkce=new_client.use_pkce or False,
             created_by_id=user.id,
         )
 
@@ -108,13 +110,16 @@ class ConnectedServicesRepository:
             if client is None:
                 raise errors.MissingResourceError(message=f"OAuth2 Client with id '{provider_id}' does not exist.")
 
-            if kwargs.get("client_secret"):
+            client_secret = cast(str | None, kwargs.get("client_secret"))
+            if client_secret:
                 client.client_secret = encrypt_string(
                     self.encryption_key, client.created_by_id, cast(str, kwargs["client_secret"])
                 )
+            elif client_secret == "":  # nosec B105
+                client.client_secret = None
 
             for key, value in kwargs.items():
-                if key in ["kind", "client_id", "display_name", "scope", "url"]:
+                if key in ["kind", "client_id", "display_name", "scope", "url", "use_pkce"]:
                     setattr(client, key, value)
 
             await session.flush()
@@ -154,25 +159,26 @@ class ConnectedServicesRepository:
             if client is None:
                 raise errors.MissingResourceError(message=f"OAuth2 Client with id '{provider_id}' does not exist.")
 
-            if next_url:
-                query = urlencode([("next_url", next_url)])
-                callback_url = f"{callback_url}?{query}"
-
             adapter = get_provider_adapter(client)
             client_secret = (
                 decrypt_string(self.encryption_key, client.created_by_id, client.client_secret)
                 if client.client_secret
                 else None
             )
+            code_verifier = generate_code_verifier() if client.use_pkce else None
+            code_challenge_method = "S256" if client.use_pkce else None
             async with self.async_oauth2_client_class(
                 client_id=client.client_id,
                 client_secret=client_secret,
                 scope=client.scope,
                 redirect_uri=callback_url,
+                code_challenge_method=code_challenge_method,
             ) as oauth2_client:
                 url: str
                 state: str
-                url, state = oauth2_client.create_authorization_url(adapter.authorization_url)
+                url, state = oauth2_client.create_authorization_url(
+                    adapter.authorization_url, code_verifier=code_verifier
+                )
 
                 result_conn = await session.scalars(
                     select(schemas.OAuth2ConnectionORM)
@@ -188,21 +194,26 @@ class ConnectedServicesRepository:
                         token=None,
                         state=state,
                         status=schemas.ConnectionStatus.pending,
+                        code_verifier=code_verifier,
+                        next_url=next_url,
                     )
                     session.add(connection)
                 else:
                     connection.state = state
                     connection.status = schemas.ConnectionStatus.pending
+                    connection.code_verifier = code_verifier
+                    connection.next_url = next_url
 
                 await session.flush()
                 await session.refresh(connection)
 
                 return url
 
-    async def authorize_callback(
-        self, state: str, raw_url: str, callback_url: str, next_url: str | None = None
-    ) -> dict | Any:
-        """Performs the OAuth2 authorization callback."""
+    async def authorize_callback(self, state: str, raw_url: str, callback_url: str) -> str | None:
+        """Performs the OAuth2 authorization callback.
+
+        Returns the `next_url` parameter value the authorization flow was started with.
+        """
         if not state:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
@@ -217,10 +228,6 @@ class ConnectedServicesRepository:
             if connection is None:
                 raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
-            if next_url:
-                query = urlencode([("next_url", next_url)])
-                callback_url = f"{callback_url}?{query}"
-
             client = connection.client
             adapter = get_provider_adapter(client)
             client_secret = (
@@ -228,22 +235,30 @@ class ConnectedServicesRepository:
                 if client.client_secret
                 else None
             )
+            code_verifier = connection.code_verifier
+            code_challenge_method = "S256" if code_verifier else None
             async with self.async_oauth2_client_class(
                 client_id=client.client_id,
                 client_secret=client_secret,
                 scope=client.scope,
                 redirect_uri=callback_url,
+                code_challenge_method=code_challenge_method,
                 state=connection.state,
             ) as oauth2_client:
-                token = await oauth2_client.fetch_token(adapter.token_endpoint_url, authorization_response=raw_url)
+                token = await oauth2_client.fetch_token(
+                    adapter.token_endpoint_url, authorization_response=raw_url, code_verifier=code_verifier
+                )
 
                 logger.info(f"Token for client {client.id} has keys: {", ".join(token.keys())}")
+
+                next_url = connection.next_url
 
                 connection.token = self._encrypt_token_set(token=token, user_id=connection.user_id)
                 connection.state = None
                 connection.status = schemas.ConnectionStatus.connected
+                connection.next_url = None
 
-                return token
+                return next_url
 
     async def get_oauth2_connections(
         self,
@@ -348,11 +363,14 @@ class ConnectedServicesRepository:
             if client.client_secret
             else None
         )
+        code_verifier = connection.code_verifier
+        code_challenge_method = "S256" if code_verifier else None
         yield (
             self.async_oauth2_client_class(
                 client_id=client.client_id,
                 client_secret=client_secret,
                 scope=client.scope,
+                code_challenge_method=code_challenge_method,
                 token_endpoint=adapter.token_endpoint_url,
                 token=token,
                 update_token=update_token,
