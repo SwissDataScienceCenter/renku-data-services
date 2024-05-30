@@ -19,8 +19,8 @@ RUN if $DEV_BUILD ; then \
     /home/renku/.local/bin/poetry export -o requirements.txt --with dev; \
     env/bin/pip install -r requirements.txt; \
   fi
-RUN /home/renku/.local/bin/poetry build-project -f wheel -C projects/keycloak_sync
-RUN env/bin/pip --no-cache-dir install projects/keycloak_sync/dist/*.whl
+RUN /home/renku/.local/bin/poetry build-project -f wheel -C projects/background_jobs
+RUN env/bin/pip --no-cache-dir install projects/background_jobs/dist/*.whl
 
 FROM python:3.12-slim-bookworm
 ARG USER_UID=1000
@@ -33,4 +33,4 @@ RUN apt-get update && apt-get install -y \
 USER $USER_UID:$USER_GID
 WORKDIR /app
 COPY --from=builder /app/env ./env
-ENTRYPOINT ["tini", "-g", "--", "env/bin/python", "-m", "renku_data_services.keycloak_sync.main"]
+ENTRYPOINT ["tini", "-g", "--", "env/bin/python", "-m", "renku_data_services.background_jobs.main"]

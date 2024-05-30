@@ -8,8 +8,10 @@ from enum import StrEnum
 from functools import wraps
 from typing import ClassVar, Concatenate, ParamSpec, Protocol, TypeVar
 
-from authzed.api.v1 import (  # type: ignore[attr-defined]
-    AsyncClient,
+from authzed.api.v1 import AsyncClient
+from authzed.api.v1.core_pb2 import ObjectReference, Relationship, RelationshipUpdate, SubjectReference, ZedToken
+from authzed.api.v1.permission_service_pb2 import (
+    LOOKUP_PERMISSIONSHIP_HAS_PERMISSION,
     CheckPermissionRequest,
     CheckPermissionResponse,
     Consistency,
@@ -17,18 +19,12 @@ from authzed.api.v1 import (  # type: ignore[attr-defined]
     LookupResourcesResponse,
     LookupSubjectsRequest,
     LookupSubjectsResponse,
-    ObjectReference,
     ReadRelationshipsRequest,
     ReadRelationshipsResponse,
-    Relationship,
     RelationshipFilter,
-    RelationshipUpdate,
     SubjectFilter,
-    SubjectReference,
     WriteRelationshipsRequest,
-    ZedToken,
 )
-from authzed.api.v1.permission_service_pb2 import LOOKUP_PERMISSIONSHIP_HAS_PERMISSION
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services import base_models
@@ -612,6 +608,10 @@ class Authz:
         self, user: base_models.APIUser, project: Project, *, zed_token: ZedToken | None = None
     ) -> _AuthzChange:
         """Remove the relationships associated with the project."""
+        if not project.id:
+            raise errors.ProgrammingError(
+                message="Cannot remove a project from the authorization database if the project has no ID"
+            )
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
         rel_filter = RelationshipFilter(resource_type=ResourceType.project.value, optional_resource_id=project.id)
         responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
@@ -634,6 +634,10 @@ class Authz:
         self, user: base_models.APIUser, project: Project, *, zed_token: ZedToken | None = None
     ) -> _AuthzChange:
         """Update the visibility of the project in the authorization database."""
+        if not project.id:
+            raise errors.ProgrammingError(
+                message="Cannot update the project visibility in the authorization database if the project has no ID"
+            )
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
         project_res = _AuthzConverter.project(project.id)  # type: ignore[arg-type]
         all_users_sub = SubjectReference(object=_AuthzConverter.all_users())
@@ -718,6 +722,10 @@ class Authz:
         self, user: base_models.APIUser, project: Project, *, zed_token: ZedToken | None = None
     ) -> _AuthzChange:
         """Update the namespace/group of the project in the authorization database."""
+        if not project.id:
+            raise errors.ProgrammingError(
+                message="Cannot update the project namespace in the authorization database if the project has no ID"
+            )
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
         project_res = _AuthzConverter.project(project.id)  # type: ignore[arg-type]
         project_namespace_filter = RelationshipFilter(
@@ -885,7 +893,7 @@ class Authz:
         resource_id: str,
         user_ids: list[str],
         *,
-        zed_token: ZedToken = None,
+        zed_token: ZedToken | None = None,
     ) -> list[MembershipChange]:
         """Remove the specific members from the project, then return the list of members that were removed."""
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
@@ -1035,6 +1043,10 @@ class Authz:
         self, user: base_models.APIUser, group: Group, *, zed_token: ZedToken | None = None
     ) -> _AuthzChange:
         """Remove the group from the authorization database."""
+        if not group.id:
+            raise errors.ProgrammingError(
+                message="Cannot a group in the authorization database if the group has no ID"
+            )
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
         rel_filter = RelationshipFilter(resource_type=ResourceType.group.value, optional_resource_id=group.id)
         responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(

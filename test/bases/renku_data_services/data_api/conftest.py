@@ -1,5 +1,5 @@
 import json
-from test.bases.renku_data_services.keycloak_sync.test_sync import get_kc_users
+from test.bases.renku_data_services.background_jobs.test_sync import get_kc_users
 from typing import Any
 
 import pytest
