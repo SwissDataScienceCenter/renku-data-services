@@ -790,6 +790,25 @@ class Authz:
         )
         return _AuthzChange(apply=apply_change, undo=undo_change)
 
+    async def _get_resource_owners(
+        self, resource_type: ResourceType, resource_id: str, consistency: Consistency
+    ) -> list[ReadRelationshipsResponse]:
+        existing_owners_filter = RelationshipFilter(
+            resource_type=resource_type.value,
+            optional_resource_id=resource_id,
+            optional_subject_filter=SubjectFilter(subject_type=ResourceType.user),
+            optional_relation=_Relation.owner.value,
+        )
+        return [
+            i
+            async for i in self.client.ReadRelationships(
+                ReadRelationshipsRequest(
+                    consistency=consistency,
+                    relationship_filter=existing_owners_filter,
+                )
+            )
+        ]
+
     @_is_allowed(Scope.CHANGE_MEMBERSHIP)
     async def upsert_project_members(
         self,
@@ -810,12 +829,6 @@ class Authz:
         undo: list[RelationshipUpdate] = []
         output: list[MembershipChange] = []
         expected_user_roles = [_Relation.viewer.value, _Relation.owner.value, _Relation.editor.value]
-        existing_owners_filter = RelationshipFilter(
-            resource_type=resource_type.value,
-            optional_resource_id=resource_id,
-            optional_subject_filter=SubjectFilter(subject_type=ResourceType.user),
-            optional_relation=_Relation.owner.value,
-        )
         existing_owners_rels: list[ReadRelationshipsResponse] | None = None
         for member in members:
             rel = Relationship(
@@ -840,15 +853,9 @@ class Authz:
                 if existing_rel.relationship != rel:
                     if existing_rel.relationship.relation == _Relation.owner.value:
                         if existing_owners_rels is None:
-                            existing_owners_rels = [
-                                i
-                                async for i in self.client.ReadRelationships(
-                                    ReadRelationshipsRequest(
-                                        consistency=consistency,
-                                        relationship_filter=existing_owners_filter,
-                                    )
-                                )
-                            ]
+                            existing_owners_rels = await self._get_resource_owners(
+                                resource_type, resource_id, consistency
+                            )
                         if len(existing_owners_rels) == 1:
                             new_owners = [m for m in members if m.role == Role.OWNER]
                             if not new_owners:
@@ -934,21 +941,8 @@ class Authz:
         add_members: list[RelationshipUpdate] = []
         remove_members: list[RelationshipUpdate] = []
         output: list[MembershipChange] = []
-        existing_owners_filter = RelationshipFilter(
-            resource_type=resource_type.value,
-            optional_resource_id=resource_id,
-            optional_subject_filter=SubjectFilter(subject_type=ResourceType.user),
-            optional_relation=_Relation.owner.value,
-        )
-        existing_owners: set[str] = {
-            rel.relationship.subject.object.object_id
-            async for rel in self.client.ReadRelationships(
-                ReadRelationshipsRequest(
-                    consistency=consistency,
-                    relationship_filter=existing_owners_filter,
-                )
-            )
-        }
+        existing_owners_rels = await self._get_resource_owners(resource_type, resource_id, consistency)
+        existing_owners: set[str] = {rel.relationship.subject.object.object_id for rel in existing_owners_rels}
         for user_id in user_ids:
             if user_id == "*":
                 raise errors.ValidationError(message="Cannot remove a project member with ID '*'")
@@ -1114,12 +1108,6 @@ class Authz:
         undo: list[RelationshipUpdate] = []
         output: list[MembershipChange] = []
         expected_user_roles = {_Relation.viewer.value, _Relation.owner.value, _Relation.editor.value}
-        existing_owners_filter = RelationshipFilter(
-            resource_type=resource_type.value,
-            optional_resource_id=resource_id,
-            optional_subject_filter=SubjectFilter(subject_type=ResourceType.user),
-            optional_relation=_Relation.owner.value,
-        )
         existing_owners_rels: list[ReadRelationshipsResponse] | None = None
         for member in members:
             rel = Relationship(
@@ -1145,15 +1133,9 @@ class Authz:
                 if existing_rel.relationship != rel:
                     if existing_rel.relationship.relation == _Relation.owner.value:
                         if existing_owners_rels is None:
-                            existing_owners_rels = [
-                                i
-                                async for i in self.client.ReadRelationships(
-                                    ReadRelationshipsRequest(
-                                        consistency=consistency,
-                                        relationship_filter=existing_owners_filter,
-                                    )
-                                )
-                            ]
+                            existing_owners_rels = await self._get_resource_owners(
+                                resource_type, resource_id, consistency
+                            )
                         if len(existing_owners_rels) == 1:
                             new_owners = [m for m in members if m.role == Role.OWNER]
                             if not new_owners:
@@ -1240,12 +1222,6 @@ class Authz:
         add_members: list[RelationshipUpdate] = []
         remove_members: list[RelationshipUpdate] = []
         output: list[MembershipChange] = []
-        existing_owners_filter = RelationshipFilter(
-            resource_type=resource_type.value,
-            optional_resource_id=resource_id,
-            optional_subject_filter=SubjectFilter(subject_type=ResourceType.user),
-            optional_relation=_Relation.owner.value,
-        )
         existing_owners_rels: list[ReadRelationshipsResponse] | None = None
         for user_id in user_ids:
             if user_id == "*":
@@ -1263,15 +1239,7 @@ class Authz:
             async for existing_rel in existing_rels:
                 if existing_rel.relationship.relation == _Relation.owner.value:
                     if existing_owners_rels is None:
-                        existing_owners_rels = [
-                            i
-                            async for i in self.client.ReadRelationships(
-                                ReadRelationshipsRequest(
-                                    consistency=consistency,
-                                    relationship_filter=existing_owners_filter,
-                                )
-                            )
-                        ]
+                        existing_owners_rels = await self._get_resource_owners(resource_type, resource_id, consistency)
                     if len(existing_owners_rels) == 1:
                         raise errors.Unauthorized(
                             message="You are trying to remove the single last owner of the group, "

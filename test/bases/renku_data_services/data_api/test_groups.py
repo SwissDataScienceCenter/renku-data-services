@@ -255,7 +255,7 @@ async def test_removing_single_group_owner_not_allowed(sanic_client, user_header
 
 
 @pytest.mark.asyncio
-async def test_cannot_change_role_for_last_group_owner(sanic_client, user_headers, regular_user, app_config, member_1_headers):
+async def test_cannot_change_role_for_last_group_owner(sanic_client, user_headers, regular_user, app_config):
     payload = {
         "name": "Group1",
         "slug": "group-1",
