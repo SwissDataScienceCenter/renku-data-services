@@ -43,7 +43,7 @@ _P = ParamSpec("_P")
 
 
 class WithAuthz(Protocol):
-    """Protcol for a class that has a authorization database client as property."""
+    """Protocol for a class that has a authorization database client as property."""
 
     @property
     def authz(self) -> "Authz":
@@ -363,7 +363,7 @@ class Authz:
         *,
         zed_token: ZedToken | None = None,
     ) -> list[str]:
-        """Get all user IDs that have a specific permission on a specific reosurce."""
+        """Get all user IDs that have a specific permission on a specific resource."""
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
         res = _AuthzConverter.to_object(resource_type, resource_id)
         ids: list[str] = []
@@ -502,7 +502,7 @@ class Authz:
                     elif isinstance(result, (ProjectUpdate, NamespaceUpdate, GroupUpdate)):
                         resource_id = result.new.id
                     raise errors.ProgrammingError(
-                        message=f"Encountered an unkonwn authorization operation {op} on resource {resource} "
+                        message=f"Encountered an unknown authorization operation {op} on resource {resource} "
                         f"with ID {resource_id} when updating the authorization database",
                     )
             return authz_change
@@ -525,7 +525,7 @@ class Authz:
                     )
                 if not session.in_transaction():
                     raise errors.ProgrammingError(
-                        message="The authroization database decorator needs a session with an open transaction."
+                        message="The authorization database decorator needs a session with an open transaction."
                     )
 
                 authz_change = _AuthzChange()
@@ -828,7 +828,7 @@ class Authz:
         add_members: list[RelationshipUpdate] = []
         undo: list[RelationshipUpdate] = []
         output: list[MembershipChange] = []
-        expected_user_roles = [_Relation.viewer.value, _Relation.owner.value, _Relation.editor.value]
+        expected_user_roles = {_Relation.viewer.value, _Relation.owner.value, _Relation.editor.value}
         existing_owners_rels: list[ReadRelationshipsResponse] | None = None
         for member in members:
             rel = Relationship(
@@ -923,7 +923,7 @@ class Authz:
         change = _AuthzChange(
             apply=WriteRelationshipsRequest(updates=add_members), undo=WriteRelationshipsRequest(updates=undo)
         )
-        self.client.WriteRelationships(change.apply)
+        await self.client.WriteRelationships(change.apply)
         return output
 
     @_is_allowed(Scope.CHANGE_MEMBERSHIP)
@@ -987,7 +987,7 @@ class Authz:
         change = _AuthzChange(
             apply=WriteRelationshipsRequest(updates=remove_members), undo=WriteRelationshipsRequest(updates=add_members)
         )
-        self.client.WriteRelationships(change.apply)
+        await self.client.WriteRelationships(change.apply)
         return output
 
     async def _get_admin_user_ids(self) -> list[str]:
@@ -1235,7 +1235,7 @@ class Authz:
                 ReadRelationshipsRequest(consistency=consistency, relationship_filter=existing_rel_filter)
             )
             # NOTE: We have to make sure that when we undo we only put back relationships that existed already.
-            # Blidnly undoing everything that was passed in may result in adding things that weren't there before.
+            # Blindly undoing everything that was passed in may result in adding things that weren't there before.
             async for existing_rel in existing_rels:
                 if existing_rel.relationship.relation == _Relation.owner.value:
                     if existing_owners_rels is None:
@@ -1268,7 +1268,7 @@ class Authz:
         change = _AuthzChange(
             apply=WriteRelationshipsRequest(updates=remove_members), undo=WriteRelationshipsRequest(updates=add_members)
         )
-        self.client.WriteRelationships(change.apply)
+        await self.client.WriteRelationships(change.apply)
         return output
 
     def _add_user_namespace(self, namespace: Namespace) -> _AuthzChange:
