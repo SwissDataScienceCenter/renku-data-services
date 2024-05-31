@@ -7,7 +7,7 @@ import logging
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.authz.authz import Authz
 from renku_data_services.background_jobs.config import SyncConfig
-from renku_data_services.background_jobs.utils import bootstrap_user_namespaces
+from renku_data_services.background_jobs.core import bootstrap_user_namespaces
 from renku_data_services.migrations.core import run_migrations_for_app
 
 logging.basicConfig(level=logging.INFO)
