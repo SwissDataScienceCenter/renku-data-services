@@ -558,10 +558,6 @@ class Authz:
 
     def _add_project(self, project: Project) -> _AuthzChange:
         """Create the new project and associated resources and relations in the DB."""
-        if not project.id:
-            raise errors.ProgrammingError(
-                message="Cannot create a project in the authorization database if its ID is missing."
-            )
         creator = SubjectReference(object=_AuthzConverter.user(project.created_by))
         project_res = _AuthzConverter.project(project.id)
         creator_is_owner = Relationship(resource=project_res, relation=_Relation.owner.value, subject=creator)
@@ -616,10 +612,6 @@ class Authz:
         zed_token: ZedToken | None = None,
     ) -> _AuthzChange:
         """Remove the relationships associated with the project."""
-        if not project.id:
-            raise errors.ProgrammingError(
-                message="Cannot remove a project from the authorization database if the project has no ID"
-            )
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
         rel_filter = RelationshipFilter(resource_type=ResourceType.project.value, optional_resource_id=project.id)
         responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
@@ -646,10 +638,6 @@ class Authz:
         zed_token: ZedToken | None = None,
     ) -> _AuthzChange:
         """Update the visibility of the project in the authorization database."""
-        if not project.id:
-            raise errors.ProgrammingError(
-                message="Cannot update the project visibility in the authorization database if the project has no ID"
-            )
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
         project_res = _AuthzConverter.project(project.id)
         all_users_sub = SubjectReference(object=_AuthzConverter.all_users())
@@ -738,10 +726,6 @@ class Authz:
         zed_token: ZedToken | None = None,
     ) -> _AuthzChange:
         """Update the namespace/group of the project in the authorization database."""
-        if not project.id:
-            raise errors.ProgrammingError(
-                message="Cannot update the project namespace in the authorization database if the project has no ID"
-            )
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
         project_res = _AuthzConverter.project(project.id)
         project_namespace_filter = RelationshipFilter(
@@ -1064,7 +1048,9 @@ class Authz:
     ) -> _AuthzChange:
         """Remove the group from the authorization database."""
         if not group.id:
-            raise errors.ProgrammingError(message="Cannot a group in the authorization database if the group has no ID")
+            raise errors.ProgrammingError(
+                message="Cannot remove a group in the authorization database if the group has no ID"
+            )
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
         rel_filter = RelationshipFilter(resource_type=ResourceType.group.value, optional_resource_id=group.id)
         responses = self.client.ReadRelationships(

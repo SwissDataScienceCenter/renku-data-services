@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 import string
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable
 from contextlib import nullcontext
 from datetime import UTC, datetime
 
@@ -312,13 +312,14 @@ class GroupRepository:
                 output.append(ns_orm.dump())
             return output, group_count
 
-    async def _get_user_namespaces(self) -> list[user_models.UserWithNamespace]:
+    async def _get_user_namespaces(self) -> AsyncGenerator[user_models.UserWithNamespace, None]:
         """Lists all user namespaces without regard for authorization or permissions, used for migrations."""
         async with self.session_maker() as session, session.begin():
-            namespaces = await session.scalars(
+            namespaces = await session.stream_scalars(
                 select(schemas.NamespaceORM).where(schemas.NamespaceORM.user_id.isnot(None))
             )
-            return [ns.dump_user() for ns in namespaces]
+            async for namespace in namespaces:
+                yield namespace.dump_user()
 
     async def get_namespace_by_slug(self, user: base_models.APIUser, slug: str) -> models.Namespace | None:
         """Get the namespace for a slug."""

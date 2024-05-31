@@ -14,7 +14,7 @@ from bases.renku_data_services.background_jobs.config import SyncConfig
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.authz.authz import Authz, ResourceType, _Relation
 from renku_data_services.authz.config import AuthzConfig
-from renku_data_services.background_jobs.utils import bootstrap_user_namespaces
+from renku_data_services.background_jobs.core import bootstrap_user_namespaces
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models import APIUser
 from renku_data_services.db_config import DBConfig
