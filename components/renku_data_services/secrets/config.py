@@ -29,6 +29,7 @@ class Config:
     db: DBConfig
     authenticator: base_models.Authenticator
     secrets_service_private_key: rsa.RSAPrivateKey
+    old_secrets_service_private_key: rsa.RSAPrivateKey | None
     core_client: K8sCoreClientInterface
     app_name: str = "secrets_storage"
     version: str = "0.0.1"
@@ -55,6 +56,7 @@ class Config:
         authenticator: base_models.Authenticator
         core_client: K8sCoreClientInterface
         secrets_service_private_key: PrivateKeyTypes
+        old_secrets_service_private_key: PrivateKeyTypes | None
         db = DBConfig.from_env(prefix)
 
         version = os.environ.get(f"{prefix}VERSION", "0.0.1")
@@ -69,6 +71,15 @@ class Config:
                 )
             else:
                 secrets_service_private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+            old_secrets_service_private_key_path = os.getenv(f"{prefix}OLD_SECRETS_SERVICE_PRIVATE_KEY_PATH")
+            if old_secrets_service_private_key_path:
+                old_private_key = Path(old_secrets_service_private_key_path).read_bytes()
+                if old_private_key is not None and len(old_private_key) > 0:
+                    old_secrets_service_private_key = serialization.load_pem_private_key(old_private_key, password=None)
+                else:
+                    old_secrets_service_private_key = None
+            else:
+                old_secrets_service_private_key = None
         else:
             keycloak_url = os.environ.get(f"{prefix}KEYCLOAK_URL")
             if keycloak_url is None:
@@ -94,13 +105,26 @@ class Config:
             secrets_service_private_key = serialization.load_pem_private_key(
                 Path(secrets_service_private_key_path).read_bytes(), password=None
             )
+            old_secrets_service_private_key_path = os.getenv(f"{prefix}OLD_SECRETS_SERVICE_PRIVATE_KEY_PATH")
+            if old_secrets_service_private_key_path and Path(old_secrets_service_private_key_path).exists():
+                old_secrets_service_private_key = serialization.load_pem_private_key(
+                    Path(old_secrets_service_private_key_path).read_bytes(), password=None
+                )
+            else:
+                old_secrets_service_private_key = None
         if not isinstance(secrets_service_private_key, rsa.RSAPrivateKey):
             raise errors.ConfigurationError(message="Secret service private key is not an RSAPrivateKey")
+
+        if old_secrets_service_private_key is not None and not isinstance(
+            old_secrets_service_private_key, rsa.RSAPrivateKey
+        ):
+            raise errors.ConfigurationError(message="Old secret service private key is not an RSAPrivateKey")
 
         return cls(
             version=version,
             db=db,
             authenticator=authenticator,
             secrets_service_private_key=secrets_service_private_key,
+            old_secrets_service_private_key=old_secrets_service_private_key,
             core_client=core_client,
         )

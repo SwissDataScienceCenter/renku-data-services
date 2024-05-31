@@ -8,6 +8,7 @@ from sanic import Sanic
 from sanic.worker.loader import AppLoader
 
 from renku_data_services.secrets.config import Config
+from renku_data_services.secrets.core import rotate_encryption_keys
 from renku_data_services.secrets_storage_api.app import register_all_handlers
 
 
@@ -18,6 +19,17 @@ def create_app() -> Sanic:
     if "COVERAGE_RUN" in environ:
         app.config.TOUCHUP = False
     app = register_all_handlers(app, config)
+
+    async def rotate_encryption_key_listener(_: Sanic) -> None:
+        """Rotate RSA private key."""
+        if config.old_secrets_service_private_key is None:
+            return
+
+        await rotate_encryption_keys(
+            config.secrets_service_private_key, config.old_secrets_service_private_key, config.user_secrets_repo
+        )
+
+    app.register_listener(rotate_encryption_key_listener, "after_server_start")
 
     return app
 

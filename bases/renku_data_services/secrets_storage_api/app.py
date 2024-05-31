@@ -18,6 +18,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         user_secrets_repo=config.user_secrets_repo,
         authenticator=config.authenticator,
         secret_service_private_key=config.secrets_service_private_key,
+        old_secret_service_private_key=config.old_secrets_service_private_key,
         core_client=config.core_client,
     )
     misc = MiscBP(name="misc", url_prefix=url_prefix, apispec=config.spec, version=config.version)
