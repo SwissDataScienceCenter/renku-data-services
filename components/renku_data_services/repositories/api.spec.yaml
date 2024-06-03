@@ -12,7 +12,12 @@ paths:
   /repositories/{repository_url}:
     get:
       summary: Get the metadata available about a repository
-      description: The repository URL will be matched against the set of available OAuth2 clients to determine which service to connect to. If a match is found, the corresponding service API will be used to fetch the repository metadata.
+      description: |
+        The repository URL will be matched against the set of available OAuth2 clients to determine which service to connect to. If a match is found, the corresponding service API will be used to fetch the repository metadata.
+
+        If no provider is found, we cannot fetch repository metadata and a 404 is returned. In this case, we can use the probe endpoint to check if the repository is likely clonable.
+
+        Note that only HTTP(S) URLs are supported.
       parameters:
         - in: path
           name: repository_url
@@ -35,6 +40,10 @@ paths:
   /repositories/{repository_url}/probe:
     get:
       summary: Probe a repository to check if it is publicly available
+      description: |
+        Probe a repository URL to see if it implements the git+http protocol. In this case we assume that the repository can be cloned and pulled.
+
+        Note that only HTTP(S) URLs are supported.
       parameters:
         - in: path
           name: repository_url
