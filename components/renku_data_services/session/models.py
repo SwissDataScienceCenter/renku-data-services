@@ -45,7 +45,7 @@ class SessionLauncher(BaseModel):
     created_by: Member
 
     @model_validator(mode="after")
-    def check_launcher_environment_kind(self):
+    def check_launcher_environment_kind(self) -> "SessionLauncher":
         """Validates the environment of a launcher."""
 
         environment_kind = self.environment_kind

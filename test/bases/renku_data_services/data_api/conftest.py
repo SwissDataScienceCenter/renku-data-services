@@ -1,5 +1,5 @@
 import json
-from test.bases.renku_data_services.keycloak_sync.test_sync import get_kc_users
+from test.bases.renku_data_services.background_jobs.test_sync import get_kc_users
 from typing import Any
 
 import pytest
@@ -94,7 +94,7 @@ def unauthorized_headers() -> dict[str, str]:
 
 
 @pytest.fixture
-def bootstrap_admins(app_config: Config, admin_user: UserInfo):
+def bootstrap_admins(app_config: Config, admin_user: UserInfo) -> None:
     authz = app_config.authz
     rels: list[RelationshipUpdate] = []
     sub = SubjectReference(object=_AuthzConverter.user(admin_user.id))

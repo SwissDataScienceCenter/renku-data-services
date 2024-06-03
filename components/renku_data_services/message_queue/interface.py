@@ -8,6 +8,6 @@ from renku_data_services.message_queue.models import Event
 class IMessageQueue(Protocol):
     """Interface for message queue client."""
 
-    async def send_message(self, event: Event):
+    async def send_message(self, event: Event) -> None:
         """Send a message on a channel."""
         ...

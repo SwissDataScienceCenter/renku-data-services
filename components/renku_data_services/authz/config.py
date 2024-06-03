@@ -1,4 +1,5 @@
 """Authorization configurations."""
+
 import os
 from dataclasses import dataclass, field
 
@@ -9,13 +10,14 @@ from grpcutil import bearer_token_credentials, insecure_bearer_token_credentials
 @dataclass
 class AuthzConfig:
     """The configuration for connecting to the authorization database."""
+
     host: str
     grpc_port: int
     key: str = field(repr=False)
     no_tls_connection: bool = False  # If set to true it means the communication to authzed is unencrypted
 
     @classmethod
-    def from_env(cls, prefix: str=""):
+    def from_env(cls, prefix: str = "") -> "AuthzConfig":
         """Create a configuration from environment variables."""
         host = os.environ[f"{prefix}AUTHZ_DB_HOST"]
         grpc_port = os.environ.get(f"{prefix}AUTHZ_DB_GRPC_PORT", "50051")

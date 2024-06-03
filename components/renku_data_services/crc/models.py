@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
-from typing import Optional, Protocol
+from typing import Any, Optional, Protocol
 from uuid import uuid4
 
 from renku_data_services.errors import ValidationError
@@ -51,16 +51,16 @@ class ResourcesCompareMixin:
         results.append(compare_func(self_storage, other_storage))
         return all(results)
 
-    def __ge__(self, other: ResourcesProtocol):
+    def __ge__(self, other: ResourcesProtocol) -> bool:
         return self.__compare(other, lambda x, y: x >= y)
 
-    def __gt__(self, other: ResourcesProtocol):
+    def __gt__(self, other: ResourcesProtocol) -> bool:
         return self.__compare(other, lambda x, y: x > y)
 
-    def __lt__(self, other: ResourcesProtocol):
+    def __lt__(self, other: ResourcesProtocol) -> bool:
         return self.__compare(other, lambda x, y: x < y)
 
-    def __le__(self, other: ResourcesProtocol):
+    def __le__(self, other: ResourcesProtocol) -> bool:
         return self.__compare(other, lambda x, y: x <= y)
 
 
@@ -93,7 +93,7 @@ class ResourceClass(ResourcesCompareMixin):
     node_affinities: list[NodeAffinity] = field(default_factory=list)
     tolerations: list[str] = field(default_factory=list)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if len(self.name) > 40:
             raise ValidationError(message="'name' cannot be longer than 40 characters.")
         if self.default_storage > self.max_storage:
@@ -122,7 +122,7 @@ class ResourceClass(ResourcesCompareMixin):
         """Determine if a quota is compatible with the resource class."""
         return quota >= self
 
-    def update(self, **kwargs) -> "ResourceClass":
+    def update(self, **kwargs: dict) -> "ResourceClass":
         """Update a field of the resource class and return a new copy."""
         if not kwargs:
             return self
@@ -178,7 +178,7 @@ class ResourcePool:
     default: bool = False
     public: bool = False
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate the resource pool after initialization."""
         if len(self.name) > 40:
             raise ValidationError(message="'name' cannot be longer than 40 characters.")
@@ -221,7 +221,7 @@ class ResourcePool:
                 )
         return self.from_dict({**asdict(self), "quota": val})
 
-    def update(self, **kwargs) -> "ResourcePool":
+    def update(self, **kwargs: Any) -> "ResourcePool":
         """Determine if an update to a resource pool is valid and if valid create new updated resource pool."""
         if self.default and "default" in kwargs and not kwargs["default"]:
             raise ValidationError(message="A default resource pool cannot be made non-default.")

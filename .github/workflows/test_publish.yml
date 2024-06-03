@@ -182,13 +182,13 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=registry,ref=renku/renku-data-service:buildcache
           cache-to: type=registry,ref=renku/renku-data-service:buildcache,mode=max
-      - name: Docker meta keycloak sync
-        id: meta-keycloak-sync
+      - name: Docker meta background jobs
+        id: meta-background-jobs
         uses: docker/metadata-action@v4
         with:
           # list of Docker images to use as base name for tags
           images: |
-            renku/keycloak-sync
+            renku/data-service-background-jobs
           # generate Docker tags based on the following events/attributes
           tags: |
             type=ref,event=branch
@@ -196,17 +196,17 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha
-      - name: Build and push keycloak sync
+      - name: Build and push background jobs
         uses: docker/build-push-action@v4
         with:
           context: .
-          file: ./projects/keycloak_sync/Dockerfile
+          file: ./projects/background_jobs/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.meta-keycloak-sync.outputs.tags }}
-          labels: ${{ steps.meta-keycloak-sync.outputs.labels }}
-          cache-from: type=registry,ref=renku/keycloak-sync:buildcache
-          cache-to: type=registry,ref=renku/keycloak-sync:buildcache,mode=max
+          tags: ${{ steps.meta-background-jobs.outputs.tags }}
+          labels: ${{ steps.meta-background-jobs.outputs.labels }}
+          cache-from: type=registry,ref=renku/data-service-background-jobs:buildcache
+          cache-to: type=registry,ref=renku/data-service-background-jobs:buildcache,mode=max
       - name: Docker meta secrets
         id: meta-secrets-storage
         uses: docker/metadata-action@v4

@@ -15,7 +15,7 @@ from ulid import ULID
 
 from renku_data_services.message_queue.avro_models.io.renku.events.v1.header import Header
 
-_root = Path(__file__).parent.resolve()
+_root: Path = Path(__file__).parent.resolve()
 _filter = f"{_root}/schemas/**/*.avsc"
 _schemas = {}
 for file in glob.glob(_filter, recursive=True):

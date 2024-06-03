@@ -10,7 +10,7 @@ from dataclasses_avroschema.schema_generator import AvroModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.errors import errors
-from renku_data_services.message_queue import AmbiguousEvent
+from renku_data_services.message_queue import events
 from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.message_queue.converters import EventConverter
 from renku_data_services.message_queue.db import EventRepository
@@ -19,7 +19,7 @@ from renku_data_services.message_queue.models import Event
 
 
 class WithMessageQueue(Protocol):
-    """The protcol required for a class to send messages to a message queue."""
+    """The protocol required for a class to send messages to a message queue."""
 
     @property
     def event_repo(self) -> EventRepository:
@@ -33,7 +33,7 @@ _WithMessageQueue = TypeVar("_WithMessageQueue", bound=WithMessageQueue)
 
 
 def dispatch_message(
-    event_type: type[AvroModel] | AmbiguousEvent,
+    event_type: type[AvroModel] | type[events.AmbiguousEvent],
 ) -> Callable[
     [Callable[Concatenate[_WithMessageQueue, _P], Awaitable[_T]]],
     Callable[Concatenate[_WithMessageQueue, _P], Awaitable[_T]],
@@ -51,7 +51,7 @@ def dispatch_message(
         f: Callable[Concatenate[_WithMessageQueue, _P], Awaitable[_T]],
     ) -> Callable[Concatenate[_WithMessageQueue, _P], Awaitable[_T]]:
         @wraps(f)
-        async def message_wrapper(self: _WithMessageQueue, *args: _P.args, **kwargs: _P.kwargs):
+        async def message_wrapper(self: _WithMessageQueue, *args: _P.args, **kwargs: _P.kwargs) -> _T:
             session = kwargs.get("session")
             if not isinstance(session, AsyncSession):
                 raise errors.ProgrammingError(
@@ -78,7 +78,7 @@ class RedisQueue(IMessageQueue):
 
     config: RedisConfig
 
-    async def send_message(self, event: Event):
+    async def send_message(self, event: Event) -> None:
         """Send a message on a channel."""
         message = copy.copy(event.serialize())
 

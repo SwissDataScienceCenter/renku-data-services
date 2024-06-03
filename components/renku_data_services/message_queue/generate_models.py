@@ -21,22 +21,23 @@ import pyavro_gen.modules.fields_collector
 import pyavro_gen.schema_and_classes_container
 from avro_preprocessor.avro_domain import Avro
 from avro_preprocessor.preprocessor_module import PreprocessorModule
+from pyavro_gen import generation_classes
 from pyavro_gen.codewriters.utils import namespace_name
 from pyavro_gen.modules.avsc_schema_dependency_checker import AvscSchemaDependenciesChecker
 
 
 # monkey patch writer to get correct namespaces
-def getv(self):
+def getv(self) -> str:  # type: ignore[no-untyped-def]
     """Fake getter."""
     return "renku_data_services.message_queue.avro_models"
 
 
-def setv(self, value) -> None:
+def setv(self, value) -> None:  # type: ignore[no-untyped-def]
     """Fake setter."""
     pass
 
 
-def deletev(self):
+def deletev(self) -> None:  # type: ignore[no-untyped-def]
     """Fake delete."""
     pass
 
@@ -49,8 +50,10 @@ original_get_from_name = pyavro_gen.modules.fields_collector.FieldsCollector.get
 
 
 def _patched_get_class_writer_from_name(
-    self, fully_qualified_name, writer_type=pyavro_gen.generation_classes.GenerationClassesType.RECORD_CLASS
-):
+    self: pyavro_gen.modules.fields_collector.FieldsCollector,
+    fully_qualified_name: str,
+    writer_type: generation_classes.GenerationClassesType = generation_classes.GenerationClassesType.RECORD_CLASS,
+) -> pyavro_gen.codewriters.core.ClassWriter:
     """Patched version that properly handles enum references."""
     if (
         fully_qualified_name in self.writers
@@ -69,10 +72,10 @@ def _patched_get_class_writer_from_name(
 pyavro_gen.modules.fields_collector.FieldsCollector.get_class_writer_from_name = _patched_get_class_writer_from_name
 
 
-class SchemaFixer(PreprocessorModule):
+class SchemaFixer(PreprocessorModule):  # type: ignore[misc]
     """Removes _schema property from enums, which breaks avro serialization."""
 
-    def __init__(self, schemas) -> None:
+    def __init__(self, schemas) -> None:  # type: ignore[no-untyped-def]
         super().__init__(schemas)
 
         self.writers = schemas.output_writers
@@ -93,7 +96,7 @@ class SchemaFixer(PreprocessorModule):
             writer.attributes = [a for a in writer.attributes if a.name != "_schema"]
 
 
-class DependencyChecker(AvscSchemaDependenciesChecker):
+class DependencyChecker(AvscSchemaDependenciesChecker):  # type: ignore[misc]
     """Fixes dependency checks."""
 
     def store_dependencies_of_field(self, node: Avro.Node) -> None:
@@ -140,7 +143,7 @@ class DependencyChecker(AvscSchemaDependenciesChecker):
         self.schemas.output_writers = OrderedDict((key, self.schemas.output_writers[key]) for key in keys)
 
 
-def generate_schemas():
+def generate_schemas() -> None:
     """Generate pythons files from avro."""
 
     from avro_preprocessor.avro_paths import AvroPaths

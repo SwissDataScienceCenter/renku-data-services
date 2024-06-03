@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 from os import environ
+from typing import TYPE_CHECKING, Any
 
 import sentry_sdk
 import uvloop
@@ -25,6 +26,9 @@ from renku_data_services.errors.errors import (
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.utils.middleware import validate_null_byte
+
+if TYPE_CHECKING:
+    import sentry_sdk._types
 
 
 async def _send_messages() -> None:
@@ -66,7 +70,9 @@ def create_app() -> Sanic:
     if config.sentry.enabled:
         logger.info("enabling sentry")
 
-        def filter_error(event, hint):
+        def filter_error(
+            event: sentry_sdk._types.Event, hint: sentry_sdk._types.Hint
+        ) -> sentry_sdk._types.Event | None:
             if "exc_info" in hint:
                 exc_type, exc_value, tb = hint["exc_info"]
                 if isinstance(
@@ -76,7 +82,7 @@ def create_app() -> Sanic:
             return event
 
         @app.before_server_start
-        async def setup_sentry(_):
+        async def setup_sentry(_: Sanic) -> None:
             sentry_sdk.init(
                 dsn=config.sentry.dsn,
                 environment=config.sentry.environment,
@@ -112,7 +118,7 @@ def create_app() -> Sanic:
     app.register_middleware(validate_null_byte, "request")
 
     @app.main_process_start
-    async def main_process_start(app: Sanic):
+    async def do_migrations(_: Sanic) -> None:
         logger.info("running migrations")
         run_migrations_for_app("common")
         config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
@@ -121,12 +127,12 @@ def create_app() -> Sanic:
         await config.group_repo.generate_user_namespaces()
 
     @app.before_server_start
-    async def setup_rclone_validator(app, _):
+    async def setup_rclone_validator(app: Sanic) -> None:
         validator = RCloneValidator()
         app.ext.dependency(validator)
 
     @app.main_process_ready
-    async def ready(app: Sanic, _):
+    async def ready(app: Sanic) -> None:
         """Application ready event handler."""
         logger.info("starting events background job.")
         app.manager.manage("SendEvents", send_pending_events, {}, transient=True)
@@ -143,7 +149,7 @@ if __name__ == "__main__":
     parser.add_argument("--fast", action="store_true", help="Enable Sanic fast mode")
     parser.add_argument("-d", "--dev", action="store_true", help="Enable Sanic development mode")
     parser.add_argument("--single-process", action="store_true", help="Do not use multiprocessing.")
-    args = vars(parser.parse_args())
+    args: dict[str, Any] = vars(parser.parse_args())
     loader = AppLoader(factory=create_app)
     app = loader.load()
     app.prepare(**args)

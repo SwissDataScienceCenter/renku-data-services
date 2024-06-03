@@ -12,12 +12,14 @@ from yaml import safe_dump, safe_load
 
 
 @pytest.mark.asyncio
-async def test_smoke(sanic_client: SanicASGITestClient):
+async def test_smoke(sanic_client: SanicASGITestClient) -> None:
     _, res = await sanic_client.get("/api/data/version")
     assert res.status_code == 200
 
-def test_apispec_conflicts():
+
+def test_apispec_conflicts() -> None:
     """Check if conflicts exist in unexpected fields in the apispec schemas when merging."""
+
     @dataclass
     class ApispecMergeError(Exception):
         path: str
@@ -64,4 +66,3 @@ def test_apispec_conflicts():
             merger.merge(base_dict, to_merge)
         except ApispecMergeError as err:
             assert False, f"There was an unexpected conflict when merging {input_file} at field {err.path}\n{err.diff}"
-

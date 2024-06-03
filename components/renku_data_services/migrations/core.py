@@ -11,7 +11,7 @@ def get_alembic_config(name: str):
     return config.Config(alembic_ini_path, ini_section=name)
 
 
-def run_migrations_for_app(name: str, revision: str = "heads"):
+def run_migrations_for_app(name: str, revision: str = "heads") -> None:
     """Perform migrations for app `name`.
 
     From: https://alembic.sqlalchemy.org/en/latest/cookbook.html#programmatic-api-use-connection-sharing-with-asyncio

@@ -7,34 +7,26 @@ readme = "README.md"
 license = "Apache License 2.0"
 packages = [
   { include = "renku_data_services/data_api", from = "bases" },
-  { include = "renku_data_services/keycloak_sync", from = "bases" },
+  { include = "renku_data_services/background_jobs", from = "bases" },
   { include = "renku_data_services/authn", from = "components" },
   { include = "renku_data_services/db_config", from = "components" },
   { include = "renku_data_services/app_config", from = "components" },
   { include = "renku_data_services/authz", from = "components" },
   { include = "renku_data_services/crc", from = "components" },
-  { include = "renku_data_services/crc_migrations", from = "components" },
   { include = "renku_data_services/k8s", from = "components" },
   { include = "renku_data_services/migrations", from = "components" },
   { include = "renku_data_services/errors", from = "components" },
   { include = "renku_data_services/base_models", from = "components" },
   { include = "renku_data_services/base_api", from = "components" },
   { include = "renku_data_services/storage", from = "components" },
-  { include = "renku_data_services/storage_migrations", from = "components" },
   { include = "renku_data_services/user_preferences", from = "components" },
-  { include = "renku_data_services/user_preferences_migrations", from = "components" },
   { include = "renku_data_services/utils", from = "components" },
   { include = "renku_data_services/git", from = "components" },
   { include = "renku_data_services/users", from = "components" },
-  { include = "renku_data_services/users_migrations", from = "components" },
   { include = "renku_data_services/project", from = "components" },
-  { include = "renku_data_services/project_migrations", from = "components" },
-  { include = "renku_data_services/events_migrations", from = "components" },
   { include = "renku_data_services/message_queue", from = "components" },
   { include = "renku_data_services/namespace", from = "components" },
   { include = "renku_data_services/session", from = "components" },
-  { include = "renku_data_services/session_migrations", from = "components" },
-  { include = "renku_data_services/events_migrations", from = "components" },
   { include = "renku_data_services/message_queue", from = "components" },
   { include = "renku_data_services/secrets", from = "components" },
   { include = "renku_data_services/connected_services", from = "components" },
@@ -64,7 +56,7 @@ undictify = "^0.11.3"
 types-redis = "^4.6.0.20240218"
 prometheus-sanic = "^3.0.0"
 sentry-sdk = { version = "^1.43.0", extras = ["sanic"] }
-authzed = {git = "https://github.com/authzed/authzed-py.git", rev = "bcd9640a5c2f8e0350e1eff29b34b3fe23a57f14"}
+authzed = "^0.15.0"
 cryptography = "^42.0.5"
 
 [tool.poetry.group.dev.dependencies]
@@ -86,6 +78,7 @@ fakeredis = "^2.21.1"
 ruff = "^0.3.4"
 debugpy = "^1.8.1"
 pytest-xdist = {version = "^3.5.0", extras = ["psutil"]}
+types-requests = "^2.32.0.20240523"
 
 [build-system]
 requires = ["poetry-core"]
@@ -97,6 +90,9 @@ target-version = "py311"
 output-format = "full"
 include = ["*.py", "*.pyi"]
 exclude = ["*/avro_models/*"]
+
+[tool.ruff.format]
+exclude = ["apispec.py"]
 
 [tool.ruff.lint]
 select = [
@@ -130,13 +126,6 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "test/*" = ["D"]
-"*/crc_migrations/*" = ["D", "I"]
-"*/events_migrations/*" = ["D", "I"]
-"*/storage_migrations/*" = ["D", "I"]
-"*/user_preferences_migrations/*" = ["D", "I"]
-"*/project_migrations/*" = ["D", "I"]
-"*/session_migrations/*" = ["D", "I"]
-"*/users_migrations/*" = ["D", "I"]
 "*/versions/*" = ["D", "E", "W"]
 "apispec.py" = ["D", "E", "W", "I", "UP"]
 
@@ -174,8 +163,18 @@ pretty = true
 show_column_numbers = true
 show_error_codes = true
 show_error_context = true
+
 warn_unreachable = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+strict_equality = true
 check_untyped_defs = true
+allow_redefinition = true
+disallow_subclassing_any = true
+disallow_untyped_decorators = true
+disallow_incomplete_defs = true
+disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
 module = [
@@ -214,4 +213,3 @@ ignore_missing_imports = true
 [tool.coverage.run]
 source = ["bases/", "components/"]
 concurrency = ["thread", "greenlet"]
-omit = ["components/renku_data_services/migrations/resource_pools/*"]

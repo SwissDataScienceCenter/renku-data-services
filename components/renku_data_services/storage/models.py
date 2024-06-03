@@ -1,6 +1,6 @@
 """Models for cloud storage."""
 
-from collections.abc import MutableMapping
+from collections.abc import Generator, MutableMapping
 from typing import Any
 from urllib.parse import ParseResult, urlparse
 
@@ -28,22 +28,26 @@ class RCloneConfig(BaseModel, MutableMapping):
         """Serialize model by returning contained dict."""
         return self.config
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.config)
 
-    def __getitem__(self, k):
+    def __getitem__(self, k: str) -> Any:
         return self.config[k]
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key: str, value: Any) -> None:
         self.config[key] = value
         self._validator.validate(self.config)
 
-    def __delitem__(self, key):
+    def __delitem__(self, key: str) -> None:
         del self.config[key]
         self._validator.validate(self.config)
 
-    def __iter__(self):
-        return iter(self.config)
+    def __iter__(self) -> Generator[str, None, None]:  # type: ignore[override]
+        """Iterate method.
+
+        Needed for pydantic to properly serialize the object.
+        """
+        yield from self.config.keys()
 
 
 class CloudStorage(BaseModel):

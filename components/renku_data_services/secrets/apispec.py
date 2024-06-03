@@ -26,9 +26,7 @@ class Ulid(RootModel[str]):
 
 class Error(BaseAPISpec):
     code: int = Field(..., example=1404, gt=0)
-    detail: Optional[str] = Field(
-        None, example="A more detailed optional message showing what the problem was"
-    )
+    detail: Optional[str] = Field(None, example="A more detailed optional message showing what the problem was")
     message: str = Field(..., example="Something went wrong - please try again later")
 
 
@@ -45,12 +43,8 @@ class K8sSecret(BaseAPISpec):
         description="The name of the k8s secret to create",
         example="john-doe-session-57-secret",
     )
-    namespace: str = Field(
-        ..., description="The namespace of the k8s secret to create", example="renku"
-    )
-    secret_ids: List[Ulid] = Field(
-        ..., description="The ids of the secrets to include", min_length=1
-    )
+    namespace: str = Field(..., description="The namespace of the k8s secret to create", example="renku")
+    secret_ids: List[Ulid] = Field(..., description="The ids of the secrets to include", min_length=1)
     owner_references: Optional[List[Dict[str, Union[str, bool]]]] = Field(
         None,
         description="The resource in K8s that owns this secret",

@@ -6,7 +6,7 @@ import functools
 from asyncio import gather
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
-from typing import Any, Concatenate, ParamSpec, TypeAlias, TypeVar, cast
+from typing import Any, Concatenate, ParamSpec, TypeVar
 
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +16,7 @@ from renku_data_services import errors
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.authz.models import Member, MembershipChange, Scope
 from renku_data_services.base_api.pagination import PaginationRequest
-from renku_data_services.message_queue import AmbiguousEvent
+from renku_data_services.message_queue import events
 from renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
@@ -40,8 +40,8 @@ class ProjectRepository:
         event_repo: EventRepository,
         group_repo: GroupRepository,
         authz: Authz,
-    ):
-        self.session_maker = session_maker  # type: ignore[call-overload]
+    ) -> None:
+        self.session_maker = session_maker
         self.message_queue: IMessageQueue = message_queue
         self.event_repo: EventRepository = event_repo
         self.group_repo: GroupRepository = group_repo
@@ -68,7 +68,7 @@ class ProjectRepository:
             )
             results = await gather(session.execute(stmt), session.execute(stmt_count))
             projects_orm = results[0].scalars().all()
-            total_elements = cast(int, results[1].scalar() or 0)
+            total_elements = results[1].scalar() or 0
             return [p.dump() for p in projects_orm], total_elements
 
     async def get_project(self, user: base_models.APIUser, project_id: str) -> models.Project:
@@ -268,12 +268,11 @@ class ProjectRepository:
 
 _P = ParamSpec("_P")
 _T = TypeVar("_T")
-_ProjectExistsFunc: TypeAlias = Callable[
-    Concatenate["ProjectMemberRepository", base_models.APIUser, str, _P], Awaitable[_T]
-]
 
 
-def _project_exists(f: _ProjectExistsFunc) -> _ProjectExistsFunc:
+def _project_exists(
+    f: Callable[Concatenate[ProjectMemberRepository, base_models.APIUser, str, _P], Awaitable[_T]],
+) -> Callable[Concatenate[ProjectMemberRepository, base_models.APIUser, str, _P], Awaitable[_T]]:
     """Checks if the project exists when adding or modifying project members."""
 
     @functools.wraps(f)
@@ -283,7 +282,7 @@ def _project_exists(f: _ProjectExistsFunc) -> _ProjectExistsFunc:
         project_id: str,
         *args: _P.args,
         **kwargs: _P.kwargs,
-    ):
+    ) -> _T:
         session = kwargs.get("session")
         if not isinstance(session, AsyncSession):
             raise errors.ProgrammingError(
@@ -310,8 +309,8 @@ class ProjectMemberRepository:
         event_repo: EventRepository,
         authz: Authz,
         message_queue: IMessageQueue,
-    ):
-        self.session_maker = session_maker  # type: ignore[call-overload]
+    ) -> None:
+        self.session_maker = session_maker
         self.event_repo = event_repo
         self.authz = authz
         self.message_queue = message_queue
@@ -328,7 +327,7 @@ class ProjectMemberRepository:
 
     @with_db_transaction
     @_project_exists
-    @dispatch_message(AmbiguousEvent.PROJECT_MEMBERSHIP_CHANGED)
+    @dispatch_message(events.ProjectMembershipChanged)
     async def update_members(
         self,
         user: base_models.APIUser,
@@ -359,7 +358,7 @@ class ProjectMemberRepository:
 
     @with_db_transaction
     @_project_exists
-    @dispatch_message(AmbiguousEvent.PROJECT_MEMBERSHIP_CHANGED)
+    @dispatch_message(events.ProjectMembershipChanged)
     async def delete_members(
         self, user: base_models.APIUser, project_id: str, user_ids: list[str], *, session: AsyncSession | None = None
     ) -> list[MembershipChange]:

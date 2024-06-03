@@ -5,7 +5,7 @@ import os
 import secrets
 import socket
 import subprocess
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from multiprocessing import Lock
 
 import pytest
@@ -90,7 +90,7 @@ def db_config(monkeypatch, worker_id, authz_config) -> Iterator[DBConfig]:
 
 
 @pytest.fixture
-def secrets_key_pair(monkeypatch, tmp_path):
+def secrets_key_pair(monkeypatch, tmp_path) -> None:
     """Create a public/private key pair to be used for secrets service tests."""
 
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -117,7 +117,7 @@ def secrets_key_pair(monkeypatch, tmp_path):
 
 
 @pytest.fixture
-def app_config(authz_config, db_config, monkeypatch, worker_id, secrets_key_pair) -> Iterator[DataConfig]:
+def app_config(authz_config, db_config, monkeypatch, worker_id, secrets_key_pair) -> Generator[DataConfig, None, None]:
     monkeypatch.setenv("MAX_PINNED_PROJECTS", "5")
 
     config = DataConfig.from_env()

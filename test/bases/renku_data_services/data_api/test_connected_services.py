@@ -31,6 +31,7 @@ def create_oauth2_provider(sanic_client: SanicASGITestClient, admin_headers):
         payload["display_name"] = payload.get("display_name") or "my oauth2 application"
         payload["scope"] = payload.get("scope") or "api"
         payload["url"] = payload.get("url") or "https://example.org"
+        payload["use_pkce"] = payload.get("use_pkce") or False
         _, res = await sanic_client.post("/api/data/oauth2/providers", headers=admin_headers, json=payload)
 
         assert res.status_code == 201, res.text
@@ -77,7 +78,7 @@ def create_oauth2_connection(oauth2_test_client: SanicASGITestClient, user_heade
 @pytest.mark.asyncio
 async def test_get_all_oauth2_providers(
     sanic_client: SanicASGITestClient, unauthorized_headers, create_oauth2_provider
-):
+) -> None:
     await create_oauth2_provider("provider_1")
     await create_oauth2_provider("provider_2")
     await create_oauth2_provider("provider_3")
@@ -95,7 +96,9 @@ async def test_get_all_oauth2_providers(
 
 
 @pytest.mark.asyncio
-async def test_get_oauth2_provider(sanic_client: SanicASGITestClient, unauthorized_headers, create_oauth2_provider):
+async def test_get_oauth2_provider(
+    sanic_client: SanicASGITestClient, unauthorized_headers, create_oauth2_provider
+) -> None:
     provider = await create_oauth2_provider(
         "provider_1",
         display_name="Some external service",
@@ -113,7 +116,7 @@ async def test_get_oauth2_provider(sanic_client: SanicASGITestClient, unauthoriz
 
 
 @pytest.mark.asyncio
-async def test_post_oauth2_provider(sanic_client: SanicASGITestClient, admin_headers):
+async def test_post_oauth2_provider(sanic_client: SanicASGITestClient, admin_headers) -> None:
     payload = {
         "id": "some-provider",
         "kind": "gitlab",
@@ -122,6 +125,7 @@ async def test_post_oauth2_provider(sanic_client: SanicASGITestClient, admin_hea
         "display_name": "Some external service",
         "scope": "api",
         "url": "https://example.org",
+        "use_pkce": False,
     }
 
     _, res = await sanic_client.post("/api/data/oauth2/providers", headers=admin_headers, json=payload)
@@ -138,7 +142,7 @@ async def test_post_oauth2_provider(sanic_client: SanicASGITestClient, admin_hea
 
 
 @pytest.mark.asyncio
-async def test_post_oauth2_provider_unauthorized(sanic_client: SanicASGITestClient, user_headers):
+async def test_post_oauth2_provider_unauthorized(sanic_client: SanicASGITestClient, user_headers) -> None:
     payload = {
         "id": "some-provider",
         "kind": "gitlab",
@@ -155,7 +159,7 @@ async def test_post_oauth2_provider_unauthorized(sanic_client: SanicASGITestClie
 
 
 @pytest.mark.asyncio
-async def test_patch_oauth2_provider(sanic_client: SanicASGITestClient, admin_headers, create_oauth2_provider):
+async def test_patch_oauth2_provider(sanic_client: SanicASGITestClient, admin_headers, create_oauth2_provider) -> None:
     provider = await create_oauth2_provider("provider_1")
     provider_id = provider["id"]
 
@@ -177,7 +181,7 @@ async def test_patch_oauth2_provider(sanic_client: SanicASGITestClient, admin_he
 @pytest.mark.asyncio
 async def test_patch_oauth2_provider_unauthorized(
     sanic_client: SanicASGITestClient, user_headers, create_oauth2_provider
-):
+) -> None:
     provider = await create_oauth2_provider("provider_1")
     provider_id = provider["id"]
 
@@ -193,7 +197,7 @@ async def test_patch_oauth2_provider_unauthorized(
 
 
 @pytest.mark.asyncio
-async def test_delete_oauth2_provider(sanic_client: SanicASGITestClient, admin_headers, create_oauth2_provider):
+async def test_delete_oauth2_provider(sanic_client: SanicASGITestClient, admin_headers, create_oauth2_provider) -> None:
     provider = await create_oauth2_provider("provider_1")
     provider_id = provider["id"]
 
@@ -205,7 +209,7 @@ async def test_delete_oauth2_provider(sanic_client: SanicASGITestClient, admin_h
 @pytest.mark.asyncio
 async def test_delete_oauth2_provider_unauthorized(
     sanic_client: SanicASGITestClient, user_headers, create_oauth2_provider
-):
+) -> None:
     provider = await create_oauth2_provider("provider_1")
     provider_id = provider["id"]
 
@@ -215,7 +219,9 @@ async def test_delete_oauth2_provider_unauthorized(
 
 
 @pytest.mark.asyncio
-async def test_start_oauth2_authorization_flow(sanic_client: SanicASGITestClient, user_headers, create_oauth2_provider):
+async def test_start_oauth2_authorization_flow(
+    sanic_client: SanicASGITestClient, user_headers, create_oauth2_provider
+) -> None:
     provider = await create_oauth2_provider("provider_1")
     provider_id = provider["id"]
 
@@ -258,7 +264,12 @@ async def test_callback_oauth2_authorization_flow(
     provider = await create_oauth2_provider("provider_1")
     provider_id = provider["id"]
 
-    _, res = await oauth2_test_client.get(f"/api/data/oauth2/providers/{provider_id}/authorize", headers=user_headers)
+    next_url = "https://example.org"
+    qs = f"next_url={quote(next_url)}"
+
+    _, res = await oauth2_test_client.get(
+        f"/api/data/oauth2/providers/{provider_id}/authorize?{qs}", headers=user_headers
+    )
 
     assert res.status_code == 302, res.text
     assert "location" in res.headers
@@ -267,8 +278,7 @@ async def test_callback_oauth2_authorization_flow(
     state = query.get("state", [None])[0]
     assert state != ""
 
-    next_url = "https://example.org"
-    qs = f"state={quote(state)}&next_url={quote(next_url)}"
+    qs = f"state={quote(state)}"
 
     _, res = await oauth2_test_client.get(f"/api/data/oauth2/callback?{qs}")
 

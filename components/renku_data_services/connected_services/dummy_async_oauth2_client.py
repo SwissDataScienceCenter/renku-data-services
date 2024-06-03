@@ -7,16 +7,16 @@ from authlib.oauth2.auth import OAuth2Token
 from httpx._models import Response
 
 
-class DummyAsyncOAuth2Client(AsyncOAuth2Client):
+class DummyAsyncOAuth2Client(AsyncOAuth2Client):  # type: ignore[misc]
     """A dummy adapter for OAuth2 operations."""
 
-    async def fetch_token(self, *args, **kwargs) -> OAuth2Token:
+    async def fetch_token(self, *args: list, **kwargs: dict) -> OAuth2Token:
         """Stub getting a token set."""
         return OAuth2Token.from_dict(
             dict(access_token="ACCESS_TOKEN", refresh_token="REFRESH_TOKEN", expires_in=3600)  # nosec
         )
 
-    async def get(self, url: str, *args, **kwargs) -> Response:
+    async def get(self, url: str, *args: list, **kwargs: dict) -> Response:
         """Stub a `GET` request."""
         parsed = urlparse(url)
 
