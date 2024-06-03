@@ -709,7 +709,7 @@ async def test_project_owner_cannot_remove_themselves_if_no_other_owner(
 
 @pytest.mark.asyncio
 async def test_cannot_change_role_for_last_project_owner(
-    create_project, sanic_client, user_headers, regular_user: UserInfo
+    create_project, sanic_client, user_headers, regular_user: UserInfo, member_1_headers
 ) -> None:
     project = await create_project("Project 1")
     project_id = project["id"]
@@ -728,3 +728,17 @@ async def test_cannot_change_role_for_last_project_owner(
     )
 
     assert response.status_code == 200
+
+    # Add another owner and then check that cannot remove both owners
+    members = [{"id": regular_user.id, "role": "owner"}]
+    _, response = await sanic_client.patch(
+        f"/api/data/projects/{project_id}/members", headers=member_1_headers, json=members
+    )
+    assert response.status_code == 200
+
+    members = [{"id": regular_user.id, "role": "editor"}, {"id": "member-1", "role": "editor"}]
+    _, response = await sanic_client.patch(
+        f"/api/data/projects/{project_id}/members", headers=member_1_headers, json=members
+    )
+
+    assert response.status_code == 401

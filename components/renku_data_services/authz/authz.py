@@ -829,7 +829,8 @@ class Authz:
         undo: list[RelationshipUpdate] = []
         output: list[MembershipChange] = []
         expected_user_roles = {_Relation.viewer.value, _Relation.owner.value, _Relation.editor.value}
-        existing_owners_rels: list[ReadRelationshipsResponse] | None = None
+        existing_owners_rels = await self._get_resource_owners(resource_type, resource_id, consistency)
+        n_existing_owners = len(existing_owners_rels)
         for member in members:
             rel = Relationship(
                 resource=project_res,
@@ -852,17 +853,9 @@ class Authz:
                 existing_rel = existing_rels[0]
                 if existing_rel.relationship != rel:
                     if existing_rel.relationship.relation == _Relation.owner.value:
-                        if existing_owners_rels is None:
-                            existing_owners_rels = await self._get_resource_owners(
-                                resource_type, resource_id, consistency
-                            )
-                        if len(existing_owners_rels) == 1:
-                            new_owners = [m for m in members if m.role == Role.OWNER]
-                            if not new_owners:
-                                raise errors.Unauthorized(
-                                    message="You are trying to change the role of the last owner of the project, "
-                                    "which is not allowed. Assign another user as owner and then retry."
-                                )
+                        n_existing_owners -= 1
+                    elif rel.relation == _Relation.owner.value:
+                        n_existing_owners += 1
 
                     add_members.extend(
                         [
@@ -911,6 +904,8 @@ class Authz:
                     )
                     output.append(MembershipChange(member, Change.REMOVE))
             else:
+                if rel.relation == _Relation.owner.value:
+                    n_existing_owners += 1
                 # The new relationship is added if all goes well and deleted if we have to undo
                 add_members.append(
                     RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=rel),
@@ -919,6 +914,12 @@ class Authz:
                     RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=rel),
                 )
                 output.append(MembershipChange(member, Change.ADD))
+
+        if n_existing_owners == 0:
+            raise errors.Unauthorized(
+                message="You are trying to change the role of the all owners of the project, which is not allowed. "
+                "Assign at least one user as owner and then retry."
+            )
 
         change = _AuthzChange(
             apply=WriteRelationshipsRequest(updates=add_members), undo=WriteRelationshipsRequest(updates=undo)
@@ -1108,7 +1109,8 @@ class Authz:
         undo: list[RelationshipUpdate] = []
         output: list[MembershipChange] = []
         expected_user_roles = {_Relation.viewer.value, _Relation.owner.value, _Relation.editor.value}
-        existing_owners_rels: list[ReadRelationshipsResponse] | None = None
+        existing_owners_rels = await self._get_resource_owners(resource_type, resource_id, consistency)
+        n_existing_owners = len(existing_owners_rels)
         for member in members:
             rel = Relationship(
                 resource=group_res,
@@ -1132,17 +1134,9 @@ class Authz:
                 existing_rel = existing_rels[0]
                 if existing_rel.relationship != rel:
                     if existing_rel.relationship.relation == _Relation.owner.value:
-                        if existing_owners_rels is None:
-                            existing_owners_rels = await self._get_resource_owners(
-                                resource_type, resource_id, consistency
-                            )
-                        if len(existing_owners_rels) == 1:
-                            new_owners = [m for m in members if m.role == Role.OWNER]
-                            if not new_owners:
-                                raise errors.Unauthorized(
-                                    message="You are trying to change the role of the last owner of the group, "
-                                    "which is not allowed. Assign another user as owner and then retry."
-                                )
+                        n_existing_owners -= 1
+                    elif rel.relation == _Relation.owner.value:
+                        n_existing_owners += 1
 
                     add_members.extend(
                         [
@@ -1192,6 +1186,9 @@ class Authz:
                     )
                     output.append(MembershipChange(member, Change.REMOVE))
             else:
+                if rel.relation == _Relation.owner.value:
+                    n_existing_owners += 1
+
                 # The new relationship is added if all goes well and deleted if we have to undo
                 add_members.append(
                     RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=rel),
@@ -1200,6 +1197,12 @@ class Authz:
                     RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=rel),
                 )
                 output.append(MembershipChange(member, Change.ADD))
+
+        if n_existing_owners == 0:
+            raise errors.Unauthorized(
+                message="You are trying to change the role of the all owners of the group, which is not allowed. "
+                "Assign at least one user as owner and then retry."
+            )
 
         change = _AuthzChange(
             apply=WriteRelationshipsRequest(updates=add_members), undo=WriteRelationshipsRequest(updates=undo)

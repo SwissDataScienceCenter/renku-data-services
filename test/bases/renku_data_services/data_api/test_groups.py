@@ -255,7 +255,9 @@ async def test_removing_single_group_owner_not_allowed(sanic_client, user_header
 
 
 @pytest.mark.asyncio
-async def test_cannot_change_role_for_last_group_owner(sanic_client, user_headers, regular_user, app_config):
+async def test_cannot_change_role_for_last_group_owner(
+    sanic_client, user_headers, regular_user, app_config, member_1_headers
+):
     payload = {
         "name": "Group1",
         "slug": "group-1",
@@ -276,6 +278,16 @@ async def test_cannot_change_role_for_last_group_owner(sanic_client, user_header
     _, response = await sanic_client.patch("/api/data/groups/group-1/members", headers=user_headers, json=new_roles)
 
     assert response.status_code == 200
+
+    # Add another owner and then check that cannot remove both owners
+    new_roles = [{"id": regular_user.id, "role": "owner"}]
+    _, response = await sanic_client.patch("/api/data/groups/group-1/members", headers=member_1_headers, json=new_roles)
+    assert response.status_code == 200
+
+    new_roles = [{"id": regular_user.id, "role": "viewer"}, {"id": "member-1", "role": "viewer"}]
+    _, response = await sanic_client.patch("/api/data/groups/group-1/members", headers=user_headers, json=new_roles)
+
+    assert response.status_code == 401
 
 
 @pytest.mark.asyncio
