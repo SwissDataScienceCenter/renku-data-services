@@ -189,47 +189,6 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - oauth2
-  /oauth2/api/repositories/{repository_url}:
-    get:
-      summary: Get the metadata available about a repository
-      description: The repository URL will be matched against the set of available OAuth2 clients to determine which service to connect to. If a match is found, the corresponding service API will be used to fetch the repository metadata.
-      parameters:
-        - in: path
-          name: repository_url
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: The repository metadata.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RepositoryProviderMatch"
-        "404":
-          description: There is no available provider for this repository.
-        default:
-          $ref: "#/components/responses/Error"
-      tags:
-        - oauth2
-  /oauth2/api/repositories/{repository_url}/probe:
-    get:
-      summary: Probe a repository to check if it is publicly available
-      parameters:
-        - in: path
-          name: repository_url
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: The repository seems to be availabe.
-        "404":
-          description: There is no available provider for this repository.
-        default:
-          $ref: "#/components/responses/Error"
-      tags:
-        - oauth2
 components:
   schemas:
     ProviderList:
@@ -338,43 +297,6 @@ components:
       required:
         - username
         - web_url
-    RepositoryProviderMatch:
-      type: object
-      additionalProperties: false
-      properties:
-        provider_id:
-          $ref: "#/components/schemas/ProviderId"
-        connection_id:
-          $ref: "#/components/schemas/Ulid"
-        repository_metadata:
-          $ref: "#/components/schemas/RepositoryMetadata"
-      required:
-        - provider_id
-    RepositoryMetadata:
-      type: object
-      additionalProperties: false
-      properties:
-        git_http_url:
-          $ref: "#/components/schemas/WebUrl"
-        web_url:
-          $ref: "#/components/schemas/WebUrl"
-        permissions:
-          $ref: "#/components/schemas/RepositoryPermissions"
-      required:
-        - git_http_url
-        - web_url
-        - permissions
-    RepositoryPermissions:
-      type: object
-      additionalProperties: false
-      properties:
-        pull:
-          type: boolean
-        push:
-          type: boolean
-      required:
-        - pull
-        - push
     Ulid:
       description: ULID identifier
       type: string

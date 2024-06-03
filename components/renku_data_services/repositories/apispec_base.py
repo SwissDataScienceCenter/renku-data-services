@@ -1,6 +1,6 @@
 """Base models for API specifications."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 
 
 class BaseAPISpec(BaseModel):
@@ -15,23 +15,12 @@ class BaseAPISpec(BaseModel):
         regex_engine = "python-re"
 
 
-class AuthorizeParams(BaseAPISpec):
-    """The schema for the query parameters used in the authorize request."""
+class RepositoryParams(BaseAPISpec):
+    """The schema for the path parameters used in the repository requests."""
 
     class Config:
         """Configuration."""
 
         extra = "ignore"
 
-    next_url: str = Field(default="")
-
-
-class CallbackParams(BaseAPISpec):
-    """The schema for the query parameters used in the authorize callback request."""
-
-    class Config:
-        """Configuration."""
-
-        extra = "ignore"
-
-    state: str = Field(default="")
+    repository_url: HttpUrl = Field(...)

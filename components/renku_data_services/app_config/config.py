@@ -52,6 +52,7 @@ from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
+from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.secrets.db import UserSecretsRepo
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository, StorageV2Repository
@@ -169,6 +170,7 @@ class Config:
     _user_secrets_repo: UserSecretsRepo | None = field(default=None, repr=False, init=False)
     _project_member_repo: ProjectMemberRepository | None = field(default=None, repr=False, init=False)
     _connected_services_repo: ConnectedServicesRepository | None = field(default=None, repr=False, init=False)
+    _git_repositories_repo: GitRepositoriesRepository | None = field(default=None, repr=False, init=False)
 
     def __post_init__(self) -> None:
         spec_file = Path(renku_data_services.crc.__file__).resolve().parent / "api.spec.yaml"
@@ -352,6 +354,17 @@ class Config:
                 internal_gitlab_url=self.gitlab_url,
             )
         return self._connected_services_repo
+
+    @property
+    def git_repositories_repo(self) -> GitRepositoriesRepository:
+        """The DB adapter for repositories."""
+        if not self._git_repositories_repo:
+            self._git_repositories_repo = GitRepositoriesRepository(
+                session_maker=self.db.async_session_maker,
+                connected_services_repo=self.connected_services_repo,
+                internal_gitlab_url=self.gitlab_url,
+            )
+        return self._git_repositories_repo
 
     @classmethod
     def from_env(cls, prefix: str = "") -> "Config":

@@ -1,10 +1,9 @@
 """Adapters for each kind of OAuth2 client."""
 
 from abc import ABC, abstractmethod
-from urllib.parse import quote, urljoin, urlparse, urlunparse
+from urllib.parse import urljoin, urlparse, urlunparse
 
 from httpx import Response
-from sanic.log import logger
 
 from renku_data_services import errors
 from renku_data_services.connected_services import external_models, models
@@ -46,18 +45,6 @@ class ProviderAdapter(ABC):
         """Validates and returns the connected account response from the Resource Server."""
         ...
 
-    @abstractmethod
-    def get_repository_api_url(self, repository_url: str) -> str:
-        """Compute the metadata API URL for a git repository."""
-        ...
-
-    @abstractmethod
-    def api_validate_repository_response(
-        self, response: Response, is_anonymous: bool = False
-    ) -> models.RepositoryMetadata:
-        """Validates and returns the connected account response from the Resource Server."""
-        ...
-
 
 class GitLabAdapter(ProviderAdapter):
     """Adapter for GitLab OAuth2 clients."""
@@ -80,25 +67,6 @@ class GitLabAdapter(ProviderAdapter):
     def api_validate_account_response(self, response: Response) -> models.ConnectedAccount:
         """Validates and returns the connected account response from the Resource Server."""
         return external_models.GitLabConnectedAccount.model_validate(response.json()).to_connected_account()
-
-    def get_repository_api_url(self, repository_url: str) -> str:
-        """Compute the metadata API URL for a git repository."""
-        path = urlparse(repository_url).path
-        path = path.removeprefix("/").removesuffix(".git")
-        return urljoin(self.api_url, f"projects/{quote(path, safe="")}")
-
-    def api_validate_repository_response(
-        self, response: Response, is_anonymous: bool = False
-    ) -> models.RepositoryMetadata:
-        """Validates and returns the connected account response from the Resource Server."""
-        model = external_models.GitLabRepository.model_validate(response.json())
-        logger.info(f"Got gitlab data: {model}")
-        new_etag = response.headers.get("ETag")
-        return model.to_repository(
-            etag=new_etag,
-            # NOTE: we assume the "pull" permission if a GitLab repository is publicly visible
-            default_permissions=models.RepositoryPermissions(pull=True, push=False) if is_anonymous else None,
-        )
 
 
 class GitHubAdapter(ProviderAdapter):
@@ -133,25 +101,6 @@ class GitHubAdapter(ProviderAdapter):
         """Validates and returns the connected account response from the Resource Server."""
         return external_models.GitHubConnectedAccount.model_validate(response.json()).to_connected_account()
 
-    def get_repository_api_url(self, repository_url: str) -> str:
-        """Compute the metadata API URL for a git repository."""
-        path = urlparse(repository_url).path
-        path = path.removeprefix("/").removesuffix(".git")
-        return urljoin(self.api_url, f"repos/{path}")
-
-    def api_validate_repository_response(
-        self, response: Response, is_anonymous: bool = False
-    ) -> models.RepositoryMetadata:
-        """Validates and returns the connected account response from the Resource Server."""
-        model = external_models.GitHubRepository.model_validate(response.json())
-        logger.info(f"Got github data: {model}")
-        new_etag = response.headers.get("ETag")
-        return model.to_repository(
-            etag=new_etag,
-            # NOTE: we assume the "pull" permission if a GitLab repository is publicly visible
-            default_permissions=models.RepositoryPermissions(pull=True, push=False) if is_anonymous else None,
-        )
-
 
 _adapter_map: dict[ProviderKind, type[ProviderAdapter]] = {
     ProviderKind.gitlab: GitLabAdapter,
@@ -168,9 +117,3 @@ def get_provider_adapter(client: schemas.OAuth2ClientORM) -> ProviderAdapter:
 
     adapter_class = _adapter_map[client.kind]
     return adapter_class(client_url=client.url)
-
-
-def get_internal_gitlab_adapter(internal_gitlab_url: str) -> GitLabAdapter:
-    """Returns an adapter instance corresponding to the internal GitLab provider."""
-    client_url = internal_gitlab_url
-    return GitLabAdapter(client_url=client_url)

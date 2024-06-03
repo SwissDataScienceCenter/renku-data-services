@@ -23,8 +23,6 @@ class DummyAsyncOAuth2Client(AsyncOAuth2Client):  # type: ignore[misc]
         if parsed.path == "/api/v4/user":
             return self._get_account_response()
 
-        print(f"URL = {url}")
-
         if parsed.path == "/api/v4/projects/username%2Fmy_repo":
             return self._get_repository_response()
 
