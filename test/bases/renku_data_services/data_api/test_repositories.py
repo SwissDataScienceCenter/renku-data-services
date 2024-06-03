@@ -1,0 +1,113 @@
+"""Tests for connected services blueprints."""
+
+from typing import Any
+from urllib.parse import parse_qs, quote, quote_plus, urlparse
+
+import pytest
+from sanic import Sanic
+from sanic_testing.testing import SanicASGITestClient
+
+from renku_data_services.app_config import Config
+from renku_data_services.connected_services.dummy_async_oauth2_client import DummyAsyncOAuth2Client
+from renku_data_services.data_api.app import register_all_handlers
+
+
+@pytest.fixture
+def oauth2_test_client(app_config: Config) -> SanicASGITestClient:
+    app_config.async_oauth2_client_class = DummyAsyncOAuth2Client
+    app = Sanic(app_config.app_name)
+    app = register_all_handlers(app, app_config)
+    return SanicASGITestClient(app)
+
+
+@pytest.fixture
+def create_oauth2_provider(sanic_client: SanicASGITestClient, admin_headers):
+    async def create_oauth2_provider_helper(provider_id: str, **payload) -> dict[str, Any]:
+        payload = payload.copy()
+        payload.update({"id": provider_id})
+        payload["kind"] = payload.get("kind") or "gitlab"
+        payload["client_id"] = payload.get("client_id") or "some-client-id"
+        payload["client_secret"] = payload.get("client_secret") or "some-client-secret"
+        payload["display_name"] = payload.get("display_name") or "my oauth2 application"
+        payload["scope"] = payload.get("scope") or "api"
+        payload["url"] = payload.get("url") or "https://example.org"
+        payload["use_pkce"] = payload.get("use_pkce") or False
+        _, res = await sanic_client.post("/api/data/oauth2/providers", headers=admin_headers, json=payload)
+
+        assert res.status_code == 201, res.text
+        assert res.json is not None
+        return res.json
+
+    return create_oauth2_provider_helper
+
+
+@pytest.fixture
+def create_oauth2_connection(oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_provider):
+    async def create_oauth2_connection_helper(provider_id: str, **payload) -> dict[str, Any]:
+        await create_oauth2_provider(provider_id, **payload)
+
+        _, res = await oauth2_test_client.get(
+            f"/api/data/oauth2/providers/{provider_id}/authorize", headers=user_headers
+        )
+
+        location = urlparse(res.headers["location"])
+        query = parse_qs(location.query)
+        state = query.get("state", [None])[0]
+        qs = f"state={quote(state)}"
+
+        _, res = await oauth2_test_client.get(f"/api/data/oauth2/callback?{qs}")
+
+        _, res = await oauth2_test_client.get("/api/data/oauth2/connections", headers=user_headers)
+
+        assert res.status_code == 200, res.text
+        assert res.json is not None
+        connection = None
+        for conn in res.json:
+            if conn["provider_id"] == provider_id:
+                connection = conn
+                break
+        assert connection is not None
+        assert connection.get("id") != ""
+        assert connection.get("status") == "connected"
+
+        return connection
+
+    return create_oauth2_connection_helper
+
+
+@pytest.mark.asyncio
+async def test_get_one_repository(oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_connection):
+    connection = await create_oauth2_connection("provider_1")
+    repository_url = "https://example.org/username/my_repo.git"
+
+    _, res = await oauth2_test_client.get(f"/api/data/repositories/{quote_plus(repository_url)}", headers=user_headers)
+
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    result = res.json
+    assert result.get("connection_id") == connection["id"]
+    assert result.get("provider_id") == "provider_1"
+    assert result.get("repository_metadata") is not None
+    repository_metadata = result["repository_metadata"]
+    assert repository_metadata.get("git_http_url") == repository_url
+    assert repository_metadata.get("permissions") is not None
+    permissions = repository_metadata["permissions"]
+    assert permissions.get("pull")
+    assert not permissions.get("push")
+
+
+@pytest.mark.asyncio
+async def test_get_one_repository_not_found(
+    oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_connection
+):
+    connection = await create_oauth2_connection("provider_1")
+    repository_url = "https://example.org/username/another_repo.git"
+
+    _, res = await oauth2_test_client.get(f"/api/data/repositories/{quote_plus(repository_url)}", headers=user_headers)
+
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    result = res.json
+    assert result.get("connection_id") == connection["id"]
+    assert result.get("provider_id") == "provider_1"
+    assert result.get("repository_metadata") is None

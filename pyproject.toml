@@ -30,6 +30,7 @@ packages = [
   { include = "renku_data_services/message_queue", from = "components" },
   { include = "renku_data_services/secrets", from = "components" },
   { include = "renku_data_services/connected_services", from = "components" },
+  { include = "renku_data_services/repositories", from = "components" },
 ]
 
 [tool.poetry.dependencies]
@@ -182,6 +183,7 @@ module = [
   "renku_data_services.connected_services.apispec",
   "renku_data_services.storage.apispec",
   "renku_data_services.project.apispec",
+  "renku_data_services.repositories.apispec",
   "renku_data_services.secrets.apispec",
   "renku_data_services.session.apispec",
   "renku_data_services.user_preferences.apispec",

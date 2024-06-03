@@ -16,6 +16,7 @@ from renku_data_services.crc.blueprints import (
 )
 from renku_data_services.namespace.blueprints import GroupsBP
 from renku_data_services.project.blueprints import ProjectsBP
+from renku_data_services.repositories.blueprints import RepositoriesBP
 from renku_data_services.session.blueprints import EnvironmentsBP, SessionLaunchersBP
 from renku_data_services.storage.blueprints import StorageBP, StorageSchemaBP, StoragesV2BP
 from renku_data_services.user_preferences.blueprints import UserPreferencesBP
@@ -120,6 +121,14 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         url_prefix=url_prefix,
         connected_services_repo=config.connected_services_repo,
         authenticator=config.authenticator,
+        internal_gitlab_authenticator=config.gitlab_authenticator,
+    )
+    repositories = RepositoriesBP(
+        name="repositories",
+        url_prefix=url_prefix,
+        git_repositories_repo=config.git_repositories_repo,
+        authenticator=config.authenticator,
+        internal_gitlab_authenticator=config.gitlab_authenticator,
     )
     app.blueprint(
         [
@@ -141,6 +150,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
             session_launchers.blueprint(),
             oauth2_clients.blueprint(),
             oauth2_connections.blueprint(),
+            repositories.blueprint(),
         ]
     )
 
