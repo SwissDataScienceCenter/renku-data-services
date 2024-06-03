@@ -28,8 +28,10 @@ components/renku_data_services/secrets/apispec.py: components/renku_data_service
 	poetry run datamodel-codegen --input components/renku_data_services/secrets/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/secrets/apispec.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.secrets.apispec_base.BaseAPISpec
 components/renku_data_services/connected_services/apispec.py: components/renku_data_services/connected_services/api.spec.yaml
 	poetry run datamodel-codegen --input components/renku_data_services/connected_services/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/connected_services/apispec.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.connected_services.apispec_base.BaseAPISpec
+components/renku_data_services/repositories/apispec.py: components/renku_data_services/repositories/api.spec.yaml
+	poetry run datamodel-codegen --input components/renku_data_services/repositories/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/repositories/apispec.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.repositories.apispec_base.BaseAPISpec
 
-schemas: components/renku_data_services/crc/apispec.py components/renku_data_services/storage/apispec.py components/renku_data_services/users/apispec.py components/renku_data_services/project/apispec.py components/renku_data_services/user_preferences/apispec.py components/renku_data_services/namespace/apispec.py components/renku_data_services/secrets/apispec.py components/renku_data_services/connected_services/apispec.py
+schemas: components/renku_data_services/crc/apispec.py components/renku_data_services/storage/apispec.py components/renku_data_services/users/apispec.py components/renku_data_services/project/apispec.py components/renku_data_services/user_preferences/apispec.py components/renku_data_services/namespace/apispec.py components/renku_data_services/secrets/apispec.py components/renku_data_services/connected_services/apispec.py components/renku_data_services/repositories/apispec.py
 	@echo "generated classes based on ApiSpec"
 
 download_avro:
@@ -64,6 +66,8 @@ style_checks:
 	@$(call test_apispec_up_to_date,"namespace")
 	@echo "checking connected_services apispec is up to date"
 	@$(call test_apispec_up_to_date,"connected_services")
+	@echo "checking repositories apispec is up to date"
+	@$(call test_apispec_up_to_date,"repositories")
 	poetry run mypy
 	poetry run ruff format --check
 	poetry run ruff check .

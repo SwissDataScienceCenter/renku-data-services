@@ -25,6 +25,7 @@ from yaml import safe_load
 import renku_data_services.base_models as base_models
 import renku_data_services.connected_services
 import renku_data_services.crc
+import renku_data_services.repositories
 import renku_data_services.storage
 import renku_data_services.user_preferences
 import renku_data_services.users
@@ -52,6 +53,7 @@ from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
+from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.secrets.db import UserSecretsRepo
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository, StorageV2Repository
@@ -140,6 +142,7 @@ class Config:
     gitlab_client: base_models.GitlabAPIProtocol
     kc_api: IKeycloakAPI
     message_queue: IMessageQueue
+    gitlab_url: str | None
 
     secrets_service_public_key: rsa.RSAPublicKey
     """The public key of the secrets service, used to encrypt user secrets that only it can decrypt."""
@@ -168,6 +171,7 @@ class Config:
     _user_secrets_repo: UserSecretsRepo | None = field(default=None, repr=False, init=False)
     _project_member_repo: ProjectMemberRepository | None = field(default=None, repr=False, init=False)
     _connected_services_repo: ConnectedServicesRepository | None = field(default=None, repr=False, init=False)
+    _git_repositories_repo: GitRepositoriesRepository | None = field(default=None, repr=False, init=False)
 
     def __post_init__(self) -> None:
         spec_file = Path(renku_data_services.crc.__file__).resolve().parent / "api.spec.yaml"
@@ -202,8 +206,20 @@ class Config:
         with open(spec_file) as f:
             connected_services = safe_load(f)
 
+        spec_file = Path(renku_data_services.repositories.__file__).resolve().parent / "api.spec.yaml"
+        with open(spec_file) as f:
+            repositories = safe_load(f)
+
         self.spec = merge_api_specs(
-            crc_spec, storage_spec, user_preferences_spec, users, projects, groups, sessions, connected_services
+            crc_spec,
+            storage_spec,
+            user_preferences_spec,
+            users,
+            projects,
+            groups,
+            sessions,
+            connected_services,
+            repositories,
         )
 
         if self.default_resource_pool_file is not None:
@@ -348,8 +364,20 @@ class Config:
                 session_maker=self.db.async_session_maker,
                 encryption_key=self.encryption_key,
                 async_oauth2_client_class=self.async_oauth2_client_class,
+                internal_gitlab_url=self.gitlab_url,
             )
         return self._connected_services_repo
+
+    @property
+    def git_repositories_repo(self) -> GitRepositoriesRepository:
+        """The DB adapter for repositories."""
+        if not self._git_repositories_repo:
+            self._git_repositories_repo = GitRepositoriesRepository(
+                session_maker=self.db.async_session_maker,
+                connected_services_repo=self.connected_services_repo,
+                internal_gitlab_url=self.gitlab_url,
+            )
+        return self._git_repositories_repo
 
     @classmethod
     def from_env(cls, prefix: str = "") -> "Config":
@@ -369,6 +397,7 @@ class Config:
         db = DBConfig.from_env(prefix)
         kc_api: IKeycloakAPI
         secrets_service_public_key: PublicKeyTypes
+        gitlab_url: str | None
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
             encryption_key = secrets.token_bytes(32)
@@ -393,6 +422,7 @@ class Config:
             ]
             kc_api = DummyKeycloakAPI(users=[i._to_keycloak_dict() for i in dummy_users])
             redis = RedisConfig.fake()
+            gitlab_url = None
         else:
             encryption_key_path = os.getenv(f"{prefix}ENCRYPTION_KEY_PATH", "/encryption-key")
             encryption_key = Path(encryption_key_path).read_bytes()
@@ -461,4 +491,5 @@ class Config:
             message_queue=message_queue,
             encryption_key=encryption_key,
             secrets_service_public_key=secrets_service_public_key,
+            gitlab_url=gitlab_url,
         )
