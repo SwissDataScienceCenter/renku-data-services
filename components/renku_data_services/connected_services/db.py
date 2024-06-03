@@ -17,7 +17,10 @@ from renku_data_services import errors
 from renku_data_services.connected_services import apispec, models
 from renku_data_services.connected_services import orm as schemas
 from renku_data_services.connected_services.apispec import ConnectionStatus
-from renku_data_services.connected_services.provider_adapters import get_provider_adapter
+from renku_data_services.connected_services.provider_adapters import (
+    ProviderAdapter,
+    get_provider_adapter,
+)
 from renku_data_services.connected_services.utils import generate_code_verifier
 from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
 
@@ -30,10 +33,12 @@ class ConnectedServicesRepository:
         session_maker: Callable[..., AsyncSession],
         encryption_key: bytes,
         async_oauth2_client_class: type[AsyncOAuth2Client],
+        internal_gitlab_url: str | None,
     ):
         self.session_maker = session_maker
         self.encryption_key = encryption_key
         self.async_oauth2_client_class = async_oauth2_client_class
+        self.internal_gitlab_url = internal_gitlab_url.rstrip("/") if internal_gitlab_url else None
 
     async def get_oauth2_clients(
         self,
@@ -299,8 +304,7 @@ class ConnectedServicesRepository:
         self, connection_id: str, user: base_models.APIUser
     ) -> models.ConnectedAccount:
         """Get the account information from a OAuth2 connection."""
-        async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (oauth2_client, _, client):
-            adapter = get_provider_adapter(client)
+        async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (oauth2_client, _, adapter):
             request_url = urljoin(adapter.api_url, "user")
             response = await oauth2_client.get(request_url, headers=adapter.api_common_headers)
 
@@ -320,7 +324,7 @@ class ConnectedServicesRepository:
     @asynccontextmanager
     async def get_async_oauth2_client(
         self, connection_id: str, user: base_models.APIUser
-    ) -> AsyncGenerator[AsyncOAuth2Client, None]:
+    ) -> AsyncGenerator[tuple[AsyncOAuth2Client, schemas.OAuth2ConnectionORM, ProviderAdapter], None]:
         """Get the AsyncOAuth2Client for the given connection_id and user."""
         if not user.is_authenticated or user.id is None:
             raise errors.MissingResourceError(
@@ -376,7 +380,7 @@ class ConnectedServicesRepository:
                 update_token=update_token,
             ),
             connection,
-            client,
+            adapter,
         )
 
     def _encrypt_token_set(self, token: dict[str, Any], user_id: str) -> models.OAuth2TokenSet:

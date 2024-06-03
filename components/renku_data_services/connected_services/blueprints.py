@@ -132,6 +132,7 @@ class OAuth2ConnectionsBP(CustomBlueprint):
 
     connected_services_repo: ConnectedServicesRepository
     authenticator: base_models.Authenticator
+    internal_gitlab_authenticator: base_models.Authenticator
 
     def get_all(self) -> BlueprintFactoryResponse:
         """List all OAuth2 connections."""
