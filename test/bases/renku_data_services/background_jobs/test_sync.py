@@ -8,11 +8,13 @@ from typing import Any, Union
 from uuid import uuid4
 
 import pytest
+from authzed.api.v1.permission_service_pb2 import ReadRelationshipsRequest, RelationshipFilter
 
-from bases.renku_data_services.keycloak_sync.config import SyncConfig
+from bases.renku_data_services.background_jobs.config import SyncConfig
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
-from renku_data_services.authz.authz import Authz
+from renku_data_services.authz.authz import Authz, ResourceType, _Relation
 from renku_data_services.authz.config import AuthzConfig
+from renku_data_services.background_jobs.core import bootstrap_user_namespaces
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models import APIUser
 from renku_data_services.db_config import DBConfig
@@ -21,9 +23,11 @@ from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.namespace.db import GroupRepository
+from renku_data_services.namespace.orm import NamespaceORM
 from renku_data_services.users.db import UserRepo, UsersSync
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import KeycloakAdminEvent, UserInfo, UserInfoUpdate
+from renku_data_services.users.orm import UserORM
 
 
 @pytest.fixture
@@ -46,7 +50,12 @@ def get_app_configs(db_config: DBConfig, authz_config: AuthzConfig):
             authz=Authz(authz_config),
         )
         config = SyncConfig(
-            syncer=users_sync, kc_api=kc_api, total_user_sync=total_user_sync, authz_config=authz_config
+            syncer=users_sync,
+            kc_api=kc_api,
+            authz_config=authz_config,
+            group_repo=group_repo,
+            event_repo=event_repo,
+            session_maker=db_config.async_session_maker,
         )
         user_repo = UserRepo(
             db_config.async_session_maker,
@@ -458,3 +467,42 @@ async def test_authz_admin_sync(get_app_configs, admin_user: APIUser) -> None:
     await sync_admins_from_keycloak(kc_api, authz)
     authz_admin_ids = await authz._get_admin_user_ids()
     assert set(authz_admin_ids) == {user1.id}
+
+
+async def get_user_namespace_ids_in_authz(authz: Authz) -> set[str]:
+    """Returns the user"""
+    res = authz.client.ReadRelationships(
+        ReadRelationshipsRequest(
+            relationship_filter=RelationshipFilter(
+                resource_type=ResourceType.user_namespace.value, optional_relation=_Relation.owner.value
+            )
+        )
+    )
+    ids = [i.relationship.resource.object_id async for i in res]
+    return set(ids)
+
+
+@pytest.mark.asyncio
+async def test_bootstraping_user_namespaces(get_app_configs, admin_user: APIUser):
+    kc_api = DummyKeycloakAPI()
+    user1 = UserInfo("user-1-id", "John", "Doe", "john.doe@gmail.com")
+    user2 = UserInfo("user-2-id", "Jane", "Doe", "jane.doe@gmail.com")
+    assert admin_user.id
+    kc_api.users = get_kc_users([user1, user2])
+    sync_config: SyncConfig
+    sync_config, _ = get_app_configs(kc_api)
+    authz = Authz(sync_config.authz_config)
+    db_user_namespace_ids: set[str] = set()
+    async with sync_config.session_maker() as session, session.begin():
+        for user in [user1, user2]:
+            user_orm = UserORM(user.id, first_name=user.first_name, last_name=user.last_name, email=user.email)
+            session.add(user_orm)
+            await session.flush()
+            ns = NamespaceORM(user.id, user_id=user.id)
+            session.add(ns)
+            db_user_namespace_ids.add(ns.id)
+    authz_user_namespace_ids = await get_user_namespace_ids_in_authz(authz)
+    assert len(authz_user_namespace_ids) == 0
+    await bootstrap_user_namespaces(sync_config)
+    authz_user_namespace_ids = await get_user_namespace_ids_in_authz(authz)
+    assert db_user_namespace_ids == authz_user_namespace_ids
