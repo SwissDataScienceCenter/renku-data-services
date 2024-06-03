@@ -39,11 +39,18 @@ class APIUser:
         return self.id is not None
 
 
-@dataclass
-class InternalServiceAdmin:
+@dataclass(kw_only=True)
+class InternalServiceAdmin(APIUser):
     """Used to gain complete admin access by internal code components when performing tasks not started by users."""
 
     id: Literal["migrations"]
+    is_admin: bool = field(default=True, init=False)
+    access_token: Optional[str] = field(repr=False, default=None, init=False)
+    full_name: Optional[str] = field(default=None, init=False)
+    first_name: Optional[str] = field(default=None, init=False)
+    last_name: Optional[str] = field(default=None, init=False)
+    email: Optional[str] = field(default=None, init=False)
+    is_authenticated: bool = field(default=True, init=False)
 
 
 class GitlabAccessLevel(Enum):
