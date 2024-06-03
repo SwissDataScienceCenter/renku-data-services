@@ -36,7 +36,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - oauth2
+        - repositories
   /repositories/{repository_url}/probe:
     get:
       summary: Probe a repository to check if it is publicly available
@@ -58,7 +58,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - oauth2
+        - repositories
 components:
   schemas:
     RepositoryProviderMatch:

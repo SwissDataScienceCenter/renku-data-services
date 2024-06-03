@@ -25,6 +25,7 @@ from yaml import safe_load
 import renku_data_services.base_models as base_models
 import renku_data_services.connected_services
 import renku_data_services.crc
+import renku_data_services.repositories
 import renku_data_services.storage
 import renku_data_services.user_preferences
 import renku_data_services.users
@@ -205,8 +206,20 @@ class Config:
         with open(spec_file) as f:
             connected_services = safe_load(f)
 
+        spec_file = Path(renku_data_services.repositories.__file__).resolve().parent / "api.spec.yaml"
+        with open(spec_file) as f:
+            repositories = safe_load(f)
+
         self.spec = merge_api_specs(
-            crc_spec, storage_spec, user_preferences_spec, users, projects, groups, sessions, connected_services
+            crc_spec,
+            storage_spec,
+            user_preferences_spec,
+            users,
+            projects,
+            groups,
+            sessions,
+            connected_services,
+            repositories,
         )
 
         if self.default_resource_pool_file is not None:
