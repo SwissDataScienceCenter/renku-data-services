@@ -2,7 +2,7 @@
 
 import secrets
 from collections.abc import Callable
-from dataclasses import asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -32,21 +32,21 @@ from renku_data_services.utils.core import with_db_transaction
 from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
 
 
+@dataclass
 class UserRepo:
     """An adapter for accessing users from the database."""
 
-    def __init__(
-        self,
-        session_maker: Callable[..., AsyncSession],
-        message_queue: IMessageQueue,
-        event_repo: EventRepository,
-        group_repo: GroupRepository,
-        encryption_key: bytes,
-        authz: Authz,
-    ) -> None:
-        self.session_maker = session_maker
-        self.encryption_key = encryption_key
-        self._users_sync = UsersSync(self.session_maker, message_queue, event_repo, group_repo, authz)
+    session_maker: Callable[..., AsyncSession]
+    message_queue: IMessageQueue
+    event_repo: EventRepository
+    group_repo: GroupRepository
+    encryption_key: bytes = field(repr=False)
+    authz: Authz
+
+    def __post_init__(self) -> None:
+        self._users_sync = UsersSync(
+            self.session_maker, self.message_queue, self.event_repo, self.group_repo, self.authz
+        )
 
     async def initialize(self, kc_api: IKeycloakAPI) -> None:
         """Do a total sync of users from Keycloak if there is nothing in the DB."""

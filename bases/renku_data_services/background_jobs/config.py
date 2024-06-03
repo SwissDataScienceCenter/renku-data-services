@@ -1,4 +1,4 @@
-"""Configurations for Keycloak syncing."""
+"""Configurations for background jobs."""
 
 import os
 from collections.abc import Callable
@@ -13,7 +13,8 @@ from renku_data_services.errors import errors
 from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.redis_queue import RedisQueue
-from renku_data_services.users.db import GroupRepository, UsersSync
+from renku_data_services.namespace.db import GroupRepository
+from renku_data_services.users.db import UsersSync
 from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
 
 
@@ -24,7 +25,9 @@ class SyncConfig:
     syncer: UsersSync
     kc_api: IKeycloakAPI
     authz_config: AuthzConfig
-    total_user_sync: bool = False
+    group_repo: GroupRepository
+    event_repo: EventRepository
+    session_maker: Callable[..., AsyncSession]
 
     @classmethod
     def from_env(cls, prefix: str = "") -> "SyncConfig":
@@ -67,5 +70,4 @@ class SyncConfig:
         client_secret = os.environ[f"{prefix}KEYCLOAK_CLIENT_SECRET"]
         realm = os.environ.get(f"{prefix}KEYCLOAK_REALM", "Renku")
         kc_api = KeycloakAPI(keycloak_url=keycloak_url, client_id=client_id, client_secret=client_secret, realm=realm)
-        total_user_sync = os.environ.get(f"{prefix}TOTAL_USER_SYNC", "false").lower() == "true"
-        return cls(syncer, kc_api, authz_config, total_user_sync)
+        return cls(syncer, kc_api, authz_config, group_repo, event_repo, session_maker)
