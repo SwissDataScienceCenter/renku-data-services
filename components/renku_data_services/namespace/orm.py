@@ -8,7 +8,9 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_co
 from sqlalchemy.schema import ForeignKey
 from ulid import ULID
 
+from renku_data_services.errors import errors
 from renku_data_services.namespace import models
+from renku_data_services.users.models import UserInfo, UserWithNamespace
 from renku_data_services.users.orm import UserORM
 
 
@@ -79,6 +81,17 @@ class NamespaceORM(BaseORM):
             created_by=created_by,
             kind=models.NamespaceKind.user if self.user_id else models.NamespaceKind.group,
         )
+
+    def dump_user(self) -> UserWithNamespace:
+        """Create a user with namespace from the ORM."""
+        if self.user is None:
+            raise errors.ProgrammingError(
+                message="Cannot dump ORM namespace as namespace with user if the namespace "
+                "has no associated user with it."
+            )
+        ns = self.dump()
+        user_info = UserInfo(self.user.keycloak_id, self.user.first_name, self.user.last_name, self.user.email)
+        return UserWithNamespace(user_info, ns)
 
 
 class NamespaceOldORM(BaseORM):
