@@ -85,7 +85,7 @@ async def rotate_encryption_keys(
 
     This method undoes the outer encryption and reencrypts with a new key, without touching the inner encryption.
     """
-    processesd_secrets_metrics = Counter(
+    processed_secrets_metrics = Counter(
         "secrets_rotation_count",
         "Number of secrets rotated",
     )
@@ -102,7 +102,7 @@ async def rotate_encryption_keys(
                     updated_secrets.append(new_secret)
 
             await secrets_repo.update_secrets(updated_secrets)
-            processesd_secrets_metrics.inc(len(updated_secrets))
+            processed_secrets_metrics.inc(len(updated_secrets))
     except:
         runnning_metrics.state("errored")
         raise

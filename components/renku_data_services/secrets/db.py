@@ -75,6 +75,8 @@ class UserSecretsRepo:
                         message="The name for the secret should be unique but it already exists",
                         detail="Please modify the name field and then retry",
                     )
+                else:
+                    raise
             return orm.dump()
 
     @only_authenticated
@@ -120,8 +122,10 @@ class UserSecretsRepo:
         offset = 0
         while True:
             async with self.session_maker() as session, session.begin():
-                result = await session.scalars(select(SecretORM).limit(batch_size).offset(offset))
-                secrets = [(s.dump(), cast(str, s.user_id)) for s in result]
+                result = await session.execute(
+                    select(SecretORM).limit(batch_size).offset(offset).order_by(SecretORM.id)
+                )
+                secrets = [(s.dump(), cast(str, s.user_id)) for s in result.scalars()]
                 if len(secrets) == 0:
                     break
 
@@ -138,15 +142,19 @@ class UserSecretsRepo:
 
         async with self.session_maker() as session, session.begin():
             result = await session.scalars(select(SecretORM).where(SecretORM.id.in_(secret_dict.keys())))
-            found_secret_ids = {s.id for s in result}
+            found_secrets = list(result)
+
+            found_secret_ids = {s.id for s in found_secrets}
             if len(secret_dict) != len(found_secret_ids):
                 raise errors.MissingResourceError(
                     message=f"Couldn't find secrets with ids: '{secret_dict.keys() - found_secret_ids}'"
                 )
 
-            for secret in result:
+            for secret in found_secrets:
                 new_secret = secret_dict[secret.id]
 
                 secret.encrypted_value = new_secret.encrypted_value
                 secret.encrypted_key = new_secret.encrypted_key
                 secret.modification_date = datetime.now(UTC).replace(microsecond=0)
+
+            await session.flush()

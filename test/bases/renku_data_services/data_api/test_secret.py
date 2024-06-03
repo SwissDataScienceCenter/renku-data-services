@@ -257,23 +257,11 @@ async def test_single_secret_rotation():
 
 
 @pytest.mark.asyncio
-async def test_secret_rotation(sanic_client, secrets_storage_app_config, loggedin_user):
+async def test_secret_rotation(sanic_client, secrets_storage_app_config, create_secret, user_headers, users):
     """Test rotating multiple secrets."""
 
-    def _create_secret(name: str, value: str, user_id: str, private_key: rsa.RSAPrivateKey) -> Secret:
-        encryption_key = generate_random_encryption_key()
-
-        encrypted_value = encrypt_string(encryption_key, user_id, value)
-        encrypted_key = encrypt_rsa(private_key.public_key(), encryption_key)
-
-        secret = Secret(name=name, encrypted_value=encrypted_value, encrypted_key=encrypted_key)
-        return secret
-
     for i in range(10):
-        secret = _create_secret(
-            f"secret-{i}", str(i), loggedin_user.id, secrets_storage_app_config.secrets_service_private_key
-        )
-        await secrets_storage_app_config.user_secrets_repo.insert_secret(loggedin_user, secret)
+        await create_secret(f"secret-{i}", str(i))
 
     new_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
@@ -285,10 +273,16 @@ async def test_secret_rotation(sanic_client, secrets_storage_app_config, loggedi
     )
 
     secrets = [s async for s in secrets_storage_app_config.user_secrets_repo.get_all_secrets_batched(100)]
-    batch = next(secrets)
+    batch = secrets[0]
     assert len(batch) == 10
 
-    for secret in batch:
+    _, response = await sanic_client.get("/api/data/user/secret_key", headers=user_headers)
+    assert response.status_code == 200
+    assert "secret_key" in response.json
+    secret_key = response.json["secret_key"]
+
+    for secret, _ in batch:
         new_encryption_key = decrypt_rsa(new_key, secret.encrypted_key)
-        decrypted_value = decrypt_string(new_encryption_key, loggedin_user.id, secret.encrypted_value).encode()  # type: ignore
-        assert f"secret-{decrypted_value.decode()}" == secret.name
+        decrypted_value = decrypt_string(new_encryption_key, users[1].id, secret.encrypted_value).encode()  # type: ignore
+        decrypted_value = decrypt_string(secret_key.encode(), users[1].id, decrypted_value)
+        assert f"secret-{decrypted_value}" == secret.name
