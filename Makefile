@@ -77,6 +77,7 @@ style_checks:
 test_setup:
 	@rm -f coverage.lcov .coverage
 main_tests:
+	DUMMY_STORES=true poetry run alembic --name common upgrade heads
 	poetry run alembic --name common check
 	poetry run pytest -m "not schemathesis" -n auto
 schemathesis_tests:
