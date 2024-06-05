@@ -71,8 +71,8 @@ def create_app() -> Sanic:
         logger.info("enabling sentry")
 
         def filter_error(
-            event: sentry_sdk._types.Event, hint: sentry_sdk._types.Hint
-        ) -> sentry_sdk._types.Event | None:
+            event: "sentry_sdk._types.Event", hint: "sentry_sdk._types.Hint"
+        ) -> "sentry_sdk._types.Event | None":
             if "exc_info" in hint:
                 exc_type, exc_value, tb = hint["exc_info"]
                 if isinstance(
