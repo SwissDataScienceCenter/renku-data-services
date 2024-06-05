@@ -24,7 +24,7 @@ class K8sSecretsBP(CustomBlueprint):
     authenticator: base_models.Authenticator
     user_secrets_repo: UserSecretsRepo
     secret_service_private_key: rsa.RSAPrivateKey
-    old_secret_service_private_key: rsa.RSAPrivateKey | None
+    previous_secret_service_private_key: rsa.RSAPrivateKey | None
     core_client: K8sCoreClientInterface
 
     def post(self) -> BlueprintFactoryResponse:
@@ -46,7 +46,7 @@ class K8sSecretsBP(CustomBlueprint):
                 owner_references,
                 self.user_secrets_repo,
                 self.secret_service_private_key,
-                self.old_secret_service_private_key,
+                self.previous_secret_service_private_key,
                 self.core_client,
             )
 

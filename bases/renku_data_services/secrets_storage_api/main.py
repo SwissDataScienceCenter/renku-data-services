@@ -22,11 +22,11 @@ def create_app() -> Sanic:
 
     async def rotate_encryption_key_listener(_: Sanic) -> None:
         """Rotate RSA private key."""
-        if config.old_secrets_service_private_key is None:
+        if config.previous_secrets_service_private_key is None:
             return
 
         await rotate_encryption_keys(
-            config.secrets_service_private_key, config.old_secrets_service_private_key, config.user_secrets_repo
+            config.secrets_service_private_key, config.previous_secrets_service_private_key, config.user_secrets_repo
         )
 
     app.register_listener(rotate_encryption_key_listener, "after_server_start")

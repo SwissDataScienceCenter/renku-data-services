@@ -28,7 +28,7 @@ async def create_k8s_secret(
     owner_references: list[OwnerReference],
     secrets_repo: UserSecretsRepo,
     secret_service_private_key: rsa.RSAPrivateKey,
-    old_secret_service_private_key: rsa.RSAPrivateKey | None,
+    previous_secret_service_private_key: rsa.RSAPrivateKey | None,
     core_client: K8sCoreClientInterface,
 ) -> str:
     """Creates k8s secret from user secrets."""
@@ -45,9 +45,9 @@ async def create_k8s_secret(
             try:
                 decryption_key = decrypt_rsa(secret_service_private_key, secret.encrypted_key)
             except ValueError:
-                if old_secret_service_private_key is not None:
+                if previous_secret_service_private_key is not None:
                     # If we're rotating keys right now, try the old key
-                    decryption_key = decrypt_rsa(old_secret_service_private_key, secret.encrypted_key)
+                    decryption_key = decrypt_rsa(previous_secret_service_private_key, secret.encrypted_key)
                 else:
                     raise
 
