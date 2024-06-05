@@ -39,7 +39,7 @@ _P = ParamSpec("_P")
 
 
 class WithAuthz(Protocol):
-    """Protcol for a class that has a authorization database client as property."""
+    """Protocol for a class that has a authorization database client as property."""
 
     @property
     def authz(self) -> "Authz":
@@ -358,7 +358,7 @@ class Authz:
         *,
         zed_token: ZedToken | None = None,
     ) -> list[str]:
-        """Get all user IDs that have a specific permission on a specific reosurce."""
+        """Get all user IDs that have a specific permission on a specific resource."""
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
         res = _AuthzConverter.to_object(resource_type, resource_id)
         ids: list[str] = []
@@ -497,7 +497,7 @@ class Authz:
                     elif isinstance(result, (ProjectUpdate, NamespaceUpdate, GroupUpdate)):
                         resource_id = result.new.id
                     raise errors.ProgrammingError(
-                        message=f"Encountered an unkonwn authorization operation {op} on resource {resource} "
+                        message=f"Encountered an unknown authorization operation {op} on resource {resource} "
                         f"with ID {resource_id} when updating the authorization database",
                     )
             return authz_change
@@ -520,7 +520,7 @@ class Authz:
                     )
                 if not session.in_transaction():
                     raise errors.ProgrammingError(
-                        message="The authroization database decorator needs a session with an open transaction."
+                        message="The authorization database decorator needs a session with an open transaction."
                     )
 
                 authz_change = _AuthzChange()
@@ -769,6 +769,25 @@ class Authz:
         )
         return _AuthzChange(apply=apply_change, undo=undo_change)
 
+    async def _get_resource_owners(
+        self, resource_type: ResourceType, resource_id: str, consistency: Consistency
+    ) -> list[ReadRelationshipsResponse]:
+        existing_owners_filter = RelationshipFilter(
+            resource_type=resource_type.value,
+            optional_resource_id=resource_id,
+            optional_subject_filter=SubjectFilter(subject_type=ResourceType.user),
+            optional_relation=_Relation.owner.value,
+        )
+        return [
+            i
+            async for i in self.client.ReadRelationships(
+                ReadRelationshipsRequest(
+                    consistency=consistency,
+                    relationship_filter=existing_owners_filter,
+                )
+            )
+        ]
+
     @_is_allowed(Scope.CHANGE_MEMBERSHIP)
     async def upsert_project_members(
         self,
@@ -788,7 +807,9 @@ class Authz:
         add_members: list[RelationshipUpdate] = []
         undo: list[RelationshipUpdate] = []
         output: list[MembershipChange] = []
-        expected_user_roles = [_Relation.viewer.value, _Relation.owner.value, _Relation.editor.value]
+        expected_user_roles = {_Relation.viewer.value, _Relation.owner.value, _Relation.editor.value}
+        existing_owners_rels = await self._get_resource_owners(resource_type, resource_id, consistency)
+        n_existing_owners = len(existing_owners_rels)
         for member in members:
             rel = Relationship(
                 resource=project_res,
@@ -810,6 +831,11 @@ class Authz:
                 # The existing relationships should be deleted if all goes well and added back in if we have to undo
                 existing_rel = existing_rels[0]
                 if existing_rel.relationship != rel:
+                    if existing_rel.relationship.relation == _Relation.owner.value:
+                        n_existing_owners -= 1
+                    elif rel.relation == _Relation.owner.value:
+                        n_existing_owners += 1
+
                     add_members.extend(
                         [
                             RelationshipUpdate(
@@ -857,6 +883,8 @@ class Authz:
                     )
                     output.append(MembershipChange(member, Change.REMOVE))
             else:
+                if rel.relation == _Relation.owner.value:
+                    n_existing_owners += 1
                 # The new relationship is added if all goes well and deleted if we have to undo
                 add_members.append(
                     RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=rel),
@@ -866,10 +894,16 @@ class Authz:
                 )
                 output.append(MembershipChange(member, Change.ADD))
 
+        if n_existing_owners == 0:
+            raise errors.Unauthorized(
+                message="You are trying to change the role of the all owners of the project, which is not allowed. "
+                "Assign at least one user as owner and then retry."
+            )
+
         change = _AuthzChange(
             apply=WriteRelationshipsRequest(updates=add_members), undo=WriteRelationshipsRequest(updates=undo)
         )
-        self.client.WriteRelationships(change.apply)
+        await self.client.WriteRelationships(change.apply)
         return output
 
     @_is_allowed(Scope.CHANGE_MEMBERSHIP)
@@ -887,21 +921,8 @@ class Authz:
         add_members: list[RelationshipUpdate] = []
         remove_members: list[RelationshipUpdate] = []
         output: list[MembershipChange] = []
-        existing_owners_filter = RelationshipFilter(
-            resource_type=resource_type.value,
-            optional_resource_id=resource_id,
-            optional_subject_filter=SubjectFilter(subject_type=ResourceType.user),
-            optional_relation=_Relation.owner.value,
-        )
-        existing_owners: set[str] = {
-            rel.relationship.subject.object.object_id
-            async for rel in self.client.ReadRelationships(
-                ReadRelationshipsRequest(
-                    consistency=consistency,
-                    relationship_filter=existing_owners_filter,
-                )
-            )
-        }
+        existing_owners_rels = await self._get_resource_owners(resource_type, resource_id, consistency)
+        existing_owners: set[str] = {rel.relationship.subject.object.object_id for rel in existing_owners_rels}
         for user_id in user_ids:
             if user_id == "*":
                 raise errors.ValidationError(message="Cannot remove a project member with ID '*'")
@@ -946,7 +967,7 @@ class Authz:
         change = _AuthzChange(
             apply=WriteRelationshipsRequest(updates=remove_members), undo=WriteRelationshipsRequest(updates=add_members)
         )
-        self.client.WriteRelationships(change.apply)
+        await self.client.WriteRelationships(change.apply)
         return output
 
     async def _get_admin_user_ids(self) -> list[str]:
@@ -1066,7 +1087,9 @@ class Authz:
         add_members: list[RelationshipUpdate] = []
         undo: list[RelationshipUpdate] = []
         output: list[MembershipChange] = []
-        expected_user_roles = [_Relation.viewer.value, _Relation.owner.value, _Relation.editor.value]
+        expected_user_roles = {_Relation.viewer.value, _Relation.owner.value, _Relation.editor.value}
+        existing_owners_rels = await self._get_resource_owners(resource_type, resource_id, consistency)
+        n_existing_owners = len(existing_owners_rels)
         for member in members:
             rel = Relationship(
                 resource=group_res,
@@ -1089,16 +1112,36 @@ class Authz:
                 # The existing relationships should be deleted if all goes well and added back in if we have to undo
                 existing_rel = existing_rels[0]
                 if existing_rel.relationship != rel:
-                    add_members.append(
-                        RelationshipUpdate(
-                            operation=RelationshipUpdate.OPERATION_TOUCH,
-                            relationship=rel,
-                        ),
+                    if existing_rel.relationship.relation == _Relation.owner.value:
+                        n_existing_owners -= 1
+                    elif rel.relation == _Relation.owner.value:
+                        n_existing_owners += 1
+
+                    add_members.extend(
+                        [
+                            RelationshipUpdate(
+                                operation=RelationshipUpdate.OPERATION_TOUCH,
+                                relationship=rel,
+                            ),
+                            # NOTE: The old role for the user still exists and we have to remove it
+                            # if not both the old and new role for the same user will be present in the database
+                            RelationshipUpdate(
+                                operation=RelationshipUpdate.OPERATION_DELETE,
+                                relationship=existing_rel.relationship,
+                            ),
+                        ]
                     )
-                    undo.append(
-                        RelationshipUpdate(
-                            operation=RelationshipUpdate.OPERATION_TOUCH, relationship=existing_rel.relationship
-                        ),
+                    undo.extend(
+                        [
+                            RelationshipUpdate(
+                                operation=RelationshipUpdate.OPERATION_TOUCH,
+                                relationship=existing_rel.relationship,
+                            ),
+                            RelationshipUpdate(
+                                operation=RelationshipUpdate.OPERATION_DELETE,
+                                relationship=rel,
+                            ),
+                        ]
                     )
                     output.append(MembershipChange(member, Change.UPDATE))
                 for rel_to_remove in existing_rels[1:]:
@@ -1122,6 +1165,9 @@ class Authz:
                     )
                     output.append(MembershipChange(member, Change.REMOVE))
             else:
+                if rel.relation == _Relation.owner.value:
+                    n_existing_owners += 1
+
                 # The new relationship is added if all goes well and deleted if we have to undo
                 add_members.append(
                     RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=rel),
@@ -1130,6 +1176,12 @@ class Authz:
                     RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=rel),
                 )
                 output.append(MembershipChange(member, Change.ADD))
+
+        if n_existing_owners == 0:
+            raise errors.Unauthorized(
+                message="You are trying to change the role of the all owners of the group, which is not allowed. "
+                "Assign at least one user as owner and then retry."
+            )
 
         change = _AuthzChange(
             apply=WriteRelationshipsRequest(updates=add_members), undo=WriteRelationshipsRequest(updates=undo)
@@ -1152,12 +1204,6 @@ class Authz:
         add_members: list[RelationshipUpdate] = []
         remove_members: list[RelationshipUpdate] = []
         output: list[MembershipChange] = []
-        existing_owners_filter = RelationshipFilter(
-            resource_type=resource_type.value,
-            optional_resource_id=resource_id,
-            optional_subject_filter=SubjectFilter(subject_type=ResourceType.user),
-            optional_relation=_Relation.owner.value,
-        )
         existing_owners_rels: list[ReadRelationshipsResponse] | None = None
         for user_id in user_ids:
             if user_id == "*":
@@ -1171,19 +1217,11 @@ class Authz:
                 ReadRelationshipsRequest(consistency=consistency, relationship_filter=existing_rel_filter)
             )
             # NOTE: We have to make sure that when we undo we only put back relationships that existed already.
-            # Blidnly undoing everything that was passed in may result in adding things that weren't there before.
+            # Blindly undoing everything that was passed in may result in adding things that weren't there before.
             async for existing_rel in existing_rels:
                 if existing_rel.relationship.relation == _Relation.owner.value:
                     if existing_owners_rels is None:
-                        existing_owners_rels = [
-                            i
-                            async for i in self.client.ReadRelationships(
-                                ReadRelationshipsRequest(
-                                    consistency=consistency,
-                                    relationship_filter=existing_owners_filter,
-                                )
-                            )
-                        ]
+                        existing_owners_rels = await self._get_resource_owners(resource_type, resource_id, consistency)
                     if len(existing_owners_rels) == 1:
                         raise errors.Unauthorized(
                             message="You are trying to remove the single last owner of the group, "
@@ -1212,7 +1250,7 @@ class Authz:
         change = _AuthzChange(
             apply=WriteRelationshipsRequest(updates=remove_members), undo=WriteRelationshipsRequest(updates=add_members)
         )
-        self.client.WriteRelationships(change.apply)
+        await self.client.WriteRelationships(change.apply)
         return output
 
     def _add_user_namespace(self, namespace: Namespace) -> _AuthzChange:

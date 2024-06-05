@@ -4,8 +4,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel
-
 from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind
 
 
@@ -36,23 +34,11 @@ class OAuth2Connection:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class ConnectedAccount(BaseModel):
+class ConnectedAccount:
     """OAuth2 connected account model."""
 
     username: str
     web_url: str
-
-
-@dataclass(frozen=True, eq=True, kw_only=True)
-class GitHubConnectedAccount(BaseModel):
-    """OAuth2 connected account model for GitHub."""
-
-    login: str
-    html_url: str
-
-    def to_connected_account(self) -> ConnectedAccount:
-        """Returns the corresponding ConnectedAccount object."""
-        return ConnectedAccount(username=self.login, web_url=self.html_url)
 
 
 class OAuth2TokenSet(dict):
