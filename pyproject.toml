@@ -13,28 +13,20 @@ packages = [
   { include = "renku_data_services/app_config", from = "components" },
   { include = "renku_data_services/authz", from = "components" },
   { include = "renku_data_services/crc", from = "components" },
-  { include = "renku_data_services/crc_migrations", from = "components" },
   { include = "renku_data_services/k8s", from = "components" },
   { include = "renku_data_services/migrations", from = "components" },
   { include = "renku_data_services/errors", from = "components" },
   { include = "renku_data_services/base_models", from = "components" },
   { include = "renku_data_services/base_api", from = "components" },
   { include = "renku_data_services/storage", from = "components" },
-  { include = "renku_data_services/storage_migrations", from = "components" },
   { include = "renku_data_services/user_preferences", from = "components" },
-  { include = "renku_data_services/user_preferences_migrations", from = "components" },
   { include = "renku_data_services/utils", from = "components" },
   { include = "renku_data_services/git", from = "components" },
   { include = "renku_data_services/users", from = "components" },
-  { include = "renku_data_services/users_migrations", from = "components" },
   { include = "renku_data_services/project", from = "components" },
-  { include = "renku_data_services/project_migrations", from = "components" },
-  { include = "renku_data_services/events_migrations", from = "components" },
   { include = "renku_data_services/message_queue", from = "components" },
   { include = "renku_data_services/namespace", from = "components" },
   { include = "renku_data_services/session", from = "components" },
-  { include = "renku_data_services/session_migrations", from = "components" },
-  { include = "renku_data_services/events_migrations", from = "components" },
   { include = "renku_data_services/message_queue", from = "components" },
   { include = "renku_data_services/secrets", from = "components" },
   { include = "renku_data_services/connected_services", from = "components" },
@@ -136,13 +128,6 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "test/*" = ["D"]
-"*/crc_migrations/*" = ["D", "I"]
-"*/events_migrations/*" = ["D", "I"]
-"*/storage_migrations/*" = ["D", "I"]
-"*/user_preferences_migrations/*" = ["D", "I"]
-"*/project_migrations/*" = ["D", "I"]
-"*/session_migrations/*" = ["D", "I"]
-"*/users_migrations/*" = ["D", "I"]
 "*/versions/*" = ["D", "E", "W"]
 "apispec.py" = ["D", "E", "W", "I", "UP"]
 
@@ -232,4 +217,3 @@ ignore_missing_imports = true
 [tool.coverage.run]
 source = ["bases/", "components/"]
 concurrency = ["thread", "greenlet"]
-omit = ["components/renku_data_services/migrations/resource_pools/*"]
