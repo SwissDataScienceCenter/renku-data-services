@@ -4,6 +4,7 @@ import argparse
 from os import environ
 from typing import Any
 
+from prometheus_sanic import monitor
 from sanic import Sanic
 from sanic.worker.loader import AppLoader
 
@@ -19,6 +20,9 @@ def create_app() -> Sanic:
     if "COVERAGE_RUN" in environ:
         app.config.TOUCHUP = False
     app = register_all_handlers(app, config)
+
+    # Setup prometheus
+    monitor(app, endpoint_type="url", multiprocess_mode="all", is_middleware=True).expose_endpoint()
 
     async def rotate_encryption_key_listener(_: Sanic) -> None:
         """Rotate RSA private key."""
