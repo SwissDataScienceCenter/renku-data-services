@@ -205,7 +205,6 @@ async def test_secret_encryption_decryption(
                 "kind": "JupyterServer",
                 "name": "renku-1234",
                 "uid": "c9328118-8d32-41b4-b9bd-1437880c95a2",
-                "controller": True,
             }
         ],
     }
