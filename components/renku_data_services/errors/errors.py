@@ -23,6 +23,9 @@ class BaseError(Exception):
         return f"{self.__class__.__qualname__}: {self.message}"
 
 
+# ! IMPORTANT: keep this list ordered by HTTP status code.
+
+
 @dataclass
 class GeneralBadRequest(BaseError):
     """Raised for a 400 status code - when the server cannot or will not process the request."""
