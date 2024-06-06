@@ -87,7 +87,10 @@ class CustomErrorHandler(ErrorHandler):
                 if message == "" or message is None:
                     message = ", ".join([str(i) for i in exception.args])
                 formatted_exception = errors.BaseError(
-                    message=message, status_code=exception.status_code, code=1000 + exception.status_code
+                    message=message,
+                    status_code=exception.status_code,
+                    code=1000 + exception.status_code,
+                    quiet=exception.quiet or False,
                 )
             case SqliteError():
                 formatted_exception = errors.BaseError(
