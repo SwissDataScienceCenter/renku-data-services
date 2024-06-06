@@ -12,6 +12,7 @@ class BaseError(Exception):
     status_code: int = 500
     message: str = "An unexpected error occurred"
     detail: Optional[str] = None
+    quiet: bool = False
 
     def __repr__(self) -> str:
         """String representation of the error."""
@@ -22,38 +23,16 @@ class BaseError(Exception):
         return f"{self.__class__.__qualname__}: {self.message}"
 
 
-@dataclass
-class MissingResourceError(BaseError):
-    """Raised when a resource is not found."""
-
-    code: int = 1404
-    status_code: int = 404
-    message: str = "The requested resource does not exist or cannot be found"
+# ! IMPORTANT: keep this list ordered by HTTP status code.
 
 
 @dataclass
-class ConfigurationError(BaseError):
-    """Raised when the server is not properly configured."""
+class GeneralBadRequest(BaseError):
+    """Raised for a 400 status code - when the server cannot or will not process the request."""
 
-    message: str = "The server is not properly configured and cannot run"
-
-
-@dataclass
-class ValidationError(BaseError):
-    """Raised when the inputs or outputs are invalid."""
-
-    code: int = 1422
-    message: str = "The provided input is invalid"
-    status_code: int = 422
-
-
-@dataclass
-class Unauthorized(BaseError):
-    """Raised when the user does not have the required credentials."""
-
-    code: int = 1401
-    message: str = "The supplied credentials are missing or invalid."
-    status_code: int = 401
+    code: int = 1400
+    message: str = "The request is invalid, malformed or non-sensical and cannot be fulfilled."
+    status_code: int = 400
 
 
 @dataclass
@@ -66,12 +45,30 @@ class NoDefaultPoolAccessError(BaseError):
 
 
 @dataclass
-class GeneralBadRequest(BaseError):
-    """Raised for a 400 status code - when the server cannot or will not process the request."""
+class Unauthorized(BaseError):
+    """Raised when the user does not have the required credentials."""
 
-    code: int = 1400
-    message: str = "The request is invalid, malformed or non-sensical and cannot be fulfilled."
-    status_code: int = 400
+    code: int = 1401
+    message: str = "The supplied credentials are missing or invalid."
+    status_code: int = 401
+
+
+@dataclass
+class MissingResourceError(BaseError):
+    """Raised when a resource is not found."""
+
+    code: int = 1404
+    status_code: int = 404
+    message: str = "The requested resource does not exist or cannot be found"
+
+
+@dataclass
+class ConflictError(BaseError):
+    """Raised when a conflicting update occurs."""
+
+    code: int = 1409
+    message: str = "Conflicting update detected."
+    status_code: int = 409
 
 
 @dataclass
@@ -90,6 +87,31 @@ class UpdatingWithStaleContentError(BaseError):
 
 
 @dataclass
+class ValidationError(BaseError):
+    """Raised when the inputs or outputs are invalid."""
+
+    code: int = 1422
+    message: str = "The provided input is invalid"
+    status_code: int = 422
+
+
+@dataclass
+class PreconditionRequiredError(BaseError):
+    """Raised when a precondition is not met."""
+
+    code: int = 1428
+    message: str = "Conflicting update detected."
+    status_code: int = 428
+
+
+@dataclass
+class ConfigurationError(BaseError):
+    """Raised when the server is not properly configured."""
+
+    message: str = "The server is not properly configured and cannot run"
+
+
+@dataclass
 class ProgrammingError(BaseError):
     """Raised an irrecoverable programming error or bug occurs."""
 
@@ -105,24 +127,6 @@ class EventError(BaseError):
     code: int = 1501
     message: str = "An unexpected error occured when handling or generating events for the message queue."
     status_code: int = 500
-
-
-@dataclass
-class ConflictError(BaseError):
-    """Raised when a conflicting update occurs."""
-
-    code: int = 1409
-    message: str = "Conflicting update detected."
-    status_code: int = 409
-
-
-@dataclass
-class PreconditionRequiredError(BaseError):
-    """Raised when a precondition is not met."""
-
-    code: int = 1428
-    message: str = "Conflicting update detected."
-    status_code: int = 428
 
 
 @dataclass
