@@ -36,9 +36,9 @@ class K8sSecretsBP(CustomBlueprint):
         async def _post(_: Request, user: base_models.APIUser, body: apispec.K8sSecret) -> JSONResponse:
             owner_references = []
             if body.owner_references:
-                owner_references = [OwnerReference.model_validate(o) for o in body.owner_references]
+                owner_references = [OwnerReference.from_dict(o) for o in body.owner_references]
             secret_ids = [id.root for id in body.secret_ids]
-            secret_name = await create_k8s_secret(
+            await create_k8s_secret(
                 user,
                 body.name,
                 body.namespace,
@@ -50,6 +50,6 @@ class K8sSecretsBP(CustomBlueprint):
                 self.core_client,
             )
 
-            return json(secret_name, 201)
+            return json(body.name, 201)
 
         return "/kubernetes", ["POST"], _post

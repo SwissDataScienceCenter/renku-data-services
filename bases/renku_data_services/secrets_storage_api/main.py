@@ -8,6 +8,7 @@ from prometheus_sanic import monitor
 from sanic import Sanic
 from sanic.worker.loader import AppLoader
 
+from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.secrets.config import Config
 from renku_data_services.secrets.core import rotate_encryption_keys
 from renku_data_services.secrets_storage_api.app import register_all_handlers
@@ -30,7 +31,10 @@ def create_app() -> Sanic:
             return
 
         await rotate_encryption_keys(
-            config.secrets_service_private_key, config.previous_secrets_service_private_key, config.user_secrets_repo
+            InternalServiceAdmin(id=ServiceAdminId.secrets_rotation),
+            config.secrets_service_private_key,
+            config.previous_secrets_service_private_key,
+            config.user_secrets_repo,
         )
 
     app.register_listener(rotate_encryption_key_listener, "after_server_start")

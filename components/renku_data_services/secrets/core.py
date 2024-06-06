@@ -8,6 +8,7 @@ from prometheus_client import Counter, Enum
 from sanic.log import logger
 
 from renku_data_services import base_models, errors
+from renku_data_services.base_models.core import InternalServiceAdmin
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface
 from renku_data_services.secrets.db import UserSecretsRepo
 from renku_data_services.secrets.models import OwnerReference, Secret
@@ -30,8 +31,8 @@ async def create_k8s_secret(
     secret_service_private_key: rsa.RSAPrivateKey,
     previous_secret_service_private_key: rsa.RSAPrivateKey | None,
     core_client: K8sCoreClientInterface,
-) -> str:
-    """Creates k8s secret from user secrets."""
+) -> None:
+    """Creates a single k8s secret from a list of user secrets stored in the DB."""
     secrets = await secrets_repo.get_secrets_by_ids(requested_by=user, secret_ids=secret_ids)
     found_secret_ids = {str(s.id) for s in secrets}
     requested_secret_ids = set(secret_ids)
@@ -75,11 +76,13 @@ async def create_k8s_secret(
         # don't wrap the error, we don't want secrets accidentally leaking.
         raise errors.SecretCreationError(message=f"An error occured creating secrets: {str(type(e))}")
 
-    return secret_name
-
 
 async def rotate_encryption_keys(
-    new_key: rsa.RSAPrivateKey, old_key: rsa.RSAPrivateKey, secrets_repo: UserSecretsRepo, batch_size: int = 100
+    requested_by: InternalServiceAdmin,
+    new_key: rsa.RSAPrivateKey,
+    old_key: rsa.RSAPrivateKey,
+    secrets_repo: UserSecretsRepo,
+    batch_size: int = 100,
 ) -> None:
     """Rotate all secrets to a new private key.
 
@@ -94,14 +97,14 @@ async def rotate_encryption_keys(
     )
     runnning_metrics.state("running")
     try:
-        async for batch in secrets_repo.get_all_secrets_batched(batch_size):
+        async for batch in secrets_repo.get_all_secrets_batched(requested_by, batch_size):
             updated_secrets = []
             for secret, user_id in batch:
                 new_secret = await rotate_single_encryption_key(secret, user_id, new_key, old_key)
                 if new_secret is not None:
                     updated_secrets.append(new_secret)
 
-            await secrets_repo.update_secrets(updated_secrets)
+            await secrets_repo.update_secrets(requested_by, updated_secrets)
             processed_secrets_metrics.inc(len(updated_secrets))
     except:
         runnning_metrics.state("errored")

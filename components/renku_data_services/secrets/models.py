@@ -1,5 +1,6 @@
 """Base models for secrets."""
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from kubernetes import client as k8s_client
@@ -16,13 +17,19 @@ class Secret(BaseModel):
     modification_date: datetime = Field(default_factory=lambda: datetime.now(UTC).replace(microsecond=0), init=False)
 
 
-class OwnerReference(BaseModel):
+@dataclass
+class OwnerReference:
     """A kubernetes owner reference."""
 
     apiVersion: str
     kind: str
     name: str
     uid: str
+
+    @classmethod
+    def from_dict(cls, data: dict[str, str]) -> "OwnerReference":
+        """Create an owner reference from a dict."""
+        return cls(apiVersion=data["apiVersion"], kind=data["kind"], name=data["name"], uid=data["uid"])
 
     def to_k8s(self) -> k8s_client.V1OwnerReference:
         """Return k8s OwnerReference."""

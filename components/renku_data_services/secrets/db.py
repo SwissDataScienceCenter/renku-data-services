@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.base_api.auth import APIUser, only_authenticated
+from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.errors import errors
 from renku_data_services.secrets.models import Secret
 from renku_data_services.secrets.orm import SecretORM
@@ -113,12 +114,14 @@ class UserSecretsRepo:
             await session.execute(delete(SecretORM).where(SecretORM.id == secret.id))
 
     async def get_all_secrets_batched(
-        self, batch_size: int = 100
+        self, requested_by: InternalServiceAdmin, batch_size: int = 100
     ) -> AsyncGenerator[Sequence[tuple[Secret, str]], None]:
         """Get secrets in batches.
 
         Only for internal use.
         """
+        if requested_by.id != ServiceAdminId.secrets_rotation:
+            raise errors.ProgrammingError(message="Only secrets_rotation admin is allowed to call this method.")
         offset = 0
         while True:
             async with self.session_maker() as session, session.begin():
@@ -133,11 +136,13 @@ class UserSecretsRepo:
 
                 offset += batch_size
 
-    async def update_secrets(self, secrets: list[Secret]) -> None:
+    async def update_secrets(self, requested_by: InternalServiceAdmin, secrets: list[Secret]) -> None:
         """Update multiple secrets.
 
         Only for internal use.
         """
+        if requested_by.id != ServiceAdminId.secrets_rotation:
+            raise errors.ProgrammingError(message="Only secrets_rotation admin is allowed to call this method.")
         secret_dict = {s.id: s for s in secrets}
 
         async with self.session_maker() as session, session.begin():
