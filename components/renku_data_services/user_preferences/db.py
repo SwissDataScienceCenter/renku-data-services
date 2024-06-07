@@ -44,7 +44,7 @@ class UserPreferencesRepository(_Base):
             user_preferences = res.one_or_none()
 
             if user_preferences is None:
-                raise errors.MissingResourceError(message="Preferences not found for user.")
+                raise errors.MissingResourceError(message="Preferences not found for user.", quiet=True)
             return user_preferences.dump()
 
     async def delete_user_preferences(self, user: base_models.APIUser) -> None:
@@ -117,7 +117,7 @@ class UserPreferencesRepository(_Base):
             user_preferences = res.one_or_none()
 
             if user_preferences is None:
-                raise errors.MissingResourceError(message="Preferences not found for user.")
+                raise errors.MissingResourceError(message="Preferences not found for user.", quiet=True)
 
             project_slugs: list[str]
             project_slugs = user_preferences.pinned_projects.get("project_slugs", [])

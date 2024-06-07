@@ -8,6 +8,7 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from sanic_testing.testing import SanicASGITestClient
 
+from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.secrets.core import rotate_encryption_keys, rotate_single_encryption_key
 from renku_data_services.secrets.models import Secret
 from renku_data_services.users.models import UserInfo
@@ -263,15 +264,16 @@ async def test_secret_rotation(sanic_client, secrets_storage_app_config, create_
         await create_secret(f"secret-{i}", str(i))
 
     new_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-
+    admin = InternalServiceAdmin(id=ServiceAdminId.secrets_rotation)
     await rotate_encryption_keys(
+        admin,
         new_key,
         secrets_storage_app_config.secrets_service_private_key,
         secrets_storage_app_config.user_secrets_repo,
         batch_size=5,
     )
 
-    secrets = [s async for s in secrets_storage_app_config.user_secrets_repo.get_all_secrets_batched(100)]
+    secrets = [s async for s in secrets_storage_app_config.user_secrets_repo.get_all_secrets_batched(admin, 100)]
     batch = secrets[0]
     assert len(batch) == 10
 
