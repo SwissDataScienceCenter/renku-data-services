@@ -15,8 +15,21 @@ from renku_data_services.errors import errors
 from renku_data_services.secrets.db import UserSecretsRepo
 from renku_data_services.secrets.models import Secret
 from renku_data_services.users import apispec
+from renku_data_services.users.apispec import SecretKind
+from renku_data_services.users.apispec_base import BaseAPISpec
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.cryptography import encrypt_rsa, encrypt_string, generate_random_encryption_key
+
+
+class GetSecretsParams(BaseAPISpec):
+    """The schema for the query parameters used when getting all secrets."""
+
+    class Config:
+        """Configuration."""
+
+        extra = "ignore"
+
+    kind: SecretKind = SecretKind.general
 
 
 @dataclass(kw_only=True)
@@ -148,8 +161,10 @@ class UserSecretsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _get_all(request: Request, user: base_models.APIUser) -> JSONResponse:
-            secrets = await self.secret_repo.get_user_secrets(requested_by=user)
+        @validate(query=GetSecretsParams)
+        async def _get_all(request: Request, user: base_models.APIUser, query: GetSecretsParams) -> JSONResponse:
+            secret_kind = query.kind
+            secrets = await self.secret_repo.get_user_secrets(requested_by=user, kind=secret_kind)
             return json(
                 apispec.SecretsList(
                     root=[apispec.SecretWithId.model_validate(secret) for secret in secrets]
@@ -181,7 +196,12 @@ class UserSecretsBP(CustomBlueprint):
         @validate(json=apispec.SecretPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.SecretPost) -> JSONResponse:
             encrypted_value, encrypted_key = await self._encrypt_user_secret(requested_by=user, secret_value=body.value)
-            secret = Secret(name=body.name, encrypted_value=encrypted_value, encrypted_key=encrypted_key)
+            secret = Secret(
+                name=body.name,
+                encrypted_value=encrypted_value,
+                encrypted_key=encrypted_key,
+                kind=body.kind,
+            )
             result = await self.secret_repo.insert_secret(requested_by=user, secret=secret)
             return json(apispec.SecretWithId.model_validate(result).model_dump(exclude_none=True, mode="json"), 201)
 

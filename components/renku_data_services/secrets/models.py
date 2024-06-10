@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 from kubernetes import client as k8s_client
 from pydantic import BaseModel, Field
 
+from renku_data_services.users.apispec import SecretKind
+
 
 class Secret(BaseModel):
     """Secret objects."""
@@ -15,6 +17,7 @@ class Secret(BaseModel):
     encrypted_key: bytes = Field(repr=False)
     id: str | None = Field(default=None, init=False)
     modification_date: datetime = Field(default_factory=lambda: datetime.now(UTC).replace(microsecond=0), init=False)
+    kind: SecretKind
 
 
 @dataclass

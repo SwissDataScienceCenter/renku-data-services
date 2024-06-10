@@ -13,6 +13,7 @@ from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAd
 from renku_data_services.errors import errors
 from renku_data_services.secrets.models import Secret
 from renku_data_services.secrets.orm import SecretORM
+from renku_data_services.users.apispec import SecretKind
 
 
 class UserSecretsRepo:
@@ -25,10 +26,10 @@ class UserSecretsRepo:
         self.session_maker = session_maker
 
     @only_authenticated
-    async def get_user_secrets(self, requested_by: APIUser) -> list[Secret]:
+    async def get_user_secrets(self, requested_by: APIUser, kind: SecretKind) -> list[Secret]:
         """Get all user's secrets from the database."""
         async with self.session_maker() as session:
-            stmt = select(SecretORM).where(SecretORM.user_id == requested_by.id)
+            stmt = select(SecretORM).where(SecretORM.user_id == requested_by.id).where(SecretORM.kind == kind)
             res = await session.execute(stmt)
             orm = res.scalars().all()
             return [o.dump() for o in orm]
@@ -65,6 +66,7 @@ class UserSecretsRepo:
                 user_id=requested_by.id,
                 encrypted_value=secret.encrypted_value,
                 encrypted_key=secret.encrypted_key,
+                kind=secret.kind,
             )
             session.add(orm)
 
