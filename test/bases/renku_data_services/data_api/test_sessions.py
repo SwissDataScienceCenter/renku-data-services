@@ -277,6 +277,7 @@ async def test_post_session_launcher(sanic_client: SanicASGITestClient, user_hea
     assert res.json.get("environment_kind") == "container_image"
     assert res.json.get("container_image") == "some_image:some_tag"
     assert res.json.get("environment_id") is None
+    assert res.json.get("resource_class_id") is None
 
 
 @pytest.mark.asyncio

@@ -181,6 +181,7 @@ class SessionRepository:
             description=new_launcher.description,
             environment_kind=new_launcher.environment_kind,
             environment_id=new_launcher.environment_id,
+            resource_class_id=new_launcher.resource_class_id,
             container_image=new_launcher.container_image,
             default_url=new_launcher.default_url,
             created_by=models.Member(id=user.id),
@@ -206,6 +207,17 @@ class SessionRepository:
                 if environment is None:
                     raise errors.MissingResourceError(
                         message=f"Session environment with id '{environment_id}' does not exist or you do not have access to it."  # noqa: E501
+                    )
+
+            resource_class_id = new_launcher.resource_class_id
+            if resource_class_id is not None:
+                res = await session.scalars(
+                    select(schemas.ResourceClassORM).where(schemas.ResourceClassORM.id == resource_class_id)
+                )
+                resource_class = res.one_or_none()
+                if resource_class is None:
+                    raise errors.MissingResourceError(
+                        message=f"Resource class with id '{resource_class_id}' does not exist or you do not have access to it."  # noqa: E501
                     )
 
             launcher = schemas.SessionLauncherORM.load(launcher_model)
@@ -249,14 +261,27 @@ class SessionRepository:
                         message=f"Session environment with id '{environment_id}' does not exist or you do not have access to it."  # noqa: E501
                     )
 
+            resource_class_id = kwargs.get("resource_class_id")
+            if resource_class_id is not None:
+                res = await session.scalars(
+                    select(schemas.ResourceClassORM).where(schemas.ResourceClassORM.id == resource_class_id)
+                )
+                resource_class = res.one_or_none()
+                if resource_class is None:
+                    raise errors.MissingResourceError(
+                        message=f"Resource class with id '{resource_class_id}' does not exist or you do not have access to it."  # noqa: E501
+                    )
+
             for key, value in kwargs.items():
                 # NOTE: Only ``name``, ``description``, ``environment_kind``,
-                #       ``environment_id``, ``container_image`` and ``default_url`` can be edited.
+                #       ``environment_id``, ``resource_class_id``, ``container_image`` and
+                #       ``default_url`` can be edited.
                 if key in [
                     "name",
                     "description",
                     "environment_kind",
                     "environment_id",
+                    "resource_class_id",
                     "container_image",
                     "default_url",
                 ]:

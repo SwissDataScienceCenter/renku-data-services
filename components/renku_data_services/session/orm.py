@@ -7,6 +7,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_co
 from sqlalchemy.schema import ForeignKey
 from ulid import ULID
 
+from renku_data_services.crc.orm import ResourceClassORM
 from renku_data_services.project.orm import ProjectORM
 from renku_data_services.session import models
 from renku_data_services.session.apispec import EnvironmentKind
@@ -113,6 +114,15 @@ class SessionLauncherORM(BaseORM):
     )
     """Id of the session environment."""
 
+    resource_class_id: Mapped[int | None] = mapped_column(
+        "resource_class_id",
+        ForeignKey(ResourceClassORM.id, ondelete="SET NULL"),
+        default=None,
+        nullable=True,
+        index=True,
+    )
+    """Id of the resource class."""
+
     @classmethod
     def load(cls, launcher: models.SessionLauncher) -> "SessionLauncherORM":
         """Create SessionLauncherORM from the session launcher model."""
@@ -125,6 +135,7 @@ class SessionLauncherORM(BaseORM):
             container_image=launcher.container_image,
             project_id=launcher.project_id,
             environment_id=launcher.environment_id,
+            resource_class_id=launcher.resource_class_id,
             default_url=launcher.default_url,
         )
 
@@ -139,6 +150,7 @@ class SessionLauncherORM(BaseORM):
             description=self.description,
             environment_kind=self.environment_kind,
             environment_id=self.environment_id if self.environment_id is not None else None,
+            resource_class_id=self.resource_class_id if self.resource_class_id is not None else None,
             container_image=self.container_image,
             default_url=self.default_url,
         )
