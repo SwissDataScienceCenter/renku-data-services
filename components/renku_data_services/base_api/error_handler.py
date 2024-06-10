@@ -9,7 +9,6 @@ from pydantic import ValidationError as PydanticValidationError
 from sanic import HTTPResponse, Request, SanicException, json
 from sanic.errorpages import BaseRenderer, TextRenderer
 from sanic.handlers import ErrorHandler
-from sanic.log import logger
 from sanic_ext.exceptions import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -22,6 +21,7 @@ class BaseError(Protocol):
     code: int
     message: str
     detail: Optional[str]
+    quiet: bool
 
 
 class BaseErrorResponse(Protocol):
@@ -62,15 +62,9 @@ class CustomErrorHandler(ErrorHandler):
         self.api_spec = api_spec
         super().__init__(base)
 
-    def _log_unhandled_exception(self, exception: Exception) -> None:
-        if self.debug:
-            logger.exception("An unknown or unhandled exception occurred", exc_info=exception)
-        logger.error("An unknown or unhandled exception of type %s occurred", type(exception).__name__)
-
     def default(self, request: Request, exception: Exception) -> HTTPResponse:
         """Overrides the default error handler."""
         formatted_exception = errors.BaseError()
-        logger.exception("An unknown or unhandled exception occurred", exc_info=exception)
         match exception:
             case errors.BaseError():
                 formatted_exception = exception
@@ -88,14 +82,15 @@ class CustomErrorHandler(ErrorHandler):
                         ]
                         message = f"There are errors in the following fields, {', '.join(parts)}"
                         formatted_exception = errors.ValidationError(message=message)
-                    case _:
-                        self._log_unhandled_exception(exception)
             case SanicException():
                 message = exception.message
                 if message == "" or message is None:
                     message = ", ".join([str(i) for i in exception.args])
                 formatted_exception = errors.BaseError(
-                    message=message, status_code=exception.status_code, code=1000 + exception.status_code
+                    message=message,
+                    status_code=exception.status_code,
+                    code=1000 + exception.status_code,
+                    quiet=exception.quiet or False,
                 )
             case SqliteError():
                 formatted_exception = errors.BaseError(
@@ -131,8 +126,7 @@ class CustomErrorHandler(ErrorHandler):
                 formatted_exception = errors.ValidationError(
                     message="The provided input is too large to be stored in the database"
                 )
-            case _:
-                self._log_unhandled_exception(exception)
+        self.log(request, formatted_exception)
         return json(
             self.api_spec.ErrorResponse(
                 error=self.api_spec.Error(
