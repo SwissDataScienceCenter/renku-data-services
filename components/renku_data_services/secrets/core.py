@@ -1,5 +1,6 @@
 """Business logic for secrets storage."""
 
+import asyncio
 from base64 import b64encode
 
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -101,6 +102,8 @@ async def rotate_encryption_keys(
             updated_secrets = []
             for secret, user_id in batch:
                 new_secret = await rotate_single_encryption_key(secret, user_id, new_key, old_key)
+                # we need to sleep, otherwise the async scheduler will never yield to other tasks like requests
+                await asyncio.sleep(0.000001)
                 if new_secret is not None:
                     updated_secrets.append(new_secret)
 
