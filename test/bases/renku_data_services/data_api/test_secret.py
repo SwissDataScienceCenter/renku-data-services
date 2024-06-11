@@ -5,10 +5,20 @@ from base64 import b64decode
 from typing import Any
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric import rsa
 from sanic_testing.testing import SanicASGITestClient
 
+from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
+from renku_data_services.secrets.core import rotate_encryption_keys, rotate_single_encryption_key
+from renku_data_services.secrets.models import Secret
 from renku_data_services.users.models import UserInfo
-from renku_data_services.utils.cryptography import decrypt_string
+from renku_data_services.utils.cryptography import (
+    decrypt_rsa,
+    decrypt_string,
+    encrypt_rsa,
+    encrypt_string,
+    generate_random_encryption_key,
+)
 
 
 @pytest.fixture
@@ -196,7 +206,6 @@ async def test_secret_encryption_decryption(
                 "kind": "JupyterServer",
                 "name": "renku-1234",
                 "uid": "c9328118-8d32-41b4-b9bd-1437880c95a2",
-                "controller": True,
             }
         ],
     }
@@ -213,3 +222,68 @@ async def test_secret_encryption_decryption(
 
     assert decrypt_string(secret_key.encode(), "user", b64decode(k8s_secret["secret-1"])) == "value-1"
     assert decrypt_string(secret_key.encode(), "user", b64decode(k8s_secret["secret-2"])) == "value-2"
+
+
+@pytest.mark.asyncio
+async def test_single_secret_rotation():
+    """Test rotating secrets."""
+    old_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    new_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    encryption_key = generate_random_encryption_key()
+    user_id = "123456"
+
+    user_secret = "abcdefg"
+
+    encrypted_value = encrypt_string(encryption_key, user_id, user_secret)
+    encrypted_key = encrypt_rsa(old_key.public_key(), encryption_key)
+
+    secret = Secret(name="test_secret", encrypted_value=encrypted_value, encrypted_key=encrypted_key)
+
+    rotated_secret = await rotate_single_encryption_key(secret, user_id, new_key, old_key)
+
+    assert rotated_secret is not None
+    with pytest.raises(ValueError):
+        decrypt_rsa(old_key, rotated_secret.encrypted_key)
+
+    new_encryption_key = decrypt_rsa(new_key, rotated_secret.encrypted_key)
+    assert new_encryption_key != encryption_key
+    decrypted_value = decrypt_string(new_encryption_key, user_id, rotated_secret.encrypted_value).encode()  # type: ignore
+    assert decrypted_value.decode() == user_secret
+
+    # ensure that rotating again does nothing
+
+    result = await rotate_single_encryption_key(rotated_secret, user_id, new_key, old_key)
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_secret_rotation(sanic_client, secrets_storage_app_config, create_secret, user_headers, users):
+    """Test rotating multiple secrets."""
+
+    for i in range(10):
+        await create_secret(f"secret-{i}", str(i))
+
+    new_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    admin = InternalServiceAdmin(id=ServiceAdminId.secrets_rotation)
+    await rotate_encryption_keys(
+        admin,
+        new_key,
+        secrets_storage_app_config.secrets_service_private_key,
+        secrets_storage_app_config.user_secrets_repo,
+        batch_size=5,
+    )
+
+    secrets = [s async for s in secrets_storage_app_config.user_secrets_repo.get_all_secrets_batched(admin, 100)]
+    batch = secrets[0]
+    assert len(batch) == 10
+
+    _, response = await sanic_client.get("/api/data/user/secret_key", headers=user_headers)
+    assert response.status_code == 200
+    assert "secret_key" in response.json
+    secret_key = response.json["secret_key"]
+
+    for secret, _ in batch:
+        new_encryption_key = decrypt_rsa(new_key, secret.encrypted_key)
+        decrypted_value = decrypt_string(new_encryption_key, users[1].id, secret.encrypted_value).encode()  # type: ignore
+        decrypted_value = decrypt_string(secret_key.encode(), users[1].id, decrypted_value)
+        assert f"secret-{decrypted_value}" == secret.name

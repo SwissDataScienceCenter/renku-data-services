@@ -136,7 +136,7 @@ class UserSecretsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_authenticated
         async def _get_all(request: Request, user: base_models.APIUser) -> JSONResponse:
-            secrets = await self.secret_repo.get_secrets(requested_by=user)
+            secrets = await self.secret_repo.get_user_secrets(requested_by=user)
             return json(
                 apispec.SecretsList(
                     root=[apispec.SecretWithId.model_validate(secret) for secret in secrets]
