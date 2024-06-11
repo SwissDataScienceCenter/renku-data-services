@@ -1,31 +1,42 @@
 """SQLAlchemy schemas for the CRC database."""
 
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, LargeBinary, MetaData, String
-from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 
 from renku_data_services.base_models import Slug
+from renku_data_services.base_orm.declarative_base import CustomBase
 from renku_data_services.users.models import UserInfo
+
+if TYPE_CHECKING:
+    from renku_data_services.namespace.orm import NamespaceORM
+else:
+    NamespaceORM = "NamespaceORM"
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
     """Base class for all ORM classes."""
 
     metadata = MetaData(schema="users")  # Has to match alembic ini section name
+    registry = CustomBase.registry
 
 
 class UserORM(BaseORM):
     """User data table."""
 
     __tablename__ = "users"
+
     keycloak_id: Mapped[str] = mapped_column(String(36), unique=True, index=True)
     first_name: Mapped[Optional[str]] = mapped_column(String(256), default=None)
     last_name: Mapped[Optional[str]] = mapped_column(String(256), default=None)
     email: Mapped[Optional[str]] = mapped_column(String(320), default=None, index=True)
     secret_key: Mapped[Optional[bytes]] = mapped_column(LargeBinary(), default=None, repr=False)
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
+    namespace: Mapped[Optional[NamespaceORM]] = relationship(
+        init=False, repr=False, viewonly=True, back_populates="user"
+    )
 
     def dump(self) -> UserInfo:
         """Create a user object from the ORM object."""

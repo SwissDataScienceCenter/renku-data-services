@@ -95,6 +95,7 @@ async def test_logged_in_users_can_get_other_users(sanic_client, users) -> None:
         headers={"Authorization": f"bearer {json.dumps(access_token)}"},
     )
     assert res.status_code == 200
+    del res.json["username"]
     retrieved_other_user = UserInfo(**res.json)
     assert retrieved_other_user == other_user
 
@@ -136,5 +137,13 @@ async def test_logged_in_user_check_adds_user_if_missing(sanic_client, users, ad
         headers=admin_headers,
     )
     assert res.status_code == 200
-    users_response = [UserInfo(**iuser) for iuser in res.json]
+    users_response = [
+        UserInfo(
+            id=iuser["id"],
+            first_name=iuser.get("first_name"),
+            last_name=iuser.get("last_name"),
+            email=iuser.get("email"),
+        )
+        for iuser in res.json
+    ]
     assert user in users_response

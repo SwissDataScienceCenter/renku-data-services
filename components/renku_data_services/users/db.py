@@ -9,6 +9,7 @@ from typing import Any
 from sanic.log import logger
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.base_api.auth import APIUser, only_authenticated
@@ -55,10 +56,10 @@ class UserRepo:
             return
         await self._users_sync.users_sync(kc_api)
 
-    async def _add_api_user(self, user: APIUser) -> UserInfo:
+    async def _add_api_user(self, user: APIUser) -> UserWithNamespace:
         if not user.id:
             raise errors.Unauthorized(message="The user has to be authenticated to be inserted in the DB.")
-        await self._users_sync.update_or_insert_user(
+        result = await self._users_sync.update_or_insert_user(
             user_id=user.id,
             payload=dict(
                 first_name=user.first_name,
@@ -66,26 +67,34 @@ class UserRepo:
                 email=user.email,
             ),
         )
-        return UserInfo(
-            id=user.id,
-            first_name=user.first_name,
-            last_name=user.last_name,
-            email=user.email,
-        )
+        return result.new
 
     @only_authenticated
-    async def get_user(self, requested_by: APIUser, id: str) -> UserInfo | None:
+    async def get_user(self, requested_by: APIUser, id: str) -> UserWithNamespace | None:
         """Get a specific user from the database."""
         async with self.session_maker() as session:
-            stmt = select(UserORM).where(UserORM.keycloak_id == id)
-            res = await session.execute(stmt)
-            orm = res.scalar_one_or_none()
-            if not orm:
+            result = await session.scalars(
+                select(UserORM).where(UserORM.keycloak_id == id).options(selectinload(UserORM.namespace))
+            )
+            user = result.one_or_none()
+            if user is None:
                 return None
-            return orm.dump()
+            if user.namespace is None:
+                raise errors.ProgrammingError(message=f"Cannot find a user namespace for user {id}.")
+            return user.namespace.dump_user()
 
     @only_authenticated
-    async def get_or_create_user(self, requested_by: APIUser, id: str) -> UserInfo | None:
+    async def get_kc_user(self, requested_by: APIUser, id: str) -> UserInfo | None:
+        """Get a specific user from the database (Keycloak data only)."""
+        async with self.session_maker() as session:
+            result = await session.scalars(select(UserORM).where(UserORM.keycloak_id == id))
+            user = result.one_or_none()
+            if user is None:
+                return None
+            return user.dump()
+
+    @only_authenticated
+    async def get_or_create_user(self, requested_by: APIUser, id: str) -> UserWithNamespace | None:
         """Get a specific user from the database and create it potentially if it does not exist.
 
         If the caller is the same user that is being retrieved and they are authenticated and
@@ -99,27 +108,56 @@ class UserRepo:
             return user
 
     @only_authenticated
-    async def get_users(self, requested_by: APIUser, email: str | None = None) -> list[UserInfo]:
+    async def get_users(self, requested_by: APIUser, email: str | None = None) -> list[UserWithNamespace]:
         """Get users from the database."""
         if not email and not requested_by.is_admin:
             raise errors.Unauthorized(message="Non-admin users cannot list all users.")
         users = await self._get_users(email)
 
-        is_api_user_missing = not any([requested_by.id == user.id for user in users])
+        is_api_user_missing = not any([requested_by.id == user.user.id for user in users])
 
         if not email and is_api_user_missing:
             api_user_info = await self._add_api_user(requested_by)
             users.append(api_user_info)
         return users
 
-    async def _get_users(self, email: str | None = None) -> list[UserInfo]:
+    async def _get_users(self, email: str | None = None) -> list[UserWithNamespace]:
         async with self.session_maker() as session:
             stmt = select(UserORM)
             if email:
                 stmt = stmt.where(UserORM.email == email)
-            res = await session.execute(stmt)
-            orms = res.scalars().all()
-            return [orm.dump() for orm in orms]
+            stmt = stmt.options(selectinload(UserORM.namespace))
+            result = await session.scalars(stmt)
+            users = result.all()
+
+            for user in users:
+                if user.namespace is None:
+                    raise errors.ProgrammingError(message=f"Cannot find a user namespace for user {id}.")
+
+            return [user.namespace.dump_user() for user in users if user.namespace is not None]
+
+    @only_authenticated
+    async def get_kc_users(self, requested_by: APIUser, email: str | None = None) -> list[UserInfo]:
+        """Get users from the database (Keycloak data only)."""
+        if not email and not requested_by.is_admin:
+            raise errors.Unauthorized(message="Non-admin users cannot list all users.")
+        users = await self._get_kc_users(email)
+
+        is_api_user_missing = not any([requested_by.id == user.id for user in users])
+
+        if not email and is_api_user_missing:
+            api_user_info = await self._add_api_user(requested_by)
+            users.append(api_user_info.user)
+        return users
+
+    async def _get_kc_users(self, email: str | None = None) -> list[UserInfo]:
+        async with self.session_maker() as session:
+            stmt = select(UserORM)
+            if email:
+                stmt = stmt.where(UserORM.email == email)
+            result = await session.scalars(stmt)
+            users = result.all()
+            return [user.dump() for user in users]
 
     @only_authenticated
     async def get_or_create_user_secret_key(self, requested_by: APIUser) -> str:
@@ -211,7 +249,7 @@ class UsersSync:
         for field_name, field_value in kwargs.items():
             if getattr(existing_user, field_name, None) != field_value:
                 setattr(existing_user, field_name, field_value)
-        namespace = await self.group_repo._get_user_namespace(user_id)
+        namespace = await self.group_repo.get_user_namespace(user_id)
         if not namespace:
             raise errors.ProgrammingError(
                 message=f"Cannot find a user namespace for user {user_id} when updating the user."

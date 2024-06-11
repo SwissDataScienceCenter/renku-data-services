@@ -34,7 +34,7 @@ class KCUsersBP(CustomBlueprint):
             users = await self.repo.get_users(requested_by=user, email=email_filter)
             return json(
                 [
-                    {"id": user.id, "first_name": user.first_name, "last_name": user.last_name, "email": user.email}
+                    apispec.UserWithId.model_validate(user.to_renku_user()).model_dump(exclude_none=True, mode="json")
                     for user in users
                 ]
             )
@@ -45,19 +45,15 @@ class KCUsersBP(CustomBlueprint):
         """Get info about the logged in user."""
 
         @authenticate(self.authenticator)
-        async def _get_self(request: Request, user: base_models.APIUser) -> JSONResponse:
-            if user.id is None:
-                raise errors.ValidationError(message="No user id provided")
+        @only_authenticated
+        async def _get_self(_: Request, user: base_models.APIUser) -> JSONResponse:
+            if not user.is_authenticated or user.id is None:
+                raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
             user_info = await self.repo.get_or_create_user(requested_by=user, id=user.id)
             if not user_info:
                 raise errors.MissingResourceError(message=f"The user with ID {user.id} cannot be found.")
             return json(
-                {
-                    "id": user_info.id,
-                    "first_name": user_info.first_name,
-                    "last_name": user_info.last_name,
-                    "email": user_info.email,
-                }
+                apispec.UserWithId.model_validate(user_info.to_renku_user()).model_dump(exclude_none=True, mode="json")
             )
 
         return "/user", ["GET"], _get_self
@@ -84,12 +80,7 @@ class KCUsersBP(CustomBlueprint):
             if not user_info:
                 raise errors.MissingResourceError(message=f"The user with ID {user_id} cannot be found.")
             return json(
-                {
-                    "id": user_info.id,
-                    "first_name": user_info.first_name,
-                    "last_name": user_info.last_name,
-                    "email": user_info.email,
-                }
+                apispec.UserWithId.model_validate(user_info.to_renku_user()).model_dump(exclude_none=True, mode="json")
             )
 
         return "/users/<user_id>", ["GET"], _get_one

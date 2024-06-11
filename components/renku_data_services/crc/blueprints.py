@@ -187,7 +187,7 @@ class ResourcePoolUsersBP(CustomBlueprint):
     ) -> HTTPResponse:
         user_ids_to_add = set([user.id for user in body.root])
         users_checks: list[UserInfo | None] = await asyncio.gather(
-            *[self.kc_user_repo.get_user(requested_by=api_user, id=id) for id in user_ids_to_add]
+            *[self.kc_user_repo.get_kc_user(requested_by=api_user, id=id) for id in user_ids_to_add]
         )
         existing_user_ids = set([user.id for user in users_checks if user is not None])
         if existing_user_ids != user_ids_to_add:

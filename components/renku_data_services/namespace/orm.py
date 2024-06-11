@@ -8,6 +8,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_co
 from sqlalchemy.schema import ForeignKey
 from ulid import ULID
 
+from renku_data_services.base_orm.declarative_base import CustomBase
 from renku_data_services.errors import errors
 from renku_data_services.namespace import models
 from renku_data_services.users.models import UserInfo, UserWithNamespace
@@ -18,6 +19,7 @@ class BaseORM(MappedAsDataclass, DeclarativeBase):
     """Base class for all ORM classes."""
 
     metadata = MetaData(schema="common")
+    registry = CustomBase.registry
 
 
 class GroupORM(BaseORM):
@@ -67,7 +69,9 @@ class NamespaceORM(BaseORM):
         nullable=True,
         index=True,
     )
-    user: Mapped[UserORM | None] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
+    user: Mapped[UserORM | None] = relationship(
+        lazy="joined", init=False, repr=False, viewonly=True, back_populates="namespace"
+    )
 
     def dump(self) -> models.Namespace:
         """Create a namespace model from the ORM."""
