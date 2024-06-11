@@ -56,6 +56,7 @@ dataclasses-avroschema = "^0.57.4"
 undictify = "^0.11.3"
 types-redis = "^4.6.0.20240218"
 prometheus-sanic = "^3.0.0"
+prometheus_client = "^0.7.1"
 sentry-sdk = { version = "^1.43.0", extras = ["sanic"] }
 authzed = "^0.15.0"
 cryptography = "^42.0.5"
@@ -138,6 +139,7 @@ convention = "google"
 
 [tool.bandit]
 skips = ["B101", "B603", "B607", "B404"]
+exclude_dirs = ["test"]
 
 [tool.pytest.ini_options]
 addopts = "--cov components/ --cov bases/ --cov-report=term-missing -v"
@@ -195,20 +197,21 @@ ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = [
-  "sanic_testing.*",
   "asyncpg.*",
-  "kubernetes.*",
-  "deepmerge.*",
-  "pyavro_gen.*",
-  "avro_preprocessor.*",
-  "undictify.*",
-  "dataclasses_avroschema",
-  "urllib3.*",
-  "prometheus_sanic.*",
-  "authzed.*",
-  "grpcutil.*",
   "authlib.*",
+  "authzed.*",
+  "avro_preprocessor.*",
+  "dataclasses_avroschema",
+  "deepmerge.*",
   "grpc.*",
+  "grpcutil.*",
+  "kubernetes.*",
+  "prometheus_client.*",
+  "prometheus_sanic.*",
+  "pyavro_gen.*",
+  "sanic_testing.*",
+  "undictify.*",
+  "urllib3.*",
 ]
 ignore_missing_imports = true
 
