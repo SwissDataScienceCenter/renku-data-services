@@ -105,9 +105,13 @@ class Config:
             )
             previous_secrets_service_private_key_path = os.getenv(f"{prefix}PREVIOUS_SECRETS_SERVICE_PRIVATE_KEY_PATH")
             if previous_secrets_service_private_key_path and Path(previous_secrets_service_private_key_path).exists():
-                previous_secrets_service_private_key = serialization.load_pem_private_key(
-                    Path(previous_secrets_service_private_key_path).read_bytes(), password=None
-                )
+                # if no previous secret was defined, k8s will just create an empty file on mount, so it being empty
+                # is not an error
+                previous_private_key = Path(previous_secrets_service_private_key_path).read_bytes()
+                if previous_private_key is not None and len(previous_private_key) > 0:
+                    previous_secrets_service_private_key = serialization.load_pem_private_key(
+                        previous_private_key, password=None
+                    )
         if not isinstance(secrets_service_private_key, rsa.RSAPrivateKey):
             raise errors.ConfigurationError(message="Secret service private key is not an RSAPrivateKey")
 
