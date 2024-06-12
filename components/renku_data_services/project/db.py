@@ -60,14 +60,22 @@ class ProjectRepository:
             stmt = select(schemas.ProjectORM)
             stmt = stmt.where(schemas.ProjectORM.id.in_(project_ids))
             if namespace:
-                stmt = stmt.where(schemas.ProjectORM.slug.namespace.slug == namespace)
+                stmt = (
+                    stmt.where(schemas.NamespaceORM.slug == namespace.lower())
+                    .where(schemas.ProjectSlug.namespace_id == schemas.NamespaceORM.id)
+                    .where(schemas.ProjectORM.id == schemas.ProjectSlug.project_id)
+                )
             stmt = stmt.limit(pagination.per_page).offset(pagination.offset)
             stmt = stmt.order_by(schemas.ProjectORM.creation_date.desc())
             stmt_count = (
                 select(func.count()).select_from(schemas.ProjectORM).where(schemas.ProjectORM.id.in_(project_ids))
             )
             if namespace:
-                stmt_count = stmt_count.where(schemas.ProjectORM.slug.namespace.slug == namespace)
+                stmt_count = (
+                    stmt_count.where(schemas.NamespaceORM.slug == namespace.lower())
+                    .where(schemas.ProjectSlug.namespace_id == schemas.NamespaceORM.id)
+                    .where(schemas.ProjectORM.id == schemas.ProjectSlug.project_id)
+                )
             results = await gather(session.execute(stmt), session.execute(stmt_count))
             projects_orm = results[0].scalars().all()
             total_elements = results[1].scalar() or 0
