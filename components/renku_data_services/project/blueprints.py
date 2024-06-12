@@ -21,6 +21,7 @@ from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.errors import errors
 from renku_data_services.project import apispec
 from renku_data_services.project import models as project_models
+from renku_data_services.project.apispec_base import GetProjectsParams
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
 from renku_data_services.users.db import UserRepo
 
@@ -40,9 +41,12 @@ class ProjectsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @paginate
         async def _get_all(
-            _: Request, user: base_models.APIUser, pagination: PaginationRequest
+            request: Request, user: base_models.APIUser, pagination: PaginationRequest
         ) -> tuple[list[dict[str, Any]], int]:
-            projects, total_num = await self.project_repo.get_projects(user=user, pagination=pagination)
+            params = GetProjectsParams.model_validate(dict(request.query_args))
+            projects, total_num = await self.project_repo.get_projects(
+                user=user, pagination=pagination, namespace=params.namespace
+            )
             return [
                 dict(
                     id=p.id,
