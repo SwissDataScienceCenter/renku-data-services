@@ -203,6 +203,7 @@ module = [
   "avro_preprocessor.*",
   "dataclasses_avroschema",
   "deepmerge.*",
+  "grpc.*",
   "grpcutil.*",
   "kubernetes.*",
   "prometheus_client.*",

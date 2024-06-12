@@ -8,8 +8,6 @@ Create Date: 2024-05-09 18:14:51.256194
 
 import logging
 
-from authzed.api.v1 import WriteSchemaRequest  # type: ignore[attr-defined]
-
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.authz.schemas import v2
 
@@ -23,13 +21,16 @@ depends_on = None
 def upgrade() -> None:
     config = AuthzConfig.from_env()
     client = config.authz_client()
-    res = client.WriteSchema(WriteSchemaRequest(schema=v2))
+    responses = v2.upgrade(client)
     logging.info(
-        f"Finished adding groups and namespaces to Authz schema migration, revision {revision}, response: {res}"
+        f"Finished upgrading the Authz schema to version 2 in Alembic revision {revision}, response: {responses}"
     )
 
 
 def downgrade() -> None:
-    # Question for the PR reviewer: Should we implement up and down migrations for authz DB?
-    # If yes then here we would have to remove all relations for groups and namespaces and then remove or edit the schema
-    pass
+    config = AuthzConfig.from_env()
+    client = config.authz_client()
+    responses = v2.downgrade(client)
+    logging.info(
+        f"Finished downgrading the Authz schema from version 2 in Alembic revision {revision}, response: {responses}"
+    )
