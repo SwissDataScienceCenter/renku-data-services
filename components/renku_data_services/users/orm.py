@@ -25,7 +25,6 @@ class UserORM(BaseORM):
     """User data table."""
 
     __tablename__ = "users"
-
     keycloak_id: Mapped[str] = mapped_column(String(36), unique=True, index=True)
     first_name: Mapped[Optional[str]] = mapped_column(String(256), default=None)
     last_name: Mapped[Optional[str]] = mapped_column(String(256), default=None)
