@@ -8,7 +8,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_co
 from sqlalchemy.schema import ForeignKey
 from ulid import ULID
 
-from renku_data_services.base_orm.declarative_base import CustomBase
+from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
 from renku_data_services.errors import errors
 from renku_data_services.namespace import models
 from renku_data_services.users.models import UserInfo, UserWithNamespace
@@ -19,7 +19,7 @@ class BaseORM(MappedAsDataclass, DeclarativeBase):
     """Base class for all ORM classes."""
 
     metadata = MetaData(schema="common")
-    registry = CustomBase.registry
+    registry = COMMON_ORM_REGISTRY
 
 
 class GroupORM(BaseORM):
