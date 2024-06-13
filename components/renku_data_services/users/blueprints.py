@@ -75,7 +75,7 @@ class KCUsersBP(CustomBlueprint):
         """Get info about a specific user."""
 
         @authenticate(self.authenticator)
-        async def _get_one(request: Request, user: base_models.APIUser, user_id: str) -> JSONResponse:
+        async def _get_one(_: Request, user: base_models.APIUser, user_id: str) -> JSONResponse:
             user_info = await self.repo.get_or_create_user(requested_by=user, id=user_id)
             if not user_info:
                 raise errors.MissingResourceError(message=f"The user with ID {user_id} cannot be found.")
