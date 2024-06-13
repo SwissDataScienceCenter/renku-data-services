@@ -323,7 +323,7 @@ class GroupRepository:
             async for namespace in namespaces:
                 yield namespace.dump_user()
 
-    async def get_namespace_by_slug(self, user: base_models.APIUser, slug: str) -> models.Namespace | None:
+    async def get_namespace_by_slug(self, slug: str) -> models.Namespace | None:
         """Get the namespace identified by a given slug."""
         async with self.session_maker() as session, session.begin():
             ns = await session.scalar(select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == slug.lower()))

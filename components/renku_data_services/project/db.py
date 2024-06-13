@@ -142,7 +142,7 @@ class ProjectRepository:
         """Insert a new project entry."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
-        ns = await self.group_repo.get_namespace_by_slug(user, project.namespace)
+        ns = await self.group_repo.get_namespace_by_slug(project.namespace)
         if not ns:
             raise errors.MissingResourceError(
                 message=f"The project cannot be created because the namespace {project.namespace} does not exist"
@@ -150,6 +150,10 @@ class ProjectRepository:
 
         if user.id is None:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+
+        # TODO: check if the user has WRITE permission on the namespace:
+        # TODO:   * WRITE permission on the group for a group namespace
+        # TODO:   * or user is the namespace user for a user namespace
 
         repositories = [schemas.ProjectRepositoryORM(url) for url in (project.repositories or [])]
         slug = project.slug or base_models.Slug.from_name(project.name).value
@@ -233,9 +237,12 @@ class ProjectRepository:
 
         if "namespace" in payload:
             ns_slug = payload["namespace"]
-            ns = await self.group_repo.get_namespace_by_slug(user, ns_slug)
+            ns = await self.group_repo.get_namespace_by_slug(ns_slug)
             if not ns:
                 raise errors.MissingResourceError(message=f"The namespace with slug {ns_slug} does not exist")
+            # TODO: check if the user has WRITE permission on the namespace:
+            # TODO:   * WRITE permission on the group for a group namespace
+            # TODO:   * or user is the namespace user for a user namespace
             project.slug.namespace_id = ns.id
 
         await session.flush()
