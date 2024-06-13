@@ -157,7 +157,7 @@ class ProjectRepository:
 
         resource_type = ResourceType.group if ns.group and ns.group_id else ResourceType.user_namespace
         resource_id = ns.group_id or ns.user_id or ""
-        has_permission = self.authz.has_permission(user, resource_type, resource_id, Scope.WRITE)
+        has_permission = await self.authz.has_permission(user, resource_type, resource_id, Scope.WRITE)
         if not has_permission:
             raise errors.Unauthorized(
                 message=f"The project cannot be created because you do not have sufficient permissions with the namespace {project.namespace}"  # noqa: E501
@@ -245,12 +245,18 @@ class ProjectRepository:
 
         if "namespace" in payload:
             ns_slug = payload["namespace"]
-            ns = await self.group_repo.get_namespace_by_slug(ns_slug)
+            ns = await session.scalar(select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == ns_slug.lower()))
             if not ns:
                 raise errors.MissingResourceError(message=f"The namespace with slug {ns_slug} does not exist")
-            # TODO: check if the user has WRITE permission on the namespace:
-            # TODO:   * WRITE permission on the group for a group namespace
-            # TODO:   * or user is the namespace user for a user namespace
+            if not ns.group_id and not ns.user_id:
+                raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
+            resource_type = ResourceType.group if ns.group and ns.group_id else ResourceType.user_namespace
+            resource_id = ns.group_id or ns.user_id or ""
+            has_permission = await self.authz.has_permission(user, resource_type, resource_id, Scope.WRITE)
+            if not has_permission:
+                raise errors.Unauthorized(
+                    message=f"The project cannot be created because you do not have sufficient permissions with the namespace {ns_slug}"  # noqa: E501
+                )
             project.slug.namespace_id = ns.id
 
         await session.flush()
