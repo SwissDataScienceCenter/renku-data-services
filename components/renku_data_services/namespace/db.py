@@ -339,11 +339,6 @@ class GroupRepository:
                     return None
                 ns = old_ns.latest_slug
             if ns.group and ns.group_id:
-                is_allowed = await self.authz.has_permission(user, ResourceType.group, ns.group_id, Scope.READ)
-                if not is_allowed:
-                    raise errors.MissingResourceError(
-                        message=f"The group with slug {slug} does not exist or you do not have permissions to view it"
-                    )
                 return models.Namespace(
                     id=ns.id,
                     name=ns.group.name,
@@ -355,11 +350,6 @@ class GroupRepository:
                 )
             if not ns.user or not ns.user_id:
                 raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
-            is_allowed = await self.authz.has_permission(user, ResourceType.user_namespace, ns.id, Scope.READ)
-            if not is_allowed:
-                raise errors.MissingResourceError(
-                    message=f"The namespace with slug {slug} does not exist or you do not have permissions to view it"
-                )
             name: str | None
             if ns.user.first_name and ns.user.last_name:
                 name = f"{ns.user.first_name} {ns.user.last_name}"
