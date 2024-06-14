@@ -265,6 +265,10 @@ class RenkuUser:
     first_name: str | None = None
     last_name: str | None = None
 
+    def to_user_info(self) -> UserInfo:
+        """Create a UserInfo instance from this instance."""
+        return UserInfo(self.id, self.first_name, self.last_name, self.email)
+
 
 class UserWithNamespace(NamedTuple):
     """A tuple used to convey information about a user and their namespace."""

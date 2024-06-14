@@ -3,7 +3,7 @@ from uuid import uuid4
 
 import pytest
 
-from renku_data_services.users.models import UserInfo
+from renku_data_services.users.models import RenkuUser, UserInfo
 
 
 @pytest.mark.asyncio
@@ -70,8 +70,12 @@ async def test_get_logged_in_user(sanic_client, users) -> None:
         headers={"Authorization": f"bearer {json.dumps(access_token)}"},
     )
     assert res.status_code == 200
-    retrieved_user = UserInfo(
-        res.json["id"], res.json.get("first_name"), res.json.get("last_name"), res.json.get("email")
+    retrieved_user = RenkuUser(
+        id=res.json["id"],
+        username=res.json["username"],
+        first_name=res.json.get("first_name"),
+        last_name=res.json.get("last_name"),
+        email=res.json.get("email"),
     )
     assert retrieved_user == user
     _, res = await sanic_client.get(
@@ -79,8 +83,12 @@ async def test_get_logged_in_user(sanic_client, users) -> None:
         headers={"Authorization": f"bearer {json.dumps(access_token)}"},
     )
     assert res.status_code == 200
-    retrieved_user = UserInfo(
-        res.json["id"], res.json.get("first_name"), res.json.get("last_name"), res.json.get("email")
+    retrieved_user = RenkuUser(
+        id=res.json["id"],
+        username=res.json["username"],
+        first_name=res.json.get("first_name"),
+        last_name=res.json.get("last_name"),
+        email=res.json.get("email"),
     )
     assert retrieved_user == user
 
@@ -95,15 +103,21 @@ async def test_logged_in_users_can_get_other_users(sanic_client, users) -> None:
         headers={"Authorization": f"bearer {json.dumps(access_token)}"},
     )
     assert res.status_code == 200
-    del res.json["username"]
-    retrieved_other_user = UserInfo(**res.json)
+    retrieved_other_user = RenkuUser(
+        id=res.json["id"],
+        username=res.json["username"],
+        first_name=res.json.get("first_name"),
+        last_name=res.json.get("last_name"),
+        email=res.json.get("email"),
+    )
     assert retrieved_other_user == other_user
 
 
 @pytest.mark.asyncio
 async def test_logged_in_user_check_adds_user_if_missing(sanic_client, users, admin_headers) -> None:
-    user = UserInfo(
+    user = RenkuUser(
         id=str(uuid4()),
+        username="peter",
         first_name="Peter",
         last_name="Parker",
         email="peter@spiderman.com",
@@ -124,8 +138,9 @@ async def test_logged_in_user_check_adds_user_if_missing(sanic_client, users, ad
         headers={"Authorization": f"bearer {json.dumps(access_token)}"},
     )
     assert res.status_code == 200
-    user_response = UserInfo(
+    user_response = RenkuUser(
         id=res.json["id"],
+        username=res.json["username"],
         first_name=res.json.get("first_name"),
         last_name=res.json.get("last_name"),
         email=res.json.get("email"),
@@ -138,8 +153,9 @@ async def test_logged_in_user_check_adds_user_if_missing(sanic_client, users, ad
     )
     assert res.status_code == 200
     users_response = [
-        UserInfo(
+        RenkuUser(
             id=iuser["id"],
+            username=iuser["username"],
             first_name=iuser.get("first_name"),
             last_name=iuser.get("last_name"),
             email=iuser.get("email"),
