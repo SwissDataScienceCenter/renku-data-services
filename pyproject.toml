@@ -60,6 +60,7 @@ prometheus_client = "^0.7.1"
 sentry-sdk = { version = "^1.43.0", extras = ["sanic"] }
 authzed = "^0.15.0"
 cryptography = "^42.0.5"
+kubernetes-asyncio = "^30.1.0"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.7.5"
@@ -206,6 +207,7 @@ module = [
   "grpc.*",
   "grpcutil.*",
   "kubernetes.*",
+  "kubernetes_asyncio.*",
   "prometheus_client.*",
   "prometheus_sanic.*",
   "pyavro_gen.*",
