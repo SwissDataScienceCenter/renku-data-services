@@ -38,7 +38,7 @@ It can then be run as daemon: `docker run -d -e DUMMY_STORES=true --name renku-c
 
 ## Migrations
 
-We use Alembic for migrations and we have a single version table for all schemas. This version table
+We use Alembic for migrations, and we have a single version table for all schemas. This version table
 is used by Alembic to determine what migrations have been applied or not and it resides in the `common`
 schema. That is why all the Alembic commands include the `--name common` argument.
 
