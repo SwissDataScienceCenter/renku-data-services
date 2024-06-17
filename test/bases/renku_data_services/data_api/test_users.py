@@ -3,13 +3,14 @@ from uuid import uuid4
 
 import pytest
 
-from renku_data_services.users.models import RenkuUser, UserInfo
+from renku_data_services.users.models import RenkuUser
 
 
 @pytest.mark.asyncio
 async def test_get_all_users_as_admin(sanic_client, users) -> None:
-    admin = UserInfo(
+    admin = RenkuUser(
         id="admin-id",
+        username="admin",
         first_name="Admin",
         last_name="Adminson",
         email="admin@gmail.com",
@@ -29,7 +30,14 @@ async def test_get_all_users_as_admin(sanic_client, users) -> None:
     assert res.status_code == 200
     assert len(res.json) == len(users)
     retrieved_users = [
-        UserInfo(user["id"], user.get("first_name"), user.get("last_name"), user.get("email")) for user in res.json
+        RenkuUser(
+            id=user["id"],
+            username=user["username"],
+            first_name=user.get("first_name"),
+            last_name=user.get("last_name"),
+            email=user.get("email"),
+        )
+        for user in res.json
     ]
     assert set(retrieved_users) == set(users)
     for user in users:
@@ -38,8 +46,12 @@ async def test_get_all_users_as_admin(sanic_client, users) -> None:
             headers={"Authorization": f"bearer {json.dumps(admin_token)}"},
         )
         assert res.status_code == 200
-        retrieved_user = UserInfo(
-            res.json["id"], res.json.get("first_name"), res.json.get("last_name"), res.json.get("email")
+        retrieved_user = RenkuUser(
+            id=res.json["id"],
+            username=res.json["username"],
+            first_name=res.json.get("first_name"),
+            last_name=res.json.get("last_name"),
+            email=res.json.get("email"),
         )
         assert user == retrieved_user
 
