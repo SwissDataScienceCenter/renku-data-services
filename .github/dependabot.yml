@@ -1,0 +1,16 @@
+version: 2
+updates:
+- package-ecosystem: "pip"
+  directories:
+    - "/"
+    - "/projects/renku_data_service"
+    - "/projects/background_jobs"
+    - "/projects/secrets_storage"
+  schedule:
+    interval: "weekly"
+    day: "sunday"
+  open-pull-requests-limit: 5
+  group:
+    poetry:
+      patterns:
+        - "*"
