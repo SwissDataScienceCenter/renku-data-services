@@ -10,7 +10,7 @@ updates:
     interval: "weekly"
     day: "sunday"
   open-pull-requests-limit: 5
-  group:
+  groups:
     poetry:
       patterns:
         - "*"
