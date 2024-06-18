@@ -22,7 +22,6 @@ async def short_period_sync() -> None:
     logging.info("after migrations")
     print("after migrations")
     logging.basicConfig(level=logging.INFO)
-    run_migrations_for_app("common")
     logging.info("after migrations")
     await bootstrap_user_namespaces(config)
     await config.syncer.events_sync(config.kc_api)

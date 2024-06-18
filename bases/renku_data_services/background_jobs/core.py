@@ -84,7 +84,6 @@ async def migrate_groups(config: SyncConfig) -> None:
             relationship_filter=RelationshipFilter(
                 resource_type=ResourceType.group.value,
                 optional_relation=_Relation.group_platform.value,
-                optional_subject_filter=SubjectReference(object=_AuthzConverter.platform()),
             )
         )
     )
