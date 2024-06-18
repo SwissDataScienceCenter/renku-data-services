@@ -79,11 +79,20 @@ async def migrate_groups(config: SyncConfig) -> None:
     """Update existing groups to make them public."""
 
     authz = Authz(config.authz_config)
-    all_groups = authz.client.LookupResources(LookupResourcesRequest(resource_object_type=ResourceType.group.value))
+    all_groups = authz.client.ReadRelationships(
+        ReadRelationshipsRequest(
+            relationship_filter=RelationshipFilter(
+                resource_type=ResourceType.group.value,
+                optional_relation=_Relation.group_platform.value,
+                optional_subject_filter=SubjectReference(object=_AuthzConverter.platform()),
+            )
+        )
+    )
     all_group_ids: set[str] = set()
     async for group in all_groups:
-        all_group_ids.add(group.resource_object_id)
-    logging.info(f"All groups = {len(all_group_ids)}")
+        all_group_ids.add(group.relationship.resource.object_id)
+    print(f"All groups = {len(all_group_ids)}")
+    print(f"All groups = {all_group_ids}")
     public_groups = authz.client.LookupResources(
         LookupResourcesRequest(
             resource_object_type=ResourceType.group.value,
@@ -94,4 +103,5 @@ async def migrate_groups(config: SyncConfig) -> None:
     public_group_ids: set[str] = set()
     async for group in public_groups:
         public_group_ids.add(group.resource_object_id)
-    logging.info(f"Public groups = {len(public_group_ids)}")
+    print(f"Public groups = {len(public_group_ids)}")
+    print(f"Public groups = {public_group_ids}")
