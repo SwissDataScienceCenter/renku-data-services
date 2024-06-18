@@ -1028,12 +1028,24 @@ class Authz:
         creator = SubjectReference(object=_AuthzConverter.user(group.created_by))
         group_res = _AuthzConverter.group(group.id)
         creator_is_owner = Relationship(resource=group_res, relation=_Relation.owner.value, subject=creator)
+        all_users = SubjectReference(object=_AuthzConverter.all_users())
+        all_anon_users = SubjectReference(object=_AuthzConverter.anonymous_users())
         group_in_platform = Relationship(
             resource=group_res,
             relation=_Relation.group_platform.value,
             subject=SubjectReference(object=self._platform),
         )
-        relationships = [creator_is_owner, group_in_platform]
+        all_users_are_viewers = Relationship(
+            resource=group_res,
+            relation=_Relation.viewer.value,
+            subject=all_users,
+        )
+        all_anon_users_are_viewers = Relationship(
+            resource=group_res,
+            relation=_Relation.viewer.value,
+            subject=all_anon_users,
+        )
+        relationships = [creator_is_owner, group_in_platform, all_users_are_viewers, all_anon_users_are_viewers]
         apply = WriteRelationshipsRequest(
             updates=[
                 RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=i) for i in relationships
