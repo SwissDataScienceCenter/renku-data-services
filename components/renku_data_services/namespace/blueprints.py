@@ -90,7 +90,6 @@ class GroupsBP(CustomBlueprint):
         """List all group members."""
 
         @authenticate(self.authenticator)
-        @only_authenticated
         async def _get_all_members(_: Request, user: base_models.APIUser, slug: str) -> JSONResponse:
             members = await self.group_repo.get_group_members(user, slug)
             return json(
