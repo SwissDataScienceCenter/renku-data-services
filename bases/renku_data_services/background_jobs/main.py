@@ -15,8 +15,12 @@ logging.basicConfig(level=logging.INFO)
 
 async def short_period_sync() -> None:
     """Perform synchronizations and jobs that should occur more often."""
+    logging.info("short_period_sync()")
     config = SyncConfig.from_env()
+    logging.info("before migrations")
     run_migrations_for_app("common")
+    logging.info("after migrations")
+    print("after migrations")
     await bootstrap_user_namespaces(config)
     await config.syncer.events_sync(config.kc_api)
     await sync_admins_from_keycloak(config.kc_api, Authz(config.authz_config))
@@ -32,7 +36,6 @@ async def long_period_sync() -> None:
 
 async def main() -> None:
     """Synchronize data from Keycloak and the user database."""
-
     parser = argparse.ArgumentParser(prog="Data Service Background Jobs")
     subparsers = parser.add_subparsers(help="Background job to run")
 
