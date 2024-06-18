@@ -96,7 +96,7 @@ async def migrate_groups(config: SyncConfig) -> None:
         LookupResourcesRequest(
             resource_object_type=ResourceType.group.value,
             permission=Scope.READ.value,
-            subject=SubjectReference(object=_AuthzConverter.anonymous_users()),
+            subject=SubjectReference(object=_AuthzConverter.anonymous_user()),
         )
     )
     public_group_ids: set[str] = set()
