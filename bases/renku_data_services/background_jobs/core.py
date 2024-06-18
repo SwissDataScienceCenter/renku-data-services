@@ -2,9 +2,15 @@
 
 import logging
 
-from authzed.api.v1.permission_service_pb2 import ReadRelationshipsRequest, RelationshipFilter
+from authzed.api.v1.core_pb2 import SubjectReference
+from authzed.api.v1.permission_service_pb2 import (
+    LookupResourcesRequest,
+    ReadRelationshipsRequest,
+    RelationshipFilter,
+)
 
-from renku_data_services.authz.authz import Authz, ResourceType, _Relation
+from renku_data_services.authz.authz import Authz, ResourceType, _AuthzConverter, _Relation
+from renku_data_services.authz.models import Scope
 from renku_data_services.background_jobs.config import SyncConfig
 from renku_data_services.message_queue.avro_models.io.renku.events import v2
 from renku_data_services.message_queue.converters import EventConverter
@@ -67,3 +73,25 @@ async def bootstrap_user_namespaces(config: SyncConfig) -> None:
         )
         return
     await sync_user_namespaces(config)
+
+
+async def migrate_groups(config: SyncConfig) -> None:
+    """Update existing groups to make them public."""
+
+    authz = Authz(config.authz_config)
+    all_groups = authz.client.LookupResources(LookupResourcesRequest(resource_object_type=ResourceType.group.value))
+    all_group_ids: set[str] = set()
+    async for group in all_groups:
+        all_group_ids.add(group.resource_object_id)
+    logging.info(f"All groups = {len(all_group_ids)}")
+    public_groups = authz.client.LookupResources(
+        LookupResourcesRequest(
+            resource_object_type=ResourceType.group.value,
+            permission=Scope.READ.value,
+            subject=SubjectReference(object=_AuthzConverter.anonymous_users()),
+        )
+    )
+    public_group_ids: set[str] = set()
+    async for group in public_groups:
+        public_group_ids.add(group.resource_object_id)
+    logging.info(f"Public groups = {len(public_group_ids)}")
