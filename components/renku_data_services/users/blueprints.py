@@ -16,6 +16,7 @@ from renku_data_services.secrets.models import Secret
 from renku_data_services.users import apispec
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.cryptography import encrypt_rsa, encrypt_string, generate_random_encryption_key
+from renku_data_services.base_models.response import validated_json
 
 
 @dataclass(kw_only=True)
@@ -137,12 +138,7 @@ class UserSecretsBP(CustomBlueprint):
         @only_authenticated
         async def _get_all(request: Request, user: base_models.APIUser) -> JSONResponse:
             secrets = await self.secret_repo.get_user_secrets(requested_by=user)
-            return json(
-                apispec.SecretsList(
-                    root=[apispec.SecretWithId.model_validate(secret) for secret in secrets]
-                ).model_dump(mode="json"),
-                200,
-            )
+            return validated_json(apispec.SecretsList, dict(root=[secret for secret in secrets]))
 
         return "/user/secrets", ["GET"], _get_all
 
