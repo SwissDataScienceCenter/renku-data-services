@@ -34,7 +34,15 @@ class KCUsersBP(CustomBlueprint):
             users = await self.repo.get_users(requested_by=user, email=email_filter)
             return json(
                 [
-                    apispec.UserWithId.model_validate(user.to_renku_user()).model_dump(exclude_none=True, mode="json")
+                    apispec.UserWithId.model_validate(
+                        dict(
+                            id=user.user.id,
+                            username=user.namespace.slug,
+                            email=user.user.email,
+                            first_name=user.user.first_name,
+                            last_name=user.user.last_name,
+                        )
+                    ).model_dump(exclude_none=True, mode="json")
                     for user in users
                 ]
             )
@@ -53,7 +61,15 @@ class KCUsersBP(CustomBlueprint):
             if not user_info:
                 raise errors.MissingResourceError(message=f"The user with ID {user.id} cannot be found.")
             return json(
-                apispec.UserWithId.model_validate(user_info.to_renku_user()).model_dump(exclude_none=True, mode="json")
+                apispec.UserWithId.model_validate(
+                    dict(
+                        id=user_info.user.id,
+                        username=user_info.namespace.slug,
+                        email=user_info.user.email,
+                        first_name=user_info.user.first_name,
+                        last_name=user_info.user.last_name,
+                    )
+                ).model_dump(exclude_none=True, mode="json")
             )
 
         return "/user", ["GET"], _get_self
@@ -80,7 +96,15 @@ class KCUsersBP(CustomBlueprint):
             if not user_info:
                 raise errors.MissingResourceError(message=f"The user with ID {user_id} cannot be found.")
             return json(
-                apispec.UserWithId.model_validate(user_info.to_renku_user()).model_dump(exclude_none=True, mode="json")
+                apispec.UserWithId.model_validate(
+                    dict(
+                        id=user_info.user.id,
+                        username=user_info.namespace.slug,
+                        email=user_info.user.email,
+                        first_name=user_info.user.first_name,
+                        last_name=user_info.user.last_name,
+                    )
+                ).model_dump(exclude_none=True, mode="json")
             )
 
         return "/users/<user_id>", ["GET"], _get_one

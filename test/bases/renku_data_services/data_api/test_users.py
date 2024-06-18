@@ -3,14 +3,13 @@ from uuid import uuid4
 
 import pytest
 
-from renku_data_services.users.models import RenkuUser
+from renku_data_services.users.models import UserInfo
 
 
 @pytest.mark.asyncio
 async def test_get_all_users_as_admin(sanic_client, users) -> None:
-    admin = RenkuUser(
+    admin = UserInfo(
         id="admin-id",
-        username="admin",
         first_name="Admin",
         last_name="Adminson",
         email="admin@gmail.com",
@@ -30,9 +29,8 @@ async def test_get_all_users_as_admin(sanic_client, users) -> None:
     assert res.status_code == 200
     assert len(res.json) == len(users)
     retrieved_users = [
-        RenkuUser(
+        UserInfo(
             id=user["id"],
-            username=user["username"],
             first_name=user.get("first_name"),
             last_name=user.get("last_name"),
             email=user.get("email"),
@@ -46,9 +44,8 @@ async def test_get_all_users_as_admin(sanic_client, users) -> None:
             headers={"Authorization": f"bearer {json.dumps(admin_token)}"},
         )
         assert res.status_code == 200
-        retrieved_user = RenkuUser(
+        retrieved_user = UserInfo(
             id=res.json["id"],
-            username=res.json["username"],
             first_name=res.json.get("first_name"),
             last_name=res.json.get("last_name"),
             email=res.json.get("email"),
@@ -82,9 +79,8 @@ async def test_get_logged_in_user(sanic_client, users) -> None:
         headers={"Authorization": f"bearer {json.dumps(access_token)}"},
     )
     assert res.status_code == 200
-    retrieved_user = RenkuUser(
+    retrieved_user = UserInfo(
         id=res.json["id"],
-        username=res.json["username"],
         first_name=res.json.get("first_name"),
         last_name=res.json.get("last_name"),
         email=res.json.get("email"),
@@ -95,9 +91,8 @@ async def test_get_logged_in_user(sanic_client, users) -> None:
         headers={"Authorization": f"bearer {json.dumps(access_token)}"},
     )
     assert res.status_code == 200
-    retrieved_user = RenkuUser(
+    retrieved_user = UserInfo(
         id=res.json["id"],
-        username=res.json["username"],
         first_name=res.json.get("first_name"),
         last_name=res.json.get("last_name"),
         email=res.json.get("email"),
@@ -115,9 +110,8 @@ async def test_logged_in_users_can_get_other_users(sanic_client, users) -> None:
         headers={"Authorization": f"bearer {json.dumps(access_token)}"},
     )
     assert res.status_code == 200
-    retrieved_other_user = RenkuUser(
+    retrieved_other_user = UserInfo(
         id=res.json["id"],
-        username=res.json["username"],
         first_name=res.json.get("first_name"),
         last_name=res.json.get("last_name"),
         email=res.json.get("email"),
@@ -127,9 +121,8 @@ async def test_logged_in_users_can_get_other_users(sanic_client, users) -> None:
 
 @pytest.mark.asyncio
 async def test_logged_in_user_check_adds_user_if_missing(sanic_client, users, admin_headers) -> None:
-    user = RenkuUser(
+    user = UserInfo(
         id=str(uuid4()),
-        username="peter",
         first_name="Peter",
         last_name="Parker",
         email="peter@spiderman.com",
@@ -150,9 +143,8 @@ async def test_logged_in_user_check_adds_user_if_missing(sanic_client, users, ad
         headers={"Authorization": f"bearer {json.dumps(access_token)}"},
     )
     assert res.status_code == 200
-    user_response = RenkuUser(
+    user_response = UserInfo(
         id=res.json["id"],
-        username=res.json["username"],
         first_name=res.json.get("first_name"),
         last_name=res.json.get("last_name"),
         email=res.json.get("email"),
@@ -165,9 +157,8 @@ async def test_logged_in_user_check_adds_user_if_missing(sanic_client, users, ad
     )
     assert res.status_code == 200
     users_response = [
-        RenkuUser(
+        UserInfo(
             id=iuser["id"],
-            username=iuser["username"],
             first_name=iuser.get("first_name"),
             last_name=iuser.get("last_name"),
             email=iuser.get("email"),
