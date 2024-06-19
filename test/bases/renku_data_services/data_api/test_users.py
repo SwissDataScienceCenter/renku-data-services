@@ -26,10 +26,16 @@ async def test_get_all_users_as_admin(sanic_client, users) -> None:
         headers={"Authorization": f"bearer {json.dumps(admin_token)}"},
     )
     users.append(admin)
-    assert res.status_code == 200
+    assert res.status_code == 200, res.text
     assert len(res.json) == len(users)
     retrieved_users = [
-        UserInfo(user["id"], user.get("first_name"), user.get("last_name"), user.get("email")) for user in res.json
+        UserInfo(
+            id=user["id"],
+            first_name=user.get("first_name"),
+            last_name=user.get("last_name"),
+            email=user.get("email"),
+        )
+        for user in res.json
     ]
     assert set(retrieved_users) == set(users)
     for user in users:
@@ -39,7 +45,10 @@ async def test_get_all_users_as_admin(sanic_client, users) -> None:
         )
         assert res.status_code == 200
         retrieved_user = UserInfo(
-            res.json["id"], res.json.get("first_name"), res.json.get("last_name"), res.json.get("email")
+            id=res.json["id"],
+            first_name=res.json.get("first_name"),
+            last_name=res.json.get("last_name"),
+            email=res.json.get("email"),
         )
         assert user == retrieved_user
 
@@ -70,9 +79,8 @@ async def test_get_logged_in_user(sanic_client, users) -> None:
         headers={"Authorization": f"bearer {json.dumps(access_token)}"},
     )
     assert res.status_code == 200
-    retrieved_user = RenkuUser(
+    retrieved_user = UserInfo(
         id=res.json["id"],
-        username=res.json["username"],
         first_name=res.json.get("first_name"),
         last_name=res.json.get("last_name"),
         email=res.json.get("email"),
@@ -83,9 +91,8 @@ async def test_get_logged_in_user(sanic_client, users) -> None:
         headers={"Authorization": f"bearer {json.dumps(access_token)}"},
     )
     assert res.status_code == 200
-    retrieved_user = RenkuUser(
+    retrieved_user = UserInfo(
         id=res.json["id"],
-        username=res.json["username"],
         first_name=res.json.get("first_name"),
         last_name=res.json.get("last_name"),
         email=res.json.get("email"),
@@ -103,9 +110,8 @@ async def test_logged_in_users_can_get_other_users(sanic_client, users) -> None:
         headers={"Authorization": f"bearer {json.dumps(access_token)}"},
     )
     assert res.status_code == 200
-    retrieved_other_user = RenkuUser(
+    retrieved_other_user = UserInfo(
         id=res.json["id"],
-        username=res.json["username"],
         first_name=res.json.get("first_name"),
         last_name=res.json.get("last_name"),
         email=res.json.get("email"),
@@ -153,9 +159,8 @@ async def test_logged_in_user_check_adds_user_if_missing(sanic_client, users, ad
     )
     assert res.status_code == 200
     users_response = [
-        RenkuUser(
+        UserInfo(
             id=iuser["id"],
-            username=iuser["username"],
             first_name=iuser.get("first_name"),
             last_name=iuser.get("last_name"),
             email=iuser.get("email"),

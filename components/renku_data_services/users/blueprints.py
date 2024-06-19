@@ -10,6 +10,7 @@ from sanic_ext import validate
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_models.validation import validated_json
 from renku_data_services.errors import errors
 from renku_data_services.secrets.db import UserSecretsRepo
 from renku_data_services.secrets.models import Secret
@@ -32,11 +33,18 @@ class KCUsersBP(CustomBlueprint):
         async def _get_all(request: Request, user: base_models.APIUser) -> JSONResponse:
             email_filter = request.args.get("exact_email")
             users = await self.repo.get_users(requested_by=user, email=email_filter)
-            return json(
+            return validated_json(
+                apispec.UsersWithId,
                 [
-                    apispec.UserWithId.model_validate(user.to_renku_user()).model_dump(exclude_none=True, mode="json")
+                    dict(
+                        id=user.user.id,
+                        username=user.namespace.slug,
+                        email=user.user.email,
+                        first_name=user.user.first_name,
+                        last_name=user.user.last_name,
+                    )
                     for user in users
-                ]
+                ],
             )
 
         return "/users", ["GET"], _get_all
@@ -52,8 +60,15 @@ class KCUsersBP(CustomBlueprint):
             user_info = await self.repo.get_or_create_user(requested_by=user, id=user.id)
             if not user_info:
                 raise errors.MissingResourceError(message=f"The user with ID {user.id} cannot be found.")
-            return json(
-                apispec.UserWithId.model_validate(user_info.to_renku_user()).model_dump(exclude_none=True, mode="json")
+            return validated_json(
+                apispec.UserWithId,
+                dict(
+                    id=user_info.user.id,
+                    username=user_info.namespace.slug,
+                    email=user_info.user.email,
+                    first_name=user_info.user.first_name,
+                    last_name=user_info.user.last_name,
+                ),
             )
 
         return "/user", ["GET"], _get_self
@@ -79,8 +94,15 @@ class KCUsersBP(CustomBlueprint):
             user_info = await self.repo.get_or_create_user(requested_by=user, id=user_id)
             if not user_info:
                 raise errors.MissingResourceError(message=f"The user with ID {user_id} cannot be found.")
-            return json(
-                apispec.UserWithId.model_validate(user_info.to_renku_user()).model_dump(exclude_none=True, mode="json")
+            return validated_json(
+                apispec.UserWithId,
+                dict(
+                    id=user_info.user.id,
+                    username=user_info.namespace.slug,
+                    email=user_info.user.email,
+                    first_name=user_info.user.first_name,
+                    last_name=user_info.user.last_name,
+                ),
             )
 
         return "/users/<user_id>", ["GET"], _get_one
