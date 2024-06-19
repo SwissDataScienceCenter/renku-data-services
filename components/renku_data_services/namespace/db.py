@@ -324,7 +324,7 @@ class GroupRepository:
                 yield namespace.dump_user()
 
     async def get_namespace_by_slug(self, user: base_models.APIUser, slug: str) -> models.Namespace | None:
-        """Get the namespace for a slug."""
+        """Get the namespace identified by a given slug."""
         async with self.session_maker() as session, session.begin():
             ns = await session.scalar(select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == slug.lower()))
             old_ns = None
@@ -374,8 +374,8 @@ class GroupRepository:
                 latest_slug=ns.slug,
             )
 
-    async def _get_user_namespace(self, user_id: str) -> models.Namespace | None:
-        """Get the namespace for a slug."""
+    async def get_user_namespace(self, user_id: str) -> models.Namespace | None:
+        """Get the namespace corresponding to a given user."""
         async with self.session_maker() as session, session.begin():
             ns = await session.scalar(select(schemas.NamespaceORM).where(schemas.NamespaceORM.user_id == user_id))
             if ns is None:
