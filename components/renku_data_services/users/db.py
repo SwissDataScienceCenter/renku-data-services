@@ -69,6 +69,7 @@ class UserRepo:
         )
         return result.new
 
+    @only_authenticated
     async def get_user(self, requested_by: APIUser, id: str) -> UserWithNamespace | None:
         """Get a specific user from the database."""
         async with self.session_maker() as session:
