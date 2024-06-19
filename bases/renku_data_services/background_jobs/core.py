@@ -77,6 +77,8 @@ async def bootstrap_user_namespaces(config: SyncConfig) -> None:
 
 async def migrate_groups(config: SyncConfig) -> None:
     """Update existing groups to make them public."""
+    logger = logging.getLogger("migrate_groups")
+    logger.setLevel(logging.INFO)
 
     authz = Authz(config.authz_config)
     all_groups = authz.client.ReadRelationships(
@@ -90,6 +92,7 @@ async def migrate_groups(config: SyncConfig) -> None:
     all_group_ids: set[str] = set()
     async for group in all_groups:
         all_group_ids.add(group.relationship.resource.object_id)
+    logger.info(f"All groups = {len(all_group_ids)}")
     print(f"All groups = {len(all_group_ids)}")
     print(f"All groups = {all_group_ids}")
     public_groups = authz.client.LookupResources(
@@ -104,3 +107,5 @@ async def migrate_groups(config: SyncConfig) -> None:
         public_group_ids.add(group.resource_object_id)
     print(f"Public groups = {len(public_group_ids)}")
     print(f"Public groups = {public_group_ids}")
+    groups_to_process = all_group_ids - public_group_ids
+    print(f"Groups to process = {groups_to_process}")
