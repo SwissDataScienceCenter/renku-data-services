@@ -26,7 +26,7 @@ async def test_get_all_users_as_admin(sanic_client, users) -> None:
         headers={"Authorization": f"bearer {json.dumps(admin_token)}"},
     )
     users.append(admin)
-    assert res.status_code == 200
+    assert res.status_code == 200, res.text
     assert len(res.json) == len(users)
     retrieved_users = [
         UserInfo(
