@@ -18,35 +18,31 @@ from renku_data_services.secrets.config import Config as SecretsConfig
 from renku_data_services.secrets_storage_api.app import register_all_handlers as register_secrets_handlers
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
-from renku_data_services.users.models import RenkuUser
+from renku_data_services.users.models import UserInfo
 
 
 @pytest.fixture
-def admin_user() -> RenkuUser:
-    return RenkuUser(id="admin", username="admin.doe", first_name="Admin", last_name="Doe", email="admin.doe@gmail.com")
+def admin_user() -> UserInfo:
+    return UserInfo(id="admin", first_name="Admin", last_name="Doe", email="admin.doe@gmail.com")
 
 
 @pytest.fixture
-def regular_user() -> RenkuUser:
-    return RenkuUser(id="user", username="user.doe", first_name="User", last_name="Doe", email="user.doe@gmail.com")
+def regular_user() -> UserInfo:
+    return UserInfo(id="user", first_name="User", last_name="Doe", email="user.doe@gmail.com")
 
 
 @pytest.fixture
-def member_1_user() -> RenkuUser:
-    return RenkuUser(
-        id="member-1", username="member-1.doe", first_name="Member-1", last_name="Doe", email="member-1.doe@gmail.com"
-    )
+def member_1_user() -> UserInfo:
+    return UserInfo(id="member-1", first_name="Member-1", last_name="Doe", email="member-1.doe@gmail.com")
 
 
 @pytest.fixture
-def member_2_user() -> RenkuUser:
-    return RenkuUser(
-        id="member-2", username="member-2.doe", first_name="Member-2", last_name="Doe", email="member-2.doe@gmail.com"
-    )
+def member_2_user() -> UserInfo:
+    return UserInfo(id="member-2", first_name="Member-2", last_name="Doe", email="member-2.doe@gmail.com")
 
 
 @pytest.fixture
-def users(admin_user, regular_user, member_1_user, member_2_user) -> list[RenkuUser]:
+def users(admin_user, regular_user, member_1_user, member_2_user) -> list[UserInfo]:
     return [
         admin_user,
         regular_user,
@@ -56,7 +52,7 @@ def users(admin_user, regular_user, member_1_user, member_2_user) -> list[RenkuU
 
 
 @pytest.fixture
-def admin_headers(admin_user: RenkuUser) -> dict[str, str]:
+def admin_headers(admin_user: UserInfo) -> dict[str, str]:
     """Authentication headers for an admin user."""
     access_token = json.dumps(
         {"is_admin": True, "id": admin_user.id, "name": f"{admin_user.first_name} {admin_user.last_name}"}
@@ -65,7 +61,7 @@ def admin_headers(admin_user: RenkuUser) -> dict[str, str]:
 
 
 @pytest.fixture
-def user_headers(regular_user: RenkuUser) -> dict[str, str]:
+def user_headers(regular_user: UserInfo) -> dict[str, str]:
     """Authentication headers for a normal user."""
     access_token = json.dumps(
         {"is_admin": False, "id": regular_user.id, "name": f"{regular_user.first_name} {regular_user.last_name}"}
@@ -74,7 +70,7 @@ def user_headers(regular_user: RenkuUser) -> dict[str, str]:
 
 
 @pytest.fixture
-def member_1_headers(member_1_user: RenkuUser) -> dict[str, str]:
+def member_1_headers(member_1_user: UserInfo) -> dict[str, str]:
     """Authentication headers for a normal user."""
     access_token = json.dumps(
         {"is_admin": False, "id": member_1_user.id, "name": f"{member_1_user.first_name} {member_1_user.last_name}"}
@@ -83,7 +79,7 @@ def member_1_headers(member_1_user: RenkuUser) -> dict[str, str]:
 
 
 @pytest.fixture
-def member_2_headers(member_2_user: RenkuUser) -> dict[str, str]:
+def member_2_headers(member_2_user: UserInfo) -> dict[str, str]:
     """Authentication headers for a normal user."""
     access_token = json.dumps(
         {"is_admin": False, "id": member_2_user.id, "name": f"{member_2_user.first_name} {member_2_user.last_name}"}
@@ -98,7 +94,7 @@ def unauthorized_headers() -> dict[str, str]:
 
 
 @pytest.fixture
-def bootstrap_admins(app_config: Config, admin_user: RenkuUser) -> None:
+def bootstrap_admins(app_config: Config, admin_user: UserInfo) -> None:
     authz = app_config.authz
     rels: list[RelationshipUpdate] = []
     sub = SubjectReference(object=_AuthzConverter.user(admin_user.id))
@@ -113,10 +109,9 @@ def bootstrap_admins(app_config: Config, admin_user: RenkuUser) -> None:
 
 @pytest_asyncio.fixture
 async def sanic_app_no_migrations(
-    app_config: Config, users: list[RenkuUser], bootstrap_admins, admin_user: RenkuUser
+    app_config: Config, users: list[UserInfo], bootstrap_admins, admin_user: UserInfo
 ) -> Sanic:
-    users_info = [user.to_user_info() for user in users]
-    app_config.kc_api = DummyKeycloakAPI(users=get_kc_users(users_info), user_roles={admin_user.id: ["renku-admin"]})
+    app_config.kc_api = DummyKeycloakAPI(users=get_kc_users(users), user_roles={admin_user.id: ["renku-admin"]})
     app = Sanic(app_config.app_name)
     app = register_all_handlers(app, app_config)
     app.register_middleware(validate_null_byte, "request")
@@ -172,9 +167,7 @@ def create_project(sanic_client, user_headers, admin_headers, regular_user, admi
 
 
 @pytest_asyncio.fixture
-async def secrets_sanic_client(
-    secrets_storage_app_config: SecretsConfig, users: list[RenkuUser]
-) -> SanicASGITestClient:
+async def secrets_sanic_client(secrets_storage_app_config: SecretsConfig, users: list[UserInfo]) -> SanicASGITestClient:
     app = Sanic(secrets_storage_app_config.app_name)
     app = register_secrets_handlers(app, secrets_storage_app_config)
     return SanicASGITestClient(app)

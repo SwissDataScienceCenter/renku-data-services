@@ -69,6 +69,7 @@ class UserRepo:
         )
         return result.new
 
+    @only_authenticated
     async def get_user(self, requested_by: APIUser, id: str) -> UserWithNamespace | None:
         """Get a specific user from the database."""
         async with self.session_maker() as session:
@@ -83,15 +84,6 @@ class UserRepo:
             return user.namespace.dump_user()
 
     @only_authenticated
-    async def get_kc_user(self, requested_by: APIUser, id: str) -> UserInfo | None:
-        """Get a specific user from the database (Keycloak data only)."""
-        async with self.session_maker() as session:
-            result = await session.scalars(select(UserORM).where(UserORM.keycloak_id == id))
-            user = result.one_or_none()
-            if user is None:
-                return None
-            return user.dump()
-
     async def get_or_create_user(self, requested_by: APIUser, id: str) -> UserWithNamespace | None:
         """Get a specific user from the database and create it potentially if it does not exist.
 
@@ -133,29 +125,6 @@ class UserRepo:
                     raise errors.ProgrammingError(message=f"Cannot find a user namespace for user {id}.")
 
             return [user.namespace.dump_user() for user in users if user.namespace is not None]
-
-    @only_authenticated
-    async def get_kc_users(self, requested_by: APIUser, email: str | None = None) -> list[UserInfo]:
-        """Get users from the database (Keycloak data only)."""
-        if not email and not requested_by.is_admin:
-            raise errors.Unauthorized(message="Non-admin users cannot list all users.")
-        users = await self._get_kc_users(email)
-
-        is_api_user_missing = not any([requested_by.id == user.id for user in users])
-
-        if not email and is_api_user_missing:
-            api_user_info = await self._add_api_user(requested_by)
-            users.append(api_user_info.user)
-        return users
-
-    async def _get_kc_users(self, email: str | None = None) -> list[UserInfo]:
-        async with self.session_maker() as session:
-            stmt = select(UserORM)
-            if email:
-                stmt = stmt.where(UserORM.email == email)
-            result = await session.scalars(stmt)
-            users = result.all()
-            return [user.dump() for user in users]
 
     @only_authenticated
     async def get_or_create_user_secret_key(self, requested_by: APIUser) -> str:

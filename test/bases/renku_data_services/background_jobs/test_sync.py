@@ -189,7 +189,7 @@ async def test_total_users_sync(
     sync_config: SyncConfig
     user_repo: UserRepo
     sync_config, user_repo = get_app_configs(kc_api)
-    db_users = await user_repo.get_kc_users(admin_user)
+    db_users = await user_repo.get_users(admin_user)
     kc_users = [UserInfo.from_kc_user_payload(user) for user in sync_config.kc_api.get_users()]
     kc_users.append(
         UserInfo(
@@ -202,11 +202,13 @@ async def test_total_users_sync(
     assert set(kc_users) == {user1, user2, admin_user_info}
     assert len(db_users) == 1  # listing users add the requesting user if not present
     await sync_config.syncer.users_sync(kc_api)
-    db_users = await user_repo.get_kc_users(admin_user)
+    db_users = await user_repo.get_users(admin_user)
+    db_users = [user.user for user in db_users]
     assert set(kc_users) == set(db_users)
     # Make sure doing users sync again does not change anything and works
     await sync_config.syncer.users_sync(kc_api)
-    db_users = await user_repo.get_kc_users(admin_user)
+    db_users = await user_repo.get_users(admin_user)
+    db_users = [user.user for user in db_users]
     assert set(kc_users) == set(db_users)
     # Make sure that the addition of the users resulted in the creation of namespaces
     nss, _ = await sync_config.syncer.group_repo.get_namespaces(
@@ -238,12 +240,13 @@ async def test_user_events_update(get_app_configs, admin_user: APIUser) -> None:
     sync_config: SyncConfig
     user_repo: UserRepo
     sync_config, user_repo = get_app_configs(kc_api)
-    db_users = await user_repo.get_kc_users(admin_user)
+    db_users = await user_repo.get_users(admin_user)
     kc_users = [UserInfo.from_kc_user_payload(user) for user in sync_config.kc_api.get_users()]
     assert set(kc_users) == {user1}
     assert len(db_users) == 1  # listing users add the requesting user if not present
     await sync_config.syncer.users_sync(kc_api)
-    db_users = await user_repo.get_kc_users(admin_user)
+    db_users = await user_repo.get_users(admin_user)
+    db_users = [user.user for user in db_users]
     kc_users.append(admin_user_info)
     assert set(kc_users) == set(db_users)
     # Add update and create events
@@ -253,12 +256,14 @@ async def test_user_events_update(get_app_configs, admin_user: APIUser) -> None:
     kc_api.user_events = get_kc_user_create_events([user2]) + get_kc_user_update_events([user1_update])
     # Process events and check if updates show up
     await sync_config.syncer.events_sync(kc_api)
-    db_users = await user_repo.get_kc_users(admin_user)
+    db_users = await user_repo.get_users(admin_user)
+    db_users = [user.user for user in db_users]
     assert set(db_users) == {user1_updated, user2, admin_user_info}
     # Ensure re-processing events does not break anything
     kc_api.user_events = get_kc_user_create_events([user2]) + get_kc_user_update_events([user1_update])
     await sync_config.syncer.events_sync(kc_api)
-    db_users = await user_repo.get_kc_users(admin_user)
+    db_users = await user_repo.get_users(admin_user)
+    db_users = [user.user for user in db_users]
     assert set(db_users) == {user1_updated, user2, admin_user_info}
     # Make sure that the addition of the user resulted in the creation of namespaces
     nss, _ = await sync_config.syncer.group_repo.get_namespaces(
@@ -285,7 +290,7 @@ async def test_admin_events(get_app_configs, admin_user: APIUser) -> None:
     sync_config: SyncConfig
     user_repo: UserRepo
     sync_config, user_repo = get_app_configs(kc_api)
-    db_users = await user_repo.get_kc_users(admin_user)
+    db_users = await user_repo.get_users(admin_user)
     kc_users = [UserInfo.from_kc_user_payload(user) for user in sync_config.kc_api.get_users()]
     assert set(kc_users) == {user1, user2, admin_user_info}
     assert len(db_users) == 1  # listing users add the requesting user if not present
@@ -297,7 +302,8 @@ async def test_admin_events(get_app_configs, admin_user: APIUser) -> None:
     assert len(nss) == 1
     assert user2.email
     assert nss[0].slug == user2.email.split("@")[0]
-    db_users = await user_repo.get_kc_users(admin_user)
+    db_users = await user_repo.get_users(admin_user)
+    db_users = [user.user for user in db_users]
     assert set(kc_users) == set(db_users)
     # Add admin events
     user1_updated = UserInfo(**{**asdict(user1), "last_name": "Renku"})
@@ -306,7 +312,8 @@ async def test_admin_events(get_app_configs, admin_user: APIUser) -> None:
     )
     # Process admin events
     await sync_config.syncer.events_sync(kc_api)
-    db_users = await user_repo.get_kc_users(admin_user)
+    db_users = await user_repo.get_users(admin_user)
+    db_users = [user.user for user in db_users]
     assert {user1_updated, admin_user_info} == set(db_users)
     # Make sure that the removal of a user removes the namespace
     nss, _ = await sync_config.syncer.group_repo.get_namespaces(
@@ -331,14 +338,15 @@ async def test_events_update_error(get_app_configs, admin_user: APIUser) -> None
     sync_config: SyncConfig
     user_repo: UserRepo
     sync_config, user_repo = get_app_configs(kc_api)
-    db_users = await user_repo.get_kc_users(admin_user)
+    db_users = await user_repo.get_users(admin_user)
     kc_users = [UserInfo.from_kc_user_payload(user) for user in sync_config.kc_api.get_users()]
     kc_users.append(admin_user_info)
     assert set(kc_users) == {user1, user2, admin_user_info}
     assert len(db_users) == 1  # listing users add the requesting user if not present
-    assert db_users[0] == admin_user_info
+    assert db_users[0].user == admin_user_info
     await sync_config.syncer.users_sync(kc_api)
-    db_users = await user_repo.get_kc_users(admin_user)
+    db_users = await user_repo.get_users(admin_user)
+    db_users = [user.user for user in db_users]
     assert set(kc_users) == set(db_users)
     # Add admin events
     user1_updated = UserInfo(**{**asdict(user1), "last_name": "Renku"})
@@ -351,7 +359,8 @@ async def test_events_update_error(get_app_configs, admin_user: APIUser) -> None
     # Process admin events
     with pytest.raises(ValueError):
         await sync_config.syncer.events_sync(kc_api)
-    db_users = await user_repo.get_kc_users(admin_user)
+    db_users = await user_repo.get_users(admin_user)
+    db_users = [user.user for user in db_users]
     # An error occurs in processing an event or between events and none of the events are processed
     assert {user1, user2, admin_user_info} == set(db_users)
     # Add admin events without error
@@ -359,7 +368,8 @@ async def test_events_update_error(get_app_configs, admin_user: APIUser) -> None
         [(user2_updated, KeycloakAdminEvent.UPDATE)]
     )
     await sync_config.syncer.events_sync(kc_api)
-    db_users = await user_repo.get_kc_users(admin_user)
+    db_users = await user_repo.get_users(admin_user)
+    db_users = [user.user for user in db_users]
     assert {user1_updated, user2_updated, admin_user_info} == set(db_users)
 
 
@@ -379,18 +389,21 @@ async def test_removing_non_existent_user(get_app_configs, admin_user: APIUser) 
     sync_config: SyncConfig
     user_repo: UserRepo
     sync_config, user_repo = get_app_configs(kc_api)
-    db_users = await user_repo.get_kc_users(admin_user)
+    db_users = await user_repo.get_users(admin_user)
+    db_users = [user.user for user in db_users]
     kc_users = [UserInfo.from_kc_user_payload(user) for user in sync_config.kc_api.get_users()]
     assert set(kc_users) == {user1, admin_user_info}
     assert len(db_users) == 1
     await sync_config.syncer.users_sync(kc_api)
-    db_users = await user_repo.get_kc_users(admin_user)
+    db_users = await user_repo.get_users(admin_user)
+    db_users = [user.user for user in db_users]
     assert set(kc_users) == set(db_users)
     # Add admin events
     kc_api.admin_events = get_kc_admin_events([(non_existent_user, KeycloakAdminEvent.DELETE)])
     # Process events
     await sync_config.syncer.events_sync(kc_api)
-    db_users = await user_repo.get_kc_users(admin_user)
+    db_users = await user_repo.get_users(admin_user)
+    db_users = [user.user for user in db_users]
     assert set(db_users) == {user1, admin_user_info}
 
 
@@ -449,11 +462,12 @@ async def test_authz_admin_sync(get_app_configs, admin_user: APIUser) -> None:
     user_repo: UserRepo
     sync_config, user_repo = get_app_configs(kc_api)
     authz = Authz(sync_config.authz_config)
-    db_users = await user_repo.get_kc_users(admin_user)
+    db_users = await user_repo.get_users(admin_user)
     kc_users = [UserInfo.from_kc_user_payload(user) for user in sync_config.kc_api.get_users()]
     await sync_config.syncer.users_sync(kc_api)
     await sync_admins_from_keycloak(kc_api, authz)
-    db_users = await user_repo.get_kc_users(admin_user)
+    db_users = await user_repo.get_users(admin_user)
+    db_users = [user.user for user in db_users]
     assert set(kc_users) == set(db_users)
     authz_admin_ids = await authz._get_admin_user_ids()
     assert set(authz_admin_ids) == {admin_user_info.id}

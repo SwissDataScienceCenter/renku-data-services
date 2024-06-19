@@ -252,39 +252,11 @@ class UserInfo:
         }
 
 
-@dataclass(frozen=True, eq=True, kw_only=True)
-class RenkuUser:
-    """Models a Renku user.
-
-    This models contains the username which is the slug for the user's namespace.
-    """
-
-    id: str
-    username: str
-    email: str | None = None
-    first_name: str | None = None
-    last_name: str | None = None
-
-    def to_user_info(self) -> UserInfo:
-        """Create a UserInfo instance from this instance."""
-        return UserInfo(self.id, self.first_name, self.last_name, self.email)
-
-
 class UserWithNamespace(NamedTuple):
     """A tuple used to convey information about a user and their namespace."""
 
     user: UserInfo
     namespace: Namespace
-
-    def to_renku_user(self) -> RenkuUser:
-        """Create a RenkuUser instance from this tuple."""
-        return RenkuUser(
-            id=self.user.id,
-            email=self.user.email,
-            first_name=self.user.first_name,
-            last_name=self.user.last_name,
-            username=self.namespace.slug,
-        )
 
 
 class UserWithNamespaceUpdate(NamedTuple):
