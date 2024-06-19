@@ -302,14 +302,13 @@ class GroupRepository:
             group_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.group, scope)
             group_ns_stmt = select(schemas.NamespaceORM).where(schemas.NamespaceORM.group_id.in_(group_ids))
             output = []
-            if pagination.page == 1:
-                personal_ns_stmt = select(schemas.NamespaceORM).where(schemas.NamespaceORM.user_id == user.id)
-                personal_ns = await session.scalar(personal_ns_stmt)
-                if personal_ns:
-                    output.append(personal_ns.dump())
+            personal_ns_stmt = select(schemas.NamespaceORM).where(schemas.NamespaceORM.user_id == user.id)
+            personal_ns = await session.scalar(personal_ns_stmt)
+            if personal_ns and pagination.page == 1:
+                output.append(personal_ns.dump())
             # NOTE: in the first page the personal namespace is added, so the offset and per page params are modified
-            group_per_page = pagination.per_page - len(output) if pagination.page == 1 else pagination.per_page
-            group_offset = 0 if pagination.page == 1 else pagination.offset - len(output)
+            group_per_page = pagination.per_page - 1 if personal_ns and pagination.page == 1 else pagination.per_page
+            group_offset = pagination.offset - 1 if personal_ns else pagination.offset
             group_ns = await session.scalars(
                 group_ns_stmt.limit(group_per_page).offset(group_offset).order_by(schemas.NamespaceORM.id)
             )
