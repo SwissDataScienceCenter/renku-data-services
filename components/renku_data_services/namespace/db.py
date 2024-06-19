@@ -308,7 +308,7 @@ class GroupRepository:
                 output.append(personal_ns.dump())
             # NOTE: in the first page the personal namespace is added, so the offset and per page params are modified
             group_per_page = pagination.per_page - 1 if personal_ns and pagination.page == 1 else pagination.per_page
-            group_offset = pagination.offset - 1 if personal_ns else pagination.offset
+            group_offset = pagination.offset - 1 if personal_ns and pagination.page > 1 else pagination.offset
             group_ns = await session.scalars(
                 group_ns_stmt.limit(group_per_page).offset(group_offset).order_by(schemas.NamespaceORM.id)
             )
