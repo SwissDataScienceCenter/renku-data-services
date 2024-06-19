@@ -41,7 +41,7 @@ class UserInfoUpdate:
     @classmethod
     def from_json_user_events(self, val: Iterable[dict[str, Any]]) -> list["UserInfoUpdate"]:
         """Generate a list of updates from a json response from Keycloak."""
-        output: list["UserInfoUpdate"] = []
+        output: list[UserInfoUpdate] = []
         for event in val:
             details = event.get("details")
             user_id = event.get("userId")
@@ -132,7 +132,7 @@ class UserInfoUpdate:
     @classmethod
     def from_json_admin_events(self, val: Iterable[dict[str, Any]]) -> list["UserInfoUpdate"]:
         """Generate a list of updates from a json response from Keycloak."""
-        output: list["UserInfoUpdate"] = []
+        output: list[UserInfoUpdate] = []
         for event in val:
             timestamp_epoch = event.get("time")
             if not timestamp_epoch:
