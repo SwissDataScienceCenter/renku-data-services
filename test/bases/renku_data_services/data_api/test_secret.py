@@ -11,7 +11,6 @@ from sanic_testing.testing import SanicASGITestClient
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.secrets.core import rotate_encryption_keys, rotate_single_encryption_key
 from renku_data_services.secrets.models import Secret
-from renku_data_services.users.models import UserInfo
 from renku_data_services.utils.cryptography import (
     decrypt_rsa,
     decrypt_string,
@@ -19,16 +18,6 @@ from renku_data_services.utils.cryptography import (
     encrypt_string,
     generate_random_encryption_key,
 )
-
-
-@pytest.fixture
-def users() -> list[UserInfo]:
-    return [
-        UserInfo("admin", "Admin", "Doe", "admin.doe@gmail.com"),
-        UserInfo("user", "User", "Doe", "user.doe@gmail.com"),
-        UserInfo("member-1", "Member-1", "Doe", "member-1.doe@gmail.com"),
-        UserInfo("member-2", "Member-2", "Doe", "member-2.doe@gmail.com"),
-    ]
 
 
 @pytest.fixture
