@@ -111,8 +111,7 @@ def bootstrap_admins(app_config: Config, admin_user: UserInfo) -> None:
 async def sanic_app_no_migrations(
     app_config: Config, users: list[UserInfo], bootstrap_admins, admin_user: UserInfo
 ) -> Sanic:
-    users_info = [user.to_user_info() for user in users]
-    app_config.kc_api = DummyKeycloakAPI(users=get_kc_users(users_info), user_roles={admin_user.id: ["renku-admin"]})
+    app_config.kc_api = DummyKeycloakAPI(users=get_kc_users(users), user_roles={admin_user.id: ["renku-admin"]})
     app = Sanic(app_config.app_name)
     app = register_all_handlers(app, app_config)
     app.register_middleware(validate_null_byte, "request")

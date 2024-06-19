@@ -189,7 +189,7 @@ async def test_total_users_sync(
     sync_config: SyncConfig
     user_repo: UserRepo
     sync_config, user_repo = get_app_configs(kc_api)
-    db_users = await user_repo.get_kc_users(admin_user)
+    db_users = await user_repo.get_users(admin_user)
     kc_users = [UserInfo.from_kc_user_payload(user) for user in sync_config.kc_api.get_users()]
     kc_users.append(
         UserInfo(
@@ -240,7 +240,7 @@ async def test_user_events_update(get_app_configs, admin_user: APIUser) -> None:
     sync_config: SyncConfig
     user_repo: UserRepo
     sync_config, user_repo = get_app_configs(kc_api)
-    db_users = await user_repo.get_kc_users(admin_user)
+    db_users = await user_repo.get_users(admin_user)
     kc_users = [UserInfo.from_kc_user_payload(user) for user in sync_config.kc_api.get_users()]
     assert set(kc_users) == {user1}
     assert len(db_users) == 1  # listing users add the requesting user if not present
@@ -290,7 +290,7 @@ async def test_admin_events(get_app_configs, admin_user: APIUser) -> None:
     sync_config: SyncConfig
     user_repo: UserRepo
     sync_config, user_repo = get_app_configs(kc_api)
-    db_users = await user_repo.get_kc_users(admin_user)
+    db_users = await user_repo.get_users(admin_user)
     kc_users = [UserInfo.from_kc_user_payload(user) for user in sync_config.kc_api.get_users()]
     assert set(kc_users) == {user1, user2, admin_user_info}
     assert len(db_users) == 1  # listing users add the requesting user if not present
@@ -338,7 +338,7 @@ async def test_events_update_error(get_app_configs, admin_user: APIUser) -> None
     sync_config: SyncConfig
     user_repo: UserRepo
     sync_config, user_repo = get_app_configs(kc_api)
-    db_users = await user_repo.get_kc_users(admin_user)
+    db_users = await user_repo.get_users(admin_user)
     kc_users = [UserInfo.from_kc_user_payload(user) for user in sync_config.kc_api.get_users()]
     kc_users.append(admin_user_info)
     assert set(kc_users) == {user1, user2, admin_user_info}
@@ -462,7 +462,7 @@ async def test_authz_admin_sync(get_app_configs, admin_user: APIUser) -> None:
     user_repo: UserRepo
     sync_config, user_repo = get_app_configs(kc_api)
     authz = Authz(sync_config.authz_config)
-    db_users = await user_repo.get_kc_users(admin_user)
+    db_users = await user_repo.get_users(admin_user)
     kc_users = [UserInfo.from_kc_user_payload(user) for user in sync_config.kc_api.get_users()]
     await sync_config.syncer.users_sync(kc_api)
     await sync_admins_from_keycloak(kc_api, authz)

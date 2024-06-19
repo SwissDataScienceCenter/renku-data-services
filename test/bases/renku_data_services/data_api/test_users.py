@@ -3,7 +3,7 @@ from uuid import uuid4
 
 import pytest
 
-from renku_data_services.users.models import RenkuUser, UserInfo
+from renku_data_services.users.models import UserInfo
 
 
 @pytest.mark.asyncio
@@ -121,9 +121,8 @@ async def test_logged_in_users_can_get_other_users(sanic_client, users) -> None:
 
 @pytest.mark.asyncio
 async def test_logged_in_user_check_adds_user_if_missing(sanic_client, users, admin_headers) -> None:
-    user = RenkuUser(
+    user = UserInfo(
         id=str(uuid4()),
-        username="peter",
         first_name="Peter",
         last_name="Parker",
         email="peter@spiderman.com",
@@ -144,9 +143,8 @@ async def test_logged_in_user_check_adds_user_if_missing(sanic_client, users, ad
         headers={"Authorization": f"bearer {json.dumps(access_token)}"},
     )
     assert res.status_code == 200
-    user_response = RenkuUser(
+    user_response = UserInfo(
         id=res.json["id"],
-        username=res.json["username"],
         first_name=res.json.get("first_name"),
         last_name=res.json.get("last_name"),
         email=res.json.get("email"),
