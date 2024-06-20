@@ -82,7 +82,6 @@ class UserRepo:
                 raise errors.ProgrammingError(message=f"Cannot find a user namespace for user {id}.")
             return user.namespace.dump_user()
 
-    @only_authenticated
     async def get_or_create_user(self, requested_by: APIUser, id: str) -> UserWithNamespace | None:
         """Get a specific user from the database and create it potentially if it does not exist.
 
