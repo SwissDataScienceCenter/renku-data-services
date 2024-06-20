@@ -16,7 +16,7 @@ from renku_data_services.crc.apispec_base import ResourceClassesFilter
 from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
-from renku_data_services.users.models import UserInfo
+from renku_data_services.users.models import UserWithNamespace
 
 
 @dataclass(kw_only=True)
@@ -186,10 +186,10 @@ class ResourcePoolUsersBP(CustomBlueprint):
         self, api_user: base_models.APIUser, resource_pool_id: int, body: apispec.PoolUsersWithId, post: bool = True
     ) -> HTTPResponse:
         user_ids_to_add = set([user.id for user in body.root])
-        users_checks: list[UserInfo | None] = await asyncio.gather(
-            *[self.kc_user_repo.get_kc_user(requested_by=api_user, id=id) for id in user_ids_to_add]
+        users_checks: list[UserWithNamespace | None] = await asyncio.gather(
+            *[self.kc_user_repo.get_user(id=id) for id in user_ids_to_add]
         )
-        existing_user_ids = set([user.id for user in users_checks if user is not None])
+        existing_user_ids = set([user.user.id for user in users_checks if user is not None])
         if existing_user_ids != user_ids_to_add:
             missing_ids = user_ids_to_add.difference(existing_user_ids)
             raise errors.MissingResourceError(message=f"The users with IDs {missing_ids} cannot be found")
@@ -239,7 +239,7 @@ class ResourcePoolUsersBP(CustomBlueprint):
         async def _delete(
             _: Request, user: base_models.APIUser, resource_pool_id: int, user_id: str
         ) -> HTTPResponse | HTTPResponse:
-            user_exists = await self.kc_user_repo.get_user(requested_by=user, id=user_id)
+            user_exists = await self.kc_user_repo.get_user(id=user_id)
             if not user_exists:
                 raise errors.MissingResourceError(message=f"The user with id {user_id} cannot be found.")
             resource_pools = await self.repo.get_user_resource_pools(
@@ -548,7 +548,7 @@ class UserResourcePoolsBP(CustomBlueprint):
     async def _post_put(
         self, user_id: str, resource_pool_ids: apispec.IntegerIds, api_user: base_models.APIUser, post: bool = True
     ) -> HTTPResponse:
-        user_check = await self.kc_user_repo.get_user(requested_by=api_user, id=user_id)
+        user_check = await self.kc_user_repo.get_user(id=user_id)
         if not user_check:
             raise errors.MissingResourceError(message=f"User with user ID {user_id} cannot be found")
         rps = await self.repo.update_user_resource_pools(

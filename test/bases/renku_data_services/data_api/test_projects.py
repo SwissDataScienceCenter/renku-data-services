@@ -521,6 +521,30 @@ async def test_get_all_projects_for_specific_user(
 
 
 @pytest.mark.asyncio
+async def test_get_projects_with_namespace_filter(create_project, sanic_client, user_headers) -> None:
+    await create_project("Project 1", visibility="private")
+    await create_project("Project 2", visibility="public")
+    await create_project("Project 3", admin=True, visibility="private")
+    await create_project("Project 4", admin=True, visibility="public")
+
+    _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    projects = response.json
+    assert {p["name"] for p in projects} == {"Project 1", "Project 2", "Project 4"}
+
+    _, response = await sanic_client.get("/api/data/projects?namespace=user.doe", headers=user_headers)
+    assert response.status_code == 200, response.text
+    projects = response.json
+    assert {p["name"] for p in projects} == {"Project 1", "Project 2"}
+
+    _, response = await sanic_client.get("/api/data/projects?namespace=admin.doe", headers=user_headers)
+    assert response.status_code == 200, response.text
+    projects = response.json
+    assert {p["name"] for p in projects} == {"Project 4"}
+
+
+@pytest.mark.asyncio
 async def test_unauthorized_user_cannot_create_delete_or_modify_projects(
     create_project, sanic_client, unauthorized_headers
 ) -> None:
