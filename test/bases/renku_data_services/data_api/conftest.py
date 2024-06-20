@@ -1,5 +1,4 @@
 import json
-from test.bases.renku_data_services.background_jobs.test_sync import get_kc_users
 from typing import Any
 
 import pytest
@@ -19,6 +18,7 @@ from renku_data_services.secrets_storage_api.app import register_all_handlers as
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import UserInfo
+from test.bases.renku_data_services.background_jobs.test_sync import get_kc_users
 
 
 @pytest.fixture
