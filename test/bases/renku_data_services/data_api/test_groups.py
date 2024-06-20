@@ -1,5 +1,8 @@
 from base64 import b64decode
 from datetime import datetime
+
+from renku_data_services.authz.models import Role, Visibility
+from sanic_testing.testing import SanicASGITestClient
 from test.bases.renku_data_services.data_api.utils import merge_headers
 
 import pytest
@@ -14,10 +17,13 @@ from renku_data_services.message_queue.avro_models.io.renku.events.v2 import (
 )
 from renku_data_services.message_queue.models import deserialize_binary
 from renku_data_services.users.models import UserInfo
+from renku_data_services.app_config.config import Config
 
 
 @pytest.mark.asyncio
-async def test_group_creation_basic(sanic_client, user_headers, app_config):
+async def test_group_creation_basic(
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str], app_config: Config
+) -> None:
     payload = {
         "name": "Group1",
         "slug": "group-1",
@@ -67,7 +73,9 @@ async def test_group_creation_basic(sanic_client, user_headers, app_config):
 
 
 @pytest.mark.asyncio
-async def test_group_pagination(sanic_client, user_headers, admin_headers):
+async def test_group_pagination(
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str], admin_headers: dict[str, str]
+) -> None:
     for i in range(5):
         payload = {"name": f"group{i}", "slug": f"group{i}"}
         _, response = await sanic_client.post("/api/data/groups", headers=admin_headers, json=payload)
@@ -96,7 +104,9 @@ async def test_group_pagination(sanic_client, user_headers, admin_headers):
 
 
 @pytest.mark.asyncio
-async def test_group_patch_delete(sanic_client, user_headers, app_config):
+async def test_group_patch_delete(
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str], app_config: Config
+) -> None:
     payload = {
         "name": "GroupOther",
         "slug": "group-other",
@@ -157,7 +167,9 @@ async def test_group_patch_delete(sanic_client, user_headers, app_config):
 
 
 @pytest.mark.asyncio
-async def test_group_members(sanic_client, user_headers, app_config):
+async def test_group_members(
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str], app_config: Config
+) -> None:
     payload = {
         "name": "Group1",
         "slug": "group-1",
@@ -194,7 +206,12 @@ async def test_group_members(sanic_client, user_headers, app_config):
 
 
 @pytest.mark.asyncio
-async def test_removing_single_group_owner_not_allowed(sanic_client, user_headers, member_1_headers, app_config):
+async def test_removing_single_group_owner_not_allowed(
+    sanic_client: SanicASGITestClient,
+    user_headers: dict[str, str],
+    member_1_headers: dict[str, str],
+    app_config: Config,
+) -> None:
     payload = {
         "name": "Group1",
         "slug": "group-1",
@@ -256,8 +273,12 @@ async def test_removing_single_group_owner_not_allowed(sanic_client, user_header
 
 @pytest.mark.asyncio
 async def test_cannot_change_role_for_last_group_owner(
-    sanic_client, user_headers, regular_user, app_config, member_1_headers
-):
+    sanic_client: SanicASGITestClient,
+    user_headers: dict[str, str],
+    regular_user: UserInfo,
+    app_config: Config,
+    member_1_headers: dict[str, str],
+) -> None:
     payload = {
         "name": "Group1",
         "slug": "group-1",
@@ -291,7 +312,9 @@ async def test_cannot_change_role_for_last_group_owner(
 
 
 @pytest.mark.asyncio
-async def test_moving_project_across_groups(sanic_client, user_headers, regular_user: UserInfo):
+async def test_moving_project_across_groups(
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str], regular_user: UserInfo
+) -> None:
     payload = {
         "name": "Group1",
         "slug": "group-1",
@@ -321,7 +344,9 @@ async def test_moving_project_across_groups(sanic_client, user_headers, regular_
 
 
 @pytest.mark.asyncio
-async def test_removing_group_removes_projects(sanic_client, user_headers, regular_user: UserInfo):
+async def test_removing_group_removes_projects(
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str], regular_user: UserInfo
+) -> None:
     payload = {
         "name": "Group1",
         "slug": "group-1",
@@ -358,3 +383,46 @@ async def test_removing_group_removes_projects(sanic_client, user_headers, regul
     # The group should not exist
     _, response = await sanic_client.get("/api/data/groups/group-1", headers=user_headers)
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_group_members_get_project_access(
+    sanic_client: SanicASGITestClient,
+    user_headers: dict[str, str],
+    regular_user: UserInfo,
+    member_1_user: UserInfo,
+    member_1_headers: dict[str, str],
+) -> None:
+    group_slug = "group-1"
+    payload = {
+        "name": "Group1",
+        "slug": group_slug,
+        "description": "Group 1 Description",
+    }
+    # Create a group
+    _, response = await sanic_client.post("/api/data/groups", headers=member_1_headers, json=payload)
+    assert response.status_code == 201, response.text
+    assert regular_user.email
+    # Create a project in the group
+    project1_payload = {
+        "name": "project-1",
+        "slug": "project-1",
+        "namespace": "group-1",
+        "visibility": Visibility.PRIVATE.value,
+    }
+    _, response = await sanic_client.post("/api/data/projects", headers=member_1_headers, json=project1_payload)
+    assert response.status_code == 201, response.text
+    project_id = response.json["id"]
+    # Other user cannot see the private project
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
+    assert response.status_code == 404
+    # Add other user to group
+    _, response = await sanic_client.patch(
+        f"/api/data/groups/{group_slug}/members",
+        json=[{"id": regular_user.id, "role": Role.VIEWER.value}],
+        headers=member_1_headers,
+    )
+    assert response.status_code == 200
+    # Now other user can see the private project in the group
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
+    assert response.status_code == 200

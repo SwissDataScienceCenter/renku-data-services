@@ -565,7 +565,7 @@ class Authz:
         project_namespace = SubjectReference(
             object=_AuthzConverter.user_namespace(project.namespace.id)
             if project.namespace.kind == NamespaceKind.user
-            else _AuthzConverter.group(project.namespace.id)
+            else _AuthzConverter.group(project.namespace.underlying_resource_id)
         )
         project_in_platform = Relationship(
             resource=project_res,

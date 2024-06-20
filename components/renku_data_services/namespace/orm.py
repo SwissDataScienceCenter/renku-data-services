@@ -1,7 +1,7 @@
 """SQLAlchemy's schemas for the group database."""
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, cast
 
 from sqlalchemy import CheckConstraint, DateTime, MetaData, String, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
@@ -71,15 +71,37 @@ class NamespaceORM(BaseORM):
 
     def dump(self) -> models.Namespace:
         """Create a namespace model from the ORM."""
+        if self.group_id is None and self.user_id is None:
+            raise errors.ProgrammingError(
+                message=f"Trying to convert a NamespaceORM with ID {self.id} to a model "
+                "but the namespace is missing both the user and group ID"
+            )
+        if self.group is None and self.user is None:
+            raise errors.ProgrammingError(
+                message=f"Trying to convert a NamespaceORM with ID {self.id} to a model "
+                "but the namespace is missing both the user and group relations"
+            )
         created_by = self.user_id
+        name: str | None = None
         if self.group:
             created_by = self.group.created_by
+            name = self.group.name
+        elif self.user:
+            if self.user.first_name and self.user.last_name:
+                name = f"{self.user.first_name} {self.user.last_name}"
+            else:
+                name = self.user.first_name or self.user.last_name
+        # NOTE: Mypy should have inferred the 2 types below beacuse at the top we check that both values are not None
+        created_by = cast(str, created_by)
+        underlying_resource = cast(str, self.user_id or self.group_id)
         return models.Namespace(
             id=self.id,
             slug=self.slug,
             latest_slug=self.slug,
             created_by=created_by,
             kind=models.NamespaceKind.user if self.user_id else models.NamespaceKind.group,
+            underlying_resource_id=underlying_resource,
+            name=name,
         )
 
     def dump_user(self) -> UserWithNamespace:
@@ -109,13 +131,27 @@ class NamespaceOldORM(BaseORM):
 
     def dump(self) -> models.Namespace:
         """Create an namespace model from the ORM."""
+        if self.latest_slug.group_id is None and self.latest_slug.user_id is None:
+            raise errors.ProgrammingError(
+                message=f"Trying to convert a NamespaceOldORM with ID {self.id} to a model "
+                "but the latest namespace is missing both the user and group ID"
+            )
+        if self.latest_slug.group is None and self.latest_slug.user is None:
+            raise errors.ProgrammingError(
+                message=f"Trying to convert a NamespaceOldORM with ID {self.id} to a model "
+                "but the latest namespace is missing both the user and group relations"
+            )
         created_by = self.latest_slug.user_id
         if self.latest_slug.group:
             created_by = self.latest_slug.group.created_by
+        # NOTE: Mypy should have inferred the 2 types below beacuse at the top we check that both values are not None
+        created_by = cast(str, created_by)
+        underlying_resource_id = cast(str, self.latest_slug.group_id or self.latest_slug.user_id)
         return models.Namespace(
             id=self.id,
             slug=self.slug,
             latest_slug=self.latest_slug.slug,
             created_by=created_by,
             kind=models.NamespaceKind.user if self.latest_slug.user_id else models.NamespaceKind.group,
+            underlying_resource_id=underlying_resource_id,
         )
