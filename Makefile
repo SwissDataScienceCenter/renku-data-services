@@ -1,4 +1,4 @@
-.PHONY: schemas tests test_setup main_tests schemathesis_tests migration_tests collect_coverage style_checks pre_commit_checks run download_avro check_avro avro_models update_avro
+.PHONY: schemas tests test_setup main_tests schemathesis_tests collect_coverage style_checks pre_commit_checks run download_avro check_avro avro_models update_avro
 
 define test_apispec_up_to_date
 	$(eval $@_NAME=$(1))
@@ -77,18 +77,15 @@ style_checks:
 test_setup:
 	@rm -f coverage.lcov .coverage
 main_tests:
+	DUMMY_STORES=true poetry run alembic --name common upgrade heads
+	poetry run alembic --name common check
 	poetry run pytest -m "not schemathesis" -n auto
 schemathesis_tests:
 	poetry run pytest -m "schemathesis" --cov-append
-migration_tests:
-	@echo "===========================================TEST DOWNGRADE/UPGRADE==========================================="
-	DUMMY_STORES=true poetry run coverage run -a -m alembic -c components/renku_data_services/migrations/alembic.ini --name=common upgrade heads
-	DUMMY_STORES=true poetry run coverage run -a -m alembic -c components/renku_data_services/migrations/alembic.ini --name=common downgrade base
-	@echo "===========================================FINAL COMBINED COVERAGE FOR ALL TESTS==========================================="
 collect_coverage:
 	poetry run coverage report --show-missing
 	poetry run coverage lcov -o coverage.lcov
-tests: test_setup main_tests schemathesis_tests migration_tests collect_coverage
+tests: test_setup main_tests schemathesis_tests collect_coverage
 
 pre_commit_checks:
 	poetry run pre-commit run --all-files

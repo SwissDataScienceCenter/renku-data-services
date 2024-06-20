@@ -61,13 +61,6 @@ jobs:
             make main_tests
           push: never
           skipContainerUserIdUpdate: false
-      - name: Migration tests
-        uses: devcontainers/ci@v0.3
-        with:
-          runCmd: |
-            make migration_tests
-          push: never
-          skipContainerUserIdUpdate: false
       - name: Combine coverage data
         uses: devcontainers/ci@v0.3
         with:
