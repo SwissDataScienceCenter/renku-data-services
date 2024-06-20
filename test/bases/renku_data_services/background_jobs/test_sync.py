@@ -8,22 +8,37 @@ from typing import Any, Union
 from uuid import uuid4
 
 import pytest
-from authzed.api.v1.permission_service_pb2 import ReadRelationshipsRequest, RelationshipFilter
+from authzed.api.v1.core_pb2 import Relationship, RelationshipUpdate, SubjectReference
+from authzed.api.v1.permission_service_pb2 import (
+    ReadRelationshipsRequest,
+    RelationshipFilter,
+    WriteRelationshipsRequest,
+)
 
 from bases.renku_data_services.background_jobs.config import SyncConfig
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
-from renku_data_services.authz.authz import Authz, ResourceType, _Relation
+from renku_data_services.authz.authz import Authz, ResourceType, _AuthzConverter, _Relation
 from renku_data_services.authz.config import AuthzConfig
-from renku_data_services.background_jobs.core import bootstrap_user_namespaces
+from renku_data_services.background_jobs.core import bootstrap_user_namespaces, fix_mismatched_project_namespace_ids
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models import APIUser
+from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.db_config import DBConfig
+from renku_data_services.errors import errors
 from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.migrations.core import run_migrations_for_app
+from renku_data_services.namespace.apispec import (
+    GroupMemberPatchRequest,
+    GroupMemberPatchRequestList,
+    GroupPostRequest,
+    GroupRole,
+)
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.namespace.orm import NamespaceORM
+from renku_data_services.project.db import ProjectRepository
+from renku_data_services.project.models import UnsavedProject
 from renku_data_services.users.db import UserRepo, UsersSync
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import KeycloakAdminEvent, UserInfo, UserInfoUpdate
@@ -49,6 +64,13 @@ def get_app_configs(db_config: DBConfig, authz_config: AuthzConfig):
             group_repo=group_repo,
             authz=Authz(authz_config),
         )
+        project_repo = ProjectRepository(
+            session_maker=db_config.async_session_maker,
+            message_queue=message_queue,
+            event_repo=event_repo,
+            group_repo=group_repo,
+            authz=Authz(authz_config),
+        )
         config = SyncConfig(
             syncer=users_sync,
             kc_api=kc_api,
@@ -56,6 +78,7 @@ def get_app_configs(db_config: DBConfig, authz_config: AuthzConfig):
             group_repo=group_repo,
             event_repo=event_repo,
             session_maker=db_config.async_session_maker,
+            project_repo=project_repo,
         )
         user_repo = UserRepo(
             db_config.async_session_maker,
@@ -506,3 +529,67 @@ async def test_bootstraping_user_namespaces(get_app_configs, admin_user: APIUser
     await bootstrap_user_namespaces(sync_config)
     authz_user_namespace_ids = await get_user_namespace_ids_in_authz(authz)
     assert db_user_namespace_ids == authz_user_namespace_ids
+
+
+@pytest.mark.asyncio
+async def test_fixing_project_group_namespace_relations(
+    get_app_configs: Callable[..., tuple[SyncConfig, UserRepo]], admin_user: APIUser
+):
+    admin_user_info = UserInfo(
+        id=admin_user.id,
+        first_name=admin_user.first_name,
+        last_name=admin_user.last_name,
+        email=admin_user.email,
+    )
+
+    user1 = UserInfo("user-1-id", "John", "Doe", "john.doe@gmail.com")
+    user2 = UserInfo("user-2-id", "Jane", "Doe", "jane.doe@gmail.com")
+    user1_api = APIUser(is_admin=False, id=user1.id, access_token="access_token")
+    user2_api = APIUser(is_admin=False, id=user2.id, access_token="access_token")
+    user_roles = {admin_user.id: get_kc_roles(["renku-admin"])}
+    kc_api = DummyKeycloakAPI(users=get_kc_users([admin_user_info, user1, user2]), user_roles=user_roles)
+    sync_config, user_repo = get_app_configs(kc_api)
+    # Sync users
+    await sync_config.syncer.users_sync(kc_api)
+    authz = Authz(sync_config.authz_config)
+    api_user = InternalServiceAdmin(id=ServiceAdminId.migrations)
+    # Create group
+    group_payload = GroupPostRequest(name="group1", slug="group1", description=None)
+    group = await sync_config.group_repo.insert_group(user1_api, group_payload)
+    # Create project
+    project_payload = UnsavedProject(
+        name="project1", slug="project1", namespace="group1", created_by=user1.id, visibility="private"
+    )
+    project = await sync_config.project_repo.insert_project(user1_api, project_payload)
+    # Write the wrong group ID
+    await authz.client.WriteRelationships(
+        WriteRelationshipsRequest(
+            updates=[
+                RelationshipUpdate(
+                    operation=RelationshipUpdate.OPERATION_DELETE,
+                    relationship=Relationship(
+                        resource=_AuthzConverter.project(project.id),
+                        relation=_Relation.project_namespace.value,
+                        subject=SubjectReference(object=_AuthzConverter.group(group.id)),
+                    ),
+                ),
+                RelationshipUpdate(
+                    operation=RelationshipUpdate.OPERATION_TOUCH,
+                    relationship=Relationship(
+                        resource=_AuthzConverter.project(project.id),
+                        relation=_Relation.project_namespace.value,
+                        subject=SubjectReference(object=_AuthzConverter.group("random")),
+                    ),
+                )
+            ]
+        )
+    )
+    # Add group member
+    await sync_config.group_repo.update_group_members(
+        user1_api, "group1", GroupMemberPatchRequestList([GroupMemberPatchRequest(id=user2.id, role=GroupRole.viewer)])
+    )
+    with pytest.raises(errors.MissingResourceError):
+        await sync_config.project_repo.get_project(user2_api, project.id)
+    await fix_mismatched_project_namespace_ids(sync_config)
+    # After the fix you can read the project
+    await sync_config.project_repo.get_project(user2_api, project.id)
