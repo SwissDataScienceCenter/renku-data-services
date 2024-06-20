@@ -81,9 +81,11 @@ class ProjectsBP(CustomBlueprint):
                 description=body.description,
                 repositories=body.repositories or [],
                 created_by=user.id,  # type: ignore[arg-type]
-                visibility=Visibility(body.visibility)
-                if isinstance(body.visibility, str)
-                else Visibility(body.visibility.value),
+                visibility=(
+                    Visibility(body.visibility)
+                    if isinstance(body.visibility, str)
+                    else Visibility(body.visibility.value)
+                ),
                 keywords=keywords,
             )
             result = await self.project_repo.insert_project(user, project)
@@ -237,9 +239,10 @@ class ProjectsBP(CustomBlueprint):
 
             for member in members:
                 user_id = member.user_id
-                user_info = await self.user_repo.get_kc_user(requested_by=user, id=user_id)
-                if not user_info:
+                user_with_namespace = await self.user_repo.get_user(id=user_id)
+                if not user_with_namespace:
                     raise errors.MissingResourceError(message=f"The user with ID {user_id} cannot be found.")
+                user_info = user_with_namespace.user
 
                 user_with_id = apispec.ProjectMemberResponse(
                     id=user_id,

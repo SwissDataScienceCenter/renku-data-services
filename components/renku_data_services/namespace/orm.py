@@ -69,9 +69,7 @@ class NamespaceORM(BaseORM):
         nullable=True,
         index=True,
     )
-    user: Mapped[UserORM | None] = relationship(
-        lazy="joined", init=False, repr=False, viewonly=True, back_populates="namespace"
-    )
+    user: Mapped[UserORM | None] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
 
     def dump(self) -> models.Namespace:
         """Create a namespace model from the ORM."""
