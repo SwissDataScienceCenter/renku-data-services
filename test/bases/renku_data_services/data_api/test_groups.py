@@ -1,6 +1,5 @@
 from base64 import b64decode
 from datetime import datetime
-from test.bases.renku_data_services.data_api.utils import merge_headers
 
 import pytest
 
@@ -14,6 +13,7 @@ from renku_data_services.message_queue.avro_models.io.renku.events.v2 import (
 )
 from renku_data_services.message_queue.models import deserialize_binary
 from renku_data_services.users.models import UserInfo
+from test.bases.renku_data_services.data_api.utils import merge_headers
 
 
 @pytest.mark.asyncio
