@@ -24,13 +24,13 @@ from authzed.api.v1.permission_service_pb2 import (
     SubjectFilter,
     WriteRelationshipsRequest,
 )
-from renku_data_services.base_models.core import InternalServiceAdmin
 from sanic.log import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services import base_models
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.authz.models import Change, Member, MembershipChange, Role, Scope, Visibility
+from renku_data_services.base_models.core import InternalServiceAdmin
 from renku_data_services.errors import errors
 from renku_data_services.namespace.models import Group, GroupUpdate, Namespace, NamespaceKind, NamespaceUpdate
 from renku_data_services.project.models import Project, ProjectUpdate

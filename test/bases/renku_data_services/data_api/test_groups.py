@@ -1,12 +1,12 @@
 from base64 import b64decode
 from datetime import datetime
-
-from renku_data_services.authz.models import Role, Visibility
-from sanic_testing.testing import SanicASGITestClient
 from test.bases.renku_data_services.data_api.utils import merge_headers
 
 import pytest
+from sanic_testing.testing import SanicASGITestClient
 
+from renku_data_services.app_config.config import Config
+from renku_data_services.authz.models import Role, Visibility
 from renku_data_services.message_queue.avro_models.io.renku.events.v2 import (
     GroupAdded,
     GroupMemberAdded,
@@ -17,7 +17,6 @@ from renku_data_services.message_queue.avro_models.io.renku.events.v2 import (
 )
 from renku_data_services.message_queue.models import deserialize_binary
 from renku_data_services.users.models import UserInfo
-from renku_data_services.app_config.config import Config
 
 
 @pytest.mark.asyncio

@@ -22,7 +22,6 @@ from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.background_jobs.core import bootstrap_user_namespaces, fix_mismatched_project_namespace_ids
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models import APIUser
-from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.db_config import DBConfig
 from renku_data_services.errors import errors
 from renku_data_services.message_queue.config import RedisConfig
@@ -541,7 +540,6 @@ async def test_fixing_project_group_namespace_relations(
         last_name=admin_user.last_name,
         email=admin_user.email,
     )
-
     user1 = UserInfo("user-1-id", "John", "Doe", "john.doe@gmail.com")
     user2 = UserInfo("user-2-id", "Jane", "Doe", "jane.doe@gmail.com")
     user1_api = APIUser(is_admin=False, id=user1.id, access_token="access_token")
@@ -552,7 +550,6 @@ async def test_fixing_project_group_namespace_relations(
     # Sync users
     await sync_config.syncer.users_sync(kc_api)
     authz = Authz(sync_config.authz_config)
-    api_user = InternalServiceAdmin(id=ServiceAdminId.migrations)
     # Create group
     group_payload = GroupPostRequest(name="group1", slug="group1", description=None)
     group = await sync_config.group_repo.insert_group(user1_api, group_payload)
@@ -580,7 +577,7 @@ async def test_fixing_project_group_namespace_relations(
                         relation=_Relation.project_namespace.value,
                         subject=SubjectReference(object=_AuthzConverter.group("random")),
                     ),
-                )
+                ),
             ]
         )
     )

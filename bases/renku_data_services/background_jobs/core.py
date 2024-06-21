@@ -13,7 +13,6 @@ from authzed.api.v1.permission_service_pb2 import (
 
 from renku_data_services.authz.authz import Authz, ResourceType, _Relation
 from renku_data_services.background_jobs.config import SyncConfig
-from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.message_queue.avro_models.io.renku.events import v2
 from renku_data_services.message_queue.converters import EventConverter
