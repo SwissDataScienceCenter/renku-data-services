@@ -1,5 +1,4 @@
 from dataclasses import asdict
-from test.components.renku_data_services.crc_models.hypothesis import quota_strat
 
 from hypothesis import given
 from kubernetes import client
@@ -7,6 +6,7 @@ from kubernetes import client
 from renku_data_services.crc import models
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
+from test.components.renku_data_services.crc_models.hypothesis import quota_strat
 
 
 def test_dummy_core_client() -> None:
