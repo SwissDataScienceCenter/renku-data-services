@@ -29,7 +29,7 @@ class SpiceDBSchema:
 @pytest.fixture
 def v1_schema() -> SpiceDBSchema:
     return SpiceDBSchema(
-        schemas.v1,
+        schemas._v1,
         relationships=[
             "platform:renku#admin@user:admin1",
             "platform:renku#admin@user:admin2",
@@ -138,7 +138,7 @@ def v1_schema() -> SpiceDBSchema:
 @pytest.fixture
 def v2_schema() -> SpiceDBSchema:
     return SpiceDBSchema(
-        schemas.v2,
+        schemas._v2,
         relationships=[
             "platform:renku#admin@user:admin1",
             "platform:renku#admin@user:admin2",
