@@ -1,13 +1,17 @@
 """The entrypoint for the secrets storage application."""
 
 import argparse
+from multiprocessing import Lock
 from os import environ
 from typing import Any
 
+from prometheus_sanic import monitor
 from sanic import Sanic
 from sanic.worker.loader import AppLoader
 
+from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.secrets.config import Config
+from renku_data_services.secrets.core import rotate_encryption_keys
 from renku_data_services.secrets_storage_api.app import register_all_handlers
 
 
@@ -18,6 +22,35 @@ def create_app() -> Sanic:
     if "COVERAGE_RUN" in environ:
         app.config.TOUCHUP = False
     app = register_all_handlers(app, config)
+
+    @app.main_process_start
+    def main_process_start(app: Sanic) -> None:
+        app.shared_ctx.rotation_lock = Lock()
+
+    # Setup prometheus
+    monitor(app, endpoint_type="url", multiprocess_mode="all", is_middleware=True).expose_endpoint()
+
+    async def rotate_encryption_key_listener(app: Sanic) -> None:
+        """Rotate RSA private key."""
+        if config.previous_secrets_service_private_key is None:
+            return
+
+        lock = app.shared_ctx.rotation_lock.acquire(block=False)
+
+        if not lock:
+            return  # only run rotation on one worker
+
+        try:
+            await rotate_encryption_keys(
+                InternalServiceAdmin(id=ServiceAdminId.secrets_rotation),
+                config.secrets_service_private_key,
+                config.previous_secrets_service_private_key,
+                config.user_secrets_repo,
+            )
+        finally:
+            app.shared_ctx.rotation_lock.release()
+
+    app.register_listener(rotate_encryption_key_listener, "after_server_start")
 
     return app
 
