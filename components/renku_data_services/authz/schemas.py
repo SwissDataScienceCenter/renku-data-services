@@ -216,6 +216,7 @@ definition user_namespace {
     relation user_namespace_platform: platform
     relation owner: user
     permission read = delete
+    permission read_children = delete
     permission write = delete
     permission delete = owner + user_namespace_platform->is_admin
 }
@@ -233,7 +234,7 @@ definition project {
     relation owner: user
     relation editor: user
     relation viewer: user | user:* | anonymous_user:*
-    permission read = viewer + write + project_namespace->read
+    permission read = viewer + write + project_namespace->read_children
     permission write = editor + delete + project_namespace->write
     permission change_membership = delete
     permission delete = owner + project_platform->is_admin + project_namespace->delete
