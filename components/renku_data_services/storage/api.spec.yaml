@@ -108,6 +108,63 @@ paths:
           $ref: '#/components/responses/Error'
       tags:
         - storages_v2
+  /storages_v2/{storage_id}/secrets:
+    parameters:
+      - in: path
+        name: storage_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/UlidId"
+        description: The id of the storage
+    get:
+      summary: Get all saved secrets for a cloud storage
+      responses:
+        "200":
+          description: The saved storage secrets
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/CloudStorageSecretGetList"
+        "404":
+          description: Storage was not found
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - storages_v2
+    post:
+      summary: Save secrets for a cloud storage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/CloudStorageSecretPost"
+      responses:
+        "201":
+          description: The secrets for cloud storage were saved
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/CloudStorageSecretGetList"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - storages_v2
+    delete:
+      summary: Remove all saved secrets for a storage
+      responses:
+        "204":
+          description: The secrets were removed or did not exist in the first place or the storage doesn't exist
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - storages_v2
   /storage/{storage_id}:
     parameters:
       - in: path
@@ -181,7 +238,7 @@ paths:
         - storage
   /storage:
     get:
-      summary: get cloud storage for a project or by id
+      summary: get cloud storage for a project by id
       parameters:
         - in: query
           name: project_id
@@ -311,7 +368,7 @@ paths:
         - storage
 components:
   schemas:
-    GitRequest:
+    ProjectId:
       type: object
       properties:
         project_id:
@@ -334,7 +391,7 @@ components:
         - type: object
     CloudStorageUrl:
       allOf:
-        - $ref: "#/components/schemas/GitRequest"
+        - $ref: "#/components/schemas/ProjectId"
         - type: object
           properties:
             storage_url:
@@ -357,7 +414,7 @@ components:
             storage_url: s3://giab
     CloudStorage:
       allOf:
-        - $ref: "#/components/schemas/GitRequest"
+        - $ref: "#/components/schemas/ProjectId"
         - type: object
           properties:
             storage_type:
@@ -426,6 +483,41 @@ components:
             $ref: "#/components/schemas/RCloneOption"
       required:
         - storage
+    CloudStorageSecretPost:
+      type: object
+      description: Data for storing secret for a storage field
+      properties:
+        name:
+          type: string
+          description: Name of the field to store credential for
+          minLength: 1
+          maxLength: 99
+        value:
+          $ref: "#/components/schemas/SecretValue"
+      required:
+        - name
+        - value
+    CloudStorageSecretGetList:
+      description: List of storage secrets that are saved
+      type: array
+      items:
+        $ref: "#/components/schemas/CloudStorageSecretGet"
+    CloudStorageSecretGet:
+      type: object
+      description: Data for saved storage secrets
+      properties:
+        name:
+          type: string
+          description: Name of the field to store credential for
+          minLength: 1
+          maxLength: 99
+      required:
+        - name
+    SecretValue:
+      description: Secret value that can be any text
+      type: string
+      minLength: 1
+      maxLength: 5000
     RCloneSchema:
       description: List of RClone schemas for different storage types
       type: array
