@@ -8,7 +8,7 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any, Concatenate, ParamSpec, TypeVar
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import Select, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import renku_data_services.base_models as base_models
@@ -48,9 +48,7 @@ class ProjectRepository:
         self.authz = authz
 
     async def get_projects(
-        self,
-        user: base_models.APIUser,
-        pagination: PaginationRequest,
+        self, user: base_models.APIUser, pagination: PaginationRequest, namespace: str | None = None
     ) -> tuple[list[models.Project], int]:
         """Get all projects from the database."""
         project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
@@ -61,11 +59,15 @@ class ProjectRepository:
             _ = await session.connection()
             stmt = select(schemas.ProjectORM)
             stmt = stmt.where(schemas.ProjectORM.id.in_(project_ids))
+            if namespace:
+                stmt = _filter_by_namespace_slug(stmt, namespace)
             stmt = stmt.limit(pagination.per_page).offset(pagination.offset)
             stmt = stmt.order_by(schemas.ProjectORM.creation_date.desc())
             stmt_count = (
                 select(func.count()).select_from(schemas.ProjectORM).where(schemas.ProjectORM.id.in_(project_ids))
             )
+            if namespace:
+                stmt_count = _filter_by_namespace_slug(stmt_count, namespace)
             results = await gather(session.execute(stmt), session.execute(stmt_count))
             projects_orm = results[0].scalars().all()
             total_elements = results[1].scalar() or 0
@@ -94,13 +96,9 @@ class ProjectRepository:
     ) -> models.Project:
         """Get one project from the database."""
         async with self.session_maker() as session:
-            stmt = (
-                select(schemas.ProjectORM)
-                .where(schemas.NamespaceORM.slug == namespace.lower())
-                .where(schemas.ProjectSlug.namespace_id == schemas.NamespaceORM.id)
-                .where(schemas.ProjectSlug.slug == slug.lower())
-                .where(schemas.ProjectORM.id == schemas.ProjectSlug.project_id)
-            )
+            stmt = select(schemas.ProjectORM)
+            stmt = _filter_by_namespace_slug(stmt, namespace)
+            stmt = stmt.where(schemas.ProjectSlug.slug == slug.lower())
             result = await session.execute(stmt)
             project_orm = result.scalars().first()
 
@@ -268,6 +266,15 @@ class ProjectRepository:
 
 _P = ParamSpec("_P")
 _T = TypeVar("_T")
+
+
+def _filter_by_namespace_slug(statement: Select[tuple[_T]], namespace: str) -> Select[tuple[_T]]:
+    """Filters a select query on projects to a given namespace."""
+    return (
+        statement.where(schemas.NamespaceORM.slug == namespace.lower())
+        .where(schemas.ProjectSlug.namespace_id == schemas.NamespaceORM.id)
+        .where(schemas.ProjectORM.id == schemas.ProjectSlug.project_id)
+    )
 
 
 def _project_exists(
