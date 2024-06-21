@@ -410,6 +410,9 @@ class Authz:
         )
         members: list[Member] = []
         async for response in responses:
+            # Skip "public_viewer" relationships
+            if response.relationship.relation == _Relation.public_viewer.value:
+                continue
             member_role = _Relation(response.relationship.relation).to_role()
             members.append(
                 Member(

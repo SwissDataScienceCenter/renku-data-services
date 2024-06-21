@@ -33,6 +33,8 @@ async def long_period_sync() -> None:
 
 async def main() -> None:
     """Synchronize data from Keycloak and the user database."""
+    logger = logging.getLogger("background_jobs")
+    logger.setLevel(logging.INFO)
 
     parser = argparse.ArgumentParser(prog="Data Service Background Jobs")
     subparsers = parser.add_subparsers(help="Background job to run")
