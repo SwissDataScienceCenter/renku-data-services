@@ -2,11 +2,12 @@
 
 import logging
 
-from authzed.api.v1.core_pb2 import SubjectReference
+from authzed.api.v1.core_pb2 import Relationship, RelationshipUpdate, SubjectReference
 from authzed.api.v1.permission_service_pb2 import (
     LookupResourcesRequest,
     ReadRelationshipsRequest,
     RelationshipFilter,
+    WriteRelationshipsRequest,
 )
 
 from renku_data_services.authz.authz import Authz, ResourceType, _AuthzConverter, _Relation
@@ -110,25 +111,25 @@ async def migrate_groups(config: SyncConfig) -> None:
     groups_to_process = all_group_ids - public_group_ids
     logger.info(f"Groups to process = {groups_to_process}")
 
-    # all_users = SubjectReference(object=_AuthzConverter.all_users())
-    # all_anon_users = SubjectReference(object=_AuthzConverter.anonymous_users())
-    # for group_id in groups_to_process:
-    #     group_res = _AuthzConverter.group(group_id)
-    #     all_users_are_viewers = Relationship(
-    #         resource=group_res,
-    #         relation=_Relation.viewer.value,
-    #         subject=all_users,
-    #     )
-    #     all_anon_users_are_viewers = Relationship(
-    #         resource=group_res,
-    #         relation=_Relation.viewer.value,
-    #         subject=all_anon_users,
-    #     )
-    #     authz_change = WriteRelationshipsRequest(
-    #         updates=[
-    #             RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=rel)
-    #             for rel in [all_users_are_viewers, all_anon_users_are_viewers]
-    #         ]
-    #     )
-    #     await authz.client.WriteRelationships(authz_change)
-    #     logger.info(f"Made group {group_id} public")
+    all_users = SubjectReference(object=_AuthzConverter.all_users())
+    all_anon_users = SubjectReference(object=_AuthzConverter.anonymous_users())
+    for group_id in groups_to_process:
+        group_res = _AuthzConverter.group(group_id)
+        all_users_are_viewers = Relationship(
+            resource=group_res,
+            relation=_Relation.public_viewer.value,
+            subject=all_users,
+        )
+        all_anon_users_are_viewers = Relationship(
+            resource=group_res,
+            relation=_Relation.public_viewer.value,
+            subject=all_anon_users,
+        )
+        authz_change = WriteRelationshipsRequest(
+            updates=[
+                RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=rel)
+                for rel in [all_users_are_viewers, all_anon_users_are_viewers]
+            ]
+        )
+        await authz.client.WriteRelationships(authz_change)
+        logger.info(f"Made group {group_id} public")
