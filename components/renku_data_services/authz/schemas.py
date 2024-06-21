@@ -195,3 +195,58 @@ v2 = AuthzSchemaMigration(
         WriteSchemaRequest(schema=_v1),
     ],
 )
+
+_v3: str = """\
+definition user {}
+
+definition group {
+    relation group_platform: platform
+    relation owner: user
+    relation editor: user
+    relation viewer: user
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = public_viewer + read_children
+    permission read_children = viewer + write
+    permission write = editor + delete
+    permission change_membership = delete
+    permission delete = owner + group_platform->is_admin
+}
+
+definition user_namespace {
+    relation user_namespace_platform: platform
+    relation owner: user
+    permission read = delete
+    permission write = delete
+    permission delete = owner + user_namespace_platform->is_admin
+}
+
+definition anonymous_user {}
+
+definition platform {
+    relation admin: user
+    permission is_admin = admin
+}
+
+definition project {
+    relation project_platform: platform
+    relation project_namespace: user_namespace | group
+    relation owner: user
+    relation editor: user
+    relation viewer: user | user:* | anonymous_user:*
+    permission read = viewer + write + project_namespace->read
+    permission write = editor + delete + project_namespace->write
+    permission change_membership = delete
+    permission delete = owner + project_platform->is_admin + project_namespace->delete
+}"""
+
+v3 = AuthzSchemaMigration(
+    up=[WriteSchemaRequest(schema=_v3)],
+    down=[
+        DeleteRelationshipsRequest(
+            relationship_filter=RelationshipFilter(
+                resource_type=ResourceType.group.value, optional_relation=_Relation.public_viewer.value
+            )
+        ),
+        WriteSchemaRequest(schema=_v2),
+    ],
+)

@@ -77,8 +77,9 @@ class _Relation(StrEnum):
     """Relations for Authzed."""
 
     owner: str = "owner"
-    viewer: str = "viewer"
     editor: str = "editor"
+    viewer: str = "viewer"
+    public_viewer: str = "public_viewer"
     admin: str = "admin"
     project_platform: str = "project_platform"
     group_platform: str = "group_platform"
@@ -1028,12 +1029,29 @@ class Authz:
         creator = SubjectReference(object=_AuthzConverter.user(group.created_by))
         group_res = _AuthzConverter.group(group.id)
         creator_is_owner = Relationship(resource=group_res, relation=_Relation.owner.value, subject=creator)
+        all_users = SubjectReference(object=_AuthzConverter.all_users())
+        all_anon_users = SubjectReference(object=_AuthzConverter.anonymous_users())
         group_in_platform = Relationship(
             resource=group_res,
             relation=_Relation.group_platform.value,
             subject=SubjectReference(object=self._platform),
         )
-        relationships = [creator_is_owner, group_in_platform]
+        all_users_are_public_viewers = Relationship(
+            resource=group_res,
+            relation=_Relation.public_viewer.value,
+            subject=all_users,
+        )
+        all_anon_users_are_public_viewers = Relationship(
+            resource=group_res,
+            relation=_Relation.public_viewer.value,
+            subject=all_anon_users,
+        )
+        relationships = [
+            creator_is_owner,
+            group_in_platform,
+            all_users_are_public_viewers,
+            all_anon_users_are_public_viewers,
+        ]
         apply = WriteRelationshipsRequest(
             updates=[
                 RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=i) for i in relationships
