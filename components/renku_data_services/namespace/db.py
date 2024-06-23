@@ -387,7 +387,7 @@ class GroupRepository:
                 continue
             else:
                 await session.refresh(ns)
-                ns.dump()
+                return ns.dump()
         if not retry_random:
             raise errors.ValidationError(
                 message=f"Cannot create generate a unique namespace slug for the user with ID {user.keycloak_id}"
