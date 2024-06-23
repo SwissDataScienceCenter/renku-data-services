@@ -49,3 +49,20 @@ def decrypt_rsa(private_key: rsa.RSAPrivateKey, encrypted_data: bytes) -> bytes:
         encrypted_data, padding.OAEP(padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None)
     )
     return data
+
+
+def encrypt_user_secret(
+    user_id: str, user_secret_key: str, secret_service_public_key: rsa.RSAPublicKey, secret_value: str
+) -> tuple[bytes, bytes]:
+    """Doubly encrypt a secret for a user.
+
+    Since RSA cannot encrypt arbitrary length strings, we use symmetric encryption with a random key and encrypt the
+    random key with RSA to get it to the secrets service.
+    """
+    # encrypt once with user secret
+    encrypted_value = encrypt_string(user_secret_key.encode(), user_id, secret_value)
+    # encrypt again with secret service public key
+    secret_svc_encryption_key = generate_random_encryption_key()
+    doubly_encrypted_value = encrypt_string(secret_svc_encryption_key, user_id, encrypted_value.decode())
+    encrypted_key = encrypt_rsa(secret_service_public_key, secret_svc_encryption_key)
+    return doubly_encrypted_value, encrypted_key

@@ -2,13 +2,15 @@
 
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, MetaData, String
+from sqlalchemy import JSON, Boolean, ForeignKey, MetaData, String
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
-from sqlalchemy.schema import UniqueConstraint
+from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
+from sqlalchemy.schema import Index, UniqueConstraint
 from ulid import ULID
 
+from renku_data_services.secrets.orm import SecretORM
 from renku_data_services.storage import models
+from renku_data_services.users.orm import UserORM
 
 JSONVariant = JSON().with_variant(JSONB(), "postgresql")
 
@@ -84,4 +86,40 @@ class CloudStorageORM(BaseORM):
             target_path=self.target_path,
             storage_id=self.storage_id,
             readonly=self.readonly,
+        )
+
+
+class CloudStorageSecretsORM(BaseORM):
+    """Secrets for cloud storages."""
+
+    __tablename__ = "cloud_storage_secrets"
+    __table_args__ = (Index("ix_storage_cloud_storage_secrets_user_id_storage_id", "user_id", "storage_id"),)
+
+    user_id: Mapped[str] = mapped_column(
+        "user_id", ForeignKey(UserORM.keycloak_id, ondelete="CASCADE"), primary_key=True
+    )
+
+    storage_id: Mapped[str] = mapped_column(
+        "storage_id", ForeignKey(CloudStorageORM.storage_id, ondelete="CASCADE"), primary_key=True
+    )
+
+    name: Mapped[str] = mapped_column("name", String(), primary_key=True)
+
+    secret_id: Mapped[str] = mapped_column("secret_id", ForeignKey(SecretORM.id, ondelete="CASCADE"))
+    secret: Mapped[SecretORM] = relationship(init=False, repr=False, lazy="selectin")
+
+    @classmethod
+    def load(cls, storage_secret: models.CloudStorageSecret) -> "CloudStorageSecretsORM":
+        """Create an instance from the cloud storage secret model."""
+        return cls(
+            user_id=storage_secret.user_id,
+            storage_id=storage_secret.storage_id,
+            name=storage_secret.name,
+            secret_id=storage_secret.secret_id,
+        )
+
+    def dump(self) -> models.CloudStorageSecret:
+        """Create a cloud storage secret model from the ORM object."""
+        return models.CloudStorageSecret(
+            user_id=self.user_id, storage_id=self.storage_id, name=self.name, secret_id=self.secret_id
         )

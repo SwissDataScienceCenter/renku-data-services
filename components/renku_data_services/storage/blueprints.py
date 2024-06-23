@@ -278,6 +278,43 @@ class StoragesV2BP(CustomBlueprint):
 
         return "/storages_v2/<storage_id:ulid>", ["DELETE"], _delete
 
+    def upsert_secrets(self) -> BlueprintFactoryResponse:
+        """Create/update secrets for a cloud storage."""
+
+        @authenticate(self.authenticator)
+        async def _upsert_secrets(request: Request, user: base_models.APIUser, storage_id: str) -> JSONResponse:
+            body = apispec.CloudStorageSecretPostList.model_validate(request.json)
+            result = await self.storage_v2_repo.upsert_storage_secrets(
+                storage_id=storage_id, user=user, secrets=body.root
+            )
+            return json(
+                apispec.CloudStorageSecretGetList.model_validate(result).model_dump(exclude_none=True, mode="json"), 201
+            )
+
+        return "/storages_v2/<storage_id>/secrets", ["POST"], _upsert_secrets
+
+    def get_secrets(self) -> BlueprintFactoryResponse:
+        """Return all secrets for a cloud storage."""
+
+        @authenticate(self.authenticator)
+        async def _get_secrets(request: Request, user: base_models.APIUser, storage_id: str) -> JSONResponse:
+            result = await self.storage_v2_repo.get_storage_secrets(storage_id=storage_id, user=user)
+            return json(
+                apispec.CloudStorageSecretGetList.model_validate(result).model_dump(exclude_none=True, mode="json"), 200
+            )
+
+        return "/storages_v2/<storage_id>/secrets", ["GET"], _get_secrets
+
+    def delete_secrets(self) -> BlueprintFactoryResponse:
+        """Delete all secrets for a cloud storage."""
+
+        @authenticate(self.authenticator)
+        async def _delete_secrets(request: Request, user: base_models.APIUser, storage_id: str) -> HTTPResponse:
+            await self.storage_v2_repo.delete_storage_secrets(storage_id=storage_id, user=user)
+            return HTTPResponse(status=204)
+
+        return "/storages_v2/<storage_id>/secrets", ["DELETE"], _delete_secrets
+
 
 @dataclass(kw_only=True)
 class StorageSchemaBP(CustomBlueprint):

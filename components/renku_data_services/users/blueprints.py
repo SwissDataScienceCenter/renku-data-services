@@ -17,7 +17,7 @@ from renku_data_services.secrets.models import Secret, SecretKind
 from renku_data_services.users import apispec
 from renku_data_services.users.apispec_base import BaseAPISpec
 from renku_data_services.users.db import UserRepo
-from renku_data_services.utils.cryptography import encrypt_rsa, encrypt_string, generate_random_encryption_key
+from renku_data_services.utils.cryptography import encrypt_user_secret
 
 
 class GetSecretsParams(BaseAPISpec):
@@ -139,21 +139,17 @@ class UserSecretsBP(CustomBlueprint):
 
     @only_authenticated
     async def _encrypt_user_secret(self, requested_by: base_models.APIUser, secret_value: str) -> tuple[bytes, bytes]:
-        """Doubly encrypt a secret for a user.
-
-        Since RSA cannot encrypt arbitrary length strings, we use symmetric encryption with a random key and encrypt the
-        random key with RSA to get it to the secrets service.
-        """
         if requested_by.id is None:
             raise errors.ValidationError(message="APIUser has no id")
+
         user_secret_key = await self.user_repo.get_or_create_user_secret_key(requested_by=requested_by)
-        # encrypt once with user secret
-        encrypted_value = encrypt_string(user_secret_key.encode(), requested_by.id, secret_value)
-        # encrypt again with secret service public key
-        secret_svc_encryption_key = generate_random_encryption_key()
-        doubly_encrypted_value = encrypt_string(secret_svc_encryption_key, requested_by.id, encrypted_value.decode())
-        encrypted_key = encrypt_rsa(self.secret_service_public_key, secret_svc_encryption_key)
-        return doubly_encrypted_value, encrypted_key
+
+        return encrypt_user_secret(
+            user_id=requested_by.id,
+            user_secret_key=user_secret_key,
+            secret_service_public_key=self.secret_service_public_key,
+            secret_value=secret_value,
+        )
 
     def get_all(self) -> BlueprintFactoryResponse:
         """Get all user's secrets."""
