@@ -82,7 +82,7 @@ fakeredis = "^2.23.2"
 ruff = "^0.4.9"
 debugpy = "^1.8.1"
 pytest-xdist = {version = "^3.5.0", extras = ["psutil"]}
-types-requests = "^2.32.0.20240602"
+types-requests = "^2.32.0.20240622"
 
 [build-system]
 requires = ["poetry-core"]
