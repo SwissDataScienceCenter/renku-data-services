@@ -301,3 +301,29 @@ async def test_storage_v2_is_deleted_if_project_is_deleted(
 
     # NOTE: If storage isn't deleted, the status code will be 401
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_storage_v2_create_secret(sanic_client, create_storage, project_normal_member_headers) -> None:
+    storage = await create_storage()
+    storage_id = storage["storage"]["storage_id"]
+
+    payload = [
+        {"name": "access_key_id", "value": "access key id value"},
+        {"name": "secret_access_key", "value": "secret access key value"},
+    ]
+
+    _, response = await sanic_client.post(
+        f"/api/data/storages_v2/{storage_id}/secrets", headers=project_normal_member_headers, json=payload
+    )
+
+    assert response.status_code == 201
+
+    _, response = await sanic_client.get(
+        f"/api/data/storages_v2/{storage_id}/secrets", headers=project_normal_member_headers
+    )
+
+    assert response.status_code == 200
+    storage = response.json["storage"]
+    assert storage["configuration"]["provider"] == "AWS"
+    assert response.json["storage"]["source_path"] == "bucket/my-folder"
