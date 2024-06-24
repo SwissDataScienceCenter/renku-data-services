@@ -132,7 +132,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         internal_gitlab_authenticator=config.gitlab_authenticator,
     )
     platform_config = PlatformConfigBP(
-        name="repositories",
+        name="platform_config",
         url_prefix=url_prefix,
         authenticator=config.authenticator,
     )
