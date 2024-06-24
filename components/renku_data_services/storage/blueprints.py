@@ -277,6 +277,17 @@ class StoragesV2BP(CustomBlueprint):
 
         return "/storages_v2/<storage_id>", ["DELETE"], _delete
 
+    def upsert_secret(self) -> BlueprintFactoryResponse:
+        """Create/update a secret for a cloud storage."""
+
+        @authenticate(self.authenticator)
+        async def _upsert_secret(request: Request, user: base_models.APIUser, storage_id: str) -> JSONResponse:
+            body = apispec.CloudStorageSecretPostList.model_validate(request.json)
+            result = await self.storage_v2_repo.upsert_storage_secrets(storage_id=storage_id, user=user, body=body)
+            return json([], 201)
+
+        return "/storages_v2/<storage_id>/secrets", ["POST"], _upsert_secret
+
 
 @dataclass(kw_only=True)
 class StorageSchemaBP(CustomBlueprint):

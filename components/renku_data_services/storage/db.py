@@ -142,6 +142,10 @@ class BaseStorageRepository(_Base):
 
             await session.delete(storage[0])
 
+    async def upsert_storage_secrets(self, storage_id: str, user: base_models.APIUser, body):
+        """Create/update cloud storage secrets."""
+
+
 
 class StorageRepository(BaseStorageRepository):
     """Repository for V1 cloud storage."""
