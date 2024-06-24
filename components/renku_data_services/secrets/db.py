@@ -14,6 +14,7 @@ from renku_data_services.errors import errors
 from renku_data_services.secrets.models import Secret
 from renku_data_services.secrets.orm import SecretORM
 from renku_data_services.users.apispec import SecretKind
+from renku_data_services.utils.cryptography import encrypt_rsa, encrypt_string, generate_random_encryption_key
 
 
 class UserSecretsRepo:
@@ -24,6 +25,23 @@ class UserSecretsRepo:
         session_maker: Callable[..., AsyncSession],
     ) -> None:
         self.session_maker = session_maker
+
+    async def _encrypt_user_secret(self, requested_by: APIUser, secret_value: str) -> tuple[bytes, bytes]:
+        """Doubly encrypt a secret for a user.
+
+        Since RSA cannot encrypt arbitrary length strings, we use symmetric encryption with a random key and encrypt the
+        random key with RSA to get it to the secrets service.
+        """
+        if requested_by.id is None:
+            raise errors.ValidationError(message="APIUser has no id")
+        user_secret_key = await self.user_repo.get_or_create_user_secret_key(requested_by=requested_by)
+        # encrypt once with user secret
+        encrypted_value = encrypt_string(user_secret_key.encode(), requested_by.id, secret_value)
+        # encrypt again with secret service public key
+        secret_svc_encryption_key = generate_random_encryption_key()
+        doubly_encrypted_value = encrypt_string(secret_svc_encryption_key, requested_by.id, encrypted_value.decode())
+        encrypted_key = encrypt_rsa(self.secret_service_public_key, secret_svc_encryption_key)
+        return doubly_encrypted_value, encrypted_key
 
     @only_authenticated
     async def get_user_secrets(self, requested_by: APIUser, kind: SecretKind) -> list[Secret]:

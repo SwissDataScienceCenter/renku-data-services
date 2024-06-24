@@ -26,7 +26,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["storage_id"], ["storage.cloud_storage.storage_id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["secret_id"], ["secrets.secrets.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["user_id"], ["users.users.keycloak_id"], ondelete="CASCADE"),
-        sa.UniqueConstraint("user_id", "storage_id", "name", name="_unique_user_id_storage_id_name"),
+        sa.PrimaryKeyConstraint("user_id", "storage_id", "name", name="_unique_user_id_storage_id_name"),
         schema="storage",
     )
     op.create_index(

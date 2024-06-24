@@ -92,11 +92,11 @@ class CloudStorageSecretsORM(BaseORM):
 
     __tablename__ = "cloud_storage_secrets"
 
-    user_id: Mapped[str] = mapped_column("user_id", String(36))
+    user_id: Mapped[str] = mapped_column("user_id", String(36), primary_key=True)
 
-    storage_id: Mapped[str] = mapped_column("storage_id", String(26))
+    storage_id: Mapped[str] = mapped_column("storage_id", String(26), primary_key=True)
 
-    name: Mapped[str] = mapped_column("name", String())
+    name: Mapped[str] = mapped_column("name", String(), primary_key=True)
 
     secret_id: Mapped[str] = mapped_column("secret_id", String(26))
 
