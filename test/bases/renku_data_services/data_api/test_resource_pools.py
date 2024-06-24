@@ -1,45 +1,37 @@
 import json
 from copy import deepcopy
+from test.bases.renku_data_services.data_api.utils import create_rp
 from typing import Any
 
 import pytest
 from sanic_testing.testing import SanicASGITestClient
-
-from test.bases.renku_data_services.data_api.utils import create_rp
-
-_valid_resource_pool_payload: dict[str, Any] = {
-    "name": "test-name",
-    "classes": [
-        {
-            "cpu": 1.0,
-            "memory": 10,
-            "gpu": 0,
-            "name": "test-class-name",
-            "max_storage": 100,
-            "default_storage": 1,
-            "default": True,
-            "node_affinities": [],
-            "tolerations": [],
-        }
-    ],
-    "quota": {"cpu": 100, "memory": 100, "gpu": 0},
-    "default": False,
-    "public": True,
-    "idle_threshold": 86400,
-    "hibernation_threshold": 99999,
-}
-
-
-@pytest.fixture
-def valid_resource_pool_payload() -> dict[str, Any]:
-    return deepcopy(_valid_resource_pool_payload)
 
 
 @pytest.mark.parametrize(
     "payload,expected_status_code",
     [
         (
-            _valid_resource_pool_payload,
+            {
+                "name": "test-name",
+                "classes": [
+                    {
+                        "cpu": 1.0,
+                        "memory": 10,
+                        "gpu": 0,
+                        "name": "test-class-name",
+                        "max_storage": 100,
+                        "default_storage": 1,
+                        "default": True,
+                        "node_affinities": [],
+                        "tolerations": [],
+                    }
+                ],
+                "quota": {"cpu": 100, "memory": 100, "gpu": 0},
+                "default": False,
+                "public": True,
+                "idle_threshold": 86400,
+                "hibernation_threshold": 99999,
+            },
             201,
         ),
         (
@@ -75,8 +67,10 @@ async def test_resource_pool_creation(
 
 
 @pytest.mark.asyncio
-async def test_resource_pool_quotas(sanic_client: SanicASGITestClient) -> None:
-    _, res = await create_rp(_valid_resource_pool_payload, sanic_client)
+async def test_resource_pool_quotas(
+    sanic_client: SanicASGITestClient, valid_resource_pool_payload: dict[str, Any]
+) -> None:
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
     assert res.status_code == 201
 
     assert res.json.get("idle_threshold") == 86400
@@ -85,8 +79,7 @@ async def test_resource_pool_quotas(sanic_client: SanicASGITestClient) -> None:
 
 @pytest.mark.asyncio
 async def test_resource_class_filtering(
-    sanic_client: SanicASGITestClient,
-    admin_headers: dict[str, str],
+    sanic_client: SanicASGITestClient, admin_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
 ) -> None:
     new_classes = [
         {
@@ -123,7 +116,7 @@ async def test_resource_class_filtering(
             "tolerations": [],
         },
     ]
-    payload = deepcopy(_valid_resource_pool_payload)
+    payload = valid_resource_pool_payload
     payload["quota"] = {"cpu": 100, "memory": 100, "gpu": 100}
     payload["classes"] = new_classes
     _, res = await create_rp(payload, sanic_client)

@@ -2,6 +2,7 @@
 
 import time
 from base64 import b64decode
+from test.bases.renku_data_services.data_api.utils import merge_headers
 from typing import Any
 
 import pytest
@@ -12,7 +13,6 @@ from renku_data_services.app_config.config import Config
 from renku_data_services.message_queue.avro_models.io.renku.events.v2.member_role import MemberRole
 from renku_data_services.message_queue.models import deserialize_binary
 from renku_data_services.users.models import UserInfo
-from test.bases.renku_data_services.data_api.utils import merge_headers
 
 
 @pytest.fixture

@@ -1,4 +1,11 @@
 import contextlib
+from test.components.renku_data_services.storage_models.hypothesis import (
+    a_path,
+    azure_configuration,
+    s3_configuration,
+    storage_strat,
+)
+from test.utils import create_storage
 from typing import Any
 
 import pytest
@@ -10,13 +17,6 @@ from renku_data_services import errors
 from renku_data_services.app_config import Config
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.migrations.core import run_migrations_for_app
-from test.components.renku_data_services.storage_models.hypothesis import (
-    a_path,
-    azure_configuration,
-    s3_configuration,
-    storage_strat,
-)
-from test.utils import create_storage
 
 
 def get_user(storage, valid: bool = True):

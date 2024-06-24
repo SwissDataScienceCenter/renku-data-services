@@ -12,6 +12,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
+from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.session import apispec, models
 from renku_data_services.session import orm as schemas
 from renku_data_services.session.apispec import EnvironmentKind
@@ -20,9 +21,12 @@ from renku_data_services.session.apispec import EnvironmentKind
 class SessionRepository:
     """Repository for sessions."""
 
-    def __init__(self, session_maker: Callable[..., AsyncSession], project_authz: Authz) -> None:
+    def __init__(
+        self, session_maker: Callable[..., AsyncSession], project_authz: Authz, resource_pools: ResourcePoolRepository
+    ) -> None:
         self.session_maker = session_maker
         self.project_authz: Authz = project_authz
+        self.resource_pools: ResourcePoolRepository = resource_pools
 
     async def get_environments(self) -> list[models.Environment]:
         """Get all session environments from the database."""
@@ -206,7 +210,7 @@ class SessionRepository:
                 environment = res.one_or_none()
                 if environment is None:
                     raise errors.MissingResourceError(
-                        message=f"Session environment with id '{environment_id}' does not exist or you do not have access to it."  # noqa: E501
+                        message=f"Session environment with id '{environment_id}' does not exist or you do not have access to it."
                     )
 
             resource_class_id = new_launcher.resource_class_id
@@ -217,7 +221,14 @@ class SessionRepository:
                 resource_class = res.one_or_none()
                 if resource_class is None:
                     raise errors.MissingResourceError(
-                        message=f"Resource class with id '{resource_class_id}' does not exist or you do not have access to it."  # noqa: E501
+                        message=f"Resource class with id '{resource_class_id}' does not exist."  # noqa: E501
+                    )
+
+                res_classes = await self.resource_pools.get_classes(api_user=user, id=resource_class_id)
+                resource_class_by_user = next((rc for rc in res_classes if rc.id == resource_class_id), None)
+                if resource_class_by_user is None:
+                    raise errors.Unauthorized(
+                        message=f"Resource class with id '{resource_class_id}' you do not have access to it."
                     )
 
             launcher = schemas.SessionLauncherORM.load(launcher_model)
@@ -269,7 +280,14 @@ class SessionRepository:
                 resource_class = res.one_or_none()
                 if resource_class is None:
                     raise errors.MissingResourceError(
-                        message=f"Resource class with id '{resource_class_id}' does not exist or you do not have access to it."  # noqa: E501
+                        message=f"Resource class with id '{resource_class_id}' does not exist."  # noqa: E501
+                    )
+
+                res_classes = await self.resource_pools.get_classes(api_user=user, id=resource_class_id)
+                resource_class_by_user = next((rc for rc in res_classes if rc.id == resource_class_id), None)
+                if resource_class_by_user is None:
+                    raise errors.Unauthorized(
+                        message=f"Resource class with id '{resource_class_id}' you do not have access to it."
                     )
 
             for key, value in kwargs.items():

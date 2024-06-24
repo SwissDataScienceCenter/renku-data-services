@@ -232,6 +232,7 @@ async def test_get_session_launcher(
     assert res.json.get("environment_kind") == "global_environment"
     assert res.json.get("environment_id") == env["id"]
     assert res.json.get("container_image") is None
+    assert res.json.get("resource_class_id") is None
 
 
 @pytest.mark.asyncio
@@ -257,17 +258,30 @@ async def test_get_project_launchers(
 
 
 @pytest.mark.asyncio
-async def test_post_session_launcher(sanic_client: SanicASGITestClient, user_headers, create_project) -> None:
+async def test_post_session_launcher(
+    sanic_client: SanicASGITestClient,
+    valid_resource_pool_payload: dict[str, Any],
+    user_headers,
+    admin_headers,
+    member_1_headers,
+    create_project,
+    create_resource_pool,
+) -> None:
     project = await create_project("Some project")
+    resource_pool_data = valid_resource_pool_payload
+
+    resource_pool = await create_resource_pool(admin=True, **resource_pool_data)
+
     payload = {
         "name": "Launcher 1",
         "project_id": project["id"],
         "description": "A session launcher.",
         "environment_kind": "container_image",
         "container_image": "some_image:some_tag",
+        "resource_class_id": resource_pool["classes"][0]["id"],
     }
 
-    _, res = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
+    _, res = await sanic_client.post("/api/data/session_launchers", headers=admin_headers, json=payload)
 
     assert res.status_code == 201, res.text
     assert res.json is not None
@@ -277,7 +291,37 @@ async def test_post_session_launcher(sanic_client: SanicASGITestClient, user_hea
     assert res.json.get("environment_kind") == "container_image"
     assert res.json.get("container_image") == "some_image:some_tag"
     assert res.json.get("environment_id") is None
-    assert res.json.get("resource_class_id") is None
+    assert res.json.get("resource_class_id") == resource_pool["classes"][0]["id"]
+
+
+@pytest.mark.asyncio
+async def test_post_session_launcher_unauthorized(
+    sanic_client: SanicASGITestClient,
+    valid_resource_pool_payload: dict[str, Any],
+    user_headers,
+    admin_headers,
+    create_project,
+    create_resource_pool,
+    regular_user,
+) -> None:
+    project = await create_project("Some project")
+    resource_pool_data = valid_resource_pool_payload
+    resource_pool_data["public"] = False
+
+    resource_pool = await create_resource_pool(admin=True, **resource_pool_data)
+
+    payload = {
+        "name": "Launcher 1",
+        "project_id": project["id"],
+        "description": "A session launcher.",
+        "environment_kind": "container_image",
+        "container_image": "some_image:some_tag",
+        "resource_class_id": resource_pool["classes"][0]["id"],
+    }
+
+    _, res = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
+
+    assert res.status_code == 401, res.text
 
 
 @pytest.mark.asyncio

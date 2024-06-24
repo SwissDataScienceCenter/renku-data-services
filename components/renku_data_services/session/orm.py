@@ -119,7 +119,7 @@ class SessionLauncherORM(BaseORM):
         ForeignKey(ResourceClassORM.id, ondelete="SET NULL"),
         default=None,
         nullable=True,
-        index=True,
+        index=False,
     )
     """Id of the resource class."""
 

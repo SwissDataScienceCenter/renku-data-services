@@ -265,10 +265,12 @@ class ResourcePoolRepository(_Base):
                 stmt = stmt.where(schemas.ResourceClassORM.id == id)
             if name is not None:
                 stmt = stmt.where(schemas.ResourceClassORM.name == name)
+
             # Apply user access control if api_user is provided
             if api_user is not None:
                 # NOTE: The line below ensures that the right users can access the right resources, do not remove.
                 stmt = _classes_user_access_control(api_user, stmt)
+
             res = await session.execute(stmt)
             orms = res.scalars().all()
             return [orm.dump() for orm in orms]
