@@ -2,14 +2,15 @@
 
 from dataclasses import dataclass
 
-from sanic import Request
-from sanic.response import JSONResponse
+from sanic import Request, empty, json
+from sanic.response import HTTPResponse, JSONResponse
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.etag import extract_if_none_match
+from renku_data_services.platform import apispec
 from renku_data_services.platform.db import PlatformRepository
 
 
@@ -24,8 +25,24 @@ class PlatformConfigBP(CustomBlueprint):
         """Get the platform configuration."""
 
         @extract_if_none_match
-        async def _get_singleton(_: Request, etag: str | None) -> JSONResponse:
-            raise errors.MissingResourceError(message="The platform configuration has not been initialized yet")
+        async def _get_singleton(_: Request, etag: str | None) -> HTTPResponse:
+            config = await self.platform_repo.get_config()
+
+            if config.etag == etag:
+                return empty(status=304)
+
+            headers = {"ETag": config.etag}
+            return json(
+                apispec.PlatformConfig.model_validate(
+                    dict(
+                        etag=config.etag,
+                        disable_ui=config.disable_ui,
+                        maintenance_banner=config.maintenance_banner,
+                        status_page_id=config.status_page_id,
+                    )
+                ).model_dump(mode="json", exclude_none=True),
+                headers=headers,
+            )
 
         return "/platform/config", ["GET"], _get_singleton
 

@@ -24,11 +24,9 @@ class PlatformConfig(BaseModel):
     maintenance_banner: str
     status_page_id: str
     creation_date: datetime = field(default_factory=lambda: datetime.now(UTC).replace(microsecond=0))
-    updated_at: datetime | None = field(default=None)
+    updated_at: datetime
 
     @property
-    def etag(self) -> str | None:
+    def etag(self) -> str:
         """Entity tag value for this project object."""
-        if self.updated_at is None:
-            return None
         return compute_etag_from_timestamp(self.updated_at, include_quotes=True)
