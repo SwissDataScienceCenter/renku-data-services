@@ -59,7 +59,7 @@ def validate_path_project_id(
             )
         if not _path_project_id_regex.match(project_id):
             raise errors.ValidationError(
-                message=f"The 'project_id' path parameter {project_id} does not match the requried "
+                message=f"The 'project_id' path parameter {project_id} does not match the required "
                 f"regex {_path_project_id_regex}"
             )
 
