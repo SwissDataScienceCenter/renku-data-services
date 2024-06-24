@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from sanic import Request, empty, json
 from sanic.response import HTTPResponse, JSONResponse
+from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
@@ -51,8 +52,24 @@ class PlatformConfigBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        async def _post_singleton(request: Request, user: base_models.APIUser) -> JSONResponse:
-            raise errors.ProgrammingError(message="Not yet implemented")
+        @validate(json=apispec.PlatformConfigPost)
+        async def _post_singleton(
+            _: Request, user: base_models.APIUser, body: apispec.PlatformConfigPost
+        ) -> JSONResponse:
+            config = await self.platform_repo.insert_config(user=user, new_config=body)
+            headers = {"ETag": config.etag}
+            return json(
+                apispec.PlatformConfig.model_validate(
+                    dict(
+                        etag=config.etag,
+                        disable_ui=config.disable_ui,
+                        maintenance_banner=config.maintenance_banner,
+                        status_page_id=config.status_page_id,
+                    )
+                ).model_dump(mode="json", exclude_none=True),
+                headers=headers,
+                status=201,
+            )
 
         return "/platform/config", ["POST"], _post_singleton
 
