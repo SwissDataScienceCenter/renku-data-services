@@ -134,6 +134,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
     platform_config = PlatformConfigBP(
         name="platform_config",
         url_prefix=url_prefix,
+        platform_repo=config.platform_repo,
         authenticator=config.authenticator,
     )
     app.blueprint(
