@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from typing import cast
 
+from cryptography.hazmat.primitives.asymmetric import rsa
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,8 +11,13 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.authz import models as authz_models
 from renku_data_services.authz.authz import Authz, ResourceType
-from renku_data_services.storage import models
+from renku_data_services.secrets.db import UserSecretsRepo
+from renku_data_services.secrets.models import Secret
+from renku_data_services.storage import apispec, models
 from renku_data_services.storage import orm as schemas
+from renku_data_services.users.apispec import SecretKind
+from renku_data_services.users.db import UserRepo
+from renku_data_services.utils.cryptography import encrypt_user_secret
 
 
 class _Base:
@@ -27,8 +33,14 @@ class BaseStorageRepository(_Base):
     def __init__(
         self,
         session_maker: Callable[..., AsyncSession],
+        user_repo: UserRepo,
+        secret_repo: UserSecretsRepo,
+        secret_service_public_key: rsa.RSAPublicKey,
     ) -> None:
         super().__init__(session_maker)
+        self.user_repo: UserRepo = user_repo
+        self.secret_service_public_key: rsa.RSAPublicKey = secret_service_public_key
+        self.secret_repo: UserSecretsRepo = secret_repo
 
     async def filter_projects_by_access_level(
         self, user: base_models.APIUser, project_ids: list[str], minimum_access_level: authz_models.Role
@@ -142,9 +154,68 @@ class BaseStorageRepository(_Base):
 
             await session.delete(storage[0])
 
-    async def upsert_storage_secrets(self, storage_id: str, user: base_models.APIUser, body):
-        """Create/update cloud storage secrets."""
+    async def _encrypt_user_secret(self, requested_by: base_models.APIUser, secret_value: str) -> tuple[bytes, bytes]:
+        if requested_by.id is None:
+            raise errors.ValidationError(message="APIUser has no id")
 
+        user_secret_key = await self.user_repo.get_or_create_user_secret_key(requested_by=requested_by)
+
+        return encrypt_user_secret(
+            user_id=requested_by.id,
+            user_secret_key=user_secret_key,
+            secret_service_public_key=self.secret_service_public_key,
+            secret_value=secret_value,
+        )
+
+    async def upsert_storage_secrets(
+        self, storage_id: str, user: base_models.APIUser, secrets: list[apispec.CloudStorageSecretPost]
+    ) -> list[models.CloudStorageSecret]:
+        """Create/update cloud storage secrets."""
+        storage = await self.get_storage_by_id(storage_id=storage_id, user=user)
+
+        async with self.session_maker() as session, session.begin():
+            stmt = (
+                select(schemas.CloudStorageSecretsORM)
+                .where(schemas.CloudStorageSecretsORM.user_id == user.id)
+                .where(schemas.CloudStorageSecretsORM.storage_id == storage_id)
+            )
+            result = await session.execute(stmt)
+            storage_secrets_orm = result.scalars().all()
+
+            for secret in secrets:
+                encrypted_value, encrypted_key = await self._encrypt_user_secret(
+                    requested_by=user, secret_value=secret.value
+                )
+                secret_model = Secret(
+                    name=f"{storage_id}-{secret.name}",
+                    encrypted_value=encrypted_value,
+                    encrypted_key=encrypted_key,
+                    kind=SecretKind.storage,
+                )
+                result = await self.secret_repo.insert_secret(requested_by=user, secret=secret_model)
+
+                secret_orm = schemas.CloudStorageSecretsORM(
+                    user_id=user.id,
+                    storage_id=storage_id,
+                    name=secret.name,
+                    secret_id=result.id,
+                )
+                session.add(secret_orm)
+
+            return []
+
+    async def get_storage_secrets(self, storage_id: str, user: base_models.APIUser) -> list[models.CloudStorageSecret]:
+        """Get cloud storage secrets."""
+        async with self.session_maker() as session, session.begin():
+            stmt = (
+                select(schemas.CloudStorageSecretsORM)
+                .where(schemas.CloudStorageSecretsORM.user_id == user.id)
+                .where(schemas.CloudStorageSecretsORM.storage_id == storage_id)
+            )
+            result = await session.execute(stmt)
+            storage_secrets_orm = result.scalars().all()
+
+            return [s.dump() for s in storage_secrets_orm]
 
 
 class StorageRepository(BaseStorageRepository):
@@ -154,8 +225,11 @@ class StorageRepository(BaseStorageRepository):
         self,
         gitlab_client: base_models.GitlabAPIProtocol,
         session_maker: Callable[..., AsyncSession],
+        user_repo: UserRepo,
+        secret_repo: UserSecretsRepo,
+        secret_service_public_key: rsa.RSAPublicKey,
     ) -> None:
-        super().__init__(session_maker)
+        super().__init__(session_maker, user_repo, secret_repo, secret_service_public_key)
         self.gitlab_client = gitlab_client
 
     async def filter_projects_by_access_level(
@@ -178,8 +252,11 @@ class StorageV2Repository(BaseStorageRepository):
         self,
         project_authz: Authz,
         session_maker: Callable[..., AsyncSession],
+        user_repo: UserRepo,
+        secret_repo: UserSecretsRepo,
+        secret_service_public_key: rsa.RSAPublicKey,
     ) -> None:
-        super().__init__(session_maker)
+        super().__init__(session_maker, user_repo, secret_repo, secret_service_public_key)
         self.project_authz: Authz = project_authz
 
     async def filter_projects_by_access_level(

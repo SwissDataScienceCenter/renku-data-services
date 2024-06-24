@@ -324,6 +324,4 @@ async def test_storage_v2_create_secret(sanic_client, create_storage, project_no
     )
 
     assert response.status_code == 200
-    storage = response.json["storage"]
-    assert storage["configuration"]["provider"] == "AWS"
-    assert response.json["storage"]["source_path"] == "bucket/my-folder"
+    assert {s["name"] for s in response.json} == {"access_key_id", "secret_access_key"}, response.json
