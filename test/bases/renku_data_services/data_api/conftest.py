@@ -1,6 +1,5 @@
 import json
 from copy import deepcopy
-from test.bases.renku_data_services.background_jobs.test_sync import get_kc_users
 from typing import Any
 
 import pytest
@@ -20,6 +19,7 @@ from renku_data_services.secrets_storage_api.app import register_all_handlers as
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import UserInfo
+from test.bases.renku_data_services.background_jobs.test_sync import get_kc_users
 
 
 @pytest.fixture
@@ -184,10 +184,9 @@ def create_project(sanic_client, user_headers, admin_headers, regular_user, admi
 
 
 @pytest.fixture
-def create_resource_pool(sanic_client, user_headers, admin_headers, regular_user, admin_user):
+def create_resource_pool(sanic_client, user_headers, admin_headers):
     async def create_resource_pool_helper(admin: bool = False, **payload) -> dict[str, Any]:
         headers = admin_headers if admin else user_headers
-        user = admin_user if admin else regular_user
         payload = payload.copy()
         _, res = await sanic_client.post("/api/data/resource_pools", headers=headers, json=payload)
         assert res.status_code == 201, res.text

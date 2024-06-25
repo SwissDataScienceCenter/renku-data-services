@@ -1,14 +1,4 @@
 from dataclasses import asdict
-from test.components.renku_data_services.crc_models.hypothesis import (
-    a_name,
-    a_uuid_string,
-    private_rp_strat,
-    public_rp_strat,
-    rc_non_default_strat,
-    rc_update_reqs_dict,
-    rp_strat,
-)
-from test.utils import create_rp, remove_id_from_user
 
 import pytest
 from hypothesis import HealthCheck, given, settings
@@ -20,6 +10,16 @@ from renku_data_services import errors
 from renku_data_services.app_config import Config
 from renku_data_services.crc import models
 from renku_data_services.migrations.core import run_migrations_for_app
+from test.components.renku_data_services.crc_models.hypothesis import (
+    a_name,
+    a_uuid_string,
+    private_rp_strat,
+    public_rp_strat,
+    rc_non_default_strat,
+    rc_update_reqs_dict,
+    rp_strat,
+)
+from test.utils import create_rp, remove_id_from_user
 
 
 @given(rp=rp_strat())

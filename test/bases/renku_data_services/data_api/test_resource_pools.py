@@ -1,10 +1,11 @@
 import json
 from copy import deepcopy
-from test.bases.renku_data_services.data_api.utils import create_rp
 from typing import Any
 
 import pytest
 from sanic_testing.testing import SanicASGITestClient
+
+from test.bases.renku_data_services.data_api.utils import create_rp
 
 
 @pytest.mark.parametrize(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -210,7 +211,7 @@ class SessionRepository:
                 environment = res.one_or_none()
                 if environment is None:
                     raise errors.MissingResourceError(
-                        message=f"Session environment with id '{environment_id}' does not exist or you do not have access to it."
+                        message=f"Session environment with id '{environment_id}' does not exist or you do not have access to it."  # noqa: E501
                     )
 
             resource_class_id = new_launcher.resource_class_id
@@ -236,7 +237,7 @@ class SessionRepository:
             return launcher.dump()
 
     async def update_launcher(
-        self, user: base_models.APIUser, launcher_id: str, **kwargs: dict
+        self, user: base_models.APIUser, launcher_id: str, **kwargs: Any
     ) -> models.SessionLauncher:
         """Update a session launcher entry."""
         if not user.is_authenticated or user.id is None:

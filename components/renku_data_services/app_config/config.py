@@ -321,7 +321,7 @@ class Config:
         """The DB adapter for sessions."""
         if not self._session_repo:
             self._session_repo = SessionRepository(
-                session_maker=self.db.async_session_maker, project_authz=self.authz, resource_pools=self._rp_repo
+                session_maker=self.db.async_session_maker, project_authz=self.authz, resource_pools=self.rp_repo
             )
         return self._session_repo
 
