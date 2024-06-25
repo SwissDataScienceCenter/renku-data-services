@@ -11,6 +11,7 @@ from renku_data_services.crc.orm import BaseORM as crc
 from renku_data_services.message_queue.orm import BaseORM as events
 from renku_data_services.migrations.utils import run_migrations
 from renku_data_services.namespace.orm import BaseORM as namespaces
+from renku_data_services.platform.orm import BaseORM as platform
 from renku_data_services.project.orm import BaseORM as project
 from renku_data_services.secrets.orm import BaseORM as secrets
 from renku_data_services.session.orm import BaseORM as sessions
@@ -33,6 +34,7 @@ all_metadata = [
     connected_services.metadata,
     events.metadata,
     namespaces.metadata,
+    platform.metadata,
     project.metadata,
     secrets.metadata,
     sessions.metadata,
