@@ -57,3 +57,32 @@ class PlatformRepository:
             await session.flush()
             await session.refresh(config)
             return config.dump()
+
+    async def update_config(
+        self, user: base_models.APIUser, etag: str, patch: apispec.PlatformConfigPatch
+    ) -> models.PlatformConfig:
+        """Update the platform configuration."""
+        if user.id is None or not user.is_admin:
+            raise errors.Unauthorized(
+                message="You do not have the required permissions for this operation.", quiet=True
+            )
+
+        async with self.session_maker() as session, session.begin():
+            result = await session.scalars(select(schemas.PlatformConfigORM))
+            config = result.one_or_none()
+            if config is None:
+                raise errors.MissingResourceError(message="The platform configuration has not been initialized yet")
+
+            current_etag = config.dump().etag
+            if current_etag != etag:
+                raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
+
+            kwargs = patch.model_dump(exclude_none=True)
+            for key, value in kwargs.items():
+                if key in ["disable_ui", "maintenance_banner", "status_page_id"]:
+                    setattr(config, key, value)
+
+            await session.flush()
+            await session.refresh(config)
+
+            return config.dump()

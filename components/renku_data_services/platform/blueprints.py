@@ -7,10 +7,9 @@ from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
-from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
-from renku_data_services.base_api.etag import extract_if_none_match
+from renku_data_services.base_api.etag import extract_if_none_match, if_match_required
 from renku_data_services.platform import apispec
 from renku_data_services.platform.db import PlatformRepository
 
@@ -78,7 +77,23 @@ class PlatformConfigBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        async def _patch_singleton(request: Request, user: base_models.APIUser) -> JSONResponse:
-            raise errors.ProgrammingError(message="Not yet implemented")
+        @if_match_required
+        @validate(json=apispec.PlatformConfigPatch)
+        async def _patch_singleton(
+            _: Request, user: base_models.APIUser, body: apispec.PlatformConfigPatch, etag: str
+        ) -> JSONResponse:
+            config = await self.platform_repo.update_config(user=user, patch=body, etag=etag)
+            headers = {"ETag": config.etag}
+            return json(
+                apispec.PlatformConfig.model_validate(
+                    dict(
+                        etag=config.etag,
+                        disable_ui=config.disable_ui,
+                        maintenance_banner=config.maintenance_banner,
+                        status_page_id=config.status_page_id,
+                    )
+                ).model_dump(mode="json", exclude_none=True),
+                headers=headers,
+            )
 
         return "/platform/config", ["PATCH"], _patch_singleton
