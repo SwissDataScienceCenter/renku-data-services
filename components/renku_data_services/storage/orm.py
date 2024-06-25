@@ -2,12 +2,13 @@
 
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, MetaData, String
+from sqlalchemy import JSON, Boolean, ForeignKey, MetaData, String
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship, backref
 from sqlalchemy.schema import UniqueConstraint
 from ulid import ULID
 
+from renku_data_services.secrets.orm import SecretORM
 from renku_data_services.storage import models
 
 JSONVariant = JSON().with_variant(JSONB(), "postgresql")
@@ -98,7 +99,8 @@ class CloudStorageSecretsORM(BaseORM):
 
     name: Mapped[str] = mapped_column("name", String(), primary_key=True)
 
-    secret_id: Mapped[str] = mapped_column("secret_id", String(26))
+    secret_id: Mapped[str] = mapped_column("secret_id", ForeignKey(SecretORM.id, ondelete="CASCADE"))
+    secret: Mapped[SecretORM] = relationship(init=False, repr=False)
 
     @classmethod
     def load(cls, storage_secret: models.CloudStorageSecret) -> "CloudStorageSecretsORM":
