@@ -318,6 +318,7 @@ async def test_storage_v2_create_secret(sanic_client, create_storage, project_no
     )
 
     assert response.status_code == 201, response.json
+    assert {s["name"] for s in response.json} == {"access_key_id", "secret_access_key"}, response.json
 
     _, response = await sanic_client.get(
         f"/api/data/storages_v2/{storage_id}/secrets", headers=project_normal_member_headers

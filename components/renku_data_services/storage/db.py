@@ -182,27 +182,33 @@ class BaseStorageRepository(_Base):
             result = await session.execute(stmt)
             storage_secrets_orm = result.scalars().all()
 
+            # self.update_secret_orm(secret=secret, encrypted_value=encrypted_value, encrypted_key=encrypted_key)
+
+            stored_secrets = []
+
             for secret in secrets:
                 encrypted_value, encrypted_key = await self._encrypt_user_secret(
                     requested_by=user, secret_value=secret.value
                 )
-                secret_model = Secret(
+                secret_orm = self.secret_repo.create_secret_orm(
                     name=f"{storage_id}-{secret.name}",
+                    user_id=user.id,
                     encrypted_value=encrypted_value,
                     encrypted_key=encrypted_key,
                     kind=SecretKind.storage,
                 )
-                result = await self.secret_repo.insert_secret(requested_by=user, secret=secret_model)
+                session.add(secret_orm)
 
-                secret_orm = schemas.CloudStorageSecretsORM(
+                storage_secret_orm = schemas.CloudStorageSecretsORM(
                     user_id=user.id,
                     storage_id=storage_id,
                     name=secret.name,
-                    secret_id=result.id,
+                    secret_id=secret_orm.id,
                 )
-                session.add(secret_orm)
+                session.add(storage_secret_orm)
+                stored_secrets.append(storage_secret_orm.dump())
 
-            return []
+            return stored_secrets
 
     async def get_storage_secrets(self, storage_id: str, user: base_models.APIUser) -> list[models.CloudStorageSecret]:
         """Get cloud storage secrets."""
