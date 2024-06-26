@@ -12,6 +12,7 @@ packages = [
   { include = "renku_data_services/authz", from = "../../components" },
   { include = "renku_data_services/base_api", from = "../../components" },
   { include = "renku_data_services/base_models", from = "../../components" },
+  { include = "renku_data_services/base_orm", from = "../../components" },
   { include = "renku_data_services/crc", from = "../../components" },
   { include = "renku_data_services/connected_services", from = "../../components" },
   { include = "renku_data_services/db_config", from = "../../components" },

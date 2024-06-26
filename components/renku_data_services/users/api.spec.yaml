@@ -109,12 +109,6 @@ paths:
         - secrets
     post:
       summary: Create a new secret for the user
-      parameters:
-        - in: path
-          name: user_id
-          required: true
-          schema:
-            type: string
       requestBody:
         required: true
         content:
@@ -136,11 +130,6 @@ paths:
     get:
       summary: Get a secret key by id
       parameters:
-        - in: path
-          name: user_id
-          required: true
-          schema:
-            type: string
         - in: path
           name: secret_id
           required: true
@@ -167,11 +156,6 @@ paths:
       summary: Change a secret
       parameters:
         - in: path
-          name: user_id
-          required: true
-          schema:
-            type: string
-        - in: path
           name: secret_id
           required: true
           schema:
@@ -196,11 +180,6 @@ paths:
     delete:
       summary: Delete a secret
       parameters:
-        - in: path
-          name: user_id
-          required: true
-          schema:
-            type: string
         - in: path
           name: secret_id
           required: true
@@ -243,16 +222,22 @@ components:
       properties:
         id:
           $ref: "#/components/schemas/UserId"
+        username:
+          $ref: "#/components/schemas/Username"
         email:
           $ref: "#/components/schemas/UserEmail"
         first_name:
           $ref: "#/components/schemas/UserFirstLastName"
         last_name:
           $ref: "#/components/schemas/UserFirstLastName"
-      required: ["id"]
+      required:
+        - id
+        - username
       example:
         id: "some-random-keycloak-id"
-        email: "user@gmail.com"
+        username: "some-username"
+        first_name: "Jane"
+        last_name: "Doe"
     UsersWithId:
       type: array
       items:
@@ -276,6 +261,12 @@ components:
       description: Keycloak user ID
       example: f74a228b-1790-4276-af5f-25c2424e9b0c
       pattern: "^[A-Za-z0-9]{1}[A-Za-z0-9-]+$"
+    Username:
+      type: string
+      description: Handle of the user
+      example: some-username
+      minLength: 1
+      maxLength: 99
     UserFirstLastName:
       type: string
       description: First or last name of the user
