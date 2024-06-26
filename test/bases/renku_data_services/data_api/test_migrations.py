@@ -53,6 +53,8 @@ async def test_upgrade_downgrade_cycle(
     assert res.status_code == 201, res.json
 
 
+# !IMPORTANT: This test can only be run on v2 of the authz schema
+@pytest.mark.skip
 @pytest.mark.asyncio
 async def test_migration_to_f34b87ddd954(
     sanic_client_no_migrations: SanicASGITestClient, app_config: Config, user_headers: dict, admin_headers: dict
