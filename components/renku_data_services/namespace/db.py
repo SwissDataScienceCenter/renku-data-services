@@ -283,6 +283,7 @@ class GroupRepository:
                     message="The slug for the group should be unique but it already exists in the database",
                     detail="Please modify the slug field and then retry",
                 )
+            raise err
         # NOTE: This is needed to populate the relationship fields in the group after inserting the ID above
         await session.refresh(group)
         return group.dump()
@@ -344,15 +345,7 @@ class GroupRepository:
                     raise errors.MissingResourceError(
                         message=f"The group with slug {slug} does not exist or you do not have permissions to view it"
                     )
-                return models.Namespace(
-                    id=ns.id,
-                    name=ns.group.name,
-                    created_by=ns.group.created_by,
-                    creation_date=ns.group.creation_date,
-                    kind=models.NamespaceKind.group,
-                    slug=old_ns.slug if old_ns else ns.slug,
-                    latest_slug=ns.slug,
-                )
+                return ns.dump()
             if not ns.user or not ns.user_id:
                 raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
             is_allowed = await self.authz.has_permission(user, ResourceType.user_namespace, ns.id, Scope.READ)
@@ -360,19 +353,7 @@ class GroupRepository:
                 raise errors.MissingResourceError(
                     message=f"The namespace with slug {slug} does not exist or you do not have permissions to view it"
                 )
-            name: str | None
-            if ns.user.first_name and ns.user.last_name:
-                name = f"{ns.user.first_name} {ns.user.last_name}"
-            else:
-                name = ns.user.first_name or ns.user.last_name
-            return models.Namespace(
-                id=ns.id,
-                name=name,
-                created_by=ns.user.keycloak_id,
-                kind=models.NamespaceKind.user,
-                slug=old_ns.slug if old_ns else ns.slug,
-                latest_slug=ns.slug,
-            )
+            return ns.dump()
 
     async def _get_user_namespace(self, user_id: str) -> models.Namespace | None:
         """Get the namespace for a slug."""
@@ -382,19 +363,7 @@ class GroupRepository:
                 return None
             if not ns.user or not ns.user_id:
                 raise errors.ProgrammingError(message="Found a namespace that has no user associated with it.")
-            name: str | None
-            if ns.user.first_name and ns.user.last_name:
-                name = f"{ns.user.first_name} {ns.user.last_name}"
-            else:
-                name = ns.user.first_name or ns.user.last_name
-            return models.Namespace(
-                id=ns.id,
-                name=name,
-                created_by=ns.user.keycloak_id,
-                kind=models.NamespaceKind.user,
-                slug=ns.slug,
-                latest_slug=ns.slug,
-            )
+            return ns.dump()
 
     async def _insert_user_namespace(
         self, session: AsyncSession, user: schemas.UserORM, retry_enumerate: int = 0, retry_random: bool = False
@@ -411,12 +380,14 @@ class GroupRepository:
             try:
                 async with session.begin_nested():
                     session.add(ns)
+                    await session.flush()
             except IntegrityError:
                 if retry_enumerate == 0:
                     raise errors.ValidationError(message=f"The user namespace slug {slug.value} already exists")
                 continue
             else:
-                return models.Namespace(ns.id, slug=ns.slug, created_by=ns.user_id, kind=models.NamespaceKind.user)
+                await session.refresh(ns)
+                return ns.dump()
         if not retry_random:
             raise errors.ValidationError(
                 message=f"Cannot create generate a unique namespace slug for the user with ID {user.keycloak_id}"
@@ -427,4 +398,6 @@ class GroupRepository:
         slug = base_models.Slug.from_name(original_slug.value.lower() + suffix)
         ns = schemas.NamespaceORM(slug.value, user_id=user.keycloak_id)
         session.add(ns)
-        return models.Namespace(ns.id, slug=ns.slug, created_by=ns.user_id, kind=models.NamespaceKind.user)
+        await session.flush()
+        await session.refresh(ns)
+        return ns.dump()

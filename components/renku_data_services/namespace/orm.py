@@ -71,15 +71,33 @@ class NamespaceORM(BaseORM):
 
     def dump(self) -> models.Namespace:
         """Create a namespace model from the ORM."""
-        created_by = self.user_id
-        if self.group:
-            created_by = self.group.created_by
+        if self.group_id and self.group:
+            return models.Namespace(
+                id=self.id,
+                slug=self.slug,
+                kind=models.NamespaceKind.group,
+                created_by=self.group.created_by,
+                underlying_resource_id=self.group_id,
+                latest_slug=self.slug,
+                name=self.group.name,
+            )
+
+        if not self.user or not self.user_id:
+            raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
+
+        name = (
+            f"{self.user.first_name} {self.user.last_name}"
+            if self.user.first_name and self.user.last_name
+            else self.user.first_name or self.user.last_name
+        )
         return models.Namespace(
             id=self.id,
             slug=self.slug,
+            kind=models.NamespaceKind.user,
+            created_by=self.user_id,
+            underlying_resource_id=self.user_id,
             latest_slug=self.slug,
-            created_by=created_by,
-            kind=models.NamespaceKind.user if self.user_id else models.NamespaceKind.group,
+            name=name,
         )
 
     def dump_user(self) -> UserWithNamespace:
@@ -109,13 +127,33 @@ class NamespaceOldORM(BaseORM):
 
     def dump(self) -> models.Namespace:
         """Create an namespace model from the ORM."""
-        created_by = self.latest_slug.user_id
-        if self.latest_slug.group:
-            created_by = self.latest_slug.group.created_by
+        if self.latest_slug.group_id and self.latest_slug.group:
+            return models.Namespace(
+                id=self.id,
+                slug=self.slug,
+                latest_slug=self.slug,
+                created_by=self.latest_slug.group.created_by,
+                kind=models.NamespaceKind.group,
+                underlying_resource_id=self.latest_slug.group_id,
+                name=self.latest_slug.group.name,
+            )
+
+        if not self.latest_slug.user or not self.latest_slug.user_id:
+            raise errors.ProgrammingError(
+                message="Found an old namespace that has no group or user associated with it in its latest slug."
+            )
+
+        name = (
+            f"{self.latest_slug.user.first_name} {self.latest_slug.user.last_name}"
+            if self.latest_slug.user.first_name and self.latest_slug.user.last_name
+            else self.latest_slug.user.first_name or self.latest_slug.user.last_name
+        )
         return models.Namespace(
             id=self.id,
             slug=self.slug,
             latest_slug=self.latest_slug.slug,
-            created_by=created_by,
-            kind=models.NamespaceKind.user if self.latest_slug.user_id else models.NamespaceKind.group,
+            created_by=self.latest_slug.user_id,
+            kind=models.NamespaceKind.user,
+            underlying_resource_id=self.latest_slug.user_id,
+            name=name,
         )

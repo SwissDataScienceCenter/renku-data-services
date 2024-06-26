@@ -53,10 +53,10 @@ class Namespace:
     id: str
     slug: str
     kind: NamespaceKind
-    name: str | None = None
-    creation_date: datetime | None = None
-    created_by: str | None = None
+    created_by: str
+    underlying_resource_id: str  # The user or group ID depending on the Namespace kind
     latest_slug: str | None = None
+    name: str | None = None
 
 
 @dataclass
