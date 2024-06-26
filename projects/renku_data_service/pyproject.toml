@@ -57,6 +57,8 @@ undictify = "^0.11.3"
 prometheus-sanic = "^3.0.0"
 sentry-sdk = {version = "^2.6.0", extras = ["sanic"]}
 authzed = "^0.15.0"
+# see https://github.com/sanic-org/sanic/issues/2828 for setuptools dependency, remove when not needed anymore
+setuptools = { version = "^70.0.0" }
 
 [tool.poetry.group.dev.dependencies]
 pyavro-gen = "^0.3.3"

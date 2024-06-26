@@ -59,6 +59,8 @@ deepmerge = "^1.1.0"
 authzed = "^0.15.0"
 prometheus-sanic = "^3.0.0"
 sentry-sdk = { version = "^2.6.0", extras = ["sanic"] }
+# see https://github.com/sanic-org/sanic/issues/2828 for setuptools dependency, remove when not needed anymore
+setuptools = { version = "^70.0.0" }
 
 [tool.poetry.group.dev.dependencies]
 pyavro-gen = "^0.3.3"
