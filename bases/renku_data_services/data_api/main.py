@@ -12,7 +12,7 @@ from sanic import Sanic
 from sanic.log import logger
 from sanic.worker.loader import AppLoader
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
-from sentry_sdk.integrations.sanic import SanicIntegration, _hub_enter, _hub_exit, _set_transaction
+from sentry_sdk.integrations.sanic import SanicIntegration, _context_enter, _context_exit, _set_transaction
 
 from renku_data_services.app_config import Config
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
@@ -94,8 +94,8 @@ def create_app() -> Sanic:
 
         # we manually need to set the signals because sentry sanic integration doesn't work with using
         # an app factory. See https://github.com/getsentry/sentry-python/issues/2902
-        app.signal("http.lifecycle.request")(_hub_enter)
-        app.signal("http.lifecycle.response")(_hub_exit)
+        app.signal("http.lifecycle.request")(_context_enter)
+        app.signal("http.lifecycle.response")(_context_exit)
         app.signal("http.routing.after")(_set_transaction)
     if config.trusted_proxies.proxies_count is not None and config.trusted_proxies.proxies_count > 0:
         app.config.PROXIES_COUNT = config.trusted_proxies.proxies_count

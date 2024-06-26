@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from renku_data_services import base_models
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.authz.models import Change, Member, MembershipChange, Role, Scope, Visibility
+from renku_data_services.base_models.core import InternalServiceAdmin
 from renku_data_services.errors import errors
 from renku_data_services.namespace.models import Group, GroupUpdate, Namespace, NamespaceKind, NamespaceUpdate
 from renku_data_services.project.models import Project, ProjectUpdate
@@ -233,7 +234,8 @@ def _is_allowed_on_resource(
                     message=f"The user with ID {user.id} cannot perform operation {operation} "
                     f"on resource {resource_type} with ID {resource.id} or the resource does not exist."
                 )
-            return await f(self, user, *args, **kwargs, zed_token=zed_token)
+            kwargs["zed_token"] = zed_token
+            return await f(self, user, *args, **kwargs)
 
         return decorated_function
 
@@ -268,7 +270,8 @@ def _is_allowed(
                     message=f"The user with ID {user.id} cannot perform operation {operation} on {resource_type.value} "
                     f"with ID {resource_id} or the resource does not exist."
                 )
-            return await f(self, user, resource_type, resource_id, *args, **kwargs, zed_token=zed_token)
+            kwargs["zed_token"] = zed_token
+            return await f(self, user, resource_type, resource_id, *args, **kwargs)
 
         return decorated_function
 
@@ -292,12 +295,14 @@ class Authz:
 
     async def _has_permission(
         self, user: base_models.APIUser, resource_type: ResourceType, resource_id: str | None, scope: Scope
-    ) -> tuple[bool, ZedToken]:
+    ) -> tuple[bool, ZedToken | None]:
         """Checks whether the provided user has a specific permission on the specific resource."""
         if not resource_id:
             raise errors.ProgrammingError(
                 message=f"Cannot check permissions on a resource of type {resource_type} with missing resource ID."
             )
+        if isinstance(user, InternalServiceAdmin):
+            return True, None
         res = _AuthzConverter.to_object(resource_type, resource_id)
         sub = SubjectReference(
             object=_AuthzConverter.to_object(ResourceType.user, user.id)
@@ -569,7 +574,7 @@ class Authz:
         project_namespace = SubjectReference(
             object=_AuthzConverter.user_namespace(project.namespace.id)
             if project.namespace.kind == NamespaceKind.user
-            else _AuthzConverter.group(project.namespace.id)
+            else _AuthzConverter.group(project.namespace.underlying_resource_id)
         )
         project_in_platform = Relationship(
             resource=project_res,

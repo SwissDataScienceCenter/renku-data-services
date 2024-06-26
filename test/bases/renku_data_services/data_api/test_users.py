@@ -120,6 +120,20 @@ async def test_logged_in_users_can_get_other_users(sanic_client, users) -> None:
 
 
 @pytest.mark.asyncio
+async def test_anonymous_users_can_get_other_users(sanic_client, users) -> None:
+    other_user = users[1]
+    _, res = await sanic_client.get(f"/api/data/users/{other_user.id}")
+    assert res.status_code == 200
+    retrieved_other_user = UserInfo(
+        id=res.json["id"],
+        first_name=res.json.get("first_name"),
+        last_name=res.json.get("last_name"),
+        email=res.json.get("email"),
+    )
+    assert retrieved_other_user == other_user
+
+
+@pytest.mark.asyncio
 async def test_logged_in_user_check_adds_user_if_missing(sanic_client, users, admin_headers) -> None:
     user = UserInfo(
         id=str(uuid4()),

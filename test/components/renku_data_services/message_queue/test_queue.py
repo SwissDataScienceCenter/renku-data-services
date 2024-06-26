@@ -28,7 +28,13 @@ async def test_queue_send(app_config, monkeypatch) -> None:
                 id="sample-id-1",
                 name="name",
                 slug="slug",
-                namespace=Namespace("namespace", "namespace", NamespaceKind.user),
+                namespace=Namespace(
+                    "namespace",
+                    "namespace",
+                    NamespaceKind.user,
+                    created_by="some-user",
+                    underlying_resource_id="some-user",
+                ),
                 visibility=Visibility.PRIVATE,
                 created_by="some-user",
             )
