@@ -52,7 +52,13 @@ async def test_adding_deleting_project(app_config: Config, bootstrap_admins, pub
         id=project_id,
         name=project_id,
         slug="slug",
-        namespace=Namespace("namespace", "namespace", NamespaceKind.user),
+        namespace=Namespace(
+            "namespace",
+            "namespace",
+            NamespaceKind.user,
+            created_by=project_owner.id,
+            underlying_resource_id=project_owner.id,
+        ),
         visibility=Visibility.PUBLIC if public_project else Visibility.PRIVATE,
         created_by=project_owner.id,
     )
@@ -96,7 +102,13 @@ async def test_granting_access(app_config: Config, bootstrap_admins, public_proj
         id=project_id,
         name=project_id,
         slug="slug",
-        namespace=Namespace("namespace", "namespace", NamespaceKind.user),
+        namespace=Namespace(
+            "namespace",
+            "namespace",
+            NamespaceKind.user,
+            created_by=project_owner.id,
+            underlying_resource_id=project_owner.id,
+        ),
         visibility=Visibility.PUBLIC if public_project else Visibility.PRIVATE,
         created_by=project_owner.id,
     )
@@ -135,7 +147,13 @@ async def test_listing_users_with_access(app_config: Config, public_project: boo
         id=project1_id,
         name=project1_id,
         slug=project1_id,
-        namespace=Namespace(project_owner.id, project_owner.id, NamespaceKind.user),
+        namespace=Namespace(
+            project_owner.id,
+            project_owner.id,
+            NamespaceKind.user,
+            created_by=project_owner.id,
+            underlying_resource_id=project_owner.id,
+        ),
         visibility=Visibility.PUBLIC if public_project else Visibility.PRIVATE,
         created_by=project_owner.id,
     )
@@ -144,7 +162,13 @@ async def test_listing_users_with_access(app_config: Config, public_project: boo
         id=project2_id,
         name=project2_id,
         slug=project2_id,
-        namespace=Namespace(regular_user2.id, regular_user2.id, NamespaceKind.user),
+        namespace=Namespace(
+            regular_user2.id,
+            regular_user2.id,
+            NamespaceKind.user,
+            created_by=regular_user2.id,
+            underlying_resource_id=regular_user2.id,
+        ),
         visibility=Visibility.PRIVATE,
         created_by=regular_user2.id,
     )
@@ -167,7 +191,13 @@ async def test_listing_projects_with_access(app_config: Config, bootstrap_admins
     private_project_id1 = str(ULID())
     private_project_id2 = str(ULID())
     project_owner = regular_user1
-    namespace = Namespace(project_owner.id, project_owner.id, NamespaceKind.user)
+    namespace = Namespace(
+        project_owner.id,
+        project_owner.id,
+        NamespaceKind.user,
+        created_by=project_owner.id,
+        underlying_resource_id=project_owner.id,
+    )
     assert project_owner.id
     assert regular_user2.id
     public_project = Project(
