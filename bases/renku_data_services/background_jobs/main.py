@@ -10,7 +10,8 @@ from renku_data_services.background_jobs.config import SyncConfig
 from renku_data_services.background_jobs.core import (
     bootstrap_user_namespaces,
     fix_mismatched_project_namespace_ids,
-    migrate_groups,
+    migrate_groups_make_all_public,
+    migrate_user_namespaces_make_all_public,
 )
 from renku_data_services.migrations.core import run_migrations_for_app
 
@@ -25,7 +26,8 @@ async def short_period_sync() -> None:
     await config.syncer.events_sync(config.kc_api)
     await sync_admins_from_keycloak(config.kc_api, Authz(config.authz_config))
     await fix_mismatched_project_namespace_ids(config)
-    await migrate_groups(config)
+    await migrate_groups_make_all_public(config)
+    await migrate_user_namespaces_make_all_public(config)
 
 
 async def long_period_sync() -> None:

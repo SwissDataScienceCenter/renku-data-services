@@ -348,6 +348,11 @@ class GroupRepository:
                 return ns.dump()
             if not ns.user or not ns.user_id:
                 raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
+            is_allowed = await self.authz.has_permission(user, ResourceType.user_namespace, ns.id, Scope.READ)
+            if not is_allowed:
+                raise errors.MissingResourceError(
+                    message=f"The namespace with slug {slug} does not exist or you do not have permissions to view it"
+                )
             return ns.dump()
 
     async def get_user_namespace(self, user_id: str) -> models.Namespace | None:

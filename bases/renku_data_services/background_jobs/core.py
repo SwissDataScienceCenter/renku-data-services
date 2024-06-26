@@ -131,9 +131,9 @@ async def fix_mismatched_project_namespace_ids(config: SyncConfig) -> None:
             )
 
 
-async def migrate_groups(config: SyncConfig) -> None:
+async def migrate_groups_make_all_public(config: SyncConfig) -> None:
     """Update existing groups to make them public."""
-    logger = logging.getLogger("background_jobs").getChild("migrate_groups")
+    logger = logging.getLogger("background_jobs").getChild(migrate_groups_make_all_public.__name__)
 
     authz = Authz(config.authz_config)
     all_groups = authz.client.ReadRelationships(
@@ -188,3 +188,62 @@ async def migrate_groups(config: SyncConfig) -> None:
         )
         await authz.client.WriteRelationships(authz_change)
         logger.info(f"Made group {group_id} public")
+
+
+async def migrate_user_namespaces_make_all_public(config: SyncConfig) -> None:
+    """Update existing user namespaces to make them public."""
+    logger = logging.getLogger("background_jobs").getChild(migrate_user_namespaces_make_all_public.__name__)
+
+    authz = Authz(config.authz_config)
+    all_user_namespaces = authz.client.ReadRelationships(
+        ReadRelationshipsRequest(
+            relationship_filter=RelationshipFilter(
+                resource_type=ResourceType.user_namespace.value,
+                optional_relation=_Relation.user_namespace_platform.value,
+            )
+        )
+    )
+    all_user_namespace_ids: set[str] = set()
+    async for ns in all_user_namespaces:
+        all_user_namespace_ids.add(ns.relationship.resource.object_id)
+    logger.info(f"All user namespaces = {len(all_user_namespace_ids)}")
+    logger.info(f"All user namespaces = {all_user_namespace_ids}")
+
+    public_user_namespaces = authz.client.LookupResources(
+        LookupResourcesRequest(
+            resource_object_type=ResourceType.user_namespace.value,
+            permission=Scope.READ.value,
+            subject=SubjectReference(object=_AuthzConverter.anonymous_user()),
+        )
+    )
+    public_user_namespace_ids: set[str] = set()
+    async for ns in public_user_namespaces:
+        public_user_namespace_ids.add(ns.resource_object_id)
+    logger.info(f"Public groups = {len(public_user_namespace_ids)}")
+    logger.info(f"Public groups = {public_user_namespace_ids}")
+
+    namespaces_to_process = all_user_namespace_ids - public_user_namespace_ids
+    logger.info(f"Groups to process = {namespaces_to_process}")
+
+    # all_users = SubjectReference(object=_AuthzConverter.all_users())
+    # all_anon_users = SubjectReference(object=_AuthzConverter.anonymous_users())
+    # for group_id in groups_to_process:
+    #     group_res = _AuthzConverter.group(group_id)
+    #     all_users_are_viewers = Relationship(
+    #         resource=group_res,
+    #         relation=_Relation.public_viewer.value,
+    #         subject=all_users,
+    #     )
+    #     all_anon_users_are_viewers = Relationship(
+    #         resource=group_res,
+    #         relation=_Relation.public_viewer.value,
+    #         subject=all_anon_users,
+    #     )
+    #     authz_change = WriteRelationshipsRequest(
+    #         updates=[
+    #             RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=rel)
+    #             for rel in [all_users_are_viewers, all_anon_users_are_viewers]
+    #         ]
+    #     )
+    #     await authz.client.WriteRelationships(authz_change)
+    #     logger.info(f"Made group {group_id} public")

@@ -215,7 +215,8 @@ definition group {
 definition user_namespace {
     relation user_namespace_platform: platform
     relation owner: user
-    permission read = delete
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = public_viewer + read_children
     permission read_children = delete
     permission write = delete
     permission delete = owner + user_namespace_platform->is_admin
