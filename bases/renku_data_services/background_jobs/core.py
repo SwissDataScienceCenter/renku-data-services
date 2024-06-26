@@ -80,6 +80,57 @@ async def bootstrap_user_namespaces(config: SyncConfig) -> None:
     await sync_user_namespaces(config)
 
 
+async def fix_mismatched_project_namespace_ids(config: SyncConfig) -> None:
+    """Fixes a problem where the project namespace relationship for projects has the wrong group ID."""
+    api_user = InternalServiceAdmin(id=ServiceAdminId.migrations)
+    authz = Authz(config.authz_config)
+    res = authz.client.ReadRelationships(
+        ReadRelationshipsRequest(
+            consistency=Consistency(fully_consistent=True),
+            relationship_filter=RelationshipFilter(
+                resource_type=ResourceType.project,
+                optional_relation=_Relation.project_namespace.value,
+                optional_subject_filter=SubjectFilter(subject_type=ResourceType.group.value),
+            ),
+        )
+    )
+    async for rel in res:
+        logging.info(f"Checking project namespace - group relation {rel} for correct group ID")
+        project_id = rel.relationship.resource.object_id
+        project = await config.project_repo.get_project(api_user, project_id)
+        if project.namespace.kind != NamespaceKind.group:
+            continue
+        correct_group_id = project.namespace.underlying_resource_id
+        authzed_group_id = rel.relationship.subject.object.object_id
+        if authzed_group_id != correct_group_id:
+            logging.info(
+                f"The project namespace ID in Authzed {authzed_group_id} "
+                f"does not match the expected group ID {correct_group_id}, correcting it..."
+            )
+            authz.client.WriteRelationships(
+                WriteRelationshipsRequest(
+                    updates=[
+                        RelationshipUpdate(
+                            operation=RelationshipUpdate.OPERATION_TOUCH,
+                            relationship=Relationship(
+                                resource=rel.relationship.resource,
+                                relation=rel.relationship.relation,
+                                subject=SubjectReference(
+                                    object=ObjectReference(
+                                        object_type=ResourceType.group.value, object_id=correct_group_id
+                                    )
+                                ),
+                            ),
+                        ),
+                        RelationshipUpdate(
+                            operation=RelationshipUpdate.OPERATION_DELETE,
+                            relationship=rel.relationship,
+                        ),
+                    ]
+                )
+            )
+
+
 async def migrate_groups(config: SyncConfig) -> None:
     """Update existing groups to make them public."""
     logger = logging.getLogger("background_jobs").getChild("migrate_groups")
@@ -137,54 +188,3 @@ async def migrate_groups(config: SyncConfig) -> None:
         )
         await authz.client.WriteRelationships(authz_change)
         logger.info(f"Made group {group_id} public")
-
-
-async def fix_mismatched_project_namespace_ids(config: SyncConfig) -> None:
-    """Fixes a problem where the project namespace relationship for projects has the wrong group ID."""
-    api_user = InternalServiceAdmin(id=ServiceAdminId.migrations)
-    authz = Authz(config.authz_config)
-    res = authz.client.ReadRelationships(
-        ReadRelationshipsRequest(
-            consistency=Consistency(fully_consistent=True),
-            relationship_filter=RelationshipFilter(
-                resource_type=ResourceType.project,
-                optional_relation=_Relation.project_namespace.value,
-                optional_subject_filter=SubjectFilter(subject_type=ResourceType.group.value),
-            ),
-        )
-    )
-    async for rel in res:
-        logging.info(f"Checking project namespace - group relation {rel} for correct group ID")
-        project_id = rel.relationship.resource.object_id
-        project = await config.project_repo.get_project(api_user, project_id)
-        if project.namespace.kind != NamespaceKind.group:
-            continue
-        correct_group_id = project.namespace.underlying_resource_id
-        authzed_group_id = rel.relationship.subject.object.object_id
-        if authzed_group_id != correct_group_id:
-            logging.info(
-                f"The project namespace ID in Authzed {authzed_group_id} "
-                f"does not match the expected group ID {correct_group_id}, correcting it..."
-            )
-            authz.client.WriteRelationships(
-                WriteRelationshipsRequest(
-                    updates=[
-                        RelationshipUpdate(
-                            operation=RelationshipUpdate.OPERATION_TOUCH,
-                            relationship=Relationship(
-                                resource=rel.relationship.resource,
-                                relation=rel.relationship.relation,
-                                subject=SubjectReference(
-                                    object=ObjectReference(
-                                        object_type=ResourceType.group.value, object_id=correct_group_id
-                                    )
-                                ),
-                            ),
-                        ),
-                        RelationshipUpdate(
-                            operation=RelationshipUpdate.OPERATION_DELETE,
-                            relationship=rel.relationship,
-                        ),
-                    ]
-                )
-            )
