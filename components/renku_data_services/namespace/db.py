@@ -324,7 +324,7 @@ class GroupRepository:
             async for namespace in namespaces:
                 yield namespace.dump_user()
 
-    async def get_namespace_by_slug(self, slug: str) -> models.Namespace | None:
+    async def get_namespace_by_slug(self, user: base_models.APIUser, slug: str) -> models.Namespace | None:
         """Get the namespace identified by a given slug."""
         async with self.session_maker() as session, session.begin():
             ns = await session.scalar(select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == slug.lower()))
@@ -340,6 +340,11 @@ class GroupRepository:
                     return None
                 ns = old_ns.latest_slug
             if ns.group and ns.group_id:
+                is_allowed = await self.authz.has_permission(user, ResourceType.group, ns.group_id, Scope.READ)
+                if not is_allowed:
+                    raise errors.MissingResourceError(
+                        message=f"The group with slug {slug} does not exist or you do not have permissions to view it"
+                    )
                 return ns.dump()
             if not ns.user or not ns.user_id:
                 raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")

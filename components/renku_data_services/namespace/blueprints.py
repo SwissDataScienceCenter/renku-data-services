@@ -173,8 +173,9 @@ class GroupsBP(CustomBlueprint):
     def get_namespace(self) -> BlueprintFactoryResponse:
         """Get namespace by slug."""
 
-        async def _get_namespace(_: Request, slug: str) -> JSONResponse:
-            ns = await self.group_repo.get_namespace_by_slug(slug=slug)
+        @authenticate(self.authenticator)
+        async def _get_namespace(_: Request, user: base_models.APIUser, slug: str) -> JSONResponse:
+            ns = await self.group_repo.get_namespace_by_slug(user=user, slug=slug)
             if not ns:
                 raise errors.MissingResourceError(message=f"The namespace with slug {slug} does not exist")
             return json(
