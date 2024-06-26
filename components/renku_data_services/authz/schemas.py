@@ -249,6 +249,11 @@ v3 = AuthzSchemaMigration(
                 resource_type=ResourceType.group.value, optional_relation=_Relation.public_viewer.value
             )
         ),
+        DeleteRelationshipsRequest(
+            relationship_filter=RelationshipFilter(
+                resource_type=ResourceType.user_namespace.value, optional_relation=_Relation.public_viewer.value
+            )
+        ),
         WriteSchemaRequest(schema=_v2),
     ],
 )
