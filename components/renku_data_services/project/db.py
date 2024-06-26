@@ -130,22 +130,37 @@ class ProjectRepository:
         """Insert a new project entry."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
-        ns = await self.group_repo.get_namespace_by_slug(user, project.namespace)
+        ns = await session.scalar(
+            select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == project.namespace.lower())
+        )
         if not ns:
             raise errors.MissingResourceError(
                 message=f"The project cannot be created because the namespace {project.namespace} does not exist"
             )
+        if not ns.group_id and not ns.user_id:
+            raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
 
         if user.id is None:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+
+        resource_type, resource_id = (
+            (ResourceType.group, ns.group_id) if ns.group and ns.group_id else (ResourceType.user_namespace, ns.id)
+        )
+        has_permission = await self.authz.has_permission(user, resource_type, resource_id, Scope.WRITE)
+        if not has_permission:
+            raise errors.Unauthorized(
+                message=f"The project cannot be created because you do not have sufficient permissions with the namespace {project.namespace}"  # noqa: E501
+            )
 
         repositories = [schemas.ProjectRepositoryORM(url) for url in (project.repositories or [])]
         slug = project.slug or base_models.Slug.from_name(project.name).value
         project_orm = schemas.ProjectORM(
             name=project.name,
-            visibility=project_apispec.Visibility(project.visibility)
-            if isinstance(project.visibility, str)
-            else project_apispec.Visibility(project.visibility.value),
+            visibility=(
+                project_apispec.Visibility(project.visibility)
+                if isinstance(project.visibility, str)
+                else project_apispec.Visibility(project.visibility.value)
+            ),
             created_by_id=user.id,
             description=project.description,
             repositories=repositories,
@@ -221,9 +236,19 @@ class ProjectRepository:
 
         if "namespace" in payload:
             ns_slug = payload["namespace"]
-            ns = await self.group_repo.get_namespace_by_slug(user, ns_slug)
+            ns = await session.scalar(select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == ns_slug.lower()))
             if not ns:
                 raise errors.MissingResourceError(message=f"The namespace with slug {ns_slug} does not exist")
+            if not ns.group_id and not ns.user_id:
+                raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
+            resource_type, resource_id = (
+                (ResourceType.group, ns.group_id) if ns.group and ns.group_id else (ResourceType.user_namespace, ns.id)
+            )
+            has_permission = await self.authz.has_permission(user, resource_type, resource_id, Scope.WRITE)
+            if not has_permission:
+                raise errors.Unauthorized(
+                    message=f"The project cannot be created because you do not have sufficient permissions with the namespace {ns_slug}"  # noqa: E501
+                )
             project.slug.namespace_id = ns.id
 
         await session.flush()

@@ -80,7 +80,7 @@ class KCUsersBP(CustomBlueprint):
         """
 
         @authenticate(self.authenticator)
-        async def _get_secret_key(request: Request, user: base_models.APIUser) -> JSONResponse:
+        async def _get_secret_key(_: Request, user: base_models.APIUser) -> JSONResponse:
             secret_key = await self.repo.get_or_create_user_secret_key(requested_by=user)
             return json({"secret_key": secret_key})
 

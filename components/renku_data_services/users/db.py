@@ -69,8 +69,7 @@ class UserRepo:
         )
         return result.new
 
-    @only_authenticated
-    async def get_user(self, requested_by: APIUser, id: str) -> UserWithNamespace | None:
+    async def get_user(self, id: str) -> UserWithNamespace | None:
         """Get a specific user from the database."""
         async with self.session_maker() as session:
             result = await session.scalars(
@@ -83,7 +82,6 @@ class UserRepo:
                 raise errors.ProgrammingError(message=f"Cannot find a user namespace for user {id}.")
             return user.namespace.dump_user()
 
-    @only_authenticated
     async def get_or_create_user(self, requested_by: APIUser, id: str) -> UserWithNamespace | None:
         """Get a specific user from the database and create it potentially if it does not exist.
 
@@ -92,7 +90,7 @@ class UserRepo:
         in addition to returning the user information.
         """
         async with self.session_maker() as session, session.begin():
-            user = await self.get_user(requested_by=requested_by, id=id)
+            user = await self.get_user(id=id)
             if not user and id == requested_by.id:
                 return await self._add_api_user(requested_by)
             return user
