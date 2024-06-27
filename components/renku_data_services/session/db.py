@@ -222,7 +222,7 @@ class SessionRepository:
                 resource_class = res.one_or_none()
                 if resource_class is None:
                     raise errors.MissingResourceError(
-                        message=f"Resource class with id '{resource_class_id}' does not exist."  # noqa: E501
+                        message=f"Resource class with id '{resource_class_id}' does not exist."
                     )
 
                 res_classes = await self.resource_pools.get_classes(api_user=user, id=resource_class_id)
@@ -270,7 +270,7 @@ class SessionRepository:
                 environment = res.one_or_none()
                 if environment is None:
                     raise errors.MissingResourceError(
-                        message=f"Session environment with id '{environment_id}' does not exist or you do not have access to it."  # noqa: E501
+                        message=f"Session environment with id '{environment_id}' does not exist or you do not have access to it." # noqa: E501
                     )
 
             resource_class_id = kwargs.get("resource_class_id")
@@ -281,7 +281,7 @@ class SessionRepository:
                 resource_class = res.one_or_none()
                 if resource_class is None:
                     raise errors.MissingResourceError(
-                        message=f"Resource class with id '{resource_class_id}' does not exist."  # noqa: E501
+                        message=f"Resource class with id '{resource_class_id}' does not exist."
                     )
 
                 res_classes = await self.resource_pools.get_classes(api_user=user, id=resource_class_id)
