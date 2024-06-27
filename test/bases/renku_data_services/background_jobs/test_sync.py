@@ -24,6 +24,7 @@ from renku_data_services.background_jobs.core import (
     bootstrap_user_namespaces,
     fix_mismatched_project_namespace_ids,
     migrate_groups_make_all_public,
+    migrate_user_namespaces_make_all_public,
 )
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models import APIUser
@@ -659,41 +660,40 @@ async def test_migrate_groups_make_all_public(
     assert group_members[0].role.value == "owner"
 
 
-# @pytest.mark.asyncio
-# async def test_migrate_user_namespaces_make_all_public(
-#     get_app_configs: Callable[..., tuple[SyncConfig, UserRepo]], admin_user: APIUser
-# ):
-#     admin_user_info = UserInfo(
-#         id=admin_user.id,
-#         first_name=admin_user.first_name,
-#         last_name=admin_user.last_name,
-#         email=admin_user.email,
-#     )
-#     user = UserInfo("user-1-id", "John", "Doe", "john.doe@gmail.com")
-#     user_api = APIUser(is_admin=False, id=user.id, access_token="access_token")
-#     anon_user_api = APIUser(is_admin=False)
-#     user_roles = {admin_user.id: get_kc_roles(["renku-admin"])}
-#     kc_api = DummyKeycloakAPI(users=get_kc_users([admin_user_info, user]), user_roles=user_roles)
-#     sync_config, _ = get_app_configs(kc_api)
-#     # Sync users
-#     await sync_config.syncer.users_sync(kc_api)
-#     authz = Authz(sync_config.authz_config)
-#     # Remove the public viewer relations
-#     await authz.client.DeleteRelationships(
-#         DeleteRelationshipsRequest(
-#             relationship_filter=RelationshipFilter(
-#                 resource_type=ResourceType.user_namespace.value, optional_relation=_Relation.public_viewer.value
-#             )
-#         ),
-#     )
+@pytest.mark.asyncio
+async def test_migrate_user_namespaces_make_all_public(
+    get_app_configs: Callable[..., tuple[SyncConfig, UserRepo]], admin_user: APIUser
+):
+    admin_user_info = UserInfo(
+        id=admin_user.id,
+        first_name=admin_user.first_name,
+        last_name=admin_user.last_name,
+        email=admin_user.email,
+    )
+    user = UserInfo("user-1-id", "John", "Doe", "john.doe@gmail.com")
+    anon_user_api = APIUser(is_admin=False)
+    user_roles = {admin_user.id: get_kc_roles(["renku-admin"])}
+    kc_api = DummyKeycloakAPI(users=get_kc_users([admin_user_info, user]), user_roles=user_roles)
+    sync_config, _ = get_app_configs(kc_api)
+    # Sync users
+    await sync_config.syncer.users_sync(kc_api)
+    authz = Authz(sync_config.authz_config)
+    # Remove the public viewer relations
+    await authz.client.DeleteRelationships(
+        DeleteRelationshipsRequest(
+            relationship_filter=RelationshipFilter(
+                resource_type=ResourceType.user_namespace.value, optional_relation=_Relation.public_viewer.value
+            )
+        ),
+    )
 
-#     with pytest.raises(errors.MissingResourceError):
-#         group_members = await sync_config.n.get_group_members(user=anon_user_api, slug=group.slug)
+    with pytest.raises(errors.MissingResourceError):
+        await sync_config.group_repo.get_namespace_by_slug(user=anon_user_api, slug="john.doe")
 
-#     await migrate_groups_make_all_public(sync_config)
+    await migrate_user_namespaces_make_all_public(sync_config)
 
-#     # After the migration, the group is public
-#     group_members = await sync_config.group_repo.get_group_members(user=anon_user_api, slug=group.slug)
-#     assert len(group_members) == 1
-#     assert group_members[0].id == "user-1-id"
-#     assert group_members[0].role.value == "owner"
+    # After the migration, the user namespace is public
+    ns = await sync_config.group_repo.get_namespace_by_slug(user=anon_user_api, slug="john.doe")
+    assert ns.slug == "john.doe"
+    assert ns.kind.value == "user"
+    assert ns.created_by == user.id
