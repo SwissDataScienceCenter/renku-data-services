@@ -270,7 +270,7 @@ class SessionRepository:
                 environment = res.one_or_none()
                 if environment is None:
                     raise errors.MissingResourceError(
-                        message=f"Session environment with id '{environment_id}' does not exist or you do not have access to it." # noqa: E501
+                        message=f"Session environment with id '{environment_id}' does not exist or you do not have access to it."  # noqa: E501
                     )
 
             resource_class_id = kwargs.get("resource_class_id")
