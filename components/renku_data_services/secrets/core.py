@@ -57,7 +57,7 @@ async def create_k8s_secret(
             decrypted_secrets[secret.name] = b64encode(decrypted_value).decode()
     except Exception as e:
         # don't wrap the error, we don't want secrets accidentally leaking.
-        raise errors.SecretDecryptionError(message=f"An error occured decrypting secrets: {str(type(e))}")
+        raise errors.SecretDecryptionError(message=f"An error occurred decrypting secrets: {str(type(e))}")
 
     owner_refs = []
     if owner_references:
@@ -75,7 +75,7 @@ async def create_k8s_secret(
         core_client.create_namespaced_secret(namespace, secret)
     except k8s_client.ApiException as e:
         # don't wrap the error, we don't want secrets accidentally leaking.
-        raise errors.SecretCreationError(message=f"An error occured creating secrets: {str(type(e))}")
+        raise errors.SecretCreationError(message=f"An error occurred creating secrets: {str(type(e))}")
 
 
 async def rotate_encryption_keys(
@@ -93,10 +93,10 @@ async def rotate_encryption_keys(
         "secrets_rotation_count",
         "Number of secrets rotated",
     )
-    runnning_metrics = Enum(
+    running_metrics = Enum(
         "secrets_rotation_state", "State of secrets rotation", states=["running", "finished", "errored"]
     )
-    runnning_metrics.state("running")
+    running_metrics.state("running")
     try:
         async for batch in secrets_repo.get_all_secrets_batched(requested_by, batch_size):
             updated_secrets = []
@@ -110,10 +110,10 @@ async def rotate_encryption_keys(
             await secrets_repo.update_secrets(requested_by, updated_secrets)
             processed_secrets_metrics.inc(len(updated_secrets))
     except:
-        runnning_metrics.state("errored")
+        running_metrics.state("errored")
         raise
     else:
-        runnning_metrics.state("finished")
+        running_metrics.state("finished")
 
 
 async def rotate_single_encryption_key(
