@@ -4,15 +4,15 @@ from collections.abc import Callable
 from typing import cast
 
 from cryptography.hazmat.primitives.asymmetric import rsa
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.authz import models as authz_models
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.secrets.db import UserSecretsRepo
-from renku_data_services.secrets.models import Secret
 from renku_data_services.storage import apispec, models
 from renku_data_services.storage import orm as schemas
 from renku_data_services.users.apispec import SecretKind
@@ -171,41 +171,51 @@ class BaseStorageRepository(_Base):
         self, storage_id: str, user: base_models.APIUser, secrets: list[apispec.CloudStorageSecretPost]
     ) -> list[models.CloudStorageSecret]:
         """Create/update cloud storage secrets."""
+        # NOTE: Check that user has proper access to the storage
         storage = await self.get_storage_by_id(storage_id=storage_id, user=user)
 
+        secret_names_values = {s.name: s.value for s in secrets}
         async with self.session_maker() as session, session.begin():
             stmt = (
                 select(schemas.CloudStorageSecretsORM)
                 .where(schemas.CloudStorageSecretsORM.user_id == user.id)
-                .where(schemas.CloudStorageSecretsORM.storage_id == storage_id)
+                .where(schemas.CloudStorageSecretsORM.storage_id == storage.storage_id)
+                .options(selectinload(schemas.CloudStorageSecretsORM.secret))
             )
             result = await session.execute(stmt)
-            storage_secrets_orm = result.scalars().all()
+            existing_storage_secrets_orm = result.scalars().all()
 
-            # self.update_secret_orm(secret=secret, encrypted_value=encrypted_value, encrypted_key=encrypted_key)
-
+            existing_secrets = {s.name: s for s in existing_storage_secrets_orm}
             stored_secrets = []
 
-            for secret in secrets:
-                encrypted_value, encrypted_key = await self._encrypt_user_secret(
-                    requested_by=user, secret_value=secret.value
-                )
-                secret_orm = self.secret_repo.create_secret_orm(
-                    name=f"{storage_id}-{secret.name}",
-                    user_id=user.id,
-                    encrypted_value=encrypted_value,
-                    encrypted_key=encrypted_key,
-                    kind=SecretKind.storage,
-                )
-                session.add(secret_orm)
+            for name, value in secret_names_values.items():
+                encrypted_value, encrypted_key = await self._encrypt_user_secret(requested_by=user, secret_value=value)
 
-                storage_secret_orm = schemas.CloudStorageSecretsORM(
-                    user_id=user.id,
-                    storage_id=storage_id,
-                    name=secret.name,
-                    secret_id=secret_orm.id,
-                )
-                session.add(storage_secret_orm)
+                if name in existing_secrets:
+                    storage_secret_orm = existing_secrets[name]
+                    self.secret_repo.update_secret_orm(
+                        secret=storage_secret_orm.secret,
+                        encrypted_value=encrypted_value,
+                        encrypted_key=encrypted_key,
+                    )
+                else:
+                    secret_orm = self.secret_repo.create_secret_orm(
+                        name=f"{storage_id}-{name}",
+                        user_id=cast(str, user.id),
+                        encrypted_value=encrypted_value,
+                        encrypted_key=encrypted_key,
+                        kind=SecretKind.storage,
+                    )
+                    session.add(secret_orm)
+
+                    storage_secret_orm = schemas.CloudStorageSecretsORM(
+                        user_id=cast(str, user.id),
+                        storage_id=storage_id,
+                        name=name,
+                        secret_id=secret_orm.id,
+                    )
+                    session.add(storage_secret_orm)
+
                 stored_secrets.append(storage_secret_orm.dump())
 
             return stored_secrets
@@ -222,6 +232,16 @@ class BaseStorageRepository(_Base):
             storage_secrets_orm = result.scalars().all()
 
             return [s.dump() for s in storage_secrets_orm]
+
+    async def delete_storage_secrets(self, storage_id: str, user: base_models.APIUser) -> None:
+        """Delete cloud storage secrets."""
+        async with self.session_maker() as session, session.begin():
+            stmt = (
+                delete(schemas.CloudStorageSecretsORM)
+                .where(schemas.CloudStorageSecretsORM.user_id == user.id)
+                .where(schemas.CloudStorageSecretsORM.storage_id == storage_id)
+            )
+            await session.execute(stmt)
 
 
 class StorageRepository(BaseStorageRepository):
