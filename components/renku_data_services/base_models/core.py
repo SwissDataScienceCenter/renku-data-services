@@ -3,8 +3,8 @@
 import re
 import unicodedata
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import ClassVar, Literal, Optional, Protocol
+from enum import Enum, StrEnum
+from typing import ClassVar, Optional, Protocol
 
 from sanic import Request
 
@@ -39,11 +39,18 @@ class APIUser:
         return self.id is not None
 
 
+class ServiceAdminId(StrEnum):
+    """Types of internal service admins."""
+
+    migrations = "migrations"
+    secrets_rotation = "secrets_rotation"
+
+
 @dataclass(kw_only=True)
 class InternalServiceAdmin(APIUser):
     """Used to gain complete admin access by internal code components when performing tasks not started by users."""
 
-    id: Literal["migrations"]
+    id: ServiceAdminId = ServiceAdminId.migrations
     is_admin: bool = field(default=True, init=False)
     access_token: Optional[str] = field(repr=False, default=None, init=False)
     full_name: Optional[str] = field(default=None, init=False)

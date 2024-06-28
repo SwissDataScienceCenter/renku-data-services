@@ -7,7 +7,12 @@ import logging
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.authz.authz import Authz
 from renku_data_services.background_jobs.config import SyncConfig
-from renku_data_services.background_jobs.core import bootstrap_user_namespaces, migrate_groups
+from renku_data_services.background_jobs.core import (
+    bootstrap_user_namespaces,
+    fix_mismatched_project_namespace_ids,
+    migrate_groups_make_all_public,
+    migrate_user_namespaces_make_all_public,
+)
 from renku_data_services.migrations.core import run_migrations_for_app
 
 logging.basicConfig(level=logging.INFO)
@@ -26,7 +31,9 @@ async def short_period_sync() -> None:
     await bootstrap_user_namespaces(config)
     await config.syncer.events_sync(config.kc_api)
     await sync_admins_from_keycloak(config.kc_api, Authz(config.authz_config))
-    await migrate_groups(config)
+    await fix_mismatched_project_namespace_ids(config)
+    await migrate_groups_make_all_public(config)
+    await migrate_user_namespaces_make_all_public(config)
 
 
 async def long_period_sync() -> None:
@@ -39,6 +46,9 @@ async def long_period_sync() -> None:
 
 async def main() -> None:
     """Synchronize data from Keycloak and the user database."""
+    logger = logging.getLogger("background_jobs")
+    logger.setLevel(logging.INFO)
+
     parser = argparse.ArgumentParser(prog="Data Service Background Jobs")
     subparsers = parser.add_subparsers(help="Background job to run")
 

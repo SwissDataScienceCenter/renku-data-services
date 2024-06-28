@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from renku_data_services import base_models
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.authz.models import Change, Member, MembershipChange, Role, Scope, Visibility
+from renku_data_services.base_models.core import InternalServiceAdmin
 from renku_data_services.errors import errors
 from renku_data_services.namespace.models import Group, GroupUpdate, Namespace, NamespaceKind, NamespaceUpdate
 from renku_data_services.project.models import Project, ProjectUpdate
@@ -77,8 +78,9 @@ class _Relation(StrEnum):
     """Relations for Authzed."""
 
     owner: str = "owner"
-    viewer: str = "viewer"
     editor: str = "editor"
+    viewer: str = "viewer"
+    public_viewer: str = "public_viewer"
     admin: str = "admin"
     project_platform: str = "project_platform"
     group_platform: str = "group_platform"
@@ -232,7 +234,8 @@ def _is_allowed_on_resource(
                     message=f"The user with ID {user.id} cannot perform operation {operation} "
                     f"on resource {resource_type} with ID {resource.id} or the resource does not exist."
                 )
-            return await f(self, user, *args, **kwargs, zed_token=zed_token)
+            kwargs["zed_token"] = zed_token
+            return await f(self, user, *args, **kwargs)
 
         return decorated_function
 
@@ -267,7 +270,8 @@ def _is_allowed(
                     message=f"The user with ID {user.id} cannot perform operation {operation} on {resource_type.value} "
                     f"with ID {resource_id} or the resource does not exist."
                 )
-            return await f(self, user, resource_type, resource_id, *args, **kwargs, zed_token=zed_token)
+            kwargs["zed_token"] = zed_token
+            return await f(self, user, resource_type, resource_id, *args, **kwargs)
 
         return decorated_function
 
@@ -291,17 +295,19 @@ class Authz:
 
     async def _has_permission(
         self, user: base_models.APIUser, resource_type: ResourceType, resource_id: str | None, scope: Scope
-    ) -> tuple[bool, ZedToken]:
+    ) -> tuple[bool, ZedToken | None]:
         """Checks whether the provided user has a specific permission on the specific resource."""
         if not resource_id:
             raise errors.ProgrammingError(
                 message=f"Cannot check permissions on a resource of type {resource_type} with missing resource ID."
             )
+        if isinstance(user, InternalServiceAdmin):
+            return True, None
         res = _AuthzConverter.to_object(resource_type, resource_id)
         sub = SubjectReference(
-            object=_AuthzConverter.to_object(ResourceType.user, user.id)
-            if user.id
-            else _AuthzConverter.anonymous_user()
+            object=(
+                _AuthzConverter.to_object(ResourceType.user, user.id) if user.id else _AuthzConverter.anonymous_user()
+            )
         )
         response: CheckPermissionResponse = await self.client.CheckPermission(
             CheckPermissionRequest(
@@ -330,9 +336,9 @@ class Authz:
                 message=f"User with ID {requested_by.id} cannot check the permissions of another user with ID {user_id}"
             )
         sub = SubjectReference(
-            object=_AuthzConverter.to_object(ResourceType.user, user_id)
-            if user_id
-            else _AuthzConverter.anonymous_user()
+            object=(
+                _AuthzConverter.to_object(ResourceType.user, user_id) if user_id else _AuthzConverter.anonymous_user()
+            )
         )
         ids: list[str] = []
         responses: AsyncIterable[LookupResourcesResponse] = self.client.LookupResources(
@@ -409,6 +415,9 @@ class Authz:
         )
         members: list[Member] = []
         async for response in responses:
+            # Skip "public_viewer" relationships
+            if response.relationship.relation == _Relation.public_viewer.value:
+                continue
             member_role = _Relation(response.relationship.relation).to_role()
             members.append(
                 Member(
@@ -563,9 +572,11 @@ class Authz:
         all_users = SubjectReference(object=_AuthzConverter.all_users())
         all_anon_users = SubjectReference(object=_AuthzConverter.anonymous_users())
         project_namespace = SubjectReference(
-            object=_AuthzConverter.user_namespace(project.namespace.id)
-            if project.namespace.kind == NamespaceKind.user
-            else _AuthzConverter.group(project.namespace.id)
+            object=(
+                _AuthzConverter.user_namespace(project.namespace.id)
+                if project.namespace.kind == NamespaceKind.user
+                else _AuthzConverter.group(project.namespace.underlying_resource_id)
+            )
         )
         project_in_platform = Relationship(
             resource=project_res,
@@ -1035,17 +1046,22 @@ class Authz:
             relation=_Relation.group_platform.value,
             subject=SubjectReference(object=self._platform),
         )
-        all_users_are_viewers = Relationship(
+        all_users_are_public_viewers = Relationship(
             resource=group_res,
-            relation=_Relation.viewer.value,
+            relation=_Relation.public_viewer.value,
             subject=all_users,
         )
-        all_anon_users_are_viewers = Relationship(
+        all_anon_users_are_public_viewers = Relationship(
             resource=group_res,
-            relation=_Relation.viewer.value,
+            relation=_Relation.public_viewer.value,
             subject=all_anon_users,
         )
-        relationships = [creator_is_owner, group_in_platform, all_users_are_viewers, all_anon_users_are_viewers]
+        relationships = [
+            creator_is_owner,
+            group_in_platform,
+            all_users_are_public_viewers,
+            all_anon_users_are_public_viewers,
+        ]
         apply = WriteRelationshipsRequest(
             updates=[
                 RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=i) for i in relationships
@@ -1274,12 +1290,29 @@ class Authz:
         creator = SubjectReference(object=_AuthzConverter.user(namespace.created_by))
         namespace_res = _AuthzConverter.user_namespace(namespace.id)
         creator_is_owner = Relationship(resource=namespace_res, relation=_Relation.owner.value, subject=creator)
+        all_users = SubjectReference(object=_AuthzConverter.all_users())
+        all_anon_users = SubjectReference(object=_AuthzConverter.anonymous_users())
         namespace_in_platform = Relationship(
             resource=namespace_res,
             relation=_Relation.user_namespace_platform.value,
             subject=SubjectReference(object=self._platform),
         )
-        relationships = [creator_is_owner, namespace_in_platform]
+        all_users_are_public_viewers = Relationship(
+            resource=namespace_res,
+            relation=_Relation.public_viewer.value,
+            subject=all_users,
+        )
+        all_anon_users_are_public_viewers = Relationship(
+            resource=namespace_res,
+            relation=_Relation.public_viewer.value,
+            subject=all_anon_users,
+        )
+        relationships = [
+            creator_is_owner,
+            namespace_in_platform,
+            all_users_are_public_viewers,
+            all_anon_users_are_public_viewers,
+        ]
         apply = WriteRelationshipsRequest(
             updates=[
                 RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=i) for i in relationships

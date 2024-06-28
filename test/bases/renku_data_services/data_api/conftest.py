@@ -1,5 +1,4 @@
 import json
-from test.bases.renku_data_services.background_jobs.test_sync import get_kc_users
 from typing import Any
 
 import pytest
@@ -19,6 +18,7 @@ from renku_data_services.secrets_storage_api.app import register_all_handlers as
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import UserInfo
+from test.bases.renku_data_services.background_jobs.test_sync import get_kc_users
 
 
 @pytest.fixture
@@ -55,7 +55,15 @@ def users(admin_user, regular_user, member_1_user, member_2_user) -> list[UserIn
 def admin_headers(admin_user: UserInfo) -> dict[str, str]:
     """Authentication headers for an admin user."""
     access_token = json.dumps(
-        {"is_admin": True, "id": admin_user.id, "name": f"{admin_user.first_name} {admin_user.last_name}"}
+        {
+            "is_admin": True,
+            "id": admin_user.id,
+            "name": f"{admin_user.first_name} {admin_user.last_name}",
+            "first_name": admin_user.first_name,
+            "last_name": admin_user.last_name,
+            "email": admin_user.email,
+            "full_name": f"{admin_user.first_name} {admin_user.last_name}",
+        }
     )
     return {"Authorization": f"Bearer {access_token}"}
 
@@ -64,7 +72,15 @@ def admin_headers(admin_user: UserInfo) -> dict[str, str]:
 def user_headers(regular_user: UserInfo) -> dict[str, str]:
     """Authentication headers for a normal user."""
     access_token = json.dumps(
-        {"is_admin": False, "id": regular_user.id, "name": f"{regular_user.first_name} {regular_user.last_name}"}
+        {
+            "is_admin": False,
+            "id": regular_user.id,
+            "name": f"{regular_user.first_name} {regular_user.last_name}",
+            "first_name": regular_user.first_name,
+            "last_name": regular_user.last_name,
+            "email": regular_user.email,
+            "full_name": f"{regular_user.first_name} {regular_user.last_name}",
+        }
     )
     return {"Authorization": f"Bearer {access_token}"}
 

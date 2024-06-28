@@ -2,7 +2,6 @@
 
 import time
 from base64 import b64decode
-from test.bases.renku_data_services.data_api.utils import merge_headers
 from typing import Any
 
 import pytest
@@ -13,6 +12,7 @@ from renku_data_services.app_config.config import Config
 from renku_data_services.message_queue.avro_models.io.renku.events.v2.member_role import MemberRole
 from renku_data_services.message_queue.models import deserialize_binary
 from renku_data_services.users.models import UserInfo
+from test.bases.renku_data_services.data_api.utils import merge_headers
 
 
 @pytest.fixture
@@ -151,6 +151,22 @@ async def test_create_project_with_invalid_keywords(sanic_client, user_headers, 
 
     assert response.status_code == 422, response.text
     assert "String should match pattern '^[A-Za-z0-9\\s\\-_.]*$'" in response.json["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_project_creation_with_invalid_namespace(sanic_client, user_headers, member_1_user) -> None:
+    namespace = f"{member_1_user.first_name}.{member_1_user.last_name}"
+    _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}", headers=user_headers)
+    assert response.status_code == 200, response.text
+    payload = {
+        "name": "Project with Default Values",
+        "namespace": namespace,
+    }
+
+    _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
+
+    assert response.status_code == 401, response.text
+    assert "you do not have sufficient permissions" in response.json["error"]["message"]
 
 
 @pytest.mark.asyncio
@@ -484,6 +500,25 @@ async def test_cannot_patch_without_if_match_header(create_project, get_project,
     project = await get_project(project_id=project_id)
 
     assert project["name"] == original_value
+
+
+@pytest.mark.asyncio
+async def test_patch_project_invalid_namespace(create_project, sanic_client, user_headers, member_1_user) -> None:
+    namespace = f"{member_1_user.first_name}.{member_1_user.last_name}"
+    _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}", headers=user_headers)
+    assert response.status_code == 200, response.text
+    project = await create_project("Project 1")
+
+    # Patch a project
+    headers = merge_headers(user_headers, {"If-Match": project["etag"]})
+    patch = {
+        "namespace": namespace,
+    }
+    project_id = project["id"]
+    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=headers, json=patch)
+
+    assert response.status_code == 401, response.text
+    assert "you do not have sufficient permissions" in response.json["error"]["message"]
 
 
 @pytest.mark.asyncio

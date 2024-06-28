@@ -167,7 +167,7 @@ class GroupsBP(CustomBlueprint):
                     name=ns.name,
                     slug=ns.latest_slug if ns.latest_slug else ns.slug,
                     created_by=ns.created_by,
-                    creation_date=ns.creation_date,
+                    creation_date=None,  # NOTE: we do not save creation date in the DB
                     namespace_kind=apispec.NamespaceKind(ns.kind.value),
                 ).model_dump(exclude_none=True, mode="json")
                 for ns in nss
@@ -178,8 +178,9 @@ class GroupsBP(CustomBlueprint):
     def get_namespace(self) -> BlueprintFactoryResponse:
         """Get namespace by slug."""
 
-        async def _get_namespace(_: Request, slug: str) -> JSONResponse:
-            ns = await self.group_repo.get_namespace_by_slug(slug=slug)
+        @authenticate(self.authenticator)
+        async def _get_namespace(_: Request, user: base_models.APIUser, slug: str) -> JSONResponse:
+            ns = await self.group_repo.get_namespace_by_slug(user=user, slug=slug)
             if not ns:
                 raise errors.MissingResourceError(message=f"The namespace with slug {slug} does not exist")
             return json(
@@ -188,7 +189,7 @@ class GroupsBP(CustomBlueprint):
                     name=ns.name,
                     slug=ns.latest_slug if ns.latest_slug else ns.slug,
                     created_by=ns.created_by,
-                    creation_date=ns.creation_date,
+                    creation_date=None,  # NOTE: we do not save creation date in the DB
                     namespace_kind=apispec.NamespaceKind(ns.kind.value),
                 ).model_dump(exclude_none=True, mode="json")
             )

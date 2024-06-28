@@ -1,5 +1,4 @@
 import json
-from test.bases.renku_data_services.data_api.utils import create_user_preferences
 from typing import Any
 from uuid import uuid4
 
@@ -7,6 +6,7 @@ import pytest
 from sanic_testing.testing import SanicASGITestClient
 
 from renku_data_services.base_models import APIUser
+from test.bases.renku_data_services.data_api.utils import create_user_preferences
 
 _valid_add_pinned_project: dict[str, Any] = {"project_slug": "user.1/first-project"}
 
