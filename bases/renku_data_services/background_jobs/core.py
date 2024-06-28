@@ -149,6 +149,7 @@ async def migrate_groups_make_all_public(config: SyncConfig) -> None:
         all_group_ids.add(group.relationship.resource.object_id)
     logger.info(f"All groups = {len(all_group_ids)}")
     logger.info(f"All groups = {all_group_ids}")
+
     public_groups = authz.client.LookupResources(
         LookupResourcesRequest(
             resource_object_type=ResourceType.group.value,
