@@ -78,8 +78,9 @@ class _Relation(StrEnum):
     """Relations for Authzed."""
 
     owner: str = "owner"
-    viewer: str = "viewer"
     editor: str = "editor"
+    viewer: str = "viewer"
+    public_viewer: str = "public_viewer"
     admin: str = "admin"
     project_platform: str = "project_platform"
     group_platform: str = "group_platform"
@@ -304,9 +305,9 @@ class Authz:
             return True, None
         res = _AuthzConverter.to_object(resource_type, resource_id)
         sub = SubjectReference(
-            object=_AuthzConverter.to_object(ResourceType.user, user.id)
-            if user.id
-            else _AuthzConverter.anonymous_user()
+            object=(
+                _AuthzConverter.to_object(ResourceType.user, user.id) if user.id else _AuthzConverter.anonymous_user()
+            )
         )
         response: CheckPermissionResponse = await self.client.CheckPermission(
             CheckPermissionRequest(
@@ -335,9 +336,9 @@ class Authz:
                 message=f"User with ID {requested_by.id} cannot check the permissions of another user with ID {user_id}"
             )
         sub = SubjectReference(
-            object=_AuthzConverter.to_object(ResourceType.user, user_id)
-            if user_id
-            else _AuthzConverter.anonymous_user()
+            object=(
+                _AuthzConverter.to_object(ResourceType.user, user_id) if user_id else _AuthzConverter.anonymous_user()
+            )
         )
         ids: list[str] = []
         responses: AsyncIterable[LookupResourcesResponse] = self.client.LookupResources(
@@ -414,6 +415,9 @@ class Authz:
         )
         members: list[Member] = []
         async for response in responses:
+            # Skip "public_viewer" relationships
+            if response.relationship.relation == _Relation.public_viewer.value:
+                continue
             member_role = _Relation(response.relationship.relation).to_role()
             members.append(
                 Member(
@@ -568,9 +572,11 @@ class Authz:
         all_users = SubjectReference(object=_AuthzConverter.all_users())
         all_anon_users = SubjectReference(object=_AuthzConverter.anonymous_users())
         project_namespace = SubjectReference(
-            object=_AuthzConverter.user_namespace(project.namespace.id)
-            if project.namespace.kind == NamespaceKind.user
-            else _AuthzConverter.group(project.namespace.underlying_resource_id)
+            object=(
+                _AuthzConverter.user_namespace(project.namespace.id)
+                if project.namespace.kind == NamespaceKind.user
+                else _AuthzConverter.group(project.namespace.underlying_resource_id)
+            )
         )
         project_in_platform = Relationship(
             resource=project_res,
@@ -1033,12 +1039,29 @@ class Authz:
         creator = SubjectReference(object=_AuthzConverter.user(group.created_by))
         group_res = _AuthzConverter.group(group.id)
         creator_is_owner = Relationship(resource=group_res, relation=_Relation.owner.value, subject=creator)
+        all_users = SubjectReference(object=_AuthzConverter.all_users())
+        all_anon_users = SubjectReference(object=_AuthzConverter.anonymous_users())
         group_in_platform = Relationship(
             resource=group_res,
             relation=_Relation.group_platform.value,
             subject=SubjectReference(object=self._platform),
         )
-        relationships = [creator_is_owner, group_in_platform]
+        all_users_are_public_viewers = Relationship(
+            resource=group_res,
+            relation=_Relation.public_viewer.value,
+            subject=all_users,
+        )
+        all_anon_users_are_public_viewers = Relationship(
+            resource=group_res,
+            relation=_Relation.public_viewer.value,
+            subject=all_anon_users,
+        )
+        relationships = [
+            creator_is_owner,
+            group_in_platform,
+            all_users_are_public_viewers,
+            all_anon_users_are_public_viewers,
+        ]
         apply = WriteRelationshipsRequest(
             updates=[
                 RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=i) for i in relationships
@@ -1267,12 +1290,29 @@ class Authz:
         creator = SubjectReference(object=_AuthzConverter.user(namespace.created_by))
         namespace_res = _AuthzConverter.user_namespace(namespace.id)
         creator_is_owner = Relationship(resource=namespace_res, relation=_Relation.owner.value, subject=creator)
+        all_users = SubjectReference(object=_AuthzConverter.all_users())
+        all_anon_users = SubjectReference(object=_AuthzConverter.anonymous_users())
         namespace_in_platform = Relationship(
             resource=namespace_res,
             relation=_Relation.user_namespace_platform.value,
             subject=SubjectReference(object=self._platform),
         )
-        relationships = [creator_is_owner, namespace_in_platform]
+        all_users_are_public_viewers = Relationship(
+            resource=namespace_res,
+            relation=_Relation.public_viewer.value,
+            subject=all_users,
+        )
+        all_anon_users_are_public_viewers = Relationship(
+            resource=namespace_res,
+            relation=_Relation.public_viewer.value,
+            subject=all_anon_users,
+        )
+        relationships = [
+            creator_is_owner,
+            namespace_in_platform,
+            all_users_are_public_viewers,
+            all_anon_users_are_public_viewers,
+        ]
         apply = WriteRelationshipsRequest(
             updates=[
                 RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=i) for i in relationships
