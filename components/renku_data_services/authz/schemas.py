@@ -6,10 +6,12 @@ These are applied through alembic migrations in the common migrations folder.
 from dataclasses import dataclass
 
 from authzed.api.v1 import SyncClient
+from authzed.api.v1.core_pb2 import SubjectReference
 from authzed.api.v1.permission_service_pb2 import (
     DeleteRelationshipsRequest,
     DeleteRelationshipsResponse,
     RelationshipFilter,
+    SubjectFilter,
     WriteRelationshipsRequest,
 )
 from authzed.api.v1.schema_service_pb2 import WriteSchemaRequest, WriteSchemaResponse
@@ -247,14 +249,20 @@ v3 = AuthzSchemaMigration(
             relationship_filter=RelationshipFilter(
                 resource_type=ResourceType.group.value,
                 optional_relation=_Relation.viewer.value,
-                optional_subject_filter=_AuthzConverter.all_users(),
+                optional_subject_filter=SubjectFilter(
+                    subject_type=ResourceType.user.value,
+                    optional_subject_id=SubjectReference(object=_AuthzConverter.all_users()).object.object_id,
+                ),
             )
         ),
         DeleteRelationshipsRequest(
             relationship_filter=RelationshipFilter(
                 resource_type=ResourceType.group.value,
                 optional_relation=_Relation.viewer.value,
-                optional_subject_filter=_AuthzConverter.anonymous_users(),
+                optional_subject_filter=SubjectFilter(
+                    subject_type=ResourceType.anonymous_user.value,
+                    optional_subject_id=SubjectReference(object=_AuthzConverter.anonymous_users()).object.object_id,
+                ),
             )
         ),
         WriteSchemaRequest(schema=_v3),
