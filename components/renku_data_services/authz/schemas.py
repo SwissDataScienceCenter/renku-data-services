@@ -14,7 +14,7 @@ from authzed.api.v1.permission_service_pb2 import (
 )
 from authzed.api.v1.schema_service_pb2 import WriteSchemaRequest, WriteSchemaResponse
 
-from renku_data_services.authz.authz import ResourceType, _Relation
+from renku_data_services.authz.authz import ResourceType, _AuthzConverter, _Relation
 from renku_data_services.errors import errors
 
 
@@ -242,7 +242,23 @@ definition project {
 }"""
 
 v3 = AuthzSchemaMigration(
-    up=[WriteSchemaRequest(schema=_v3)],
+    up=[
+        DeleteRelationshipsRequest(
+            relationship_filter=RelationshipFilter(
+                resource_type=ResourceType.group.value,
+                optional_relation=_Relation.viewer.value,
+                optional_subject_filter=_AuthzConverter.all_users(),
+            )
+        ),
+        DeleteRelationshipsRequest(
+            relationship_filter=RelationshipFilter(
+                resource_type=ResourceType.group.value,
+                optional_relation=_Relation.viewer.value,
+                optional_subject_filter=_AuthzConverter.anonymous_users(),
+            )
+        ),
+        WriteSchemaRequest(schema=_v3),
+    ],
     down=[
         DeleteRelationshipsRequest(
             relationship_filter=RelationshipFilter(
