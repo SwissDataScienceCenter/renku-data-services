@@ -1,0 +1,408 @@
+openapi: 3.0.2
+info:
+  title: Renku Data Services API
+  description: |
+    Service that allows creating, updating, deleting, and managing Renku user sessions.
+    All errors have the same format as the schema called ErrorResponse.
+  version: v1
+servers:
+  - url: /api/data
+  - url: /ui-server/api/data
+paths:
+  /sessions:
+    get:
+      summary: Get all sessions
+      description: Information about all active sessions for a user.
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/SessionsListResponse"
+          description: Map of all servers for a user.
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+      - sessions 
+  /projects/{namespace}/{slug}/sessions:
+    post:
+      summary: Launch a new session
+      parameters:
+      - description: The namespace slug
+        in: path
+        name: namespace
+        required: true
+        schema:
+          type: string
+      - description: The project slug
+        in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionPostRequest"
+      responses:
+        "201":
+          description: The session was created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectSessionResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - sessions 
+    get:
+      summary: Get all sessions in a project
+      parameters:
+      - description: The namespace slug
+        in: path
+        name: namespace
+        required: true
+        schema:
+          type: string
+      - description: The project slug
+        in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ProjectSessionsListResponse"
+          description: Session description.
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+      - sessions 
+  /projects/{namespace}/{slug}/sessions/{session_name}:
+    delete:
+      summary: Fully remove a session
+      parameters:
+      - description: The namespace slug
+        in: path
+        name: namespace
+        required: true
+        schema:
+          type: string
+      - description: The project slug
+        in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      - description: The name of the session that should be deleted.
+        in: path
+        name: session_name
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: The server was stopped successfully.
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+      - sessions 
+    get:
+      summary: Information about a specific session
+      parameters:
+      - description: The namespace slug
+        in: path
+        name: namespace
+        required: true
+        schema:
+          type: string
+      - description: The project slug
+        in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      - description: The name of the session for which additional information is required.
+        in: path
+        name: session_name 
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ProjectSessionResponse"
+          description: Session description.
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+      - sessions 
+    patch:
+      summary: Modify an existing session
+      parameters:
+      - description: The namespace slug
+        in: path
+        name: namespace
+        required: true
+        schema:
+          type: string
+      - description: The project slug
+        in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      - description: The name of the session that should be patched.
+        in: path
+        name: session_name
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/SessionPatchRequest"
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ProjectSessionResponse"
+          description: The session was patched successfully.
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+      - sessions 
+  /projects/{namespace}/{slug}/sessions/{session_name}/logs:
+    get:
+      summary: Get all logs for an active session
+      parameters:
+      - description: The namespace slug
+        in: path
+        name: namespace
+        required: true
+        schema:
+          type: string
+      - description: The project slug
+        in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      - description: The name of the session.
+        in: path
+        name: session_name 
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/SessionsLogsResponse"
+          description: Session description.
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+      - sessions 
+components:
+  schemas:
+    SessionPostRequest:
+      type: object
+      properties:
+        resource_class_id: 
+          type: string
+        session_launcher_id: 
+          type: string
+        repositories:
+          type: array
+          items:
+            type: string
+        cloud_storage_ids:
+          type: array
+          items:
+            type: string
+    SessionPatchRequest:
+      type: object
+      properties:
+        resource_class_id:
+          type: integer
+        state:
+          $ref: "#/components/schemas/SessionStatusPatch"
+      example:
+        resource_class_id: 1
+        state: running
+    SessionResponse:
+      type: object
+      properties:
+        name:
+          type: string
+        project_slug:
+          type: string
+        namespace:
+          type: string
+        resource_class_id:
+          type: integer
+        session_launcher_id:
+          type: string
+        repositories:
+          type: array
+          items:
+            type: string
+        cloud_storage_ids:
+          type: array
+          items: 
+            type: string
+        status:
+          $ref: "#/components/schemas/SessionStatus"
+        errors:
+          type: array
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        culling:
+          $ref: "#/components/schemas/SessionCullingStatus"
+      required:
+        - name
+        - resource_class_id
+        - session_launcher_id
+        - status
+        - created_at
+    ProjectSessionResponse:
+      type: object
+      properties:
+        name:
+          type: string
+        project_slug:
+          type: string
+        namespace:
+          type: string
+        resource_class_id:
+          type: integer
+        session_launcher_id:
+          type: string
+        repositories:
+          type: array
+          items:
+            type: string
+        cloud_storage_ids:
+          type: array
+          items: 
+            type: string
+        status:
+          $ref: "#/components/schemas/SessionStatus"
+        errors:
+          type: array
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        culling:
+          $ref: "#/components/schemas/SessionCullingStatus"
+      required:
+        - namespace
+        - project_slug
+        - name
+        - resource_class_id
+        - session_launcher_id
+        - status
+        - created_at
+    ProjectSessionsListResponse:
+      type: array
+      items:
+        $ref: "#/components/schemas/ProjectSessionResponse"
+    SessionsListResponse:
+      type: array
+      items:
+        $ref: "#/components/schemas/SessionResponse"
+    SessionsLogsResponse:
+      type: object
+      additionalProperties:
+        type: string
+      example:
+        container1: "Log line 1\nLog line 2"
+        container2: "Log line 1\nLog line 2"
+    SessionStatus:
+      type: string
+      enum:
+        - running
+        - not ready
+        - running degraded
+        - failed
+        - hibernated
+    SessionStatusPatch:
+      type: string
+      enum:
+        - running
+        - hibernated
+    SessionStorage:
+      type: integer
+      minimum: 0
+      exclusiveMinimum: true
+      description: Disk storage size for a session in gigabytes.
+    SessionCullingStatus:
+      type: object
+      properties:
+        idle_at:
+          type: string
+          format: date-time
+          description: When the session became idle, the presence of this timestamp indicates the session is currently idle
+        hibernated_at:
+          type: string
+          format: date-time
+          description: When the session was hibernated if its status is hibernating
+        will_hibernate_at:
+          type: string
+          format: date-time
+          description: At what date and time will the session be hibernated
+        will_delete_at:
+          type: string
+          format: date-time
+          description: At what date and time will the session be fully deleted
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: integer
+              minimum: 0
+              exclusiveMinimum: true
+              example: 1404
+            detail:
+              type: string
+              example: "A more detailed optional message showing what the problem was"
+            message:
+              type: string
+              example: "Something went wrong - please try again later"
+          required:
+            - "code"
+            - "message"
+  responses:
+    Error:
+      description: The schema for all 4xx and 5xx responses
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
