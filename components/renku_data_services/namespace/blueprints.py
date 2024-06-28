@@ -12,6 +12,7 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.errors import errors
 from renku_data_services.namespace import apispec
+from renku_data_services.namespace.apispec_params import GetNamespacesParams
 from renku_data_services.namespace.db import GroupRepository
 
 
@@ -153,9 +154,13 @@ class GroupsBP(CustomBlueprint):
         @only_authenticated
         @paginate
         async def _get_namespaces(
-            _: Request, user: base_models.APIUser, pagination: PaginationRequest
+            request: Request, user: base_models.APIUser, pagination: PaginationRequest
         ) -> tuple[list[dict], int]:
-            nss, total_count = await self.group_repo.get_namespaces(user=user, pagination=pagination)
+            params = GetNamespacesParams.model_validate(dict(request.query_args))
+
+            nss, total_count = await self.group_repo.get_namespaces(
+                user=user, pagination=pagination, minimum_role=params.minimum_role
+            )
             return [
                 apispec.NamespaceResponse(
                     id=ns.id,
