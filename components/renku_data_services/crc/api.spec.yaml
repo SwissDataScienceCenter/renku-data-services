@@ -19,7 +19,7 @@ paths:
           required: false
           description: Filter for classes that meet or exceed the number of cpu cores
           schema:
-            $ref: "#/components/schemas/Cpu"
+            $ref: "#/components/schemas/CpuFilter"
         - in: query
           name: gpu
           required: false
@@ -31,13 +31,13 @@ paths:
           required: false
           description: Filter for classes that meet or exceed the amount of memory in gigabytes
           schema:
-            $ref: "#/components/schemas/Memory"
+            $ref: "#/components/schemas/MemoryFilter"
         - in: query
           name: max_storage
           required: false
           description: Filter for classes that meet or exceed the amount of max_storage in gigabytes
           schema:
-            $ref: "#/components/schemas/Storage"
+            $ref: "#/components/schemas/StorageFilter"
       responses:
         "200":
           description: The resource pool definitions
@@ -1334,11 +1334,24 @@ components:
       example: 10
       exclusiveMinimum: true
       minimum: 0
+    CpuFilter:
+      type: number
+      format: float
+      description: Number of cpu cores
+      example: 10
+      minimum: 0
     Memory:
       type: integer
       description: Number of gigabytes of memory
       example: 4
       exclusiveMinimum: true
+      minimum: 0
+      # Max value for int64 in postgres
+      maximum: 9223372036854775807
+    MemoryFilter:
+      type: integer
+      description: Number of gigabytes of memory
+      example: 4
       minimum: 0
       # Max value for int64 in postgres
       maximum: 9223372036854775807
@@ -1354,6 +1367,13 @@ components:
       description: Number of gigabytes of storage
       example: 100
       exclusiveMinimum: true
+      minimum: 0
+      # Max value for int64 in postgres
+      maximum: 9223372036854775807
+    StorageFilter:
+      type: integer
+      description: Number of gigabytes of storage
+      example: 100
       minimum: 0
       # Max value for int64 in postgres
       maximum: 9223372036854775807

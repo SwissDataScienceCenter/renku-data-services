@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from sanic import HTTPResponse, Request, json
 from sanic.response import JSONResponse
 from sanic_ext import validate
+from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, validate_path_project_id
@@ -104,7 +105,7 @@ class SessionLaunchersBP(CustomBlueprint):
         """Get a specific session launcher."""
 
         @authenticate(self.authenticator)
-        async def _get_one(_: Request, user: base_models.APIUser, launcher_id: str) -> JSONResponse:
+        async def _get_one(_: Request, user: base_models.APIUser, launcher_id: ULID) -> JSONResponse:
             launcher = await self.session_repo.get_launcher(user=user, launcher_id=launcher_id)
             return json(apispec.SessionLauncher.model_validate(launcher).model_dump(exclude_none=True, mode="json"))
 
@@ -129,7 +130,7 @@ class SessionLaunchersBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @validate(json=apispec.SessionLauncherPatch)
         async def _patch(
-            _: Request, user: base_models.APIUser, launcher_id: str, body: apispec.SessionLauncherPatch
+            _: Request, user: base_models.APIUser, launcher_id: ULID, body: apispec.SessionLauncherPatch
         ) -> JSONResponse:
             body_dict = body.model_dump(exclude_none=True)
             launcher = await self.session_repo.update_launcher(user=user, launcher_id=launcher_id, **body_dict)
@@ -141,7 +142,7 @@ class SessionLaunchersBP(CustomBlueprint):
         """Delete a specific session launcher."""
 
         @authenticate(self.authenticator)
-        async def _delete(_: Request, user: base_models.APIUser, launcher_id: str) -> HTTPResponse:
+        async def _delete(_: Request, user: base_models.APIUser, launcher_id: ULID) -> HTTPResponse:
             await self.session_repo.delete_launcher(user=user, launcher_id=launcher_id)
             return HTTPResponse(status=204)
 

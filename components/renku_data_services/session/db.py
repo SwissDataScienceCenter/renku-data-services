@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
@@ -145,7 +146,7 @@ class SessionRepository:
             launcher = res.all()
             return [item.dump() for item in launcher]
 
-    async def get_launcher(self, user: base_models.APIUser, launcher_id: str) -> models.SessionLauncher:
+    async def get_launcher(self, user: base_models.APIUser, launcher_id: ULID) -> models.SessionLauncher:
         """Get one session launcher from the database."""
         async with self.session_maker() as session:
             res = await session.scalars(
@@ -237,7 +238,7 @@ class SessionRepository:
             return launcher.dump()
 
     async def update_launcher(
-        self, user: base_models.APIUser, launcher_id: str, **kwargs: Any
+        self, user: base_models.APIUser, launcher_id: ULID, **kwargs: Any
     ) -> models.SessionLauncher:
         """Update a session launcher entry."""
         if not user.is_authenticated or user.id is None:
@@ -316,7 +317,7 @@ class SessionRepository:
 
             return launcher_model
 
-    async def delete_launcher(self, user: base_models.APIUser, launcher_id: str) -> None:
+    async def delete_launcher(self, user: base_models.APIUser, launcher_id: ULID) -> None:
         """Delete a session launcher entry."""
         if not user.is_authenticated or user.id is None:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")

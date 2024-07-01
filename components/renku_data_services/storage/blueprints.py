@@ -6,13 +6,14 @@ from typing import Any
 from sanic import HTTPResponse, Request, empty, json
 from sanic.response import JSONResponse
 from sanic_ext import validate
+from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.storage import apispec, models
-from renku_data_services.storage.apispec_base import RepositoryFilter
+from renku_data_services.storage.apispec_base import RepositoryFilter, RepositoryFilterV2
 from renku_data_services.storage.db import StorageRepository, StorageV2Repository
 from renku_data_services.storage.rclone import RCloneValidator
 
@@ -54,7 +55,7 @@ class StorageBP(CustomBlueprint):
         async def _get_one(
             request: Request,
             user: base_models.APIUser,
-            storage_id: str,
+            storage_id: ULID,
             validator: RCloneValidator,
         ) -> JSONResponse:
             storage = await self.storage_repo.get_storage_by_id(storage_id, user=user)
@@ -101,7 +102,7 @@ class StorageBP(CustomBlueprint):
         async def _put(
             request: Request,
             user: base_models.APIUser,
-            storage_id: str,
+            storage_id: ULID,
             validator: RCloneValidator,
         ) -> JSONResponse:
             if not request.json:
@@ -137,7 +138,7 @@ class StorageBP(CustomBlueprint):
         async def _patch(
             request: Request,
             user: base_models.APIUser,
-            storage_id: str,
+            storage_id: ULID,
             body: apispec.CloudStoragePatch,
             validator: RCloneValidator,
         ) -> JSONResponse:
@@ -163,7 +164,7 @@ class StorageBP(CustomBlueprint):
         """Delete a storage entry."""
 
         @authenticate(self.authenticator)
-        async def _delete(request: Request, user: base_models.APIUser, storage_id: str) -> HTTPResponse:
+        async def _delete(request: Request, user: base_models.APIUser, storage_id: ULID) -> HTTPResponse:
             await self.storage_repo.delete_storage(storage_id=storage_id, user=user)
             return empty(204)
 
@@ -182,7 +183,7 @@ class StoragesV2BP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _get(request: Request, user: base_models.APIUser, validator: RCloneValidator) -> JSONResponse:
-            res_filter = RepositoryFilter.model_validate(dict(request.query_args))
+            res_filter = RepositoryFilterV2.model_validate(dict(request.query_args))
             storage: list[models.CloudStorage]
             storage = await self.storage_v2_repo.get_storage(user=user, **res_filter.model_dump())
 
@@ -197,7 +198,7 @@ class StoragesV2BP(CustomBlueprint):
         async def _get_one(
             request: Request,
             user: base_models.APIUser,
-            storage_id: str,
+            storage_id: ULID,
             validator: RCloneValidator,
         ) -> JSONResponse:
             storage = await self.storage_v2_repo.get_storage_by_id(storage_id, user=user)
@@ -245,7 +246,7 @@ class StoragesV2BP(CustomBlueprint):
         async def _patch(
             request: Request,
             user: base_models.APIUser,
-            storage_id: str,
+            storage_id: ULID,
             body: apispec.CloudStoragePatch,
             validator: RCloneValidator,
         ) -> JSONResponse:
@@ -271,7 +272,7 @@ class StoragesV2BP(CustomBlueprint):
         """Delete a storage entry."""
 
         @authenticate(self.authenticator)
-        async def _delete(request: Request, user: base_models.APIUser, storage_id: str) -> HTTPResponse:
+        async def _delete(request: Request, user: base_models.APIUser, storage_id: ULID) -> HTTPResponse:
             await self.storage_v2_repo.delete_storage(storage_id=storage_id, user=user)
             return empty(204)
 
