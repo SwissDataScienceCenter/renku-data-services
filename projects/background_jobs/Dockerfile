@@ -17,8 +17,10 @@ RUN python3 -m pip install --user pipx && \
 COPY --chown=$USER_UID:$USER_GID . .
 RUN if $DEV_BUILD ; then \
     /home/renku/.local/bin/poetry export -o requirements.txt --with dev; \
-    env/bin/pip install -r requirements.txt; \
-  fi
+  else \
+    /home/renku/.local/bin/poetry export -o requirements.txt; \
+  fi && \
+  env/bin/pip install -r requirements.txt
 RUN /home/renku/.local/bin/poetry build-project -f wheel -C projects/background_jobs
 RUN env/bin/pip --no-cache-dir install projects/background_jobs/dist/*.whl
 
