@@ -76,7 +76,7 @@ paths:
           name: resource_pool_id
           required: true
           schema:
-            type: string
+            type: integer
       responses:
         "200":
           description: The resource pool definition
@@ -101,7 +101,7 @@ paths:
           name: resource_pool_id
           required: true
           schema:
-            type: string
+            type: integer
       requestBody:
         required: true
         content:
@@ -132,7 +132,7 @@ paths:
           name: resource_pool_id
           required: true
           schema:
-            type: string
+            type: integer
       requestBody:
         required: true
         content:
@@ -163,7 +163,7 @@ paths:
           name: resource_pool_id
           required: true
           schema:
-            type: string
+            type: integer
       responses:
         "204":
           description: The resource pool was removed or did not exist in the first place
@@ -179,7 +179,7 @@ paths:
           name: resource_pool_id
           required: true
           schema:
-            type: string
+            type: integer
       responses:
         "200":
           description: The list of users
@@ -204,7 +204,7 @@ paths:
           name: resource_pool_id
           required: true
           schema:
-            type: string
+            type: integer
       requestBody:
         description: List of user Ids
         required: true
@@ -243,7 +243,7 @@ paths:
           name: resource_pool_id
           required: true
           schema:
-            type: string
+            type: integer
       requestBody:
         description: List of user Ids
         required: true
@@ -276,7 +276,7 @@ paths:
           name: resource_pool_id
           required: true
           schema:
-            type: string
+            type: integer
         - in: path
           name: user_id
           required: true
@@ -306,7 +306,7 @@ paths:
           name: resource_pool_id
           required: true
           schema:
-            type: string
+            type: integer
         - in: path
           name: user_id
           required: true
@@ -327,7 +327,7 @@ paths:
           name: resource_pool_id
           required: true
           schema:
-            type: string
+            type: integer
         - in: query
           description: Filter for resource classes based on the provided name as a prefix. Omitting this parameter returns all classes.
           name: name
@@ -358,7 +358,7 @@ paths:
           name: resource_pool_id
           required: true
           schema:
-            type: string
+            type: integer
       requestBody:
         required: true
         content:
@@ -390,7 +390,7 @@ paths:
           name: resource_pool_id
           required: true
           schema:
-            type: string
+            type: integer
         - in: path
           name: class_id
           required: true
@@ -420,7 +420,7 @@ paths:
           name: resource_pool_id
           required: true
           schema:
-            type: string
+            type: integer
         - in: path
           name: class_id
           required: true
@@ -456,7 +456,7 @@ paths:
           name: resource_pool_id
           required: true
           schema:
-            type: string
+            type: integer
         - in: path
           name: class_id
           required: true
@@ -492,7 +492,7 @@ paths:
           name: resource_pool_id
           required: true
           schema:
-            type: string
+            type: integer
         - in: path
           name: class_id
           required: true
@@ -513,7 +513,7 @@ paths:
           name: resource_pool_id
           required: true
           schema:
-            type: string
+            type: integer
         - in: path
           name: class_id
           required: true
@@ -537,7 +537,7 @@ paths:
           name: resource_pool_id
           required: true
           schema:
-            type: string
+            type: integer
         - in: path
           name: class_id
           required: true
@@ -558,7 +558,7 @@ paths:
           name: resource_pool_id
           required: true
           schema:
-            type: string
+            type: integer
         - in: path
           name: class_id
           required: true
@@ -582,7 +582,7 @@ paths:
           name: resource_pool_id
           required: true
           schema:
-            type: string
+            type: integer
         - in: path
           name: class_id
           required: true
@@ -629,7 +629,7 @@ paths:
           name: resource_pool_id
           required: true
           schema:
-            type: string
+            type: integer
       responses:
         "200":
           description: The resource quota for the resource pool
@@ -654,7 +654,7 @@ paths:
           name: resource_pool_id
           required: true
           schema:
-            type: string
+            type: integer
       requestBody:
         required: true
         content:
@@ -685,7 +685,7 @@ paths:
           name: resource_pool_id
           required: true
           schema:
-            type: string
+            type: integer
       requestBody:
         required: true
         content:
