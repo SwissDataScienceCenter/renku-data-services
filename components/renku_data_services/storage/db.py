@@ -5,6 +5,7 @@ from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
@@ -40,7 +41,7 @@ class BaseStorageRepository(_Base):
         self,
         user: base_models.APIUser,
         id: str | None = None,
-        project_id: str | None = None,
+        project_id: str | ULID | None = None,
         name: str | None = None,
     ) -> list[models.CloudStorage]:
         """Get a storage from the database."""
@@ -48,9 +49,9 @@ class BaseStorageRepository(_Base):
             stmt = select(schemas.CloudStorageORM)
 
             if project_id is not None:
-                stmt = stmt.where(schemas.CloudStorageORM.project_id == project_id)
+                stmt = stmt.where(schemas.CloudStorageORM.project_id == str(project_id))
             if id is not None:
-                stmt = stmt.where(schemas.CloudStorageORM.storage_id == id)
+                stmt = stmt.where(schemas.CloudStorageORM.storage_id == (id))
 
             if name is not None:
                 stmt = stmt.where(schemas.CloudStorageORM.name == name)
@@ -67,11 +68,11 @@ class BaseStorageRepository(_Base):
 
             return [p.dump() for p in orms if p.project_id in accessible_projects]
 
-    async def get_storage_by_id(self, storage_id: str, user: base_models.APIUser) -> models.CloudStorage:
+    async def get_storage_by_id(self, storage_id: ULID, user: base_models.APIUser) -> models.CloudStorage:
         """Get a single storage by id."""
         async with self.session_maker() as session:
             storage = await session.scalar(
-                select(schemas.CloudStorageORM).where(schemas.CloudStorageORM.storage_id == storage_id)
+                select(schemas.CloudStorageORM).where(schemas.CloudStorageORM.storage_id == str(storage_id))
             )
 
             if storage is None:
@@ -94,11 +95,11 @@ class BaseStorageRepository(_Base):
             session.add(orm)
         return orm.dump()
 
-    async def update_storage(self, storage_id: str, user: base_models.APIUser, **kwargs: dict) -> models.CloudStorage:
+    async def update_storage(self, storage_id: ULID, user: base_models.APIUser, **kwargs: dict) -> models.CloudStorage:
         """Update a cloud storage entry."""
         async with self.session_maker() as session, session.begin():
             res = await session.execute(
-                select(schemas.CloudStorageORM).where(schemas.CloudStorageORM.storage_id == storage_id)
+                select(schemas.CloudStorageORM).where(schemas.CloudStorageORM.storage_id == str(storage_id))
             )
             storage = res.scalars().one_or_none()
 
@@ -127,11 +128,11 @@ class BaseStorageRepository(_Base):
 
         return result
 
-    async def delete_storage(self, storage_id: str, user: base_models.APIUser) -> None:
+    async def delete_storage(self, storage_id: ULID, user: base_models.APIUser) -> None:
         """Delete a cloud storage entry."""
         async with self.session_maker() as session, session.begin():
             res = await session.execute(
-                select(schemas.CloudStorageORM).where(schemas.CloudStorageORM.storage_id == storage_id)
+                select(schemas.CloudStorageORM).where(schemas.CloudStorageORM.storage_id == str(storage_id))
             )
             storage = res.one_or_none()
 

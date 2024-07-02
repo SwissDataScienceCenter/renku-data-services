@@ -6,13 +6,14 @@ from typing import Any
 from sanic import HTTPResponse, Request, empty, json
 from sanic.response import JSONResponse
 from sanic_ext import validate
+from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.storage import apispec, models
-from renku_data_services.storage.apispec_base import RepositoryFilter
+from renku_data_services.storage.apispec_base import RepositoryFilter, RepositoryFilterV2
 from renku_data_services.storage.db import StorageRepository, StorageV2Repository
 from renku_data_services.storage.rclone import RCloneValidator
 
@@ -54,14 +55,14 @@ class StorageBP(CustomBlueprint):
         async def _get_one(
             request: Request,
             user: base_models.APIUser,
-            storage_id: str,
+            storage_id: ULID,
             validator: RCloneValidator,
         ) -> JSONResponse:
             storage = await self.storage_repo.get_storage_by_id(storage_id, user=user)
 
             return json(dump_storage_with_sensitive_fields(storage, validator))
 
-        return "/storage/<storage_id>", ["GET"], _get_one
+        return "/storage/<storage_id:ulid>", ["GET"], _get_one
 
     def post(self) -> BlueprintFactoryResponse:
         """Create a new cloud storage entry."""
@@ -101,7 +102,7 @@ class StorageBP(CustomBlueprint):
         async def _put(
             request: Request,
             user: base_models.APIUser,
-            storage_id: str,
+            storage_id: ULID,
             validator: RCloneValidator,
         ) -> JSONResponse:
             if not request.json:
@@ -127,7 +128,7 @@ class StorageBP(CustomBlueprint):
             res = await self.storage_repo.update_storage(storage_id=storage_id, user=user, **body_dict)
             return json(dump_storage_with_sensitive_fields(res, validator))
 
-        return "/storage/<storage_id>", ["PUT"], _put
+        return "/storage/<storage_id:ulid>", ["PUT"], _put
 
     def patch(self) -> BlueprintFactoryResponse:
         """Update parts of a storage entry."""
@@ -137,7 +138,7 @@ class StorageBP(CustomBlueprint):
         async def _patch(
             request: Request,
             user: base_models.APIUser,
-            storage_id: str,
+            storage_id: ULID,
             body: apispec.CloudStoragePatch,
             validator: RCloneValidator,
         ) -> JSONResponse:
@@ -157,17 +158,17 @@ class StorageBP(CustomBlueprint):
             res = await self.storage_repo.update_storage(storage_id=storage_id, user=user, **body_dict)
             return json(dump_storage_with_sensitive_fields(res, validator))
 
-        return "/storage/<storage_id>", ["PATCH"], _patch
+        return "/storage/<storage_id:ulid>", ["PATCH"], _patch
 
     def delete(self) -> BlueprintFactoryResponse:
         """Delete a storage entry."""
 
         @authenticate(self.authenticator)
-        async def _delete(request: Request, user: base_models.APIUser, storage_id: str) -> HTTPResponse:
+        async def _delete(request: Request, user: base_models.APIUser, storage_id: ULID) -> HTTPResponse:
             await self.storage_repo.delete_storage(storage_id=storage_id, user=user)
             return empty(204)
 
-        return "/storage/<storage_id>", ["DELETE"], _delete
+        return "/storage/<storage_id:ulid>", ["DELETE"], _delete
 
 
 @dataclass(kw_only=True)
@@ -182,7 +183,7 @@ class StoragesV2BP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _get(request: Request, user: base_models.APIUser, validator: RCloneValidator) -> JSONResponse:
-            res_filter = RepositoryFilter.model_validate(dict(request.query_args))
+            res_filter = RepositoryFilterV2.model_validate(dict(request.query_args))
             storage: list[models.CloudStorage]
             storage = await self.storage_v2_repo.get_storage(user=user, **res_filter.model_dump())
 
@@ -197,14 +198,14 @@ class StoragesV2BP(CustomBlueprint):
         async def _get_one(
             request: Request,
             user: base_models.APIUser,
-            storage_id: str,
+            storage_id: ULID,
             validator: RCloneValidator,
         ) -> JSONResponse:
             storage = await self.storage_v2_repo.get_storage_by_id(storage_id, user=user)
 
             return json(dump_storage_with_sensitive_fields(storage, validator))
 
-        return "/storages_v2/<storage_id>", ["GET"], _get_one
+        return "/storages_v2/<storage_id:ulid>", ["GET"], _get_one
 
     def post(self) -> BlueprintFactoryResponse:
         """Create a new cloud storage entry."""
@@ -245,7 +246,7 @@ class StoragesV2BP(CustomBlueprint):
         async def _patch(
             request: Request,
             user: base_models.APIUser,
-            storage_id: str,
+            storage_id: ULID,
             body: apispec.CloudStoragePatch,
             validator: RCloneValidator,
         ) -> JSONResponse:
@@ -265,17 +266,17 @@ class StoragesV2BP(CustomBlueprint):
             res = await self.storage_v2_repo.update_storage(storage_id=storage_id, user=user, **body_dict)
             return json(dump_storage_with_sensitive_fields(res, validator))
 
-        return "/storages_v2/<storage_id>", ["PATCH"], _patch
+        return "/storages_v2/<storage_id:ulid>", ["PATCH"], _patch
 
     def delete(self) -> BlueprintFactoryResponse:
         """Delete a storage entry."""
 
         @authenticate(self.authenticator)
-        async def _delete(request: Request, user: base_models.APIUser, storage_id: str) -> HTTPResponse:
+        async def _delete(request: Request, user: base_models.APIUser, storage_id: ULID) -> HTTPResponse:
             await self.storage_v2_repo.delete_storage(storage_id=storage_id, user=user)
             return empty(204)
 
-        return "/storages_v2/<storage_id>", ["DELETE"], _delete
+        return "/storages_v2/<storage_id:ulid>", ["DELETE"], _delete
 
 
 @dataclass(kw_only=True)

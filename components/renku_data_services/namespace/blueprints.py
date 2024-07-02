@@ -58,7 +58,7 @@ class GroupsBP(CustomBlueprint):
             result = await self.group_repo.get_group(user=user, slug=slug)
             return json(apispec.GroupResponse.model_validate(result).model_dump(exclude_none=True, mode="json"))
 
-        return "/groups/<slug>", ["GET"], _get_one
+        return "/groups/<slug:renku_slug>", ["GET"], _get_one
 
     def delete(self) -> BlueprintFactoryResponse:
         """Delete a specific group."""
@@ -69,7 +69,7 @@ class GroupsBP(CustomBlueprint):
             await self.group_repo.delete_group(user=user, slug=slug)
             return HTTPResponse(status=204)
 
-        return "/groups/<slug>", ["DELETE"], _delete
+        return "/groups/<slug:renku_slug>", ["DELETE"], _delete
 
     def patch(self) -> BlueprintFactoryResponse:
         """Partially update a specific group."""
@@ -84,7 +84,7 @@ class GroupsBP(CustomBlueprint):
             res = await self.group_repo.update_group(user=user, slug=slug, payload=body_dict)
             return json(apispec.GroupResponse.model_validate(res).model_dump(exclude_none=True, mode="json"))
 
-        return "/groups/<slug>", ["PATCH"], _patch
+        return "/groups/<slug:renku_slug>", ["PATCH"], _patch
 
     def get_all_members(self) -> BlueprintFactoryResponse:
         """List all group members."""
@@ -106,7 +106,7 @@ class GroupsBP(CustomBlueprint):
                 ]
             )
 
-        return "/groups/<slug>/members", ["GET"], _get_all_members
+        return "/groups/<slug:renku_slug>/members", ["GET"], _get_all_members
 
     def update_members(self) -> BlueprintFactoryResponse:
         """Update or add group members."""
@@ -134,7 +134,7 @@ class GroupsBP(CustomBlueprint):
                 ]
             )
 
-        return "/groups/<slug>/members", ["PATCH"], _update_members
+        return "/groups/<slug:renku_slug>/members", ["PATCH"], _update_members
 
     def delete_member(self) -> BlueprintFactoryResponse:
         """Remove a specific user from the list of members of a group."""
@@ -145,7 +145,7 @@ class GroupsBP(CustomBlueprint):
             await self.group_repo.delete_group_member(user=user, slug=slug, user_id_to_delete=user_id)
             return HTTPResponse(status=204)
 
-        return "/groups/<slug>/members/<user_id>", ["DELETE"], _delete_member
+        return "/groups/<slug:renku_slug>/members/<user_id>", ["DELETE"], _delete_member
 
     def get_namespaces(self) -> BlueprintFactoryResponse:
         """Get all namespaces."""
@@ -191,4 +191,4 @@ class GroupsBP(CustomBlueprint):
                 ).model_dump(exclude_none=True, mode="json")
             )
 
-        return "/namespaces/<slug>", ["GET"], _get_namespace
+        return "/namespaces/<slug:renku_slug>", ["GET"], _get_namespace
