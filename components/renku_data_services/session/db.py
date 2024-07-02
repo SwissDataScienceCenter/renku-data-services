@@ -37,11 +37,11 @@ class SessionRepository:
             environments = res.all()
             return [e.dump() for e in environments]
 
-    async def get_environment(self, environment_id: str) -> models.Environment:
+    async def get_environment(self, environment_id: ULID) -> models.Environment:
         """Get one session environment from the database."""
         async with self.session_maker() as session:
             res = await session.scalars(
-                select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == environment_id)
+                select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == str(environment_id))
             )
             environment = res.one_or_none()
             if environment is None:
@@ -75,7 +75,7 @@ class SessionRepository:
             return environment.dump()
 
     async def update_environment(
-        self, user: base_models.APIUser, environment_id: str, **kwargs: dict
+        self, user: base_models.APIUser, environment_id: ULID, **kwargs: dict
     ) -> models.Environment:
         """Update a session environment entry."""
         if not user.is_admin:
@@ -83,7 +83,7 @@ class SessionRepository:
 
         async with self.session_maker() as session, session.begin():
             res = await session.scalars(
-                select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == environment_id)
+                select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == str(environment_id))
             )
             environment = res.one_or_none()
             if environment is None:
@@ -98,14 +98,14 @@ class SessionRepository:
 
             return environment.dump()
 
-    async def delete_environment(self, user: base_models.APIUser, environment_id: str) -> None:
+    async def delete_environment(self, user: base_models.APIUser, environment_id: ULID) -> None:
         """Delete a session environment entry."""
         if not user.is_admin:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session, session.begin():
             res = await session.scalars(
-                select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == environment_id)
+                select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == str(environment_id))
             )
             environment = res.one_or_none()
 
@@ -150,7 +150,7 @@ class SessionRepository:
         """Get one session launcher from the database."""
         async with self.session_maker() as session:
             res = await session.scalars(
-                select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.id == launcher_id)
+                select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.id == str(launcher_id))
             )
             launcher = res.one_or_none()
 
@@ -246,7 +246,7 @@ class SessionRepository:
 
         async with self.session_maker() as session, session.begin():
             res = await session.scalars(
-                select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.id == launcher_id)
+                select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.id == str(launcher_id))
             )
             launcher = res.one_or_none()
             if launcher is None:
@@ -324,7 +324,7 @@ class SessionRepository:
 
         async with self.session_maker() as session, session.begin():
             res = await session.scalars(
-                select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.id == launcher_id)
+                select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.id == str(launcher_id))
             )
             launcher = res.one_or_none()
 

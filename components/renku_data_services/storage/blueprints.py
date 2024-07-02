@@ -62,7 +62,7 @@ class StorageBP(CustomBlueprint):
 
             return json(dump_storage_with_sensitive_fields(storage, validator))
 
-        return "/storage/<storage_id>", ["GET"], _get_one
+        return "/storage/<storage_id:ulid>", ["GET"], _get_one
 
     def post(self) -> BlueprintFactoryResponse:
         """Create a new cloud storage entry."""
@@ -128,7 +128,7 @@ class StorageBP(CustomBlueprint):
             res = await self.storage_repo.update_storage(storage_id=storage_id, user=user, **body_dict)
             return json(dump_storage_with_sensitive_fields(res, validator))
 
-        return "/storage/<storage_id>", ["PUT"], _put
+        return "/storage/<storage_id:ulid>", ["PUT"], _put
 
     def patch(self) -> BlueprintFactoryResponse:
         """Update parts of a storage entry."""
@@ -158,7 +158,7 @@ class StorageBP(CustomBlueprint):
             res = await self.storage_repo.update_storage(storage_id=storage_id, user=user, **body_dict)
             return json(dump_storage_with_sensitive_fields(res, validator))
 
-        return "/storage/<storage_id>", ["PATCH"], _patch
+        return "/storage/<storage_id:ulid>", ["PATCH"], _patch
 
     def delete(self) -> BlueprintFactoryResponse:
         """Delete a storage entry."""
@@ -168,7 +168,7 @@ class StorageBP(CustomBlueprint):
             await self.storage_repo.delete_storage(storage_id=storage_id, user=user)
             return empty(204)
 
-        return "/storage/<storage_id>", ["DELETE"], _delete
+        return "/storage/<storage_id:ulid>", ["DELETE"], _delete
 
 
 @dataclass(kw_only=True)
@@ -205,7 +205,7 @@ class StoragesV2BP(CustomBlueprint):
 
             return json(dump_storage_with_sensitive_fields(storage, validator))
 
-        return "/storages_v2/<storage_id>", ["GET"], _get_one
+        return "/storages_v2/<storage_id:ulid>", ["GET"], _get_one
 
     def post(self) -> BlueprintFactoryResponse:
         """Create a new cloud storage entry."""
@@ -266,7 +266,7 @@ class StoragesV2BP(CustomBlueprint):
             res = await self.storage_v2_repo.update_storage(storage_id=storage_id, user=user, **body_dict)
             return json(dump_storage_with_sensitive_fields(res, validator))
 
-        return "/storages_v2/<storage_id>", ["PATCH"], _patch
+        return "/storages_v2/<storage_id:ulid>", ["PATCH"], _patch
 
     def delete(self) -> BlueprintFactoryResponse:
         """Delete a storage entry."""
@@ -276,7 +276,7 @@ class StoragesV2BP(CustomBlueprint):
             await self.storage_v2_repo.delete_storage(storage_id=storage_id, user=user)
             return empty(204)
 
-        return "/storages_v2/<storage_id>", ["DELETE"], _delete
+        return "/storages_v2/<storage_id:ulid>", ["DELETE"], _delete
 
 
 @dataclass(kw_only=True)

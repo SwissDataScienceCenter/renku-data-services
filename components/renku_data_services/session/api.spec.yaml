@@ -77,7 +77,7 @@ paths:
           name: environment_id
           required: true
           schema:
-          $ref: "#/components/schemas/Ulid"
+            $ref: "#/components/schemas/Ulid"
       requestBody:
         required: true
         content:
