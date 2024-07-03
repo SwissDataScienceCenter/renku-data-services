@@ -17,7 +17,6 @@ from ulid import ULID
 
 from renku_data_services.app_config import Config
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
-from renku_data_services.base_models.core import Slug
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.errors.errors import (
     MissingResourceError,
@@ -63,7 +62,7 @@ def create_app() -> Sanic:
     app = Sanic(config.app_name)
 
     app.router.register_pattern("ulid", ULID.from_str, r"^[0-9A-HJKMNP-TV-Z]{26}$")
-    app.router.register_pattern("renku_slug", str, Slug._regex)
+    app.router.register_pattern("renku_slug", str, r"^[a-zA-Z0-9][a-zA-Z0-9\-_.]*$")
 
     if "COVERAGE_RUN" in environ:
         app.config.TOUCHUP = False
