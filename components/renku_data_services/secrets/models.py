@@ -2,11 +2,17 @@
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import Enum
 
 from kubernetes import client as k8s_client
 from pydantic import BaseModel, Field
 
-from renku_data_services.users.apispec import SecretKind
+
+class SecretKind(Enum):
+    """Kind of secret. This should have the same values as users.apispec.SecretKind."""
+
+    general = "general"
+    storage = "storage"
 
 
 class Secret(BaseModel):

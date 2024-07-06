@@ -1,7 +1,7 @@
 """add secret kind
 
 Revision ID: 9c26ab37ff4c
-Revises: 57dfd69ea814
+Revises: 6538ba654104
 Create Date: 2024-06-06 16:41:56.948696
 
 """
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "9c26ab37ff4c"
-down_revision = "57dfd69ea814"
+down_revision = "6538ba654104"
 branch_labels = None
 depends_on = None
 

@@ -9,8 +9,8 @@ from sanic_testing.testing import SanicASGITestClient
 
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.secrets.core import rotate_encryption_keys, rotate_single_encryption_key
-from renku_data_services.secrets.models import Secret
-from renku_data_services.users.apispec import SecretKind
+from renku_data_services.secrets.models import Secret, SecretKind
+from renku_data_services.users import apispec
 from renku_data_services.utils.cryptography import (
     decrypt_rsa,
     decrypt_string,
@@ -34,11 +34,12 @@ def create_secret(sanic_client: SanicASGITestClient, user_headers):
 
 
 @pytest.mark.asyncio
-async def test_create_secrets(sanic_client: SanicASGITestClient, user_headers) -> None:
+@pytest.mark.parametrize("kind", [e.value for e in apispec.SecretKind])
+async def test_create_secrets(sanic_client: SanicASGITestClient, user_headers, kind) -> None:
     payload = {
         "name": "my-secret",
         "value": "42",
-        "kind": "general",
+        "kind": kind,
     }
     _, response = await sanic_client.post("/api/data/user/secrets", headers=user_headers, json=payload)
 
@@ -48,7 +49,7 @@ async def test_create_secrets(sanic_client: SanicASGITestClient, user_headers) -
     assert response.json["name"] == "my-secret"
     assert response.json["id"] is not None
     assert response.json["modification_date"] is not None
-    assert response.json["kind"] == "general"
+    assert response.json["kind"] == kind
 
 
 @pytest.mark.asyncio

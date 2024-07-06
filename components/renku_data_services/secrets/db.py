@@ -11,9 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from renku_data_services.base_api.auth import APIUser, only_authenticated
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.errors import errors
-from renku_data_services.secrets.models import Secret
+from renku_data_services.secrets.models import Secret, SecretKind
 from renku_data_services.secrets.orm import SecretORM
-from renku_data_services.users.apispec import SecretKind
 
 
 class UserSecretsRepo:
@@ -55,7 +54,7 @@ class UserSecretsRepo:
             return [orm.dump() for orm in orms]
 
     @only_authenticated
-    async def insert_secret(self, requested_by: APIUser, secret: Secret) -> Secret | None:
+    async def insert_secret(self, requested_by: APIUser, secret: Secret) -> Secret:
         """Insert a new secret."""
 
         async with self.session_maker() as session, session.begin():
