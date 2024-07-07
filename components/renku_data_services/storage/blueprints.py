@@ -28,6 +28,15 @@ def dump_storage_with_sensitive_fields(storage: models.CloudStorage, validator: 
     ).model_dump(exclude_none=True)
 
 
+def dump_storage_with_sensitive_fields_and_secrets(
+    storage: models.CloudStorage, validator: RCloneValidator
+) -> dict[str, Any]:
+    """Dump a CloudStorage model alongside sensitive fields and its saved secrets."""
+    dumped_storage = dump_storage_with_sensitive_fields(storage, validator)
+    dumped_storage["secrets"] = [apispec.CloudStorageSecretGet.model_validate(s).model_dump() for s in storage.secrets]
+    return dumped_storage
+
+
 @dataclass(kw_only=True)
 class StorageBP(CustomBlueprint):
     """Handlers for manipulating storage definitions."""
@@ -185,9 +194,9 @@ class StoragesV2BP(CustomBlueprint):
         async def _get(request: Request, user: base_models.APIUser, validator: RCloneValidator) -> JSONResponse:
             res_filter = RepositoryFilterV2.model_validate(dict(request.query_args))
             storage: list[models.CloudStorage]
-            storage = await self.storage_v2_repo.get_storage(user=user, **res_filter.model_dump())
+            storage = await self.storage_v2_repo.get_storage(user=user, include_secrets=True, **res_filter.model_dump())
 
-            return json([dump_storage_with_sensitive_fields(s, validator) for s in storage])
+            return json([dump_storage_with_sensitive_fields_and_secrets(s, validator) for s in storage])
 
         return "/storages_v2", ["GET"], _get
 
@@ -203,7 +212,7 @@ class StoragesV2BP(CustomBlueprint):
         ) -> JSONResponse:
             storage = await self.storage_v2_repo.get_storage_by_id(storage_id, user=user)
 
-            return json(dump_storage_with_sensitive_fields(storage, validator))
+            return json(dump_storage_with_sensitive_fields_and_secrets(storage, validator))
 
         return "/storages_v2/<storage_id:ulid>", ["GET"], _get_one
 

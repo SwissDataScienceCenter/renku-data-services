@@ -69,7 +69,9 @@ class CloudStorage(BaseModel):
     """
 
     target_path: str = Field(min_length=1)
-    """Path inside the target repository to mouhnt/clone data to."""
+    """Path inside the target repository to mount/clone data to."""
+
+    secrets: list["CloudStorageSecret"] = Field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict) -> "CloudStorage":

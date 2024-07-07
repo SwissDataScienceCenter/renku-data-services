@@ -2,6 +2,7 @@
 
 import asyncio
 from base64 import b64encode
+from typing import cast
 
 from cryptography.hazmat.primitives.asymmetric import rsa
 from kubernetes import client as k8s_client
@@ -33,6 +34,7 @@ async def create_k8s_secret(
     secret_service_private_key: rsa.RSAPrivateKey,
     previous_secret_service_private_key: rsa.RSAPrivateKey | None,
     core_client: K8sCoreClientInterface,
+    key_mapping: dict[str, str] | None,
 ) -> None:
     """Creates a single k8s secret from a list of user secrets stored in the DB."""
     secrets = await secrets_repo.get_secrets_by_ids(requested_by=user, secret_ids=secret_ids)
@@ -41,6 +43,12 @@ async def create_k8s_secret(
     missing_secret_ids = requested_secret_ids - found_secret_ids
     if len(missing_secret_ids) > 0:
         raise errors.MissingResourceError(message=f"Couldn't find secrets with ids {', '.join(missing_secret_ids)}")
+
+    if key_mapping:
+        if set(key_mapping) != requested_secret_ids:
+            raise errors.ValidationError(message="Key mapping must include all requested secret IDs")
+        if len(key_mapping) != len(set(key_mapping.values())):
+            raise errors.ValidationError(message="Key mapping values are not unique")
 
     decrypted_secrets = {}
     try:
@@ -55,7 +63,8 @@ async def create_k8s_secret(
                     raise
 
             decrypted_value = decrypt_string(decryption_key, user.id, secret.encrypted_value).encode()  # type: ignore
-            decrypted_secrets[secret.name] = b64encode(decrypted_value).decode()
+            key = secret.name if not key_mapping else key_mapping[cast(str, secret.id)]
+            decrypted_secrets[key] = b64encode(decrypted_value).decode()
     except Exception as e:
         # don't wrap the error, we don't want secrets accidentally leaking.
         raise errors.SecretDecryptionError(message=f"An error occurred decrypting secrets: {str(type(e))}")
@@ -123,7 +132,7 @@ async def rotate_single_encryption_key(
     """Rotate a single secret in place."""
     # try using new key first as a sanity check, in case it was already rotated
     try:
-        decryption_key = decrypt_rsa(new_key, secret.encrypted_key)
+        _ = decrypt_rsa(new_key, secret.encrypted_key)
     except ValueError:
         pass
     else:
