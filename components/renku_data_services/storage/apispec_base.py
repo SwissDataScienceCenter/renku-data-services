@@ -1,6 +1,7 @@
 """Base models for API specifications."""
 
 from pydantic import BaseModel, Field
+from ulid import ULID
 
 
 class BaseAPISpec(BaseModel):
@@ -21,3 +22,14 @@ class RepositoryFilter(BaseAPISpec):
         extra = "ignore"
 
     project_id: str = Field()
+
+
+class RepositoryFilterV2(BaseAPISpec):
+    """The schema for the query parameters used to filter resource classes."""
+
+    class Config:
+        """Configuration."""
+
+        extra = "ignore"
+
+    project_id: ULID

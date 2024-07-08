@@ -114,7 +114,7 @@ class Slug:
     # - cannot end in .atom
     # - cannot contain any combination of two or more consecutive -._
     # - has to start with letter or number
-    _regex: ClassVar[str] = "^(?!.*\\.git$|.*\\.atom$|.*[\\-._][\\-._].*)[a-zA-Z0-9][a-zA-Z0-9\\-_.]*$"
+    _regex: ClassVar[str] = r"^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-zA-Z0-9][a-zA-Z0-9\-_.]*$"
 
     def __init__(self, value: str) -> None:
         if not re.match(self._regex, value):

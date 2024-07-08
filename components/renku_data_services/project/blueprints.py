@@ -165,7 +165,7 @@ class ProjectsBP(CustomBlueprint):
                 headers=headers,
             )
 
-        return "/projects/<namespace>/<slug>", ["GET"], _get_one_by_namespace_slug
+        return "/projects/<namespace>/<slug:renku_slug>", ["GET"], _get_one_by_namespace_slug
 
     def delete(self) -> BlueprintFactoryResponse:
         """Delete a specific project."""
