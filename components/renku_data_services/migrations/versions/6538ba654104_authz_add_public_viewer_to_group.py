@@ -1,7 +1,7 @@
 """authz add public_viewer to group
 
 Revision ID: 6538ba654104
-Revises: c0631477aea4
+Revises: 57dfd69ea814
 Create Date: 2024-06-21 07:24:30.067012
 
 """
@@ -13,7 +13,7 @@ from renku_data_services.authz.schemas import v3
 
 # revision identifiers, used by Alembic.
 revision = "6538ba654104"
-down_revision = "c0631477aea4"
+down_revision = "57dfd69ea814"
 branch_labels = None
 depends_on = None
 
