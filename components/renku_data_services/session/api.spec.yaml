@@ -354,6 +354,8 @@ components:
           $ref: "#/components/schemas/EnvironmentKind"
         environment_id:
           $ref: "#/components/schemas/EnvironmentId"
+        resource_class_id:
+          $ref: "#/components/schemas/ResourceClassId"
         container_image:
           $ref: "#/components/schemas/ContainerImage"
         default_url:
@@ -387,6 +389,8 @@ components:
           $ref: "#/components/schemas/EnvironmentKind"
         environment_id:
           $ref: "#/components/schemas/EnvironmentId"
+        resource_class_id:
+          $ref: "#/components/schemas/ResourceClassId"
         container_image:
           $ref: "#/components/schemas/ContainerImage"
         default_url:
@@ -408,6 +412,8 @@ components:
           $ref: "#/components/schemas/EnvironmentKind"
         environment_id:
           $ref: "#/components/schemas/EnvironmentId"
+        resource_class_id:
+          $ref: "#/components/schemas/ResourceClassId"
         container_image:
           $ref: "#/components/schemas/ContainerImage"
         default_url:
