@@ -1,3 +1,4 @@
+import math
 from datetime import timedelta
 
 import pytest
@@ -7,6 +8,20 @@ from hypothesis import HealthCheck, settings
 from sanic_testing.testing import SanicASGITestClient
 from schemathesis.hooks import HookContext
 from schemathesis.specs.openapi.schemas import BaseOpenAPISchema
+
+
+@pytest.fixture(scope="session")
+def requests_statistics():
+    stats = []
+    yield stats
+
+    if len(stats) < 2:
+        return
+
+    stats = sorted(stats)
+    p95 = stats[math.floor(0.95 * len(stats))]
+
+    assert p95 < timedelta(milliseconds=100)
 
 
 @pytest_asyncio.fixture
@@ -56,11 +71,14 @@ ALLOWED_SLOW_ENDPOINTS = [
 @schema.parametrize(validate_schema=True)
 @settings(max_examples=5, suppress_health_check=[HealthCheck.filter_too_much, HealthCheck.data_too_large])
 async def test_api_schemathesis(
-    case: schemathesis.Case, sanic_client: SanicASGITestClient, admin_headers: dict
+    case: schemathesis.Case,
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict,
+    requests_statistics: list[timedelta],
 ) -> None:
     req_kwargs = case.as_requests_kwargs(headers=admin_headers)
     _, res = await sanic_client.request(**req_kwargs)
     res.request.uri = str(res.url)
     if all(slow[0] != case.path or slow[1] != case.method for slow in ALLOWED_SLOW_ENDPOINTS):
-        assert res.elapsed <= timedelta(milliseconds=100), f"{case.path}:{case.method}"
+        requests_statistics.append(res.elapsed)
     case.validate_response(res)

@@ -315,10 +315,9 @@ class ClassesBP(CustomBlueprint):
     def get_no_pool(self) -> BlueprintFactoryResponse:
         """Get a specific class."""
 
-        @authenticate(self.authenticator)
         @validate_db_ids
-        async def _get_no_pool(_: Request, user: base_models.APIUser, class_id: int) -> HTTPResponse:
-            res = await self.repo.get_classes(api_user=user, id=class_id)
+        async def _get_no_pool(_: Request, class_id: int) -> HTTPResponse:
+            res = await self.repo.get_classes(api_user=None, id=class_id)
             if len(res) < 1:
                 raise errors.MissingResourceError(message=f"The class with id {class_id} cannot be found.")
             return json(apispec.ResourceClassWithId.model_validate(res[0]).model_dump(exclude_none=True))
