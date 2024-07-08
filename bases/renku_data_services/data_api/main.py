@@ -13,7 +13,6 @@ from sanic.log import logger
 from sanic.worker.loader import AppLoader
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
 from sentry_sdk.integrations.sanic import SanicIntegration, _context_enter, _context_exit, _set_transaction
-from ulid import ULID
 
 from renku_data_services.app_config import Config
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
@@ -60,9 +59,6 @@ def create_app() -> Sanic:
     """Create a Sanic application."""
     config = Config.from_env()
     app = Sanic(config.app_name)
-
-    app.router.register_pattern("ulid", ULID.from_str, r"^[0-9A-HJKMNP-TV-Z]{26}$")
-    app.router.register_pattern("renku_slug", str, r"^[a-zA-Z0-9][a-zA-Z0-9\-_.]*$")
 
     if "COVERAGE_RUN" in environ:
         app.config.TOUCHUP = False
