@@ -2,7 +2,6 @@
 
 from marshmallow import Schema, fields
 
-from ...config import config
 from .cloud_storage import RCloneStorageRequest
 from .custom_fields import LowercaseString
 from .repository import Repository
@@ -27,10 +26,10 @@ class LaunchNotebookRequestWithoutStorageBase(Schema):
         required=False,
         load_default=1,
     )
-    lfs_auto_fetch = fields.Bool(required=False, load_default=config.server_options.defaults["lfs_auto_fetch"])
+    lfs_auto_fetch = fields.Bool(required=False, load_default=False)
     default_url = fields.Str(
         required=False,
-        load_default=config.server_options.defaults["defaultUrl"],
+        load_default="/lab",
     )
     environment_variables = fields.Dict(keys=fields.Str(), values=fields.Str(), load_default=dict())
     # User uploaded secrets
@@ -61,9 +60,7 @@ class LaunchNotebookRequestWithStorage(LaunchNotebookRequestWithoutStorage):
     )
 
 
-LaunchNotebookRequest = (
-    LaunchNotebookRequestWithStorage if config.cloud_storage.enabled else LaunchNotebookRequestWithoutStorage
-)
+LaunchNotebookRequest = LaunchNotebookRequestWithStorage
 
 
 class Renku2LaunchNotebookRequest(LaunchNotebookRequestWithoutStorageBase):

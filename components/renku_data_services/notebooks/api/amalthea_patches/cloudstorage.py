@@ -1,11 +1,13 @@
-from typing import TYPE_CHECKING, Any
+"""Cloud storage patches."""
 
-if TYPE_CHECKING:
-    from renku_notebooks.api.classes.cloud_storage import ICloudStorageRequest
-    from renku_notebooks.api.classes.server import UserServer
+from typing import Any
+
+from renku_data_services.notebooks.api.classes.cloud_storage import ICloudStorageRequest
+from renku_data_services.notebooks.api.classes.server import UserServer
 
 
 def main(server: "UserServer") -> list[dict[str, Any]]:
+    """Cloud storage patches."""
     cloud_storage_patches: list[dict[str, Any]] = []
     cloud_storage_request: "ICloudStorageRequest"
     if not server.cloudstorage:

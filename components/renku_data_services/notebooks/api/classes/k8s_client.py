@@ -3,7 +3,7 @@
 import base64
 import json
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, cast
 from urllib.parse import urljoin
 
 import requests
@@ -29,6 +29,8 @@ from .auth import GitlabToken, RenkuTokens
 
 
 class NamespacedK8sClient:
+    """A kubernetes client that operates in a specific namespace."""
+
     def __init__(
         self,
         namespace: str,
@@ -58,22 +60,26 @@ class NamespacedK8sClient:
         self, pod_name: str, container_name: str, max_log_lines: Optional[int] = None
     ) -> Optional[str]:
         try:
-            logs = self._core_v1.read_namespaced_pod_log(
-                pod_name,
-                self.namespace,
-                container=container_name,
-                tail_lines=max_log_lines,
-                timestamps=True,
+            logs = cast(
+                str,
+                self._core_v1.read_namespaced_pod_log(
+                    pod_name,
+                    self.namespace,
+                    container=container_name,
+                    tail_lines=max_log_lines,
+                    timestamps=True,
+                ),
             )
         except ApiException as err:
             if err.status in [400, 404]:
-                return  # container does not exist or is not ready yet
+                return None  # container does not exist or is not ready yet
             else:
                 raise IntermittentError(f"Logs cannot be read for pod {pod_name}, container {container_name}.")
         else:
             return logs
 
     def get_pod_logs(self, name: str, containers: list[str], max_log_lines: Optional[int] = None) -> dict[str, str]:
+        """Get the logs of all containers in the session."""
         output = {}
         for container in containers:
             logs = self._get_container_logs(pod_name=name, container_name=container, max_log_lines=max_log_lines)
@@ -82,13 +88,15 @@ class NamespacedK8sClient:
         return output
 
     def get_secret(self, name: str) -> Optional[dict[str, Any]]:
+        """Read a specific secret from the cluster."""
         try:
-            secret = self._core_v1.read_namespaced_secret(name, self.namespace)
+            secret = cast(dict[str, Any], self._core_v1.read_namespaced_secret(name, self.namespace))
         except client.rest.ApiException:
             return None
         return secret
 
     def create_server(self, manifest: dict[str, Any]) -> dict[str, Any]:
+        """Create a jupyter server in the cluster."""
         server_name = manifest.get("metadata", {}).get("name")
         try:
             self._custom_objects.create_namespaced_custom_object(
@@ -110,9 +118,12 @@ class NamespacedK8sClient:
         # before we send the response from the POST request out. Exponential backoff
         # is used to avoid overwhelming the cache.
         server = retry_with_exponential_backoff(lambda x: x is None)(self.get_server)(server_name)
+        if server is None:
+            raise CannotStartServerError(message=f"Cannot start the session {server_name}")
         return server
 
-    def patch_server(self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]]):
+    def patch_server(self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]]) -> dict[str, Any]:
+        """Patch the server."""
         try:
             if isinstance(patch, list):  # noqa: SIM108
                 # NOTE: The _custom_objects_patch will only accept rfc6902 json-patch.
@@ -122,13 +133,16 @@ class NamespacedK8sClient:
                 # NOTE: The _custom_objects will accept the usual rfc7386 merge patches
                 client = self._custom_objects
 
-            server = client.patch_namespaced_custom_object(
-                group=self.amalthea_group,
-                version=self.amalthea_version,
-                namespace=self.namespace,
-                plural=self.amalthea_plural,
-                name=server_name,
-                body=patch,
+            server = cast(
+                dict[str, Any],
+                client.patch_namespaced_custom_object(
+                    group=self.amalthea_group,
+                    version=self.amalthea_version,
+                    namespace=self.namespace,
+                    plural=self.amalthea_plural,
+                    name=server_name,
+                    body=patch,
+                ),
             )
 
         except ApiException as e:
@@ -140,6 +154,7 @@ class NamespacedK8sClient:
     def patch_statefulset(
         self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]] | client.V1StatefulSet
     ) -> client.V1StatefulSet | None:
+        """Patch a statefulset."""
         try:
             ss = self._apps_v1.patch_namespaced_stateful_set(
                 server_name,
@@ -151,11 +166,12 @@ class NamespacedK8sClient:
                 # NOTE: It can happen potentially that another request or something else
                 # deleted the session as this request was going on, in this case we ignore
                 # the missing statefulset
-                return
+                return None
             raise
         return ss
 
-    def delete_server(self, server_name: str, forced: bool = False):
+    def delete_server(self, server_name: str, forced: bool = False) -> Any:
+        """Delete the server."""
         try:
             status = self._custom_objects.delete_namespaced_custom_object(
                 group=self.amalthea_group,
@@ -174,18 +190,21 @@ class NamespacedK8sClient:
     def get_server(self, name: str) -> Optional[dict[str, Any]]:
         """Get a specific JupyterServer object."""
         try:
-            js = self._custom_objects.get_namespaced_custom_object(
-                name=name,
-                group=self.amalthea_group,
-                version=self.amalthea_version,
-                namespace=self.namespace,
-                plural=self.amalthea_plural,
+            js = cast(
+                dict[str, Any],
+                self._custom_objects.get_namespaced_custom_object(
+                    name=name,
+                    group=self.amalthea_group,
+                    version=self.amalthea_version,
+                    namespace=self.namespace,
+                    plural=self.amalthea_plural,
+                ),
             )
         except ApiException as err:
             if err.status not in [400, 404]:
                 logging.exception(f"Cannot get server {name} because of {err}")
                 raise IntermittentError(f"Cannot get server {name} from the k8s API.")
-            return
+            return None
         return js
 
     def list_servers(self, label_selector: Optional[str] = None) -> list[dict[str, Any]]:
@@ -203,9 +222,9 @@ class NamespacedK8sClient:
                 logging.exception(f"Cannot list servers because of {err}")
                 raise IntermittentError(f"Cannot list servers from the k8s API with selector {label_selector}.")
             return []
-        return jss.get("items", [])
+        return cast(list[dict[str, Any]], jss.get("items", []))
 
-    def patch_image_pull_secret(self, server_name: str, gitlab_token: GitlabToken):
+    def patch_image_pull_secret(self, server_name: str, gitlab_token: GitlabToken) -> None:
         """Patch the image pull secret used in a Renku session."""
         secret_name = f"{server_name}-image-secret"
         try:
@@ -246,7 +265,7 @@ class NamespacedK8sClient:
             patch,
         )
 
-    def patch_statefulset_tokens(self, name: str, renku_tokens: RenkuTokens):
+    def patch_statefulset_tokens(self, name: str, renku_tokens: RenkuTokens) -> None:
         """Patch the Renku and Gitlab access tokens that are used in the session statefulset."""
         try:
             sts = self._apps_v1.read_namespaced_stateful_set(name, self.namespace)
@@ -270,11 +289,7 @@ class NamespacedK8sClient:
             (None, None),
         )
         secrets_container_index, secrets_container = next(
-            (
-                (i, c)
-                for i, c in enumerate(init_containers)
-                if c.name == "init-user-secrets"
-            ),
+            ((i, c) for i, c in enumerate(init_containers) if c.name == "init-user-secrets"),
             (None, None),
         )
 
@@ -294,16 +309,11 @@ class NamespacedK8sClient:
             else None
         )
         secrets_renku_access_token_env = (
-            find_env_var(secrets_container, "RENKU_ACCESS_TOKEN")
-            if secrets_container is not None
-            else None
+            find_env_var(secrets_container, "RENKU_ACCESS_TOKEN") if secrets_container is not None else None
         )
 
         patches = list()
-        if (
-            git_proxy_container_index is not None
-            and git_proxy_renku_access_token_env is not None
-        ):
+        if git_proxy_container_index is not None and git_proxy_renku_access_token_env is not None:
             patches.append(
                 {
                     "op": "replace",
@@ -314,10 +324,7 @@ class NamespacedK8sClient:
                     "value": renku_tokens.access_token,
                 }
             )
-        if (
-            git_proxy_container_index is not None
-            and git_proxy_renku_refresh_token_env is not None
-        ):
+        if git_proxy_container_index is not None and git_proxy_renku_refresh_token_env is not None:
             patches.append(
                 {
                     "op": "replace",
@@ -328,10 +335,7 @@ class NamespacedK8sClient:
                     "value": renku_tokens.refresh_token,
                 },
             )
-        if (
-            git_clone_container_index is not None
-            and git_clone_renku_access_token_env is not None
-        ):
+        if git_clone_container_index is not None and git_clone_renku_access_token_env is not None:
             patches.append(
                 {
                     "op": "replace",
@@ -342,10 +346,7 @@ class NamespacedK8sClient:
                     "value": renku_tokens.access_token,
                 },
             )
-        if (
-            secrets_container_index is not None
-            and secrets_renku_access_token_env is not None
-        ):
+        if secrets_container_index is not None and secrets_renku_access_token_env is not None:
             patches.append(
                 {
                     "op": "replace",
@@ -368,13 +369,16 @@ class NamespacedK8sClient:
 
 
 class JsServerCache:
+    """Utility class for calling the jupyter server cache."""
+
     def __init__(self, url: str):
         self.url = url
 
     def list_servers(self, safe_username: str) -> list[dict[str, Any]]:
+        """List the jupyter servers."""
         url = urljoin(self.url, f"/users/{safe_username}/servers")
         try:
-            res = requests.get(url)
+            res = requests.get(url, timeout=10)
             res.raise_for_status()
         except requests.HTTPError as err:
             logging.warning(
@@ -386,12 +390,14 @@ class JsServerCache:
         except requests.RequestException as err:
             logging.warning(f"Jupyter server cache at {url} cannot be reached: {err}")
             raise JSCacheError("The jupyter server cache is not available") from err
-        return res.json()
+
+        return cast(list[dict[str, Any]], res.json())
 
     def get_server(self, name: str) -> Optional[dict[str, Any]]:
+        """Get a specific jupyter server."""
         url = urljoin(self.url, f"/servers/{name}")
         try:
-            res = requests.get(url)
+            res = requests.get(url, timeout=10)
         except requests.exceptions.RequestException as err:
             logging.warning(f"Jupyter server cache at {url} cannot be reached: {err}")
             raise JSCacheError("The jupyter server cache is not available")
@@ -404,13 +410,15 @@ class JsServerCache:
             raise JSCacheError(f"The JSCache produced an unexpected status code: {res.status_code}")
         output = res.json()
         if len(output) == 0:
-            return
+            return None
         if len(output) > 1:
             raise ProgrammingError(f"Expected to find 1 server when getting server {name}, " f"found {len(output)}.")
-        return output[0]
+        return cast(dict[str, Any], output[0])
 
 
 class K8sClient:
+    """The K8s client that combines a namespaced client and a jupyter server cache."""
+
     def __init__(
         self,
         js_cache: JsServerCache,
@@ -462,16 +470,17 @@ class K8sClient:
                     "Expected less than two results for searching for " f"server {name}, but got {len(output)}"
                 )
             if len(output) == 0:
-                return
+                return None
             server = output[0]
 
         if server and server.get("metadata", {}).get("labels", {}).get(self.username_label) != safe_username:
-            return
+            return None
         return server
 
     def get_server_logs(
         self, server_name: str, safe_username: str, max_log_lines: Optional[int] = None
     ) -> dict[str, str]:
+        """Get the logs from the server."""
         server = self.get_server(server_name, safe_username)
         if server is None:
             raise MissingResourceError(
@@ -484,16 +493,22 @@ class K8sClient:
         pod_name = f"{server_name}-0"
         if namespace == self.renku_ns_client.namespace:
             return self.renku_ns_client.get_pod_logs(pod_name, containers, max_log_lines)
+        if self.session_ns_client is None:
+            raise MissingResourceError(
+                f"Cannot find server {server_name} for user {safe_username} to read the logs from."
+            )
         return self.session_ns_client.get_pod_logs(pod_name, containers, max_log_lines)
 
     def get_secret(self, name: str) -> Optional[dict[str, Any]]:
+        """Get a specific secret."""
         if self.session_ns_client is not None:
             secret = self.session_ns_client.get_secret(name)
             if secret:
                 return secret
         return self.renku_ns_client.get_secret(name)
 
-    def create_server(self, manifest: dict[str, Any], safe_username: str):
+    def create_server(self, manifest: dict[str, Any], safe_username: str) -> dict[str, Any]:
+        """Create a server."""
         server_name = manifest.get("metadata", {}).get("name")
         server = self.get_server(server_name, safe_username)
         if server:
@@ -503,7 +518,10 @@ class K8sClient:
             return self.renku_ns_client.create_server(manifest)
         return self.session_ns_client.create_server(manifest)
 
-    def patch_server(self, server_name: str, safe_username: str, patch: dict[str, Any]):
+    def patch_server(
+        self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        """Patch a server."""
         server = self.get_server(server_name, safe_username)
         if not server:
             raise MissingResourceError(
@@ -514,14 +532,21 @@ class K8sClient:
 
         if namespace == self.renku_ns_client.namespace:
             return self.renku_ns_client.patch_server(server_name=server_name, patch=patch)
-        else:
-            return self.session_ns_client.patch_server(server_name=server_name, patch=patch)
+        if self.session_ns_client is None:
+            raise MissingResourceError(
+                f"Cannot find server {server_name} for user " f"{safe_username} in order to patch it."
+            )
+        return self.session_ns_client.patch_server(server_name=server_name, patch=patch)
 
-    def patch_statefulset(self, server_name: str, patch: dict[str, Any]) -> client.V1StatefulSet | None:
+    def patch_statefulset(
+        self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]]
+    ) -> client.V1StatefulSet | None:
+        """Patch a statefulset."""
         client = self.session_ns_client if self.session_ns_client else self.renku_ns_client
         return client.patch_statefulset(server_name=server_name, patch=patch)
 
-    def delete_server(self, server_name: str, safe_username: str, forced: bool = False):
+    def delete_server(self, server_name: str, safe_username: str, forced: bool = False) -> None:
+        """Delete the server."""
         server = self.get_server(server_name, safe_username)
         if not server:
             raise MissingResourceError(
@@ -530,10 +555,13 @@ class K8sClient:
         namespace = server.get("metadata", {}).get("namespace")
         if namespace == self.renku_ns_client.namespace:
             self.renku_ns_client.delete_server(server_name, forced)
-        else:
-            self.session_ns_client.delete_server(server_name, forced)
+        if self.session_ns_client is None:
+            raise MissingResourceError(
+                f"Cannot find server {server_name} for user " f"{safe_username} in order to delete it."
+            )
+        self.session_ns_client.delete_server(server_name, forced)
 
-    def patch_tokens(self, server_name, renku_tokens: RenkuTokens, gitlab_token: GitlabToken):
+    def patch_tokens(self, server_name: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken) -> None:
         """Patch the Renku and Gitlab access tokens used in a session."""
         client = self.session_ns_client if self.session_ns_client else self.renku_ns_client
         client.patch_statefulset_tokens(server_name, renku_tokens)
@@ -541,6 +569,7 @@ class K8sClient:
 
     @property
     def preferred_namespace(self) -> str:
+        """Get the preferred namespace for creating jupyter servers."""
         if self.session_ns_client is not None:
             return self.session_ns_client.namespace
         return self.renku_ns_client.namespace

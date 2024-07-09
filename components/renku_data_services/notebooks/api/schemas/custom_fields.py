@@ -1,6 +1,8 @@
 """Custom schema fields."""
 
 import re
+from collections.abc import Mapping
+from typing import Any
 
 from marshmallow import fields
 from marshmallow.exceptions import ValidationError
@@ -11,7 +13,7 @@ class CpuField(fields.Field):
 
     _validation_regex = r"^(?<!-)([0-9]*\.?[0-9]*)(m?)$"
 
-    def _serialize(self, value, attr, obj, **kwargs):
+    def _serialize(self, value: float | int, attr: str | None, obj: dict, **kwargs: dict) -> float | int:
         if not isinstance(value, float) and not isinstance(value, int):
             raise ValidationError(
                 f"Invalid value {value} during serialization, " f"must be int or float, got {type(value)}."
@@ -20,7 +22,7 @@ class CpuField(fields.Field):
             raise ValidationError("Invalid value during serialization, must be greater than zero.")
         return value
 
-    def _deserialize(self, value, attr, data, **kwargs):
+    def _deserialize(self, value: Any, attr: str | None, data: Mapping[str, Any] | None, **kwargs: dict) -> float | int:
         """Always deserialize to fractional cores."""
         re_match = re.match(self._validation_regex, str(value))
         if re_match is None:
@@ -61,7 +63,7 @@ class ByteSizeField(fields.Field):
         "ei": 1024**6,
     }
 
-    def _serialize(self, value, attr, obj, **kwargs):
+    def _serialize(self, value: int, attr: str | None, obj: dict, **kwargs: dict) -> str:
         """Assumes value to be serialized is always bytes, serialized to gigabytes."""
         if not isinstance(value, float) and not isinstance(value, int):
             raise ValidationError(
@@ -75,7 +77,7 @@ class ByteSizeField(fields.Field):
         else:
             return f"{value / 1000000000:.0f}G"
 
-    def _deserialize(self, value, attr, data, **kwargs):
+    def _deserialize(self, value: str, attr: str | None, data: Mapping[str, Any] | None, **kwargs: dict) -> int:
         """Always deserialize to bytes."""
         re_match = re.match(self._validation_regex, str(value))
         if re_match is None:
@@ -97,7 +99,7 @@ class GpuField(fields.Field):
 
     _validation_regex = r"^(?<!-)([0-9]*\.?[0-9]*)$"
 
-    def _serialize(self, value, attr, obj, **kwargs):
+    def _serialize(self, value: int, attr: str | None, obj: dict, **kwargs: dict) -> int:
         """Serialize GpuField.
 
         Assumes value to be serialized is always whole GPUs.
@@ -117,7 +119,7 @@ class GpuField(fields.Field):
             )
         return value
 
-    def _deserialize(self, value, attr, data, **kwargs):
+    def _deserialize(self, value: str, attr: str | None, data: Mapping[str, Any] | None, **kwargs: dict) -> int:
         """Always deserialize to whole GPUs as integer."""
         re_match = re.match(self._validation_regex, str(value))
         if re_match is None:
@@ -141,14 +143,14 @@ class LowercaseString(fields.String):
     Used for parameters that are case insensitive.
     """
 
-    def _serialize(self, value, attr, obj, **kwargs):
+    def _serialize(self, value: str, attr: str | None, obj: dict, **kwargs: dict) -> str:
         value = super()._serialize(value, attr, obj, **kwargs)
         if isinstance(value, str):
             return value.lower()
         else:
             raise ValidationError(f"The value {value} is not type string, but {type(value)}.")
 
-    def _deserialize(self, value, attr, data, **kwargs):
+    def _deserialize(self, value: str, attr: str | None, data: Mapping[str, Any] | None, **kwargs: dict) -> str:
         value = super()._deserialize(value, attr, data, **kwargs)
         if isinstance(value, str):
             return value.lower()

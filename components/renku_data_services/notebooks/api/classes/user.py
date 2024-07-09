@@ -1,45 +1,51 @@
+"""Notebooks user model definitions."""
+
 import base64
 import json
+import logging
 import re
-from abc import ABC
 from functools import lru_cache
 from math import floor
-from typing import Optional
+from typing import Any, Optional, Protocol, cast
 
 import escapism
 import jwt
-from flask import current_app
 from gitlab import Gitlab
 from gitlab.v4.objects.projects import Project
+from gitlab.v4.objects.users import CurrentUser
 
-from ...config import config
-from ...errors.programming import ConfigurationError
 from ...errors.user import AuthenticationError
 
 
-class User(ABC):
-    access_token = None
-    git_token = None
+class User(Protocol):
+    """Representation of a user that is calling the API."""
+
+    access_token: str | None = None
+    git_token: str | None = None
+    gitlab_client: Gitlab
+    username: str
 
     @lru_cache(maxsize=8)
-    def get_renku_project(self, namespace_project) -> Optional[Project]:
+    def get_renku_project(self, namespace_project: str) -> Optional[Project]:
         """Retrieve the GitLab project."""
         try:
             return self.gitlab_client.projects.get(f"{namespace_project}")
         except Exception as e:
-            current_app.logger.warning(f"Cannot get project: {namespace_project} for user: {self.username}, error: {e}")
+            logging.warning(f"Cannot get project: {namespace_project} for user: {self.username}, error: {e}")
+        return None
 
     @property
     def anonymous(self) -> bool:
+        """Indicates whether the user is anonymous or not."""
         return False
 
 
 class AnonymousUser(User):
+    """Anonymous user."""
+
     auth_header = "Renku-Auth-Anon-Id"
 
-    def __init__(self, headers):
-        if not config.anonymous_sessions_enabled:
-            raise ConfigurationError(message="Anonymous sessions are not enabled.")
+    def __init__(self, headers: dict, gitlab_url: str):
         self.authenticated = (
             self.auth_header in headers
             and headers[self.auth_header] != ""
@@ -48,8 +54,8 @@ class AnonymousUser(User):
         )
         if not self.authenticated:
             return
-        self.git_url = config.git.url
-        self.gitlab_client = Gitlab(self.git_url, api_version=4, per_page=50)
+        self.git_url = gitlab_url
+        self.gitlab_client = Gitlab(self.git_url, api_version="4", per_page=50)
         self.username = headers[self.auth_header]
         self.safe_username = escapism.escape(self.username, escape_char="-").lower()
         self.full_name = None
@@ -61,22 +67,25 @@ class AnonymousUser(User):
         self.refresh_token = None
         self.id = headers[self.auth_header]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"<Anonymous user id:{self.username[:5]}****>"
 
     @property
     def anonymous(self) -> bool:
+        """Indicates whether the user is anonymous."""
         return True
 
 
 class RegisteredUser(User):
+    """Registered user."""
+
     auth_headers = [
         "Renku-Auth-Access-Token",
         "Renku-Auth-Id-Token",
     ]
     git_header = "Renku-Auth-Git-Credentials"
 
-    def __init__(self, headers):
+    def __init__(self, headers: dict[str, str]):
         self.authenticated = all([header in headers for header in self.auth_headers])
         if not self.authenticated:
             return
@@ -104,29 +113,38 @@ class RegisteredUser(User):
         ) = self.git_creds_from_headers(headers)
         self.gitlab_client = Gitlab(
             self.git_url,
-            api_version=4,
+            api_version="4",
             oauth_token=self.git_token,
             per_page=50,
         )
 
     @property
-    def gitlab_user(self):
+    def gitlab_user(self) -> CurrentUser | None:
+        """Get the Gitlab user."""
         if not getattr(self.gitlab_client, "user", None):
             self.gitlab_client.auth()
         return self.gitlab_client.user
 
     @staticmethod
-    def parse_jwt_from_headers(headers):
+    def parse_jwt_from_headers(headers: dict[str, str]) -> dict[str, Any]:
+        """Parse the JWT."""
         # No need to verify the signature because this is already done by the gateway
-        return jwt.decode(headers["Renku-Auth-Id-Token"], options={"verify_signature": False})
+        decoded = jwt.decode(headers["Renku-Auth-Id-Token"], options={"verify_signature": False})
+        decoded = cast(dict[str, Any], decoded)
+        return decoded
 
     @staticmethod
-    def git_creds_from_headers(headers):
+    def git_creds_from_headers(headers: dict[str, str]) -> tuple[str, str, str, int]:
+        """Extract the git credentials from a header."""
         parsed_dict = json.loads(base64.decodebytes(headers["Renku-Auth-Git-Credentials"].encode()))
         git_url, git_credentials = next(iter(parsed_dict.items()))
+        if not isinstance(git_url, str) or not isinstance(git_credentials, dict):
+            raise AuthenticationError(message="Could not successfully decode the git credentials header")
         token_match = re.match(r"^[^\s]+\ ([^\s]+)$", git_credentials["AuthorizationHeader"])
         git_token = token_match.group(1) if token_match is not None else None
-        git_token_expires_at = git_credentials["AccessTokenExpiresAt"]
+        if not isinstance(git_token, str):
+            raise AuthenticationError(message="Could not successfully decode the git credentials header")
+        git_token_expires_at = git_credentials.get("AccessTokenExpiresAt")
         if git_token_expires_at is None:
             # INFO: Indicates that the token does not expire
             git_token_expires_at = -1
@@ -145,5 +163,5 @@ class RegisteredUser(User):
             git_token_expires_at,
         )
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"<Registered user username:{self.username} name: " f"{self.full_name} email: {self.email}>"

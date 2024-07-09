@@ -1,11 +1,12 @@
 """Schema utilities."""
 
+from collections.abc import Iterable
 from typing import Any, Optional, Union
 
 
 def flatten_dict(
-    d: list[tuple[str, Any]], sep=".", skip_key_concat: Optional[list[Any]] = None
-) -> list[tuple[str, Union[str, int, float]]]:
+    d: Iterable[tuple[str, Any]], sep: str = ".", skip_key_concat: Optional[list[Any]] = None
+) -> Iterable[tuple[str, Union[str, int, float]]]:
     """Convert a list of (key, value) pairs into another list of (key, value) pairs where value is never a dictionary.
 
     If dictionaries are found they are converted to new (key, value) pairs where the new key is the contatenation of

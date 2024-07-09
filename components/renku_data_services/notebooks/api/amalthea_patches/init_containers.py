@@ -1,23 +1,27 @@
+"""Patches for init containers."""
+
 import json
 import os
 from dataclasses import asdict
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any
 
+from gitlab.v4.objects.users import CurrentUser
 from kubernetes import client
 
-from ...config import config
-from .utils import get_certificates_volume_mounts
+from renku_data_services.notebooks.api.amalthea_patches.utils import get_certificates_volume_mounts
+from renku_data_services.notebooks.api.classes.server import UserServer
+from renku_data_services.notebooks.api.classes.user import RegisteredUser
+from renku_data_services.notebooks.config import _NotebooksConfig
 
-if TYPE_CHECKING:
-    from renku_notebooks.api.classes.server import UserServer
 
-
-def git_clone(server: "UserServer"):
+def git_clone(server: "UserServer") -> list[dict[str, Any]]:
+    """Adds the patch for the init container that clones the git repository."""
     if not server.repositories:
         return []
 
     etc_cert_volume_mount = get_certificates_volume_mounts(
+        server.config,
         custom_certs=False,
         etc_certs=True,
         read_only_etc_certs=True,
@@ -48,19 +52,19 @@ def git_clone(server: "UserServer"):
         {"name": f"{prefix}IS_GIT_PROXY_ENABLED", "value": "0" if server.user.anonymous else "1"},
         {
             "name": f"{prefix}SENTRY__ENABLED",
-            "value": str(config.sessions.git_clone.sentry.enabled).lower(),
+            "value": str(server.config.sessions.git_clone.sentry.enabled).lower(),
         },
         {
             "name": f"{prefix}SENTRY__DSN",
-            "value": config.sessions.git_clone.sentry.dsn,
+            "value": server.config.sessions.git_clone.sentry.dsn,
         },
         {
             "name": f"{prefix}SENTRY__ENVIRONMENT",
-            "value": config.sessions.git_clone.sentry.env,
+            "value": server.config.sessions.git_clone.sentry.env,
         },
         {
             "name": f"{prefix}SENTRY__SAMPLE_RATE",
-            "value": str(config.sessions.git_clone.sentry.sample_rate),
+            "value": str(server.config.sessions.git_clone.sentry.sample_rate),
         },
         {"name": "SENTRY_RELEASE", "value": os.environ.get("SENTRY_RELEASE")},
         {
@@ -72,7 +76,11 @@ def git_clone(server: "UserServer"):
             "value": str(Path(etc_cert_volume_mount[0]["mountPath"]) / "ca-certificates.crt"),
         },
     ]
-    if not server.user.anonymous:
+    if (
+        isinstance(server.user, RegisteredUser)
+        and isinstance(server.user.gitlab_user, CurrentUser)
+        and not server.user.anonymous
+    ):
         env += [
             {"name": f"{prefix}USER__EMAIL", "value": server.user.gitlab_user.email},
             {
@@ -110,7 +118,7 @@ def git_clone(server: "UserServer"):
                     "op": "add",
                     "path": "/statefulset/spec/template/spec/initContainers/-",
                     "value": {
-                        "image": config.sessions.git_clone.image,
+                        "image": server.config.sessions.git_clone.image,
                         "name": "git-clone",
                         "resources": {
                             "requests": {
@@ -140,11 +148,13 @@ def git_clone(server: "UserServer"):
     ]
 
 
-def certificates():
+def certificates(config: _NotebooksConfig) -> list[dict[str, Any]]:
+    """Add a container that initializes custom certificate authorities for a session."""
     init_container = client.V1Container(
         name="init-certificates",
         image=config.sessions.ca_certs.image,
         volume_mounts=get_certificates_volume_mounts(
+            config,
             etc_certs=True,
             custom_certs=True,
             read_only_etc_certs=False,
@@ -156,9 +166,7 @@ def certificates():
             }
         },
     )
-    volume_etc_certs = client.V1Volume(
-        name="etc-ssl-certs", empty_dir=client.V1EmptyDirVolumeSource(medium="Memory")
-    )
+    volume_etc_certs = client.V1Volume(name="etc-ssl-certs", empty_dir=client.V1EmptyDirVolumeSource(medium="Memory"))
     volume_custom_certs = client.V1Volume(
         name="custom-ca-certs",
         projected=client.V1ProjectedVolumeSource(
@@ -166,7 +174,7 @@ def certificates():
             sources=[
                 {"secret": {"name": i.get("secret")}}
                 for i in config.sessions.ca_certs.secrets
-                if i is not None and i.get("secret") is not None
+                if isinstance(i, dict) and i.get("secret") is not None
             ],
         ),
     )
@@ -206,7 +214,8 @@ def certificates():
     return patches
 
 
-def download_image(server: "UserServer"):
+def download_image(server: "UserServer") -> list[dict[str, Any]]:
+    """Adds a container that does not do anything but simply downloads the session image at startup."""
     container = client.V1Container(
         name="download-image",
         image=server.image,

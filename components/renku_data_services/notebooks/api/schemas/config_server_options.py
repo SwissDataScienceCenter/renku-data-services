@@ -28,6 +28,8 @@ class ServerOptionsChoices(Schema):
     """Used to deserialize (load) the server options choices from the Helm values file."""
 
     class Meta:
+        """Configuration."""
+
         unknown = EXCLUDE
 
     defaultUrl = fields.Nested(StringServerOptionsChoice, required=False)
@@ -38,6 +40,8 @@ class ServerOptionsDefaults(Schema):
     """Used to deserialize (load) the server options defaults from the Helm values file."""
 
     class Meta:
+        """Configuration."""
+
         unknown = EXCLUDE
 
     defaultUrl = fields.Str(required=True)

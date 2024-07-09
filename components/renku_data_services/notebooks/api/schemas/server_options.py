@@ -2,14 +2,13 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Optional, Self
 
-from marshmallow import Schema, fields, post_load
+from marshmallow import Schema, fields
 
-from ...config import config
-from ...config.dynamic import CPUEnforcement
-from ...errors.programming import ProgrammingError
-from .custom_fields import ByteSizeField, CpuField, GpuField
+from renku_data_services.notebooks.api.schemas.custom_fields import ByteSizeField, CpuField, GpuField
+from renku_data_services.notebooks.config.dynamic import CPUEnforcement
+from renku_data_services.notebooks.errors.programming import ProgrammingError
 
 
 @dataclass
@@ -46,10 +45,10 @@ class ServerOptions:
     """Server options. Memory and storage are in bytes."""
 
     cpu: float
-    memory: int
+    memory: int | float
     gpu: int
-    storage: Optional[int] = None
-    default_url: Optional[str] = None
+    storage: Optional[int | float] = None
+    default_url: str | None = None
     lfs_auto_fetch: bool = False
     gigabytes: bool = False
     priority_class: Optional[str] = None
@@ -59,11 +58,7 @@ class ServerOptions:
     idle_threshold_seconds: Optional[int] = None
     hibernation_threshold_seconds: Optional[int] = None
 
-    def __post_init__(self):
-        if self.default_url is None:
-            self.default_url = config.server_options.defaults["defaultUrl"]
-        if self.lfs_auto_fetch is None:
-            self.lfs_auto_fetch = config.server_options.defaults["lfs_auto_fetch"]
+    def __post_init__(self) -> None:
         if self.storage is None and self.gigabytes:
             self.storage = 1
         elif self.storage is None and not self.gigabytes:
@@ -77,14 +72,14 @@ class ServerOptions:
             raise ProgrammingError(
                 message="Cannot create a ServerOptions dataclass with tolerations that are not of type Toleration"
             )
-        if self.node_affinities is None:
+        if not self.node_affinities:
             self.node_affinities = []
         else:
             self.node_affinities = sorted(
                 self.node_affinities,
                 key=lambda x: (x.key, x.required_during_scheduling),
             )
-        if self.tolerations is None:
+        if not self.tolerations:
             self.tolerations = []
         else:
             self.tolerations = sorted(self.tolerations, key=lambda x: x.key)
@@ -92,7 +87,7 @@ class ServerOptions:
     def __compare(
         self,
         other: "ServerOptions",
-        compare_func: Callable[["ServerOptions", "ServerOptions"], bool],
+        compare_func: Callable[[int | float, int | float], bool],
     ) -> bool:
         results = [
             compare_func(self.cpu, other.cpu),
@@ -118,7 +113,7 @@ class ServerOptions:
             gigabytes=True,
         )
 
-    def set_storage(self, storage: int, gigabytes: bool = False):
+    def set_storage(self, storage: int, gigabytes: bool = False) -> None:
         """Set storage request for a session."""
         if self.gigabytes and not gigabytes:
             self.storage = round(storage / 1_000_000_000)
@@ -137,19 +132,21 @@ class ServerOptions:
             storage=self_storage - other_storage,
         )
 
-    def __ge__(self, other: "ServerOptions"):
+    def __ge__(self, other: "ServerOptions") -> bool:
         return self.__compare(other, lambda x, y: x >= y)
 
-    def __gt__(self, other: "ServerOptions"):
+    def __gt__(self, other: "ServerOptions") -> bool:
         return self.__compare(other, lambda x, y: x > y)
 
-    def __lt__(self, other: "ServerOptions"):
+    def __lt__(self, other: "ServerOptions") -> bool:
         return self.__compare(other, lambda x, y: x < y)
 
-    def __le__(self, other: "ServerOptions"):
+    def __le__(self, other: "ServerOptions") -> bool:
         return self.__compare(other, lambda x, y: x <= y)
 
-    def __eq__(self, other: "ServerOptions"):
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, type(self)):
+            return False
         numeric_value_equal = self.__compare(other, lambda x, y: x == y)
         return (
             numeric_value_equal
@@ -179,7 +176,9 @@ class ServerOptions:
         return resources
 
     @classmethod
-    def from_resource_class(cls, data: dict[str, Any]) -> "ServerOptions":
+    def from_resource_class(
+        cls, data: dict[str, Any], default_url_default: str, lfs_auto_fetch_default: bool = False
+    ) -> Self:
         """Convert a CRC resource class to server options.
 
         Data Service uses GB for storage and memory whereas the notebook service uses bytes so we convert to bytes here.
@@ -192,12 +191,14 @@ class ServerOptions:
             node_affinities=[NodeAffinity(**a) for a in data.get("node_affinities", [])],
             tolerations=[Toleration(t) for t in data.get("tolerations", [])],
             resource_class_id=data.get("id"),
+            default_url=default_url_default,
+            lfs_auto_fetch=lfs_auto_fetch_default,
         )
 
     @classmethod
-    def from_request(cls, data: dict[str, Any]) -> "ServerOptions":
+    def from_request(cls, data: dict[str, Any]) -> Self:
         """Convert a server options request dictionary to the model."""
-        return ServerOptions(
+        return cls(
             cpu=data["cpu_request"],
             gpu=data["gpu_request"],
             memory=data["mem_request"],
@@ -205,6 +206,17 @@ class ServerOptions:
             lfs_auto_fetch=data["lfs_auto_fetch"],
             storage=data["disk_request"],
         )
+
+    @classmethod
+    def from_server_options_request_schema(
+        cls, data: dict[str, str | int | float | None], default_url_default: str, lfs_auto_fetch_default: bool
+    ) -> Self:
+        """Convert to dataclass from the result of the serialization from LaunchNotebookRequestServerOptions."""
+        if data.get("defaultUrl") is None:
+            data["defaultUrl"] = default_url_default
+        if data.get("lfs_auto_fetch") is None:
+            data["lfs_auto_fetch"] = lfs_auto_fetch_default
+        return cls.from_request(data)
 
 
 class LaunchNotebookRequestServerOptions(Schema):
@@ -217,7 +229,6 @@ class LaunchNotebookRequestServerOptions(Schema):
 
     defaultUrl = fields.Str(
         required=False,
-        load_default=config.server_options.defaults["defaultUrl"],
     )
     cpu_request = CpuField(
         required=False,
@@ -233,14 +244,8 @@ class LaunchNotebookRequestServerOptions(Schema):
     )
     lfs_auto_fetch = fields.Bool(
         required=False,
-        load_default=config.server_options.defaults["lfs_auto_fetch"],
     )
     gpu_request = GpuField(
         required=False,
         load_default=0,
     )
-
-    @post_load
-    def make_dataclass(self, data, **kwargs):
-        """Create class from request."""
-        return ServerOptions.from_request(data)

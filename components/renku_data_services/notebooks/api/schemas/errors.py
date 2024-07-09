@@ -1,8 +1,8 @@
 """Schemas for error responses."""
 
 from marshmallow import Schema, fields, pre_dump
-
-from .utils import flatten_dict
+from marshmallow.exceptions import ValidationError
+from werkzeug.exceptions import HTTPException
 
 
 class ErrorResponseNested(Schema):
@@ -23,7 +23,7 @@ class ErrorResponseFromGenericError(ErrorResponse):
     """Generic error response."""
 
     @pre_dump
-    def extract_fields(self, err, *args, **kwargs):
+    def extract_fields(self, err: ErrorResponseNested, *args: tuple, **kwargs: dict) -> dict:
         """Extract relevant fields."""
         response = {
             "message": err.message,
@@ -73,25 +73,29 @@ class ErrorResponseFromWerkzeug(ErrorResponse):
     }
 
     @pre_dump
-    def extract_fields(self, err, *args, **kwargs):
+    def extract_fields(self, err: HTTPException | ValidationError, *args: tuple, **kwargs: dict) -> dict:
         """Extract relevant fields."""
-        code = self.status_code_map.get(err.code, 2500)
+        code = 2500
+        if hasattr(err, "code") and err.code is not None:
+            code = self.status_code_map.get(err.code, 2500)
         response = {
-            "message": err.description,
+            "message": "Something went wrong, contact a Renku administrator.",
             "code": code,
         }
+        if hasattr(err, "description") and isinstance(err.description, str):
+            response["message"] = err.description
 
-        if getattr(err, "detail", None) is not None:
+        if hasattr(err, "detail") and isinstance(err.detail, str):
             response["detail"] = err.detail
 
-        if err.code == 422 and err.data.get("messages", {}).get("json") is not None:
-            # extract details from marshmallow validation error
-            marshmallow_errors = [
-                f"Field '{field_name}' has errors: " + " ".join(errors)
-                for (field_name, errors) in flatten_dict(
-                    err.data["messages"]["json"].items(), skip_key_concat=["_schema"]
-                )
-            ]
-            response["detail"] = " ".join(marshmallow_errors)
+        # if err.code == 422 and err.data.get("messages", {}).get("json") is not None:
+        #     # extract details from marshmallow validation error
+        #     marshmallow_errors = [
+        #         f"Field '{field_name}' has errors: " + " ".join(errors)
+        #         for (field_name, errors) in flatten_dict(
+        #             err.data["messages"]["json"].items(), skip_key_concat=["_schema"]
+        #         )
+        #     ]
+        #     response["detail"] = " ".join(marshmallow_errors)
 
         return {"error": response}

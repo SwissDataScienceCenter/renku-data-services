@@ -1,29 +1,38 @@
+"""Representation of a jupyter server session manifest."""
+
 import contextlib
 import json
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
-from ...config import config
 from .cloud_storage.existing import ExistingCloudStorage
 
 
 class UserServerManifest:
-    def __init__(self, manifest: dict[str, Any]) -> None:
+    """Thin wrapper around a jupyter server manifest."""
+
+    def __init__(self, manifest: dict[str, Any], default_image: str, pvs_enabled: bool = True) -> None:
         self.manifest = manifest
+        self.default_image = default_image
+        self.pvs_enabled = pvs_enabled
 
     @property
     def name(self) -> str:
-        return self.manifest["metadata"]["name"]
+        """The name of the server."""
+        return cast(str, self.manifest["metadata"]["name"])
 
     @property
     def image(self) -> str:
-        return self.manifest["spec"]["jupyterServer"]["image"]
+        """The image the server is running."""
+        return cast(str, self.manifest["spec"]["jupyterServer"]["image"])
 
     @property
     def using_default_image(self) -> bool:
-        return self.image == config.sessions.default_image
+        """Whether a default image is used or not."""
+        return self.image == self.default_image
 
     @property
     def server_options(self) -> dict[str, Any]:
+        """Extract the server options from a manifest."""
         js = self.manifest
         server_options = {}
         # url
@@ -48,9 +57,7 @@ class UserServerManifest:
         # adjust ephemeral storage properly based on whether persistent volumes are used
         if "ephemeral-storage" in server_options:
             server_options["ephemeral-storage"] = (
-                server_options["ephemeral-storage"]
-                if config.sessions.storage.pvs_enabled
-                else server_options["disk_request"]
+                server_options["ephemeral-storage"] if self.pvs_enabled else server_options["disk_request"]
             )
         # lfs auto fetch
         for patches in js["spec"]["patches"]:
@@ -63,19 +70,23 @@ class UserServerManifest:
 
     @property
     def annotations(self) -> dict[str, str]:
-        return self.manifest["metadata"]["annotations"]
+        """Extract the manifest annotations."""
+        return cast(dict[str, str], self.manifest["metadata"]["annotations"])
 
     @property
     def labels(self) -> dict[str, str]:
-        return self.manifest["metadata"]["labels"]
+        """Extract the manifest labels."""
+        return cast(dict[str, str], self.manifest["metadata"]["labels"])
 
     @property
     def cloudstorage(self) -> list[ExistingCloudStorage]:
+        """Get the cloud storage."""
         return ExistingCloudStorage.from_manifest(self.manifest)
 
     @property
     def server_name(self) -> str:
-        return self.manifest["metadata"]["name"]
+        """Get the server name."""
+        return cast(str, self.manifest["metadata"]["name"])
 
     @property
     def hibernation(self) -> Optional[dict[str, Any]]:
@@ -85,8 +96,14 @@ class UserServerManifest:
 
     @property
     def dirty(self) -> bool:
-        """Return True if server is dirty."""
-        return self.hibernation.get("dirty", False)
+        """Return True if server is dirty, i.e. if it has unsaved data in the git repository."""
+        is_dirty = False
+        if self.hibernation:
+            dirty_annotation = self.hibernation.get("dirty")
+            is_dirty = (isinstance(dirty_annotation, bool) and is_dirty) or (
+                isinstance(dirty_annotation, str) and dirty_annotation.lower() == "false"
+            )
+        return is_dirty
 
     @property
     def hibernation_commit(self) -> Optional[str]:
@@ -102,6 +119,7 @@ class UserServerManifest:
 
     @property
     def url(self) -> str:
+        """Return the url where the user can access the session."""
         host = self.manifest["spec"]["routing"]["host"]
         path = self.manifest["spec"]["routing"]["path"].rstrip("/")
         token = self.manifest["spec"]["auth"].get("token", "")

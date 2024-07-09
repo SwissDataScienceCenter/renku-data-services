@@ -1,19 +1,20 @@
+"""Patches for the git proxy container."""
+
 import json
 from dataclasses import asdict
-from typing import TYPE_CHECKING
+from typing import Any
 
-from ...config import config
-from .utils import get_certificates_volume_mounts
-
-if TYPE_CHECKING:
-    from renku_notebooks.api.classes.server import UserServer
+from renku_data_services.notebooks.api.amalthea_patches.utils import get_certificates_volume_mounts
+from renku_data_services.notebooks.api.classes.server import UserServer
 
 
-def main(server: "UserServer"):
+def main(server: "UserServer") -> list[dict[str, Any]]:
+    """The patch that adds the git proxy container to a session statefulset."""
     if server.user.anonymous or not server.repositories:
         return []
 
     etc_cert_volume_mount = get_certificates_volume_mounts(
+        server.config,
         custom_certs=False,
         etc_certs=True,
         read_only_etc_certs=True,
@@ -22,24 +23,24 @@ def main(server: "UserServer"):
 
     prefix = "GIT_PROXY_"
     env = [
-        {"name": f"{prefix}PORT", "value": str(config.sessions.git_proxy.port)},
-        {"name": f"{prefix}HEALTH_PORT", "value": str(config.sessions.git_proxy.health_port)},
+        {"name": f"{prefix}PORT", "value": str(server.config.sessions.git_proxy.port)},
+        {"name": f"{prefix}HEALTH_PORT", "value": str(server.config.sessions.git_proxy.health_port)},
         {
             "name": f"{prefix}ANONYMOUS_SESSION",
             "value": "true" if server.user.anonymous else "false",
         },
         {"name": f"{prefix}RENKU_ACCESS_TOKEN", "value": str(server.user.access_token)},
         {"name": f"{prefix}RENKU_REFRESH_TOKEN", "value": str(server.user.refresh_token)},
-        {"name": f"{prefix}RENKU_REALM", "value": config.keycloak_realm},
+        {"name": f"{prefix}RENKU_REALM", "value": server.config.keycloak_realm},
         {
             "name": f"{prefix}RENKU_CLIENT_ID",
-            "value": str(config.sessions.git_proxy.renku_client_id),
+            "value": str(server.config.sessions.git_proxy.renku_client_id),
         },
         {
             "name": f"{prefix}RENKU_CLIENT_SECRET",
-            "value": str(config.sessions.git_proxy.renku_client_secret),
+            "value": str(server.config.sessions.git_proxy.renku_client_secret),
         },
-        {"name": f"{prefix}RENKU_URL", "value": "https://" + config.sessions.ingress.host},
+        {"name": f"{prefix}RENKU_URL", "value": "https://" + server.config.sessions.ingress.host},
         {
             "name": f"{prefix}REPOSITORIES",
             "value": json.dumps([asdict(repo) for repo in server.repositories]),
@@ -47,10 +48,7 @@ def main(server: "UserServer"):
         {
             "name": f"{prefix}PROVIDERS",
             "value": json.dumps(
-                [
-                    dict(id=provider.id, access_token_url=provider.access_token_url)
-                    for provider in server.git_providers
-                ]
+                [dict(id=provider.id, access_token_url=provider.access_token_url) for provider in server.git_providers]
             ),
         },
     ]
@@ -63,7 +61,7 @@ def main(server: "UserServer"):
                     "op": "add",
                     "path": "/statefulset/spec/template/spec/containers/-",
                     "value": {
-                        "image": config.sessions.git_proxy.image,
+                        "image": server.config.sessions.git_proxy.image,
                         "securityContext": {
                             "fsGroup": 100,
                             "runAsGroup": 1000,
@@ -76,14 +74,14 @@ def main(server: "UserServer"):
                         "livenessProbe": {
                             "httpGet": {
                                 "path": "/health",
-                                "port": config.sessions.git_proxy.health_port,
+                                "port": server.config.sessions.git_proxy.health_port,
                             },
                             "initialDelaySeconds": 3,
                         },
                         "readinessProbe": {
                             "httpGet": {
                                 "path": "/health",
-                                "port": config.sessions.git_proxy.health_port,
+                                "port": server.config.sessions.git_proxy.health_port,
                             },
                             "initialDelaySeconds": 3,
                         },
