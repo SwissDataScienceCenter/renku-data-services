@@ -262,6 +262,12 @@ paths:
             minimum: 1
             maximum: 100
             default: 20
+        - in: query
+          name: minimum_role
+          description: A minimum role to filter results by.
+          required: false
+          schema:
+            $ref: "#/components/schemas/GroupRole"
       responses:
         "200":
           description: List of namespaces
