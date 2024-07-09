@@ -14,7 +14,7 @@ class BaseAPISpec(BaseModel):
 
 
 class RepositoryFilter(BaseAPISpec):
-    """The schema for the query parameters used to filter resource classes."""
+    """The schema for the query parameters used to filter repositories in old Renku."""
 
     class Config:
         """Configuration."""
@@ -25,7 +25,7 @@ class RepositoryFilter(BaseAPISpec):
 
 
 class RepositoryFilterV2(BaseAPISpec):
-    """The schema for the query parameters used to filter resource classes."""
+    """The schema for the query parameters used to filter repositories."""
 
     class Config:
         """Configuration."""
