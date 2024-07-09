@@ -7,6 +7,7 @@ from sanic.response import JSONResponse
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
+from renku_data_services.authz.models import Role
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
@@ -158,8 +159,10 @@ class GroupsBP(CustomBlueprint):
         ) -> tuple[list[dict], int]:
             params = GetNamespacesParams.model_validate(dict(request.query_args))
 
+            minimum_role = Role.from_group_role(params.minimum_role) if params.minimum_role is not None else None
+
             nss, total_count = await self.group_repo.get_namespaces(
-                user=user, pagination=pagination, minimum_role=params.minimum_role
+                user=user, pagination=pagination, minimum_role=minimum_role
             )
             return [
                 apispec.NamespaceResponse(
