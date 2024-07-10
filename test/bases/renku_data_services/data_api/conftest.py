@@ -24,22 +24,22 @@ from test.bases.renku_data_services.background_jobs.test_sync import get_kc_user
 
 @pytest.fixture
 def admin_user() -> UserInfo:
-    return UserInfo("admin", "Admin", "Doe", "admin.doe@gmail.com")
+    return UserInfo(id="admin", first_name="Admin", last_name="Doe", email="admin.doe@gmail.com")
 
 
 @pytest.fixture
 def regular_user() -> UserInfo:
-    return UserInfo("user", "User", "Doe", "user.doe@gmail.com")
+    return UserInfo(id="user", first_name="User", last_name="Doe", email="user.doe@gmail.com")
 
 
 @pytest.fixture
 def member_1_user() -> UserInfo:
-    return UserInfo("member-1", "Member-1", "Doe", "member-1.doe@gmail.com")
+    return UserInfo(id="member-1", first_name="Member-1", last_name="Doe", email="member-1.doe@gmail.com")
 
 
 @pytest.fixture
 def member_2_user() -> UserInfo:
-    return UserInfo("member-2", "Member-2", "Doe", "member-2.doe@gmail.com")
+    return UserInfo(id="member-2", first_name="Member-2", last_name="Doe", email="member-2.doe@gmail.com")
 
 
 @pytest.fixture

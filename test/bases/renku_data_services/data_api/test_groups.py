@@ -425,3 +425,39 @@ async def test_group_members_get_project_access(
     # Now other user can see the private project in the group
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
     assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_get_group_anonymously(sanic_client, user_headers) -> None:
+    payload = {
+        "name": "Group1",
+        "slug": "group-1",
+        "description": "Group 1 Description",
+    }
+    _, response = await sanic_client.post("/api/data/groups", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    group = response.json
+    _, response = await sanic_client.get("/api/data/groups/group-1/members", headers=user_headers)
+    assert response.status_code == 200, response.text
+    new_members = [{"id": "member-1", "role": "viewer"}]
+    _, response = await sanic_client.patch("/api/data/groups/group-1/members", headers=user_headers, json=new_members)
+    assert response.status_code == 200
+
+    _, response = await sanic_client.get("/api/data/groups/group-1")
+    assert response.status_code == 200, response.text
+    group = response.json
+    assert group["name"] == payload["name"]
+    assert group["slug"] == payload["slug"]
+    assert group["description"] == payload["description"]
+    assert group["created_by"] == "user"
+
+    _, response = await sanic_client.get("/api/data/groups/group-1/members")
+    assert response.status_code == 200, response.text
+    members = response.json
+    assert len(members) == 2
+    member_1 = members[0]
+    assert member_1["id"] == "user"
+    assert member_1["role"] == "owner"
+    member_2 = members[1]
+    assert member_2["id"] == "member-1"
+    assert member_2["role"] == "viewer"
