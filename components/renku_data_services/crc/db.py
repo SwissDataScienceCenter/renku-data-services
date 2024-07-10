@@ -672,7 +672,7 @@ class UserRepository(_Base):
     ) -> list[models.ResourcePool]:
         """Update the resource pools that a specific user has access to."""
         async with self.session_maker() as session, session.begin():
-            kc_user = await self.kc_user_repo.get_user(api_user, keycloak_id)
+            kc_user = await self.kc_user_repo.get_user(keycloak_id)
             if kc_user is None:
                 raise errors.MissingResourceError(message=f"The user with ID {keycloak_id} does not exist")
             stmt = (

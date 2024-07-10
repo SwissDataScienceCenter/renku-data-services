@@ -21,6 +21,7 @@ from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.errors import errors
 from renku_data_services.project import apispec
 from renku_data_services.project import models as project_models
+from renku_data_services.project.apispec_base import GetProjectsParams
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
 from renku_data_services.users.db import UserRepo
 
@@ -40,9 +41,12 @@ class ProjectsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @paginate
         async def _get_all(
-            _: Request, user: base_models.APIUser, pagination: PaginationRequest
+            request: Request, user: base_models.APIUser, pagination: PaginationRequest
         ) -> tuple[list[dict[str, Any]], int]:
-            projects, total_num = await self.project_repo.get_projects(user=user, pagination=pagination)
+            params = GetProjectsParams.model_validate(dict(request.query_args))
+            projects, total_num = await self.project_repo.get_projects(
+                user=user, pagination=pagination, namespace=params.namespace
+            )
             return [
                 dict(
                     id=p.id,
@@ -77,9 +81,11 @@ class ProjectsBP(CustomBlueprint):
                 description=body.description,
                 repositories=body.repositories or [],
                 created_by=user.id,  # type: ignore[arg-type]
-                visibility=Visibility(body.visibility)
-                if isinstance(body.visibility, str)
-                else Visibility(body.visibility.value),
+                visibility=(
+                    Visibility(body.visibility)
+                    if isinstance(body.visibility, str)
+                    else Visibility(body.visibility.value)
+                ),
                 keywords=keywords,
             )
             result = await self.project_repo.insert_project(user, project)
@@ -233,9 +239,10 @@ class ProjectsBP(CustomBlueprint):
 
             for member in members:
                 user_id = member.user_id
-                user_info = await self.user_repo.get_user(requested_by=user, id=user_id)
-                if not user_info:
+                user_with_namespace = await self.user_repo.get_user(id=user_id)
+                if not user_with_namespace:
                     raise errors.MissingResourceError(message=f"The user with ID {user_id} cannot be found.")
+                user_info = user_with_namespace.user
 
                 user_with_id = apispec.ProjectMemberResponse(
                     id=user_id,
