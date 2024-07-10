@@ -221,32 +221,6 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - session_launchers
-  /session_launchers/{launcher_id}/start:
-    post:
-      summary: Use a session launcher to start a session
-      parameters:
-        - in: path
-          name: launcher_id
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SessionStart"
-      responses:
-        "201":
-          description: The started session
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Session"
-        default:
-          $ref: "#/components/responses/Error"
-      tags:
-        - sessions
   /projects/{project_id}/session_launchers:
     get:
       summary: Get a project's session launchers
@@ -290,11 +264,37 @@ components:
           $ref: "#/components/schemas/ContainerImage"
         default_url:
           $ref: "#/components/schemas/DefaultUrl"
+        owner_type:
+          $ref: "#/components/schemas/EnvironmentOwnerType"
+        owner_id:
+          $ref: "#/components/schemas/EnvironmentOwnerId"
+        uid: 
+          $ref: "#/components/schemas/EnvironmentUid"
+        gid: 
+          $ref: "#/components/schemas/EnvironmentGid"
+        working_directory:
+          $ref: "#/components/schemas/EnvironmentWorkingDirectory"
+        mount_directory:
+          $ref: "#/components/schemas/EnvironmentMountDirectory"
+        port:
+          $ref: "#/components/schemas/EnvironmentPort"
+        visibility:
+          $ref: "#/components/schemas/EnvironmentVisibility"
       required:
         - id
         - name
         - creation_date
         - container_image
+        - official
+        - port
+        - working_directory
+        - mount_directory
+        - uid
+        - gid
+        - default_url
+        - owner_type
+        - owner_id
+        - visibility
       example:
         id: 01AN4Z79ZS6XX96588FDX0H099
         name: JupyterLab environment
@@ -302,7 +302,15 @@ components:
         description: JupyterLab session environment
         container_image: renku-jupyter:latest
         default_url: "/lab"
-    EnvironmentPost:
+        port: 8080
+        working_directory: /home/jovyan/work
+        mount_directory: /home/jovyan/work
+        uid: 1000
+        gid: 1000
+        owner_type: user
+        ownerId: 4fcd155c-fef5-48de-87f7-2facab8bf4c2
+        visibility: private
+    EnvironmentPostInLauncher:
       description: Data required to create a session environment
       type: object
       properties:
@@ -313,11 +321,49 @@ components:
         container_image:
           $ref: "#/components/schemas/ContainerImage"
         default_url:
-          $ref: "#/components/schemas/DefaultUrl"
+          allOf:
+            - $ref: "#/components/schemas/DefaultUrl"
+            - default: /lab
+        uid: 
+          allOf:
+            - $ref: "#/components/schemas/EnvironmentUid"
+            - default: 1000
+        gid: 
+          allOf:
+            - $ref: "#/components/schemas/EnvironmentGid"
+            - default: 1000
+        working_directory:
+          allOf:
+            - $ref: "#/components/schemas/EnvironmentWorkingDirectory"
+            - default: /home/jovyan/work
+        mount_directory:
+          allOf:
+            - $ref: "#/components/schemas/EnvironmentMountDirectory"
+            - default: /home/jovyan/work
+        port:
+          allOf:
+            - $ref: "#/components/schemas/EnvironmentPort"
+            - default: 8080
+        visibility:
+          allOf:
+            - $ref: "#/components/schemas/EnvironmentVisibility"
+            - default: private
       required:
         - name
         - container_image
-    EnvironmentPatch:
+    EnvironmentPost:
+      allOf:
+        - $ref: "#/components/schemas/EnvironmentPostInLauncher"
+        - type: object
+          properties:
+            owner_id:
+              $ref: "#/components/schemas/EnvironmentOwnerId"
+            owner_type:
+              $ref: "#/components/schemas/EnvironmentOwnerType"
+          required:
+            - owner_id
+            - owner_type
+    EnvironmentPatchInLauncher:
       type: object
       description: Update a session environment
       additionalProperties: false
@@ -330,6 +376,25 @@ components:
           $ref: "#/components/schemas/ContainerImage"
         default_url:
           $ref: "#/components/schemas/DefaultUrl"
+        uid: 
+          $ref: "#/components/schemas/EnvironmentUid"
+        gid: 
+          $ref: "#/components/schemas/EnvironmentGid"
+        working_directory:
+          $ref: "#/components/schemas/EnvironmentWorkingDirectory"
+        mount_directory:
+          $ref: "#/components/schemas/EnvironmentMountDirectory"
+        port:
+          $ref: "#/components/schemas/EnvironmentPort"
+    EnvironmentPatch:
+      allOf:
+        - $ref: "#/components/schemas/EnvironmentPatchInLauncher"
+        - type: object
+          properties:
+            owner_id:
+              $ref: "#/components/schemas/EnvironmentOwnerId"
+            owner_type:
+              $ref: "#/components/schemas/EnvironmentOwnerType"
     SessionLaunchersList:
       description: A list of Renku session launchers
       type: array
@@ -350,30 +415,35 @@ components:
           $ref: "#/components/schemas/CreationDate"
         description:
           $ref: "#/components/schemas/Description"
-        environment_kind:
-          $ref: "#/components/schemas/EnvironmentKind"
-        environment_id:
-          $ref: "#/components/schemas/EnvironmentId"
-        resource_class_id:
-          $ref: "#/components/schemas/ResourceClassId"
-        container_image:
-          $ref: "#/components/schemas/ContainerImage"
-        default_url:
-          $ref: "#/components/schemas/DefaultUrl"
+        environment:
+          $ref: "#/components/schemas/Environment"
       required:
         - id
         - project_id
         - name
         - creation_date
-        - environment_kind
+        - environment
       example:
         id: 01AN4Z79ZS5XN0F25N3DB94T4R
         project_id: 01AN4Z79ZS5XN0F25N3DB94T4R
         name: Renku R Session
         creation_date: "2023-11-01T17:32:28Z"
         description: R compute session
-        environment_kind: global_environment
-        environment_id: 01AN4Z79ZS6XX96588FDX0H099
+        environment:
+          id: 01AN4Z79ZS6XX96588FDX0H099
+          name: Rstudio
+          creation_date: "2023-11-01T17:32:28Z"
+          description: JupyterLab session environment
+          container_image: rocker/rstudio
+          default_url: "/rstudio"
+          port: 8080
+          working_directory: /home/rstudio/work
+          mount_directory: /home/rstudio/work
+          uid: 1000
+          gid: 1000
+          owner_type: project
+          ownerId: 01AN4Z79ZS5XN0F25N3DB94T4R
+          visibility: private
     SessionLauncherPost:
       description: Data required to create a session launcher
       type: object
@@ -385,20 +455,16 @@ components:
           $ref: "#/components/schemas/Ulid"
         description:
           $ref: "#/components/schemas/Description"
-        environment_kind:
-          $ref: "#/components/schemas/EnvironmentKind"
-        environment_id:
-          $ref: "#/components/schemas/EnvironmentId"
         resource_class_id:
           $ref: "#/components/schemas/ResourceClassId"
-        container_image:
-          $ref: "#/components/schemas/ContainerImage"
-        default_url:
-          $ref: "#/components/schemas/DefaultUrl"
+        environment:
+          oneOf:
+            - $ref: "#/components/schemas/EnvironmentPostInLauncher"
+            - $ref: "#/components/schemas/EnvironmentIdOnlyPost"
       required:
         - name
         - project_id
-        - environment_kind
+        - environment
     SessionLauncherPatch:
       type: object
       description: Update a session launcher
@@ -408,23 +474,12 @@ components:
           $ref: "#/components/schemas/SessionName"
         description:
           $ref: "#/components/schemas/Description"
-        environment_kind:
-          $ref: "#/components/schemas/EnvironmentKind"
-        environment_id:
-          $ref: "#/components/schemas/EnvironmentId"
         resource_class_id:
           $ref: "#/components/schemas/ResourceClassId"
-        container_image:
-          $ref: "#/components/schemas/ContainerImage"
-        default_url:
-          $ref: "#/components/schemas/DefaultUrl"
-    SessionStart:
-      type: object
-      description: Start a session
-      additionalProperties: true
-      properties:
-        resource_class_id:
-          $ref: "#/components/schemas/ResourceClassId"
+        environment:
+          oneOf:
+            - $ref: "#/components/schemas/EnvironmentPatchInLauncher"
+            - $ref: "#/components/schemas/EnvironmentIdOnlyPatch"
     Ulid:
       description: ULID identifier
       type: string
@@ -437,13 +492,18 @@ components:
       minLength: 1
       maxLength: 99
       example: My Renku Session :)
-    EnvironmentKind:
-      description: Kind of environment to use
-      type: string
-      enum:
-        - global_environment
-        - container_image
-      example: container_image
+    EnvironmentIdOnlyPatch:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/EnvironmentId"
+    EnvironmentIdOnlyPost:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/EnvironmentId"
+      required:
+        - id
     EnvironmentId:
       description: Id of the environment to use
       type: string
@@ -473,15 +533,48 @@ components:
       type: integer
       default: null
       nullable: true
-    Session:
-      description: A Renku session
-      type: object
-      additionalProperties: true
-      properties:
-        name:
-          $ref: "#/components/schemas/SessionName"
-        url:
-          type: string
+    EnvironmentPort:
+      type: integer
+      minimum: 0
+      exclusiveMinimum: true
+      maximum: 65535
+      description: The TCP port (on any container in the session) where user requests will be routed to from the ingress
+    EnvironmentUid:
+      type: integer
+      minimum: 0
+      exclusiveMinimum: true
+      maximum: 65535
+      description: The user ID used to run the session
+    EnvironmentGid:
+      type: integer
+      minimum: 0
+      exclusiveMinimum: true
+      maximum: 65535
+      description: The group ID used to run the session
+    EnvironmentWorkingDirectory:
+      type: string
+      description: The location where the session will start
+      minLength: 1
+    EnvironmentMountDirectory:
+      type: string
+      description: The location where the persistent storage for the session will be mounted, usually it should be identical to or a parent of the working directory
+      minLength: 1
+    EnvironmentOwnerType:
+      type: string
+      enum:
+        - user
+        - group
+        - project
+        - platform
+      description: The owner of the environment which is used to enforce authorization on it
+    EnvironmentOwnerId:
+      type: string
+      description: The id of the entity that owns the environment
+    EnvironmentVisibility:
+      type: string
+      enum:
+        - public
+        - private
     ErrorResponse:
       type: object
       properties:
