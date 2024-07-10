@@ -11,10 +11,10 @@ servers:
 paths:
   /environments:
     get:
-      summary: Get all environments
+      summary: Get all global environments
       responses:
         "200":
-          description: List of environments
+          description: List of global environments
           content:
             application/json:
               schema:
@@ -24,7 +24,7 @@ paths:
       tags:
         - environments
     post:
-      summary: Create a new session environment
+      summary: Create a new global session environment
       description: Requires admin permissions
       requestBody:
         required: true
@@ -45,7 +45,7 @@ paths:
         - environments
   /environments/{environment_id}:
     get:
-      summary: Get a session environment
+      summary: Get a global session environment
       parameters:
         - in: path
           name: environment_id
@@ -70,7 +70,7 @@ paths:
       tags:
         - environments
     patch:
-      summary: Update specific fields of an existing session environment
+      summary: Update specific fields of an existing global session environment
       description: Requires admin permissions
       parameters:
         - in: path
@@ -102,7 +102,7 @@ paths:
       tags:
         - environments
     delete:
-      summary: Remove a session environment
+      summary: Remove a global session environment
       parameters:
         - in: path
           name: environment_id
@@ -176,7 +176,7 @@ paths:
       tags:
         - session_launchers
     patch:
-      summary: Update specific fields of an existing session
+      summary: Update specific fields of an existing session launcher
       parameters:
         - in: path
           name: launcher_id
@@ -221,32 +221,6 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - session_launchers
-  /session_launchers/{launcher_id}/start:
-    post:
-      summary: Use a session launcher to start a session
-      parameters:
-        - in: path
-          name: launcher_id
-          required: true
-          schema:
-            $ref: "#/components/schemas/Ulid"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SessionStart"
-      responses:
-        "201":
-          description: The started session
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Session"
-        default:
-          $ref: "#/components/responses/Error"
-      tags:
-        - sessions
   /projects/{project_id}/session_launchers:
     get:
       summary: Get a project's session launchers
@@ -290,11 +264,27 @@ components:
           $ref: "#/components/schemas/ContainerImage"
         default_url:
           $ref: "#/components/schemas/DefaultUrl"
+        uid: 
+          $ref: "#/components/schemas/EnvironmentUid"
+        gid: 
+          $ref: "#/components/schemas/EnvironmentGid"
+        working_directory:
+          $ref: "#/components/schemas/EnvironmentWorkingDirectory"
+        mount_directory:
+          $ref: "#/components/schemas/EnvironmentMountDirectory"
+        port:
+          $ref: "#/components/schemas/EnvironmentPort"
       required:
         - id
         - name
         - creation_date
         - container_image
+        - port
+        - working_directory
+        - mount_directory
+        - uid
+        - gid
+        - default_url
       example:
         id: 01AN4Z79ZS6XX96588FDX0H099
         name: JupyterLab environment
@@ -302,6 +292,33 @@ components:
         description: JupyterLab session environment
         container_image: renku-jupyter:latest
         default_url: "/lab"
+        port: 8080
+        working_directory: /home/jovyan/work
+        mount_directory: /home/jovyan/work
+        uid: 1000
+        gid: 1000
+    EnvironmentGetInLauncher:
+      allOf:
+        - $ref: "#/components/schemas/Environment"
+        - type: object
+          properties:
+            environment_kind:
+              $ref: "#/components/schemas/EnvironmentKind"
+          required:
+            - environment_kind
+          example:
+            environment_kind: global_environment
+    EnvironmentPostInLauncher:
+      allOf:
+        - $ref: "#/components/schemas/EnvironmentPost"
+        - type: object
+          properties:
+            environment_kind:
+              $ref: "#/components/schemas/EnvironmentKind"
+          required:
+            - environment_kind
+          example:
+            environment_kind: global_environment
     EnvironmentPost:
       description: Data required to create a session environment
       type: object
@@ -313,10 +330,45 @@ components:
         container_image:
           $ref: "#/components/schemas/ContainerImage"
         default_url:
-          $ref: "#/components/schemas/DefaultUrl"
+          allOf:
+            - $ref: "#/components/schemas/DefaultUrl"
+            - default: /lab
+          default: /lab
+        uid: 
+          allOf:
+            - $ref: "#/components/schemas/EnvironmentUid"
+            - default: 1000
+          default: 1000
+        gid: 
+          allOf:
+            - $ref: "#/components/schemas/EnvironmentGid"
+            - default: 1000
+          default: 1000
+        working_directory:
+          allOf:
+            - $ref: "#/components/schemas/EnvironmentWorkingDirectory"
+            - default: /home/jovyan/work
+          default: /home/jovyan/work
+        mount_directory:
+          allOf:
+            - $ref: "#/components/schemas/EnvironmentMountDirectory"
+            - default: /home/jovyan/work
+          default: /home/jovyan/work
+        port:
+          allOf:
+            - $ref: "#/components/schemas/EnvironmentPort"
+            - default: 8080
+          default: 8080
       required:
         - name
         - container_image
+    EnvironmentPatchInLauncher:
+      allOf:
+        - $ref: "#/components/schemas/EnvironmentPatch"
+        - type: object
+          properties:
+            environment_kind:
+              $ref: "#/components/schemas/EnvironmentKind"
     EnvironmentPatch:
       type: object
       description: Update a session environment
@@ -330,6 +382,16 @@ components:
           $ref: "#/components/schemas/ContainerImage"
         default_url:
           $ref: "#/components/schemas/DefaultUrl"
+        uid: 
+          $ref: "#/components/schemas/EnvironmentUid"
+        gid: 
+          $ref: "#/components/schemas/EnvironmentGid"
+        working_directory:
+          $ref: "#/components/schemas/EnvironmentWorkingDirectory"
+        mount_directory:
+          $ref: "#/components/schemas/EnvironmentMountDirectory"
+        port:
+          $ref: "#/components/schemas/EnvironmentPort"
     SessionLaunchersList:
       description: A list of Renku session launchers
       type: array
@@ -350,30 +412,36 @@ components:
           $ref: "#/components/schemas/CreationDate"
         description:
           $ref: "#/components/schemas/Description"
-        environment_kind:
-          $ref: "#/components/schemas/EnvironmentKind"
-        environment_id:
-          $ref: "#/components/schemas/EnvironmentId"
+        environment:
+          $ref: "#/components/schemas/EnvironmentGetInLauncher"
         resource_class_id:
           $ref: "#/components/schemas/ResourceClassId"
-        container_image:
-          $ref: "#/components/schemas/ContainerImage"
-        default_url:
-          $ref: "#/components/schemas/DefaultUrl"
       required:
         - id
         - project_id
         - name
         - creation_date
-        - environment_kind
+        - environment
+        - resource_class_id
       example:
         id: 01AN4Z79ZS5XN0F25N3DB94T4R
         project_id: 01AN4Z79ZS5XN0F25N3DB94T4R
         name: Renku R Session
         creation_date: "2023-11-01T17:32:28Z"
         description: R compute session
-        environment_kind: global_environment
-        environment_id: 01AN4Z79ZS6XX96588FDX0H099
+        environment:
+          id: 01AN4Z79ZS6XX96588FDX0H099
+          name: Rstudio
+          creation_date: "2023-11-01T17:32:28Z"
+          description: JupyterLab session environment
+          environment_kind: GLOBAL
+          container_image: rocker/rstudio
+          default_url: "/rstudio"
+          port: 8080
+          working_directory: /home/rstudio/work
+          mount_directory: /home/rstudio/work
+          uid: 1000
+          gid: 1000
     SessionLauncherPost:
       description: Data required to create a session launcher
       type: object
@@ -385,20 +453,21 @@ components:
           $ref: "#/components/schemas/Ulid"
         description:
           $ref: "#/components/schemas/Description"
-        environment_kind:
-          $ref: "#/components/schemas/EnvironmentKind"
-        environment_id:
-          $ref: "#/components/schemas/EnvironmentId"
         resource_class_id:
           $ref: "#/components/schemas/ResourceClassId"
-        container_image:
-          $ref: "#/components/schemas/ContainerImage"
-        default_url:
-          $ref: "#/components/schemas/DefaultUrl"
+        environment:
+          oneOf:
+            - $ref: "#/components/schemas/EnvironmentPostInLauncher"
+            - $ref: "#/components/schemas/EnvironmentIdOnlyPost"
       required:
         - name
         - project_id
-        - environment_kind
+        - environment
+      example:
+        project_id: 01AN4Z79ZS5XN0F25N3DB94T4R
+        name: Renku R Session
+        environment:
+          id: 01AN4Z79ZS6XX96588FDX0H099
     SessionLauncherPatch:
       type: object
       description: Update a session launcher
@@ -408,23 +477,12 @@ components:
           $ref: "#/components/schemas/SessionName"
         description:
           $ref: "#/components/schemas/Description"
-        environment_kind:
-          $ref: "#/components/schemas/EnvironmentKind"
-        environment_id:
-          $ref: "#/components/schemas/EnvironmentId"
         resource_class_id:
           $ref: "#/components/schemas/ResourceClassId"
-        container_image:
-          $ref: "#/components/schemas/ContainerImage"
-        default_url:
-          $ref: "#/components/schemas/DefaultUrl"
-    SessionStart:
-      type: object
-      description: Start a session
-      additionalProperties: true
-      properties:
-        resource_class_id:
-          $ref: "#/components/schemas/ResourceClassId"
+        environment:
+          oneOf:
+            - $ref: "#/components/schemas/EnvironmentPatchInLauncher"
+            - $ref: "#/components/schemas/EnvironmentIdOnlyPatch"
     Ulid:
       description: ULID identifier
       type: string
@@ -437,13 +495,25 @@ components:
       minLength: 1
       maxLength: 99
       example: My Renku Session :)
+    EnvironmentIdOnlyPatch:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/EnvironmentId"
+    EnvironmentIdOnlyPost:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/EnvironmentId"
+      required:
+        - id
     EnvironmentKind:
       description: Kind of environment to use
       type: string
       enum:
-        - global_environment
-        - container_image
-      example: container_image
+        - GLOBAL
+        - CUSTOM
+      example: CUSTOM
     EnvironmentId:
       description: Id of the environment to use
       type: string
@@ -473,15 +543,34 @@ components:
       type: integer
       default: null
       nullable: true
-    Session:
-      description: A Renku session
-      type: object
-      additionalProperties: true
-      properties:
-        name:
-          $ref: "#/components/schemas/SessionName"
-        url:
-          type: string
+    EnvironmentPort:
+      type: integer
+      minimum: 0
+      exclusiveMinimum: true
+      exclusiveMaximum: true
+      # NOTE: we reserve 65400 - 65535 for usage of Renku sidecars and services
+      maximum: 65400
+      description: The TCP port (on any container in the session) where user requests will be routed to from the ingress
+    EnvironmentUid:
+      type: integer
+      minimum: 0
+      exclusiveMinimum: true
+      maximum: 65535
+      description: The user ID used to run the session
+    EnvironmentGid:
+      type: integer
+      minimum: 0
+      exclusiveMinimum: true
+      maximum: 65535
+      description: The group ID used to run the session
+    EnvironmentWorkingDirectory:
+      type: string
+      description: The location where the session will start
+      minLength: 1
+    EnvironmentMountDirectory:
+      type: string
+      description: The location where the persistent storage for the session will be mounted, usually it should be identical to or a parent of the working directory
+      minLength: 1
     ErrorResponse:
       type: object
       properties:

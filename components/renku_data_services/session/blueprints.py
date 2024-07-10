@@ -1,6 +1,7 @@
 """Session blueprint."""
 
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 
 from sanic import HTTPResponse, Request, json
 from sanic.response import JSONResponse
@@ -10,7 +11,7 @@ from ulid import ULID
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, validate_path_project_id
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
-from renku_data_services.session import apispec
+from renku_data_services.session import apispec, models
 from renku_data_services.session.db import SessionRepository
 
 
@@ -47,7 +48,19 @@ class EnvironmentsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @validate(json=apispec.EnvironmentPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.EnvironmentPost) -> JSONResponse:
-            environment = await self.session_repo.insert_environment(user=user, new_environment=body)
+            unsaved_environment = models.UnsavedEnvironment(
+                name=body.name,
+                description=body.description,
+                container_image=body.container_image,
+                default_url=body.default_url,
+                port=body.port,
+                working_directory=PurePosixPath(body.working_directory),
+                mount_directory=PurePosixPath(body.mount_directory),
+                uid=body.uid,
+                gid=body.gid,
+                environment_kind=models.EnvironmentKind.GLOBAL,
+            )
+            environment = await self.session_repo.insert_environment(user=user, new_environment=unsaved_environment)
             return json(apispec.Environment.model_validate(environment).model_dump(exclude_none=True, mode="json"), 201)
 
         return "/environments", ["POST"], _post
@@ -117,7 +130,30 @@ class SessionLaunchersBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @validate(json=apispec.SessionLauncherPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.SessionLauncherPost) -> JSONResponse:
-            launcher = await self.session_repo.insert_launcher(user=user, new_launcher=body)
+            environment: str | models.UnsavedEnvironment
+            if isinstance(body.environment, apispec.EnvironmentIdOnlyPost):
+                environment = body.environment.id
+            else:
+                environment = models.UnsavedEnvironment(
+                    name=body.environment.name,
+                    description=body.environment.description,
+                    container_image=body.environment.container_image,
+                    default_url=body.environment.default_url,
+                    port=body.environment.port,
+                    working_directory=PurePosixPath(body.environment.working_directory),
+                    mount_directory=PurePosixPath(body.environment.mount_directory),
+                    uid=body.environment.uid,
+                    gid=body.environment.gid,
+                    environment_kind=models.EnvironmentKind(body.environment.environment_kind.value),
+                )
+            new_launcher = models.UnsavedSessionLauncher(
+                project_id=body.project_id,
+                name=body.name,
+                description=body.description,
+                environment=environment,
+                resource_class_id=body.resource_class_id,
+            )
+            launcher = await self.session_repo.insert_launcher(user=user, new_launcher=new_launcher)
             return json(
                 apispec.SessionLauncher.model_validate(launcher).model_dump(exclude_none=True, mode="json"), 201
             )
