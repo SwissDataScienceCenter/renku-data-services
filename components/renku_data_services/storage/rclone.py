@@ -182,8 +182,10 @@ class RCloneValidator:
         except errors.ValidationError as e:
             return ConnectionResult(False, str(e))
 
+        obscured_config = await self.obscure_config(configuration)
+
         with tempfile.NamedTemporaryFile(mode="w+", delete=False, encoding="utf-8") as f:
-            config = "\n".join(f"{k}={v}" for k, v in configuration.items())
+            config = "\n".join(f"{k}={v}" for k, v in obscured_config.items())
             f.write(f"[temp]\n{config}")
             f.close()
             proc = await asyncio.create_subprocess_exec(
