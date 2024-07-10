@@ -102,9 +102,35 @@ class GitHubAdapter(ProviderAdapter):
         return external_models.GitHubConnectedAccount.model_validate(response.json()).to_connected_account()
 
 
+class BitBucketAdapter(ProviderAdapter):
+    """Adapter for BitBucket OAuth2 clients."""
+
+    @property
+    def authorization_url(self) -> str:
+        """The authorization URL for the OAuth2 protocol."""
+        return urljoin(self.client_url, "site/oauth2/authorize")
+
+    @property
+    def token_endpoint_url(self) -> str:
+        """The token endpoint URL for the OAuth2 protocol."""
+        return urljoin(self.client_url, "site/oauth2/access_token")
+
+    @property
+    def api_url(self) -> str:
+        """The URL used for API calls on the Resource Server."""
+        url = urlparse(self.client_url)
+        url = url._replace(netloc=f"api.{url.netloc}")
+        return urljoin(urlunparse(url), "2.0")
+
+    def api_validate_account_response(self, response: Response) -> models.ConnectedAccount:
+        """Validates and returns the connected account response from the Resource Server."""
+        raise NotImplementedError()
+
+
 _adapter_map: dict[ProviderKind, type[ProviderAdapter]] = {
     ProviderKind.gitlab: GitLabAdapter,
     ProviderKind.github: GitHubAdapter,
+    ProviderKind.bitbucket: BitBucketAdapter,
 }
 
 
