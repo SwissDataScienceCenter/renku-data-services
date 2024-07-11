@@ -623,65 +623,65 @@ return "/notebooks/servers", ["POST"], _patch_server
 def stop_server(self) -> BlueprintFactoryResponse:
     """Stop user server by name."""
 
-    @notebooks_authenticate(self.authenticator)
-    async def _stop_server(
-        request: Request, user: RegisteredUser | AnonymousUser, server_name: str
-    ) -> HTTPResponse:
-        forced: bool = request.query_args.get("forced") == "true"
-        self.nb_config.k8s_client.delete_server(server_name, forced=forced, safe_username=user.safe_username)
-        return HTTPResponse(status=204)
+@notebooks_authenticate(self.authenticator)
+async def _stop_server(
+    request: Request, user: RegisteredUser | AnonymousUser, server_name: str
+) -> HTTPResponse:
+    forced: bool = request.query_args.get("forced") == "true"
+    self.nb_config.k8s_client.delete_server(server_name, forced=forced, safe_username=user.safe_username)
+    return HTTPResponse(status=204)
 
-    return "/notebooks/servers", ["DELETE"], _stop_server
+return "/notebooks/servers", ["DELETE"], _stop_server
 
 def server_options(self) -> BlueprintFactoryResponse:
     """Return a set of configurable server options."""
 
-    async def _server_options(request: Request) -> JSONResponse:
-        return json(
-            ServerOptionsEndpointResponse().dump(
-                {
-                    **self.nb_config.server_options.ui_choices,
-                    "cloudstorage": {
-                        "enabled": self.nb_config.cloud_storage.enabled,
-                    },
+async def _server_options(request: Request) -> JSONResponse:
+    return json(
+        ServerOptionsEndpointResponse().dump(
+            {
+                **self.nb_config.server_options.ui_choices,
+                "cloudstorage": {
+                    "enabled": self.nb_config.cloud_storage.enabled,
                 },
-            )
+            },
         )
+    )
 
     return "/notebooks/server_options", ["GET"], _server_options
 
 def server_logs(self) -> BlueprintFactoryResponse:
     """Return the logs of the running server."""
 
-    @notebooks_authenticate(self.authenticator)
-    async def _server_logs(
-        request: Request, user: RegisteredUser | AnonymousUser, server_name: str
-    ) -> JSONResponse:
-        max_lines = int(request.query_args.get("max_lines", 250))
-        logs = self.nb_config.k8s_client.get_server_logs(
-            server_name=server_name,
-            max_log_lines=max_lines,
-            safe_username=user.safe_username,
-        )
-        return json(ServerLogs().dump(logs))
+@notebooks_authenticate(self.authenticator)
+async def _server_logs(
+    request: Request, user: RegisteredUser | AnonymousUser, server_name: str
+) -> JSONResponse:
+    max_lines = int(request.query_args.get("max_lines", 250))
+    logs = self.nb_config.k8s_client.get_server_logs(
+        server_name=server_name,
+        max_log_lines=max_lines,
+        safe_username=user.safe_username,
+    )
+    return json(ServerLogs().dump(logs))
 
-    return "/notebooks/logs/<server_name>", ["GET"], _server_logs
+return "/notebooks/logs/<server_name>", ["GET"], _server_logs
 
 def check_docker_image(self) -> BlueprintFactoryResponse:
     """Return the availability of the docker image."""
 
-    @notebooks_authenticate(self.authenticator)
-    async def _check_docker_image(request: Request, user: RegisteredUser | AnonymousUser) -> HTTPResponse:
-        image_url = request.query_args.get("image_url")
-        if not isinstance(image_url, str):
-            raise ValueError("required string of image url")
-        parsed_image = Image.from_path(image_url)
-        image_repo = parsed_image.repo_api()
-        if parsed_image.hostname == self.nb_config.git.registry and user.git_token:
-            image_repo = image_repo.with_oauth2_token(user.git_token)
-        if image_repo.image_exists(parsed_image):
-            return HTTPResponse(status=200)
-        else:
-            return HTTPResponse(status=404)
+@notebooks_authenticate(self.authenticator)
+async def _check_docker_image(request: Request, user: RegisteredUser | AnonymousUser) -> HTTPResponse:
+    image_url = request.query_args.get("image_url")
+    if not isinstance(image_url, str):
+        raise ValueError("required string of image url")
+    parsed_image = Image.from_path(image_url)
+    image_repo = parsed_image.repo_api()
+    if parsed_image.hostname == self.nb_config.git.registry and user.git_token:
+        image_repo = image_repo.with_oauth2_token(user.git_token)
+    if image_repo.image_exists(parsed_image):
+        return HTTPResponse(status=200)
+    else:
+        return HTTPResponse(status=404)
 
-    return "/notebooks/images", ["GET"], _check_docker_image
+return "/notebooks/images", ["GET"], _check_docker_image
