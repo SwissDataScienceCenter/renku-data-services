@@ -12,6 +12,12 @@ paths:
   /environments:
     get:
       summary: Get all environments
+      parameters:
+        - in: query
+          name: owner_type
+          schema:
+            $ref: "#/components/schemas/EnvironmentOwnerType"
+          description: Filter the environments by the owner type.
       responses:
         "200":
           description: List of environments
