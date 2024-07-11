@@ -468,157 +468,157 @@ def launch_notebook_helper(
 def patch_server(self) -> BlueprintFactoryResponse:
     """Patch a user server by name based on the query param."""
 
-    @notebooks_authenticate(self.authenticator)
-    @validate(json=apispec.PatchServerRequest)
-    async def _patch_server(
-        request: Request, user: RegisteredUser | AnonymousUser, server_name: str, body: apispec.PatchServerRequest
-    ) -> JSONResponse:
-        if not self.nb_config.sessions.storage.pvs_enabled:
-            raise PVDisabledError()
+@notebooks_authenticate(self.authenticator)
+@validate(json=apispec.PatchServerRequest)
+async def _patch_server(
+    request: Request, user: RegisteredUser | AnonymousUser, server_name: str, body: apispec.PatchServerRequest
+) -> JSONResponse:
+    if not self.nb_config.sessions.storage.pvs_enabled:
+        raise PVDisabledError()
 
-        if isinstance(user, AnonymousUser):
-            raise AnonymousUserPatchError()
+    if isinstance(user, AnonymousUser):
+        raise AnonymousUserPatchError()
 
-        patch_body = body
-        server = self.nb_config.k8s_client.get_server(server_name, user.safe_username)
-        if server is None:
-            raise errors.MissingResourceError(message=f"The server with name {server_name} cannot be found")
+    patch_body = body
+    server = self.nb_config.k8s_client.get_server(server_name, user.safe_username)
+    if server is None:
+        raise errors.MissingResourceError(message=f"The server with name {server_name} cannot be found")
 
-        new_server = server
-        currently_hibernated = server.get("spec", {}).get("jupyterServer", {}).get("hibernated", False)
-        currently_failing = server.get("status", {}).get("state", "running") == "failed"
-        state = PatchServerStatusEnum.from_api_state(body.state) if body.state is not None else None
-        resource_class_id = patch_body.resource_class_id
-        if server and not (currently_hibernated or currently_failing) and resource_class_id:
-            raise UserInputError("The resource class can be changed only if the server is hibernated or failing")
+    new_server = server
+    currently_hibernated = server.get("spec", {}).get("jupyterServer", {}).get("hibernated", False)
+    currently_failing = server.get("status", {}).get("state", "running") == "failed"
+    state = PatchServerStatusEnum.from_api_state(body.state) if body.state is not None else None
+    resource_class_id = patch_body.resource_class_id
+    if server and not (currently_hibernated or currently_failing) and resource_class_id:
+        raise UserInputError("The resource class can be changed only if the server is hibernated or failing")
 
-        if resource_class_id:
-            parsed_server_options = self.nb_config.crc_validator.validate_class_storage(
-                user,
-                resource_class_id,
-                storage=None,  # we do not care about validating storage
-            )
-            js_patch: list[dict[str, Any]] = [
-                {
-                    "op": "replace",
-                    "path": "/spec/jupyterServer/resources",
-                    "value": parsed_server_options.to_k8s_resources(self.nb_config.sessions.enforce_cpu_limits),
-                },
+    if resource_class_id:
+        parsed_server_options = self.nb_config.crc_validator.validate_class_storage(
+            user,
+            resource_class_id,
+            storage=None,  # we do not care about validating storage
+        )
+        js_patch: list[dict[str, Any]] = [
+            {
+                "op": "replace",
+                "path": "/spec/jupyterServer/resources",
+                "value": parsed_server_options.to_k8s_resources(self.nb_config.sessions.enforce_cpu_limits),
+            },
+            {
+                "op": "replace",
+                # NOTE: ~1 is how you escape '/' in json-patch
+                "path": "/metadata/annotations/renku.io~1resourceClassId",
+                "value": str(resource_class_id),
+            },
+        ]
+        if parsed_server_options.priority_class:
+            js_patch.append(
                 {
                     "op": "replace",
                     # NOTE: ~1 is how you escape '/' in json-patch
-                    "path": "/metadata/annotations/renku.io~1resourceClassId",
-                    "value": str(resource_class_id),
-                },
-            ]
-            if parsed_server_options.priority_class:
-                js_patch.append(
-                    {
-                        "op": "replace",
-                        # NOTE: ~1 is how you escape '/' in json-patch
-                        "path": "/metadata/labels/renku.io~1quota",
-                        "value": parsed_server_options.priority_class,
-                    }
-                )
-            elif server.get("metadata", {}).get("labels", {}).get("renku.io/quota"):
-                js_patch.append(
-                    {
-                        "op": "remove",
-                        # NOTE: ~1 is how you escape '/' in json-patch
-                        "path": "/metadata/labels/renku.io~1quota",
-                    }
-                )
-            new_server = self.nb_config.k8s_client.patch_server(
-                server_name=server_name, safe_username=user.safe_username, patch=js_patch
-            )
-            ss_patch: list[dict[str, Any]] = [
-                {
-                    "op": "replace",
-                    "path": "/spec/template/spec/priorityClassName",
+                    "path": "/metadata/labels/renku.io~1quota",
                     "value": parsed_server_options.priority_class,
                 }
-            ]
-            self.nb_config.k8s_client.patch_statefulset(server_name=server_name, patch=ss_patch)
-
-        if state == PatchServerStatusEnum.Hibernated:
-            # NOTE: Do nothing if server is already hibernated
-            currently_hibernated = server.get("spec", {}).get("jupyterServer", {}).get("hibernated", False)
-            if server and currently_hibernated:
-                logging.warning(f"Server {server_name} is already hibernated.")
-
-                return json(
-                    NotebookResponse().dump(UserServerManifest(server, self.nb_config.sessions.default_image)), 200
-                )
-
-            hibernation: dict[str, str | bool] = {"branch": "", "commit": "", "dirty": "", "synchronized": ""}
-
-            sidecar_patch = find_container(server.get("spec", {}).get("patches", []), "git-sidecar")
-            status = (
-                get_status(
-                    server_name=server_name,
-                    access_token=user.access_token,
-                    hostname=self.nb_config.sessions.ingress.host,
-                )
-                if sidecar_patch is not None
-                else None
             )
-            if status:
-                hibernation = {
-                    "branch": status.get("branch", ""),
-                    "commit": status.get("commit", ""),
-                    "dirty": not status.get("clean", True),
-                    "synchronized": status.get("ahead", 0) == status.get("behind", 0) == 0,
+        elif server.get("metadata", {}).get("labels", {}).get("renku.io/quota"):
+            js_patch.append(
+                {
+                    "op": "remove",
+                    # NOTE: ~1 is how you escape '/' in json-patch
+                    "path": "/metadata/labels/renku.io~1quota",
                 }
-
-            hibernation["date"] = datetime.now(UTC).isoformat(timespec="seconds")
-
-            patch = {
-                "metadata": {
-                    "annotations": {
-                        "renku.io/hibernation": json_lib.dumps(hibernation),
-                        "renku.io/hibernationBranch": hibernation["branch"],
-                        "renku.io/hibernationCommitSha": hibernation["commit"],
-                        "renku.io/hibernationDirty": str(hibernation["dirty"]).lower(),
-                        "renku.io/hibernationSynchronized": str(hibernation["synchronized"]).lower(),
-                        "renku.io/hibernationDate": hibernation["date"],
-                    },
-                },
-                "spec": {
-                    "jupyterServer": {
-                        "hibernated": True,
-                    },
-                },
-            }
-
-            new_server = self.nb_config.k8s_client.patch_server(
-                server_name=server_name, safe_username=user.safe_username, patch=patch
             )
-        elif state == PatchServerStatusEnum.Running:
-            # NOTE: We clear hibernation annotations in Amalthea to avoid flickering in the UI (showing
-            # the repository as dirty when resuming a session for a short period of time).
-            patch = {
-                "spec": {
-                    "jupyterServer": {
-                        "hibernated": False,
-                    },
-                },
+        new_server = self.nb_config.k8s_client.patch_server(
+            server_name=server_name, safe_username=user.safe_username, patch=js_patch
+        )
+        ss_patch: list[dict[str, Any]] = [
+            {
+                "op": "replace",
+                "path": "/spec/template/spec/priorityClassName",
+                "value": parsed_server_options.priority_class,
             }
-            # NOTE: The tokens in the session could expire if the session is hibernated long enough,
-            # here we inject new ones to make sure everything is valid when the session starts back up.
-            if user.access_token is None or user.refresh_token is None or user.git_token is None:
-                raise errors.Unauthorized(message="Cannot patch the server if the user is not fully logged in.")
-            renku_tokens = RenkuTokens(access_token=user.access_token, refresh_token=user.refresh_token)
-            gitlab_token = GitlabToken(access_token=user.git_token, expires_at=user.git_token_expires_at)
-            self.nb_config.k8s_client.patch_tokens(server_name, renku_tokens, gitlab_token)
-            new_server = self.nb_config.k8s_client.patch_server(
-                server_name=server_name, safe_username=user.safe_username, patch=patch
+        ]
+        self.nb_config.k8s_client.patch_statefulset(server_name=server_name, patch=ss_patch)
+
+    if state == PatchServerStatusEnum.Hibernated:
+        # NOTE: Do nothing if server is already hibernated
+        currently_hibernated = server.get("spec", {}).get("jupyterServer", {}).get("hibernated", False)
+        if server and currently_hibernated:
+            logging.warning(f"Server {server_name} is already hibernated.")
+
+            return json(
+                NotebookResponse().dump(UserServerManifest(server, self.nb_config.sessions.default_image)), 200
             )
 
-        return json(
-            NotebookResponse().dump(UserServerManifest(new_server, self.nb_config.sessions.default_image)), 200
+        hibernation: dict[str, str | bool] = {"branch": "", "commit": "", "dirty": "", "synchronized": ""}
+
+        sidecar_patch = find_container(server.get("spec", {}).get("patches", []), "git-sidecar")
+        status = (
+            get_status(
+                server_name=server_name,
+                access_token=user.access_token,
+                hostname=self.nb_config.sessions.ingress.host,
+            )
+            if sidecar_patch is not None
+            else None
+        )
+        if status:
+            hibernation = {
+                "branch": status.get("branch", ""),
+                "commit": status.get("commit", ""),
+                "dirty": not status.get("clean", True),
+                "synchronized": status.get("ahead", 0) == status.get("behind", 0) == 0,
+            }
+
+        hibernation["date"] = datetime.now(UTC).isoformat(timespec="seconds")
+
+        patch = {
+            "metadata": {
+                "annotations": {
+                    "renku.io/hibernation": json_lib.dumps(hibernation),
+                    "renku.io/hibernationBranch": hibernation["branch"],
+                    "renku.io/hibernationCommitSha": hibernation["commit"],
+                    "renku.io/hibernationDirty": str(hibernation["dirty"]).lower(),
+                    "renku.io/hibernationSynchronized": str(hibernation["synchronized"]).lower(),
+                    "renku.io/hibernationDate": hibernation["date"],
+                },
+            },
+            "spec": {
+                "jupyterServer": {
+                    "hibernated": True,
+                },
+            },
+        }
+
+        new_server = self.nb_config.k8s_client.patch_server(
+            server_name=server_name, safe_username=user.safe_username, patch=patch
+        )
+    elif state == PatchServerStatusEnum.Running:
+        # NOTE: We clear hibernation annotations in Amalthea to avoid flickering in the UI (showing
+        # the repository as dirty when resuming a session for a short period of time).
+        patch = {
+            "spec": {
+                "jupyterServer": {
+                    "hibernated": False,
+                },
+            },
+        }
+        # NOTE: The tokens in the session could expire if the session is hibernated long enough,
+        # here we inject new ones to make sure everything is valid when the session starts back up.
+        if user.access_token is None or user.refresh_token is None or user.git_token is None:
+            raise errors.Unauthorized(message="Cannot patch the server if the user is not fully logged in.")
+        renku_tokens = RenkuTokens(access_token=user.access_token, refresh_token=user.refresh_token)
+        gitlab_token = GitlabToken(access_token=user.git_token, expires_at=user.git_token_expires_at)
+        self.nb_config.k8s_client.patch_tokens(server_name, renku_tokens, gitlab_token)
+        new_server = self.nb_config.k8s_client.patch_server(
+            server_name=server_name, safe_username=user.safe_username, patch=patch
         )
 
-    return "/notebooks/servers", ["POST"], _patch_server
+    return json(
+        NotebookResponse().dump(UserServerManifest(new_server, self.nb_config.sessions.default_image)), 200
+    )
+
+return "/notebooks/servers", ["POST"], _patch_server
 
 def stop_server(self) -> BlueprintFactoryResponse:
     """Stop user server by name."""
