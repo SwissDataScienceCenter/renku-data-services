@@ -1,7 +1,7 @@
 """Shared utility functions."""
 
-import functools
 import datetime
+import functools
 import os
 import ssl
 from collections.abc import Awaitable, Callable
@@ -100,6 +100,7 @@ async def get_openbis_pat(
     minimum_validity_in_days: int = 2,
     timeout: int = 12,
 ) -> str:
+    """Requests an openBIS PAT with an openBIS session ID."""
     url = f"https://{host}/openbis/openbis/rmi-application-server-v3.json"
 
     get_server_information = {"method": "getServerInformation", "params": [session_id], "id": "2", "jsonrpc": "2.0"}
@@ -138,7 +139,8 @@ async def get_openbis_pat(
                     return json2["result"][0]["permId"]
             else:
                 raise Exception(
-                    f"The maximum allowed validity period of a personal access token is less than {minimum_validity_in_days} days."
+                    "The maximum allowed validity period of a personal access token is less than "
+                    f"{minimum_validity_in_days} days."
                 )
 
         raise Exception("An openBIS personal access token related request failed.")
