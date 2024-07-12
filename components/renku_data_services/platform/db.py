@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services import base_models, errors
-from renku_data_services.platform import apispec, models
+from renku_data_services.platform import models
 from renku_data_services.platform import orm as schemas
 
 
@@ -29,38 +29,25 @@ class PlatformRepository:
                 )
             return config.dump()
 
-    async def insert_config(
-        self,
-        user: base_models.APIUser,
-        new_config: apispec.PlatformConfigPost,
-    ) -> models.PlatformConfig:
-        """Create the initial platform configuration."""
+    async def create_initial_config(self, user: base_models.APIUser) -> models.PlatformConfig:
+        """Create the initial platform configuration in the database."""
         if user.id is None or not user.is_admin:
             raise errors.Unauthorized(
                 message="You do not have the required permissions for this operation.", quiet=True
             )
 
-        config = schemas.PlatformConfigORM(id=models.ConfigID.config)
-        if new_config.disable_ui is not None:
-            config.disable_ui = new_config.disable_ui
-        if new_config.maintenance_banner is not None:
-            config.maintenance_banner = new_config.maintenance_banner
-        if new_config.status_page_id is not None:
-            config.status_page_id = new_config.status_page_id
-
         async with self.session_maker() as session, session.begin():
             result = await session.scalars(select(schemas.PlatformConfigORM))
             existing_config = result.one_or_none()
             if existing_config is not None:
-                raise errors.ConflictError(message="The platform configuration already exists")
+                return existing_config.dump()
+            config = schemas.PlatformConfigORM(id=models.ConfigID.config)
             session.add(config)
             await session.flush()
             await session.refresh(config)
             return config.dump()
 
-    async def update_config(
-        self, user: base_models.APIUser, etag: str, patch: apispec.PlatformConfigPatch
-    ) -> models.PlatformConfig:
+    async def update_config(self, user: base_models.APIUser, etag: str, **kwargs: dict) -> models.PlatformConfig:
         """Update the platform configuration."""
         if user.id is None or not user.is_admin:
             raise errors.Unauthorized(
@@ -77,9 +64,8 @@ class PlatformRepository:
             if current_etag != etag:
                 raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
 
-            kwargs = patch.model_dump(exclude_none=True)
             for key, value in kwargs.items():
-                if key in ["disable_ui", "maintenance_banner", "status_page_id"]:
+                if key in ["incident_banner"]:
                     setattr(config, key, value)
 
             await session.flush()

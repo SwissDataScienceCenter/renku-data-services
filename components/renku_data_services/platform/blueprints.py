@@ -36,41 +36,13 @@ class PlatformConfigBP(CustomBlueprint):
                 apispec.PlatformConfig.model_validate(
                     dict(
                         etag=config.etag,
-                        disable_ui=config.disable_ui,
-                        maintenance_banner=config.maintenance_banner,
-                        status_page_id=config.status_page_id,
+                        maintenance_banner=config.incident_banner,
                     )
                 ).model_dump(mode="json", exclude_none=True),
                 headers=headers,
             )
 
         return "/platform/config", ["GET"], _get_singleton
-
-    def post_singleton(self) -> BlueprintFactoryResponse:
-        """Create the initial platform configuration."""
-
-        @authenticate(self.authenticator)
-        @only_admins
-        @validate(json=apispec.PlatformConfigPost)
-        async def _post_singleton(
-            _: Request, user: base_models.APIUser, body: apispec.PlatformConfigPost
-        ) -> JSONResponse:
-            config = await self.platform_repo.insert_config(user=user, new_config=body)
-            headers = {"ETag": config.etag}
-            return json(
-                apispec.PlatformConfig.model_validate(
-                    dict(
-                        etag=config.etag,
-                        disable_ui=config.disable_ui,
-                        maintenance_banner=config.maintenance_banner,
-                        status_page_id=config.status_page_id,
-                    )
-                ).model_dump(mode="json", exclude_none=True),
-                headers=headers,
-                status=201,
-            )
-
-        return "/platform/config", ["POST"], _post_singleton
 
     def patch_singleton(self) -> BlueprintFactoryResponse:
         """Update the platform configuration."""
@@ -82,15 +54,14 @@ class PlatformConfigBP(CustomBlueprint):
         async def _patch_singleton(
             _: Request, user: base_models.APIUser, body: apispec.PlatformConfigPatch, etag: str
         ) -> JSONResponse:
-            config = await self.platform_repo.update_config(user=user, patch=body, etag=etag)
+            body_dict = body.model_dump(exclude_none=True)
+            config = await self.platform_repo.update_config(user=user, etag=etag, **body_dict)
             headers = {"ETag": config.etag}
             return json(
                 apispec.PlatformConfig.model_validate(
                     dict(
                         etag=config.etag,
-                        disable_ui=config.disable_ui,
-                        maintenance_banner=config.maintenance_banner,
-                        status_page_id=config.status_page_id,
+                        status_page_id=config.incident_banner,
                     )
                 ).model_dump(mode="json", exclude_none=True),
                 headers=headers,

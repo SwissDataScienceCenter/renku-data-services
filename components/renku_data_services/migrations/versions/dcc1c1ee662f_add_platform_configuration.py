@@ -21,9 +21,7 @@ def upgrade() -> None:
     op.create_table(
         "config",
         sa.Column("id", sa.Enum("config", name="configid"), nullable=False),
-        sa.Column("disable_ui", sa.Boolean(), nullable=False),
-        sa.Column("maintenance_banner", sa.String(), nullable=False),
-        sa.Column("status_page_id", sa.String(length=500), nullable=False),
+        sa.Column("incident_banner", sa.String(), nullable=False),
         sa.Column("creation_date", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.PrimaryKeyConstraint("id"),

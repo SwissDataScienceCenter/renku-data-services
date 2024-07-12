@@ -4,8 +4,6 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from pydantic import BaseModel
-
 from renku_data_services.utils.etag import compute_etag_from_timestamp
 
 
@@ -16,13 +14,11 @@ class ConfigID(StrEnum):
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class PlatformConfig(BaseModel):
+class PlatformConfig:
     """The configuration of RenkuLab."""
 
     id: ConfigID
-    disable_ui: bool
-    maintenance_banner: str
-    status_page_id: str
+    incident_banner: str
     creation_date: datetime = field(default_factory=lambda: datetime.now(UTC).replace(microsecond=0))
     updated_at: datetime
 
