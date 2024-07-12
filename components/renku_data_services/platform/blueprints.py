@@ -36,7 +36,7 @@ class PlatformConfigBP(CustomBlueprint):
                 apispec.PlatformConfig.model_validate(
                     dict(
                         etag=config.etag,
-                        maintenance_banner=config.incident_banner,
+                        incident_banner=config.incident_banner,
                     )
                 ).model_dump(mode="json", exclude_none=True),
                 headers=headers,
@@ -61,7 +61,7 @@ class PlatformConfigBP(CustomBlueprint):
                 apispec.PlatformConfig.model_validate(
                     dict(
                         etag=config.etag,
-                        status_page_id=config.incident_banner,
+                        incident_banner=config.incident_banner,
                     )
                 ).model_dump(mode="json", exclude_none=True),
                 headers=headers,
