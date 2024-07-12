@@ -11,16 +11,10 @@ servers:
 paths:
   /environments:
     get:
-      summary: Get all environments
-      parameters:
-        - in: query
-          name: owner_type
-          schema:
-            $ref: "#/components/schemas/EnvironmentOwnerType"
-          description: Filter the environments by the owner type.
+      summary: Get all global environments
       responses:
         "200":
-          description: List of environments
+          description: List of global environments
           content:
             application/json:
               schema:
@@ -30,7 +24,7 @@ paths:
       tags:
         - environments
     post:
-      summary: Create a new session environment
+      summary: Create a new global session environment
       description: Requires admin permissions
       requestBody:
         required: true
@@ -51,7 +45,7 @@ paths:
         - environments
   /environments/{environment_id}:
     get:
-      summary: Get a session environment
+      summary: Get a global session environment
       parameters:
         - in: path
           name: environment_id
@@ -76,7 +70,7 @@ paths:
       tags:
         - environments
     patch:
-      summary: Update specific fields of an existing session environment
+      summary: Update specific fields of an existing global session environment
       description: Requires admin permissions
       parameters:
         - in: path
@@ -108,7 +102,7 @@ paths:
       tags:
         - environments
     delete:
-      summary: Remove a session environment
+      summary: Remove a global session environment
       parameters:
         - in: path
           name: environment_id
@@ -182,7 +176,7 @@ paths:
       tags:
         - session_launchers
     patch:
-      summary: Update specific fields of an existing session
+      summary: Update specific fields of an existing session launcher
       parameters:
         - in: path
           name: launcher_id
@@ -270,10 +264,6 @@ components:
           $ref: "#/components/schemas/ContainerImage"
         default_url:
           $ref: "#/components/schemas/DefaultUrl"
-        owner_type:
-          $ref: "#/components/schemas/EnvironmentOwnerType"
-        owner_id:
-          $ref: "#/components/schemas/EnvironmentOwnerId"
         uid: 
           $ref: "#/components/schemas/EnvironmentUid"
         gid: 
@@ -284,23 +274,17 @@ components:
           $ref: "#/components/schemas/EnvironmentMountDirectory"
         port:
           $ref: "#/components/schemas/EnvironmentPort"
-        visibility:
-          $ref: "#/components/schemas/EnvironmentVisibility"
       required:
         - id
         - name
         - creation_date
         - container_image
-        - official
         - port
         - working_directory
         - mount_directory
         - uid
         - gid
         - default_url
-        - owner_type
-        - owner_id
-        - visibility
       example:
         id: 01AN4Z79ZS6XX96588FDX0H099
         name: JupyterLab environment
@@ -313,10 +297,29 @@ components:
         mount_directory: /home/jovyan/work
         uid: 1000
         gid: 1000
-        owner_type: user
-        ownerId: 4fcd155c-fef5-48de-87f7-2facab8bf4c2
-        visibility: private
+    EnvironmentGetInLauncher:
+      allOf:
+        - $ref: "#/components/schemas/Environment"
+        - type: object
+          properties:
+            environment_kind:
+              $ref: "#/components/schemas/EnvironmentKind"
+          required:
+            - environment_kind
+          example:
+            environment_kind: global_environment
     EnvironmentPostInLauncher:
+      allOf:
+        - $ref: "#/components/schemas/EnvironmentPost"
+        - type: object
+          properties:
+            environment_kind:
+              $ref: "#/components/schemas/EnvironmentKind"
+          required:
+            - environment_kind
+          example:
+            environment_kind: global_environment
+    EnvironmentPost:
       description: Data required to create a session environment
       type: object
       properties:
@@ -350,26 +353,19 @@ components:
           allOf:
             - $ref: "#/components/schemas/EnvironmentPort"
             - default: 8080
-        visibility:
-          allOf:
-            - $ref: "#/components/schemas/EnvironmentVisibility"
-            - default: private
       required:
         - name
         - container_image
-    EnvironmentPost:
+    EnvironmentPatchInLauncher:
       allOf:
-        - $ref: "#/components/schemas/EnvironmentPostInLauncher"
+        - $ref: "#/components/schemas/EnvironmentPatch"
         - type: object
           properties:
-            owner_id:
-              $ref: "#/components/schemas/EnvironmentOwnerId"
-            owner_type:
-              $ref: "#/components/schemas/EnvironmentOwnerType"
-          required:
-            - owner_id
-            - owner_type
-    EnvironmentPatchInLauncher:
+            environment_kind:
+              $ref: "#/components/schemas/EnvironmentKind"
+          example:
+            environment_kind: global_environment
+    EnvironmentPatch:
       type: object
       description: Update a session environment
       additionalProperties: false
@@ -392,15 +388,6 @@ components:
           $ref: "#/components/schemas/EnvironmentMountDirectory"
         port:
           $ref: "#/components/schemas/EnvironmentPort"
-    EnvironmentPatch:
-      allOf:
-        - $ref: "#/components/schemas/EnvironmentPatchInLauncher"
-        - type: object
-          properties:
-            owner_id:
-              $ref: "#/components/schemas/EnvironmentOwnerId"
-            owner_type:
-              $ref: "#/components/schemas/EnvironmentOwnerType"
     SessionLaunchersList:
       description: A list of Renku session launchers
       type: array
@@ -422,7 +409,7 @@ components:
         description:
           $ref: "#/components/schemas/Description"
         environment:
-          $ref: "#/components/schemas/Environment"
+          $ref: "#/components/schemas/EnvironmentGetInLauncher"
       required:
         - id
         - project_id
@@ -440,6 +427,7 @@ components:
           name: Rstudio
           creation_date: "2023-11-01T17:32:28Z"
           description: JupyterLab session environment
+          environment_kind: global_environment
           container_image: rocker/rstudio
           default_url: "/rstudio"
           port: 8080
@@ -447,9 +435,6 @@ components:
           mount_directory: /home/rstudio/work
           uid: 1000
           gid: 1000
-          owner_type: project
-          ownerId: 01AN4Z79ZS5XN0F25N3DB94T4R
-          visibility: private
     SessionLauncherPost:
       description: Data required to create a session launcher
       type: object
@@ -510,6 +495,13 @@ components:
           $ref: "#/components/schemas/EnvironmentId"
       required:
         - id
+    EnvironmentKind:
+      description: Kind of environment to use
+      type: string
+      enum:
+        - global_environment
+        - container_image
+      example: container_image
     EnvironmentId:
       description: Id of the environment to use
       type: string
@@ -565,22 +557,6 @@ components:
       type: string
       description: The location where the persistent storage for the session will be mounted, usually it should be identical to or a parent of the working directory
       minLength: 1
-    EnvironmentOwnerType:
-      type: string
-      enum:
-        - user
-        - group
-        - project
-        - platform
-      description: The owner of the environment which is used to enforce authorization on it
-    EnvironmentOwnerId:
-      type: string
-      description: The id of the entity that owns the environment
-    EnvironmentVisibility:
-      type: string
-      enum:
-        - public
-        - private
     ErrorResponse:
       type: object
       properties:
