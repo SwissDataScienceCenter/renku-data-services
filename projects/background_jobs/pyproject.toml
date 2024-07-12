@@ -12,6 +12,7 @@ packages = [
   { include = "renku_data_services/errors", from = "../../components" },
   { include = "renku_data_services/base_api", from = "../../components" },
   { include = "renku_data_services/base_models", from = "../../components" },
+  { include = "renku_data_services/base_orm", from = "../../components" },
   { include = "renku_data_services/users", from = "../../components" },
   { include = "renku_data_services/base_api", from = "../../components" },
   { include = "renku_data_services/message_queue", from = "../../components" },
