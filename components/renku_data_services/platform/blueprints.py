@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from sanic import Request, empty, json
+from sanic import Request, empty
 from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
 
@@ -10,6 +10,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.etag import extract_if_none_match, if_match_required
+from renku_data_services.base_models.validation import validated_json
 from renku_data_services.platform import apispec
 from renku_data_services.platform.db import PlatformRepository
 
@@ -32,13 +33,12 @@ class PlatformConfigBP(CustomBlueprint):
                 return empty(status=304)
 
             headers = {"ETag": config.etag}
-            return json(
-                apispec.PlatformConfig.model_validate(
-                    dict(
-                        etag=config.etag,
-                        incident_banner=config.incident_banner,
-                    )
-                ).model_dump(mode="json", exclude_none=True),
+            return validated_json(
+                apispec.PlatformConfig,
+                dict(
+                    etag=config.etag,
+                    incident_banner=config.incident_banner,
+                ),
                 headers=headers,
             )
 
@@ -57,13 +57,12 @@ class PlatformConfigBP(CustomBlueprint):
             body_dict = body.model_dump(exclude_none=True)
             config = await self.platform_repo.update_config(user=user, etag=etag, **body_dict)
             headers = {"ETag": config.etag}
-            return json(
-                apispec.PlatformConfig.model_validate(
-                    dict(
-                        etag=config.etag,
-                        incident_banner=config.incident_banner,
-                    )
-                ).model_dump(mode="json", exclude_none=True),
+            return validated_json(
+                apispec.PlatformConfig,
+                dict(
+                    etag=config.etag,
+                    incident_banner=config.incident_banner,
+                ),
                 headers=headers,
             )
 
