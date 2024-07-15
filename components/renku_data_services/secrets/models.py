@@ -2,9 +2,17 @@
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import Enum
 
 from kubernetes import client as k8s_client
 from pydantic import BaseModel, Field
+
+
+class SecretKind(Enum):
+    """Kind of secret. This should have the same values as users.apispec.SecretKind."""
+
+    general = "general"
+    storage = "storage"
 
 
 class Secret(BaseModel):
@@ -15,6 +23,7 @@ class Secret(BaseModel):
     encrypted_key: bytes = Field(repr=False)
     id: str | None = Field(default=None, init=False)
     modification_date: datetime = Field(default_factory=lambda: datetime.now(UTC).replace(microsecond=0), init=False)
+    kind: SecretKind
 
 
 @dataclass

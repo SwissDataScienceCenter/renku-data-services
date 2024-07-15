@@ -1,6 +1,6 @@
 """Common blueprints."""
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass
 from functools import wraps
 from typing import Any, NoReturn, ParamSpec, TypeVar, cast
@@ -48,7 +48,7 @@ _T = TypeVar("_T")
 _P = ParamSpec("_P")
 
 
-def validate_db_ids(f: Callable[_P, Awaitable[_T]]) -> Callable[_P, Awaitable[_T]]:
+def validate_db_ids(f: Callable[_P, Awaitable[_T]]) -> Callable[_P, Coroutine[Any, Any, _T]]:
     """Decorator for a Sanic handler that errors out if passed in IDs are outside of the valid range for postgres."""
 
     @wraps(f)

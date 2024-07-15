@@ -10,12 +10,25 @@ from sanic_ext import validate
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_models.validation import validated_json
 from renku_data_services.errors import errors
 from renku_data_services.secrets.db import UserSecretsRepo
-from renku_data_services.secrets.models import Secret
+from renku_data_services.secrets.models import Secret, SecretKind
 from renku_data_services.users import apispec
+from renku_data_services.users.apispec_base import BaseAPISpec
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.cryptography import encrypt_rsa, encrypt_string, generate_random_encryption_key
+
+
+class GetSecretsParams(BaseAPISpec):
+    """The schema for the query parameters used when getting all secrets."""
+
+    class Config:
+        """Configuration."""
+
+        extra = "ignore"
+
+    kind: apispec.SecretKind = apispec.SecretKind.general
 
 
 @dataclass(kw_only=True)
@@ -32,11 +45,18 @@ class KCUsersBP(CustomBlueprint):
         async def _get_all(request: Request, user: base_models.APIUser) -> JSONResponse:
             email_filter = request.args.get("exact_email")
             users = await self.repo.get_users(requested_by=user, email=email_filter)
-            return json(
+            return validated_json(
+                apispec.UsersWithId,
                 [
-                    {"id": user.id, "first_name": user.first_name, "last_name": user.last_name, "email": user.email}
+                    dict(
+                        id=user.user.id,
+                        username=user.namespace.slug,
+                        email=user.user.email,
+                        first_name=user.user.first_name,
+                        last_name=user.user.last_name,
+                    )
                     for user in users
-                ]
+                ],
             )
 
         return "/users", ["GET"], _get_all
@@ -45,19 +65,22 @@ class KCUsersBP(CustomBlueprint):
         """Get info about the logged in user."""
 
         @authenticate(self.authenticator)
-        async def _get_self(request: Request, user: base_models.APIUser) -> JSONResponse:
-            if user.id is None:
-                raise errors.ValidationError(message="No user id provided")
+        @only_authenticated
+        async def _get_self(_: Request, user: base_models.APIUser) -> JSONResponse:
+            if not user.is_authenticated or user.id is None:
+                raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
             user_info = await self.repo.get_or_create_user(requested_by=user, id=user.id)
             if not user_info:
                 raise errors.MissingResourceError(message=f"The user with ID {user.id} cannot be found.")
-            return json(
-                {
-                    "id": user_info.id,
-                    "first_name": user_info.first_name,
-                    "last_name": user_info.last_name,
-                    "email": user_info.email,
-                }
+            return validated_json(
+                apispec.UserWithId,
+                dict(
+                    id=user_info.user.id,
+                    username=user_info.namespace.slug,
+                    email=user_info.user.email,
+                    first_name=user_info.user.first_name,
+                    last_name=user_info.user.last_name,
+                ),
             )
 
         return "/user", ["GET"], _get_self
@@ -69,7 +92,7 @@ class KCUsersBP(CustomBlueprint):
         """
 
         @authenticate(self.authenticator)
-        async def _get_secret_key(request: Request, user: base_models.APIUser) -> JSONResponse:
+        async def _get_secret_key(_: Request, user: base_models.APIUser) -> JSONResponse:
             secret_key = await self.repo.get_or_create_user_secret_key(requested_by=user)
             return json({"secret_key": secret_key})
 
@@ -79,17 +102,19 @@ class KCUsersBP(CustomBlueprint):
         """Get info about a specific user."""
 
         @authenticate(self.authenticator)
-        async def _get_one(request: Request, user: base_models.APIUser, user_id: str) -> JSONResponse:
+        async def _get_one(_: Request, user: base_models.APIUser, user_id: str) -> JSONResponse:
             user_info = await self.repo.get_or_create_user(requested_by=user, id=user_id)
             if not user_info:
                 raise errors.MissingResourceError(message=f"The user with ID {user_id} cannot be found.")
-            return json(
-                {
-                    "id": user_info.id,
-                    "first_name": user_info.first_name,
-                    "last_name": user_info.last_name,
-                    "email": user_info.email,
-                }
+            return validated_json(
+                apispec.UserWithId,
+                dict(
+                    id=user_info.user.id,
+                    username=user_info.namespace.slug,
+                    email=user_info.user.email,
+                    first_name=user_info.user.first_name,
+                    last_name=user_info.user.last_name,
+                ),
             )
 
         return "/users/<user_id>", ["GET"], _get_one
@@ -135,11 +160,17 @@ class UserSecretsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _get_all(request: Request, user: base_models.APIUser) -> JSONResponse:
-            secrets = await self.secret_repo.get_user_secrets(requested_by=user)
+        @validate(query=GetSecretsParams)
+        async def _get_all(request: Request, user: base_models.APIUser, query: GetSecretsParams) -> JSONResponse:
+            secret_kind = SecretKind[query.kind.value]
+            secrets = await self.secret_repo.get_user_secrets(requested_by=user, kind=secret_kind)
+            secrets_json = [
+                secret.model_dump(include={"name", "id", "modification_date", "kind"}, exclude_none=True, mode="json")
+                for secret in secrets
+            ]
             return json(
                 apispec.SecretsList(
-                    root=[apispec.SecretWithId.model_validate(secret) for secret in secrets]
+                    root=[apispec.SecretWithId.model_validate(secret) for secret in secrets_json]
                 ).model_dump(mode="json"),
                 200,
             )
@@ -155,8 +186,10 @@ class UserSecretsBP(CustomBlueprint):
             secret = await self.secret_repo.get_secret_by_id(requested_by=user, secret_id=secret_id)
             if not secret:
                 raise errors.MissingResourceError(message=f"The secret with id {secret_id} cannot be found.")
-
-            return json(apispec.SecretWithId.model_validate(secret).model_dump(mode="json"))
+            result = secret.model_dump(
+                include={"name", "id", "modification_date", "kind"}, exclude_none=True, mode="json"
+            )
+            return json(result)
 
         return "/user/secrets/<secret_id>", ["GET"], _get_one
 
@@ -168,9 +201,17 @@ class UserSecretsBP(CustomBlueprint):
         @validate(json=apispec.SecretPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.SecretPost) -> JSONResponse:
             encrypted_value, encrypted_key = await self._encrypt_user_secret(requested_by=user, secret_value=body.value)
-            secret = Secret(name=body.name, encrypted_value=encrypted_value, encrypted_key=encrypted_key)
-            result = await self.secret_repo.insert_secret(requested_by=user, secret=secret)
-            return json(apispec.SecretWithId.model_validate(result).model_dump(exclude_none=True, mode="json"), 201)
+            secret = Secret(
+                name=body.name,
+                encrypted_value=encrypted_value,
+                encrypted_key=encrypted_key,
+                kind=SecretKind[body.kind.value],
+            )
+            inserted_secret = await self.secret_repo.insert_secret(requested_by=user, secret=secret)
+            result = inserted_secret.model_dump(
+                include={"name", "id", "modification_date", "kind"}, exclude_none=True, mode="json"
+            )
+            return json(result, 201)
 
         return "/user/secrets", ["POST"], _post
 
@@ -187,8 +228,11 @@ class UserSecretsBP(CustomBlueprint):
             updated_secret = await self.secret_repo.update_secret(
                 requested_by=user, secret_id=secret_id, encrypted_value=encrypted_value, encrypted_key=encrypted_key
             )
+            result = updated_secret.model_dump(
+                include={"name", "id", "modification_date", "kind"}, exclude_none=True, mode="json"
+            )
 
-            return json(apispec.SecretWithId.model_validate(updated_secret).model_dump(exclude_none=True, mode="json"))
+            return json(result)
 
         return "/user/secrets/<secret_id>", ["PATCH"], _patch
 

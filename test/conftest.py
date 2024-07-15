@@ -77,12 +77,12 @@ def db_config(monkeypatch, worker_id, authz_config) -> Iterator[DBConfig]:
     monkeypatch.setenv("DB_HOST", host)
     monkeypatch.setenv("DB_PORT", port)
     with DatabaseJanitor(
-        user,
-        host,
-        port,
-        db_name,
-        "16.2",
-        password,
+        user=user,
+        host=host,
+        port=port,
+        dbname=db_name,
+        version="16.2",
+        password=password,
     ):
         yield DBConfig.from_env()
         DBConfig.dispose_connection()

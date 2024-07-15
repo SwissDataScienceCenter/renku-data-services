@@ -14,6 +14,7 @@ from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.namespace.db import GroupRepository
+from renku_data_services.project.db import ProjectRepository
 from renku_data_services.users.db import UsersSync
 from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
 
@@ -27,6 +28,7 @@ class SyncConfig:
     authz_config: AuthzConfig
     group_repo: GroupRepository
     event_repo: EventRepository
+    project_repo: ProjectRepository
     session_maker: Callable[..., AsyncSession]
 
     @classmethod
@@ -58,6 +60,13 @@ class SyncConfig:
             group_authz=Authz(authz_config),
             message_queue=message_queue,
         )
+        project_repo = ProjectRepository(
+            session_maker=session_maker,
+            message_queue=message_queue,
+            event_repo=event_repo,
+            group_repo=group_repo,
+            authz=Authz(authz_config),
+        )
         syncer = UsersSync(
             session_maker,
             message_queue=message_queue,
@@ -70,4 +79,4 @@ class SyncConfig:
         client_secret = os.environ[f"{prefix}KEYCLOAK_CLIENT_SECRET"]
         realm = os.environ.get(f"{prefix}KEYCLOAK_REALM", "Renku")
         kc_api = KeycloakAPI(keycloak_url=keycloak_url, client_id=client_id, client_secret=client_secret, realm=realm)
-        return cls(syncer, kc_api, authz_config, group_repo, event_repo, session_maker)
+        return cls(syncer, kc_api, authz_config, group_repo, event_repo, project_repo, session_maker)

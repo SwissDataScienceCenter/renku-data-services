@@ -119,11 +119,11 @@ class GitlabAPI:
 class DummyGitlabAPI:
     """Dummy gitlab API.
 
-    The user with name John Doe has admin access to project 123456 and member access to 999999.
+    The user with name Admin Doe has admin access to project 123456 and member access to 999999.
     """
 
     _store = {
-        "John Doe": {
+        "Admin Doe": {
             GitlabAccessLevel.MEMBER: ["999999", "123456"],
             GitlabAccessLevel.ADMIN: ["123456"],
         },
