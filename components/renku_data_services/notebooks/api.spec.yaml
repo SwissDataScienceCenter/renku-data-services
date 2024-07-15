@@ -286,24 +286,27 @@ components:
       - registered
       type: object
     ErrorResponse:
+      type: object
       properties:
         error:
-          "$ref": "#/components/schemas/ErrorResponseNested"
+          type: object
+          properties:
+            code:
+              type: integer
+              minimum: 0
+              exclusiveMinimum: true
+              example: 1404
+            detail:
+              type: string
+              example: "A more detailed optional message showing what the problem was"
+            message:
+              type: string
+              example: "Something went wrong - please try again later"
+          required:
+            - "code"
+            - "message"
       required:
-      - error
-      type: object
-    ErrorResponseNested:
-      properties:
-        code:
-          type: integer
-        detail:
-          type: string
-        message:
-          type: string
-      required:
-      - code
-      - message
-      type: object
+        - "error"
     Generated:
       properties:
         enabled:
