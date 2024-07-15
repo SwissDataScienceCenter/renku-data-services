@@ -1,10 +1,12 @@
 """Patches for the git sidecar container."""
 
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from renku_data_services.notebooks.api.classes.server import UserServer
 from renku_data_services.notebooks.api.classes.user import RegisteredUser
+
+if TYPE_CHECKING:
+    from renku_data_services.notebooks.api.classes.server import UserServer
 
 
 def main(server: "UserServer") -> list[dict[str, Any]]:

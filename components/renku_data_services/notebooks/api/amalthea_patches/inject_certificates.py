@@ -1,11 +1,13 @@
 """Patches for injecting custom certificates in session containers."""
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from renku_data_services.notebooks.api.amalthea_patches.utils import get_certificates_volume_mounts
-from renku_data_services.notebooks.api.classes.server import UserServer
 from renku_data_services.notebooks.api.classes.user import RegisteredUser
+
+if TYPE_CHECKING:
+    from renku_data_services.notebooks.api.classes.server import UserServer
 
 
 def proxy(server: "UserServer") -> list[dict[str, Any]]:

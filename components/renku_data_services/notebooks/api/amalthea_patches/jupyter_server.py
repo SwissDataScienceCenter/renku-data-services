@@ -3,14 +3,16 @@
 import base64
 import json
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from gitlab.v4.objects.users import CurrentUser
 from kubernetes import client
 
-from renku_data_services.notebooks.api.classes.server import UserServer
 from renku_data_services.notebooks.api.classes.user import RegisteredUser
 from renku_data_services.notebooks.errors.user import OverriddenEnvironmentVariableError
+
+if TYPE_CHECKING:
+    from renku_data_services.notebooks.api.classes.server import UserServer
 
 
 def env(server: "UserServer") -> list[dict[str, Any]]:
