@@ -37,7 +37,7 @@ packages = [
 [tool.poetry.dependencies]
 python = "^3.12"
 sanic = { extras = ["ext"], version = "^24.6.0" }
-pydantic = {extras = ["email"], version = "^2.8.2"}
+pydantic = { extras = ["email"], version = "^2.8.2" }
 datamodel-code-generator = "^0.24.2"
 sqlalchemy = { extras = ["asyncio"], version = "^2.0.31" }
 alembic = "^1.13.2"
@@ -69,7 +69,7 @@ setuptools = { version = "^70.2.0" }
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.7.9"
-mypy = "~1.10"  # NOTE: Mypy 1.10.0 has problems with our decorators, see https://github.com/python/mypy/issues/17166
+mypy = "~1.10"                                             # NOTE: Mypy 1.10.0 has problems with our decorators, see https://github.com/python/mypy/issues/17166
 pytest = "^8.2.2"
 pytest-cov = "^5.0.0"
 pre-commit = "^3.2.2"
@@ -85,7 +85,7 @@ avro-preprocessor = "^0.3.0"
 fakeredis = "^2.23.3"
 ruff = "^0.5.1"
 debugpy = "^1.8.2"
-pytest-xdist = {version = "^3.5.0", extras = ["psutil"]}
+pytest-xdist = { version = "^3.5.0", extras = ["psutil"] }
 types-requests = "^2.32.0.20240622"
 
 [build-system]
@@ -129,7 +129,7 @@ ignore = [
   "E226",
   "E231",
   "UP007",
-  "UP038"
+  "UP038",
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -198,6 +198,7 @@ module = [
   "renku_data_services.users.apispec",
   "renku_data_services.data_api.error_handler",
   "renku_data_services.namespace.apispec",
+  "renku_data_services.notebooks.apispec",
 ]
 ignore_errors = true
 
@@ -225,4 +226,5 @@ ignore_missing_imports = true
 
 [tool.coverage.run]
 source = ["bases/", "components/"]
+omit = ["components/renku_data_services/notebooks"]
 concurrency = ["thread", "greenlet"]
