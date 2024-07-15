@@ -3,7 +3,7 @@
 from typing import Any, Optional, cast
 
 import requests
-from sanic import logger
+from sanic.log import logger
 
 
 def get_status(hostname: str, server_name: str, access_token: Optional[str]) -> dict[str, Any]:

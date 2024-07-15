@@ -117,9 +117,7 @@ class _NotebooksConfig:
             storage_validator = DummyStorageValidator()
             git_provider_helper = DummyGitProviderHelper()
         else:
-            crc_validator = CRCValidator(
-                data_service_url, server_options.default_url_default, server_options.lfs_auto_fetch_default
-            )
+            crc_validator = CRCValidator(data_service_url)
             storage_validator = StorageValidator(data_service_url)
             git_provider_helper = GitProviderHelper(data_service_url, sessions_config.ingress.host, git_config.url)
 
