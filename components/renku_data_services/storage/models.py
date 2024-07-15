@@ -235,15 +235,6 @@ class CloudStorageSecret(BaseModel):
     @classmethod
     def from_dict(cls, data: dict) -> "CloudStorageSecret":
         """Create the model from a plain dictionary."""
-        if "user_id" not in data:
-            raise errors.ValidationError(message="'user_id' not set")
-        if "storage_id" not in data:
-            raise errors.ValidationError(message="'storage_id' not set")
-        if "name" not in data:
-            raise errors.ValidationError(message="'name' not set")
-        if "secret_id" not in data:
-            raise errors.ValidationError(message="'secret_id' not set")
-
         return cls(
             user_id=data["user_id"], storage_id=data["storage_id"], name=data["name"], secret_id=data["secret_id"]
         )

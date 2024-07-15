@@ -53,33 +53,12 @@ class UserSecretsRepo:
             orms = res.scalars()
             return [orm.dump() for orm in orms]
 
-    @staticmethod
-    def create_secret_orm(
-        name: str, user_id: str, encrypted_value: bytes, encrypted_key: bytes, kind: SecretKind
-    ) -> SecretORM:
-        """Create a new secret."""
-        return SecretORM(
-            name=name,
-            modification_date=datetime.now(UTC).replace(microsecond=0),
-            user_id=user_id,
-            encrypted_value=encrypted_value,
-            encrypted_key=encrypted_key,
-            kind=kind,
-        )
-
-    @staticmethod
-    def update_secret_orm(secret: SecretORM, encrypted_value: bytes, encrypted_key: bytes) -> None:
-        """Update an existing secret."""
-        secret.encrypted_value = encrypted_value
-        secret.encrypted_key = encrypted_key
-        secret.modification_date = datetime.now(UTC).replace(microsecond=0)
-
     @only_authenticated
     async def insert_secret(self, requested_by: APIUser, secret: Secret) -> Secret:
         """Insert a new secret."""
 
         async with self.session_maker() as session, session.begin():
-            orm = self.create_secret_orm(
+            orm = SecretORM(
                 name=secret.name,
                 user_id=cast(str, requested_by.id),
                 encrypted_value=secret.encrypted_value,
@@ -114,7 +93,7 @@ class UserSecretsRepo:
             if secret is None:
                 raise errors.MissingResourceError(message=f"The secret with id '{secret_id}' cannot be found")
 
-            self.update_secret_orm(secret=secret, encrypted_value=encrypted_value, encrypted_key=encrypted_key)
+            secret.update(encrypted_value=encrypted_value, encrypted_key=encrypted_key)
         return secret.dump()
 
     @only_authenticated

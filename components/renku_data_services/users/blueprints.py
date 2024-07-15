@@ -12,12 +12,12 @@ from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.errors import errors
+from renku_data_services.secrets.core import encrypt_user_secret
 from renku_data_services.secrets.db import UserSecretsRepo
 from renku_data_services.secrets.models import Secret, SecretKind
 from renku_data_services.users import apispec
 from renku_data_services.users.apispec_base import BaseAPISpec
 from renku_data_services.users.db import UserRepo
-from renku_data_services.utils.cryptography import encrypt_user_secret
 
 
 class GetSecretsParams(BaseAPISpec):
@@ -137,27 +137,13 @@ class UserSecretsBP(CustomBlueprint):
     authenticator: base_models.Authenticator
     secret_service_public_key: rsa.RSAPublicKey
 
-    @only_authenticated
-    async def _encrypt_user_secret(self, requested_by: base_models.APIUser, secret_value: str) -> tuple[bytes, bytes]:
-        if requested_by.id is None:
-            raise errors.ValidationError(message="APIUser has no id")
-
-        user_secret_key = await self.user_repo.get_or_create_user_secret_key(requested_by=requested_by)
-
-        return encrypt_user_secret(
-            user_id=requested_by.id,
-            user_secret_key=user_secret_key,
-            secret_service_public_key=self.secret_service_public_key,
-            secret_value=secret_value,
-        )
-
     def get_all(self) -> BlueprintFactoryResponse:
         """Get all user's secrets."""
 
         @authenticate(self.authenticator)
         @only_authenticated
         @validate(query=GetSecretsParams)
-        async def _get_all(request: Request, user: base_models.APIUser, query: GetSecretsParams) -> JSONResponse:
+        async def _get_all(_: Request, user: base_models.APIUser, query: GetSecretsParams) -> JSONResponse:
             secret_kind = SecretKind[query.kind.value]
             secrets = await self.secret_repo.get_user_secrets(requested_by=user, kind=secret_kind)
             secrets_json = [
@@ -178,7 +164,7 @@ class UserSecretsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _get_one(request: Request, user: base_models.APIUser, secret_id: str) -> JSONResponse:
+        async def _get_one(_: Request, user: base_models.APIUser, secret_id: str) -> JSONResponse:
             secret = await self.secret_repo.get_secret_by_id(requested_by=user, secret_id=secret_id)
             if not secret:
                 raise errors.MissingResourceError(message=f"The secret with id {secret_id} cannot be found.")
@@ -196,7 +182,12 @@ class UserSecretsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.SecretPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.SecretPost) -> JSONResponse:
-            encrypted_value, encrypted_key = await self._encrypt_user_secret(requested_by=user, secret_value=body.value)
+            encrypted_value, encrypted_key = await encrypt_user_secret(
+                user_repo=self.user_repo,
+                requested_by=user,
+                secret_service_public_key=self.secret_service_public_key,
+                secret_value=body.value,
+            )
             secret = Secret(
                 name=body.name,
                 encrypted_value=encrypted_value,
@@ -220,7 +211,12 @@ class UserSecretsBP(CustomBlueprint):
         async def _patch(
             _: Request, user: base_models.APIUser, secret_id: str, body: apispec.SecretPatch
         ) -> JSONResponse:
-            encrypted_value, encrypted_key = await self._encrypt_user_secret(requested_by=user, secret_value=body.value)
+            encrypted_value, encrypted_key = await encrypt_user_secret(
+                user_repo=self.user_repo,
+                requested_by=user,
+                secret_service_public_key=self.secret_service_public_key,
+                secret_value=body.value,
+            )
             updated_secret = await self.secret_repo.update_secret(
                 requested_by=user, secret_id=secret_id, encrypted_value=encrypted_value, encrypted_key=encrypted_key
             )

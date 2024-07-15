@@ -260,7 +260,6 @@ class Config:
                 session_maker=self.db.async_session_maker,
                 gitlab_client=self.gitlab_client,
                 user_repo=self.kc_user_repo,
-                secret_repo=self.user_secrets_repo,
                 secret_service_public_key=self.secrets_service_public_key,
             )
         return self._storage_repo
@@ -273,7 +272,6 @@ class Config:
                 session_maker=self.db.async_session_maker,
                 project_authz=self.authz,
                 user_repo=self.kc_user_repo,
-                secret_repo=self.user_secrets_repo,
                 secret_service_public_key=self.secrets_service_public_key,
             )
         return self._storage_v2_repo
