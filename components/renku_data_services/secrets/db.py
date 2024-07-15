@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from renku_data_services.base_api.auth import APIUser, only_authenticated
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.errors import errors
-from renku_data_services.secrets.models import Secret
+from renku_data_services.secrets.models import Secret, SecretKind
 from renku_data_services.secrets.orm import SecretORM
 
 
@@ -25,10 +25,10 @@ class UserSecretsRepo:
         self.session_maker = session_maker
 
     @only_authenticated
-    async def get_user_secrets(self, requested_by: APIUser) -> list[Secret]:
+    async def get_user_secrets(self, requested_by: APIUser, kind: SecretKind) -> list[Secret]:
         """Get all user's secrets from the database."""
         async with self.session_maker() as session:
-            stmt = select(SecretORM).where(SecretORM.user_id == requested_by.id)
+            stmt = select(SecretORM).where(SecretORM.user_id == requested_by.id).where(SecretORM.kind == kind)
             res = await session.execute(stmt)
             orm = res.scalars().all()
             return [o.dump() for o in orm]
@@ -54,7 +54,7 @@ class UserSecretsRepo:
             return [orm.dump() for orm in orms]
 
     @only_authenticated
-    async def insert_secret(self, requested_by: APIUser, secret: Secret) -> Secret | None:
+    async def insert_secret(self, requested_by: APIUser, secret: Secret) -> Secret:
         """Insert a new secret."""
 
         async with self.session_maker() as session, session.begin():
@@ -65,6 +65,7 @@ class UserSecretsRepo:
                 user_id=requested_by.id,
                 encrypted_value=secret.encrypted_value,
                 encrypted_key=secret.encrypted_key,
+                kind=secret.kind,
             )
             session.add(orm)
 
