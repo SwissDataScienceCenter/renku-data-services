@@ -48,7 +48,7 @@ class ServerOptions:
     memory: int | float
     gpu: int
     storage: Optional[int | float] = None
-    default_url: str | None = None
+    default_url: str = "/lab"
     lfs_auto_fetch: bool = False
     gigabytes: bool = False
     priority_class: Optional[str] = None
@@ -176,9 +176,7 @@ class ServerOptions:
         return resources
 
     @classmethod
-    def from_resource_class(
-        cls, data: dict[str, Any], default_url_default: str, lfs_auto_fetch_default: bool = False
-    ) -> Self:
+    def from_resource_class(cls, data: dict[str, Any]) -> Self:
         """Convert a CRC resource class to server options.
 
         Data Service uses GB for storage and memory whereas the notebook service uses bytes so we convert to bytes here.
@@ -191,8 +189,6 @@ class ServerOptions:
             node_affinities=[NodeAffinity(**a) for a in data.get("node_affinities", [])],
             tolerations=[Toleration(t) for t in data.get("tolerations", [])],
             resource_class_id=data.get("id"),
-            default_url=default_url_default,
-            lfs_auto_fetch=lfs_auto_fetch_default,
         )
 
     @classmethod

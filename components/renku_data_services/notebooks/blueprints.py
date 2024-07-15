@@ -121,7 +121,7 @@ class NotebooksBP(CustomBlueprint):
         return "/notebooks/servers/<server_name>", ["GET"], _user_server
 
     def launch_notebook(self) -> BlueprintFactoryResponse:
-        """Start a renku session."""
+        """Start a renku session using the old operator in renku v2."""
 
         @notebooks_authenticate(self.authenticator)
         @validate(json=apispec.LaunchNotebookRequest)
@@ -162,7 +162,7 @@ class NotebooksBP(CustomBlueprint):
         return "/notebooks/servers", ["POST"], _launch_notebook
 
     def launch_notebook_old(self) -> BlueprintFactoryResponse:
-        """Start a renku session using the old operator."""
+        """Start a renku session using the old operator renku v1."""
 
         @notebooks_authenticate(self.authenticator)
         @validate(json=apispec.LaunchNotebookRequestOld)
@@ -341,11 +341,7 @@ def launch_notebook_helper(
             )
         if storage is None:
             storage = default_resource_class.get("default_storage") or 1
-        parsed_server_options = ServerOptions.from_resource_class(
-            default_resource_class,
-            nb_config.server_options.default_url_default,
-            nb_config.server_options.lfs_auto_fetch_default,
-        )
+        parsed_server_options = ServerOptions.from_resource_class(default_resource_class)
         # Storage in request is in GB
         parsed_server_options.set_storage(storage, gigabytes=True)
 

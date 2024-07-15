@@ -6,11 +6,13 @@ from typing import Any
 
 from renku_data_services.notebooks.api.amalthea_patches.utils import get_certificates_volume_mounts
 from renku_data_services.notebooks.api.classes.server import UserServer
+from renku_data_services.notebooks.api.classes.user import AnonymousUser
 
 
 def main(server: "UserServer") -> list[dict[str, Any]]:
     """The patch that adds the git proxy container to a session statefulset."""
-    if server.user.anonymous or not server.repositories:
+    user_is_anonymous = isinstance(server.user, AnonymousUser)
+    if user_is_anonymous or not server.repositories:
         return []
 
     etc_cert_volume_mount = get_certificates_volume_mounts(
@@ -27,7 +29,7 @@ def main(server: "UserServer") -> list[dict[str, Any]]:
         {"name": f"{prefix}HEALTH_PORT", "value": str(server.config.sessions.git_proxy.health_port)},
         {
             "name": f"{prefix}ANONYMOUS_SESSION",
-            "value": "true" if server.user.anonymous else "false",
+            "value": "true" if user_is_anonymous else "false",
         },
         {"name": f"{prefix}RENKU_ACCESS_TOKEN", "value": str(server.user.access_token)},
         {"name": f"{prefix}RENKU_REFRESH_TOKEN", "value": str(server.user.refresh_token)},

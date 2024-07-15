@@ -186,7 +186,7 @@ class UserServer(ABC):
 
                     if key in env_vars and env_vars[key] != value:
                         raise DuplicateEnvironmentVariableError(
-                            message=f"Environment variable {path}::{name} is being overridden by " "multiple patches"
+                            message=f"Environment variable {path}::{name} is being overridden by multiple patches"
                         )
                     else:
                         env_vars[key] = value

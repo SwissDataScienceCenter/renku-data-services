@@ -34,11 +34,6 @@ class User(Protocol):
             logger.warning(f"Cannot get project: {namespace_project} for user: {self.username}, error: {e}")
         return None
 
-    @property
-    def anonymous(self) -> bool:
-        """Indicates whether the user is anonymous or not."""
-        return False
-
 
 class AnonymousUser(User):
     """Anonymous user."""
@@ -69,11 +64,6 @@ class AnonymousUser(User):
 
     def __str__(self) -> str:
         return f"<Anonymous user id:{self.username[:5]}****>"
-
-    @property
-    def anonymous(self) -> bool:
-        """Indicates whether the user is anonymous."""
-        return True
 
 
 class RegisteredUser(User):

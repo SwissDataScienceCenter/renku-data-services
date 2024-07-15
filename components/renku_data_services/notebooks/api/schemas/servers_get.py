@@ -143,8 +143,7 @@ class LaunchNotebookResponseWithoutStorage(Schema):
             last_state = last_states[-1] if len(last_states) > 0 else {}
             exit_code_raw = last_state.get("exitCode", "unknown")
             exit_code: int | str = "unknown"
-            if not isinstance(exit_code_raw, int):
-                exit_code = str(exit_code)
+            exit_code = str(exit_code_raw) if not isinstance(exit_code_raw, int) else exit_code_raw
             return exit_code
 
         def get_user_correctable_message(exit_code: int | str) -> str | None:
