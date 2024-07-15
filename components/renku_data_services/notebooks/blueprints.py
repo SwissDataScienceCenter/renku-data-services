@@ -1,7 +1,6 @@
 """Notebooks service API."""
 
 import json as json_lib
-import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -12,6 +11,7 @@ from gitlab.const import Visibility as GitlabVisibility
 from gitlab.v4.objects.projects import Project as GitlabProject
 from marshmallow import ValidationError
 from sanic import Request, json
+from sanic.log import logger
 from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
 
@@ -428,7 +428,7 @@ def launch_notebook_helper(
     if manifest is None:
         raise errors.ProgrammingError(message="Failed to start server.")
 
-    logging.debug(f"Server {server.server_name} has been started")
+    logger.debug(f"Server {server.server_name} has been started")
 
     if k8s_user_secret is not None:
         owner_reference = {
@@ -544,7 +544,7 @@ async def _patch_server(
         # NOTE: Do nothing if server is already hibernated
         currently_hibernated = server.get("spec", {}).get("jupyterServer", {}).get("hibernated", False)
         if server and currently_hibernated:
-            logging.warning(f"Server {server_name} is already hibernated.")
+            logger.warning(f"Server {server_name} is already hibernated.")
 
             return json(
                 NotebookResponse().dump(UserServerManifest(server, self.nb_config.sessions.default_image)), 200

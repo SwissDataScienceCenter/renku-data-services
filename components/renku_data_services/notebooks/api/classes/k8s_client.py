@@ -2,7 +2,6 @@
 
 import base64
 import json
-import logging
 from typing import Any, Optional, cast
 from urllib.parse import urljoin
 
@@ -13,6 +12,7 @@ from kubernetes.client.models import V1Container, V1DeleteOptions
 from kubernetes.config import load_config
 from kubernetes.config.config_exception import ConfigException
 from kubernetes.config.incluster_config import SERVICE_CERT_FILENAME, SERVICE_TOKEN_FILENAME, InClusterConfigLoader
+from sanic.log import logger
 
 from ...errors.intermittent import (
     CannotStartServerError,
@@ -107,7 +107,7 @@ class NamespacedK8sClient:
                 body=manifest,
             )
         except ApiException as e:
-            logging.exception(f"Cannot start server {server_name} because of {e}")
+            logger.exception(f"Cannot start server {server_name} because of {e}")
             raise CannotStartServerError(
                 message=f"Cannot start the session {server_name}",
             )
@@ -146,7 +146,7 @@ class NamespacedK8sClient:
             )
 
         except ApiException as e:
-            logging.exception(f"Cannot patch server {server_name} because of {e}")
+            logger.exception(f"Cannot patch server {server_name} because of {e}")
             raise PatchServerError()
 
         return server
@@ -183,7 +183,7 @@ class NamespacedK8sClient:
                 body=V1DeleteOptions(propagation_policy="Foreground"),
             )
         except ApiException as e:
-            logging.exception(f"Cannot delete server {server_name} because of {e}")
+            logger.exception(f"Cannot delete server {server_name} because of {e}")
             raise DeleteServerError()
         return status
 
@@ -202,7 +202,7 @@ class NamespacedK8sClient:
             )
         except ApiException as err:
             if err.status not in [400, 404]:
-                logging.exception(f"Cannot get server {name} because of {err}")
+                logger.exception(f"Cannot get server {name} because of {err}")
                 raise IntermittentError(f"Cannot get server {name} from the k8s API.")
             return None
         return js
@@ -219,7 +219,7 @@ class NamespacedK8sClient:
             )
         except ApiException as err:
             if err.status not in [400, 404]:
-                logging.exception(f"Cannot list servers because of {err}")
+                logger.exception(f"Cannot list servers because of {err}")
                 raise IntermittentError(f"Cannot list servers from the k8s API with selector {label_selector}.")
             return []
         return cast(list[dict[str, Any]], jss.get("items", []))
@@ -381,14 +381,14 @@ class JsServerCache:
             res = requests.get(url, timeout=10)
             res.raise_for_status()
         except requests.HTTPError as err:
-            logging.warning(
+            logger.warning(
                 f"Listing servers at {url} from "
                 f"jupyter server cache failed with status code: {res.status_code} "
                 f"and error: {err}"
             )
             raise JSCacheError(f"The JSCache produced an unexpected status code: {err}") from err
         except requests.RequestException as err:
-            logging.warning(f"Jupyter server cache at {url} cannot be reached: {err}")
+            logger.warning(f"Jupyter server cache at {url} cannot be reached: {err}")
             raise JSCacheError("The jupyter server cache is not available") from err
 
         return cast(list[dict[str, Any]], res.json())
@@ -399,10 +399,10 @@ class JsServerCache:
         try:
             res = requests.get(url, timeout=10)
         except requests.exceptions.RequestException as err:
-            logging.warning(f"Jupyter server cache at {url} cannot be reached: {err}")
+            logger.warning(f"Jupyter server cache at {url} cannot be reached: {err}")
             raise JSCacheError("The jupyter server cache is not available")
         if res.status_code != 200:
-            logging.warning(
+            logger.warning(
                 f"Reading server at {url} from "
                 f"jupyter server cache failed with status code: {res.status_code} "
                 f"and body: {res.text}"
@@ -441,7 +441,7 @@ class K8sClient:
         try:
             return self.js_cache.list_servers(safe_username)
         except JSCacheError:
-            logging.warning(f"Skipping the cache to list servers for user: {safe_username}")
+            logger.warning(f"Skipping the cache to list servers for user: {safe_username}")
             label_selector = f"{self.username_label}={safe_username}"
             return self.renku_ns_client.list_servers(label_selector) + (
                 self.session_ns_client.list_servers(label_selector) if self.session_ns_client is not None else []

@@ -1,11 +1,11 @@
 """Helpers for interacting wit the data service."""
 
-import logging
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple, Optional, cast
 from urllib.parse import urljoin, urlparse
 
 import requests
+from sanic.log import logger
 
 from renku_data_services.notebooks.errors.intermittent import IntermittentError
 from renku_data_services.notebooks.errors.programming import ConfigurationError
@@ -50,7 +50,7 @@ class StorageValidator:
             }
         # TODO: remove project_id once authz on the data service works properly
         request_url = self.storage_url + f"/storage/{storage_id}?project_id={project_id}"
-        logging.info(f"getting storage info by id: {request_url}")
+        logger.info(f"getting storage info by id: {request_url}")
         res = requests.get(request_url, headers=headers, timeout=10)
         if res.status_code == 404:
             raise MissingResourceError(message=f"Couldn't find cloud storage with id {storage_id}")
