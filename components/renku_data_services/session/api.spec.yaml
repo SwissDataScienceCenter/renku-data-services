@@ -51,7 +51,7 @@ paths:
           name: environment_id
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Ulid"
       responses:
         "200":
           description: The session environment
@@ -77,7 +77,7 @@ paths:
           name: environment_id
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Ulid"
       requestBody:
         required: true
         content:
@@ -108,7 +108,7 @@ paths:
           name: environment_id
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Ulid"
       responses:
         "204":
           description: The session environment was removed or did not exist in the first place
@@ -157,7 +157,7 @@ paths:
           name: launcher_id
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Ulid"
       responses:
         "200":
           description: The session launcher
@@ -182,7 +182,7 @@ paths:
           name: launcher_id
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Ulid"
       requestBody:
         required: true
         content:
@@ -213,7 +213,7 @@ paths:
           name: launcher_id
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Ulid"
       responses:
         "204":
           description: The session was removed or did not exist in the first place
@@ -229,7 +229,7 @@ paths:
           name: launcher_id
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Ulid"
       requestBody:
         required: true
         content:
@@ -255,7 +255,7 @@ paths:
           name: project_id
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Ulid"
       responses:
         "200":
           description: List of sessions launchers
@@ -455,7 +455,7 @@ components:
       format: date-time
       example: "2023-11-01T17:32:28Z"
     Description:
-      description: A description for the resource 
+      description: A description for the resource
       type: string
       maxLength: 500
     ContainerImage:

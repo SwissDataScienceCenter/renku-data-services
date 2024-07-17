@@ -21,7 +21,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/UserWithId"
         default:
-          $ref: '#/components/responses/Error'
+          $ref: "#/components/responses/Error"
       tags:
         - users
   /user/secret_key:
@@ -58,7 +58,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/UsersWithId"
         default:
-          $ref: '#/components/responses/Error'
+          $ref: "#/components/responses/Error"
       tags:
         - users
   /users/{user_id}:
@@ -84,12 +84,20 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         default:
-          $ref: '#/components/responses/Error'
+          $ref: "#/components/responses/Error"
       tags:
         - users
   /user/secrets:
     get:
       summary: List all secrets for a user (keys only)
+      parameters:
+        - in: query
+          description: Filter results based on secret kind
+          name: kind
+          required: false
+          schema:
+            $ref: "#/components/schemas/SecretKind"
+            default: general
       responses:
         "200":
           description: The user's secrets
@@ -104,7 +112,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         default:
-          $ref: '#/components/responses/Error'
+          $ref: "#/components/responses/Error"
       tags:
         - secrets
     post:
@@ -123,7 +131,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/SecretWithId"
         default:
-          $ref: '#/components/responses/Error'
+          $ref: "#/components/responses/Error"
       tags:
         - secrets
   /user/secrets/{secret_id}:
@@ -149,7 +157,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         default:
-          $ref: '#/components/responses/Error'
+          $ref: "#/components/responses/Error"
       tags:
         - secrets
     patch:
@@ -174,7 +182,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/SecretWithId"
         default:
-          $ref: '#/components/responses/Error'
+          $ref: "#/components/responses/Error"
       tags:
         - secrets
     delete:
@@ -295,10 +303,13 @@ components:
           $ref: "#/components/schemas/SecretName"
         modification_date:
           $ref: "#/components/schemas/ModificationDate"
+        kind:
+          $ref: "#/components/schemas/SecretKind"
       required:
         - "id"
         - "name"
         - "modification_date"
+        - "kind"
       example:
         id: "01AN4Z79ZS5XN0F25N3DB94T4R"
         name: "S3-Credentials"
@@ -312,9 +323,12 @@ components:
           $ref: "#/components/schemas/SecretName"
         value:
           $ref: "#/components/schemas/SecretValue"
+        kind:
+          $ref: "#/components/schemas/SecretKind"
       required:
         - "name"
         - "value"
+        - "kind"
     SecretPatch:
       type: object
       description: Secret metadata to be modified
@@ -347,6 +361,12 @@ components:
       type: string
       minLength: 1
       maxLength: 5000
+    SecretKind:
+      description: Kind of secret
+      type: string
+      enum:
+        - general
+        - storage
     ErrorResponse:
       type: object
       properties:
@@ -372,7 +392,7 @@ components:
       content:
         "application/json":
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            $ref: "#/components/schemas/ErrorResponse"
   securitySchemes:
     oidc:
       type: openIdConnect
