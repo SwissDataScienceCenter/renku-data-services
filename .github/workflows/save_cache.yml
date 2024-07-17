@@ -1,0 +1,28 @@
+name: Create cache from commits on main
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+
+jobs:
+  save-poetry-cache:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Install python deps
+        uses: devcontainers/ci@v0.3
+        with:
+          runCmd: poetry install --with dev
+          push: never
+          skipContainerUserIdUpdate: false
+      - uses: actions/cache/save@v3
+        name: Create cache
+        with:
+          path: .devcontainer/.poetry_cache
+          key: main-branch-poetry-cache-${{ runner.os }}
