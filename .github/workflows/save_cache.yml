@@ -11,6 +11,10 @@ on:
 jobs:
   save-poetry-cache:
     runs-on: ubuntu-latest
+    env:
+      CACHE_KEY: main-branch-poetry-cache-${{ runner.os }}
+      CACHE_PATH: .devcontainer/.poetry_cache
+      DEVCONTAINER_IMAGE_CACHE: ghcr.io/swissdatasciencecenter/renku-data-services/devcontainer
 
     steps:
       - uses: actions/checkout@v3
@@ -28,10 +32,10 @@ jobs:
           runCmd: poetry install --with dev
           push: always
           skipContainerUserIdUpdate: false
-          imageName: ghcr.io/${{ github.repository }}/devcontainer
-          cacheFrom: ghcr.io/${{ github.repository }}/devcontainer
+          imageName: ${{ env.DEVCONTAINER_IMAGE_CACHE }}
+          cacheFrom: ${{ env.DEVCONTAINER_IMAGE_CACHE }}
       - uses: actions/cache/save@v3
         name: Create cache
         with:
-          path: .devcontainer/.poetry_cache
-          key: main-branch-poetry-cache-${{ runner.os }}
+          path: ${{ env.CACHE_PATH }}
+          key: ${{ env.CACHE_KEY }}
