@@ -5,6 +5,7 @@ services:
     image: "mcr.microsoft.com/devcontainers/python:3.12-bookworm"
     volumes:
       - ../:/workspace:cached
+      - .poetry_cache/:/poetry_cache:delegated
     # Overrides default command so things don't shut down after the process ends.
     entrypoint: sleep infinity
     environment:
@@ -21,6 +22,7 @@ services:
       ZED_ENDPOINT: 127.0.0.1:50051
       ZED_TOKEN: renku
       ZED_INSECURE: "true"
+      POETRY_CACHE_DIR: "/poetry_cache"
     network_mode: service:db
     depends_on:
       - db
