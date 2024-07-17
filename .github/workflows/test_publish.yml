@@ -14,7 +14,7 @@ jobs:
   style-checks:
     runs-on: ubuntu-latest
     env:
-      CACHE_KEY: main-branch-poetry-cache-${{ runner.os }}
+      CACHE_KEY: main-branch-poetry-cache-ubuntu
       CACHE_PATH: .devcontainer/.poetry_cache
       DEVCONTAINER_IMAGE_CACHE: ghcr.io/swissdatasciencecenter/renku-data-services/devcontainer
 
