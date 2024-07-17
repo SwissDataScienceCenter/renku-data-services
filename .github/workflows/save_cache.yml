@@ -28,9 +28,8 @@ jobs:
           runCmd: poetry install --with dev
           push: always
           skipContainerUserIdUpdate: false
-          imageName: ghcr.io/${{ github.repository }}
-          imageTag: devcontainer-main
-          cacheFrom: ghcr.io/${{ github.repository }}:devcontainer-main
+          imageName: ghcr.io/${{ github.repository }}/devcontainer
+          cacheFrom: ghcr.io/${{ github.repository }}/devcontainer
       - uses: actions/cache/save@v3
         name: Create cache
         with:
