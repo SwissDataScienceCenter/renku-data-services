@@ -1,7 +1,7 @@
 """add platform configuration
 
 Revision ID: dcc1c1ee662f
-Revises: 6538ba654104
+Revises: 9c26ab37ff4c
 Create Date: 2024-06-24 14:30:27.671588
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "dcc1c1ee662f"
-down_revision = "6538ba654104"
+down_revision = "9c26ab37ff4c"
 branch_labels = None
 depends_on = None
 
