@@ -70,4 +70,3 @@ target/
 
 # docker compose
 docker-compose.override.yml
-.devcontainer/.poetry_cache
