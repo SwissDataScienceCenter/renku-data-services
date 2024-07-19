@@ -1,19 +1,24 @@
 """SQLAlchemy schemas for the CRC database."""
 
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, LargeBinary, MetaData, String
-from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 
 from renku_data_services.base_models import Slug
+from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
 from renku_data_services.users.models import UserInfo
+
+if TYPE_CHECKING:
+    from renku_data_services.namespace.orm import NamespaceORM
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
     """Base class for all ORM classes."""
 
     metadata = MetaData(schema="users")  # Has to match alembic ini section name
+    registry = COMMON_ORM_REGISTRY
 
 
 class UserORM(BaseORM):
@@ -26,6 +31,9 @@ class UserORM(BaseORM):
     email: Mapped[Optional[str]] = mapped_column(String(320), default=None, index=True)
     secret_key: Mapped[Optional[bytes]] = mapped_column(LargeBinary(), default=None, repr=False)
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
+    namespace: Mapped["NamespaceORM | None"] = relationship(
+        init=False, repr=False, viewonly=True, back_populates="user"
+    )
 
     def dump(self) -> UserInfo:
         """Create a user object from the ORM object."""

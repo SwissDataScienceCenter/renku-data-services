@@ -1,10 +1,10 @@
 """Jupyter server models."""
 
-import logging
 from abc import ABC
 from collections.abc import Sequence
 from itertools import chain
 from pathlib import Path
+from sanic.log import logger
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
@@ -174,7 +174,7 @@ class UserServer(ABC):
 
                     if key in env_vars and env_vars[key] != value:
                         raise DuplicateEnvironmentVariableError(
-                            message=f"Environment variable {path}::{name} is being overridden by " "multiple patches"
+                            message=f"Environment variable {path}::{name} is being overridden by multiple patches"
                         )
                     else:
                         env_vars[key] = value
@@ -437,7 +437,7 @@ class Renku1UserServer(UserServer):
             try:
                 self.gitlab_project.branches.get(self.branch)
             except Exception as err:
-                logging.warning(f"Branch {self.branch} cannot be verified or does not exist. {err}")
+                logger.warning(f"Branch {self.branch} cannot be verified or does not exist. {err}")
             else:
                 return True
         return False
@@ -448,7 +448,7 @@ class Renku1UserServer(UserServer):
             try:
                 self.gitlab_project.commits.get(self.commit_sha)
             except Exception as err:
-                logging.warning(f"Commit {self.commit_sha} cannot be verified or does not exist. {err}")
+                logger.warning(f"Commit {self.commit_sha} cannot be verified or does not exist. {err}")
             else:
                 return True
         return False

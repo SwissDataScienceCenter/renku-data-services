@@ -40,6 +40,7 @@ class SessionLauncher(BaseModel):
     description: str | None
     environment_kind: EnvironmentKind
     environment_id: str | None
+    resource_class_id: int | None
     container_image: str | None
     default_url: str | None
     created_by: Member

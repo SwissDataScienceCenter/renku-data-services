@@ -1,6 +1,5 @@
 """Tests for secrets blueprints."""
 
-import json
 from base64 import b64decode
 from typing import Any
 
@@ -10,8 +9,8 @@ from sanic_testing.testing import SanicASGITestClient
 
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.secrets.core import rotate_encryption_keys, rotate_single_encryption_key
-from renku_data_services.secrets.models import Secret
-from renku_data_services.users.models import UserInfo
+from renku_data_services.secrets.models import Secret, SecretKind
+from renku_data_services.users import apispec
 from renku_data_services.utils.cryptography import (
     decrypt_rsa,
     decrypt_string,
@@ -22,39 +21,9 @@ from renku_data_services.utils.cryptography import (
 
 
 @pytest.fixture
-def users() -> list[UserInfo]:
-    return [
-        UserInfo("admin", "Admin", "Doe", "admin.doe@gmail.com"),
-        UserInfo("user", "User", "Doe", "user.doe@gmail.com"),
-        UserInfo("member-1", "Member-1", "Doe", "member-1.doe@gmail.com"),
-        UserInfo("member-2", "Member-2", "Doe", "member-2.doe@gmail.com"),
-    ]
-
-
-@pytest.fixture
-def admin_headers() -> dict[str, str]:
-    """Authentication headers for an admin user."""
-    access_token = json.dumps({"is_admin": True, "id": "admin", "name": "Admin User"})
-    return {"Authorization": f"Bearer {access_token}"}
-
-
-@pytest.fixture
-def user_headers() -> dict[str, str]:
-    """Authentication headers for a normal user."""
-    access_token = json.dumps({"is_admin": False, "id": "user", "name": "Normal User"})
-    return {"Authorization": f"Bearer {access_token}"}
-
-
-@pytest.fixture
-def unauthorized_headers() -> dict[str, str]:
-    """Authentication headers for an anonymous user (did not log in)."""
-    return {"Authorization": "Bearer {}"}
-
-
-@pytest.fixture
 def create_secret(sanic_client: SanicASGITestClient, user_headers):
-    async def create_secret_helper(name: str, value: str) -> dict[str, Any]:
-        payload = {"name": name, "value": value}
+    async def create_secret_helper(name: str, value: str, kind: str = "general") -> dict[str, Any]:
+        payload = {"name": name, "value": value, "kind": kind}
 
         _, response = await sanic_client.post("/api/data/user/secrets", headers=user_headers, json=payload)
 
@@ -65,18 +34,22 @@ def create_secret(sanic_client: SanicASGITestClient, user_headers):
 
 
 @pytest.mark.asyncio
-async def test_create_secrets(sanic_client: SanicASGITestClient, user_headers) -> None:
+@pytest.mark.parametrize("kind", [e.value for e in apispec.SecretKind])
+async def test_create_secrets(sanic_client: SanicASGITestClient, user_headers, kind) -> None:
     payload = {
         "name": "my-secret",
         "value": "42",
+        "kind": kind,
     }
     _, response = await sanic_client.post("/api/data/user/secrets", headers=user_headers, json=payload)
 
     assert response.status_code == 201, response.text
     assert response.json is not None
+    assert response.json.keys() == {"name", "id", "modification_date", "kind"}
     assert response.json["name"] == "my-secret"
     assert response.json["id"] is not None
     assert response.json["modification_date"] is not None
+    assert response.json["kind"] == kind
 
 
 @pytest.mark.asyncio
@@ -101,12 +74,37 @@ async def test_get_all_secrets(sanic_client: SanicASGITestClient, user_headers, 
     await create_secret("secret-1", "value-1")
     await create_secret("secret-2", "value-2")
     await create_secret("secret-3", "value-3")
+    await create_secret("secret-4", "value-4", kind="storage")
 
     _, response = await sanic_client.get("/api/data/user/secrets", headers=user_headers)
 
     assert response.status_code == 200, response.text
     assert response.json is not None
     assert {s["name"] for s in response.json} == {"secret-1", "secret-2", "secret-3"}
+
+
+@pytest.mark.asyncio
+async def test_get_all_secrets_filtered_by_kind(sanic_client, user_headers, create_secret) -> None:
+    await create_secret("secret-1", "value-1")
+    await create_secret("secret-2", "value-2", kind="storage")
+    await create_secret("secret-3", "value-3")
+    await create_secret("secret-4", "value-4", kind="storage")
+
+    # NOTE: By default, only `general` secrets are returned
+    _, response = await sanic_client.get("/api/data/user/secrets", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert {s["name"] for s in response.json} == {"secret-1", "secret-3"}
+
+    _, response = await sanic_client.get("/api/data/user/secrets", params={"kind": "general"}, headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert {s["name"] for s in response.json} == {"secret-1", "secret-3"}
+
+    _, response = await sanic_client.get("/api/data/user/secrets", params={"kind": "storage"}, headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert {s["name"] for s in response.json} == {"secret-2", "secret-4"}
 
 
 @pytest.mark.asyncio
@@ -237,7 +235,9 @@ async def test_single_secret_rotation():
     encrypted_value = encrypt_string(encryption_key, user_id, user_secret)
     encrypted_key = encrypt_rsa(old_key.public_key(), encryption_key)
 
-    secret = Secret(name="test_secret", encrypted_value=encrypted_value, encrypted_key=encrypted_key)
+    secret = Secret(
+        name="test_secret", encrypted_value=encrypted_value, encrypted_key=encrypted_key, kind=SecretKind.general
+    )
 
     rotated_secret = await rotate_single_encryption_key(secret, user_id, new_key, old_key)
 

@@ -47,6 +47,7 @@ class Scope(Enum):
     WRITE: str = "write"
     DELETE: str = "delete"
     CHANGE_MEMBERSHIP: str = "change_membership"
+    READ_CHILDREN: str = "read_children"
 
 
 @dataclass

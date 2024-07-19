@@ -1,11 +1,11 @@
 """Helpers for interacting wit the data service."""
 
-import logging
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple, Optional, cast
 from urllib.parse import urljoin, urlparse
 
 import requests
+from sanic.log import logger
 
 from renku_data_services.notebooks.errors.intermittent import IntermittentError
 from renku_data_services.notebooks.errors.programming import ConfigurationError
@@ -50,7 +50,7 @@ class StorageValidator:
             }
         # TODO: remove project_id once authz on the data service works properly
         request_url = self.storage_url + f"/storage/{storage_id}?project_id={project_id}"
-        logging.info(f"getting storage info by id: {request_url}")
+        logger.info(f"getting storage info by id: {request_url}")
         res = requests.get(request_url, headers=headers, timeout=10)
         if res.status_code == 404:
             raise MissingResourceError(message=f"Couldn't find cloud storage with id {storage_id}")
@@ -115,8 +115,6 @@ class CRCValidator:
     """Calls to the CRC service to validate resource requests."""
 
     crc_url: str
-    default_url_default: str
-    lfs_auto_fetch_default: bool = False
 
     def __post_init__(self) -> None:
         self.crc_url = self.crc_url.rstrip("/")
@@ -148,7 +146,7 @@ class CRCValidator:
             raise InvalidComputeResourceError(message="Storage requests have to be greater than or equal to 1GB.")
         if storage > res_class.get("max_storage"):
             raise InvalidComputeResourceError(message="The requested storage surpasses the maximum value allowed.")
-        options = ServerOptions.from_resource_class(res_class, self.default_url_default, self.lfs_auto_fetch_default)
+        options = ServerOptions.from_resource_class(res_class)
         options.idle_threshold_seconds = pool.get("idle_threshold")
         options.hibernation_threshold_seconds = pool.get("hibernation_threshold")
         options.set_storage(storage, gigabytes=True)
@@ -185,9 +183,7 @@ class CRCValidator:
         for resource_pool in resource_pools:
             quota = resource_pool.get("quota")
             for resource_class in resource_pool["classes"]:
-                resource_class_mdl = ServerOptions.from_resource_class(
-                    resource_class, self.default_url_default, self.lfs_auto_fetch_default
-                )
+                resource_class_mdl = ServerOptions.from_resource_class(resource_class)
                 if quota is not None and isinstance(quota, dict):
                     resource_class_mdl.priority_class = quota.get("id")
                 diff = resource_class_mdl - requested_server_options

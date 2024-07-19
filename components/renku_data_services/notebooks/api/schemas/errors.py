@@ -88,14 +88,4 @@ class ErrorResponseFromWerkzeug(ErrorResponse):
         if hasattr(err, "detail") and isinstance(err.detail, str):
             response["detail"] = err.detail
 
-        # if err.code == 422 and err.data.get("messages", {}).get("json") is not None:
-        #     # extract details from marshmallow validation error
-        #     marshmallow_errors = [
-        #         f"Field '{field_name}' has errors: " + " ".join(errors)
-        #         for (field_name, errors) in flatten_dict(
-        #             err.data["messages"]["json"].items(), skip_key_concat=["_schema"]
-        #         )
-        #     ]
-        #     response["detail"] = " ".join(marshmallow_errors)
-
         return {"error": response}

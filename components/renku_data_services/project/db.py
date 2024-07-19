@@ -8,7 +8,7 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any, Concatenate, ParamSpec, TypeVar
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import Select, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import renku_data_services.base_models as base_models
@@ -48,9 +48,7 @@ class ProjectRepository:
         self.authz = authz
 
     async def get_projects(
-        self,
-        user: base_models.APIUser,
-        pagination: PaginationRequest,
+        self, user: base_models.APIUser, pagination: PaginationRequest, namespace: str | None = None
     ) -> tuple[list[models.Project], int]:
         """Get all projects from the database."""
         project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
@@ -61,11 +59,15 @@ class ProjectRepository:
             _ = await session.connection()
             stmt = select(schemas.ProjectORM)
             stmt = stmt.where(schemas.ProjectORM.id.in_(project_ids))
+            if namespace:
+                stmt = _filter_by_namespace_slug(stmt, namespace)
             stmt = stmt.limit(pagination.per_page).offset(pagination.offset)
             stmt = stmt.order_by(schemas.ProjectORM.creation_date.desc())
             stmt_count = (
                 select(func.count()).select_from(schemas.ProjectORM).where(schemas.ProjectORM.id.in_(project_ids))
             )
+            if namespace:
+                stmt_count = _filter_by_namespace_slug(stmt_count, namespace)
             results = await gather(session.execute(stmt), session.execute(stmt_count))
             projects_orm = results[0].scalars().all()
             total_elements = results[1].scalar() or 0
@@ -94,13 +96,9 @@ class ProjectRepository:
     ) -> models.Project:
         """Get one project from the database."""
         async with self.session_maker() as session:
-            stmt = (
-                select(schemas.ProjectORM)
-                .where(schemas.NamespaceORM.slug == namespace.lower())
-                .where(schemas.ProjectSlug.namespace_id == schemas.NamespaceORM.id)
-                .where(schemas.ProjectSlug.slug == slug.lower())
-                .where(schemas.ProjectORM.id == schemas.ProjectSlug.project_id)
-            )
+            stmt = select(schemas.ProjectORM)
+            stmt = _filter_by_namespace_slug(stmt, namespace)
+            stmt = stmt.where(schemas.ProjectSlug.slug == slug.lower())
             result = await session.execute(stmt)
             project_orm = result.scalars().first()
 
@@ -132,22 +130,37 @@ class ProjectRepository:
         """Insert a new project entry."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
-        ns = await self.group_repo.get_namespace_by_slug(user, project.namespace)
+        ns = await session.scalar(
+            select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == project.namespace.lower())
+        )
         if not ns:
             raise errors.MissingResourceError(
                 message=f"The project cannot be created because the namespace {project.namespace} does not exist"
             )
+        if not ns.group_id and not ns.user_id:
+            raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
 
         if user.id is None:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+
+        resource_type, resource_id = (
+            (ResourceType.group, ns.group_id) if ns.group and ns.group_id else (ResourceType.user_namespace, ns.id)
+        )
+        has_permission = await self.authz.has_permission(user, resource_type, resource_id, Scope.WRITE)
+        if not has_permission:
+            raise errors.Unauthorized(
+                message=f"The project cannot be created because you do not have sufficient permissions with the namespace {project.namespace}"  # noqa: E501
+            )
 
         repositories = [schemas.ProjectRepositoryORM(url) for url in (project.repositories or [])]
         slug = project.slug or base_models.Slug.from_name(project.name).value
         project_orm = schemas.ProjectORM(
             name=project.name,
-            visibility=project_apispec.Visibility(project.visibility)
-            if isinstance(project.visibility, str)
-            else project_apispec.Visibility(project.visibility.value),
+            visibility=(
+                project_apispec.Visibility(project.visibility)
+                if isinstance(project.visibility, str)
+                else project_apispec.Visibility(project.visibility.value)
+            ),
             created_by_id=user.id,
             description=project.description,
             repositories=repositories,
@@ -223,9 +236,19 @@ class ProjectRepository:
 
         if "namespace" in payload:
             ns_slug = payload["namespace"]
-            ns = await self.group_repo.get_namespace_by_slug(user, ns_slug)
+            ns = await session.scalar(select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == ns_slug.lower()))
             if not ns:
                 raise errors.MissingResourceError(message=f"The namespace with slug {ns_slug} does not exist")
+            if not ns.group_id and not ns.user_id:
+                raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
+            resource_type, resource_id = (
+                (ResourceType.group, ns.group_id) if ns.group and ns.group_id else (ResourceType.user_namespace, ns.id)
+            )
+            has_permission = await self.authz.has_permission(user, resource_type, resource_id, Scope.WRITE)
+            if not has_permission:
+                raise errors.Unauthorized(
+                    message=f"The project cannot be created because you do not have sufficient permissions with the namespace {ns_slug}"  # noqa: E501
+                )
             project.slug.namespace_id = ns.id
 
         await session.flush()
@@ -268,6 +291,15 @@ class ProjectRepository:
 
 _P = ParamSpec("_P")
 _T = TypeVar("_T")
+
+
+def _filter_by_namespace_slug(statement: Select[tuple[_T]], namespace: str) -> Select[tuple[_T]]:
+    """Filters a select query on projects to a given namespace."""
+    return (
+        statement.where(schemas.NamespaceORM.slug == namespace.lower())
+        .where(schemas.ProjectSlug.namespace_id == schemas.NamespaceORM.id)
+        .where(schemas.ProjectORM.id == schemas.ProjectSlug.project_id)
+    )
 
 
 def _project_exists(

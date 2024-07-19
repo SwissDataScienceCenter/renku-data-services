@@ -283,26 +283,34 @@ class GroupRepository:
                     message="The slug for the group should be unique but it already exists in the database",
                     detail="Please modify the slug field and then retry",
                 )
+            raise err
         # NOTE: This is needed to populate the relationship fields in the group after inserting the ID above
         await session.refresh(group)
         return group.dump()
 
     async def get_namespaces(
-        self, user: base_models.APIUser, pagination: PaginationRequest
+        self, user: base_models.APIUser, pagination: PaginationRequest, minimum_role: Role | None = None
     ) -> tuple[list[models.Namespace], int]:
         """Get all namespaces."""
+        scope = Scope.READ
+        if minimum_role == Role.VIEWER:
+            scope = Scope.READ_CHILDREN
+        elif minimum_role == Role.EDITOR:
+            scope = Scope.WRITE
+        elif minimum_role == Role.OWNER:
+            scope = Scope.DELETE
+
         async with self.session_maker() as session, session.begin():
-            group_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.group, Scope.READ)
+            group_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.group, scope)
             group_ns_stmt = select(schemas.NamespaceORM).where(schemas.NamespaceORM.group_id.in_(group_ids))
             output = []
-            if pagination.page == 1:
-                personal_ns_stmt = select(schemas.NamespaceORM).where(schemas.NamespaceORM.user_id == user.id)
-                personal_ns = await session.scalar(personal_ns_stmt)
-                if personal_ns:
-                    output.append(personal_ns.dump())
+            personal_ns_stmt = select(schemas.NamespaceORM).where(schemas.NamespaceORM.user_id == user.id)
+            personal_ns = await session.scalar(personal_ns_stmt)
+            if personal_ns and pagination.page == 1:
+                output.append(personal_ns.dump())
             # NOTE: in the first page the personal namespace is added, so the offset and per page params are modified
-            group_per_page = pagination.per_page - len(output) if pagination.page == 1 else pagination.per_page
-            group_offset = 0 if pagination.page == 1 else pagination.offset - len(output)
+            group_per_page = pagination.per_page - 1 if personal_ns and pagination.page == 1 else pagination.per_page
+            group_offset = pagination.offset - 1 if personal_ns and pagination.page > 1 else pagination.offset
             group_ns = await session.scalars(
                 group_ns_stmt.limit(group_per_page).offset(group_offset).order_by(schemas.NamespaceORM.id)
             )
@@ -324,7 +332,7 @@ class GroupRepository:
                 yield namespace.dump_user()
 
     async def get_namespace_by_slug(self, user: base_models.APIUser, slug: str) -> models.Namespace | None:
-        """Get the namespace for a slug."""
+        """Get the namespace identified by a given slug."""
         async with self.session_maker() as session, session.begin():
             ns = await session.scalar(select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == slug.lower()))
             old_ns = None
@@ -344,15 +352,7 @@ class GroupRepository:
                     raise errors.MissingResourceError(
                         message=f"The group with slug {slug} does not exist or you do not have permissions to view it"
                     )
-                return models.Namespace(
-                    id=ns.id,
-                    name=ns.group.name,
-                    created_by=ns.group.created_by,
-                    creation_date=ns.group.creation_date,
-                    kind=models.NamespaceKind.group,
-                    slug=old_ns.slug if old_ns else ns.slug,
-                    latest_slug=ns.slug,
-                )
+                return ns.dump()
             if not ns.user or not ns.user_id:
                 raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
             is_allowed = await self.authz.has_permission(user, ResourceType.user_namespace, ns.id, Scope.READ)
@@ -360,41 +360,17 @@ class GroupRepository:
                 raise errors.MissingResourceError(
                     message=f"The namespace with slug {slug} does not exist or you do not have permissions to view it"
                 )
-            name: str | None
-            if ns.user.first_name and ns.user.last_name:
-                name = f"{ns.user.first_name} {ns.user.last_name}"
-            else:
-                name = ns.user.first_name or ns.user.last_name
-            return models.Namespace(
-                id=ns.id,
-                name=name,
-                created_by=ns.user.keycloak_id,
-                kind=models.NamespaceKind.user,
-                slug=old_ns.slug if old_ns else ns.slug,
-                latest_slug=ns.slug,
-            )
+            return ns.dump()
 
-    async def _get_user_namespace(self, user_id: str) -> models.Namespace | None:
-        """Get the namespace for a slug."""
+    async def get_user_namespace(self, user_id: str) -> models.Namespace | None:
+        """Get the namespace corresponding to a given user."""
         async with self.session_maker() as session, session.begin():
             ns = await session.scalar(select(schemas.NamespaceORM).where(schemas.NamespaceORM.user_id == user_id))
             if ns is None:
                 return None
             if not ns.user or not ns.user_id:
                 raise errors.ProgrammingError(message="Found a namespace that has no user associated with it.")
-            name: str | None
-            if ns.user.first_name and ns.user.last_name:
-                name = f"{ns.user.first_name} {ns.user.last_name}"
-            else:
-                name = ns.user.first_name or ns.user.last_name
-            return models.Namespace(
-                id=ns.id,
-                name=name,
-                created_by=ns.user.keycloak_id,
-                kind=models.NamespaceKind.user,
-                slug=ns.slug,
-                latest_slug=ns.slug,
-            )
+            return ns.dump()
 
     async def _insert_user_namespace(
         self, session: AsyncSession, user: schemas.UserORM, retry_enumerate: int = 0, retry_random: bool = False
@@ -411,12 +387,14 @@ class GroupRepository:
             try:
                 async with session.begin_nested():
                     session.add(ns)
+                    await session.flush()
             except IntegrityError:
                 if retry_enumerate == 0:
                     raise errors.ValidationError(message=f"The user namespace slug {slug.value} already exists")
                 continue
             else:
-                return models.Namespace(ns.id, slug=ns.slug, created_by=ns.user_id, kind=models.NamespaceKind.user)
+                await session.refresh(ns)
+                return ns.dump()
         if not retry_random:
             raise errors.ValidationError(
                 message=f"Cannot create generate a unique namespace slug for the user with ID {user.keycloak_id}"
@@ -427,4 +405,6 @@ class GroupRepository:
         slug = base_models.Slug.from_name(original_slug.value.lower() + suffix)
         ns = schemas.NamespaceORM(slug.value, user_id=user.keycloak_id)
         session.add(ns)
-        return models.Namespace(ns.id, slug=ns.slug, created_by=ns.user_id, kind=models.NamespaceKind.user)
+        await session.flush()
+        await session.refresh(ns)
+        return ns.dump()

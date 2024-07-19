@@ -203,7 +203,7 @@ def only_admins(
 def only_authenticated(f: Callable[_P, Awaitable[_T]]) -> Callable[_P, Awaitable[_T]]:
     """Decorator that errors out if the user is not authenticated.
 
-    It looks for APIUser in the named or unnamed poarameters.
+    It looks for APIUser in the named or unnamed parameters.
     """
 
     @wraps(f)

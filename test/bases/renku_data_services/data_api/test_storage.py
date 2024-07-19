@@ -306,11 +306,11 @@ async def test_get_storage(storage_test_client, valid_storage_payload, admin_hea
 
 
 @pytest.mark.asyncio
-async def test_get_storage_unauthorized(storage_test_client, valid_storage_payload) -> None:
+async def test_get_storage_unauthorized(storage_test_client, valid_storage_payload, admin_headers) -> None:
     storage_test_client, gl_auth = storage_test_client
     _, res = await storage_test_client.post(
         "/api/data/storage",
-        headers={"Authorization": '{"is_admin": false}'},
+        headers=admin_headers,
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201
@@ -326,11 +326,11 @@ async def test_get_storage_unauthorized(storage_test_client, valid_storage_paylo
 
 
 @pytest.mark.asyncio
-async def test_storage_deletion(storage_test_client, valid_storage_payload) -> None:
+async def test_storage_deletion(storage_test_client, valid_storage_payload, admin_headers) -> None:
     storage_test_client, _ = storage_test_client
     _, res = await storage_test_client.post(
         "/api/data/storage",
-        headers={"Authorization": '{"is_admin": false}'},
+        headers=admin_headers,
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201
@@ -339,24 +339,24 @@ async def test_storage_deletion(storage_test_client, valid_storage_payload) -> N
 
     _, res = await storage_test_client.delete(
         f"/api/data/storage/{storage_id}",
-        headers={"Authorization": '{"is_admin": false}'},
+        headers=admin_headers,
     )
     assert res.status_code == 204
 
     _, res = await storage_test_client.get(
         f"/api/data/storage/{storage_id}",
-        headers={"Authorization": '{"is_admin": false}'},
+        headers=admin_headers,
     )
 
     assert res.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_storage_deletion_unauthorized(storage_test_client, valid_storage_payload) -> None:
+async def test_storage_deletion_unauthorized(storage_test_client, valid_storage_payload, admin_headers) -> None:
     storage_test_client, gl_auth = storage_test_client
     _, res = await storage_test_client.post(
         "/api/data/storage",
-        headers={"Authorization": '{"is_admin": false}'},
+        headers=admin_headers,
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201
@@ -370,11 +370,11 @@ async def test_storage_deletion_unauthorized(storage_test_client, valid_storage_
 
 
 @pytest.mark.asyncio
-async def test_storage_put(storage_test_client, valid_storage_payload) -> None:
+async def test_storage_put(storage_test_client, valid_storage_payload, admin_headers) -> None:
     storage_test_client, _ = storage_test_client
     _, res = await storage_test_client.post(
         "/api/data/storage",
-        headers={"Authorization": '{"is_admin": false}'},
+        headers=admin_headers,
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201
@@ -383,7 +383,7 @@ async def test_storage_put(storage_test_client, valid_storage_payload) -> None:
 
     _, res = await storage_test_client.put(
         f"/api/data/storage/{storage_id}",
-        headers={"Authorization": '{"is_admin": false}'},
+        headers=admin_headers,
         data=json.dumps(
             {
                 "project_id": valid_storage_payload["project_id"],
@@ -399,11 +399,11 @@ async def test_storage_put(storage_test_client, valid_storage_payload) -> None:
 
 
 @pytest.mark.asyncio
-async def test_storage_put_unauthorized(storage_test_client, valid_storage_payload) -> None:
+async def test_storage_put_unauthorized(storage_test_client, valid_storage_payload, admin_headers) -> None:
     storage_test_client, gl_auth = storage_test_client
     _, res = await storage_test_client.post(
         "/api/data/storage",
-        headers={"Authorization": '{"is_admin": false}'},
+        headers=admin_headers,
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201
@@ -429,8 +429,8 @@ async def test_storage_put_unauthorized(storage_test_client, valid_storage_paylo
 async def test_storage_patch(storage_test_client, valid_storage_payload) -> None:
     storage_test_client, _ = storage_test_client
     # NOTE: The keycloak dummy client used to authorize the storage patch requests only has info
-    # on a user with name John Doe, using a different user will fail with a 401 error.
-    access_token = json.dumps({"is_admin": False, "id": "some-id", "name": "John Doe"})
+    # on a user with name Admin Doe, using a different user will fail with a 401 error.
+    access_token = json.dumps({"is_admin": False, "id": "some-id", "full_name": "Admin Doe"})
     _, res = await storage_test_client.post(
         "/api/data/storage",
         headers={"Authorization": f"bearer {access_token}"},
@@ -470,11 +470,11 @@ async def test_storage_patch(storage_test_client, valid_storage_payload) -> None
 
 
 @pytest.mark.asyncio
-async def test_storage_patch_unauthorized(storage_test_client, valid_storage_payload) -> None:
+async def test_storage_patch_unauthorized(storage_test_client, valid_storage_payload, admin_headers) -> None:
     storage_test_client, gl_auth = storage_test_client
     _, res = await storage_test_client.post(
         "/api/data/storage",
-        headers={"Authorization": '{"is_admin": false}'},
+        headers=admin_headers,
         data=json.dumps(valid_storage_payload),
     )
     assert res.status_code == 201

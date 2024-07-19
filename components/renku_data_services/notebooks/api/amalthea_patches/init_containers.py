@@ -30,6 +30,7 @@ def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
         read_only_etc_certs=True,
     )
 
+    user_is_anonymous = isinstance(server.user, AnonymousUser)
     prefix = "GIT_CLONE_"
     env = [
         {
@@ -52,7 +53,7 @@ def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
             "name": f"{prefix}USER__RENKU_TOKEN",
             "value": str(server.user.access_token),
         },
-        {"name": f"{prefix}IS_GIT_PROXY_ENABLED", "value": "0" if server.user.anonymous else "1"},
+        {"name": f"{prefix}IS_GIT_PROXY_ENABLED", "value": "0" if user_is_anonymous else "1"},
         {
             "name": f"{prefix}SENTRY__ENABLED",
             "value": str(server.config.sessions.git_clone.sentry.enabled).lower(),
@@ -82,7 +83,7 @@ def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
     if (
         isinstance(server.user, RegisteredUser)
         and isinstance(server.user.gitlab_user, CurrentUser)
-        and not server.user.anonymous
+        and not user_is_anonymous
     ):
         env += [
             {"name": f"{prefix}USER__EMAIL", "value": server.user.gitlab_user.email},

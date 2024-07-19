@@ -667,13 +667,13 @@ dev = ["black", "coveralls", "mypy", "pre-commit", "pylint", "pytest (>=5)", "py
 
 [[package]]
 name = "dataclasses-avroschema"
-version = "0.57.5"
+version = "0.60.2"
 description = "Generate Avro Schemas from Python classes. Serialize/Deserialize python instances with avro schemas"
 optional = false
 python-versions = "<4.0,>=3.8"
 files = [
-    {file = "dataclasses_avroschema-0.57.5-py3-none-any.whl", hash = "sha256:21946eb166f60f2e8e91f6dfea9717b6c6505c3401a77bc1a516d1ca9fe3de75"},
-    {file = "dataclasses_avroschema-0.57.5.tar.gz", hash = "sha256:ff85272d3d2e9a17837d683462b5baf0acef4b26cf566c11fc16302c04cd065e"},
+    {file = "dataclasses_avroschema-0.60.2-py3-none-any.whl", hash = "sha256:5552ef2bf76d490ac6d3029371b5224a5af301bb7e20a9a3f0192e419bc47eec"},
+    {file = "dataclasses_avroschema-0.60.2.tar.gz", hash = "sha256:b72b9cf819a1f795c77c10e8a150073ec0d754f88e79b18079473b7a32d15cc6"},
 ]
 
 [package.dependencies]
@@ -681,11 +681,12 @@ casefy = ">=0.1.7,<0.2.0"
 dacite = ">=1.8.0,<2.0.0"
 fastavro = ">=1.7.3,<2.0.0"
 inflector = ">=3.1.1,<4.0.0"
+python-dateutil = ">=2.9.0.post0,<3.0.0"
 typing-extensions = ">=4.2.0,<5.0.0"
 
 [package.extras]
-faker = ["faker (>=18.3.1,<25.0.0)"]
-faust = ["faust-streaming (>=0.10.11,<0.11.0)"]
+faker = ["faker (>=18.3.1,<26.0.0)"]
+faust = ["faust-streaming (>=0.10.11,<0.12.0)"]
 pydantic = ["pydantic[email] (>=2.4.2,<3.0.0)"]
 
 [[package]]
@@ -1413,23 +1414,23 @@ test = ["kubernetes (>=26.1.0)", "kubernetes-asyncio (>=24.2.3)", "kubernetes-va
 
 [[package]]
 name = "kubernetes"
-version = "26.1.0"
+version = "30.1.0"
 description = "Kubernetes python client"
 optional = false
 python-versions = ">=3.6"
 files = [
-    {file = "kubernetes-26.1.0-py2.py3-none-any.whl", hash = "sha256:e3db6800abf7e36c38d2629b5cb6b74d10988ee0cba6fba45595a7cbe60c0042"},
-    {file = "kubernetes-26.1.0.tar.gz", hash = "sha256:5854b0c508e8d217ca205591384ab58389abdae608576f9c9afc35a3c76a366c"},
+    {file = "kubernetes-30.1.0-py2.py3-none-any.whl", hash = "sha256:e212e8b7579031dd2e512168b617373bc1e03888d41ac4e04039240a292d478d"},
+    {file = "kubernetes-30.1.0.tar.gz", hash = "sha256:41e4c77af9f28e7a6c314e3bd06a8c6229ddd787cad684e0ab9f69b498e98ebc"},
 ]
 
 [package.dependencies]
 certifi = ">=14.05.14"
 google-auth = ">=1.0.1"
+oauthlib = ">=3.2.2"
 python-dateutil = ">=2.5.3"
 pyyaml = ">=5.4.1"
 requests = "*"
 requests-oauthlib = "*"
-setuptools = ">=21.0.0"
 six = ">=1.9.0"
 urllib3 = ">=1.24.2"
 websocket-client = ">=0.32.0,<0.40.0 || >0.40.0,<0.41.dev0 || >=0.43.dev0"
@@ -2163,22 +2164,22 @@ six = ">=1.5"
 
 [[package]]
 name = "python-gitlab"
-version = "3.15.0"
-description = "Interact with GitLab API"
+version = "4.6.0"
+description = "A python wrapper for the GitLab API"
 optional = false
-python-versions = ">=3.7.0"
+python-versions = ">=3.8.0"
 files = [
-    {file = "python-gitlab-3.15.0.tar.gz", hash = "sha256:c9e65eb7612a9fbb8abf0339972eca7fd7a73d4da66c9b446ffe528930aff534"},
-    {file = "python_gitlab-3.15.0-py3-none-any.whl", hash = "sha256:8f8d1c0d387f642eb1ac7bf5e8e0cd8b3dd49c6f34170cee3c7deb7d384611f3"},
+    {file = "python_gitlab-4.6.0-py3-none-any.whl", hash = "sha256:b22e54344706851815ae5395f5f8f6503f9d3ef180e99ac9fc2ea66f59912a56"},
+    {file = "python_gitlab-4.6.0.tar.gz", hash = "sha256:b56ae363890374caede853ef552e92c41551d605800de1c64ba61bcf25f237b0"},
 ]
 
 [package.dependencies]
-requests = ">=2.25.0"
-requests-toolbelt = ">=0.10.1"
+requests = ">=2.32.0"
+requests-toolbelt = ">=1.0.0"
 
 [package.extras]
 autocompletion = ["argcomplete (>=1.10.0,<3)"]
-yaml = ["PyYaml (>=5.2)"]
+yaml = ["PyYaml (>=6.0.1)"]
 
 [[package]]
 name = "python-jsonpath"
@@ -2193,14 +2194,17 @@ files = [
 
 [[package]]
 name = "python-ulid"
-version = "1.1.0"
-description = "Universally Unique Lexicographically Sortable Identifier"
+version = "2.7.0"
+description = "Universally unique lexicographically sortable identifier"
 optional = false
-python-versions = ">=3.7"
+python-versions = ">=3.9"
 files = [
-    {file = "python-ulid-1.1.0.tar.gz", hash = "sha256:5fb5e4a91db8ca93e8938a613360b3def299b60d41f847279a8c39c9b2e9c65e"},
-    {file = "python_ulid-1.1.0-py3-none-any.whl", hash = "sha256:88c952f6be133dbede19c907d72d26717d2691ec8421512b573144794d891e24"},
+    {file = "python_ulid-2.7.0-py3-none-any.whl", hash = "sha256:c81658e382f69bad8c6d365155c4ae21843ae4226b94f72c12d7adcbb545a251"},
+    {file = "python_ulid-2.7.0.tar.gz", hash = "sha256:18eb595885140851a490a95b0da4447911ff69fa9f434732067b97f6956f9fe9"},
 ]
+
+[package.extras]
+pydantic = ["pydantic (>=2.0)"]
 
 [[package]]
 name = "pytz"
@@ -2484,22 +2488,23 @@ files = [
 
 [[package]]
 name = "sentry-sdk"
-version = "1.45.0"
+version = "2.6.0"
 description = "Python client for Sentry (https://sentry.io)"
 optional = false
-python-versions = "*"
+python-versions = ">=3.6"
 files = [
-    {file = "sentry-sdk-1.45.0.tar.gz", hash = "sha256:509aa9678c0512344ca886281766c2e538682f8acfa50fd8d405f8c417ad0625"},
-    {file = "sentry_sdk-1.45.0-py2.py3-none-any.whl", hash = "sha256:1ce29e30240cc289a027011103a8c83885b15ef2f316a60bcc7c5300afa144f1"},
+    {file = "sentry_sdk-2.6.0-py2.py3-none-any.whl", hash = "sha256:422b91cb49378b97e7e8d0e8d5a1069df23689d45262b86f54988a7db264e874"},
+    {file = "sentry_sdk-2.6.0.tar.gz", hash = "sha256:65cc07e9c6995c5e316109f138570b32da3bd7ff8d0d0ee4aaf2628c3dd8127d"},
 ]
 
 [package.dependencies]
 certifi = "*"
 sanic = {version = ">=0.8", optional = true, markers = "extra == \"sanic\""}
-urllib3 = {version = ">=1.26.11", markers = "python_version >= \"3.6\""}
+urllib3 = ">=1.26.11"
 
 [package.extras]
 aiohttp = ["aiohttp (>=3.5)"]
+anthropic = ["anthropic (>=0.16)"]
 arq = ["arq (>=0.23)"]
 asyncpg = ["asyncpg (>=0.23)"]
 beam = ["apache-beam (>=2.12)"]
@@ -2512,9 +2517,11 @@ django = ["django (>=1.8)"]
 falcon = ["falcon (>=1.4)"]
 fastapi = ["fastapi (>=0.79.0)"]
 flask = ["blinker (>=1.1)", "flask (>=0.11)", "markupsafe"]
-grpcio = ["grpcio (>=1.21.1)"]
+grpcio = ["grpcio (>=1.21.1)", "protobuf (>=3.8.0)"]
 httpx = ["httpx (>=0.16.0)"]
 huey = ["huey (>=2)"]
+huggingface-hub = ["huggingface-hub (>=0.22)"]
+langchain = ["langchain (>=0.0.210)"]
 loguru = ["loguru (>=0.5)"]
 openai = ["openai (>=1.0.0)", "tiktoken (>=0.3.0)"]
 opentelemetry = ["opentelemetry-distro (>=0.35b0)"]
@@ -3109,4 +3116,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "ffb586a74dbc2fe6a9126676cb13bb1231799d71ec8c9208671d5110558f295f"
+content-hash = "1b75fad5c02296cc4984d4c46b1d51566748c01bc192fa7f54df03a680c294cb"

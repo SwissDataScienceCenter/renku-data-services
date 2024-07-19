@@ -2,7 +2,6 @@
 
 import base64
 import json
-import logging
 import re
 from functools import lru_cache
 from math import floor
@@ -13,6 +12,7 @@ import jwt
 from gitlab import Gitlab
 from gitlab.v4.objects.projects import Project
 from gitlab.v4.objects.users import CurrentUser
+from sanic.log import logger
 
 from ...errors.user import AuthenticationError
 
@@ -31,7 +31,7 @@ class User(Protocol):
         try:
             return self.gitlab_client.projects.get(f"{namespace_project}")
         except Exception as e:
-            logging.warning(f"Cannot get project: {namespace_project} for user: {self.username}, error: {e}")
+            logger.warning(f"Cannot get project: {namespace_project} for user: {self.username}, error: {e}")
         return None
 
     @property

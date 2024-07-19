@@ -1,5 +1,5 @@
 import json
-from test.bases.renku_data_services.background_jobs.test_sync import get_kc_users
+from copy import deepcopy
 from typing import Any
 
 import pytest
@@ -19,26 +19,27 @@ from renku_data_services.secrets_storage_api.app import register_all_handlers as
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import UserInfo
+from test.bases.renku_data_services.background_jobs.test_sync import get_kc_users
 
 
 @pytest.fixture
 def admin_user() -> UserInfo:
-    return UserInfo("admin", "Admin", "Doe", "admin.doe@gmail.com")
+    return UserInfo(id="admin", first_name="Admin", last_name="Doe", email="admin.doe@gmail.com")
 
 
 @pytest.fixture
 def regular_user() -> UserInfo:
-    return UserInfo("user", "User", "Doe", "user.doe@gmail.com")
+    return UserInfo(id="user", first_name="User", last_name="Doe", email="user.doe@gmail.com")
 
 
 @pytest.fixture
 def member_1_user() -> UserInfo:
-    return UserInfo("member-1", "Member-1", "Doe", "member-1.doe@gmail.com")
+    return UserInfo(id="member-1", first_name="Member-1", last_name="Doe", email="member-1.doe@gmail.com")
 
 
 @pytest.fixture
 def member_2_user() -> UserInfo:
-    return UserInfo("member-2", "Member-2", "Doe", "member-2.doe@gmail.com")
+    return UserInfo(id="member-2", first_name="Member-2", last_name="Doe", email="member-2.doe@gmail.com")
 
 
 @pytest.fixture
@@ -55,7 +56,15 @@ def users(admin_user, regular_user, member_1_user, member_2_user) -> list[UserIn
 def admin_headers(admin_user: UserInfo) -> dict[str, str]:
     """Authentication headers for an admin user."""
     access_token = json.dumps(
-        {"is_admin": True, "id": admin_user.id, "name": f"{admin_user.first_name} {admin_user.last_name}"}
+        {
+            "is_admin": True,
+            "id": admin_user.id,
+            "name": f"{admin_user.first_name} {admin_user.last_name}",
+            "first_name": admin_user.first_name,
+            "last_name": admin_user.last_name,
+            "email": admin_user.email,
+            "full_name": f"{admin_user.first_name} {admin_user.last_name}",
+        }
     )
     return {"Authorization": f"Bearer {access_token}"}
 
@@ -64,7 +73,15 @@ def admin_headers(admin_user: UserInfo) -> dict[str, str]:
 def user_headers(regular_user: UserInfo) -> dict[str, str]:
     """Authentication headers for a normal user."""
     access_token = json.dumps(
-        {"is_admin": False, "id": regular_user.id, "name": f"{regular_user.first_name} {regular_user.last_name}"}
+        {
+            "is_admin": False,
+            "id": regular_user.id,
+            "name": f"{regular_user.first_name} {regular_user.last_name}",
+            "first_name": regular_user.first_name,
+            "last_name": regular_user.last_name,
+            "email": regular_user.email,
+            "full_name": f"{regular_user.first_name} {regular_user.last_name}",
+        }
     )
     return {"Authorization": f"Bearer {access_token}"}
 
@@ -164,6 +181,52 @@ def create_project(sanic_client, user_headers, admin_headers, regular_user, admi
         return project
 
     return create_project_helper
+
+
+@pytest.fixture
+def create_resource_pool(sanic_client, user_headers, admin_headers):
+    async def create_resource_pool_helper(admin: bool = False, **payload) -> dict[str, Any]:
+        headers = admin_headers if admin else user_headers
+        payload = payload.copy()
+        _, res = await sanic_client.post("/api/data/resource_pools", headers=headers, json=payload)
+        assert res.status_code == 201, res.text
+        assert res.json is not None
+        return res.json
+
+    return create_resource_pool_helper
+
+
+_valid_resource_pool_payload: dict[str, Any] = {
+    "name": "test-name",
+    "classes": [
+        {
+            "cpu": 1.0,
+            "memory": 10,
+            "gpu": 0,
+            "name": "test-class-name",
+            "max_storage": 100,
+            "default_storage": 1,
+            "default": True,
+            "node_affinities": [],
+            "tolerations": [],
+        }
+    ],
+    "quota": {"cpu": 100, "memory": 100, "gpu": 0},
+    "default": False,
+    "public": True,
+    "idle_threshold": 86400,
+    "hibernation_threshold": 99999,
+}
+
+
+@pytest.fixture
+def valid_resource_pool_payload() -> dict[str, Any]:
+    return deepcopy(_valid_resource_pool_payload)
+
+
+@pytest.fixture
+def valid_resource_class_payload() -> dict[str, Any]:
+    return deepcopy(_valid_resource_pool_payload["classes"][0])
 
 
 @pytest_asyncio.fixture

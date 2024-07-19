@@ -326,7 +326,9 @@ class Config:
     def session_repo(self) -> SessionRepository:
         """The DB adapter for sessions."""
         if not self._session_repo:
-            self._session_repo = SessionRepository(session_maker=self.db.async_session_maker, project_authz=self.authz)
+            self._session_repo = SessionRepository(
+                session_maker=self.db.async_session_maker, project_authz=self.authz, resource_pools=self.rp_repo
+            )
         return self._session_repo
 
     @property

@@ -7,11 +7,13 @@ from sanic.response import JSONResponse
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
+from renku_data_services.authz.models import Role
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.errors import errors
 from renku_data_services.namespace import apispec
+from renku_data_services.namespace.apispec_params import GetNamespacesParams
 from renku_data_services.namespace.db import GroupRepository
 
 
@@ -58,7 +60,7 @@ class GroupsBP(CustomBlueprint):
             result = await self.group_repo.get_group(user=user, slug=slug)
             return json(apispec.GroupResponse.model_validate(result).model_dump(exclude_none=True, mode="json"))
 
-        return "/groups/<slug>", ["GET"], _get_one
+        return "/groups/<slug:renku_slug>", ["GET"], _get_one
 
     def delete(self) -> BlueprintFactoryResponse:
         """Delete a specific group."""
@@ -69,7 +71,7 @@ class GroupsBP(CustomBlueprint):
             await self.group_repo.delete_group(user=user, slug=slug)
             return HTTPResponse(status=204)
 
-        return "/groups/<slug>", ["DELETE"], _delete
+        return "/groups/<slug:renku_slug>", ["DELETE"], _delete
 
     def patch(self) -> BlueprintFactoryResponse:
         """Partially update a specific group."""
@@ -84,13 +86,12 @@ class GroupsBP(CustomBlueprint):
             res = await self.group_repo.update_group(user=user, slug=slug, payload=body_dict)
             return json(apispec.GroupResponse.model_validate(res).model_dump(exclude_none=True, mode="json"))
 
-        return "/groups/<slug>", ["PATCH"], _patch
+        return "/groups/<slug:renku_slug>", ["PATCH"], _patch
 
     def get_all_members(self) -> BlueprintFactoryResponse:
         """List all group members."""
 
         @authenticate(self.authenticator)
-        @only_authenticated
         async def _get_all_members(_: Request, user: base_models.APIUser, slug: str) -> JSONResponse:
             members = await self.group_repo.get_group_members(user, slug)
             return json(
@@ -106,7 +107,7 @@ class GroupsBP(CustomBlueprint):
                 ]
             )
 
-        return "/groups/<slug>/members", ["GET"], _get_all_members
+        return "/groups/<slug:renku_slug>/members", ["GET"], _get_all_members
 
     def update_members(self) -> BlueprintFactoryResponse:
         """Update or add group members."""
@@ -134,7 +135,7 @@ class GroupsBP(CustomBlueprint):
                 ]
             )
 
-        return "/groups/<slug>/members", ["PATCH"], _update_members
+        return "/groups/<slug:renku_slug>/members", ["PATCH"], _update_members
 
     def delete_member(self) -> BlueprintFactoryResponse:
         """Remove a specific user from the list of members of a group."""
@@ -145,7 +146,7 @@ class GroupsBP(CustomBlueprint):
             await self.group_repo.delete_group_member(user=user, slug=slug, user_id_to_delete=user_id)
             return HTTPResponse(status=204)
 
-        return "/groups/<slug>/members/<user_id>", ["DELETE"], _delete_member
+        return "/groups/<slug:renku_slug>/members/<user_id>", ["DELETE"], _delete_member
 
     def get_namespaces(self) -> BlueprintFactoryResponse:
         """Get all namespaces."""
@@ -154,16 +155,22 @@ class GroupsBP(CustomBlueprint):
         @only_authenticated
         @paginate
         async def _get_namespaces(
-            _: Request, user: base_models.APIUser, pagination: PaginationRequest
+            request: Request, user: base_models.APIUser, pagination: PaginationRequest
         ) -> tuple[list[dict], int]:
-            nss, total_count = await self.group_repo.get_namespaces(user=user, pagination=pagination)
+            params = GetNamespacesParams.model_validate(dict(request.query_args))
+
+            minimum_role = Role.from_group_role(params.minimum_role) if params.minimum_role is not None else None
+
+            nss, total_count = await self.group_repo.get_namespaces(
+                user=user, pagination=pagination, minimum_role=minimum_role
+            )
             return [
                 apispec.NamespaceResponse(
                     id=ns.id,
                     name=ns.name,
                     slug=ns.latest_slug if ns.latest_slug else ns.slug,
                     created_by=ns.created_by,
-                    creation_date=ns.creation_date,
+                    creation_date=None,  # NOTE: we do not save creation date in the DB
                     namespace_kind=apispec.NamespaceKind(ns.kind.value),
                 ).model_dump(exclude_none=True, mode="json")
                 for ns in nss
@@ -175,7 +182,6 @@ class GroupsBP(CustomBlueprint):
         """Get namespace by slug."""
 
         @authenticate(self.authenticator)
-        @only_authenticated
         async def _get_namespace(_: Request, user: base_models.APIUser, slug: str) -> JSONResponse:
             ns = await self.group_repo.get_namespace_by_slug(user=user, slug=slug)
             if not ns:
@@ -186,9 +192,9 @@ class GroupsBP(CustomBlueprint):
                     name=ns.name,
                     slug=ns.latest_slug if ns.latest_slug else ns.slug,
                     created_by=ns.created_by,
-                    creation_date=ns.creation_date,
+                    creation_date=None,  # NOTE: we do not save creation date in the DB
                     namespace_kind=apispec.NamespaceKind(ns.kind.value),
                 ).model_dump(exclude_none=True, mode="json")
             )
 
-        return "/namespaces/<slug>", ["GET"], _get_namespace
+        return "/namespaces/<slug:renku_slug>", ["GET"], _get_namespace

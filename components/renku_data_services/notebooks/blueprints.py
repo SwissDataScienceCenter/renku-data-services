@@ -13,6 +13,7 @@ from gitlab.const import Visibility as GitlabVisibility
 from gitlab.v4.objects.projects import Project as GitlabProject
 from marshmallow import ValidationError
 from sanic import Request, json
+from sanic.log import logger
 from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
 
@@ -360,11 +361,7 @@ class NotebooksBP(CustomBlueprint):
                 )
             if storage is None:
                 storage = default_resource_class.get("default_storage") or 1
-            parsed_server_options = ServerOptions.from_resource_class(
-                default_resource_class,
-                nb_config.server_options.default_url_default,
-                nb_config.server_options.lfs_auto_fetch_default,
-            )
+            parsed_server_options = ServerOptions.from_resource_class(default_resource_class)
             # Storage in request is in GB
             parsed_server_options.set_storage(storage, gigabytes=True)
 
@@ -565,7 +562,7 @@ class NotebooksBP(CustomBlueprint):
                 # NOTE: Do nothing if server is already hibernated
                 currently_hibernated = server.get("spec", {}).get("jupyterServer", {}).get("hibernated", False)
                 if server and currently_hibernated:
-                    logging.warning(f"Server {server_name} is already hibernated.")
+                    logger.warning(f"Server {server_name} is already hibernated.")
 
                     return json(
                         NotebookResponse().dump(UserServerManifest(server, self.nb_config.sessions.default_image)), 200
