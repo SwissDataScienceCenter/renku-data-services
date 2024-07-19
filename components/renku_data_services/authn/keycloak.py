@@ -10,6 +10,7 @@ from sanic import Request
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from renku_data_services.base_models.core import Authenticator
 from renku_data_services.utils.core import get_ssl_context
 
 
@@ -34,7 +35,7 @@ class KcUserStore:
 
 
 @dataclass
-class KeycloakAuthenticator:
+class KeycloakAuthenticator(Authenticator):
     """Authenticator for JWT access tokens from Keycloak."""
 
     jwks: PyJWKClient
@@ -47,17 +48,26 @@ class KeycloakAuthenticator:
             raise errors.ConfigurationError(message="At least one algorithm for token validation has to be specified.")
 
     def _validate(self, token: str) -> dict[str, Any]:
-        sk = self.jwks.get_signing_key_from_jwt(token)
-        return cast(
-            dict[str, Any],
-            jwt.decode(
-                token,
-                key=sk.key,
-                algorithms=self.algorithms,
-                audience=["renku", "renku-ui", "renku-cli", "swagger"],
-                verify=True,
-            ),
-        )
+        try:
+            sk = self.jwks.get_signing_key_from_jwt(token)
+            return cast(
+                dict[str, Any],
+                jwt.decode(
+                    token,
+                    key=sk.key,
+                    algorithms=self.algorithms,
+                    audience=["renku", "renku-ui", "renku-cli", "swagger"],
+                    verify=True,
+                ),
+            )
+        except (jwt.InvalidSignatureError, jwt.MissingRequiredClaimError):
+            # NOTE: the above errors are subclasses of `InvalidToken` below but they will result from keycloak
+            # misconfiguration most often rather than from the user having done something so we surface them.
+            raise
+        except jwt.InvalidTokenError:
+            raise errors.Unauthorized(
+                message="Your credentials are invalid or expired, please log in again.", quiet=True
+            )
 
     async def authenticate(self, access_token: str, request: Request) -> base_models.APIUser:
         """Checks the validity of the access token."""

@@ -1,24 +1,31 @@
+"""Patches the modify the jupyter container in the session."""
+
 import base64
 import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from gitlab.v4.objects.users import CurrentUser
 from kubernetes import client
 
-from renku_notebooks.config import config
-from renku_notebooks.errors.user import OverriddenEnvironmentVariableError
+from renku_data_services.notebooks.api.classes.user import RegisteredUser
+from renku_data_services.notebooks.errors.user import OverriddenEnvironmentVariableError
 
 if TYPE_CHECKING:
-    from renku_notebooks.api.classes.server import UserServer
+    # NOTE: If these are directly imported then you get circular imports.
+    from renku_data_services.notebooks.api.classes.server import UserServer
 
 
-def env(server: "UserServer"):
-    # amalthea always makes the jupyter server the first container in the statefulset
+def env(server: "UserServer") -> list[dict[str, Any]]:
+    """Injects environment variables in the jupyter container in the session.
+
+    Amalthea always makes the jupyter server the first container in the statefulset
+    """
 
     commit_sha = getattr(server, "commit_sha", None)
     project = getattr(server, "project", None)
 
-    patch_list = [
+    patch_list: list[dict[str, Any]] = [
         {
             "op": "add",
             "path": "/statefulset/spec/template/spec/containers/0/env/-",
@@ -85,7 +92,8 @@ def env(server: "UserServer"):
     return patches
 
 
-def args():
+def args() -> list[dict[str, Any]]:
+    """Sets the arguments for running the jupyter container."""
     patches = []
     patches.append(
         {
@@ -102,13 +110,18 @@ def args():
     return patches
 
 
-def image_pull_secret(server: "UserServer"):
+def image_pull_secret(server: "UserServer") -> list[dict[str, Any]]:
+    """Adds an image pull secret to the session if the session image is not public."""
     patches = []
-    if server.is_image_private:
+    if (
+        isinstance(server.user, RegisteredUser)
+        and isinstance(server.user.gitlab_user, CurrentUser)
+        and server.is_image_private
+    ):
         image_pull_secret_name = server.server_name + "-image-secret"
         registry_secret = {
             "auths": {
-                config.git.registry: {
+                server.config.git.registry: {
                     "Username": "oauth2",
                     "Password": server.user.git_token,
                     "Email": server.user.gitlab_user.email,
@@ -153,7 +166,8 @@ def image_pull_secret(server: "UserServer"):
     return patches
 
 
-def disable_service_links():
+def disable_service_links() -> list[dict[str, Any]]:
+    """Disables the addition of cluster-specific URLs or configs inside the session container as env variables."""
     return [
         {
             "type": "application/json-patch+json",
@@ -245,9 +259,9 @@ def user_secrets(server: "UserServer") -> list[dict[str, Any]]:
 
     init_container = client.V1Container(
         name="init-user-secrets",
-        image=config.user_secrets.image,
+        image=server.config.user_secrets.image,
         env=[
-            client.V1EnvVar(name="DATA_SERVICE_URL", value=config.data_service_url),
+            client.V1EnvVar(name="DATA_SERVICE_URL", value=server.config.data_service_url),
             client.V1EnvVar(name="RENKU_ACCESS_TOKEN", value=str(server.user.access_token)),
             client.V1EnvVar(name="ENCRYPTED_SECRETS_MOUNT_PATH", value="/encrypted"),
             client.V1EnvVar(name="DECRYPTED_SECRETS_MOUNT_PATH", value="/decrypted"),

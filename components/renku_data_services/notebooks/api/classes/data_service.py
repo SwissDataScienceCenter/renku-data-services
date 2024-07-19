@@ -1,13 +1,15 @@
+"""Helpers for interacting wit the data service."""
+
+import logging
 from dataclasses import dataclass, field
-from typing import Any, NamedTuple, Optional
+from typing import Any, NamedTuple, Optional, cast
 from urllib.parse import urljoin, urlparse
 
 import requests
-from flask import current_app
 
-from renku_notebooks.errors.intermittent import IntermittentError
-from renku_notebooks.errors.programming import ConfigurationError
-from renku_notebooks.errors.user import (
+from renku_data_services.notebooks.errors.intermittent import IntermittentError
+from renku_data_services.notebooks.errors.programming import ConfigurationError
+from renku_data_services.notebooks.errors.user import (
     AuthenticationError,
     InvalidCloudStorageConfiguration,
     InvalidComputeResourceError,
@@ -20,6 +22,8 @@ from .user import User
 
 
 class CloudStorageConfig(NamedTuple):
+    """Cloud storage configuration."""
+
     config: dict[str, Any]
     source_path: str
     target_path: str
@@ -29,12 +33,15 @@ class CloudStorageConfig(NamedTuple):
 
 @dataclass
 class StorageValidator:
+    """Cloud storage validator."""
+
     storage_url: str
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.storage_url = self.storage_url.rstrip("/")
 
     def get_storage_by_id(self, user: User, project_id: int, storage_id: str) -> CloudStorageConfig:
+        """Get a specific cloud storage configuration by ID."""
         headers = None
         if user is not None and user.access_token is not None and user.git_token is not None:
             headers = {
@@ -43,8 +50,8 @@ class StorageValidator:
             }
         # TODO: remove project_id once authz on the data service works properly
         request_url = self.storage_url + f"/storage/{storage_id}?project_id={project_id}"
-        current_app.logger.info(f"getting storage info by id: {request_url}")
-        res = requests.get(request_url, headers=headers)
+        logging.info(f"getting storage info by id: {request_url}")
+        res = requests.get(request_url, headers=headers, timeout=10)
         if res.status_code == 404:
             raise MissingResourceError(message=f"Couldn't find cloud storage with id {storage_id}")
         if res.status_code == 401:
@@ -63,7 +70,8 @@ class StorageValidator:
         )
 
     def validate_storage_configuration(self, configuration: dict[str, Any], source_path: str) -> None:
-        res = requests.post(self.storage_url + "/storage_schema/validate", json=configuration)
+        """Validate the cloud storage configuration."""
+        res = requests.post(self.storage_url + "/storage_schema/validate", json=configuration, timeout=10)
         if res.status_code == 422:
             raise InvalidCloudStorageConfiguration(
                 message=f"The provided cloud storage configuration isn't valid: {res.json()}",
@@ -75,22 +83,30 @@ class StorageValidator:
 
     def obscure_password_fields_for_storage(self, configuration: dict[str, Any]) -> dict[str, Any]:
         """Obscures password fields for use with rclone."""
-        res = requests.post(self.storage_url + "/storage_schema/obscure", json=configuration)
+        res = requests.post(self.storage_url + "/storage_schema/obscure", json=configuration, timeout=10)
 
         if res.status_code != 200:
             raise InvalidCloudStorageConfiguration(
                 message=f"Couldn't obscure password fields for configuration: {res.json()}"
             )
 
-        return res.json()
+        return cast(dict[str, Any], res.json())
 
 
 @dataclass
 class DummyStorageValidator:
+    """Dummy cloud storage validator used for testing."""
+
     def get_storage_by_id(self, user: User, project_id: int, storage_id: str) -> CloudStorageConfig:
+        """Get storage by ID."""
         raise NotImplementedError()
 
     def validate_storage_configuration(self, configuration: dict[str, Any], source_path: str) -> None:
+        """Validate the cloud storage configuration."""
+        raise NotImplementedError()
+
+    def obscure_password_fields_for_storage(self, configuration: dict[str, Any]) -> dict[str, Any]:
+        """Obscure the password fields in a cloud storage configuration."""
         raise NotImplementedError()
 
 
@@ -99,8 +115,10 @@ class CRCValidator:
     """Calls to the CRC service to validate resource requests."""
 
     crc_url: str
+    default_url_default: str
+    lfs_auto_fetch_default: bool = False
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.crc_url = self.crc_url.rstrip("/")
 
     def validate_class_storage(
@@ -122,7 +140,7 @@ class CRCValidator:
                     res_class = cls
                     pool = rp
                     break
-        if res_class is None:
+        if pool is None or res_class is None:
             raise InvalidComputeResourceError(message=f"The resource class ID {class_id} does not exist.")
         if storage is None:
             storage = res_class.get("default_storage", 1)
@@ -130,7 +148,7 @@ class CRCValidator:
             raise InvalidComputeResourceError(message="Storage requests have to be greater than or equal to 1GB.")
         if storage > res_class.get("max_storage"):
             raise InvalidComputeResourceError(message="The requested storage surpasses the maximum value allowed.")
-        options = ServerOptions.from_resource_class(res_class)
+        options = ServerOptions.from_resource_class(res_class, self.default_url_default, self.lfs_auto_fetch_default)
         options.idle_threshold_seconds = pool.get("idle_threshold")
         options.hibernation_threshold_seconds = pool.get("hibernation_threshold")
         options.set_storage(storage, gigabytes=True)
@@ -140,12 +158,15 @@ class CRCValidator:
         return options
 
     def get_default_class(self) -> dict[str, Any]:
+        """Get the default resource class from the default resource pool."""
         pools = self._get_resource_pools()
         default_pools = [p for p in pools if p.get("default", False)]
         if len(default_pools) < 1:
             raise ConfigurationError("Cannot find the default resource pool.")
         default_pool = default_pools[0]
-        default_classes = [cls for cls in default_pool.get("classes", []) if cls.get("default", False)]
+        default_classes: list[dict[str, Any]] = [
+            cls for cls in default_pool.get("classes", []) if cls.get("default", False)
+        ]
         if len(default_classes) < 1:
             raise ConfigurationError("Cannot find the default resource class.")
         return default_classes[0]
@@ -158,13 +179,15 @@ class CRCValidator:
         resource_pools = self._get_resource_pools(user=user, server_options=requested_server_options)
         # Difference and best candidate in the case that the resource class will be
         # greater than or equal to the request
-        best_larger_or_equal_diff = None
-        best_larger_or_equal_class = None
-        zero_diff = ServerOptions(cpu=0, memory=0, gpu=0, storage=0, priority_class=resource_pools)
+        best_larger_or_equal_diff: ServerOptions | None = None
+        best_larger_or_equal_class: ServerOptions | None = None
+        zero_diff = ServerOptions(cpu=0, memory=0, gpu=0, storage=0)
         for resource_pool in resource_pools:
             quota = resource_pool.get("quota")
             for resource_class in resource_pool["classes"]:
-                resource_class_mdl = ServerOptions.from_resource_class(resource_class)
+                resource_class_mdl = ServerOptions.from_resource_class(
+                    resource_class, self.default_url_default, self.lfs_auto_fetch_default
+                )
                 if quota is not None and isinstance(quota, dict):
                     resource_class_mdl.priority_class = quota.get("id")
                 diff = resource_class_mdl - requested_server_options
@@ -187,35 +210,42 @@ class CRCValidator:
         if user is not None and user.access_token is not None:
             headers = {"Authorization": f"bearer {user.access_token}"}
         if server_options is not None:
+            max_storage: float | int = 1
+            if server_options.storage is not None:
+                max_storage = (
+                    server_options.storage
+                    if server_options.gigabytes
+                    else round(server_options.storage / 1_000_000_000)
+                )
             params = {
                 "cpu": server_options.cpu,
                 "gpu": server_options.gpu,
                 "memory": (
                     server_options.memory if server_options.gigabytes else round(server_options.memory / 1_000_000_000)
                 ),
-                "max_storage": (
-                    server_options.storage
-                    if server_options.gigabytes
-                    else round(server_options.storage / 1_000_000_000)
-                ),
+                "max_storage": max_storage,
             }
-        res = requests.get(self.crc_url + "/resource_pools", headers=headers, params=params)
+        res = requests.get(self.crc_url + "/resource_pools", headers=headers, params=params, timeout=10)
         if res.status_code != 200:
             raise IntermittentError(
                 message="The compute resource access control service sent "
                 "an unexpected response, please try again later",
             )
-        return res.json()
+        return cast(list[dict[str, Any]], res.json())
 
 
 @dataclass
 class DummyCRCValidator:
+    """Dummy validator for resource pools and classes."""
+
     options: ServerOptions = field(default_factory=lambda: ServerOptions(0.5, 1, 0, 1, "/lab", False, True))
 
-    def validate_class_storage(self, *args, **kwargs) -> ServerOptions:
+    def validate_class_storage(self, user: User, class_id: int, storage: int | None = None) -> ServerOptions:
+        """Validate the storage against the resource class."""
         return self.options
 
     def get_default_class(self) -> dict[str, Any]:
+        """Get the default resource class."""
         return {
             "name": "resource class",
             "cpu": 0.1,
@@ -227,7 +257,8 @@ class DummyCRCValidator:
             "default": True,
         }
 
-    def find_acceptable_class(self, *args, **kwargs) -> Optional[ServerOptions]:
+    def find_acceptable_class(self, user: User, requested_server_options: ServerOptions) -> Optional[ServerOptions]:
+        """Find an acceptable resource class based on the required options."""
         return self.options
 
 
@@ -239,11 +270,12 @@ class GitProviderHelper:
     renku_url: str
     internal_gitlab_url: str
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.service_url = self.service_url.rstrip("/")
         self.renku_url = self.renku_url.rstrip("/")
 
     def get_providers(self, user: User) -> list[GitProvider]:
+        """Get the providers for the specific user."""
         if user is None or user.access_token is None:
             return []
         connections = self.get_oauth2_connections(user=user)
@@ -265,9 +297,7 @@ class GitProviderHelper:
 
         providers_list = list(providers.values())
         # Insert the internal GitLab as the first provider
-        internal_gitlab_access_token_url = urljoin(
-            self.renku_url, "/api/auth/gitlab/exchange"
-        )
+        internal_gitlab_access_token_url = urljoin(self.renku_url, "/api/auth/gitlab/exchange")
         providers_list.insert(
             0,
             GitProvider(
@@ -279,38 +309,33 @@ class GitProviderHelper:
         )
         return providers_list
 
-    def get_oauth2_connections(
-        self, user: User | None = None
-    ) -> list[OAuth2Connection]:
+    def get_oauth2_connections(self, user: User | None = None) -> list[OAuth2Connection]:
+        """Get oauth2 connections."""
         if user is None or user.access_token is None:
             return []
         request_url = f"{self.service_url}/oauth2/connections"
         headers = {"Authorization": f"bearer {user.access_token}"}
-        res = requests.get(request_url, headers=headers)
+        res = requests.get(request_url, headers=headers, timeout=10)
         if res.status_code != 200:
-            raise IntermittentError(
-                message="The data service sent an unexpected response, please try again later"
-            )
+            raise IntermittentError(message="The data service sent an unexpected response, please try again later")
         connections = res.json()
-        connections = [
-            OAuth2Connection.from_dict(c)
-            for c in connections
-            if c["status"] == "connected"
-        ]
+        connections = [OAuth2Connection.from_dict(c) for c in connections if c["status"] == "connected"]
         return connections
 
     def get_oauth2_provider(self, provider_id: str) -> OAuth2Provider:
+        """Get a specific provider."""
         request_url = f"{self.service_url}/oauth2/providers/{provider_id}"
-        res = requests.get(request_url)
+        res = requests.get(request_url, timeout=10)
         if res.status_code != 200:
-            raise IntermittentError(
-                message="The data service sent an unexpected response, please try again later"
-            )
+            raise IntermittentError(message="The data service sent an unexpected response, please try again later")
         provider = res.json()
         return OAuth2Provider.from_dict(provider)
 
 
 @dataclass
 class DummyGitProviderHelper:
-    def get_providers(self, *args, **kwargs) -> list[GitProvider]:
+    """Helper for git providers."""
+
+    def get_providers(self, user: User) -> list[GitProvider]:
+        """Get a list of providers."""
         return []

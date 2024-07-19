@@ -31,6 +31,7 @@ packages = [
   { include = "renku_data_services/secrets", from = "components" },
   { include = "renku_data_services/connected_services", from = "components" },
   { include = "renku_data_services/repositories", from = "components" },
+  { include = "renku_data_services/notebooks", from = "components" },
 ]
 
 [tool.poetry.dependencies]
@@ -43,7 +44,6 @@ alembic = "^1.12.1"
 asyncpg = "^0.29.0"
 pyjwt = { extras = ["crypto"], version = "^2.6.0" }
 tenacity = "^8.2.2"
-httpx = "<0.24"
 kubernetes = "^26.1.0"
 python-ulid = "^1.1.0"
 python-gitlab = "^3.15.0"
@@ -61,6 +61,11 @@ sentry-sdk = { version = "^1.43.0", extras = ["sanic"] }
 authzed = "^0.15.0"
 cryptography = "^42.0.5"
 kubernetes-asyncio = "^30.1.0"
+marshmallow = "^3.21.3"
+escapism = "^1.0.1"
+httpx = "^0.27.0"
+kr8s = "^0.17.0"
+werkzeug = "^3.0.3"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.7.5"
@@ -131,6 +136,7 @@ ignore = [
 "test/*" = ["D"]
 "*/versions/*" = ["D", "E", "W"]
 "apispec.py" = ["D", "E", "W", "I", "UP"]
+"components/renku_data_services/notebooks/crs.py" = ["F401"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["renku_data_services"]
@@ -140,7 +146,7 @@ convention = "google"
 
 [tool.bandit]
 skips = ["B101", "B603", "B607", "B404"]
-exclude_dirs = ["test"]
+exclude_dirs = ["test", ".devcontainer"]
 
 [tool.pytest.ini_options]
 addopts = "--cov components/ --cov bases/ --cov-report=term-missing -v"
@@ -214,6 +220,8 @@ module = [
   "sanic_testing.*",
   "undictify.*",
   "urllib3.*",
+  "escapism.*",
+  "kr8s.*",
 ]
 ignore_missing_imports = true
 

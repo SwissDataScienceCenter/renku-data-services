@@ -1,3 +1,5 @@
+"""Models for different tokens used for authentication."""
+
 from dataclasses import dataclass, field
 
 

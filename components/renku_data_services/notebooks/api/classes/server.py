@@ -1,28 +1,32 @@
+"""Jupyter server models."""
+
+import logging
 from abc import ABC
+from collections.abc import Sequence
 from itertools import chain
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
-from flask import current_app
-
-from ...config import config
-from ...errors.programming import ConfigurationError, DuplicateEnvironmentVariableError
-from ...errors.user import MissingResourceError
-from ..amalthea_patches import cloudstorage as cloudstorage_patches
-from ..amalthea_patches import general as general_patches
-from ..amalthea_patches import git_proxy as git_proxy_patches
-from ..amalthea_patches import git_sidecar as git_sidecar_patches
-from ..amalthea_patches import init_containers as init_containers_patches
-from ..amalthea_patches import inject_certificates as inject_certificates_patches
-from ..amalthea_patches import jupyter_server as jupyter_server_patches
-from ..amalthea_patches import ssh as ssh_patches
-from ..schemas.secrets import K8sUserSecrets
-from ..schemas.server_options import ServerOptions
-from .cloud_storage import ICloudStorageRequest
-from .k8s_client import K8sClient
-from .repository import GitProvider, Repository
-from .user import AnonymousUser, RegisteredUser
+from renku_data_services import base_models
+from renku_data_services.notebooks.api.amalthea_patches import cloudstorage as cloudstorage_patches
+from renku_data_services.notebooks.api.amalthea_patches import general as general_patches
+from renku_data_services.notebooks.api.amalthea_patches import git_proxy as git_proxy_patches
+from renku_data_services.notebooks.api.amalthea_patches import git_sidecar as git_sidecar_patches
+from renku_data_services.notebooks.api.amalthea_patches import init_containers as init_containers_patches
+from renku_data_services.notebooks.api.amalthea_patches import inject_certificates as inject_certificates_patches
+from renku_data_services.notebooks.api.amalthea_patches import jupyter_server as jupyter_server_patches
+from renku_data_services.notebooks.api.amalthea_patches import ssh as ssh_patches
+from renku_data_services.notebooks.api.classes.cloud_storage import ICloudStorageRequest
+from renku_data_services.notebooks.api.classes.k8s_client import JupyterServerV1Alpha1Kr8s, K8sClient
+from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
+from renku_data_services.notebooks.api.classes.user import AnonymousUser, RegisteredUser
+from renku_data_services.notebooks.api.schemas.secrets import K8sUserSecrets
+from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
+from renku_data_services.notebooks.config import _NotebooksConfig
+from renku_data_services.notebooks.crs import JupyterServerV1Alpha1
+from renku_data_services.notebooks.errors.programming import ConfigurationError, DuplicateEnvironmentVariableError
+from renku_data_services.notebooks.errors.user import MissingResourceError
 
 
 class UserServer(ABC):
@@ -30,26 +34,25 @@ class UserServer(ABC):
 
     def __init__(
         self,
-        user: AnonymousUser | RegisteredUser,
+        user: base_models.APIUser,
         server_name: str,
         image: str | None,
         server_options: ServerOptions,
         environment_variables: dict[str, str],
         user_secrets: K8sUserSecrets | None,
-        cloudstorage: list[ICloudStorageRequest],
+        cloudstorage: Sequence[ICloudStorageRequest],
         k8s_client: K8sClient,
         workspace_mount_path: Path,
         work_dir: Path,
+        config: _NotebooksConfig,
         using_default_image: bool = False,
         is_image_private: bool = False,
-        repositories: list[Repository] = [],
-        **_,
+        repositories: list[Repository] | None = None,
     ):
-        self._check_flask_config()
         self._user = user
         self.server_name = server_name
-        self._k8s_client: K8sClient = k8s_client
-        self.safe_username = self._user.safe_username
+        self._k8s_client: K8sClient[JupyterServerV1Alpha1, JupyterServerV1Alpha1Kr8s] = k8s_client
+        self.safe_username = self._user.id
         self.image = image
         self.server_options = server_options
         self.environment_variables = environment_variables
@@ -57,13 +60,14 @@ class UserServer(ABC):
         self.using_default_image = using_default_image
         self.workspace_mount_path = workspace_mount_path
         self.work_dir = work_dir
-        self.cloudstorage: list[ICloudStorageRequest] | None = cloudstorage
+        self.cloudstorage = cloudstorage
         self.is_image_private = is_image_private
+        self.config = config
 
         if self.server_options.idle_threshold_seconds is not None:
             self.idle_seconds_threshold = self.server_options.idle_threshold_seconds
         else:
-            self.idle_seconds_threshold: int = (
+            self.idle_seconds_threshold = (
                 config.sessions.culling.registered.idle_seconds
                 if isinstance(self._user, RegisteredUser)
                 else config.sessions.culling.anonymous.idle_seconds
@@ -72,12 +76,12 @@ class UserServer(ABC):
         if self.server_options.hibernation_threshold_seconds is not None:
             self.hibernated_seconds_threshold: int = self.server_options.hibernation_threshold_seconds
         else:
-            self.hibernated_seconds_threshold: int = (
+            self.hibernated_seconds_threshold = (
                 config.sessions.culling.registered.hibernated_seconds
                 if isinstance(user, RegisteredUser)
                 else config.sessions.culling.anonymous.hibernated_seconds
             )
-        self._repositories: list[Repository] = repositories
+        self._repositories: list[Repository] = repositories or []
         self._git_providers: list[GitProvider] | None = None
         self._has_configured_git_providers = False
 
@@ -93,6 +97,7 @@ class UserServer(ABC):
 
     @property
     def repositories(self) -> list[Repository]:
+        """Get the list of repositories in the project."""
         # Configure git repository providers based on matching URLs.
         if not self._has_configured_git_providers:
             for repo in self._repositories:
@@ -112,11 +117,11 @@ class UserServer(ABC):
         """The URL where a user can access their session."""
         if type(self._user) is RegisteredUser:
             return urljoin(
-                f"https://{config.sessions.ingress.host}",
+                f"https://{self.config.sessions.ingress.host}",
                 f"sessions/{self.server_name}",
             )
         return urljoin(
-            f"https://{config.sessions.ingress.host}",
+            f"https://{self.config.sessions.ingress.host}",
             f"sessions/{self.server_name}?token={self._user.username}",
         )
 
@@ -124,25 +129,19 @@ class UserServer(ABC):
     def git_providers(self) -> list[GitProvider]:
         """The list of git providers."""
         if self._git_providers is None:
-            self._git_providers = config.git_provider_helper.get_providers(
-                user=self.user
-            )
+            self._git_providers = self.config.git_provider_helper.get_providers(user=self.user)
         return self._git_providers
 
     @property
     def required_git_providers(self) -> list[GitProvider]:
         """The list of required git providers."""
-        required_provider_ids: set[str] = set(
-            r.provider for r in self.repositories if r.provider
-        )
+        required_provider_ids: set[str] = set(r.provider for r in self.repositories if r.provider)
         return [p for p in self.git_providers if p.id in required_provider_ids]
 
-    def __str__(self):
-        return (
-            f"<UserServer user: {self._user.username} server_name: {self.server_name}>"
-        )
+    def __str__(self) -> str:
+        return f"<UserServer user: {self._user.username} server_name: {self.server_name}>"
 
-    def start(self) -> dict[str, Any] | None:
+    async def start(self) -> JupyterServerV1Alpha1 | None:
         """Create the jupyterserver resource in k8s."""
         errors = self._get_start_errors()
         if errors:
@@ -152,46 +151,30 @@ class UserServer(ABC):
                     f"or Docker resources are missing: {', '.join(errors)}"
                 )
             )
-        return self._k8s_client.create_server(
-            self._get_session_manifest(), self.safe_username
-        )
+        return await self._k8s_client.create_server(self._get_session_manifest(), self.safe_username)
 
     @staticmethod
-    def _check_flask_config():
-        """Check the app config and ensure minimum required parameters are present."""
-        if config.git.url is None:
-            raise ConfigurationError(
-                message="The gitlab URL is missing, it must be provided in an environment variable called GITLAB_URL"
-            )
-        if config.git.registry is None:
-            raise ConfigurationError(
-                message="The url to the docker image registry is missing, it must be provided in "
-                "an environment variable called IMAGE_REGISTRY"
-            )
-
-    @staticmethod
-    def _check_environment_variables_overrides(patches_list: list[dict[str, Any]]):
+    def _check_environment_variables_overrides(patches_list: list[dict[str, Any]]) -> None:
         """Check if any patch overrides server's environment variables.
 
         Checks if it overrides with a different value or if two patches create environment variables with different
         values.
         """
-        env_vars = {}
+        env_vars: dict[tuple[str, str], str] = {}
 
         for patch_list in patches_list:
             patches = patch_list["patch"]
 
             for patch in patches:
-                path = patch["path"].lower()
+                path = str(patch["path"]).lower()
                 if path.endswith("/env/-"):
-                    name = patch["value"]["name"]
-                    value = patch["value"]["value"]
+                    name = str(patch["value"]["name"])
+                    value = str(patch["value"]["value"])
                     key = (path, name)
 
                     if key in env_vars and env_vars[key] != value:
                         raise DuplicateEnvironmentVariableError(
-                            message=f"Environment variable {path}::{name} is being overridden by "
-                            "multiple patches"
+                            message=f"Environment variable {path}::{name} is being overridden by " "multiple patches"
                         )
                     else:
                         env_vars[key] = value
@@ -204,24 +187,25 @@ class UserServer(ABC):
             errors.append(f"image {self.image} does not exist or cannot be accessed")
         return errors
 
-    def _get_session_manifest(self):
+    def _get_session_manifest(self) -> dict[str, Any]:
         """Compose the body of the user session for the k8s operator."""
         patches = self._get_patches()
         self._check_environment_variables_overrides(patches)
 
         # Storage
-        if config.sessions.storage.pvs_enabled:
-            storage = {
+        if self.config.sessions.storage.pvs_enabled:
+            storage: dict[str, Any] = {
                 "size": self.server_options.storage,
                 "pvc": {
                     "enabled": True,
-                    "storageClassName": config.sessions.storage.pvs_storage_class,
+                    "storageClassName": self.config.sessions.storage.pvs_storage_class,
                     "mountPath": self.workspace_mount_path.absolute().as_posix(),
                 },
             }
         else:
+            storage_size = self.server_options.storage if self.config.sessions.storage.use_empty_dir_size_limit else ""
             storage = {
-                "size": (self.server_options.storage if config.sessions.storage.use_empty_dir_size_limit else ""),
+                "size": storage_size,
                 "pvc": {
                     "enabled": False,
                     "mountPath": self.workspace_mount_path.absolute().as_posix(),
@@ -233,8 +217,8 @@ class UserServer(ABC):
                 "token": "",
                 "oidc": {
                     "enabled": True,
-                    "clientId": config.sessions.oidc.client_id,
-                    "clientSecret": {"value": config.sessions.oidc.client_secret},
+                    "clientId": self.config.sessions.oidc.client_id,
+                    "clientSecret": {"value": self.config.sessions.oidc.client_secret},
                     "issuerUrl": self._user.oidc_issuer,
                     "authorizedEmails": [self._user.email],
                 },
@@ -246,7 +230,7 @@ class UserServer(ABC):
             }
         # Combine everything into the manifest
         manifest = {
-            "apiVersion": f"{config.amalthea.group}/{config.amalthea.version}",
+            "apiVersion": f"{self.config.amalthea.group}/{self.config.amalthea.version}",
             "kind": "JupyterServer",
             "metadata": {
                 "name": self.server_name,
@@ -258,9 +242,9 @@ class UserServer(ABC):
                 "culling": {
                     "idleSecondsThreshold": self.idle_seconds_threshold,
                     "maxAgeSecondsThreshold": (
-                        config.sessions.culling.registered.max_age_seconds
+                        self.config.sessions.culling.registered.max_age_seconds
                         if isinstance(self._user, RegisteredUser)
-                        else config.sessions.culling.anonymous.max_age_seconds
+                        else self.config.sessions.culling.anonymous.max_age_seconds
                     ),
                     "hibernatedSecondsThreshold": self.hibernated_seconds_threshold,
                 },
@@ -269,16 +253,16 @@ class UserServer(ABC):
                     "image": self.image,
                     "rootDir": self.work_dir.absolute().as_posix(),
                     "resources": self.server_options.to_k8s_resources(
-                        enforce_cpu_limits=config.sessions.enforce_cpu_limits
+                        enforce_cpu_limits=self.config.sessions.enforce_cpu_limits
                     ),
                 },
                 "routing": {
                     "host": urlparse(self.server_url).netloc,
                     "path": urlparse(self.server_url).path,
-                    "ingressAnnotations": config.sessions.ingress.annotations,
+                    "ingressAnnotations": self.config.sessions.ingress.annotations,
                     "tls": {
-                        "enabled": config.sessions.ingress.tls_secret is not None,
-                        "secretName": config.sessions.ingress.tls_secret,
+                        "enabled": self.config.sessions.ingress.tls_secret is not None,
+                        "secretName": self.config.sessions.ingress.tls_secret,
                     },
                 },
                 "storage": storage,
@@ -287,9 +271,8 @@ class UserServer(ABC):
         }
         return manifest
 
-    @staticmethod
-    def _get_renku_annotation_prefix() -> str:
-        return config.session_get_endpoint_annotations.renku_annotation_prefix
+    def _get_renku_annotation_prefix(self) -> str:
+        return self.config.session_get_endpoint_annotations.renku_annotation_prefix
 
     def _get_patches(self) -> list[dict[str, Any]]:
         return list(
@@ -309,10 +292,10 @@ class UserServer(ABC):
                 git_proxy_patches.main(self),
                 git_sidecar_patches.main(self),
                 general_patches.oidc_unverified_email(self),
-                ssh_patches.main(),
+                ssh_patches.main(self.config),
                 # init container for certs must come before all other init containers
                 # so that it runs first before all other init containers
-                init_containers_patches.certificates(),
+                init_containers_patches.certificates(self.config),
                 init_containers_patches.download_image(self),
                 init_containers_patches.git_clone(self),
                 inject_certificates_patches.proxy(self),
@@ -325,6 +308,7 @@ class UserServer(ABC):
         )
 
     def get_labels(self) -> dict[str, str | None]:
+        """Get the labels for the session."""
         prefix = self._get_renku_annotation_prefix()
         labels = {
             "app": "jupyter",
@@ -338,6 +322,7 @@ class UserServer(ABC):
         return labels
 
     def get_annotations(self) -> dict[str, str | None]:
+        """Get the annotations for the session."""
         prefix = self._get_renku_annotation_prefix()
         annotations = {
             f"{prefix}commit-sha": None,
@@ -358,16 +343,12 @@ class UserServer(ABC):
             f"{prefix}hibernationDirty": "",
             f"{prefix}hibernationSynchronized": "",
             f"{prefix}hibernationDate": "",
-            f"{prefix}hibernatedSecondsThreshold": str(
-                self.hibernated_seconds_threshold
-            ),
+            f"{prefix}hibernatedSecondsThreshold": str(self.hibernated_seconds_threshold),
             f"{prefix}lastActivityDate": "",
             f"{prefix}idleSecondsThreshold": str(self.idle_seconds_threshold),
         }
         if self.server_options.resource_class_id:
-            annotations[f"{prefix}resourceClassId"] = str(
-                self.server_options.resource_class_id
-            )
+            annotations[f"{prefix}resourceClassId"] = str(self.server_options.resource_class_id)
         return annotations
 
 
@@ -387,13 +368,13 @@ class Renku1UserServer(UserServer):
         server_options: ServerOptions,
         environment_variables: dict[str, str],
         user_secrets: K8sUserSecrets | None,
-        cloudstorage: list[ICloudStorageRequest],
+        cloudstorage: Sequence[ICloudStorageRequest],
         k8s_client: K8sClient,
         workspace_mount_path: Path,
         work_dir: Path,
+        config: _NotebooksConfig,
         using_default_image: bool = False,
         is_image_private: bool = False,
-        **_,
     ):
         gitlab_project_name = f"{namespace}/{project}"
         gitlab_project = user.get_renku_project(gitlab_project_name)
@@ -422,6 +403,7 @@ class Renku1UserServer(UserServer):
             using_default_image=using_default_image,
             is_image_private=is_image_private,
             repositories=[single_repository] if single_repository is not None else [],
+            config=config,
         )
 
         self.namespace = namespace
@@ -445,7 +427,7 @@ class Renku1UserServer(UserServer):
             errors.append(f"commit {self.commit_sha} does not exist")
         return errors
 
-    def _branch_exists(self):
+    def _branch_exists(self) -> bool:
         """Check if a specific branch exists in the user's gitlab project.
 
         The branch name is not required by the API and therefore
@@ -455,27 +437,24 @@ class Renku1UserServer(UserServer):
             try:
                 self.gitlab_project.branches.get(self.branch)
             except Exception as err:
-                current_app.logger.warning(
-                    f"Branch {self.branch} cannot be verified or does not exist. {err}"
-                )
+                logging.warning(f"Branch {self.branch} cannot be verified or does not exist. {err}")
             else:
                 return True
         return False
 
-    def _commit_sha_exists(self):
+    def _commit_sha_exists(self) -> bool:
         """Check if a specific commit sha exists in the user's gitlab project."""
         if self.commit_sha is not None and self.gitlab_project is not None:
             try:
                 self.gitlab_project.commits.get(self.commit_sha)
             except Exception as err:
-                current_app.logger.warning(
-                    f"Commit {self.commit_sha} cannot be verified or does not exist. {err}"
-                )
+                logging.warning(f"Commit {self.commit_sha} cannot be verified or does not exist. {err}")
             else:
                 return True
         return False
 
     def get_labels(self) -> dict[str, str | None]:
+        """Get the labels of the jupyter server."""
         prefix = self._get_renku_annotation_prefix()
         labels = super().get_labels()
         labels[f"{prefix}commit-sha"] = self.commit_sha
@@ -484,6 +463,7 @@ class Renku1UserServer(UserServer):
         return labels
 
     def get_annotations(self) -> dict[str, str | None]:
+        """Get the annotations of the jupyter server."""
         prefix = self._get_renku_annotation_prefix()
         annotations = super().get_annotations()
         annotations[f"{prefix}commit-sha"] = self.commit_sha
@@ -510,14 +490,14 @@ class Renku2UserServer(UserServer):
         server_options: ServerOptions,
         environment_variables: dict[str, str],
         user_secrets: K8sUserSecrets | None,
-        cloudstorage: list[ICloudStorageRequest],
+        cloudstorage: Sequence[ICloudStorageRequest],
         k8s_client: K8sClient,
         workspace_mount_path: Path,
         work_dir: Path,
         repositories: list[Repository],
+        config: _NotebooksConfig,
         using_default_image: bool = False,
         is_image_private: bool = False,
-        **_,
     ):
         super().__init__(
             user=user,
@@ -533,12 +513,14 @@ class Renku2UserServer(UserServer):
             using_default_image=using_default_image,
             is_image_private=is_image_private,
             repositories=repositories,
+            config=config,
         )
 
         self.project_id = project_id
         self.launcher_id = launcher_id
 
-    def get_annotations(self):
+    def get_annotations(self) -> dict[str, str | None]:
+        """Get the annotations of the session."""
         prefix = self._get_renku_annotation_prefix()
         annotations = super().get_annotations()
         annotations[f"{prefix}renkuVersion"] = "2.0"

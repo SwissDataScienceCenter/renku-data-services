@@ -1,16 +1,13 @@
 """Repository utilities."""
 
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import requests
 
 
-def get_status(server_name: str, access_token: Optional[str]) -> dict[str, Any]:
+def get_status(hostname: str, server_name: str, access_token: Optional[str]) -> dict[str, Any]:
     """Get repository status from the sidecar."""
-    from renku_notebooks.config import config
-
-    hostname = config.sessions.ingress.host
     url = f"https://{hostname}/sessions/{server_name}/sidecar/jsonrpc"
 
     headers = {
@@ -23,6 +20,7 @@ def get_status(server_name: str, access_token: Optional[str]) -> dict[str, Any]:
             url=url,
             json={"jsonrpc": "2.0", "id": 0, "method": "git/get_status"},
             headers=headers,
+            timeout=10,
         )
         response.raise_for_status()
     except requests.HTTPError as e:
@@ -36,4 +34,6 @@ def get_status(server_name: str, access_token: Optional[str]) -> dict[str, Any]:
     except Exception as e:
         logging.warning(f"Cannot get git status for {server_name}: {e}")
     else:
-        return response.json().get("result", {})
+        response_dict = cast(dict[str, dict[str, Any]], response.json())
+        return response_dict.get("result", {})
+    return {}

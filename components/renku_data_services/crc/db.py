@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from functools import wraps
 from typing import Any, Concatenate, Optional, ParamSpec, TypeVar, cast
 
-from sqlalchemy import NullPool, create_engine, delete, select
+from sqlalchemy import NullPool, create_engine, delete, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 from sqlalchemy.sql import Select, and_, not_, or_
@@ -180,6 +180,21 @@ class ResourcePoolRepository(_Base):
                 quota = self.quotas_repo.get_quota(rp.quota) if rp.quota else None
                 output.append(rp.dump(quota))
             return output
+
+    async def get_default_resource_class(self) -> models.ResourceClass:
+        """Get the default reosurce class in the default resource pool."""
+        async with self.session_maker() as session:
+            stmt = (
+                select(schemas.ResourceClassORM)
+                .where(schemas.ResourceClassORM.default == true())
+                .where(schemas.ResourceClassORM.resource_pool.has(schemas.ResourcePoolORM.default == true()))
+            )
+            res = await session.scalar(stmt)
+            if res is None:
+                raise errors.ProgrammingError(
+                    message="Could not find the default class from the default resource pool, but this has to exist."
+                )
+            return res.dump()
 
     async def filter_resource_pools(
         self,

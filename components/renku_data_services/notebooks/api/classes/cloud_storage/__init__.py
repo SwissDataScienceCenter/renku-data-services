@@ -1,25 +1,16 @@
-from abc import ABC, abstractmethod, abstractproperty
-from typing import Any
+"""The protocol for cloud storage."""
+
+from typing import Any, Protocol
 
 
-class ICloudStorageRequest(ABC):
-    @abstractproperty
-    def exists(self) -> bool:
-        pass
+class ICloudStorageRequest(Protocol):
+    """The abstract class for cloud storage."""
 
-    @abstractproperty
-    def mount_folder(self) -> str:
-        pass
+    exists: bool
+    mount_folder: str
+    source_folder: str
+    bucket: str
 
-    @abstractproperty
-    def source_folder(self) -> str:
-        pass
-
-    @abstractproperty
-    def bucket(self) -> str:
-        pass
-
-    @abstractmethod
     def get_manifest_patch(
         self,
         base_name: str,
@@ -27,4 +18,5 @@ class ICloudStorageRequest(ABC):
         labels: dict[str, str] = {},
         annotations: dict[str, str] = {},
     ) -> list[dict[str, Any]]:
-        pass
+        """The patches applied to a jupyter server to insert the storage in the session."""
+        ...

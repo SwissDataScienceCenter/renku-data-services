@@ -1,9 +1,12 @@
+"""Patches for enabling SSH access to a session."""
+
 from typing import Any
 
-from ...config import config
+from renku_data_services.notebooks.config import _NotebooksConfig
 
 
-def main() -> list[dict[str, Any]]:
+def main(config: _NotebooksConfig) -> list[dict[str, Any]]:
+    """Adds the required configuration to the session statefulset for SSH access."""
     if not config.sessions.ssh.enabled:
         return []
     patches = [

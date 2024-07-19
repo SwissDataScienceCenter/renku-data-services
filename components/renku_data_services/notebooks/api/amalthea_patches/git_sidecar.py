@@ -1,14 +1,17 @@
-import os
-from typing import TYPE_CHECKING
+"""Patches for the git sidecar container."""
 
-from renku_notebooks.api.classes.user import RegisteredUser
-from renku_notebooks.config import config
+import os
+from typing import TYPE_CHECKING, Any
+
+from renku_data_services.notebooks.api.classes.user import RegisteredUser
 
 if TYPE_CHECKING:
-    from renku_notebooks.api.classes.server import UserServer
+    # NOTE: If these are directly imported then you get circular imports.
+    from renku_data_services.notebooks.api.classes.server import UserServer
 
 
-def main(server: "UserServer"):
+def main(server: "UserServer") -> list[dict[str, Any]]:
+    """Adds the git sidecar container to the session statefulset."""
     # NOTE: Sessions can be persisted only for registered users
     if not isinstance(server.user, RegisteredUser):
         return []
@@ -34,11 +37,11 @@ def main(server: "UserServer"):
                     "op": "add",
                     "path": "/statefulset/spec/template/spec/containers/-",
                     "value": {
-                        "image": config.sessions.git_rpc_server.image,
+                        "image": server.config.sessions.git_rpc_server.image,
                         "name": "git-sidecar",
                         "ports": [
                             {
-                                "containerPort": config.sessions.git_rpc_server.port,
+                                "containerPort": server.config.sessions.git_rpc_server.port,
                                 "name": "git-port",
                                 "protocol": "TCP",
                             }
@@ -53,11 +56,11 @@ def main(server: "UserServer"):
                             },
                             {
                                 "name": "GIT_RPC_PORT",
-                                "value": str(config.sessions.git_rpc_server.port),
+                                "value": str(server.config.sessions.git_rpc_server.port),
                             },
                             {
                                 "name": "GIT_RPC_HOST",
-                                "value": config.sessions.git_rpc_server.host,
+                                "value": server.config.sessions.git_rpc_server.host,
                             },
                             {
                                 "name": "GIT_RPC_URL_PREFIX",
@@ -65,23 +68,19 @@ def main(server: "UserServer"):
                             },
                             {
                                 "name": "GIT_RPC_SENTRY__ENABLED",
-                                "value": str(
-                                    config.sessions.git_rpc_server.sentry.enabled
-                                ).lower(),
+                                "value": str(server.config.sessions.git_rpc_server.sentry.enabled).lower(),
                             },
                             {
                                 "name": "GIT_RPC_SENTRY__DSN",
-                                "value": config.sessions.git_rpc_server.sentry.dsn,
+                                "value": server.config.sessions.git_rpc_server.sentry.dsn,
                             },
                             {
                                 "name": "GIT_RPC_SENTRY__ENVIRONMENT",
-                                "value": config.sessions.git_rpc_server.sentry.env,
+                                "value": server.config.sessions.git_rpc_server.sentry.env,
                             },
                             {
                                 "name": "GIT_RPC_SENTRY__SAMPLE_RATE",
-                                "value": str(
-                                    config.sessions.git_rpc_server.sentry.sample_rate
-                                ),
+                                "value": str(server.config.sessions.git_rpc_server.sentry.sample_rate),
                             },
                             {
                                 "name": "SENTRY_RELEASE",
@@ -97,7 +96,7 @@ def main(server: "UserServer"):
                             },
                             {
                                 "name": "GIT_RPC_GIT_PROXY_HEALTH_PORT",
-                                "value": str(config.sessions.git_proxy.health_port),
+                                "value": str(server.config.sessions.git_proxy.health_port),
                             },
                         ],
                         "securityContext": {
@@ -110,7 +109,7 @@ def main(server: "UserServer"):
                         "volumeMounts": [volume_mount],
                         "livenessProbe": {
                             "httpGet": {
-                                "port": config.sessions.git_rpc_server.port,
+                                "port": server.config.sessions.git_rpc_server.port,
                                 "path": f"/sessions/{server.server_name}/sidecar/health",
                             },
                             "periodSeconds": 10,
@@ -118,7 +117,7 @@ def main(server: "UserServer"):
                         },
                         "readinessProbe": {
                             "httpGet": {
-                                "port": config.sessions.git_rpc_server.port,
+                                "port": server.config.sessions.git_rpc_server.port,
                                 "path": f"/sessions/{server.server_name}/sidecar/health",
                             },
                             "periodSeconds": 10,
@@ -126,7 +125,7 @@ def main(server: "UserServer"):
                         },
                         "startupProbe": {
                             "httpGet": {
-                                "port": config.sessions.git_rpc_server.port,
+                                "port": server.config.sessions.git_rpc_server.port,
                                 "path": f"/sessions/{server.server_name}/sidecar/health",
                             },
                             "periodSeconds": 10,
@@ -151,23 +150,19 @@ def main(server: "UserServer"):
                     "op": "add",
                     "path": "/statefulset/spec/template/spec/containers/1/args/-",
                     "value": (
-                        f"--upstream=http://127.0.0.1:{config.sessions.git_rpc_server.port}"
+                        f"--upstream=http://127.0.0.1:{server.config.sessions.git_rpc_server.port}"
                         f"/sessions/{server.server_name}/sidecar/"
                     ),
                 },
                 {
                     "op": "add",
                     "path": "/statefulset/spec/template/spec/containers/1/args/-",
-                    "value": (
-                        f"--skip-auth-route=^/sessions/{server.server_name}/sidecar/health$"
-                    ),
+                    "value": (f"--skip-auth-route=^/sessions/{server.server_name}/sidecar/health$"),
                 },
                 {
                     "op": "add",
                     "path": "/statefulset/spec/template/spec/containers/1/args/-",
-                    "value": (
-                        f"--skip-auth-route=^/sessions/{server.server_name}/sidecar/health/$"
-                    ),
+                    "value": (f"--skip-auth-route=^/sessions/{server.server_name}/sidecar/health/$"),
                 },
                 {
                     "op": "add",
@@ -177,9 +172,7 @@ def main(server: "UserServer"):
                 {
                     "op": "add",
                     "path": "/statefulset/spec/template/spec/containers/1/args/-",
-                    "value": (
-                        f"--skip-auth-route=^/sessions/{server.server_name}/sidecar/jsonrpc/map$"
-                    ),
+                    "value": (f"--skip-auth-route=^/sessions/{server.server_name}/sidecar/jsonrpc/map$"),
                 },
                 {
                     "op": "add",
@@ -210,7 +203,7 @@ def main(server: "UserServer"):
                                     "name": "http",
                                     "port": 80,
                                     "protocol": "TCP",
-                                    "targetPort": config.sessions.git_rpc_server.port,
+                                    "targetPort": server.config.sessions.git_rpc_server.port,
                                 },
                             ],
                             "selector": {

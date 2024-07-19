@@ -52,6 +52,7 @@ from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.namespace.db import GroupRepository
+from renku_data_services.notebooks.config import _NotebooksConfig
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.secrets.db import UserSecretsRepo
@@ -143,6 +144,7 @@ class Config:
     kc_api: IKeycloakAPI
     message_queue: IMessageQueue
     gitlab_url: str | None
+    nb_config: _NotebooksConfig
 
     secrets_service_public_key: rsa.RSAPublicKey
     """The public key of the secrets service, used to encrypt user secrets that only it can decrypt."""
@@ -207,6 +209,10 @@ class Config:
             connected_services = safe_load(f)
 
         spec_file = Path(renku_data_services.repositories.__file__).resolve().parent / "api.spec.yaml"
+        with open(spec_file) as f:
+            repositories = safe_load(f)
+
+        spec_file = Path(renku_data_services.notebooks.__file__).resolve().parent / "api.spec.yaml"
         with open(spec_file) as f:
             repositories = safe_load(f)
 
@@ -389,8 +395,8 @@ class Config:
         gitlab_client: base_models.GitlabAPIProtocol
         user_preferences_config: UserPreferencesConfig
         version = os.environ.get(f"{prefix}VERSION", "0.0.1")
-        server_options_file = os.environ.get("SERVER_OPTIONS")
-        server_defaults_file = os.environ.get("SERVER_DEFAULTS")
+        server_options_file = os.environ.get("NB_SERVER_OPTIONS__UI_CHOICES_PATH")
+        server_defaults_file = os.environ.get("NB_SERVER_OPTIONS__DEFAULTS_PATH")
         k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
         max_pinned_projects = int(os.environ.get(f"{prefix}MAX_PINNED_PROJECTS", "10"))
         user_preferences_config = UserPreferencesConfig(max_pinned_projects=max_pinned_projects)
@@ -472,6 +478,7 @@ class Config:
         sentry = SentryConfig.from_env(prefix)
         trusted_proxies = TrustedProxiesConfig.from_env(prefix)
         message_queue = RedisQueue(redis)
+        nb_config = _NotebooksConfig.from_env()
 
         return cls(
             version=version,
@@ -492,4 +499,5 @@ class Config:
             encryption_key=encryption_key,
             secrets_service_public_key=secrets_service_public_key,
             gitlab_url=gitlab_url,
+            nb_config=nb_config,
         )

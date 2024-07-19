@@ -1,7 +1,7 @@
 """Static configuration."""
 
 from dataclasses import dataclass, field
-from typing import ClassVar
+from typing import ClassVar, Self, cast
 
 from marshmallow import INCLUDE, Schema, fields
 
@@ -26,7 +26,7 @@ class _SessionAnnotationName:
         return fields.Str(required=self.required, data_key=self.get_field_name())
 
     @classmethod
-    def from_str(cls, val: str, required: bool = True):
+    def from_str(cls, val: str, required: bool = True) -> Self:
         parts = val.split(cls._sep)
         if len(parts) != 2:
             raise ValueError(f"Expected to find prefix and name in the annotation but found {len(parts)} parts.")
@@ -75,7 +75,7 @@ class _ServersGetEndpointAnnotations:
         ]
     )
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         annotations: list[_SessionAnnotationName] = []
         for annotation in self.required_annotation_names:
             annotations.append(_SessionAnnotationName.from_str(annotation, required=True))
@@ -83,18 +83,12 @@ class _ServersGetEndpointAnnotations:
             annotations.append(_SessionAnnotationName.from_str(annotation, required=False))
         self.annotations = annotations
 
-        class _UserPodAnnotations(
-            Schema.from_dict(
-                {
-                    annotation.get_field_name(sanitized=True): annotation.to_marshmallow_field()
-                    for annotation in self.annotations
-                }
-            )
-        ):
-            class Meta:
-                unknown = INCLUDE
-
-        self.schema = _UserPodAnnotations
+        self.schema = Schema.from_dict(
+            {
+                annotation.get_field_name(sanitized=True): annotation.to_marshmallow_field()
+                for annotation in self.annotations
+            }
+        )(unknown=INCLUDE)
 
     def sanitize_dict(self, ann_dict: dict[str, str]) -> dict[str, str]:
-        return self.schema().load(ann_dict)
+        return cast(dict[str, str], self.schema().load(ann_dict))

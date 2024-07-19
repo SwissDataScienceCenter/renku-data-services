@@ -1,9 +1,11 @@
+"""Used to get information about docker images used in jupyter servers."""
+
 import base64
 import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Self, cast
 
 import requests
 from werkzeug.datastructures import WWWAuthenticate
@@ -12,6 +14,8 @@ from ...errors.user import ImageParseError
 
 
 class ManifestTypes(Enum):
+    """The mime types for docker image manifests."""
+
     docker_v2: str = "application/vnd.docker.distribution.manifest.v2+json"
     oci_v1: str = "application/vnd.oci.image.manifest.v1+json"
 
@@ -33,21 +37,25 @@ class ImageRepoDockerAPI:
         """
         image_digest_url = f"https://{self.hostname}/v2/{image.name}/manifests/{image.tag}"
         try:
-            auth_req = requests.get(image_digest_url)
+            auth_req = requests.get(image_digest_url, timeout=10)
         except requests.ConnectionError:
             auth_req = None
         if auth_req is None or not (auth_req.status_code == 401 and "Www-Authenticate" in auth_req.headers):
             # the request status code and header are not what is expected
             return None
         www_auth = WWWAuthenticate.from_header(auth_req.headers["Www-Authenticate"])
+        if not www_auth:
+            return None
         params = {**www_auth.parameters}
         realm = params.pop("realm")
+        if not realm:
+            return None
         headers = {"Accept": "application/json"}
         if self.oauth2_token:
             creds = base64.urlsafe_b64encode(f"oauth2:{self.oauth2_token}".encode()).decode()
             headers["Authorization"] = f"Basic {creds}"
-        token_req = requests.get(realm, params=params, headers=headers)
-        return token_req.json().get("token")
+        token_req = requests.get(realm, params=params, headers=headers, timeout=10)
+        return str(token_req.json().get("token"))
 
     def get_image_manifest(self, image: "Image") -> Optional[dict[str, Any]]:
         """Query the docker API to get the manifest of an image."""
@@ -60,13 +68,13 @@ class ImageRepoDockerAPI:
         headers = {"Accept": ManifestTypes.docker_v2.value}
         if token:
             headers["Authorization"] = f"Bearer {token}"
-        res = requests.get(image_digest_url, headers=headers)
+        res = requests.get(image_digest_url, headers=headers, timeout=10)
         if res.status_code != 200:
             headers["Accept"] = ManifestTypes.oci_v1.value
-            res = requests.get(image_digest_url, headers=headers)
+            res = requests.get(image_digest_url, headers=headers, timeout=10)
         if res.status_code != 200:
             return None
-        return res.json()
+        return cast(dict[str, Any], res.json())
 
     def image_exists(self, image: "Image") -> bool:
         """Check the docker repo API if the image exists."""
@@ -87,10 +95,11 @@ class ImageRepoDockerAPI:
                 "Accept": "application/json",
                 "Authorization": f"Bearer {token}",
             },
+            timeout=10,
         )
         if res.status_code != 200:
             return None
-        return res.json()
+        return cast(dict[str, Any], res.json())
 
     def image_workdir(self, image: "Image") -> Optional[Path]:
         """Query the docker API to get the workdir of an image."""
@@ -106,18 +115,23 @@ class ImageRepoDockerAPI:
         return Path(workdir)
 
     def with_oauth2_token(self, oauth2_token: str) -> "ImageRepoDockerAPI":
+        """Return a docker API instance with the token as authentication."""
         return ImageRepoDockerAPI(self.hostname, oauth2_token)
 
 
 @dataclass
 class Image:
+    """Representation of a docker image."""
+
     hostname: str
     name: str
     tag: str
 
     @classmethod
-    def from_path(cls, path: str):
-        def build_re(*parts):
+    def from_path(cls, path: str) -> Self:
+        """Create an image from a path like 'nginx:1.28'."""
+
+        def build_re(*parts: str) -> re.Pattern:
             """Assemble the regex."""
             return re.compile(r"^" + r"".join(parts) + r"$")
 
@@ -130,7 +144,7 @@ class Image:
         tag = r"(?P<tag>(?<=:)[a-zA-Z0-9\._\-]{1,}(?=$))"
 
         # a list of tuples with (regex, defaults to fill in case of match)
-        regexes = [
+        regexes: list[tuple[re.Pattern, dict[str, str]]] = [
             # nginx
             (
                 build_re(docker_image),
@@ -195,4 +209,5 @@ class Image:
             raise ImageParseError(f"Cannot parse the image {path}")
 
     def repo_api(self) -> ImageRepoDockerAPI:
+        """Get the docker API from the image."""
         return ImageRepoDockerAPI(self.hostname)

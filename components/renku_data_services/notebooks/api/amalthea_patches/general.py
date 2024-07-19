@@ -1,19 +1,20 @@
+"""General patches for the jupyter server session."""
+
 from typing import TYPE_CHECKING, Any
 
-from ...config import config
-from ..classes.user import RegisteredUser
-
 if TYPE_CHECKING:
-    from renku_notebooks.api.classes.server import UserServer
+    # NOTE: If these are directly imported then you get circular imports.
+    from renku_data_services.notebooks.api.classes.server import UserServer
+    from renku_data_services.notebooks.api.classes.user import RegisteredUser
 
 
-def session_tolerations(server: "UserServer"):
+def session_tolerations(server: "UserServer") -> list[dict[str, Any]]:
     """Patch for node taint tolerations.
 
     The static tolerations from the configuration are ignored
     if the tolerations are set in the server options (coming from CRC).
     """
-    key = f"{config.session_get_endpoint_annotations.renku_annotation_prefix}dedicated"
+    key = f"{server.config.session_get_endpoint_annotations.renku_annotation_prefix}dedicated"
     default_tolerations: list[dict[str, str]] = [
         {
             "key": key,
@@ -21,7 +22,7 @@ def session_tolerations(server: "UserServer"):
             "value": "user",
             "effect": "NoSchedule",
         },
-    ] + config.sessions.tolerations
+    ] + server.config.sessions.tolerations
     return [
         {
             "type": "application/json-patch+json",
@@ -37,7 +38,7 @@ def session_tolerations(server: "UserServer"):
     ]
 
 
-def session_affinity(server: "UserServer"):
+def session_affinity(server: "UserServer") -> list[dict[str, Any]]:
     """Patch for session affinities.
 
     The static affinities from the configuration are ignored
@@ -51,16 +52,16 @@ def session_affinity(server: "UserServer"):
                     {
                         "op": "add",
                         "path": "/statefulset/spec/template/spec/affinity",
-                        "value": config.sessions.affinity,
+                        "value": server.config.sessions.affinity,
                     }
                 ],
             }
         ]
-    default_preferred_selector_terms: list[dict[str, Any]] = config.sessions.affinity.get("nodeAffinity", {}).get(
-        "preferredDuringSchedulingIgnoredDuringExecution", []
-    )
+    default_preferred_selector_terms: list[dict[str, Any]] = server.config.sessions.affinity.get(
+        "nodeAffinity", {}
+    ).get("preferredDuringSchedulingIgnoredDuringExecution", [])
     default_required_selector_terms: list[dict[str, Any]] = (
-        config.sessions.affinity.get("nodeAffinity", {})
+        server.config.sessions.affinity.get("nodeAffinity", {})
         .get("requiredDuringSchedulingIgnoredDuringExecution", {})
         .get("nodeSelectorTerms", [])
     )
@@ -105,7 +106,7 @@ def session_affinity(server: "UserServer"):
     ]
 
 
-def session_node_selector(server: "UserServer"):
+def session_node_selector(server: "UserServer") -> list[dict[str, Any]]:
     """Patch for a node selector.
 
     If node affinities are specified in the server options
@@ -119,7 +120,7 @@ def session_node_selector(server: "UserServer"):
                     {
                         "op": "add",
                         "path": "/statefulset/spec/template/spec/nodeSelector",
-                        "value": config.sessions.node_selector,
+                        "value": server.config.sessions.node_selector,
                     }
                 ],
             }
@@ -127,7 +128,8 @@ def session_node_selector(server: "UserServer"):
     return []
 
 
-def priority_class(server: "UserServer"):
+def priority_class(server: "UserServer") -> list[dict[str, Any]]:
+    """Set the priority class for the session, used to enforce resource quotas."""
     if server.server_options.priority_class is None:
         return []
     return [
@@ -144,7 +146,7 @@ def priority_class(server: "UserServer"):
     ]
 
 
-def test(server: "UserServer"):
+def test(server: "UserServer") -> list[dict[str, Any]]:
     """Test the server patches.
 
     RFC 6901 patches support test statements that will cause the whole patch
@@ -156,9 +158,9 @@ def test(server: "UserServer"):
     # in. This test checks whether the expected number and order is received from Amalthea and
     # does not use all containers.
     container_names = (
-        config.sessions.containers.registered[:2]
+        server.config.sessions.containers.registered[:2]
         if isinstance(server.user, RegisteredUser)
-        else config.sessions.containers.anonymous[:1]
+        else server.config.sessions.containers.anonymous[:1]
     )
     for container_ind, container_name in enumerate(container_names):
         patches.append(
@@ -176,7 +178,8 @@ def test(server: "UserServer"):
     return patches
 
 
-def oidc_unverified_email(server: "UserServer"):
+def oidc_unverified_email(server: "UserServer") -> list[dict[str, Any]]:
+    """Allow users whose email is unverified in Keycloak to still be able to access their sessions."""
     patches = []
     if isinstance(server.user, RegisteredUser):
         # modify oauth2 proxy to accept users whose email has not been verified
@@ -190,7 +193,7 @@ def oidc_unverified_email(server: "UserServer"):
                         "path": "/statefulset/spec/template/spec/containers/1/env/-",
                         "value": {
                             "name": "OAUTH2_PROXY_INSECURE_OIDC_ALLOW_UNVERIFIED_EMAIL",
-                            "value": str(config.sessions.oidc.allow_unverified_email).lower(),
+                            "value": str(server.config.sessions.oidc.allow_unverified_email).lower(),
                         },
                     },
                 ],
@@ -199,7 +202,8 @@ def oidc_unverified_email(server: "UserServer"):
     return patches
 
 
-def dev_shm(server: "UserServer"):
+def dev_shm(server: "UserServer") -> list[dict[str, Any]]:
+    """Patches the /dev/shm folder used by some ML libraries for passing data between different processes."""
     patches = []
     if server.server_options.storage:
         patches.append(
@@ -222,7 +226,7 @@ def dev_shm(server: "UserServer"):
                         "op": "add",
                         "path": "/statefulset/spec/template/spec/containers/1/volumeMounts/-",
                         "value": {
-                            "mountPath": "/dev/shm",
+                            "mountPath": "/dev/shm",  # nosec B108
                             "name": "shm",
                         },
                     },

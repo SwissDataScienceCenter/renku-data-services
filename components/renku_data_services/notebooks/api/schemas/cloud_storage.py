@@ -3,36 +3,37 @@
 from configparser import ConfigParser
 from io import StringIO
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Self
 
 from marshmallow import EXCLUDE, Schema, ValidationError, fields, validates_schema
 
-from ...config import config
-from ..classes.user import User
+from renku_data_services.notebooks.api.classes.cloud_storage import ICloudStorageRequest
+from renku_data_services.notebooks.api.classes.user import User
+from renku_data_services.notebooks.config import _NotebooksConfig
 
 
 class RCloneStorageRequest(Schema):
     """Request for RClone based storage."""
 
     class Meta:
+        """Configuration."""
+
         unknown = EXCLUDE
 
-    source_path: Optional[str] = fields.Str()
-    target_path: Optional[str] = fields.Str()
-    configuration: Optional[dict[str, Any]] = fields.Dict(
-        keys=fields.Str(), values=fields.Raw(), load_default=None, allow_none=True
-    )
-    storage_id: Optional[str] = fields.Str(load_default=None, allow_none=True)
-    readonly: bool = fields.Bool(load_default=True, allow_none=False)
+    source_path = fields.Str()
+    target_path = fields.Str()
+    configuration = fields.Dict(keys=fields.Str(), values=fields.Raw(), load_default=None, allow_none=True)
+    storage_id = fields.Str(load_default=None, allow_none=True)
+    readonly = fields.Bool(load_default=True, allow_none=False)
 
     @validates_schema
-    def validate_storage(self, data, **kwargs):
+    def validate_storage(self, data: dict, **kwargs: dict) -> None:
         """Validate a storage request."""
         if data.get("storage_id") and (data.get("source_path") or data.get("target_path")):
             raise ValidationError("'storage_id' cannot be used together with 'source_path' or 'target_path'")
 
 
-class RCloneStorage:
+class RCloneStorage(ICloudStorageRequest):
     """RClone based storage."""
 
     def __init__(
@@ -42,8 +43,10 @@ class RCloneStorage:
         readonly: bool,
         mount_folder: str,
         name: Optional[str],
+        config: _NotebooksConfig,
     ) -> None:
-        config.storage_validator.validate_storage_configuration(configuration, source_path)
+        self.config = config
+        self.config.storage_validator.validate_storage_configuration(configuration, source_path)
         self.configuration = configuration
         self.source_path = source_path
         self.mount_folder = mount_folder
@@ -51,7 +54,14 @@ class RCloneStorage:
         self.name = name
 
     @classmethod
-    def storage_from_schema(cls, data: dict[str, Any], user: User, project_id: int, work_dir: Path):
+    def storage_from_schema(
+        cls,
+        data: dict[str, Any],
+        user: User,
+        project_id: int,
+        work_dir: Path,
+        config: _NotebooksConfig,
+    ) -> Self:
         """Create storage object from request."""
         name = None
         if data.get("storage_id"):
@@ -76,9 +86,11 @@ class RCloneStorage:
             readonly = data.get("readonly", True)
         mount_folder = str(work_dir / target_path)
 
-        return cls(source_path, configuration, readonly, mount_folder, name)
+        return cls(source_path, configuration, readonly, mount_folder, name, config)
 
-    def get_manifest_patch(self, base_name: str, namespace: str, labels={}, annotations={}) -> list[dict[str, Any]]:
+    def get_manifest_patch(
+        self, base_name: str, namespace: str, labels: dict = {}, annotations: dict = {}
+    ) -> list[dict[str, Any]]:
         """Get server manifest patch."""
         patches = []
         patches.append(
@@ -98,7 +110,7 @@ class RCloneStorage:
                             "spec": {
                                 "accessModes": ["ReadOnlyMany" if self.readonly else "ReadWriteMany"],
                                 "resources": {"requests": {"storage": "10Gi"}},
-                                "storageClassName": config.cloud_storage.storage_class,
+                                "storageClassName": self.config.cloud_storage.storage_class,
                             },
                         },
                     },
@@ -159,7 +171,7 @@ class RCloneStorage:
         parser = ConfigParser()
         parser.add_section(name)
 
-        def _stringify(value):
+        def _stringify(value: Any) -> str:
             if isinstance(value, bool):
                 return "true" if value else "false"
             return str(value)
@@ -175,4 +187,6 @@ class LaunchNotebookResponseCloudStorage(RCloneStorageRequest):
     """Notebook launch response with cloud storage attached."""
 
     class Meta:
+        """Specify fields."""
+
         fields = ("remote", "mount_folder", "type")

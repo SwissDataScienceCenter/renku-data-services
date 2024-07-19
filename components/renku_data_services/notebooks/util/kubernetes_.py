@@ -18,48 +18,22 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from enum import StrEnum
 from hashlib import md5
-from typing import Any
+from typing import Any, Self, TypeAlias
 
 import escapism
 from kubernetes.client import V1Container
 
 
-def filter_resources_by_annotations(
-    resources,
-    annotations,
-):
-    """Fetch all the user server pods that matches the provided annotations.
-
-    If an annotation that is not present on the pod is provided the match fails.
-    """
-
-    def filter_resource(resource):
-        res = []
-        for annotation_name in annotations:
-            res.append(
-                resource["metadata"]["annotations"].get(annotation_name)
-                == annotations[annotation_name]
-            )
-        if len(res) == 0:
-            return True
-        else:
-            return all(res)
-
-    return list(filter(filter_resource, resources))
-
-
-def renku_1_make_server_name(
-    safe_username: str, namespace: str, project: str, branch: str, commit_sha: str
-) -> str:
+def renku_1_make_server_name(safe_username: str, namespace: str, project: str, branch: str, commit_sha: str) -> str:
     """Form a unique server name for Renku 1.0 sessions.
 
     This is used in naming all the k8s resources created by amalthea.
     """
-    server_string_for_hashing = (
-        f"{safe_username}-{namespace}-{project}-{branch}-{commit_sha}"
-    )
-    server_hash = md5(server_string_for_hashing.encode()).hexdigest().lower()
+    server_string_for_hashing = f"{safe_username}-{namespace}-{project}-{branch}-{commit_sha}"
+    server_hash = md5(server_string_for_hashing.encode(), usedforsecurity=False).hexdigest().lower()
     prefix = _make_server_name_prefix(safe_username)
     # NOTE: A K8s object name can only contain lowercase alphanumeric characters, hyphens, or dots.
     # Must be less than 253 characters long and start and end with an alphanumeric.
@@ -75,15 +49,13 @@ def renku_1_make_server_name(
     )
 
 
-def renku_2_make_server_name(
-    safe_username: str, project_id: str, launcher_id: str
-) -> str:
+def renku_2_make_server_name(safe_username: str, project_id: str, launcher_id: str) -> str:
     """Form a unique server name for Renku 2.0 sessions.
 
     This is used in naming all the k8s resources created by amalthea.
     """
     server_string_for_hashing = f"{safe_username}-{project_id}-{launcher_id}"
-    server_hash = md5(server_string_for_hashing.encode()).hexdigest().lower()
+    server_hash = md5(server_string_for_hashing.encode(), usedforsecurity=False).hexdigest().lower()
     prefix = _make_server_name_prefix(safe_username)
     # NOTE: A K8s object name can only contain lowercase alphanumeric characters, hyphens, or dots.
     # Must be less than 253 characters long and start and end with an alphanumeric.
@@ -111,13 +83,10 @@ def find_env_var(container: V1Container, env_name: str) -> tuple[int, str] | Non
     return ind, val
 
 
-def _make_server_name_prefix(safe_username: str):
+def _make_server_name_prefix(safe_username: str) -> str:
     safe_username_lowercase = safe_username.lower()
     prefix = ""
-    if (
-        not safe_username_lowercase[0].isalpha()
-        or not safe_username_lowercase[0].isascii()
-    ):
+    if not safe_username_lowercase[0].isalpha() or not safe_username_lowercase[0].isascii():
         # NOTE: Username starts with an invalid character. This has to be modified because a
         # k8s service object cannot start with anything other than a lowercase alphabet character.
         # NOTE: We do not have worry about collisions with already existing servers from older
@@ -130,13 +99,36 @@ def _make_server_name_prefix(safe_username: str):
     return prefix
 
 
-def find_container(
-    patches: list[dict[str, Any]], container_name: str
-) -> dict[str, Any] | None:
+JsonPatch: TypeAlias = list[dict[str, Any]]
+MergePatch: TypeAlias = dict[str, Any]
+
+
+class PatchKind(StrEnum):
+    """Content types for different json patches."""
+
+    json: str = "application/json-patch+json"
+    merge: str = "application/merge-patch+json"
+
+
+@dataclass
+class Patch:
+    """Representation of a JSON patch."""
+
+    patch: JsonPatch | MergePatch
+    type: PatchKind
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Self:
+        """Create a patch from a dictionary."""
+        return cls(data["patch"], PatchKind(data["type"]))
+
+
+def find_container(patches: list[Patch], container_name: str) -> dict[str, Any] | None:
     """Find the json patch corresponding a given container."""
     for patch_obj in patches:
-        inner_patches = patch_obj.get("patch", [])
-        for p in inner_patches:
+        if patch_obj.type != PatchKind.json or not isinstance(patch_obj.patch, list):
+            continue
+        for p in patch_obj.patch:
             if (
                 p.get("op") == "add"
                 and p.get("path") == "/statefulset/spec/template/spec/containers/-"

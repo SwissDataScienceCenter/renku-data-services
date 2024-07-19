@@ -1,4 +1,7 @@
+"""Model of a Git repository used by notebooks."""
+
 from dataclasses import dataclass
+from typing import Self
 
 INTERNAL_GITLAB_PROVIDER = "INTERNAL_GITLAB"
 
@@ -14,7 +17,8 @@ class Repository:
     commit_sha: str | None = None
 
     @classmethod
-    def from_dict(cls, data: dict[str, str]):
+    def from_dict(cls, data: dict[str, str]) -> Self:
+        """Create a repository from a dictionary."""
         return cls(
             url=data["url"],
             dirname=data.get("dirname"),
@@ -41,7 +45,8 @@ class OAuth2Provider:
     url: str
 
     @classmethod
-    def from_dict(cls, data: dict[str, str]):
+    def from_dict(cls, data: dict[str, str]) -> Self:
+        """Create a provider from a dictionary."""
         return cls(id=data["id"], url=data["url"])
 
 
@@ -54,5 +59,6 @@ class OAuth2Connection:
     status: str
 
     @classmethod
-    def from_dict(cls, data: dict[str, str]):
+    def from_dict(cls, data: dict[str, str]) -> Self:
+        """Creat an OAuth2 connection from a dictonary."""
         return cls(id=data["id"], provider_id=data["provider_id"], status=data["status"])
