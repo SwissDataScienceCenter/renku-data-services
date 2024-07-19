@@ -22,12 +22,12 @@ class PlatformConfigBP(CustomBlueprint):
     platform_repo: PlatformRepository
     authenticator: base_models.Authenticator
 
-    def get_singleton(self) -> BlueprintFactoryResponse:
+    def get_singleton_configuration(self) -> BlueprintFactoryResponse:
         """Get the platform configuration."""
 
         @extract_if_none_match
-        async def _get_singleton(_: Request, etag: str | None) -> HTTPResponse:
-            config = await self.platform_repo.get_config()
+        async def _get_singleton_configuration(_: Request, etag: str | None) -> HTTPResponse:
+            config = await self.platform_repo.get_or_create_config()
 
             if config.etag == etag:
                 return empty(status=304)
@@ -42,16 +42,16 @@ class PlatformConfigBP(CustomBlueprint):
                 headers=headers,
             )
 
-        return "/platform/config", ["GET"], _get_singleton
+        return "/platform/config", ["GET"], _get_singleton_configuration
 
-    def patch_singleton(self) -> BlueprintFactoryResponse:
+    def patch_singleton_configuration(self) -> BlueprintFactoryResponse:
         """Update the platform configuration."""
 
         @authenticate(self.authenticator)
         @only_admins
         @if_match_required
         @validate(json=apispec.PlatformConfigPatch)
-        async def _patch_singleton(
+        async def _patch_singleton_configuration(
             _: Request, user: base_models.APIUser, body: apispec.PlatformConfigPatch, etag: str
         ) -> JSONResponse:
             body_dict = body.model_dump(exclude_none=True)
@@ -66,4 +66,4 @@ class PlatformConfigBP(CustomBlueprint):
                 headers=headers,
             )
 
-        return "/platform/config", ["PATCH"], _patch_singleton
+        return "/platform/config", ["PATCH"], _patch_singleton_configuration

@@ -19,32 +19,15 @@ class PlatformRepository:
     ):
         self.session_maker = session_maker
 
-    async def get_config(self) -> models.PlatformConfig:
-        """Get the platform configuration from the database."""
-        async with self.session_maker() as session:
+    async def get_or_create_config(self) -> models.PlatformConfig:
+        """Get the platform configuration from the database or create it if it does not exist yet."""
+        async with self.session_maker() as session, session.begin():
             config = await session.scalar(select(schemas.PlatformConfigORM))
             if config is None:
-                raise errors.MissingResourceError(
-                    message="The platform configuration has not been initialized yet", quiet=True
-                )
-            return config.dump()
-
-    async def create_initial_config(self, user: base_models.APIUser) -> models.PlatformConfig:
-        """Create the initial platform configuration in the database."""
-        if user.id is None or not user.is_admin:
-            raise errors.Unauthorized(
-                message="You do not have the required permissions for this operation.", quiet=True
-            )
-
-        async with self.session_maker() as session, session.begin():
-            result = await session.scalars(select(schemas.PlatformConfigORM))
-            existing_config = result.one_or_none()
-            if existing_config is not None:
-                return existing_config.dump()
-            config = schemas.PlatformConfigORM(id=models.ConfigID.config)
-            session.add(config)
-            await session.flush()
-            await session.refresh(config)
+                config = schemas.PlatformConfigORM(id=models.ConfigID.config)
+                session.add(config)
+                await session.flush()
+                await session.refresh(config)
             return config.dump()
 
     async def update_config(self, user: base_models.APIUser, etag: str, **kwargs: dict) -> models.PlatformConfig:

@@ -16,7 +16,6 @@ from sentry_sdk.integrations.sanic import SanicIntegration, _context_enter, _con
 
 from renku_data_services.app_config import Config
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
-from renku_data_services.base_models import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.errors.errors import (
     MissingResourceError,
@@ -127,7 +126,6 @@ def create_app() -> Sanic:
         await config.kc_user_repo.initialize(config.kc_api)
         await sync_admins_from_keycloak(config.kc_api, config.authz)
         await config.group_repo.generate_user_namespaces()
-        await config.platform_repo.create_initial_config(user=InternalServiceAdmin(id=ServiceAdminId.migrations))
 
     @app.before_server_start
     async def setup_rclone_validator(app: Sanic) -> None:
