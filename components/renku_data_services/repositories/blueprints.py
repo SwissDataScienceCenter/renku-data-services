@@ -41,7 +41,7 @@ class RepositoriesBP(CustomBlueprint):
             RepositoryParams.model_validate(dict(repository_url=repository_url))
 
             async def get_internal_gitlab_user() -> base_models.APIUser:
-                return await _get_internal_gitlab_user(request)
+                return await _get_internal_gitlab_user(request, user)
 
             result = await self.git_repositories_repo.get_repository(
                 repository_url=repository_url, user=user, etag=etag, get_internal_gitlab_user=get_internal_gitlab_user

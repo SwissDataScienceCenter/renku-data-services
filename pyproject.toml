@@ -202,6 +202,8 @@ module = [
   "renku_data_services.data_api.error_handler",
   "renku_data_services.namespace.apispec",
   "renku_data_services.notebooks.apispec",
+  "renku_data_services.notebooks.cr_amalthea_session",
+  "renku_data_services.notebooks.cr_jupyter_server",
 ]
 ignore_errors = true
 

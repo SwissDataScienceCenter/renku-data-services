@@ -31,6 +31,11 @@ class APIUser:
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     email: Optional[str] = None
+    is_admin_init: InitVar[bool] = False
+    __is_admin: bool = field(init=False, repr=False)
+
+    def __post_init__(self, is_admin_init: bool) -> None:
+        self.__is_admin: bool = is_admin_init
 
     @property
     def is_authenticated(self) -> bool:
@@ -40,7 +45,7 @@ class APIUser:
     @property
     def is_admin(self) -> bool:
         """Indicates whether the user is a Renku platform administrator."""
-        return False
+        return self.__is_admin
 
 
 @dataclass(kw_only=True)
@@ -48,21 +53,11 @@ class AuthenticatedAPIUser(APIUser):
     """The model for a an authenticated user of the API."""
 
     id: str
+    email: str
     access_token: str = field(repr=False)
-    is_admin_init: InitVar[bool] = False
     full_name: str | None = None
     first_name: str | None = None
     last_name: str | None = None
-    email: str | None = None
-    __is_admin: bool = field(init=False, repr=False)
-
-    def __post_init__(self, is_admin_init: bool) -> None:
-        self.__is_admin: bool = is_admin_init
-
-    @property
-    def is_admin(self) -> bool:
-        """Whether the user is administrator or not."""
-        return self.__is_admin
 
 
 @dataclass(kw_only=True)
@@ -79,6 +74,11 @@ class AnonymousAPIUser(APIUser):
     @property
     def is_authenticated(self) -> bool:
         """We cannot authenticate anonymous users, so this is by definition False."""
+        return False
+
+    @property
+    def is_admin(self) -> bool:
+        """Unauthenticated users cannot be admins."""
         return False
 
 

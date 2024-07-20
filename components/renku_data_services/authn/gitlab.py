@@ -70,7 +70,6 @@ class GitlabAuthenticator:
                 last_name = " ".join(name_parts)
 
         return base_models.APIUser(
-            is_admin=False,
             id=str(user_id),
             access_token=access_token,
             first_name=first_name,

@@ -7,8 +7,8 @@ from typing import Any, Optional, Self
 
 from marshmallow import EXCLUDE, Schema, ValidationError, fields, validates_schema
 
+from renku_data_services.base_models import APIUser
 from renku_data_services.notebooks.api.classes.cloud_storage import ICloudStorageRequest
-from renku_data_services.notebooks.api.classes.user import User
 from renku_data_services.notebooks.config import _NotebooksConfig
 
 
@@ -57,7 +57,8 @@ class RCloneStorage(ICloudStorageRequest):
     def storage_from_schema(
         cls,
         data: dict[str, Any],
-        user: User,
+        user: APIUser,
+        internal_gitlab_user: APIUser,
         project_id: int,
         work_dir: Path,
         config: _NotebooksConfig,
@@ -76,7 +77,7 @@ class RCloneStorage(ICloudStorageRequest):
                 target_path,
                 readonly,
                 name,
-            ) = config.storage_validator.get_storage_by_id(user, project_id, data["storage_id"])
+            ) = config.storage_validator.get_storage_by_id(user, internal_gitlab_user, project_id, data["storage_id"])
             configuration = {**configuration, **(configuration or {})}
             readonly = readonly
         else:

@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 def main_container(server: "UserServer") -> client.V1Container | None:
     """The patch that adds the git proxy container to a session statefulset."""
-    if server.user.anonymous or not server.repositories:
+    if not server.user.is_authenticated or not server.repositories:
         return None
 
     etc_cert_volume_mount = get_certificates_volume_mounts(
@@ -31,7 +31,7 @@ def main_container(server: "UserServer") -> client.V1Container | None:
         client.V1EnvVar(name=f"{prefix}HEALTH_PORT", value=str(server.config.sessions.git_proxy.health_port)),
         client.V1EnvVar(
             name=f"{prefix}ANONYMOUS_SESSION",
-            value="true" if server.user.anonymous else "false",
+            value="false" if server.user.is_authenticated else "true",
         ),
         client.V1EnvVar(name=f"{prefix}RENKU_ACCESS_TOKEN", value=str(server.user.access_token)),
         client.V1EnvVar(name=f"{prefix}RENKU_REFRESH_TOKEN", value=str(server.user.refresh_token)),
@@ -91,7 +91,7 @@ def main_container(server: "UserServer") -> client.V1Container | None:
 
 def main(server: "UserServer") -> list[dict[str, Any]]:
     """The patch that adds the git proxy container to a session statefulset."""
-    if server.user.anonymous or not server.repositories:
+    if not server.user.is_authenticated or not server.repositories:
         return []
 
     container = main_container(server)

@@ -1,9 +1,9 @@
 """Authentication decorators for Sanic."""
 
 import re
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from functools import wraps
-from typing import Any, Concatenate, Coroutine, ParamSpec, TypeVar, cast
+from typing import Any, Concatenate, ParamSpec, TypeVar, cast
 
 from sanic import Request
 from ulid import ULID
@@ -54,6 +54,10 @@ async def _authenticate(authenticator: Authenticator, request: Request) -> Authe
     user = await authenticator.authenticate(token, request)
     if not user.is_authenticated or user.id is None or user.access_token is None:
         raise errors.Unauthorized(message="You have to log in to access this endpoint.", quiet=True)
+    if not user.email:
+        raise errors.ProgrammingError(
+            message="Expected the user's email to be present after authentication", quiet=True
+        )
 
     return AuthenticatedAPIUser(
         id=user.id,
@@ -69,17 +73,17 @@ async def _authenticate(authenticator: Authenticator, request: Request) -> Authe
 def authenticated_or_anonymous(
     authenticator: Authenticator,
 ) -> Callable[
-    [Callable[Concatenate[Request, APIUser | AnonymousAPIUser, _P], Awaitable[_T]]],
-    Callable[Concatenate[Request, APIUser | AnonymousAPIUser, _P], Awaitable[_T]],
+    [Callable[Concatenate[Request, AuthenticatedAPIUser | AnonymousAPIUser, _P], Awaitable[_T]]],
+    Callable[Concatenate[Request, AuthenticatedAPIUser | AnonymousAPIUser, _P], Coroutine[Any, Any, _T]],
 ]:
     """Decorator for a Sanic handler that adds the APIUser or AnonymousAPIUser model to the handler."""
 
     def decorator(
-        f: Callable[Concatenate[Request, APIUser | AnonymousAPIUser, _P], Awaitable[_T]],
-    ) -> Callable[Concatenate[Request, APIUser | AnonymousAPIUser, _P], Awaitable[_T]]:
+        f: Callable[Concatenate[Request, AuthenticatedAPIUser | AnonymousAPIUser, _P], Awaitable[_T]],
+    ) -> Callable[Concatenate[Request, AuthenticatedAPIUser | AnonymousAPIUser, _P], Coroutine[Any, Any, _T]]:
         @wraps(f)
         async def decorated_function(
-            request: Request, user: APIUser | AnonymousAPIUser, *args: _P.args, **kwargs: _P.kwargs
+            request: Request, user: AuthenticatedAPIUser | AnonymousAPIUser, *args: _P.args, **kwargs: _P.kwargs
         ) -> _T:
             try:
                 user = await _authenticate(authenticator, request)

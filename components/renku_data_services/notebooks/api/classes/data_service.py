@@ -7,6 +7,14 @@ from urllib.parse import urljoin, urlparse
 import requests
 from sanic.log import logger
 
+from renku_data_services.base_models import APIUser
+from renku_data_services.notebooks.api.classes.repository import (
+    INTERNAL_GITLAB_PROVIDER,
+    GitProvider,
+    OAuth2Connection,
+    OAuth2Provider,
+)
+from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
 from renku_data_services.notebooks.errors.intermittent import IntermittentError
 from renku_data_services.notebooks.errors.programming import ConfigurationError
 from renku_data_services.notebooks.errors.user import (
@@ -15,10 +23,6 @@ from renku_data_services.notebooks.errors.user import (
     InvalidComputeResourceError,
     MissingResourceError,
 )
-
-from ..schemas.server_options import ServerOptions
-from .repository import INTERNAL_GITLAB_PROVIDER, GitProvider, OAuth2Connection, OAuth2Provider
-from .user import User
 
 
 class CloudStorageConfig(NamedTuple):
@@ -40,13 +44,15 @@ class StorageValidator:
     def __post_init__(self) -> None:
         self.storage_url = self.storage_url.rstrip("/")
 
-    def get_storage_by_id(self, user: User, project_id: int, storage_id: str) -> CloudStorageConfig:
+    def get_storage_by_id(
+        self, user: APIUser, internal_gitlab_user: APIUser, project_id: int, storage_id: str
+    ) -> CloudStorageConfig:
         """Get a specific cloud storage configuration by ID."""
         headers = None
-        if user is not None and user.access_token is not None and user.git_token is not None:
+        if user is not None and user.access_token is not None and internal_gitlab_user.access_token is not None:
             headers = {
                 "Authorization": f"bearer {user.access_token}",
-                "Gitlab-Access-Token": user.git_token,
+                "Gitlab-Access-Token": user.access_token,
             }
         # TODO: remove project_id once authz on the data service works properly
         request_url = self.storage_url + f"/storage/{storage_id}?project_id={project_id}"
@@ -97,7 +103,7 @@ class StorageValidator:
 class DummyStorageValidator:
     """Dummy cloud storage validator used for testing."""
 
-    def get_storage_by_id(self, user: User, project_id: int, storage_id: str) -> CloudStorageConfig:
+    def get_storage_by_id(self, user: APIUser, internal_gitlab_user: APIUser, project_id: int, storage_id: str) -> CloudStorageConfig:
         """Get storage by ID."""
         raise NotImplementedError()
 
@@ -114,14 +120,14 @@ class DummyStorageValidator:
 class CRCValidator:
     """Calls to the CRC service to validate resource requests."""
 
-    crc_url: str
+    crc_url: str = "http://127.0.0.1/api/data"
 
     def __post_init__(self) -> None:
         self.crc_url = self.crc_url.rstrip("/")
 
     def validate_class_storage(
         self,
-        user: User,
+        user: APIUser,
         class_id: int,
         storage: Optional[int] = None,
     ) -> ServerOptions:
@@ -169,7 +175,7 @@ class CRCValidator:
             raise ConfigurationError("Cannot find the default resource class.")
         return default_classes[0]
 
-    def find_acceptable_class(self, user: User, requested_server_options: ServerOptions) -> Optional[ServerOptions]:
+    def find_acceptable_class(self, user: APIUser, requested_server_options: ServerOptions) -> Optional[ServerOptions]:
         """Find a resource class greater than or equal to the old-style server options being requested.
 
         Only classes available to the user are considered.
@@ -198,7 +204,7 @@ class CRCValidator:
 
     def _get_resource_pools(
         self,
-        user: Optional[User] = None,
+        user: Optional[APIUser] = None,
         server_options: Optional[ServerOptions] = None,
     ) -> list[dict[str, Any]]:
         headers = None
@@ -236,7 +242,7 @@ class DummyCRCValidator:
 
     options: ServerOptions = field(default_factory=lambda: ServerOptions(0.5, 1, 0, 1, "/lab", False, True))
 
-    def validate_class_storage(self, user: User, class_id: int, storage: int | None = None) -> ServerOptions:
+    def validate_class_storage(self, user: APIUser, class_id: int, storage: int | None = None) -> ServerOptions:
         """Validate the storage against the resource class."""
         return self.options
 
@@ -253,7 +259,7 @@ class DummyCRCValidator:
             "default": True,
         }
 
-    def find_acceptable_class(self, user: User, requested_server_options: ServerOptions) -> Optional[ServerOptions]:
+    def find_acceptable_class(self, user: APIUser, requested_server_options: ServerOptions) -> Optional[ServerOptions]:
         """Find an acceptable resource class based on the required options."""
         return self.options
 
@@ -270,7 +276,7 @@ class GitProviderHelper:
         self.service_url = self.service_url.rstrip("/")
         self.renku_url = self.renku_url.rstrip("/")
 
-    def get_providers(self, user: User) -> list[GitProvider]:
+    def get_providers(self, user: APIUser) -> list[GitProvider]:
         """Get the providers for the specific user."""
         if user is None or user.access_token is None:
             return []
@@ -305,7 +311,7 @@ class GitProviderHelper:
         )
         return providers_list
 
-    def get_oauth2_connections(self, user: User | None = None) -> list[OAuth2Connection]:
+    def get_oauth2_connections(self, user: APIUser | None = None) -> list[OAuth2Connection]:
         """Get oauth2 connections."""
         if user is None or user.access_token is None:
             return []
@@ -332,6 +338,6 @@ class GitProviderHelper:
 class DummyGitProviderHelper:
     """Helper for git providers."""
 
-    def get_providers(self, user: User) -> list[GitProvider]:
+    def get_providers(self, user: APIUser) -> list[GitProvider]:
         """Get a list of providers."""
         return []

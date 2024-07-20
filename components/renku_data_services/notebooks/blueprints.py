@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from renku_data_services.connected_services.db import ConnectedServicesRepository
 import requests
 from gitlab.const import Visibility as GitlabVisibility
 from gitlab.v4.objects.projects import Project as GitlabProject
@@ -16,10 +15,14 @@ from sanic import Request, json
 from sanic.log import logger
 from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
+from ulid import ULID
 
 from renku_data_services import base_models
-from renku_data_services.base_api.auth import authenticate, only_authenticated
+from renku_data_services.base_api.auth import authenticated_or_anonymous
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser, Authenticator
+from renku_data_services.connected_services.db import ConnectedServicesRepository
+from renku_data_services.connected_services.models import OAuth2TokenSet
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec
@@ -29,7 +32,7 @@ from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.classes.repository import Repository
 from renku_data_services.notebooks.api.classes.server import Renku1UserServer, Renku2UserServer, UserServer
 from renku_data_services.notebooks.api.classes.server_manifest import UserServerManifest
-from renku_data_services.notebooks.api.classes.user import AnonymousUser, RegisteredUser
+from renku_data_services.notebooks.api.classes.user import NotebooksGitlabClient
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_data_services.notebooks.api.schemas.config_server_options import ServerOptionsEndpointResponse
 from renku_data_services.notebooks.api.schemas.logs import ServerLogs
@@ -41,18 +44,20 @@ from renku_data_services.notebooks.config import _NotebooksConfig
 from renku_data_services.notebooks.crs import (
     AmaltheaSessionSpec,
     AmaltheaSessionV1Alpha1,
-    CodeRepository,
-    CodeRepositoryType,
     Culling,
+    ExtraContainer,
     Ingress,
     Metadata,
+    Resources,
     Session,
     Storage,
 )
 from renku_data_services.notebooks.errors.intermittent import AnonymousUserPatchError, PVDisabledError
 from renku_data_services.notebooks.errors.programming import ProgrammingError
 from renku_data_services.notebooks.errors.user import MissingResourceError, UserInputError
-from renku_data_services.notebooks.util.authn import NotebooksAuthenticator, notebooks_authenticate
+from renku_data_services.notebooks.util.authn import (
+    notebooks_internal_gitlab_authenticate,
+)
 from renku_data_services.notebooks.util.kubernetes_ import (
     find_container,
     renku_1_make_server_name,
@@ -60,6 +65,7 @@ from renku_data_services.notebooks.util.kubernetes_ import (
 )
 from renku_data_services.notebooks.util.repository import get_status
 from renku_data_services.project.db import ProjectRepository
+from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.session.db import SessionRepository
 
 
@@ -67,8 +73,10 @@ from renku_data_services.session.db import SessionRepository
 class NotebooksBP(CustomBlueprint):
     """Handlers for manipulating notebooks."""
 
-    authenticator: NotebooksAuthenticator
+    authenticator: Authenticator
     nb_config: _NotebooksConfig
+    git_repo: GitRepositoriesRepository
+    internal_gitlab_authenticator: base_models.Authenticator
 
     def version(self) -> BlueprintFactoryResponse:
         """Return notebook services version."""
@@ -106,13 +114,13 @@ class NotebooksBP(CustomBlueprint):
     def user_servers(self) -> BlueprintFactoryResponse:
         """Return a JSON of running servers for the user."""
 
-        @notebooks_authenticate(self.authenticator)
+        @authenticated_or_anonymous(self.authenticator)
         async def _user_servers(
-            request: Request, user: AnonymousUser | RegisteredUser, **query_params: dict
+            request: Request, user: AnonymousAPIUser | AuthenticatedAPIUser, **query_params: dict
         ) -> JSONResponse:
             servers = [
                 UserServerManifest(s, self.nb_config.sessions.default_image)
-                for s in self.nb_config.k8s_client.list_servers(user.safe_username)
+                for s in await self.nb_config.k8s_client.list_servers(user.id)
             ]
             filter_attrs = list(filter(lambda x: x[1] is not None, request.get_query_args()))
             filtered_servers = {}
@@ -127,11 +135,11 @@ class NotebooksBP(CustomBlueprint):
     def user_server(self) -> BlueprintFactoryResponse:
         """Returns a user server based on its ID."""
 
-        @notebooks_authenticate(self.authenticator)
+        @authenticated_or_anonymous(self.authenticator)
         async def _user_server(
-            request: Request, user: RegisteredUser | AnonymousUser, server_name: str
+            request: Request, user: AnonymousAPIUser | AuthenticatedAPIUser, server_name: str
         ) -> JSONResponse:
-            server = await self.nb_config.k8s_client.get_server(server_name, user.safe_username)
+            server = await self.nb_config.k8s_client.get_server(server_name, user.id)
             if server is None:
                 raise MissingResourceError(message=f"The server {server_name} does not exist.")
             server = UserServerManifest(server, self.nb_config.sessions.default_image)
@@ -142,13 +150,17 @@ class NotebooksBP(CustomBlueprint):
     def launch_notebook(self) -> BlueprintFactoryResponse:
         """Start a renku session."""
 
-        @notebooks_authenticate(self.authenticator)
+        @authenticated_or_anonymous(self.authenticator)
+        @notebooks_internal_gitlab_authenticate(self.internal_gitlab_authenticator)
         @validate(json=apispec.LaunchNotebookRequest)
         async def _launch_notebook(
-            request: Request, user: RegisteredUser | AnonymousUser, body: apispec.LaunchNotebookRequest
+            request: Request,
+            user: AnonymousAPIUser | AuthenticatedAPIUser,
+            internal_gitlab_user: APIUser,
+            body: apispec.LaunchNotebookRequest,
         ) -> JSONResponse:
             server_name = renku_2_make_server_name(
-                safe_username=user.safe_username, project_id=body.project_id, launcher_id=body.launcher_id
+                safe_username=user.id, project_id=body.project_id, launcher_id=body.launcher_id
             )
             server_class = Renku2UserServer
             server, status_code = await self.launch_notebook_helper(
@@ -175,6 +187,7 @@ class NotebooksBP(CustomBlueprint):
                 project_id=body.project_id,
                 launcher_id=body.launcher_id,
                 repositories=body.repositories,
+                internal_gitlab_user=internal_gitlab_user,
             )
             return json(NotebookResponse().dump(server), status_code)
 
@@ -183,16 +196,19 @@ class NotebooksBP(CustomBlueprint):
     def launch_notebook_old(self) -> BlueprintFactoryResponse:
         """Start a renku session using the old operator."""
 
-        @notebooks_authenticate(self.authenticator)
+        @authenticated_or_anonymous(self.authenticator)
+        @notebooks_internal_gitlab_authenticate(self.internal_gitlab_authenticator)
         @validate(json=apispec.LaunchNotebookRequestOld)
         async def _launch_notebook_old(
-            request: Request, user: RegisteredUser | AnonymousUser, body: apispec.LaunchNotebookRequestOld
+            request: Request,
+            user: AnonymousAPIUser | AuthenticatedAPIUser,
+            internal_gitlab_user: APIUser,
+            body: apispec.LaunchNotebookRequestOld,
         ) -> JSONResponse:
-            server_name = renku_1_make_server_name(
-                user.safe_username, body.namespace, body.project, body.branch, body.commit_sha
-            )
+            server_name = renku_1_make_server_name(user.id, body.namespace, body.project, body.branch, body.commit_sha)
             project_slug = f"{body.namespace}/{body.project}"
-            gl_project = user.get_renku_project(project_slug)
+            gitlab_client = NotebooksGitlabClient(self.nb_config.git.url, APIUser.access_token)
+            gl_project = gitlab_client.get_renku_project(project_slug)
             if gl_project is None:
                 raise errors.MissingResourceError(message=f"Cannot find gitlab project with slug {project_slug}")
             gl_project_path = gl_project.path
@@ -231,6 +247,7 @@ class NotebooksBP(CustomBlueprint):
                 project_id=None,
                 launcher_id=None,
                 repositories=None,
+                internal_gitlab_user=internal_gitlab_user,
             )
             return json(NotebookResponse().dump(server), status_code)
 
@@ -241,7 +258,7 @@ class NotebooksBP(CustomBlueprint):
         nb_config: _NotebooksConfig,
         server_name: str,
         server_class: type[UserServer],
-        user: AnonymousUser | RegisteredUser,
+        user: AnonymousAPIUser | AuthenticatedAPIUser,
         image: str,
         resource_class_id: int | None,
         storage: int | None,
@@ -261,9 +278,10 @@ class NotebooksBP(CustomBlueprint):
         project_id: str | None,  # Renku 2.0
         launcher_id: str | None,  # Renku 2.0
         repositories: list[apispec.LaunchNotebookRequestRepository] | None,  # Renku 2.0
+        internal_gitlab_user: APIUser,
     ) -> tuple[UserServerManifest, int]:
         """Helper function to launch a Jupyter server."""
-        server = await nb_config.k8s_client.get_server(server_name, user.safe_username)
+        server = await nb_config.k8s_client.get_server(server_name, user.id)
 
         if server:
             return UserServerManifest(
@@ -281,8 +299,12 @@ class NotebooksBP(CustomBlueprint):
             image_repo = parsed_image.repo_api()
             image_exists_publicly = image_repo.image_exists(parsed_image)
             image_exists_privately = False
-            if not image_exists_publicly and parsed_image.hostname == nb_config.git.registry and user.git_token:
-                image_repo = image_repo.with_oauth2_token(user.git_token)
+            if (
+                not image_exists_publicly
+                and parsed_image.hostname == nb_config.git.registry
+                and internal_gitlab_user.access_token
+            ):
+                image_repo = image_repo.with_oauth2_token(internal_gitlab_user.access_token)
                 image_exists_privately = image_repo.image_exists(parsed_image)
             if not image_exists_privately and not image_exists_publicly:
                 using_default_image = True
@@ -307,8 +329,8 @@ class NotebooksBP(CustomBlueprint):
             # non-authenticated users. Also, a nice footgun from the Gitlab API Python library.
             is_image_private = getattr(gl_project, "visibility", GitlabVisibility.PUBLIC) != GitlabVisibility.PUBLIC
             image_repo = parsed_image.repo_api()
-            if is_image_private and user.git_token:
-                image_repo = image_repo.with_oauth2_token(user.git_token)
+            if is_image_private and internal_gitlab_user.access_token:
+                image_repo = image_repo.with_oauth2_token(internal_gitlab_user.access_token)
             if not image_repo.image_exists(parsed_image):
                 raise MissingResourceError(
                     message=(
@@ -388,6 +410,7 @@ class NotebooksBP(CustomBlueprint):
                             project_id=gl_project_id,
                             work_dir=server_work_dir.absolute(),
                             config=nb_config,
+                            internal_gitlab_user=internal_gitlab_user,
                         )
                     )
             except ValidationError as e:
@@ -463,7 +486,7 @@ class NotebooksBP(CustomBlueprint):
             headers = {"Authorization": f"bearer {user.access_token}"}
 
             async def _on_error(server_name: str, error_msg: str) -> None:
-                await nb_config.k8s_client.delete_server(server_name, safe_username=user.safe_username)
+                await nb_config.k8s_client.delete_server(server_name, safe_username=user.id)
                 raise RuntimeError(error_msg)
 
             try:
@@ -484,19 +507,24 @@ class NotebooksBP(CustomBlueprint):
     def patch_server(self) -> BlueprintFactoryResponse:
         """Patch a user server by name based on the query param."""
 
-        @notebooks_authenticate(self.authenticator)
+        @authenticated_or_anonymous(self.authenticator)
+        @notebooks_internal_gitlab_authenticate(self.internal_gitlab_authenticator)
         @validate(json=apispec.PatchServerRequest)
         async def _patch_server(
-            request: Request, user: RegisteredUser | AnonymousUser, server_name: str, body: apispec.PatchServerRequest
+            request: Request,
+            user: AnonymousAPIUser | AuthenticatedAPIUser,
+            internal_gitlab_user: APIUser,
+            server_name: str,
+            body: apispec.PatchServerRequest,
         ) -> JSONResponse:
             if not self.nb_config.sessions.storage.pvs_enabled:
                 raise PVDisabledError()
 
-            if isinstance(user, AnonymousUser):
+            if isinstance(user, AnonymousAPIUser):
                 raise AnonymousUserPatchError()
 
             patch_body = body
-            server = await self.nb_config.k8s_client.get_server(server_name, user.safe_username)
+            server = await self.nb_config.k8s_client.get_server(server_name, user.id)
             if server is None:
                 raise errors.MissingResourceError(message=f"The server with name {server_name} cannot be found")
             if server.spec is None:
@@ -538,7 +566,7 @@ class NotebooksBP(CustomBlueprint):
                             "value": parsed_server_options.priority_class,
                         }
                     )
-                elif server.get("metadata", {}).get("labels", {}).get("renku.io/quota"):
+                elif server.metadata.labels.get("renku.io/quota"):
                     js_patch.append(
                         {
                             "op": "remove",
@@ -546,8 +574,8 @@ class NotebooksBP(CustomBlueprint):
                             "path": "/metadata/labels/renku.io~1quota",
                         }
                     )
-                new_server = self.nb_config.k8s_client.patch_server(
-                    server_name=server_name, safe_username=user.safe_username, patch=js_patch
+                new_server = await self.nb_config.k8s_client.patch_server(
+                    server_name=server_name, safe_username=user.id, patch=js_patch
                 )
                 ss_patch: list[dict[str, Any]] = [
                     {
@@ -556,11 +584,11 @@ class NotebooksBP(CustomBlueprint):
                         "value": parsed_server_options.priority_class,
                     }
                 ]
-                self.nb_config.k8s_client.patch_statefulset(server_name=server_name, patch=ss_patch)
+                await self.nb_config.k8s_client.patch_statefulset(server_name=server_name, patch=ss_patch)
 
             if state == PatchServerStatusEnum.Hibernated:
                 # NOTE: Do nothing if server is already hibernated
-                currently_hibernated = server.get("spec", {}).get("jupyterServer", {}).get("hibernated", False)
+                currently_hibernated = server.spec.jupyterServer.hibernated
                 if server and currently_hibernated:
                     logger.warning(f"Server {server_name} is already hibernated.")
 
@@ -570,7 +598,7 @@ class NotebooksBP(CustomBlueprint):
 
                 hibernation: dict[str, str | bool] = {"branch": "", "commit": "", "dirty": "", "synchronized": ""}
 
-                sidecar_patch = find_container(server.get("spec", {}).get("patches", []), "git-sidecar")
+                sidecar_patch = find_container(server.spec.patches, "git-sidecar")
                 status = (
                     get_status(
                         server_name=server_name,
@@ -608,8 +636,8 @@ class NotebooksBP(CustomBlueprint):
                     },
                 }
 
-                new_server = self.nb_config.k8s_client.patch_server(
-                    server_name=server_name, safe_username=user.safe_username, patch=patch
+                new_server = await self.nb_config.k8s_client.patch_server(
+                    server_name=server_name, safe_username=user.id, patch=patch
                 )
             elif state == PatchServerStatusEnum.Running:
                 # NOTE: We clear hibernation annotations in Amalthea to avoid flickering in the UI (showing
@@ -623,13 +651,15 @@ class NotebooksBP(CustomBlueprint):
                 }
                 # NOTE: The tokens in the session could expire if the session is hibernated long enough,
                 # here we inject new ones to make sure everything is valid when the session starts back up.
-                if user.access_token is None or user.refresh_token is None or user.git_token is None:
+                if user.access_token is None or user.refresh_token is None or internal_gitlab_user.access_token is None:
                     raise errors.Unauthorized(message="Cannot patch the server if the user is not fully logged in.")
                 renku_tokens = RenkuTokens(access_token=user.access_token, refresh_token=user.refresh_token)
-                gitlab_token = GitlabToken(access_token=user.git_token, expires_at=user.git_token_expires_at)
-                self.nb_config.k8s_client.patch_tokens(server_name, renku_tokens, gitlab_token)
-                new_server = self.nb_config.k8s_client.patch_server(
-                    server_name=server_name, safe_username=user.safe_username, patch=patch
+                gitlab_token = GitlabToken(
+                    access_token=internal_gitlab_user.access_token, expires_at=user.git_token_expires_at
+                )
+                await self.nb_config.k8s_client.patch_tokens(server_name, renku_tokens, gitlab_token)
+                new_server = await self.nb_config.k8s_client.patch_server(
+                    server_name=server_name, safe_username=user.id, patch=patch
                 )
 
             return json(
@@ -641,12 +671,11 @@ class NotebooksBP(CustomBlueprint):
     def stop_server(self) -> BlueprintFactoryResponse:
         """Stop user server by name."""
 
-        @notebooks_authenticate(self.authenticator)
+        @authenticated_or_anonymous(self.authenticator)
         async def _stop_server(
-            request: Request, user: RegisteredUser | AnonymousUser, server_name: str
+            request: Request, user: AnonymousAPIUser | AuthenticatedAPIUser, server_name: str
         ) -> HTTPResponse:
-            forced: bool = request.query_args.get("forced") == "true"
-            self.nb_config.k8s_client.delete_server(server_name, forced=forced, safe_username=user.safe_username)
+            await self.nb_config.k8s_client.delete_server(server_name, safe_username=user.id)
             return HTTPResponse(status=204)
 
         return "/notebooks/servers/<server_name>", ["DELETE"], _stop_server
@@ -671,15 +700,15 @@ class NotebooksBP(CustomBlueprint):
     def server_logs(self) -> BlueprintFactoryResponse:
         """Return the logs of the running server."""
 
-        @notebooks_authenticate(self.authenticator)
+        @authenticated_or_anonymous(self.authenticator)
         async def _server_logs(
-            request: Request, user: RegisteredUser | AnonymousUser, server_name: str
+            request: Request, user: AnonymousAPIUser | AuthenticatedAPIUser, server_name: str
         ) -> JSONResponse:
             max_lines = int(request.query_args.get("max_lines", 250))
             logs = self.nb_config.k8s_client.get_server_logs(
                 server_name=server_name,
                 max_log_lines=max_lines,
-                safe_username=user.safe_username,
+                safe_username=user.id,
             )
             return json(ServerLogs().dump(logs))
 
@@ -688,15 +717,18 @@ class NotebooksBP(CustomBlueprint):
     def check_docker_image(self) -> BlueprintFactoryResponse:
         """Return the availability of the docker image."""
 
-        @notebooks_authenticate(self.authenticator)
-        async def _check_docker_image(request: Request, user: RegisteredUser | AnonymousUser) -> HTTPResponse:
+        @authenticated_or_anonymous(self.authenticator)
+        @notebooks_internal_gitlab_authenticate(self.internal_gitlab_authenticator)
+        async def _check_docker_image(
+            request: Request, user: AnonymousAPIUser | AuthenticatedAPIUser, internal_gitlab_user: APIUser
+        ) -> HTTPResponse:
             image_url = request.query_args.get("image_url")
             if not isinstance(image_url, str):
                 raise ValueError("required string of image url")
             parsed_image = Image.from_path(image_url)
             image_repo = parsed_image.repo_api()
-            if parsed_image.hostname == self.nb_config.git.registry and user.git_token:
-                image_repo = image_repo.with_oauth2_token(user.git_token)
+            if parsed_image.hostname == self.nb_config.git.registry and internal_gitlab_user.access_token:
+                image_repo = image_repo.with_oauth2_token(internal_gitlab_user.access_token)
             if image_repo.image_exists(parsed_image):
                 return HTTPResponse(status=200)
             else:
@@ -710,6 +742,7 @@ class NotebooksNewBP(CustomBlueprint):
     """Handlers for manipulating notebooks for the new Amalthea operator."""
 
     authenticator: base_models.Authenticator
+    internal_gitlab_authenticator: base_models.Authenticator
     nb_config: _NotebooksConfig
     project_repo: ProjectRepository
     session_repo: SessionRepository
@@ -718,41 +751,52 @@ class NotebooksNewBP(CustomBlueprint):
     def start(self) -> BlueprintFactoryResponse:
         """Start a session with the new operator."""
 
-        @authenticate(self.authenticator)
-        @only_authenticated
+        @authenticated_or_anonymous(self.authenticator)
+        @notebooks_internal_gitlab_authenticate(self.internal_gitlab_authenticator)
         @validate(json=apispec.LaunchNotebookRequest)
-        async def _handler(_: Request, user: base_models.APIUser, body=apispec.LaunchNotebookRequest) -> JSONResponse:
+        async def _handler(
+            _: Request,
+            user: AuthenticatedAPIUser | AnonymousAPIUser,
+            internal_gitlab_user: APIUser,
+            body: apispec.LaunchNotebookRequest,
+        ) -> JSONResponse:
+            gitlab_client = NotebooksGitlabClient(self.nb_config.git.url, internal_gitlab_user.access_token)
             server_name = renku_2_make_server_name(
                 safe_username=user.id, project_id=body.project_id, launcher_id=body.launcher_id
             )
             project = await self.project_repo.get_project(user=user, project_id=body.project_id)
-            launcher = await self.session_repo.get_launcher(user, body.launcher_id)
+            launcher = await self.session_repo.get_launcher(user, ULID.from_str(body.launcher_id))
             environment = None
             if launcher.environment_id:
-                environment = await self.session_repo.get_environment(launcher.environment_id)
-            image = launcher.container_image or environment.container_image
+                environment = await self.session_repo.get_environment(ULID.from_str(launcher.environment_id))
+            image = launcher.container_image
+            if image is None and environment is not None:
+                image = environment.container_image
+            if image is None:
+                raise errors.ProgrammingError(message="Cannot start a session without an image", quiet=True)
             default_resource_class = await self.rp_repo.get_default_resource_class()
-            resource_class_id = body.resource_class_id or self.nb_config.resource or default_resource_class.id
+            if default_resource_class.id is None:
+                raise errors.ProgrammingError(message="The default reosurce class has to have an ID", quiet=True)
+            resource_class_id = body.resource_class_id or default_resource_class.id
             parsed_server_options = self.nb_config.crc_validator.validate_class_storage(
                 user, resource_class_id, body.storage
             )
             work_dir = Path("/home/jovyan/work")
-            user_secrets: apispec.UserSecrets | None = None
+            user_secrets: K8sUserSecrets | None = None
             if body.user_secrets:
                 user_secrets = K8sUserSecrets(
                     name=server_name,
                     user_secret_ids=body.user_secrets.user_secret_ids,
                     mount_path=body.user_secrets.mount_path,
                 )
-            cloud_storage: list[RCloneStorage] = [
-                RCloneStorage.storage_from_schema(i, user, body.project_id, work_dir, self.nb_config)
-                for i in body.cloudstorage
-            ]
+            cloud_storage: list[RCloneStorage] = []
             repositories = [Repository(i.url, branch=i.branch, commit_sha=i.commit_sha) for i in body.repositories]
-            server = UserServer(
+            server = Renku2UserServer(
                 user=user,
-                server_name=server_name,
                 image=image,
+                project_id=body.project_id,
+                launcher_id=body.launcher_id,
+                server_name=server_name,
                 server_options=parsed_server_options,
                 environment_variables={},
                 user_secrets=user_secrets,
@@ -760,17 +804,24 @@ class NotebooksNewBP(CustomBlueprint):
                 k8s_client=self.nb_config.k8s_v2_client,
                 workspace_mount_path=work_dir,
                 work_dir=work_dir,
+                repositories=repositories,
                 config=self.nb_config,
                 using_default_image=self.nb_config.sessions.default_image == image,
                 is_image_private=False,
-                repositories=repositories,
+                internal_gitlab_user=internal_gitlab_user,
             )
             cert_init, cert_vols = init_containers.certificates_container(self.nb_config)
             session_init_containers = [cert_init]
             extra_volumes = [i for i in cert_vols]
             git_clone = init_containers.git_clone_container(server)
             if git_clone:
-                init_containers.append(git_clone)
+                session_init_containers.append(git_clone)
+            default_url = "/"
+            if launcher.default_url:
+                default_url = launcher.default_url
+            if not default_url and environment and environment.default_url:
+                default_url = environment.default_url
+            extra_containers: list[ExtraContainer] = [ExtraContainer.model_validate(git_proxy.main_container(server))]
             manifest = AmaltheaSessionV1Alpha1(
                 metadata=Metadata(
                     name=server_name,
@@ -778,18 +829,25 @@ class NotebooksNewBP(CustomBlueprint):
                 ),
                 spec=AmaltheaSessionSpec(
                     adoptSecrets=True,
-                    codeRepositories=[
-                        CodeRepository(remote=i, type=CodeRepositoryType.git) for i in project.repositories
-                    ],
+                    codeRepositories=[],
+                    dataSources=[],
                     hibernated=False,
                     session=Session(
-                        image=launcher.container_image or environment.container_image,
-                        urlPath=launcher.default_url or environment.default_url,
+                        image=image,
+                        urlPath=default_url,
+                        port=4180,
                         storage=Storage(
                             className=self.nb_config.sessions.storage.pvs_storage_class,
-                            size=body.storage + "Gi",
+                            size=str(body.storage) + "Gi",
                             mountPath="/home/jovyan/work",
                         ),
+                        workingDir="/home/jovyan/work",
+                        runAsUser=1000,
+                        runAsGroup=1000,
+                        resources=Resources(claims=None, requests=None, limits=None),
+                        extraVolumeMounts=[],
+                        command=None,
+                        args=None,
                     ),
                     ingress=Ingress(
                         host=self.nb_config.sessions.ingress.host,
@@ -797,7 +855,7 @@ class NotebooksNewBP(CustomBlueprint):
                         annotations=self.nb_config.sessions.ingress.annotations,
                         tlsSecretName=self.nb_config.sessions.ingress.tls_secret,
                     ),
-                    extraContainers=[git_proxy.main_container],
+                    extraContainers=extra_containers,
                     initContainers=session_init_containers,
                     extraVolumes=extra_volumes,
                     culling=Culling(
@@ -807,20 +865,25 @@ class NotebooksNewBP(CustomBlueprint):
                         maxAge=f"{self.nb_config.sessions.culling.registered.max_age_seconds}s",
                         starting=f"{self.nb_config.sessions.culling.registered.pending_seconds}s",
                     ),
+                    authentication=None,
                 ),
+                status=None,
             )
-            manifest = await self.nb_config.k8s_v2_client.create_server(manifest, user.keycloak_id)
+            manifest = await self.nb_config.k8s_v2_client.create_server(manifest, user.id)
+            url = None
+            if manifest.status:
+                url = manifest.status.url
             return json(
                 apispec.NotebookResponse(
-                    annotations=manifest.metadata.annotations,
-                    cloudstorage=[i for i in cloud_storage],
+                    annotations=apispec.FieldUserPodAnnotations.model_validate(manifest.metadata.annotations),
+                    cloudstorage=[apispec.LaunchNotebookResponseCloudStorage.model_validate(i) for i in cloud_storage],
                     image=image,
                     name=server_name,
-                    resources=apispec.ResourceRequests(),
+                    resources=None,
                     started=manifest.metadata.creationTimestamp,
-                    state={},
-                    status=apispec.ServerStatus(),
-                    url=manifest.status.url,
+                    state=None,
+                    status=None,
+                    url=url,
                 ).model_dump()
             )
 

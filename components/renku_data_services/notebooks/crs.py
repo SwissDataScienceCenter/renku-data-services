@@ -18,10 +18,13 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     Storage,
 )
 from renku_data_services.notebooks.cr_amalthea_session import Model as _ASModel
+from renku_data_services.notebooks.cr_amalthea_session import Resources3 as Resources
 from renku_data_services.notebooks.cr_amalthea_session import Spec as AmaltheaSessionSpec
 from renku_data_services.notebooks.cr_amalthea_session import Type1 as CodeRepositoryType
 from renku_data_services.notebooks.cr_jupyter_server import Model as _JSModel
+from renku_data_services.notebooks.cr_jupyter_server import Patch
 from renku_data_services.notebooks.cr_jupyter_server import Spec as JupyterServerSpec
+from renku_data_services.notebooks.cr_jupyter_server import Type as PatchType
 
 
 class Metadata(BaseModel):

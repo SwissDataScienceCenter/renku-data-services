@@ -6,11 +6,9 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from gitlab.v4.objects.users import CurrentUser
 from kubernetes import client
 
 from renku_data_services.notebooks.api.amalthea_patches.utils import get_certificates_volume_mounts
-from renku_data_services.notebooks.api.classes.user import RegisteredUser
 from renku_data_services.notebooks.config import _NotebooksConfig
 
 if TYPE_CHECKING:
@@ -30,7 +28,7 @@ def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
         read_only_etc_certs=True,
     )
 
-    user_is_anonymous = isinstance(server.user, AnonymousUser)
+    user_is_anonymous = not server.user.is_authenticated
     prefix = "GIT_CLONE_"
     env = [
         {
@@ -47,7 +45,7 @@ def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
         },
         {
             "name": f"{prefix}USER__USERNAME",
-            "value": server.user.username,
+            "value": server.user.email,
         },
         {
             "name": f"{prefix}USER__RENKU_TOKEN",
@@ -80,18 +78,31 @@ def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
             "value": str(Path(etc_cert_volume_mount[0]["mountPath"]) / "ca-certificates.crt"),
         },
     ]
-    if (
-        isinstance(server.user, RegisteredUser)
-        and isinstance(server.user.gitlab_user, CurrentUser)
-        and not user_is_anonymous
-    ):
-        env += [
-            {"name": f"{prefix}USER__EMAIL", "value": server.user.gitlab_user.email},
-            {
-                "name": f"{prefix}USER__FULL_NAME",
-                "value": server.user.gitlab_user.name,
-            },
-        ]
+    if server.user.is_authenticated:
+        if server.user.email:
+            env.append(
+                {"name": f"{prefix}USER__EMAIL", "value": server.user.email},
+            )
+        if server.user.full_name:
+            env.append(
+                {
+                    "name": f"{prefix}USER__FULL_NAME",
+                    "value": server.user.full_name,
+                },
+            )
+        elif server.user.first_name or server.user.last_name:
+            full_name = server.user.first_name or ""
+            if full_name == "":
+                full_name = server.user.last_name or ""
+            else:
+                full_name += " " + (server.user.last_name or "")
+            env.append(
+                {
+                    "name": f"{prefix}USER__FULL_NAME",
+                    "value": server.user.full_name,
+                },
+            )
+
 
     # Set up git repositories
     for idx, repo in enumerate(server.repositories):

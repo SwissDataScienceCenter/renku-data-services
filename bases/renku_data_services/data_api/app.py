@@ -17,7 +17,6 @@ from renku_data_services.crc.blueprints import (
 )
 from renku_data_services.namespace.blueprints import GroupsBP
 from renku_data_services.notebooks.blueprints import NotebooksBP, NotebooksNewBP
-from renku_data_services.notebooks.util.authn import NotebooksAuthenticator
 from renku_data_services.project.blueprints import ProjectsBP
 from renku_data_services.repositories.blueprints import RepositoriesBP
 from renku_data_services.session.blueprints import EnvironmentsBP, SessionLaunchersBP
@@ -139,8 +138,10 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
     notebooks = NotebooksBP(
         name="notebooks_old",
         url_prefix=url_prefix,
-        authenticator=NotebooksAuthenticator(config.nb_config),
+        authenticator=config.authenticator,
         nb_config=config.nb_config,
+        internal_gitlab_authenticator=config.gitlab_authenticator,
+        git_repo=config.git_repositories_repo,
     )
     notebooks_new = NotebooksNewBP(
         name="notebooks",
@@ -150,6 +151,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         project_repo=config.project_repo,
         session_repo=config.session_repo,
         rp_repo=config.rp_repo,
+        internal_gitlab_authenticator=config.gitlab_authenticator,
     )
     app.blueprint(
         [

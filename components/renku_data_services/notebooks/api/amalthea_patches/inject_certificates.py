@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from renku_data_services.notebooks.api.amalthea_patches.utils import get_certificates_volume_mounts
-from renku_data_services.notebooks.api.classes.user import RegisteredUser
 
 if TYPE_CHECKING:
     # NOTE: If these are directly imported then you get circular imports.
@@ -32,7 +31,7 @@ def proxy(server: "UserServer") -> list[dict[str, Any]]:
             ],
         },
     ]
-    if isinstance(server.user, RegisteredUser):
+    if server.user.is_authenticated:
         patches.append(
             {
                 "type": "application/json-patch+json",

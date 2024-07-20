@@ -3,8 +3,6 @@
 import os
 from typing import TYPE_CHECKING, Any
 
-from renku_data_services.notebooks.api.classes.user import RegisteredUser
-
 if TYPE_CHECKING:
     # NOTE: If these are directly imported then you get circular imports.
     from renku_data_services.notebooks.api.classes.server import UserServer
@@ -13,7 +11,7 @@ if TYPE_CHECKING:
 def main(server: "UserServer") -> list[dict[str, Any]]:
     """Adds the git sidecar container to the session statefulset."""
     # NOTE: Sessions can be persisted only for registered users
-    if not isinstance(server.user, RegisteredUser):
+    if not server.user.is_authenticated:
         return []
     if not server.repositories:
         return []
@@ -92,7 +90,7 @@ def main(server: "UserServer") -> list[dict[str, Any]]:
                             },
                             {
                                 "name": "RENKU_USERNAME",
-                                "value": f"{server.user.username}",
+                                "value": f"{server.user.id}",
                             },
                             {
                                 "name": "GIT_RPC_GIT_PROXY_HEALTH_PORT",

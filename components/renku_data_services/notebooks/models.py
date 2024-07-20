@@ -1,15 +1,11 @@
 """Basic models for amalthea sessions."""
 
-import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Self
 
-from pydantic import AliasGenerator, BaseModel, Field, Json, ValidationError
+from pydantic import AliasGenerator, BaseModel, Field, Json
 
-from renku_data_services.errors import errors
-from renku_data_services.notebooks.api.amalthea_patches.jupyter_server import user_secrets
-from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
+from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1
 
 
 @dataclass
@@ -34,8 +30,8 @@ class _AmaltheaSessionAnnotations(BaseModel):
     session_launcher_id: str | None = None
     project_id: str | None = None
     user_secrets_mount_path: str | None = None
-    user_secrets_ids: Json[list[str]] = "[]"
-    env_variable_names: Json[list[str]] = "[]"
+    user_secrets_ids: Json[list[str]] = Field(default_factory=list)
+    env_variable_names: Json[list[str]] = Field(default_factory=list)
 
 
 class _MetadataValidation(BaseModel):
@@ -59,7 +55,8 @@ class AmaltheaSessionManifest:
     @property
     def env_vars(self) -> dict[str, SessionEnvVar]:
         output: dict[str, SessionEnvVar] = {}
-        for env in self._manifest.spec.session.env:
+        assert self._manifest.spec
+        for env in self._manifest.spec.session.env or []:
             if env.value is None:
                 continue
             output[env.name] = SessionEnvVar(env.name, env.value)

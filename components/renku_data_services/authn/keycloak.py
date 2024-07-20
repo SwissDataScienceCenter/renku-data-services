@@ -77,7 +77,7 @@ class KeycloakAuthenticator(Authenticator):
         parsed = self._validate(access_token)
         is_admin = self.admin_role in parsed.get("realm_access", {}).get("roles", [])
         return base_models.APIUser(
-            is_admin=is_admin,
+            is_admin_init=is_admin,
             id=parsed.get("sub"),
             access_token=access_token,
             full_name=parsed.get("name"),

@@ -4,6 +4,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Optional, Protocol, Self
 
+from renku_data_services.base_models import APIUser
 from renku_data_services.notebooks.api.classes.data_service import (
     CloudStorageConfig,
     CRCValidator,
@@ -21,7 +22,6 @@ from renku_data_services.notebooks.api.classes.k8s_client import (
     ServerCache,
 )
 from renku_data_services.notebooks.api.classes.repository import GitProvider
-from renku_data_services.notebooks.api.classes.user import User
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
 from renku_data_services.notebooks.config.dynamic import (
     _AmaltheaConfig,
@@ -37,6 +37,8 @@ from renku_data_services.notebooks.config.dynamic import (
 )
 from renku_data_services.notebooks.config.static import _ServersGetEndpointAnnotations
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
+from renku_data_services.storage.db import StorageRepository
+from renku_data_services.storage.rclone import RCloneValidator
 
 
 class CRCValidatorProto(Protocol):
@@ -44,7 +46,7 @@ class CRCValidatorProto(Protocol):
 
     def validate_class_storage(
         self,
-        user: User,
+        user: APIUser,
         class_id: int,
         storage: Optional[int] = None,
     ) -> ServerOptions:
@@ -55,7 +57,7 @@ class CRCValidatorProto(Protocol):
         """Get the default resource class."""
         ...
 
-    def find_acceptable_class(self, user: User, requested_server_options: ServerOptions) -> Optional[ServerOptions]:
+    def find_acceptable_class(self, user: APIUser, requested_server_options: ServerOptions) -> Optional[ServerOptions]:
         """Find a suitable resource class based on resource requirements."""
         ...
 
@@ -63,7 +65,9 @@ class CRCValidatorProto(Protocol):
 class StorageValidatorProto(Protocol):
     """Cloud storage validator protocol."""
 
-    def get_storage_by_id(self, user: User, project_id: int, storage_id: str) -> CloudStorageConfig:
+    def get_storage_by_id(
+        self, user: APIUser, internal_gitlab_user: APIUser, project_id: int, storage_id: str
+    ) -> CloudStorageConfig:
         """Get storage by ID."""
         ...
 
@@ -79,7 +83,7 @@ class StorageValidatorProto(Protocol):
 class GitProviderHelperProto(Protocol):
     """Git provider protocol."""
 
-    def get_providers(self, user: User) -> list[GitProvider]:
+    def get_providers(self, user: APIUser) -> list[GitProvider]:
         """Get a list of git providers."""
         ...
 
@@ -130,9 +134,7 @@ class _NotebooksConfig:
             amalthea_v2_config = _AmaltheaV2Config(cache_url="http://not.specified")
             git_config = _GitConfig("http://not.specified", "registry.not.specified")
         else:
-            crc_validator = CRCValidator(
-                data_service_url, server_options.default_url_default, server_options.lfs_auto_fetch_default
-            )
+            crc_validator = CRCValidator(data_service_url)
             sessions_config = _SessionConfig.from_env()
             storage_validator = StorageValidator(data_service_url)
             git_provider_helper = GitProviderHelper(data_service_url, sessions_config.ingress.host, git_config.url)
