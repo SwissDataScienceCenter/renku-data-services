@@ -678,7 +678,7 @@ class NotebooksBP(CustomBlueprint):
             await self.nb_config.k8s_client.delete_server(server_name, safe_username=user.id)
             return HTTPResponse(status=204)
 
-        return "/notebooks/servers/<server_name>", ["DELETE"], _stop_server
+        return "/notebooks/servers/<server_name>", ["DELETE"],_stop_server
 
     def server_options(self) -> BlueprintFactoryResponse:
         """Return a set of configurable server options."""

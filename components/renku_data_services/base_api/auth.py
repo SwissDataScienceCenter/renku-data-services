@@ -1,7 +1,7 @@
 """Authentication decorators for Sanic."""
 
 import re
-from collections.abc import Awaitable, Callable, Coroutine
+from collections.abc import Callable, Coroutine
 from functools import wraps
 from typing import Any, Concatenate, ParamSpec, TypeVar, cast
 
@@ -18,8 +18,8 @@ _P = ParamSpec("_P")
 def authenticate(
     authenticator: Authenticator,
 ) -> Callable[
-    [Callable[Concatenate[Request, APIUser, _P], Awaitable[_T]]],
-    Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]],
+    [Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]]],
+    Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]],
 ]:
     """Decorator for a Sanic handler that adds the APIUser model to the context.
 
@@ -27,10 +27,10 @@ def authenticate(
     """
 
     def decorator(
-        f: Callable[Concatenate[Request, APIUser, _P], Awaitable[_T]],
-    ) -> Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]]:
+        f: Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]],
+    ) -> Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]]:
         @wraps(f)
-        async def decorated_function(request: Request, user: APIUser, *args: _P.args, **kwargs: _P.kwargs) -> _T:
+        async def decorated_function(request: Request, *args: _P.args, **kwargs: _P.kwargs) -> _T:
             token = request.headers.get(authenticator.token_field)
             user = APIUser()
             if token is not None and len(token) >= 8:
@@ -73,20 +73,18 @@ async def _authenticate(authenticator: Authenticator, request: Request) -> Authe
 def authenticated_or_anonymous(
     authenticator: Authenticator,
 ) -> Callable[
-    [Callable[Concatenate[Request, AuthenticatedAPIUser | AnonymousAPIUser, _P], Awaitable[_T]]],
-    Callable[Concatenate[Request, AuthenticatedAPIUser | AnonymousAPIUser, _P], Coroutine[Any, Any, _T]],
+    [Callable[Concatenate[Request, AuthenticatedAPIUser | AnonymousAPIUser, _P], Coroutine[Any, Any, _T]]],
+    Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]],
 ]:
     """Decorator for a Sanic handler that adds the APIUser or AnonymousAPIUser model to the handler."""
 
     def decorator(
-        f: Callable[Concatenate[Request, AuthenticatedAPIUser | AnonymousAPIUser, _P], Awaitable[_T]],
-    ) -> Callable[Concatenate[Request, AuthenticatedAPIUser | AnonymousAPIUser, _P], Coroutine[Any, Any, _T]]:
+        f: Callable[Concatenate[Request, AuthenticatedAPIUser | AnonymousAPIUser, _P], Coroutine[Any, Any, _T]],
+    ) -> Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]]:
         @wraps(f)
-        async def decorated_function(
-            request: Request, user: AuthenticatedAPIUser | AnonymousAPIUser, *args: _P.args, **kwargs: _P.kwargs
-        ) -> _T:
+        async def decorated_function(request: Request, *args: _P.args, **kwargs: _P.kwargs) -> _T:
             try:
-                user = await _authenticate(authenticator, request)
+                user: AnonymousAPIUser | AuthenticatedAPIUser = await _authenticate(authenticator, request)
             except errors.Unauthorized:
                 # TODO: set the cookie on the user side if it is not set
                 # perhaps this will have to be done with another decorator...
@@ -106,8 +104,8 @@ def authenticated_or_anonymous(
 def only_authenticated_new(
     authenticator: Authenticator,
 ) -> Callable[
-    [Callable[Concatenate[Request, APIUser, _P], Awaitable[_T]]],
-    Callable[Concatenate[Request, APIUser, _P], Awaitable[_T]],
+    [Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]]],
+    Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]],
 ]:
     """Decorator for a Sanic handler that adds the APIUser model to the handler.
 
@@ -115,8 +113,8 @@ def only_authenticated_new(
     """
 
     def decorator(
-        f: Callable[Concatenate[Request, APIUser, _P], Awaitable[_T]],
-    ) -> Callable[Concatenate[Request, APIUser, _P], Awaitable[_T]]:
+        f: Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]],
+    ) -> Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]]:
         @wraps(f)
         async def decorated_function(request: Request, user: APIUser, *args: _P.args, **kwargs: _P.kwargs) -> _T:
             user = await _authenticate(authenticator, request)
@@ -129,8 +127,8 @@ def only_authenticated_new(
 
 
 def validate_path_project_id(
-    f: Callable[Concatenate[Request, _P], Awaitable[_T]],
-) -> Callable[Concatenate[Request, _P], Awaitable[_T]]:
+    f: Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]],
+) -> Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]]:
     """Decorator for a Sanic handler that validates the project_id path parameter."""
     _path_project_id_regex = re.compile(r"^[A-Za-z0-9]{26}$")
 
@@ -153,8 +151,8 @@ def validate_path_project_id(
 
 
 def validate_path_user_id(
-    f: Callable[Concatenate[Request, _P], Awaitable[_T]],
-) -> Callable[Concatenate[Request, _P], Awaitable[_T]]:
+    f: Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]],
+) -> Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]]:
     """Decorator for a Sanic handler that validates the user_id or member_id path parameter."""
     _path_user_id_regex = re.compile(r"^[A-Za-z0-9]{1}[A-Za-z0-9-]+$")
 
@@ -186,8 +184,8 @@ def validate_path_user_id(
 
 
 def only_admins(
-    f: Callable[Concatenate[Request, APIUser, _P], Awaitable[_T]],
-) -> Callable[Concatenate[Request, APIUser, _P], Awaitable[_T]]:
+    f: Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]],
+) -> Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]]:
     """Decorator for a Sanic handler that errors out if the user is not an admin."""
 
     @wraps(f)
@@ -204,7 +202,7 @@ def only_admins(
     return decorated_function
 
 
-def only_authenticated(f: Callable[_P, Awaitable[_T]]) -> Callable[_P, Awaitable[_T]]:
+def only_authenticated(f: Callable[_P, Coroutine[Any, Any, _T]]) -> Callable[_P, Coroutine[Any, Any, _T]]:
     """Decorator that errors out if the user is not authenticated.
 
     It looks for APIUser in the named or unnamed parameters.
@@ -235,3 +233,30 @@ def only_authenticated(f: Callable[_P, Awaitable[_T]]) -> Callable[_P, Awaitable
         return response
 
     return decorated_function
+
+
+def internal_gitlab_authenticate(
+    authenticator: Authenticator,
+) -> Callable[
+    [Callable[Concatenate[Request, APIUser, APIUser, _P], Coroutine[Any, Any, _T]]],
+    Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]],
+]:
+    """Decorator for a Sanic handler that that adds a user for the internal gitlab user."""
+
+    def decorator(
+        f: Callable[Concatenate[Request, APIUser, APIUser, _P], Coroutine[Any, Any, _T]],
+    ) -> Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]]:
+        @wraps(f)
+        async def decorated_function(
+            request: Request,
+            user: APIUser,
+            *args: _P.args,
+            **kwargs: _P.kwargs,
+        ) -> _T:
+            access_token = str(request.headers.get("Gitlab-Access-Token"))
+            internal_gitlab_user = await authenticator.authenticate(access_token, request)
+            return await f(request, user, internal_gitlab_user, *args, **kwargs)
+
+        return decorated_function
+
+    return decorator

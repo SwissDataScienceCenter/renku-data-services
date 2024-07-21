@@ -7,7 +7,7 @@ it all in one place.
 """
 
 from asyncio import gather
-from collections.abc import Awaitable, Callable, Collection, Sequence
+from collections.abc import Callable, Collection, Coroutine, Sequence
 from dataclasses import dataclass, field
 from functools import wraps
 from typing import Any, Concatenate, Optional, ParamSpec, TypeVar, cast
@@ -116,7 +116,9 @@ _P = ParamSpec("_P")
 _T = TypeVar("_T")
 
 
-def _only_admins(f: Callable[Concatenate[Any, _P], Awaitable[_T]]) -> Callable[Concatenate[Any, _P], Awaitable[_T]]:
+def _only_admins(
+    f: Callable[Concatenate[Any, _P], Coroutine[Any, Any, _T]],
+) -> Callable[Concatenate[Any, _P], Coroutine[Any, Any, _T]]:
     """Decorator that errors out if the user is not an admin.
 
     It expects the APIUser model to be a named parameter in the decorated function or

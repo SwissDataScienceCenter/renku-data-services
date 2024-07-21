@@ -37,7 +37,7 @@ class GitRepositoriesRepository:
         repository_url: str,
         user: base_models.APIUser,
         etag: str | None,
-        get_internal_gitlab_user: Callable[..., Coroutine[Any, Any, base_models.APIUser]],
+        internal_gitlab_user: base_models.APIUser,
     ) -> models.RepositoryProviderMatch | Literal["304"]:
         """Get the metadata about a repository."""
         repository_netloc = urlparse(repository_url).netloc
@@ -51,10 +51,9 @@ class GitRepositoriesRepository:
         if self.internal_gitlab_url:
             internal_gitlab_netloc = urlparse(self.internal_gitlab_url).netloc
             if matched_client is None and internal_gitlab_netloc == repository_netloc:
-                gitlab_user = await get_internal_gitlab_user()
                 return await self._get_repository_from_internal_gitlab(
                     repository_url=repository_url,
-                    user=gitlab_user,
+                    user=internal_gitlab_user,
                     etag=etag,
                     internal_gitlab_url=self.internal_gitlab_url,
                 )
