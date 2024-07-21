@@ -61,7 +61,7 @@ prometheus_client = "^0.7.1"
 kubernetes-asyncio = "^30.1.0"
 marshmallow = "^3.21.3"
 escapism = "^1.0.1"
-sentry-sdk = { version = "^2.7.1", extras = ["sanic"] }
+sentry-sdk = { version = "^2.10.0", extras = ["sanic"] }
 authzed = "^0.16.0"
 cryptography = "^42.0.8"
 # see https://github.com/sanic-org/sanic/issues/2828 for setuptools dependency, remove when not needed anymore
