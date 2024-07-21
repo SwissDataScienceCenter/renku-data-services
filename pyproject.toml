@@ -83,7 +83,7 @@ types-urllib3 = "^1.26.25.14"
 pyavro-gen = "^0.3.3"
 avro-preprocessor = "^0.3.0"
 fakeredis = "^2.23.3"
-ruff = "^0.5.1"
+ruff = "^0.5.4"
 debugpy = "^1.8.2"
 pytest-xdist = { version = "^3.5.0", extras = ["psutil"] }
 types-requests = "^2.32.0.20240622"
