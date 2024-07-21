@@ -65,7 +65,7 @@ sentry-sdk = { version = "^2.7.1", extras = ["sanic"] }
 authzed = "^0.16.0"
 cryptography = "^42.0.8"
 # see https://github.com/sanic-org/sanic/issues/2828 for setuptools dependency, remove when not needed anymore
-setuptools = { version = "^70.2.0" }
+setuptools = { version = "^71.0.4" }
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.7.9"
