@@ -138,7 +138,7 @@ kind_cluster:  ## Creates a kind cluster for testing
 	sleep 15
 	kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=90s
 
-install_amaltheas:  ## Installs both version of amalthea in the. NOTE: It uses the currently active k8s context.
+install_amaltheas:  ## Installs both version of amalthea in the currently active k8s context.
 	helm repo add renku https://swissdatasciencecenter.github.io/helm-charts
 	helm install amalthea-js renku/amalthea --version $(AMALTHEA_JS_VERSION)
 	helm install amalthea-sessions renku/amalthea-sessions --version $(AMALTHEA_SESSIONS_VERSION)
