@@ -10,8 +10,6 @@ on:
     branches:
 
 env:
-  CACHE_KEY: main-branch-poetry-cache-ubuntu
-  CACHE_PATH: .devcontainer/.poetry_cache
   DEVCONTAINER_IMAGE_CACHE: ghcr.io/swissdatasciencecenter/renku-data-services/devcontainer
 
 jobs:
@@ -22,11 +20,6 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      - uses: actions/cache/restore@v3
-        name: Restore cache
-        with:
-          path: ${{ env.CACHE_PATH }}
-          key: ${{ env.CACHE_KEY }}
       - name: Set Git config
         shell: bash
         run: |
@@ -54,11 +47,6 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      - uses: actions/cache/restore@v3
-        name: Restore cache
-        with:
-          path: ${{ env.CACHE_PATH }}
-          key: ${{ env.CACHE_KEY }}
       - name: Set Git config
         shell: bash
         run: |
@@ -102,11 +90,6 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      - uses: actions/cache/restore@v3
-        name: Restore cache
-        with:
-          path: ${{ env.CACHE_PATH }}
-          key: ${{ env.CACHE_KEY }}
       - name: Set Git config
         shell: bash
         run: |
