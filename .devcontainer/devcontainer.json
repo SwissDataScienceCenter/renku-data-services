@@ -1,33 +1,39 @@
-// For format details, see https://aka.ms/devcontainer.json. For config options, see the
-// README at: https://github.com/devcontainers/templates/tree/main/src/postgres
 {
-	"name": "Python 3 & PostgreSQL",
+	"name": "Data services devcontainer",
 	"dockerComposeFile": "docker-compose.yml",
 	"service": "data_service",
-	"remoteUser": "renku",
-	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
-	// Features to add to the dev container. More info: https://containers.dev/features.
+	"containerUser": "root",
+	"workspaceFolder": "/workspace",
+	"shutdownAction": "stopCompose",
 	"features": {
 		"ghcr.io/devcontainers-contrib/features/poetry:2": {},
-		"ghcr.io/devcontainers/features/git:1": {},
-		"ghcr.io/jungaretti/features/make:1": {},
-		"ghcr.io/rocker-org/devcontainer-features/apt-packages:1": {
-			"packages": "procps,gcc,python3-dev,curl,ca-certificates,gpg"
-		},
 		"ghcr.io/devcontainers-contrib/features/bash-command:1": {
-			"command": "apt update && apt install -y curl ca-certificates gpg && curl https://apt.fury.io/authzed/gpg.key | apt-key add - && echo 'deb https://apt.fury.io/authzed/ * *' > /etc/apt/sources.list.d/fury.list && apt update && apt install -y zed && curl https://pkg.authzed.com/apt/gpg.key | apt-key add - && echo 'deb https://pkg.authzed.com/apt/ * *' > /etc/apt/sources.list.d/authzed.list && apt update && apt install -y spicedb lsof"
-		}
+			"command": "poetry self add poetry-polylith-plugin"
+		},
+		"ghcr.io/devcontainers/features/docker-in-docker:2": {},
+		"ghcr.io/mpriscella/features/kind:1": {},
+		"ghcr.io/devcontainers-contrib/features/gh-release:1": {
+			"repo": "authzed/zed",
+			"binaryNames": "zed"
+		},
+		"ghcr.io/devcontainers-contrib/features/spicedb:1": {},
+		"ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {
+			"minikube": "none"
+		},
+		"ghcr.io/eitsupi/devcontainer-features/jq-likes:2": {},
+		"ghcr.io/dhoeric/features/k9s:1": {},
+		"ghcr.io/EliiseS/devcontainer-features/bash-profile:1": {
+			"command": "alias k=kubectl"
+		},
+		"ghcr.io/devcontainers-contrib/features/rclone:1": {}
 	},
-	// Use 'forwardPorts' to make a list of ports inside the container available locally.
-	// This can be used to network with other containers or the host.
-	//"forwardPorts": [8000, 8080, 5432],
-	// Use 'postCreateCommand' to run commands after the container is created.
-	"postCreateCommand": "poetry self add poetry-polylith-plugin && poetry install --with dev && echo 'cd /workspaces/renku-data-services/'>~/.bashrc",
-	// Configure tool-specific properties.
+	"overrideFeatureInstallOrder": [
+		"ghcr.io/devcontainers-contrib/features/poetry",
+		"ghcr.io/devcontainers-contrib/features/bash-command"
+	],
+	"postCreateCommand": "poetry install --with dev && make kind_cluster && make install_amaltheas",
 	"customizations": {
-		// Configure properties specific to VS Code.
 		"vscode": {
-			// Add the IDs of extensions you want installed when the container is created.
 			"extensions": [
 				"ms-python.python",
 				"ms-python.flake8",
@@ -39,6 +45,4 @@
 			]
 		}
 	}
-	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
-	//"remoteUser": "root"
 }

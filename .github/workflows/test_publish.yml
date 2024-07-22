@@ -9,6 +9,9 @@ on:
   pull_request:
     branches:
 
+env:
+  DEVCONTAINER_IMAGE_CACHE: ghcr.io/swissdatasciencecenter/renku-data-services/devcontainer
+
 jobs:
   style-checks:
     runs-on: ubuntu-latest
@@ -28,12 +31,14 @@ jobs:
           runCmd: make check_avro
           push: never
           skipContainerUserIdUpdate: false
+          cacheFrom: ${{ env.DEVCONTAINER_IMAGE_CACHE }}
       - name: Style checks
         uses: devcontainers/ci@v0.3
         with:
           runCmd: make style_checks
           push: never
           skipContainerUserIdUpdate: false
+          cacheFrom: ${{ env.DEVCONTAINER_IMAGE_CACHE }}
   test-main:
     runs-on: ubuntu-latest
     needs: 
@@ -54,6 +59,7 @@ jobs:
             make test_setup
           push: never
           skipContainerUserIdUpdate: false
+          cacheFrom: ${{ env.DEVCONTAINER_IMAGE_CACHE }}
       - name: Main tests
         uses: devcontainers/ci@v0.3
         with:
@@ -61,6 +67,7 @@ jobs:
             make main_tests
           push: never
           skipContainerUserIdUpdate: false
+          cacheFrom: ${{ env.DEVCONTAINER_IMAGE_CACHE }}
       - name: Combine coverage data
         uses: devcontainers/ci@v0.3
         with:
@@ -68,6 +75,7 @@ jobs:
             make collect_coverage
           push: never
           skipContainerUserIdUpdate: false
+          cacheFrom: ${{ env.DEVCONTAINER_IMAGE_CACHE }}
       - name: Coveralls Parallel
         uses: coverallsapp/github-action@v2
         with:
@@ -94,6 +102,7 @@ jobs:
             make test_setup
           push: never
           skipContainerUserIdUpdate: false
+          cacheFrom: ${{ env.DEVCONTAINER_IMAGE_CACHE }}
       - name: Schemathesis Tests
         uses: devcontainers/ci@v0.3
         with:
@@ -101,6 +110,7 @@ jobs:
             make schemathesis_tests
           push: never
           skipContainerUserIdUpdate: false
+          cacheFrom: ${{ env.DEVCONTAINER_IMAGE_CACHE }}
           env: |
             HYPOTHESIS_PROFILE=ci
       - name: Combine coverage data
@@ -110,6 +120,7 @@ jobs:
             make collect_coverage
           push: never
           skipContainerUserIdUpdate: false
+          cacheFrom: ${{ env.DEVCONTAINER_IMAGE_CACHE }}
       - name: Coveralls Parallel
         uses: coverallsapp/github-action@v2
         with:
