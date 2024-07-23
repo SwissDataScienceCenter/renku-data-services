@@ -11,7 +11,7 @@ on:
 
 env:
   DEVCONTAINER_IMAGE_CACHE: ghcr.io/swissdatasciencecenter/renku-data-services/devcontainer
-  DEVCONTAINER_IMAGE_CACHE_TAG: "cache-${{ github.ref }}"
+  DEVCONTAINER_IMAGE_CACHE_TAG: "cache-${{ github.ref_name }}"
 
 jobs:
   style-checks:
