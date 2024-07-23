@@ -41,7 +41,7 @@ async def apispec(sanic_client: SanicASGITestClient) -> BaseOpenAPISchema:
 @schemathesis.hook
 def filter_headers(context: HookContext, headers: dict[str, str]) -> bool:
     op = context.operation
-    if op.method.upper() == "PATCH" and op.path == "/projects/{project_id}":
+    if op.method.upper() == "PATCH" and (op.path == "/projects/{project_id}" or op.path == "/platform/config"):
         if_match = headers.get("If-Match")
         if if_match and isinstance(if_match, str):
             try:
