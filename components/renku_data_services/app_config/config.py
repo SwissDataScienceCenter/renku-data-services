@@ -25,6 +25,7 @@ from yaml import safe_load
 import renku_data_services.base_models as base_models
 import renku_data_services.connected_services
 import renku_data_services.crc
+import renku_data_services.platform
 import renku_data_services.repositories
 import renku_data_services.storage
 import renku_data_services.user_preferences
@@ -52,6 +53,7 @@ from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.namespace.db import GroupRepository
+from renku_data_services.platform.db import PlatformRepository
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.secrets.db import UserSecretsRepo
@@ -172,6 +174,7 @@ class Config:
     _project_member_repo: ProjectMemberRepository | None = field(default=None, repr=False, init=False)
     _connected_services_repo: ConnectedServicesRepository | None = field(default=None, repr=False, init=False)
     _git_repositories_repo: GitRepositoriesRepository | None = field(default=None, repr=False, init=False)
+    _platform_repo: PlatformRepository | None = field(default=None, repr=False, init=False)
 
     def __post_init__(self) -> None:
         spec_file = Path(renku_data_services.crc.__file__).resolve().parent / "api.spec.yaml"
@@ -210,6 +213,10 @@ class Config:
         with open(spec_file) as f:
             repositories = safe_load(f)
 
+        spec_file = Path(renku_data_services.platform.__file__).resolve().parent / "api.spec.yaml"
+        with open(spec_file) as f:
+            platform = safe_load(f)
+
         self.spec = merge_api_specs(
             crc_spec,
             storage_spec,
@@ -220,6 +227,7 @@ class Config:
             sessions,
             connected_services,
             repositories,
+            platform,
         )
 
         if self.default_resource_pool_file is not None:
@@ -380,6 +388,15 @@ class Config:
                 internal_gitlab_url=self.gitlab_url,
             )
         return self._git_repositories_repo
+
+    @property
+    def platform_repo(self) -> PlatformRepository:
+        """The DB adapter for the platform configuration."""
+        if not self._platform_repo:
+            self._platform_repo = PlatformRepository(
+                session_maker=self.db.async_session_maker,
+            )
+        return self._platform_repo
 
     @classmethod
     def from_env(cls, prefix: str = "") -> "Config":
