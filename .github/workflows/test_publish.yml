@@ -14,18 +14,12 @@ env:
   DEVCONTAINER_IMAGE_CACHE_TAG: "cache-pr-319"
 
 jobs:
-  style-checks:
+  build-devcontainer:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      - name: Set Git config
-        shell: bash
-        run: |
-          git config --add user.name "Renku Bot"
-          git config --add user.email "renku@datascience.ch"
       - name: Pre-build devcontainer
         uses: devcontainers/ci@v0.3
         with:
@@ -36,6 +30,20 @@ jobs:
           cacheFrom: |
             ${{ env.DEVCONTAINER_IMAGE_CACHE }}:${{ env.DEVCONTAINER_IMAGE_CACHE_TAG }}
             ${{ env.DEVCONTAINER_IMAGE_CACHE }}:cache-main
+
+  style-checks:
+    runs-on: ubuntu-latest
+    needs:
+      - build-devcontainer
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Set Git config
+        shell: bash
+        run: |
+          git config --add user.name "Renku Bot"
+          git config --add user.email "renku@datascience.ch"
       - name: Update Avro Schemas
         uses: devcontainers/ci@v0.3
         with:
