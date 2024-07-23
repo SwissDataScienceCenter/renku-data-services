@@ -55,9 +55,7 @@ jobs:
           runCmd: make check_avro
           push: never
           skipContainerUserIdUpdate: false
-          cacheFrom: |
-            ${{ env.DEVCONTAINER_IMAGE_CACHE }}:${{ env.DEVCONTAINER_IMAGE_CACHE_TAG }}
-            ${{ env.DEVCONTAINER_IMAGE_CACHE }}:cache-main
+          cacheFrom: ${{ env.DEVCONTAINER_IMAGE_CACHE }}:${{ env.DEVCONTAINER_IMAGE_CACHE_TAG }}
       - name: Style checks
         uses: devcontainers/ci@v0.3
         with:
