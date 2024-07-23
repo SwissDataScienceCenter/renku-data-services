@@ -132,6 +132,7 @@ help:  ## Display this help.
 
 kind_cluster:  ## Creates a kind cluster for testing
 	kind delete cluster
+	docker network rm -f kind
 	kind create cluster --config kind_config.yaml
 	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
 	echo "Waiting for ingress controller to initialize"
