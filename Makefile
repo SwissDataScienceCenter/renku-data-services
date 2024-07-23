@@ -136,6 +136,8 @@ help:  ## Display this help.
 
 kind_cluster:  ## Creates a kind cluster for testing
 	kind delete cluster
+	docker network rm -f kind
+	docker network create -d=bridge -o com.docker.network.bridge.enable_ip_masquerade=true -o com.docker.network.driver.mtu=1500 --ipv6=false --subnet=192.168.0.0/16 kind
 	kind create cluster --config kind_config.yaml
 	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
 	echo "Waiting for ingress controller to initialize"
