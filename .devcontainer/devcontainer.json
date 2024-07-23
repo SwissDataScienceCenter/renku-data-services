@@ -31,7 +31,7 @@
 		"ghcr.io/devcontainers-contrib/features/poetry",
 		"ghcr.io/devcontainers-contrib/features/bash-command"
 	],
-	"postCreateCommand": "poetry install --with dev && docker network create -d=bridge -o com.docker.network.bridge.enable_ip_masquerade=true -o com.docker.network.driver.mtu=1500 --ipv6=false --subnet=192.168.0.0/16 kind && make kind_cluster && make install_amaltheas",
+	"postCreateCommand": "poetry install --with dev && make kind_cluster && make install_amaltheas",
 	"customizations": {
 		"vscode": {
 			"extensions": [
