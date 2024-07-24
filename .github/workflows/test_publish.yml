@@ -30,7 +30,7 @@ jobs:
         with:
           images: ${{ env.DEVCONTAINER_REGISTRY }}/${{ env.DEVCONTAINER_IMAGE_NAME }}
           tags: |
-            type=ref,event=pr,prefix=cache-,priority=600
+            type=ref,event=pr,prefix=cache-pr-,priority=600
             type=ref,event=branch,prefix=cache-,priority=500
       - name: Extract Docker image name
         id: docker_image
