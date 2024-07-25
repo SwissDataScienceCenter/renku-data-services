@@ -6,7 +6,7 @@ AMALTHEA_SESSIONS_VERSION ?= 0.0.1-new-operator-chart
 define test_apispec_up_to_date
 	$(eval $@_NAME=$(1))
 	cp "components/renku_data_services/${$@_NAME}/apispec.py" "/tmp/apispec_orig.py"
-	poetry run datamodel-codegen --input components/renku_data_services/${$@_NAME}/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/${$@_NAME}/apispec.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.${$@_NAME}.apispec_base.BaseAPISpec
+	poetry run datamodel-codegen --input components/renku_data_services/${$@_NAME}/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/${$@_NAME}/apispec.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.${$@_NAME}.apispec_base.BaseAPISpec --set-default-enum-member 
 	diff -I "^#   timestamp\: " "/tmp/apispec_orig.py" "components/renku_data_services/${$@_NAME}/apispec.py"
 	@RESULT=$?
 	cp "/tmp/apispec_orig.py" "components/renku_data_services/${$@_NAME}/apispec.py"
