@@ -55,56 +55,52 @@ class BaseStorageRepository(_Base):
         project_id: str | ULID | None = None,
         name: str | None = None,
         include_secrets: bool = False,
+        filter_by_access_level: bool = True,
     ) -> list[models.CloudStorage]:
         """Get a storage from the database."""
         async with self.session_maker() as session:
-            stmt = select(schemas.CloudStorageORM)
-
-            if project_id is not None:
-                stmt = stmt.where(schemas.CloudStorageORM.project_id == str(project_id))
-            if id is not None:
-                stmt = stmt.where(schemas.CloudStorageORM.storage_id == (id))
-
-            if name is not None:
-                stmt = stmt.where(schemas.CloudStorageORM.name == name)
             if not project_id and not name and not id:
                 raise errors.ValidationError(
                     message="One of 'project_id', 'id' or 'name' has to be set when getting storage"
                 )
 
+            stmt = select(schemas.CloudStorageORM)
+
+            if project_id is not None:
+                stmt = stmt.where(schemas.CloudStorageORM.project_id == str(project_id))
+            if id is not None:
+                stmt = stmt.where(schemas.CloudStorageORM.storage_id == id)
+            if name is not None:
+                stmt = stmt.where(schemas.CloudStorageORM.name == name)
+            if include_secrets:
+                stmt = stmt.options(
+                    selectinload(
+                        schemas.CloudStorageORM.secrets.and_(schemas.CloudStorageSecretsORM.user_id == user.id)
+                    )
+                )
+
             res = await session.execute(stmt)
             storage_orms = res.scalars().all()
+
+            if not filter_by_access_level:
+                return [s.dump() for s in storage_orms]
+
             accessible_projects = await self.filter_projects_by_access_level(
                 user, [s.project_id for s in storage_orms], authz_models.Role.VIEWER
             )
 
-            storages = [s.dump() for s in storage_orms if s.project_id in accessible_projects]
-
-            if include_secrets:
-                for storage in storages:
-                    storage_id = cast(ULID, storage.storage_id)
-                    saved_secrets = await self.get_storage_secrets(storage_id, user)
-                    storage.secrets = saved_secrets
-
-            return storages
+            return [s.dump() for s in storage_orms if s.project_id in accessible_projects]
 
     async def get_storage_by_id(self, storage_id: ULID, user: base_models.APIUser) -> models.CloudStorage:
         """Get a single storage by id."""
-        async with self.session_maker() as session:
-            storage_orm = await session.scalar(
-                select(schemas.CloudStorageORM).where(schemas.CloudStorageORM.storage_id == str(storage_id))
-            )
+        storages = await self.get_storage(user, id=str(storage_id), include_secrets=True, filter_by_access_level=False)
 
-            if storage_orm is None:
-                raise errors.MissingResourceError(message=f"The storage with id '{storage_id}' cannot be found")
-            if not await self.filter_projects_by_access_level(user, [storage_orm.project_id], authz_models.Role.VIEWER):
-                raise errors.Unauthorized(message="User does not have access to this project")
+        if not storages:
+            raise errors.MissingResourceError(message=f"The storage with id '{storage_id}' cannot be found")
+        if not await self.filter_projects_by_access_level(user, [storages[0].project_id], authz_models.Role.VIEWER):
+            raise errors.Unauthorized(message="User does not have access to this project")
 
-            saved_secrets = await self.get_storage_secrets(storage_id, user)
-
-            storage = storage_orm.dump()
-            storage.secrets = saved_secrets
-            return storage
+        return storages[0]
 
     async def insert_storage(self, storage: models.CloudStorage, user: base_models.APIUser) -> models.CloudStorage:
         """Insert a new cloud storage entry."""

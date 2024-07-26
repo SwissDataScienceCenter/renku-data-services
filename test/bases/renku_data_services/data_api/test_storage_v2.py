@@ -304,7 +304,9 @@ async def test_storage_v2_is_deleted_if_project_is_deleted(
 
 
 @pytest.mark.asyncio
-async def test_storage_v2_create_secret(sanic_client, create_storage, project_normal_member_headers) -> None:
+async def test_storage_v2_create_secret(
+    sanic_client, create_storage, project_normal_member_headers, project_owner_member_headers
+) -> None:
     storage = await create_storage()
     storage_id = storage["storage"]["storage_id"]
 
@@ -322,6 +324,19 @@ async def test_storage_v2_create_secret(sanic_client, create_storage, project_no
     created_secret_ids = {s["secret_id"] for s in response.json}
     assert len(created_secret_ids) == 2, response.json
 
+    # NOTE: Save secrets for the same storage for another user
+    payload = [
+        {"name": "another_user_secret", "value": "another value"},
+    ]
+
+    _, response = await sanic_client.post(
+        f"/api/data/storages_v2/{storage_id}/secrets", headers=project_owner_member_headers, json=payload
+    )
+
+    assert response.status_code == 201, response.json
+    assert {s["name"] for s in response.json} == {"another_user_secret"}, response.json
+
+    # NOTE: Get secrets for a storage
     _, response = await sanic_client.get(
         f"/api/data/storages_v2/{storage_id}/secrets", headers=project_normal_member_headers
     )
