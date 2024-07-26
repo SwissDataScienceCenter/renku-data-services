@@ -53,21 +53,24 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("CREATE SCHEMA user_preferences")
-    op.create_table(
-        "user_preferences",
-        sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("user_id", sa.String(), nullable=False),
-        sa.Column(
-            "pinned_projects",
-            sa.JSON().with_variant(postgresql.JSONB(astext_type=sa.Text()), "postgresql"),
-            nullable=False,
-        ),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("user_id"),
-        schema="user_preferences",
-    )
     conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    if "user_preferences" not in inspector.get_schema_names():
+        op.execute("CREATE SCHEMA user_preferences")
+    if "user_preferences" not in inspector.get_table_names(schema="user_preferences"):
+        op.create_table(
+            "user_preferences",
+            sa.Column("id", sa.Integer(), nullable=False),
+            sa.Column("user_id", sa.String(), nullable=False),
+            sa.Column(
+                "pinned_projects",
+                sa.JSON().with_variant(postgresql.JSONB(astext_type=sa.Text()), "postgresql"),
+                nullable=False,
+            ),
+            sa.PrimaryKeyConstraint("id"),
+            sa.UniqueConstraint("user_id"),
+            schema="user_preferences",
+        )
     statement = sa.sql.text(
         """
         INSERT INTO user_preferences.user_preferences

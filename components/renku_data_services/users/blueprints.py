@@ -16,20 +16,8 @@ from renku_data_services.errors import errors
 from renku_data_services.secrets.db import UserSecretsRepo
 from renku_data_services.secrets.models import Secret, SecretKind
 from renku_data_services.users import apispec, models
-from renku_data_services.users.apispec_base import BaseAPISpec
 from renku_data_services.users.db import UserPreferencesRepository, UserRepo
 from renku_data_services.utils.cryptography import encrypt_rsa, encrypt_string, generate_random_encryption_key
-
-
-class GetSecretsParams(BaseAPISpec):
-    """The schema for the query parameters used when getting all secrets."""
-
-    class Config:
-        """Configuration."""
-
-        extra = "forbid"
-
-    kind: apispec.SecretKind = apispec.SecretKind.general
 
 
 @dataclass(kw_only=True)
