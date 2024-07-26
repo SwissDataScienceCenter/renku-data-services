@@ -10,12 +10,59 @@ on:
     branches:
 
 env:
-  DEVCONTAINER_IMAGE_CACHE: ghcr.io/swissdatasciencecenter/renku-data-services/devcontainer
+  DEVCONTAINER_REGISTRY: ghcr.io
+  DEVCONTAINER_IMAGE_NAME: ${{ github.repository }}/devcontainer
+  DEVCONTAINER_IMAGE_TAG_MAIN: "cache-main"
 
 jobs:
+  build-devcontainer:
+    runs-on: ubuntu-latest
+    outputs:
+      image_repository: ${{ steps.docker_image.outputs.image_repository }}
+      image_tag: ${{ steps.docker_image.outputs.image_tag }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Docker image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DEVCONTAINER_REGISTRY }}/${{ env.DEVCONTAINER_IMAGE_NAME }}
+          tags: |
+            type=ref,event=pr,prefix=cache-pr-,priority=600
+            type=ref,event=branch,prefix=cache-,priority=500
+      - name: Extract Docker image name
+        id: docker_image
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          IMAGE=$(echo "$IMAGE_TAGS" | cut -d" " -f1)
+          IMAGE_REPOSITORY=$(echo "$IMAGE" | cut -d":" -f1)
+          IMAGE_TAG=$(echo "$IMAGE" | cut -d":" -f2)
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "image_repository=$IMAGE_REPOSITORY" >> "$GITHUB_OUTPUT"
+          echo "image_tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Pre-build devcontainer
+        uses: devcontainers/ci@v0.3
+        with:
+          push: always
+          skipContainerUserIdUpdate: false
+          imageName: ${{ steps.docker_image.outputs.image_repository }}
+          imageTag: ${{ steps.docker_image.outputs.image_tag }}
+          cacheFrom: |
+            ${{ steps.docker_image.outputs.image_repository }}:${{ steps.docker_image.outputs.image_tag }}
+            ${{ steps.docker_image.outputs.image_repository }}:${{ env.DEVCONTAINER_IMAGE_TAG_MAIN }}
+
   style-checks:
     runs-on: ubuntu-latest
-
+    needs:
+      - build-devcontainer
     steps:
       - uses: actions/checkout@v3
         with:
@@ -31,17 +78,18 @@ jobs:
           runCmd: make check_avro
           push: never
           skipContainerUserIdUpdate: false
-          cacheFrom: ${{ env.DEVCONTAINER_IMAGE_CACHE }}
+          cacheFrom: ${{ needs.build-devcontainer.outputs.image_repository }}:${{ needs.build-devcontainer.outputs.image_tag }}
       - name: Style checks
         uses: devcontainers/ci@v0.3
         with:
           runCmd: make style_checks
           push: never
           skipContainerUserIdUpdate: false
-          cacheFrom: ${{ env.DEVCONTAINER_IMAGE_CACHE }}
+          cacheFrom: ${{ needs.build-devcontainer.outputs.image_repository }}:${{ needs.build-devcontainer.outputs.image_tag }}
   test-main:
     runs-on: ubuntu-latest
-    needs: 
+    needs:
+      - build-devcontainer
       - style-checks
     steps:
       - uses: actions/checkout@v3
@@ -59,7 +107,7 @@ jobs:
             make test_setup
           push: never
           skipContainerUserIdUpdate: false
-          cacheFrom: ${{ env.DEVCONTAINER_IMAGE_CACHE }}
+          cacheFrom: ${{ needs.build-devcontainer.outputs.image_repository }}:${{ needs.build-devcontainer.outputs.image_tag }}
       - name: Main tests
         uses: devcontainers/ci@v0.3
         with:
@@ -67,7 +115,7 @@ jobs:
             make main_tests
           push: never
           skipContainerUserIdUpdate: false
-          cacheFrom: ${{ env.DEVCONTAINER_IMAGE_CACHE }}
+          cacheFrom: ${{ needs.build-devcontainer.outputs.image_repository }}:${{ needs.build-devcontainer.outputs.image_tag }}
       - name: Combine coverage data
         uses: devcontainers/ci@v0.3
         with:
@@ -75,7 +123,7 @@ jobs:
             make collect_coverage
           push: never
           skipContainerUserIdUpdate: false
-          cacheFrom: ${{ env.DEVCONTAINER_IMAGE_CACHE }}
+          cacheFrom: ${{ needs.build-devcontainer.outputs.image_repository }}:${{ needs.build-devcontainer.outputs.image_tag }}
       - name: Coveralls Parallel
         uses: coverallsapp/github-action@v2
         with:
@@ -84,7 +132,8 @@ jobs:
           path-to-lcov: coverage.lcov
   test-schemathesis:
     runs-on: ubuntu-latest
-    needs: 
+    needs:
+      - build-devcontainer
       - style-checks
     steps:
       - uses: actions/checkout@v3
@@ -102,7 +151,7 @@ jobs:
             make test_setup
           push: never
           skipContainerUserIdUpdate: false
-          cacheFrom: ${{ env.DEVCONTAINER_IMAGE_CACHE }}
+          cacheFrom: ${{ needs.build-devcontainer.outputs.image_repository }}:${{ needs.build-devcontainer.outputs.image_tag }}
       - name: Schemathesis Tests
         uses: devcontainers/ci@v0.3
         with:
@@ -110,7 +159,7 @@ jobs:
             make schemathesis_tests
           push: never
           skipContainerUserIdUpdate: false
-          cacheFrom: ${{ env.DEVCONTAINER_IMAGE_CACHE }}
+          cacheFrom: ${{ needs.build-devcontainer.outputs.image_repository }}:${{ needs.build-devcontainer.outputs.image_tag }}
           env: |
             HYPOTHESIS_PROFILE=ci
       - name: Combine coverage data
@@ -120,7 +169,7 @@ jobs:
             make collect_coverage
           push: never
           skipContainerUserIdUpdate: false
-          cacheFrom: ${{ env.DEVCONTAINER_IMAGE_CACHE }}
+          cacheFrom: ${{ needs.build-devcontainer.outputs.image_repository }}:${{ needs.build-devcontainer.outputs.image_tag }}
       - name: Coveralls Parallel
         uses: coverallsapp/github-action@v2
         with:
@@ -128,7 +177,7 @@ jobs:
           parallel: true
           path-to-lcov: coverage.lcov
   coveralls:
-    needs: 
+    needs:
       - test-main
       - test-schemathesis
     runs-on: ubuntu-latest
@@ -148,7 +197,6 @@ jobs:
     needs:
       - test-main
       - test-schemathesis
-
     steps:
       - name: Checkout
         uses: actions/checkout@v3
