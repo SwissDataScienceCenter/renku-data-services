@@ -57,9 +57,7 @@ def filter_headers(context: HookContext, headers: dict[str, str]) -> bool:
 # and this crashes the server when it tries to validate the query.
 @schemathesis.hook
 def filter_query(context: HookContext, query: dict[str, str] | None) -> bool:
-    if query is not None and "" in query:
-        return False
-    return True
+    return query is None or "" not in query
 
 
 schema = schemathesis.from_pytest_fixture(
