@@ -13,7 +13,6 @@ from renku_data_services.project.orm import BaseORM as project
 from renku_data_services.secrets.orm import BaseORM as secrets
 from renku_data_services.session.orm import BaseORM as sessions
 from renku_data_services.storage.orm import BaseORM as storage
-from renku_data_services.user_preferences.orm import BaseORM as user_preferences
 from renku_data_services.users.orm import BaseORM as users
 
 # Interpret the config file for Python logging.
@@ -31,7 +30,6 @@ all_metadata = [
     secrets.metadata,
     sessions.metadata,
     storage.metadata,
-    user_preferences.metadata,
     users.metadata,
 ]
 

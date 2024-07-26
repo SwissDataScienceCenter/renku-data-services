@@ -6,8 +6,8 @@ from renku_data_services.crc import models as rp_models
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.storage import models as storage_models
 from renku_data_services.storage.db import StorageRepository
-from renku_data_services.user_preferences import models as user_preferences_models
-from renku_data_services.user_preferences.db import UserPreferencesRepository
+from renku_data_services.users import models as user_preferences_models
+from renku_data_services.users.db import UserPreferencesRepository
 
 
 def remove_id_from_quota(quota: rp_models.Quota) -> rp_models.Quota:
