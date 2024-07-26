@@ -6,6 +6,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from sanic import HTTPResponse, Request, json
 from sanic.response import JSONResponse
 from sanic_ext import validate
+from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
@@ -159,10 +160,9 @@ class UserSecretsBP(CustomBlueprint):
                 secret.model_dump(include={"name", "id", "modification_date", "kind"}, exclude_none=True, mode="json")
                 for secret in secrets
             ]
-            return json(
-                apispec.SecretsList(
-                    root=[apispec.SecretWithId.model_validate(secret) for secret in secrets_json]
-                ).model_dump(mode="json"),
+            return validated_json(
+                apispec.SecretsList,
+                secrets_json,
                 200,
             )
 
@@ -173,16 +173,16 @@ class UserSecretsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _get_one(request: Request, user: base_models.APIUser, secret_id: str) -> JSONResponse:
+        async def _get_one(request: Request, user: base_models.APIUser, secret_id: ULID) -> JSONResponse:
             secret = await self.secret_repo.get_secret_by_id(requested_by=user, secret_id=secret_id)
             if not secret:
                 raise errors.MissingResourceError(message=f"The secret with id {secret_id} cannot be found.")
             result = secret.model_dump(
                 include={"name", "id", "modification_date", "kind"}, exclude_none=True, mode="json"
             )
-            return json(result)
+            return validated_json(apispec.SecretWithId, result)
 
-        return "/user/secrets/<secret_id>", ["GET"], _get_one
+        return "/user/secrets/<secret_id:ulid>", ["GET"], _get_one
 
     def post(self) -> BlueprintFactoryResponse:
         """Create a new secret."""
@@ -202,7 +202,7 @@ class UserSecretsBP(CustomBlueprint):
             result = inserted_secret.model_dump(
                 include={"name", "id", "modification_date", "kind"}, exclude_none=True, mode="json"
             )
-            return json(result, 201)
+            return validated_json(apispec.SecretWithId, result, 201)
 
         return "/user/secrets", ["POST"], _post
 
@@ -213,7 +213,7 @@ class UserSecretsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.SecretPatch)
         async def _patch(
-            _: Request, user: base_models.APIUser, secret_id: str, body: apispec.SecretPatch
+            _: Request, user: base_models.APIUser, secret_id: ULID, body: apispec.SecretPatch
         ) -> JSONResponse:
             encrypted_value, encrypted_key = await self._encrypt_user_secret(requested_by=user, secret_value=body.value)
             updated_secret = await self.secret_repo.update_secret(
@@ -223,20 +223,20 @@ class UserSecretsBP(CustomBlueprint):
                 include={"name", "id", "modification_date", "kind"}, exclude_none=True, mode="json"
             )
 
-            return json(result)
+            return validated_json(apispec.SecretWithId, result)
 
-        return "/user/secrets/<secret_id>", ["PATCH"], _patch
+        return "/user/secrets/<secret_id:ulid>", ["PATCH"], _patch
 
     def delete(self) -> BlueprintFactoryResponse:
         """Delete a specific secret."""
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _delete(_: Request, user: base_models.APIUser, secret_id: str) -> HTTPResponse:
+        async def _delete(_: Request, user: base_models.APIUser, secret_id: ULID) -> HTTPResponse:
             await self.secret_repo.delete_secret(requested_by=user, secret_id=secret_id)
             return HTTPResponse(status=204)
 
-        return "/user/secrets/<secret_id>", ["DELETE"], _delete
+        return "/user/secrets/<secret_id:ulid>", ["DELETE"], _delete
 
 
 @dataclass(kw_only=True)
@@ -253,7 +253,7 @@ class UserPreferencesBP(CustomBlueprint):
         async def _get(_: Request, user: base_models.APIUser) -> JSONResponse:
             user_preferences: models.UserPreferences
             user_preferences = await self.user_preferences_repo.get_user_preferences(requested_by=user)
-            return json(apispec.UserPreferences.model_validate(user_preferences).model_dump())
+            return validated_json(apispec.UserPreferences, user_preferences)
 
         return "/user/preferences", ["GET"], _get
 
@@ -264,7 +264,7 @@ class UserPreferencesBP(CustomBlueprint):
         @validate(json=apispec.AddPinnedProject)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.AddPinnedProject) -> JSONResponse:
             res = await self.user_preferences_repo.add_pinned_project(requested_by=user, project_slug=body.project_slug)
-            return json(apispec.UserPreferences.model_validate(res).model_dump())
+            return validated_json(apispec.UserPreferences, res)
 
         return "/user/preferences/pinned_projects", ["POST"], _post
 
@@ -279,6 +279,6 @@ class UserPreferencesBP(CustomBlueprint):
             res = await self.user_preferences_repo.remove_pinned_project(
                 requested_by=user, project_slug=query.project_slug
             )
-            return json(apispec.UserPreferences.model_validate(res).model_dump())
+            return validated_json(apispec.UserPreferences, res)
 
         return "/user/preferences/pinned_projects", ["DELETE"], _delete
