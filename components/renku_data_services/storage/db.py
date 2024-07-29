@@ -78,13 +78,13 @@ class BaseStorageRepository(_Base):
             if storage is None:
                 raise errors.MissingResourceError(message=f"The storage with id '{storage_id}' cannot be found")
             if not await self.filter_projects_by_access_level(user, [storage.project_id], authz_models.Role.VIEWER):
-                raise errors.Unauthorized(message="User does not have access to this project")
+                raise errors.ForbiddenError(message="User does not have access to this project")
             return storage.dump()
 
     async def insert_storage(self, storage: models.CloudStorage, user: base_models.APIUser) -> models.CloudStorage:
         """Insert a new cloud storage entry."""
         if not await self.filter_projects_by_access_level(user, [storage.project_id], authz_models.Role.OWNER):
-            raise errors.Unauthorized(message="User does not have access to this project")
+            raise errors.ForbiddenError(message="User does not have access to this project")
         existing_storage = await self.get_storage(user, project_id=storage.project_id, name=storage.name)
         if existing_storage:
             raise errors.ValidationError(
@@ -106,7 +106,7 @@ class BaseStorageRepository(_Base):
             if storage is None:
                 raise errors.MissingResourceError(message=f"The storage with id '{storage_id}' cannot be found")
             if not await self.filter_projects_by_access_level(user, [storage.project_id], authz_models.Role.OWNER):
-                raise errors.Unauthorized(message="User does not have access to this project")
+                raise errors.ForbiddenError(message="User does not have access to this project")
             if "project_id" in kwargs and cast(str, kwargs.get("project_id")) != storage.project_id:
                 raise errors.ValidationError(message="Cannot change project id of existing storage.")
             name = cast(str, kwargs.get("name", storage.name))
@@ -139,7 +139,7 @@ class BaseStorageRepository(_Base):
             if storage is None:
                 return
             if not await self.filter_projects_by_access_level(user, [storage[0].project_id], authz_models.Role.OWNER):
-                raise errors.Unauthorized(message="User does not have access to this project")
+                raise errors.ForbiddenError(message="User does not have access to this project")
 
             await session.delete(storage[0])
 

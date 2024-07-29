@@ -68,7 +68,7 @@ class KCUsersBP(CustomBlueprint):
         @only_authenticated
         async def _get_self(_: Request, user: base_models.APIUser) -> JSONResponse:
             if not user.is_authenticated or user.id is None:
-                raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+                raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
             user_info = await self.repo.get_or_create_user(requested_by=user, id=user.id)
             if not user_info:
                 raise errors.MissingResourceError(message=f"The user with ID {user.id} cannot be found.")

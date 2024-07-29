@@ -603,7 +603,9 @@ class NotebooksBP(CustomBlueprint):
                 # NOTE: The tokens in the session could expire if the session is hibernated long enough,
                 # here we inject new ones to make sure everything is valid when the session starts back up.
                 if user.access_token is None or user.refresh_token is None or user.git_token is None:
-                    raise errors.Unauthorized(message="Cannot patch the server if the user is not fully logged in.")
+                    raise errors.UnauthorizedError(
+                        message="Cannot patch the server if the user is not fully logged in."
+                    )
                 renku_tokens = RenkuTokens(access_token=user.access_token, refresh_token=user.refresh_token)
                 gitlab_token = GitlabToken(access_token=user.git_token, expires_at=user.git_token_expires_at)
                 self.nb_config.k8s_client.patch_tokens(server_name, renku_tokens, gitlab_token)

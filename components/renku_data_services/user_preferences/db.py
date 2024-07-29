@@ -36,7 +36,7 @@ class UserPreferencesRepository(_Base):
         """Get user preferences from the database."""
         async with self.session_maker() as session:
             if not user.is_authenticated:
-                raise errors.Unauthorized(message="Anonymous users cannot have user preferences.")
+                raise errors.UnauthorizedError(message="Anonymous users cannot have user preferences.")
 
             res = await session.scalars(
                 select(schemas.UserPreferencesORM).where(schemas.UserPreferencesORM.user_id == user.id)
@@ -67,7 +67,7 @@ class UserPreferencesRepository(_Base):
         """Adds a new pinned project to the user's preferences."""
         async with self.session_maker() as session, session.begin():
             if not user.is_authenticated:
-                raise errors.Unauthorized(message="Anonymous users cannot have user preferences.")
+                raise errors.UnauthorizedError(message="Anonymous users cannot have user preferences.")
 
             res = await session.scalars(
                 select(schemas.UserPreferencesORM).where(schemas.UserPreferencesORM.user_id == user.id)
@@ -109,7 +109,7 @@ class UserPreferencesRepository(_Base):
         """Removes on or all pinned projects from the user's preferences."""
         async with self.session_maker() as session, session.begin():
             if not user.is_authenticated:
-                raise errors.Unauthorized(message="Anonymous users cannot have user preferences.")
+                raise errors.UnauthorizedError(message="Anonymous users cannot have user preferences.")
 
             res = await session.scalars(
                 select(schemas.UserPreferencesORM).where(schemas.UserPreferencesORM.user_id == user.id)

@@ -18,9 +18,9 @@ from renku_data_services.app_config import Config
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.errors.errors import (
+    ForbiddenError,
     MissingResourceError,
-    NoDefaultPoolAccessError,
-    Unauthorized,
+    UnauthorizedError,
     ValidationError,
 )
 from renku_data_services.migrations.core import run_migrations_for_app
@@ -76,9 +76,7 @@ def create_app() -> Sanic:
         ) -> "sentry_sdk._types.Event | None":
             if "exc_info" in hint:
                 exc_type, exc_value, tb = hint["exc_info"]
-                if isinstance(
-                    exc_value, (MissingResourceError, Unauthorized, ValidationError, NoDefaultPoolAccessError)
-                ):
+                if isinstance(exc_value, (MissingResourceError, UnauthorizedError, ForbiddenError, ValidationError)):
                     return None
             return event
 
