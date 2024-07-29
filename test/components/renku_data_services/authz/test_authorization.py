@@ -245,7 +245,7 @@ async def test_listing_projects_with_access(app_config: Config, bootstrap_admins
     assert {public_project_id, private_project_id1, private_project_id2} == set(
         await authz.resources_with_permission(admin_user, admin_user.id, ResourceType.project, Scope.READ)
     )
-    with pytest.raises(errors.Unauthorized):
+    with pytest.raises(errors.ForbiddenError):
         await authz.resources_with_permission(anon_user, project_owner.id, ResourceType.project, Scope.WRITE)
         await authz.resources_with_permission(anon_user, project_owner.id, ResourceType.project, Scope.DELETE)
         await authz.resources_with_permission(anon_user, project_owner.id, ResourceType.project, Scope.READ)
