@@ -81,11 +81,7 @@ class ProjectsBP(CustomBlueprint):
                 description=body.description,
                 repositories=body.repositories or [],
                 created_by=user.id,  # type: ignore[arg-type]
-                visibility=(
-                    Visibility(body.visibility)
-                    if isinstance(body.visibility, str)
-                    else Visibility(body.visibility.value)
-                ),
+                visibility=Visibility(body.visibility.value),
                 keywords=keywords,
             )
             result = await self.project_repo.insert_project(user, project)
