@@ -51,6 +51,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Pre-build devcontainer
         uses: devcontainers/ci@v0.3
+        continue-on-error: true
         with:
           push: always
           skipContainerUserIdUpdate: false
