@@ -166,7 +166,7 @@ class RCloneValidator:
                         "NoPrefix": False,
                         "Advanced": False,
                         "Exclusive": False,
-                        "Sensitive": False,
+                        "Sensitive": True,
                         "DefaultStr": "",
                         "ValueStr": "",
                         "Type": "string",
