@@ -57,7 +57,10 @@ class SessionRepository:
             return environment.dump()
 
     async def __insert_environment(
-        self, user: base_models.APIUser, new_environment: models.UnsavedEnvironment
+        self,
+        user: base_models.APIUser,
+        session: AsyncSession,
+        new_environment: models.UnsavedEnvironment,
     ) -> schemas.EnvironmentORM:
         if user.id is None:
             raise errors.Unauthorized(
@@ -78,9 +81,8 @@ class SessionRepository:
             environment_kind=new_environment.environment_kind,
         )
 
-        async with self.session_maker() as session, session.begin():
-            session.add(environment)
-            return environment
+        session.add(environment)
+        return environment
 
     async def insert_environment(
         self, user: base_models.APIUser, new_environment: models.UnsavedEnvironment
@@ -93,40 +95,43 @@ class SessionRepository:
         if new_environment.environment_kind != models.EnvironmentKind.GLOBAL:
             raise errors.ValidationError(message="This endpoint only supports adding global environments", quiet=True)
 
-        env = await self.__insert_environment(user, new_environment)
-        return env.dump()
+        async with self.session_maker() as session, session.begin():
+            env = await self.__insert_environment(user, session, new_environment)
+            return env.dump()
 
     async def __update_environment(
-        self, user: base_models.APIUser, environment_id: ULID, kind: models.EnvironmentKind, **kwargs: dict
+        self,
+        user: base_models.APIUser,
+        session: AsyncSession,
+        environment_id: ULID,
+        kind: models.EnvironmentKind,
+        **kwargs: dict,
     ) -> models.Environment:
-        async with self.session_maker() as session, session.begin():
-            res = await session.scalars(
-                select(schemas.EnvironmentORM)
-                .where(schemas.EnvironmentORM.id == str(environment_id))
-                .where(schemas.EnvironmentORM.environment_kind == kind.value)
-            )
-            environment = res.one_or_none()
-            if environment is None:
-                raise errors.MissingResourceError(
-                    message=f"Session environment with id '{environment_id}' does not exist."
-                )
+        res = await session.scalars(
+            select(schemas.EnvironmentORM)
+            .where(schemas.EnvironmentORM.id == str(environment_id))
+            .where(schemas.EnvironmentORM.environment_kind == kind.value)
+        )
+        environment = res.one_or_none()
+        if environment is None:
+            raise errors.MissingResourceError(message=f"Session environment with id '{environment_id}' does not exist.")
 
-            for key, value in kwargs.items():
-                # NOTE: Only some fields can be edited
-                if key in [
-                    "name",
-                    "description",
-                    "container_image",
-                    "default_url",
-                    "port",
-                    "working_directory",
-                    "mount_directory",
-                    "uid",
-                    "gid",
-                ]:
-                    setattr(environment, key, value)
+        for key, value in kwargs.items():
+            # NOTE: Only some fields can be edited
+            if key in [
+                "name",
+                "description",
+                "container_image",
+                "default_url",
+                "port",
+                "working_directory",
+                "mount_directory",
+                "uid",
+                "gid",
+            ]:
+                setattr(environment, key, value)
 
-            return environment.dump()
+        return environment.dump()
 
     async def update_environment(
         self, user: base_models.APIUser, environment_id: ULID, **kwargs: dict
@@ -135,7 +140,10 @@ class SessionRepository:
         if not user.is_admin:
             raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
 
-        return await self.__update_environment(user, environment_id, models.EnvironmentKind.GLOBAL, **kwargs)
+        async with self.session_maker() as session, session.begin():
+            return await self.__update_environment(
+                user, session, environment_id, models.EnvironmentKind.GLOBAL, **kwargs
+            )
 
     async def delete_environment(self, user: base_models.APIUser, environment_id: ULID) -> None:
         """Delete a global session environment entry."""
@@ -233,7 +241,7 @@ class SessionRepository:
             environment: models.Environment
             environment_orm: schemas.EnvironmentORM | None
             if isinstance(new_launcher.environment, models.UnsavedEnvironment):
-                environment_orm = await self.__insert_environment(user, new_launcher.environment)
+                environment_orm = await self.__insert_environment(user, session, new_launcher.environment)
                 environment = environment_orm.dump()
                 environment_id = environment.id
             else:
@@ -386,7 +394,7 @@ class SessionRepository:
                         gid=env_payload_valid.gid,
                         environment_kind=models.EnvironmentKind(env_payload_valid.environment_kind.value),
                     )
-                    new_env = await self.__insert_environment(user, new_unsaved_env)
+                    new_env = await self.__insert_environment(user, session, new_unsaved_env)
                     launcher.environment = new_env
                 else:
                     # Fields on the environment attached to the launcher are being changed.
