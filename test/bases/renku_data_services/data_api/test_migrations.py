@@ -1,18 +1,18 @@
 import base64
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+import sqlalchemy as sa
 from alembic.script import ScriptDirectory
 from sanic_testing.testing import SanicASGITestClient
-import sqlalchemy as sa
+from ulid import ULID
 
 from renku_data_services.app_config.config import Config
 from renku_data_services.message_queue.avro_models.io.renku.events import v2
 from renku_data_services.message_queue.models import deserialize_binary
 from renku_data_services.migrations.core import downgrade_migrations_for_app, get_alembic_config, run_migrations_for_app
 from renku_data_services.users.models import UserInfo
-from ulid import ULID
 
 
 @pytest.mark.asyncio
