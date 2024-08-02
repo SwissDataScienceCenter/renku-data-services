@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime
+from pathlib import PurePosixPath
 from typing import Any
 
 from sqlalchemy import select
@@ -15,7 +16,7 @@ from renku_data_services import errors
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.crc.db import ResourcePoolRepository
-from renku_data_services.session import models
+from renku_data_services.session import apispec, models
 from renku_data_services.session import orm as schemas
 
 
@@ -236,6 +237,7 @@ class SessionRepository:
                 environment = environment_orm.dump()
                 environment_id = environment.id
             else:
+                environment_id = new_launcher.environment
                 res_env = await session.scalars(
                     select(schemas.EnvironmentORM)
                     .where(schemas.EnvironmentORM.id == environment_id)
@@ -276,6 +278,8 @@ class SessionRepository:
                 resource_class_id=new_launcher.resource_class_id,
             )
             session.add(launcher)
+            await session.flush()
+            await session.refresh(launcher)
             return launcher.dump()
 
     async def update_launcher(
@@ -368,13 +372,20 @@ class SessionRepository:
                             "launcher only the new global environment ID should be specfied",
                             quiet=True,
                         )
-                    env_payload["environment_kind"] = models.EnvironmentKind.CUSTOM
-                    try:
-                        new_unsaved_env = models.UnsavedEnvironment(**env_payload)
-                    except TypeError:
-                        raise errors.ValidationError(
-                            message="The payload for the new custom environment is not valid", quiet=True
-                        )
+                    env_payload["environment_kind"] = models.EnvironmentKind.CUSTOM.value
+                    env_payload_valid = apispec.EnvironmentPostInLauncher.model_validate(env_payload)
+                    new_unsaved_env = models.UnsavedEnvironment(
+                        name=env_payload_valid.name,
+                        description=env_payload_valid.description,
+                        container_image=env_payload_valid.container_image,
+                        default_url=env_payload_valid.default_url,
+                        port=env_payload_valid.port,
+                        working_directory=PurePosixPath(env_payload_valid.working_directory),
+                        mount_directory=PurePosixPath(env_payload_valid.mount_directory),
+                        uid=env_payload_valid.uid,
+                        gid=env_payload_valid.gid,
+                        environment_kind=models.EnvironmentKind(env_payload_valid.environment_kind.value),
+                    )
                     new_env = await self.__insert_environment(user, new_unsaved_env)
                     launcher.environment = new_env
                 else:

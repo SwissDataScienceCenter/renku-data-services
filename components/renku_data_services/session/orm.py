@@ -94,7 +94,7 @@ class SessionLauncherORM(BaseORM):
     """Human-readable description of the session launcher."""
 
     project: Mapped[ProjectORM] = relationship(init=False)
-    environment: Mapped[EnvironmentORM] = relationship(init=False)
+    environment: Mapped[EnvironmentORM] = relationship(init=False, lazy="joined")
 
     project_id: Mapped[str] = mapped_column(
         "project_id", ForeignKey(ProjectORM.id, ondelete="CASCADE"), default=None, index=True

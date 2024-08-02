@@ -414,12 +414,15 @@ components:
           $ref: "#/components/schemas/Description"
         environment:
           $ref: "#/components/schemas/EnvironmentGetInLauncher"
+        resource_class_id:
+          $ref: "#/components/schemas/ResourceClassId"
       required:
         - id
         - project_id
         - name
         - creation_date
         - environment
+        - resource_class_id
       example:
         id: 01AN4Z79ZS5XN0F25N3DB94T4R
         project_id: 01AN4Z79ZS5XN0F25N3DB94T4R

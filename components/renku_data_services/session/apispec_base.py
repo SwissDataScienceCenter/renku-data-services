@@ -1,6 +1,8 @@
 """Base models for API specifications."""
 
-from pydantic import BaseModel
+from pathlib import PurePosixPath
+
+from pydantic import BaseModel, field_validator
 
 
 class BaseAPISpec(BaseModel):
@@ -10,3 +12,11 @@ class BaseAPISpec(BaseModel):
         """Enables orm mode for pydantic."""
 
         from_attributes = True
+
+    @field_validator("working_directory", "mount_directory", check_fields=False, mode="before")
+    @classmethod
+    def convert_path_to_string(cls, val: str | PurePosixPath) -> str:
+        """Converts the python path to a regular string when pydantic deserializes."""
+        if isinstance(val, PurePosixPath):
+            return val.as_posix()
+        return val
