@@ -41,7 +41,7 @@ async def apispec(sanic_client: SanicASGITestClient) -> BaseOpenAPISchema:
 @schemathesis.hook
 def filter_headers(context: HookContext, headers: dict[str, str]) -> bool:
     op = context.operation
-    if op.method.upper() == "PATCH" and op.path == "/projects/{project_id}":
+    if op.method.upper() == "PATCH" and (op.path == "/projects/{project_id}" or op.path == "/platform/config"):
         if_match = headers.get("If-Match")
         if if_match and isinstance(if_match, str):
             try:
@@ -50,6 +50,14 @@ def filter_headers(context: HookContext, headers: dict[str, str]) -> bool:
             except UnicodeEncodeError:
                 return False
     return True
+
+
+# Schemathesis keeps generating calls where name of a query parameter is just empty but there is a
+# value. I.e. like /api/data/user/secrets?kind=&=null, the second query parameter does not have a name
+# and this crashes the server when it tries to validate the query.
+@schemathesis.hook
+def filter_query(context: HookContext, query: dict[str, str] | None) -> bool:
+    return query is None or "" not in query
 
 
 schema = schemathesis.from_pytest_fixture(

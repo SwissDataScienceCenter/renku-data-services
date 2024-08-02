@@ -32,6 +32,7 @@ packages = [
   { include = "renku_data_services/connected_services", from = "components" },
   { include = "renku_data_services/repositories", from = "components" },
   { include = "renku_data_services/notebooks", from = "components" },
+  { include = "renku_data_services/platform", from = "components" },
 ]
 
 [tool.poetry.dependencies]
@@ -204,6 +205,7 @@ module = [
   "renku_data_services.notebooks.apispec",
   "renku_data_services.notebooks.cr_amalthea_session",
   "renku_data_services.notebooks.cr_jupyter_server",
+  "renku_data_services.platform.apispec",
 ]
 ignore_errors = true
 

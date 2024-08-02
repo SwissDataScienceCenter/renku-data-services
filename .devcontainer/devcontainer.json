@@ -31,7 +31,7 @@
 		"ghcr.io/devcontainers-contrib/features/poetry",
 		"ghcr.io/devcontainers-contrib/features/bash-command"
 	],
-	"postCreateCommand": "poetry install --with dev && make kind_cluster && make install_amaltheas",
+	"postCreateCommand": "poetry install --with dev",
 	"customizations": {
 		"vscode": {
 			"extensions": [
