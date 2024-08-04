@@ -398,7 +398,7 @@ class SessionRepository:
                     launcher.environment = new_env
                 else:
                     # Fields on the environment attached to the launcher are being changed.
-                    for key, val in env_payload:
+                    for key, val in env_payload.items():
                         # NOTE: Only some fields can be updated.
                         if key in [
                             "name",
@@ -411,7 +411,7 @@ class SessionRepository:
                             "uid",
                             "gid",
                         ]:
-                            setattr(launcher.environment, key, value)
+                            setattr(launcher.environment, key, val)
 
             return launcher.dump()
 
