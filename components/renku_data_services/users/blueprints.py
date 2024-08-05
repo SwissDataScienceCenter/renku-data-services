@@ -27,7 +27,7 @@ class GetSecretsParams(BaseAPISpec):
     class Config:
         """Configuration."""
 
-        extra = "ignore"
+        extra = "forbid"
 
     kind: apispec.SecretKind = apispec.SecretKind.general
 
@@ -43,9 +43,9 @@ class KCUsersBP(CustomBlueprint):
         """Get all users or search by email."""
 
         @authenticate(self.authenticator)
-        async def _get_all(request: Request, user: base_models.APIUser) -> JSONResponse:
-            email_filter = request.args.get("exact_email")
-            users = await self.repo.get_users(requested_by=user, email=email_filter)
+        @validate_query(query=apispec.UserParams)
+        async def _get_all(request: Request, user: base_models.APIUser, query: apispec.UserParams) -> JSONResponse:
+            users = await self.repo.get_users(requested_by=user, email=query.exact_email)
             return validated_json(
                 apispec.UsersWithId,
                 [
@@ -161,8 +161,10 @@ class UserSecretsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        @validate_query(query=GetSecretsParams)
-        async def _get_all(request: Request, user: base_models.APIUser, query: GetSecretsParams) -> JSONResponse:
+        @validate_query(query=apispec.UserSecretsParams)
+        async def _get_all(
+            request: Request, user: base_models.APIUser, query: apispec.UserSecretsParams
+        ) -> JSONResponse:
             secret_kind = SecretKind[query.kind.value]
             secrets = await self.secret_repo.get_user_secrets(requested_by=user, kind=secret_kind)
             secrets_json = [

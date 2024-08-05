@@ -9,8 +9,8 @@ from sanic_ext import validate
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_api.misc import validate_query
 from renku_data_services.user_preferences import apispec, models
-from renku_data_services.user_preferences.apispec_base import PinnedProjectFilter
 from renku_data_services.user_preferences.db import UserPreferencesRepository
 
 
@@ -47,9 +47,11 @@ class UserPreferencesBP(CustomBlueprint):
         """Remove a pinned project from user preferences for the logged in user."""
 
         @authenticate(self.authenticator)
-        async def _delete(request: Request, user: base_models.APIUser) -> JSONResponse:
-            res_filter = PinnedProjectFilter.model_validate(dict(request.query_args))
-            res = await self.user_preferences_repo.remove_pinned_project(user=user, **res_filter.model_dump())
+        @validate_query(query=apispec.DeletePinnedParams)
+        async def _delete(
+            request: Request, user: base_models.APIUser, query: apispec.DeletePinnedParams
+        ) -> JSONResponse:
+            res = await self.user_preferences_repo.remove_pinned_project(user=user, project_slug=query.project_slug)
             return json(apispec.UserPreferences.model_validate(res).model_dump())
 
         return "/user/preferences/pinned_projects", ["DELETE"], _delete

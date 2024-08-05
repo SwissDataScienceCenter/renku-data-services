@@ -123,10 +123,17 @@ paths:
           schema:
             type: string
         - in: query
-          name: next_url
+          description: query parameters
+          name: authorize_params
+          style: form
+          explode: true
           schema:
-            description: The URL to redirect the user to once the authorization flow has been completed.
-            type: string
+            type: object
+            additionalProperties: false
+            properties:
+              next_url:
+                description: The URL to redirect the user to once the authorization flow has been completed.
+                type: string
       responses:
         "302":
           description: The authorization URL for this OAuth2 Client.

@@ -45,11 +45,16 @@ paths:
       summary: List all users
       parameters:
         - in: query
-          name: exact_email
+          style: form
+          explode: true
+          name: user_params
           schema:
-            type: string
-          required: false
-          description: Return the user(s) with an exact match on the email provided
+            type: object
+            additionalProperties: false
+            properties:
+              exact_email:
+                type: string
+                description: Return the user(s) with an exact match on the email provided
       responses:
         "200":
           description: The list of users in the service (this is a subset of what is in Keycloak)
@@ -92,13 +97,17 @@ paths:
       summary: List all secrets for a user (keys only)
       parameters:
         - in: query
-          description: Filter results based on secret kind
-          name: kind
-          required: false
+          style: form
+          explode: true
+          name: user_secrets_params
           schema:
-            allOf:
-              - $ref: "#/components/schemas/SecretKind"
-              - default: general
+            type: object
+            additionalProperties: false
+            properties:
+              kind:
+                description: Filter results based on secret kind
+                $ref: "#/components/schemas/SecretKind"
+                default: general
       responses:
         "200":
           description: The user's secrets

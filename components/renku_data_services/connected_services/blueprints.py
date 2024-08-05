@@ -11,6 +11,7 @@ from sanic_ext import validate
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_admins, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_api.misc import validate_query
 from renku_data_services.connected_services import apispec
 from renku_data_services.connected_services.apispec_base import AuthorizeParams, CallbackParams
 from renku_data_services.connected_services.db import ConnectedServicesRepository
@@ -90,11 +91,13 @@ class OAuth2ClientsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _authorize(request: Request, user: base_models.APIUser, provider_id: str) -> HTTPResponse:
-            params = AuthorizeParams.model_validate(dict(request.query_args))
+        @validate_query(query=apispec.AuthorizeParams)
+        async def _authorize(
+            request: Request, user: base_models.APIUser, provider_id: str, query: AuthorizeParams
+        ) -> HTTPResponse:
             callback_url = self._get_callback_url(request)
             url = await self.connected_services_repo.authorize_client(
-                provider_id=provider_id, user=user, callback_url=callback_url, next_url=params.next_url
+                provider_id=provider_id, user=user, callback_url=callback_url, next_url=query.next_url
             )
             return redirect(to=url)
 
