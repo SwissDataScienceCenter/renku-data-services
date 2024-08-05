@@ -32,10 +32,10 @@ class PlatformRepository:
 
     async def update_config(self, user: base_models.APIUser, etag: str, **kwargs: dict) -> models.PlatformConfig:
         """Update the platform configuration."""
-        if user.id is None or not user.is_admin:
-            raise errors.Unauthorized(
-                message="You do not have the required permissions for this operation.", quiet=True
-            )
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+        if not user.is_admin:
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session, session.begin():
             result = await session.scalars(select(schemas.PlatformConfigORM))

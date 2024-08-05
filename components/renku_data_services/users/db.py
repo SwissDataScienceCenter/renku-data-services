@@ -58,7 +58,7 @@ class UserRepo:
 
     async def _add_api_user(self, user: APIUser) -> UserWithNamespace:
         if not user.id:
-            raise errors.Unauthorized(message="The user has to be authenticated to be inserted in the DB.")
+            raise errors.UnauthorizedError(message="The user has to be authenticated to be inserted in the DB.")
         result = await self._users_sync.update_or_insert_user(
             user_id=user.id,
             payload=dict(
@@ -99,7 +99,7 @@ class UserRepo:
     async def get_users(self, requested_by: APIUser, email: str | None = None) -> list[UserWithNamespace]:
         """Get users from the database."""
         if not email and not requested_by.is_admin:
-            raise errors.Unauthorized(message="Non-admin users cannot list all users.")
+            raise errors.ForbiddenError(message="Non-admin users cannot list all users.")
         users = await self._get_users(email)
 
         is_api_user_missing = not any([requested_by.id == user.user.id for user in users])

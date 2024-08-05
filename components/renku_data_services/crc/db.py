@@ -132,8 +132,10 @@ def _only_admins(f: Callable[Concatenate[Any, _P], Awaitable[_T]]) -> Callable[C
             api_user = args[0]
         if api_user is not None and not isinstance(api_user, base_models.APIUser):
             raise errors.ProgrammingError(message="Expected user parameter is not of type APIUser.")
-        if api_user is None or not api_user.is_admin:
-            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+        if api_user is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+        if not api_user.is_admin:
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
         # the user is authenticated and is an admin
         response = await f(self, *args, **kwargs)
@@ -705,7 +707,7 @@ class UserRepository(_Base):
             if user.no_default_access:
                 default_rp = next((rp for rp in rps_to_add if rp.default), None)
                 if default_rp:
-                    raise errors.NoDefaultPoolAccessError(
+                    raise errors.ForbiddenError(
                         message=f"User with keycloak id {keycloak_id} cannot access the default resource pool"
                     )
             if append:

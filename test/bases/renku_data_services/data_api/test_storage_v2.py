@@ -120,7 +120,7 @@ async def test_storage_v2_create_cannot_as_unauthorized_or_non_owner_or_non_memb
     _, response = await sanic_client.post("/api/data/storages_v2", headers=headers, json=payload)
 
     assert response
-    assert response.status_code == 401
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -198,7 +198,7 @@ async def test_storage_v2_cannot_delete_as_normal_member(
         f"/api/data/storages_v2/{storage_id}", headers=project_normal_member_headers
     )
 
-    assert response.status_code == 401
+    assert response.status_code == 403
 
     _, response = await sanic_client.get(f"/api/data/storages_v2/{storage_id}", headers=project_normal_member_headers)
 
@@ -216,7 +216,7 @@ async def test_storage_v2_cannot_delete_as_unauthorized_or_non_member(
 
     _, response = await sanic_client.delete(f"/api/data/storages_v2/{storage_id}", headers=headers)
 
-    assert response.status_code == 401
+    assert response.status_code == 403, response.text
 
 
 @pytest.mark.asyncio
@@ -255,7 +255,7 @@ async def test_storage_v2_cannot_patch_as_normal_member(
         f"/api/data/storages_v2/{storage_id}", headers=project_normal_member_headers, json=payload
     )
 
-    assert response.status_code == 401
+    assert response.status_code == 403
 
     _, response = await sanic_client.get(f"/api/data/storages_v2/{storage_id}", headers=project_normal_member_headers)
 
@@ -281,7 +281,7 @@ async def test_storage_v2_cannot_patch_as_unauthorized_or_non_member(
 
     _, response = await sanic_client.patch(f"/api/data/storages_v2/{storage_id}", headers=headers, json=payload)
 
-    assert response.status_code == 401
+    assert response.status_code == 403, response.text
 
 
 @pytest.mark.asyncio
