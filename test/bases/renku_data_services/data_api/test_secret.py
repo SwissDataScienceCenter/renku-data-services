@@ -212,6 +212,7 @@ async def test_secret_encryption_decryption(
     assert response.status_code == 201
     assert "test-secret" in secrets_storage_app_config.core_client.secrets
     k8s_secret = secrets_storage_app_config.core_client.secrets["test-secret"].data
+    assert k8s_secret.keys() == {"secret-1", "secret-2"}
 
     _, response = await sanic_client.get("/api/data/user/secret_key", headers=user_headers)
     assert response.status_code == 200
@@ -220,6 +221,69 @@ async def test_secret_encryption_decryption(
 
     assert decrypt_string(secret_key.encode(), "user", b64decode(k8s_secret["secret-1"])) == "value-1"
     assert decrypt_string(secret_key.encode(), "user", b64decode(k8s_secret["secret-2"])) == "value-2"
+
+
+@pytest.mark.asyncio
+async def test_secret_encryption_decryption_with_key_mapping(
+    sanic_client: SanicASGITestClient,
+    secrets_sanic_client: SanicASGITestClient,
+    secrets_storage_app_config,
+    user_headers,
+    create_secret,
+) -> None:
+    """Test adding a secret and decrypting it in the secret service with mapping for key names."""
+    secret1 = await create_secret("secret-1", "value-1")
+    secret1_id = secret1["id"]
+    secret2 = await create_secret("secret-2", "value-2")
+    secret2_id = secret2["id"]
+
+    payload = {
+        "name": "test-secret",
+        "namespace": "test-namespace",
+        "secret_ids": [secret1_id, secret2_id],
+        "owner_references": [
+            {
+                "apiVersion": "amalthea.dev/v1alpha1",
+                "kind": "JupyterServer",
+                "name": "renku-1234",
+                "uid": "c9328118-8d32-41b4-b9bd-1437880c95a2",
+            }
+        ],
+        "key_mapping": {
+            secret1_id: "access_key_id",
+            secret2_id: "secret_access_key",
+        },
+    }
+
+    _, response = await secrets_sanic_client.post("/api/secrets/kubernetes", headers=user_headers, json=payload)
+    assert response.status_code == 201
+    assert "test-secret" in secrets_storage_app_config.core_client.secrets
+    k8s_secret = secrets_storage_app_config.core_client.secrets["test-secret"].data
+    assert k8s_secret.keys() == {"access_key_id", "secret_access_key"}
+
+    _, response = await sanic_client.get("/api/data/user/secret_key", headers=user_headers)
+    assert response.status_code == 200
+    assert "secret_key" in response.json
+    secret_key = response.json["secret_key"]
+
+    assert decrypt_string(secret_key.encode(), "user", b64decode(k8s_secret["access_key_id"])) == "value-1"
+    assert decrypt_string(secret_key.encode(), "user", b64decode(k8s_secret["secret_access_key"])) == "value-2"
+
+    # NOTE: Test missing secret_id in key mapping
+    payload["key_mapping"] = {secret1_id: "access_key_id"}
+
+    _, response = await secrets_sanic_client.post("/api/secrets/kubernetes", headers=user_headers, json=payload)
+
+    assert response.status_code == 422
+    assert response.json["error"]["message"] == "Key mapping must include all requested secret IDs"
+
+    # NOTE: Test duplicated key mapping
+    payload["key_mapping"] = {secret1_id: "access_key_id", secret2_id: "access_key_id"}
+
+    _, response = await secrets_sanic_client.post("/api/secrets/kubernetes", headers=user_headers, json=payload)
+
+    assert response.status_code == 422
+    assert response.json["error"]["message"] == "Key mapping values are not unique"
 
 
 @pytest.mark.asyncio

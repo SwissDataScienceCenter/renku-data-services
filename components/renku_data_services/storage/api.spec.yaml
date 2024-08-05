@@ -26,7 +26,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/CloudStorageGet"
+                $ref: "#/components/schemas/CloudStorageGetV2"
         default:
           $ref: '#/components/responses/Error'
       tags:
@@ -76,7 +76,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/CloudStorageGet"
+                  $ref: "#/components/schemas/CloudStorageGetV2"
         "404":
           description: Storage was not found
           content:
@@ -481,6 +481,16 @@ components:
             $ref: "#/components/schemas/RCloneOption"
       required:
         - storage
+    CloudStorageGetV2:
+      description: Get response for a V2 cloud storage. Contains field name and secret ID for saved secrets.
+      allOf:
+        - $ref: "#/components/schemas/CloudStorageGet"
+        - type: object
+          properties:
+            secrets:
+              type: array
+              items:
+                $ref: "#/components/schemas/CloudStorageSecretGet"
     CloudStorageSecretPost:
       type: object
       description: Data for storing secret for a storage field
@@ -514,8 +524,11 @@ components:
           description: Name of the field to store credential for
           minLength: 1
           maxLength: 99
+        secret_id:
+          $ref: "#/components/schemas/UlidId"
       required:
         - name
+        - secret_id
     SecretValue:
       description: Secret value that can be any text
       type: string

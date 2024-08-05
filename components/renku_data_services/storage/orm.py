@@ -54,6 +54,11 @@ class CloudStorageORM(BaseORM):
     )
     """Id of this storage."""
 
+    secrets: Mapped[list["CloudStorageSecretsORM"]] = relationship(
+        lazy="noload", init=False, viewonly=True, default_factory=list
+    )
+    """Saved secrets for the storage."""
+
     __table_args__ = (
         UniqueConstraint(
             "project_id",
@@ -86,6 +91,7 @@ class CloudStorageORM(BaseORM):
             target_path=self.target_path,
             storage_id=self.storage_id,
             readonly=self.readonly,
+            secrets=[s.dump() for s in self.secrets],
         )
 
 

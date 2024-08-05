@@ -16,6 +16,7 @@ from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.secrets import orm as secrets_schemas
 from renku_data_services.secrets.core import encrypt_user_secret
 from renku_data_services.secrets.models import SecretKind
+from renku_data_services.secrets.orm import SecretORM
 from renku_data_services.storage import apispec, models
 from renku_data_services.storage import orm as schemas
 from renku_data_services.users.db import UserRepo
@@ -53,43 +54,53 @@ class BaseStorageRepository(_Base):
         id: str | None = None,
         project_id: str | ULID | None = None,
         name: str | None = None,
+        include_secrets: bool = False,
+        filter_by_access_level: bool = True,
     ) -> list[models.CloudStorage]:
         """Get a storage from the database."""
         async with self.session_maker() as session:
-            stmt = select(schemas.CloudStorageORM)
-
-            if project_id is not None:
-                stmt = stmt.where(schemas.CloudStorageORM.project_id == str(project_id))
-            if id is not None:
-                stmt = stmt.where(schemas.CloudStorageORM.storage_id == (id))
-
-            if name is not None:
-                stmt = stmt.where(schemas.CloudStorageORM.name == name)
             if not project_id and not name and not id:
                 raise errors.ValidationError(
                     message="One of 'project_id', 'id' or 'name' has to be set when getting storage"
                 )
 
+            stmt = select(schemas.CloudStorageORM)
+
+            if project_id is not None:
+                stmt = stmt.where(schemas.CloudStorageORM.project_id == str(project_id))
+            if id is not None:
+                stmt = stmt.where(schemas.CloudStorageORM.storage_id == id)
+            if name is not None:
+                stmt = stmt.where(schemas.CloudStorageORM.name == name)
+            if include_secrets:
+                stmt = stmt.options(
+                    selectinload(
+                        schemas.CloudStorageORM.secrets.and_(schemas.CloudStorageSecretsORM.user_id == user.id)
+                    )
+                )
+
             res = await session.execute(stmt)
-            orms = res.scalars().all()
+            storage_orms = res.scalars().all()
+
+            if not filter_by_access_level:
+                return [s.dump() for s in storage_orms]
+
             accessible_projects = await self.filter_projects_by_access_level(
-                user, [p.project_id for p in orms], authz_models.Role.VIEWER
+                user, [s.project_id for s in storage_orms], authz_models.Role.VIEWER
             )
 
-            return [p.dump() for p in orms if p.project_id in accessible_projects]
+            return [s.dump() for s in storage_orms if s.project_id in accessible_projects]
 
     async def get_storage_by_id(self, storage_id: ULID, user: base_models.APIUser) -> models.CloudStorage:
         """Get a single storage by id."""
-        async with self.session_maker() as session:
-            storage = await session.scalar(
-                select(schemas.CloudStorageORM).where(schemas.CloudStorageORM.storage_id == str(storage_id))
-            )
+        storages = await self.get_storage(user, id=str(storage_id), include_secrets=True, filter_by_access_level=False)
 
-            if storage is None:
-                raise errors.MissingResourceError(message=f"The storage with id '{storage_id}' cannot be found")
-            if not await self.filter_projects_by_access_level(user, [storage.project_id], authz_models.Role.VIEWER):
-                raise errors.Unauthorized(message="User does not have access to this project")
-            return storage.dump()
+        if not storages:
+            raise errors.MissingResourceError(message=f"The storage with id '{storage_id}' cannot be found")
+        if not await self.filter_projects_by_access_level(user, [storages[0].project_id], authz_models.Role.VIEWER):
+            raise errors.Unauthorized(message="User does not have access to this project")
+
+        return storages[0]
 
     async def insert_storage(self, storage: models.CloudStorage, user: base_models.APIUser) -> models.CloudStorage:
         """Insert a new cloud storage entry."""
@@ -222,6 +233,13 @@ class BaseStorageRepository(_Base):
     async def delete_storage_secrets(self, storage_id: ULID, user: base_models.APIUser) -> None:
         """Delete cloud storage secrets."""
         async with self.session_maker() as session, session.begin():
+            stmt = (
+                delete(SecretORM)
+                .where(schemas.CloudStorageSecretsORM.secret_id == SecretORM.id)
+                .where(schemas.CloudStorageSecretsORM.user_id == user.id)
+                .where(schemas.CloudStorageSecretsORM.storage_id == str(storage_id))
+            )
+            await session.execute(stmt)
             stmt = (
                 delete(schemas.CloudStorageSecretsORM)
                 .where(schemas.CloudStorageSecretsORM.user_id == user.id)
