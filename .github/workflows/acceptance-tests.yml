@@ -44,7 +44,7 @@ jobs:
       name: renku-ci-ds-${{ github.event.number }}
       url: https://renku-ci-ds-${{ github.event.number }}.dev.renku.ch
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Find deplyoment url
         uses: peter-evans/find-comment@v1
         id: deploymentUrlMessage
