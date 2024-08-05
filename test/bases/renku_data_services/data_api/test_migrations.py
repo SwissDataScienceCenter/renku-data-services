@@ -1,9 +1,12 @@
 import base64
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+import sqlalchemy as sa
 from alembic.script import ScriptDirectory
 from sanic_testing.testing import SanicASGITestClient
+from ulid import ULID
 
 from renku_data_services.app_config.config import Config
 from renku_data_services.message_queue.avro_models.io.renku.events import v2
@@ -94,3 +97,39 @@ async def test_migration_to_f34b87ddd954(
     ]
     assert len(group_removed_events) == 2
     assert set(added_group_ids) == {e.id for e in group_removed_events}
+
+
+@pytest.mark.asyncio
+async def test_migration_to_584598f3b769(sanic_client_no_migrations: SanicASGITestClient, app_config: Config) -> None:
+    run_migrations_for_app("common", "dcc1c1ee662f")
+    sanic_client = sanic_client_no_migrations
+    await app_config.kc_user_repo.initialize(app_config.kc_api)
+    await app_config.group_repo.generate_user_namespaces()
+    env_id = str(ULID())
+    async with app_config.db.async_session_maker() as session, session.begin():
+        await session.execute(
+            sa.text(
+                "INSERT INTO "
+                "sessions.environments(id, name, created_by_id, creation_date, container_image, default_url) "
+                "VALUES (:id, :name, :created_by, :date, :image, :url)"
+            ).bindparams(
+                id=env_id,
+                name="test",
+                created_by="test",
+                date=datetime.now(UTC),
+                image="test",
+                url="/test",
+            )
+        )
+    run_migrations_for_app("common", "584598f3b769")
+    _, response = await sanic_client.get("/api/data/environments")
+    assert response.status_code == 200, response.text
+    assert len(response.json) == 1
+    env = response.json[0]
+    assert env["id"] == env_id
+    assert env["name"] == "test"
+    assert env["container_image"] == "test"
+    assert env["default_url"] == "/test"
+    assert env["port"] == 4180
+    assert env["uid"] == 1000
+    assert env["gid"] == 1000
