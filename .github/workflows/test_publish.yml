@@ -32,6 +32,7 @@ jobs:
           tags: |
             type=ref,event=pr,prefix=cache-pr-,priority=600
             type=ref,event=branch,prefix=cache-,priority=500
+            type=ref,event=tag,prefix=cache-,priority=500
       - name: Extract Docker image name
         id: docker_image
         env:
@@ -50,6 +51,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Pre-build devcontainer
         uses: devcontainers/ci@v0.3
+        continue-on-error: true
         with:
           push: always
           skipContainerUserIdUpdate: false
