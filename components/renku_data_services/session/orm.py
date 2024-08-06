@@ -77,7 +77,7 @@ class SessionLauncherORM(BaseORM):
 
     __tablename__ = "launchers"
 
-    id: Mapped[str] = mapped_column("id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
     """Id of this session launcher object."""
 
     name: Mapped[str] = mapped_column("name", String(99))
@@ -143,7 +143,7 @@ class SessionLauncherORM(BaseORM):
         """Create a session launcher model from the SessionLauncherORM."""
         return models.SessionLauncher(
             id=self.id,
-            project_id=str(self.project_id),
+            project_id=self.project_id,
             name=self.name,
             created_by=models.Member(id=self.created_by_id),
             creation_date=self.creation_date,
