@@ -160,8 +160,12 @@ class UserSecretsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        @validate(query=GetSecretsParams)
-        async def _get_all(request: Request, user: base_models.APIUser, query: GetSecretsParams) -> JSONResponse:
+        async def _get_all(request: Request, user: base_models.APIUser) -> JSONResponse:
+            try:
+                query = GetSecretsParams.model_validate(request.query_args)
+            except KeyError:
+                # NOTE: Query validation can fail with a key error if the query is invalid
+                raise errors.ValidationError(message="The provided query parameters are not valid.")
             secret_kind = SecretKind[query.kind.value]
             secrets = await self.secret_repo.get_user_secrets(requested_by=user, kind=secret_kind)
             secrets_json = [
