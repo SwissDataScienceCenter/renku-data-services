@@ -1,6 +1,7 @@
 """Session blueprint."""
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from sanic import HTTPResponse, Request, json
 from sanic.response import JSONResponse
@@ -8,9 +9,10 @@ from sanic_ext import validate
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
-from renku_data_services.base_api.auth import authenticate, validate_path_project_id
+from renku_data_services import errors
+from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
-from renku_data_services.session import apispec
+from renku_data_services.session import apispec, models
 from renku_data_services.session.db import SessionRepository
 
 
@@ -47,7 +49,16 @@ class EnvironmentsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @validate(json=apispec.EnvironmentPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.EnvironmentPost) -> JSONResponse:
-            environment = await self.session_repo.insert_environment(user=user, new_environment=body)
+            assert user.id
+            environment_model = models.UnsavedEnvironment(
+                name=body.name,
+                description=body.description,
+                container_image=body.container_image,
+                default_url=body.default_url,
+                created_by=models.Member(id=user.id),
+                creation_date=datetime.now(UTC).replace(microsecond=0),
+            )
+            environment = await self.session_repo.insert_environment(user=user, new_environment=environment_model)
             return json(apispec.Environment.model_validate(environment).model_dump(exclude_none=True, mode="json"), 201)
 
         return "/environments", ["POST"], _post
@@ -115,9 +126,30 @@ class SessionLaunchersBP(CustomBlueprint):
         """Create a new session launcher."""
 
         @authenticate(self.authenticator)
+        @only_authenticated
         @validate(json=apispec.SessionLauncherPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.SessionLauncherPost) -> JSONResponse:
-            launcher = await self.session_repo.insert_launcher(user=user, new_launcher=body)
+            match body.environment_kind:
+                case apispec.EnvironmentKind.global_environment:
+                    environment_kind = models.EnvironmentKind.global_environment
+                case apispec.EnvironmentKind.container_image:
+                    environment_kind = models.EnvironmentKind.container_image
+                case _:
+                    raise errors.ValidationError(message=f"Unknown environment kind {body.environment_kind}")
+            assert user.id
+            launcher_model = models.UnsavedSessionLauncher(
+                name=body.name,
+                project_id=ULID.from_str(body.project_id),
+                description=body.description,
+                environment_kind=environment_kind,
+                environment_id=body.environment_id,
+                resource_class_id=body.resource_class_id,
+                container_image=body.container_image,
+                default_url=body.default_url,
+                created_by=models.Member(id=user.id),
+                creation_date=datetime.now(UTC).replace(microsecond=0),
+            )
+            launcher = await self.session_repo.insert_launcher(user=user, new_launcher=launcher_model)
             return json(
                 apispec.SessionLauncher.model_validate(launcher).model_dump(exclude_none=True, mode="json"), 201
             )
@@ -152,8 +184,7 @@ class SessionLaunchersBP(CustomBlueprint):
         """Get all launchers belonging to a project."""
 
         @authenticate(self.authenticator)
-        @validate_path_project_id
-        async def _get_launcher(_: Request, user: base_models.APIUser, project_id: str) -> JSONResponse:
+        async def _get_launcher(_: Request, user: base_models.APIUser, project_id: ULID) -> JSONResponse:
             launchers = await self.session_repo.get_project_launchers(user=user, project_id=project_id)
             return json(
                 [
@@ -162,4 +193,4 @@ class SessionLaunchersBP(CustomBlueprint):
                 ]
             )
 
-        return "/projects/<project_id>/session_launchers", ["GET"], _get_launcher
+        return "/projects/<project_id:ulid>/session_launchers", ["GET"], _get_launcher

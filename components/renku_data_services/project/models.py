@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Optional
 
+from ulid import ULID
+
 from renku_data_services.authz.models import Visibility
 from renku_data_services.namespace.models import Namespace
 from renku_data_services.utils.etag import compute_etag_from_timestamp
@@ -37,7 +39,7 @@ class BaseProject:
 class Project(BaseProject):
     """Base Project model."""
 
-    id: str
+    id: ULID
     namespace: Namespace
 
 
