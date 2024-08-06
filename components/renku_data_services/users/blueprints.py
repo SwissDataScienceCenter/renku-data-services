@@ -10,6 +10,7 @@ from sanic_ext import validate
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.errors import errors
 from renku_data_services.secrets.db import UserSecretsRepo
@@ -160,12 +161,8 @@ class UserSecretsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _get_all(request: Request, user: base_models.APIUser) -> JSONResponse:
-            try:
-                query = GetSecretsParams.model_validate(request.query_args)
-            except KeyError:
-                # NOTE: Query validation can fail with a key error if the query is invalid
-                raise errors.ValidationError(message="The provided query parameters are not valid.")
+        @validate_query(query=GetSecretsParams)
+        async def _get_all(request: Request, user: base_models.APIUser, query: GetSecretsParams) -> JSONResponse:
             secret_kind = SecretKind[query.kind.value]
             secrets = await self.secret_repo.get_user_secrets(requested_by=user, kind=secret_kind)
             secrets_json = [
