@@ -122,7 +122,7 @@ paths:
         name: storage_id
         required: true
         schema:
-          $ref: "#/components/schemas/UlidId"
+          $ref: "#/components/schemas/Ulid"
         description: The id of the storage
     get:
       summary: Get all saved secrets for a cloud storage
@@ -549,7 +549,7 @@ components:
           minLength: 1
           maxLength: 99
         secret_id:
-          $ref: "#/components/schemas/UlidId"
+          $ref: "#/components/schemas/Ulid"
       required:
         - name
         - secret_id

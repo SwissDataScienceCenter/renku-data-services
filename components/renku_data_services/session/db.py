@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, nullcontext
-from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -69,7 +68,6 @@ class SessionRepository:
         environment = schemas.EnvironmentORM(
             name=new_environment.name,
             created_by_id=user.id,
-            creation_date=datetime.now(UTC),
             description=new_environment.description,
             container_image=new_environment.container_image,
             default_url=new_environment.default_url,
@@ -99,6 +97,8 @@ class SessionRepository:
 
         async with self.session_maker() as session, session.begin():
             env = await self.__insert_environment(user, session, new_environment)
+            await session.flush()
+            await session.refresh(env)
             return env.dump()
 
     async def __update_environment(
@@ -182,11 +182,9 @@ class SessionRepository:
             launcher = res.all()
             return [item.dump() for item in launcher]
 
-    async def get_project_launchers(self, user: base_models.APIUser, project_id: str) -> list[models.SessionLauncher]:
+    async def get_project_launchers(self, user: base_models.APIUser, project_id: ULID) -> list[models.SessionLauncher]:
         """Get all session launchers in a project from the database."""
-        authorized = await self.project_authz.has_permission(
-            user, ResourceType.project, ULID.from_str(project_id), Scope.READ
-        )
+        authorized = await self.project_authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
         if not authorized:
             raise errors.MissingResourceError(
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
@@ -285,7 +283,6 @@ class SessionRepository:
             launcher = schemas.SessionLauncherORM(
                 name=new_launcher.name,
                 created_by_id=user.id,
-                creation_date=datetime.now(UTC),
                 description=new_launcher.description,
                 project_id=new_launcher.project_id,
                 environment_id=environment_id,

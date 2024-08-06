@@ -209,7 +209,8 @@ class StoragesV2BP(CustomBlueprint):
             )
 
             return validated_json(
-                apispec.StoragesV2GetResponse, [dump_storage_with_sensitive_fields_and_secrets(s, validator) for s in storage]
+                apispec.StoragesV2GetResponse,
+                [dump_storage_with_sensitive_fields_and_secrets(s, validator) for s in storage],
             )
 
         return "/storages_v2", ["GET"], _get
@@ -226,7 +227,9 @@ class StoragesV2BP(CustomBlueprint):
         ) -> JSONResponse:
             storage = await self.storage_v2_repo.get_storage_by_id(storage_id, user=user)
 
-            return validated_json(apispec.CloudStorageGet, dump_storage_with_sensitive_fields_and_secrets(storage, validator))
+            return validated_json(
+                apispec.CloudStorageGetV2, dump_storage_with_sensitive_fields_and_secrets(storage, validator)
+            )
 
         return "/storages_v2/<storage_id:ulid>", ["GET"], _get_one
 
@@ -313,9 +316,7 @@ class StoragesV2BP(CustomBlueprint):
             result = await self.storage_v2_repo.upsert_storage_secrets(
                 storage_id=storage_id, user=user, secrets=secrets
             )
-            return validated_json(
-                apispec.CloudStorageSecretGetList,result, 201
-            )
+            return validated_json(apispec.CloudStorageSecretGetList, result, 201)
 
         return "/storages_v2/<storage_id:ulid>/secrets", ["POST"], _upsert_secrets
 
@@ -325,9 +326,7 @@ class StoragesV2BP(CustomBlueprint):
         @authenticate(self.authenticator)
         async def _get_secrets(request: Request, user: base_models.APIUser, storage_id: ULID) -> JSONResponse:
             result = await self.storage_v2_repo.get_storage_secrets(storage_id=storage_id, user=user)
-            return validated_json(
-                apispec.CloudStorageSecretGetList,result, 200
-            )
+            return validated_json(apispec.CloudStorageSecretGetList, result, 200)
 
         return "/storages_v2/<storage_id:ulid>/secrets", ["GET"], _get_secrets
 

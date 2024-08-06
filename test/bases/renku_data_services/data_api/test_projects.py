@@ -88,7 +88,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user, app_co
 
     # same as above, but using namespace/slug to retreive the pr
     _, response = await sanic_client.get(
-        f"/api/data/projects/{payload['namespace']}/{payload['slug']}", headers=user_headers
+        f"/api/data/namespaces/{payload['namespace']}/projects/{payload['slug']}", headers=user_headers
     )
 
     assert response.status_code == 200, response.text
