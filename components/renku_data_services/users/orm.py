@@ -1,17 +1,20 @@
 """SQLAlchemy schemas for the CRC database."""
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
-from sqlalchemy import DateTime, LargeBinary, MetaData, String
+from sqlalchemy import JSON, DateTime, Integer, LargeBinary, MetaData, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 
 from renku_data_services.base_models import Slug
 from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
-from renku_data_services.users.models import UserInfo
+from renku_data_services.users.models import PinnedProjects, UserInfo, UserPreferences
 
 if TYPE_CHECKING:
     from renku_data_services.namespace.orm import NamespaceORM
+
+JSONVariant = JSON().with_variant(JSONB(), "postgresql")
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
@@ -78,3 +81,30 @@ class LastKeycloakEventTimestamp(BaseORM):
     __tablename__ = "last_keycloak_event_timestamp"
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
     timestamp_utc: Mapped[datetime] = mapped_column(DateTime(timezone=False), default_factory=datetime.utcnow)
+
+
+class UserPreferencesORM(BaseORM):
+    """Stored user preferences."""
+
+    __tablename__ = "user_preferences"
+
+    id: Mapped[int] = mapped_column("id", Integer, primary_key=True, default=None, init=False)
+    """Id of this user preferences object."""
+
+    user_id: Mapped[str] = mapped_column("user_id", String(), unique=True)
+    """Id of the user."""
+
+    pinned_projects: Mapped[dict[str, Any]] = mapped_column("pinned_projects", JSONVariant)
+    """Pinned projects."""
+
+    @classmethod
+    def load(cls, user_preferences: UserPreferences) -> "UserPreferencesORM":
+        """Create UserPreferencesORM from the user preferences model."""
+        return cls(
+            user_id=user_preferences.user_id,
+            pinned_projects=user_preferences.pinned_projects.model_dump(),
+        )
+
+    def dump(self) -> UserPreferences:
+        """Create a user preferences model from the ORM object."""
+        return UserPreferences(user_id=self.user_id, pinned_projects=PinnedProjects.from_dict(self.pinned_projects))

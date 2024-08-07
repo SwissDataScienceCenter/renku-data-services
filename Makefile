@@ -26,8 +26,6 @@ components/renku_data_services/project/apispec.py: components/renku_data_service
 	poetry run datamodel-codegen --input components/renku_data_services/project/api.spec.yaml --output components/renku_data_services/project/apispec.py --base-class renku_data_services.project.apispec_base.BaseAPISpec $(codegen_params)
 components/renku_data_services/session/apispec.py: components/renku_data_services/session/api.spec.yaml
 	poetry run datamodel-codegen --input components/renku_data_services/session/api.spec.yaml --output components/renku_data_services/session/apispec.py --base-class renku_data_services.session.apispec_base.BaseAPISpec $(codegen_params)
-components/renku_data_services/user_preferences/apispec.py: components/renku_data_services/user_preferences/api.spec.yaml
-	poetry run datamodel-codegen --input components/renku_data_services/user_preferences/api.spec.yaml --output components/renku_data_services/user_preferences/apispec.py --base-class renku_data_services.user_preferences.apispec_base.BaseAPISpec $(codegen_params)
 components/renku_data_services/namespace/apispec.py: components/renku_data_services/namespace/api.spec.yaml
 	poetry run datamodel-codegen --input components/renku_data_services/namespace/api.spec.yaml --output components/renku_data_services/namespace/apispec.py --base-class renku_data_services.namespace.apispec_base.BaseAPISpec $(codegen_params)
 components/renku_data_services/secrets/apispec.py: components/renku_data_services/secrets/api.spec.yaml
@@ -43,7 +41,7 @@ components/renku_data_services/platform/apispec.py: components/renku_data_servic
 
 ##@ Apispec
 
-schemas: components/renku_data_services/crc/apispec.py components/renku_data_services/storage/apispec.py components/renku_data_services/users/apispec.py components/renku_data_services/project/apispec.py components/renku_data_services/user_preferences/apispec.py components/renku_data_services/namespace/apispec.py components/renku_data_services/secrets/apispec.py components/renku_data_services/connected_services/apispec.py components/renku_data_services/repositories/apispec.py components/renku_data_services/notebooks/apispec.py components/renku_data_services/platform/apispec.py  ## Generate pydantic classes from apispec yaml files
+schemas: components/renku_data_services/crc/apispec.py components/renku_data_services/storage/apispec.py components/renku_data_services/users/apispec.py components/renku_data_services/project/apispec.py components/renku_data_services/namespace/apispec.py components/renku_data_services/secrets/apispec.py components/renku_data_services/connected_services/apispec.py components/renku_data_services/repositories/apispec.py components/renku_data_services/notebooks/apispec.py components/renku_data_services/platform/apispec.py  ## Generate pydantic classes from apispec yaml files
 	@echo "generated classes based on ApiSpec"
 
 ##@ Avro schemas
@@ -72,8 +70,6 @@ style_checks:  ## Run linting and style checks
 	@$(call test_apispec_up_to_date,"crc")
 	@echo "checking storage apispec is up to date"
 	@$(call test_apispec_up_to_date,"storage")
-	@echo "checking user preferences apispec is up to date"
-	@$(call test_apispec_up_to_date,"user_preferences")
 	@echo "checking users apispec is up to date"
 	@$(call test_apispec_up_to_date,"users")
 	@echo "checking project apispec is up to date"

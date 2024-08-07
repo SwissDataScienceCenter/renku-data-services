@@ -15,21 +15,9 @@ from renku_data_services.base_models.validation import validated_json
 from renku_data_services.errors import errors
 from renku_data_services.secrets.db import UserSecretsRepo
 from renku_data_services.secrets.models import Secret, SecretKind
-from renku_data_services.users import apispec
-from renku_data_services.users.apispec_base import BaseAPISpec
-from renku_data_services.users.db import UserRepo
+from renku_data_services.users import apispec, models
+from renku_data_services.users.db import UserPreferencesRepository, UserRepo
 from renku_data_services.utils.cryptography import encrypt_rsa, encrypt_string, generate_random_encryption_key
-
-
-class GetSecretsParams(BaseAPISpec):
-    """The schema for the query parameters used when getting all secrets."""
-
-    class Config:
-        """Configuration."""
-
-        extra = "forbid"
-
-    kind: apispec.SecretKind = apispec.SecretKind.general
 
 
 @dataclass(kw_only=True)
@@ -249,3 +237,48 @@ class UserSecretsBP(CustomBlueprint):
             return HTTPResponse(status=204)
 
         return "/user/secrets/<secret_id>", ["DELETE"], _delete
+
+
+@dataclass(kw_only=True)
+class UserPreferencesBP(CustomBlueprint):
+    """Handlers for manipulating user preferences."""
+
+    user_preferences_repo: UserPreferencesRepository
+    authenticator: base_models.Authenticator
+
+    def get(self) -> BlueprintFactoryResponse:
+        """Get user preferences for the logged in user."""
+
+        @authenticate(self.authenticator)
+        async def _get(_: Request, user: base_models.APIUser) -> JSONResponse:
+            user_preferences: models.UserPreferences
+            user_preferences = await self.user_preferences_repo.get_user_preferences(requested_by=user)
+            return json(apispec.UserPreferences.model_validate(user_preferences).model_dump())
+
+        return "/user/preferences", ["GET"], _get
+
+    def post_pinned_projects(self) -> BlueprintFactoryResponse:
+        """Add a pinned project to user preferences for the logged in user."""
+
+        @authenticate(self.authenticator)
+        @validate(json=apispec.AddPinnedProject)
+        async def _post(_: Request, user: base_models.APIUser, body: apispec.AddPinnedProject) -> JSONResponse:
+            res = await self.user_preferences_repo.add_pinned_project(requested_by=user, project_slug=body.project_slug)
+            return json(apispec.UserPreferences.model_validate(res).model_dump())
+
+        return "/user/preferences/pinned_projects", ["POST"], _post
+
+    def delete_pinned_projects(self) -> BlueprintFactoryResponse:
+        """Remove a pinned project from user preferences for the logged in user."""
+
+        @authenticate(self.authenticator)
+        @validate_query(query=apispec.DeletePinnedParams)
+        async def _delete(
+            request: Request, user: base_models.APIUser, query: apispec.DeletePinnedParams
+        ) -> JSONResponse:
+            res = await self.user_preferences_repo.remove_pinned_project(
+                requested_by=user, project_slug=query.project_slug
+            )
+            return json(apispec.UserPreferences.model_validate(res).model_dump())
+
+        return "/user/preferences/pinned_projects", ["DELETE"], _delete
