@@ -332,7 +332,7 @@ class Authz:
         what are the resources that a user has access to.
         """
         if not requested_by.is_admin and requested_by.id != user_id:
-            raise errors.Unauthorized(
+            raise errors.ForbiddenError(
                 message=f"User with ID {requested_by.id} cannot check the permissions of another user with ID {user_id}"
             )
         sub = SubjectReference(
@@ -906,8 +906,8 @@ class Authz:
                 output.append(MembershipChange(member, Change.ADD))
 
         if n_existing_owners == 0:
-            raise errors.Unauthorized(
-                message="You are trying to change the role of the all owners of the project, which is not allowed. "
+            raise errors.ValidationError(
+                message="You are trying to change the role of all the owners of the project, which is not allowed. "
                 "Assign at least one user as owner and then retry."
             )
 
@@ -950,7 +950,7 @@ class Authz:
             async for existing_rel in existing_rels:
                 if existing_rel.relationship.relation == _Relation.owner.value and user_id in existing_owners:
                     if len(existing_owners) == 1:
-                        raise errors.Unauthorized(
+                        raise errors.ValidationError(
                             message="You are trying to remove the single last owner of the project, "
                             "which is not allowed. Assign another user as owner and then retry."
                         )
@@ -1206,8 +1206,8 @@ class Authz:
                 output.append(MembershipChange(member, Change.ADD))
 
         if n_existing_owners == 0:
-            raise errors.Unauthorized(
-                message="You are trying to change the role of the all owners of the group, which is not allowed. "
+            raise errors.ValidationError(
+                message="You are trying to change the role of all the owners of the group, which is not allowed. "
                 "Assign at least one user as owner and then retry."
             )
 
@@ -1251,7 +1251,7 @@ class Authz:
                     if existing_owners_rels is None:
                         existing_owners_rels = await self._get_resource_owners(resource_type, resource_id, consistency)
                     if len(existing_owners_rels) == 1:
-                        raise errors.Unauthorized(
+                        raise errors.ValidationError(
                             message="You are trying to remove the single last owner of the group, "
                             "which is not allowed. Assign another user as owner and then retry."
                         )

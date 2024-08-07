@@ -1,8 +1,8 @@
 """Enitity tag decorators for Sanic."""
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from functools import wraps
-from typing import Concatenate, ParamSpec, TypeVar
+from typing import Any, Concatenate, ParamSpec, TypeVar
 
 from sanic import Request
 
@@ -32,7 +32,7 @@ def if_match_required(
 
 def extract_if_none_match(
     f: Callable[Concatenate[Request, _P], Awaitable[_T]],
-) -> Callable[Concatenate[Request, _P], Awaitable[_T]]:
+) -> Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]]:
     """Decorator which extracts the "If-None-Match" header if present."""
 
     @wraps(f)

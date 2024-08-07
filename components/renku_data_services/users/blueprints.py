@@ -10,25 +10,15 @@ from sanic_ext import validate
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.errors import errors
 from renku_data_services.secrets.core import encrypt_user_secret
 from renku_data_services.secrets.db import UserSecretsRepo
 from renku_data_services.secrets.models import Secret, SecretKind
-from renku_data_services.users import apispec
-from renku_data_services.users.apispec_base import BaseAPISpec
-from renku_data_services.users.db import UserRepo
-
-
-class GetSecretsParams(BaseAPISpec):
-    """The schema for the query parameters used when getting all secrets."""
-
-    class Config:
-        """Configuration."""
-
-        extra = "ignore"
-
-    kind: apispec.SecretKind = apispec.SecretKind.general
+from renku_data_services.users import apispec, models
+from renku_data_services.users.db import UserPreferencesRepository, UserRepo
+from renku_data_services.utils.cryptography import encrypt_rsa, encrypt_string, generate_random_encryption_key
 
 
 @dataclass(kw_only=True)
@@ -42,9 +32,9 @@ class KCUsersBP(CustomBlueprint):
         """Get all users or search by email."""
 
         @authenticate(self.authenticator)
-        async def _get_all(request: Request, user: base_models.APIUser) -> JSONResponse:
-            email_filter = request.args.get("exact_email")
-            users = await self.repo.get_users(requested_by=user, email=email_filter)
+        @validate_query(query=apispec.UserParams)
+        async def _get_all(request: Request, user: base_models.APIUser, query: apispec.UserParams) -> JSONResponse:
+            users = await self.repo.get_users(requested_by=user, email=query.exact_email)
             return validated_json(
                 apispec.UsersWithId,
                 [
@@ -68,7 +58,7 @@ class KCUsersBP(CustomBlueprint):
         @only_authenticated
         async def _get_self(_: Request, user: base_models.APIUser) -> JSONResponse:
             if not user.is_authenticated or user.id is None:
-                raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+                raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
             user_info = await self.repo.get_or_create_user(requested_by=user, id=user.id)
             if not user_info:
                 raise errors.MissingResourceError(message=f"The user with ID {user.id} cannot be found.")
@@ -142,8 +132,10 @@ class UserSecretsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        @validate(query=GetSecretsParams)
-        async def _get_all(_: Request, user: base_models.APIUser, query: GetSecretsParams) -> JSONResponse:
+        @validate_query(query=apispec.UserSecretsParams)
+        async def _get_all(
+            request: Request, user: base_models.APIUser, query: apispec.UserSecretsParams
+        ) -> JSONResponse:
             secret_kind = SecretKind[query.kind.value]
             secrets = await self.secret_repo.get_user_secrets(requested_by=user, kind=secret_kind)
             secrets_json = [
@@ -238,3 +230,48 @@ class UserSecretsBP(CustomBlueprint):
             return HTTPResponse(status=204)
 
         return "/user/secrets/<secret_id>", ["DELETE"], _delete
+
+
+@dataclass(kw_only=True)
+class UserPreferencesBP(CustomBlueprint):
+    """Handlers for manipulating user preferences."""
+
+    user_preferences_repo: UserPreferencesRepository
+    authenticator: base_models.Authenticator
+
+    def get(self) -> BlueprintFactoryResponse:
+        """Get user preferences for the logged in user."""
+
+        @authenticate(self.authenticator)
+        async def _get(_: Request, user: base_models.APIUser) -> JSONResponse:
+            user_preferences: models.UserPreferences
+            user_preferences = await self.user_preferences_repo.get_user_preferences(requested_by=user)
+            return json(apispec.UserPreferences.model_validate(user_preferences).model_dump())
+
+        return "/user/preferences", ["GET"], _get
+
+    def post_pinned_projects(self) -> BlueprintFactoryResponse:
+        """Add a pinned project to user preferences for the logged in user."""
+
+        @authenticate(self.authenticator)
+        @validate(json=apispec.AddPinnedProject)
+        async def _post(_: Request, user: base_models.APIUser, body: apispec.AddPinnedProject) -> JSONResponse:
+            res = await self.user_preferences_repo.add_pinned_project(requested_by=user, project_slug=body.project_slug)
+            return json(apispec.UserPreferences.model_validate(res).model_dump())
+
+        return "/user/preferences/pinned_projects", ["POST"], _post
+
+    def delete_pinned_projects(self) -> BlueprintFactoryResponse:
+        """Remove a pinned project from user preferences for the logged in user."""
+
+        @authenticate(self.authenticator)
+        @validate_query(query=apispec.DeletePinnedParams)
+        async def _delete(
+            request: Request, user: base_models.APIUser, query: apispec.DeletePinnedParams
+        ) -> JSONResponse:
+            res = await self.user_preferences_repo.remove_pinned_project(
+                requested_by=user, project_slug=query.project_slug
+            )
+            return json(apispec.UserPreferences.model_validate(res).model_dump())
+
+        return "/user/preferences/pinned_projects", ["DELETE"], _delete

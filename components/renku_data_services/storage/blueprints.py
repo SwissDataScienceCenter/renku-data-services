@@ -12,8 +12,8 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_api.misc import validate_query
 from renku_data_services.storage import apispec, models
-from renku_data_services.storage.apispec_base import RepositoryFilter, RepositoryFilterV2
 from renku_data_services.storage.db import StorageRepository, StorageV2Repository
 from renku_data_services.storage.rclone import RCloneValidator
 
@@ -48,10 +48,15 @@ class StorageBP(CustomBlueprint):
         """Get cloud storage for a repository."""
 
         @authenticate(self.authenticator)
-        async def _get(request: Request, user: base_models.APIUser, validator: RCloneValidator) -> JSONResponse:
-            res_filter = RepositoryFilter.model_validate(dict(request.query_args))
+        @validate_query(query=apispec.StorageParams)
+        async def _get(
+            request: Request,
+            user: base_models.APIUser,
+            validator: RCloneValidator,
+            query: apispec.StorageParams,
+        ) -> JSONResponse:
             storage: list[models.CloudStorage]
-            storage = await self.storage_repo.get_storage(user=user, **res_filter.model_dump())
+            storage = await self.storage_repo.get_storage(user=user, project_id=query.project_id)
 
             return json([dump_storage_with_sensitive_fields(s, validator) for s in storage])
 
@@ -191,10 +196,15 @@ class StoragesV2BP(CustomBlueprint):
         """Get cloud storage for a repository."""
 
         @authenticate(self.authenticator)
-        async def _get(request: Request, user: base_models.APIUser, validator: RCloneValidator) -> JSONResponse:
-            res_filter = RepositoryFilterV2.model_validate(dict(request.query_args))
+        @validate_query(query=apispec.StorageV2Params)
+        async def _get(
+            request: Request,
+            user: base_models.APIUser,
+            validator: RCloneValidator,
+            query: apispec.StorageV2Params,
+        ) -> JSONResponse:
             storage: list[models.CloudStorage]
-            storage = await self.storage_v2_repo.get_storage(user=user, include_secrets=True, **res_filter.model_dump())
+            storage = await self.storage_v2_repo.get_storage(user=user, include_secrets=True, project_id=query.project_id)
 
             return json([dump_storage_with_sensitive_fields_and_secrets(s, validator) for s in storage])
 

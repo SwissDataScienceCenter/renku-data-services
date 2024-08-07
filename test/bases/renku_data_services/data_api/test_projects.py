@@ -165,7 +165,7 @@ async def test_project_creation_with_invalid_namespace(sanic_client, user_header
 
     _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
 
-    assert response.status_code == 401, response.text
+    assert response.status_code == 403, response.text
     assert "you do not have sufficient permissions" in response.json["error"]["message"]
 
 
@@ -517,7 +517,7 @@ async def test_patch_project_invalid_namespace(create_project, sanic_client, use
     project_id = project["id"]
     _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=headers, json=patch)
 
-    assert response.status_code == 401, response.text
+    assert response.status_code == 403, response.text
     assert "you do not have sufficient permissions" in response.json["error"]["message"]
 
 
@@ -748,7 +748,7 @@ async def test_project_owner_cannot_remove_themselves_if_no_other_owner(
 
     # Try to remove the only owner
     _, response = await sanic_client.delete(f"/api/data/projects/{project_id}/members/{owner.id}", headers=user_headers)
-    assert response.status_code == 401
+    assert response.status_code == 422
 
     # Add another user as owner
     members = [{"id": member_1_user.id, "role": "owner"}]
@@ -778,7 +778,7 @@ async def test_cannot_change_role_for_last_project_owner(
     _, response = await sanic_client.patch(
         f"/api/data/projects/{project_id}/members", headers=user_headers, json=members
     )
-    assert response.status_code == 401
+    assert response.status_code == 422
 
     # Can change the owner role if another owner is added during an update
     members.append({"id": "member-1", "role": "owner"})
@@ -800,4 +800,4 @@ async def test_cannot_change_role_for_last_project_owner(
         f"/api/data/projects/{project_id}/members", headers=member_1_headers, json=members
     )
 
-    assert response.status_code == 401
+    assert response.status_code == 422

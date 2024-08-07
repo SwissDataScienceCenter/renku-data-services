@@ -36,21 +36,23 @@ class GeneralBadRequest(BaseError):
 
 
 @dataclass
-class NoDefaultPoolAccessError(BaseError):
-    """Raised when the user does not have the right to access the default resource pool."""
-
-    code: int = 1400
-    message: str = "The user cannot access the default resource pool."
-    status_code: int = 400
-
-
-@dataclass
-class Unauthorized(BaseError):
+class UnauthorizedError(BaseError):
     """Raised when the user does not have the required credentials."""
 
     code: int = 1401
-    message: str = "The supplied credentials are missing or invalid."
+    message: str = "Credentials need to be supplied for this operation."
     status_code: int = 401
+    quiet: bool = True
+
+
+@dataclass
+class ForbiddenError(BaseError):
+    """Raised when the provided credentials do not grant permission for the current operation."""
+
+    code: int = 1403
+    message: str = "The supplied credentials do not grant permission for this operation."
+    status_code: int = 403
+    quiet: bool = True
 
 
 @dataclass

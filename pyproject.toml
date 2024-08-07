@@ -19,7 +19,6 @@ packages = [
   { include = "renku_data_services/base_models", from = "components" },
   { include = "renku_data_services/base_api", from = "components" },
   { include = "renku_data_services/storage", from = "components" },
-  { include = "renku_data_services/user_preferences", from = "components" },
   { include = "renku_data_services/utils", from = "components" },
   { include = "renku_data_services/git", from = "components" },
   { include = "renku_data_services/users", from = "components" },
@@ -32,6 +31,7 @@ packages = [
   { include = "renku_data_services/connected_services", from = "components" },
   { include = "renku_data_services/repositories", from = "components" },
   { include = "renku_data_services/notebooks", from = "components" },
+  { include = "renku_data_services/platform", from = "components" },
 ]
 
 [tool.poetry.dependencies]
@@ -145,7 +145,7 @@ convention = "google"
 
 [tool.bandit]
 skips = ["B101", "B603", "B607", "B404"]
-exclude_dirs = ["test"]
+exclude_dirs = ["test", ".devcontainer"]
 
 [tool.pytest.ini_options]
 addopts = "--cov components/ --cov bases/ --cov-report=term-missing -v"
@@ -194,11 +194,11 @@ module = [
   "renku_data_services.repositories.apispec",
   "renku_data_services.secrets.apispec",
   "renku_data_services.session.apispec",
-  "renku_data_services.user_preferences.apispec",
   "renku_data_services.users.apispec",
   "renku_data_services.data_api.error_handler",
   "renku_data_services.namespace.apispec",
   "renku_data_services.notebooks.apispec",
+  "renku_data_services.platform.apispec",
 ]
 ignore_errors = true
 

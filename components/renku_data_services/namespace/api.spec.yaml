@@ -14,22 +14,12 @@ paths:
       summary: Get all groups
       parameters:
         - in: query
-          description: Result's page number starting from 1
-          name: page
-          required: false
+          description: query parameters
+          name: params
+          style: form
+          explode: true
           schema:
-            type: integer
-            minimum: 1
-            default: 1
-        - in: query
-          description: The number of results per page
-          name: per_page
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 20
+            $ref: "#/components/schemas/PaginationRequest"
       responses:
         "200":
           description: List of groups
@@ -246,28 +236,12 @@ paths:
       summary: Get all namespaces
       parameters:
         - in: query
-          description: Result's page number starting from 1
-          name: page
-          required: false
+          description: query parameters
+          name: params
+          style: form
+          explode: true
           schema:
-            type: integer
-            minimum: 1
-            default: 1
-        - in: query
-          description: The number of results per page
-          name: per_page
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 20
-        - in: query
-          name: minimum_role
-          description: A minimum role to filter results by.
-          required: false
-          schema:
-            $ref: "#/components/schemas/GroupRole"
+            $ref: "#/components/schemas/NamespaceGetQuery"
       responses:
         "200":
           description: List of namespaces
@@ -548,6 +522,29 @@ components:
       format: email
       description: User email
       example: some-user@gmail.com
+    NamespaceGetQuery:
+      description: Query params for namespace get request
+      allOf:
+      - $ref: "#/components/schemas/PaginationRequest"
+      - properties:
+          minimum_role:
+            description: A minimum role to filter results by.
+            $ref: "#/components/schemas/GroupRole"
+    PaginationRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        page:
+          description: Result's page number starting from 1
+          type: integer
+          minimum: 1
+          default: 1
+        per_page:
+          description: The number of results per page
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
     ErrorResponse:
       type: object
       properties:
