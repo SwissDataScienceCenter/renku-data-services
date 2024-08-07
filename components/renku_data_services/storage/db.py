@@ -98,7 +98,7 @@ class BaseStorageRepository(_Base):
         if not storages:
             raise errors.MissingResourceError(message=f"The storage with id '{storage_id}' cannot be found")
         if not await self.filter_projects_by_access_level(user, [storages[0].project_id], authz_models.Role.VIEWER):
-            raise errors.Unauthorized(message="User does not have access to this project")
+            raise errors.UnauthorizedError(message="User does not have access to this project")
 
         return storages[0]
 

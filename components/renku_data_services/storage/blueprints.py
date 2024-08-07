@@ -204,7 +204,9 @@ class StoragesV2BP(CustomBlueprint):
             query: apispec.StorageV2Params,
         ) -> JSONResponse:
             storage: list[models.CloudStorage]
-            storage = await self.storage_v2_repo.get_storage(user=user, include_secrets=True, project_id=query.project_id)
+            storage = await self.storage_v2_repo.get_storage(
+                user=user, include_secrets=True, project_id=query.project_id
+            )
 
             return json([dump_storage_with_sensitive_fields_and_secrets(s, validator) for s in storage])
 
@@ -263,7 +265,7 @@ class StoragesV2BP(CustomBlueprint):
         @authenticate(self.authenticator)
         @validate(json=apispec.CloudStoragePatch)
         async def _patch(
-            request: Request,
+            _: Request,
             user: base_models.APIUser,
             storage_id: ULID,
             body: apispec.CloudStoragePatch,

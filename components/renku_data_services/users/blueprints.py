@@ -18,7 +18,6 @@ from renku_data_services.secrets.db import UserSecretsRepo
 from renku_data_services.secrets.models import Secret, SecretKind
 from renku_data_services.users import apispec, models
 from renku_data_services.users.db import UserPreferencesRepository, UserRepo
-from renku_data_services.utils.cryptography import encrypt_rsa, encrypt_string, generate_random_encryption_key
 
 
 @dataclass(kw_only=True)
