@@ -7,6 +7,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from kubernetes import client as k8s_client
 from prometheus_client import Counter, Enum
 from sanic.log import logger
+from ulid import ULID
 
 from renku_data_services import base_models, errors
 from renku_data_services.base_models.core import InternalServiceAdmin
@@ -26,7 +27,7 @@ async def create_k8s_secret(
     user: base_models.APIUser,
     secret_name: str,
     namespace: str,
-    secret_ids: list[str],
+    secret_ids: list[ULID],
     owner_references: list[OwnerReference],
     secrets_repo: UserSecretsRepo,
     secret_service_private_key: rsa.RSAPrivateKey,
@@ -36,7 +37,7 @@ async def create_k8s_secret(
     """Creates a single k8s secret from a list of user secrets stored in the DB."""
     secrets = await secrets_repo.get_secrets_by_ids(requested_by=user, secret_ids=secret_ids)
     found_secret_ids = {str(s.id) for s in secrets}
-    requested_secret_ids = set(secret_ids)
+    requested_secret_ids = set(map(str, secret_ids))
     missing_secret_ids = requested_secret_ids - found_secret_ids
     if len(missing_secret_ids) > 0:
         raise errors.MissingResourceError(message=f"Couldn't find secrets with ids {', '.join(missing_secret_ids)}")

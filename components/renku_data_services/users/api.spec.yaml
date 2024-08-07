@@ -152,7 +152,7 @@ paths:
           name: secret_id
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Ulid"
       responses:
         "200":
           description: The secret
@@ -177,7 +177,7 @@ paths:
           name: secret_id
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Ulid"
       requestBody:
         required: true
         content:
@@ -202,7 +202,7 @@ paths:
           name: secret_id
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Ulid"
       responses:
         "204":
           description: The secret was deleted or didn't exist

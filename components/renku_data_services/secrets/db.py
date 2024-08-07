@@ -7,6 +7,7 @@ from typing import cast
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from ulid import ULID
 
 from renku_data_services.base_api.auth import APIUser, only_authenticated
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
@@ -34,10 +35,10 @@ class UserSecretsRepo:
             return [o.dump() for o in orm]
 
     @only_authenticated
-    async def get_secret_by_id(self, requested_by: APIUser, secret_id: str) -> Secret | None:
+    async def get_secret_by_id(self, requested_by: APIUser, secret_id: ULID) -> Secret | None:
         """Get a specific user secret from the database."""
         async with self.session_maker() as session:
-            stmt = select(SecretORM).where(SecretORM.user_id == requested_by.id).where(SecretORM.id == secret_id)
+            stmt = select(SecretORM).where(SecretORM.user_id == requested_by.id).where(SecretORM.id == str(secret_id))
             res = await session.execute(stmt)
             orm = res.scalar_one_or_none()
             if orm is None:
@@ -45,10 +46,11 @@ class UserSecretsRepo:
             return orm.dump()
 
     @only_authenticated
-    async def get_secrets_by_ids(self, requested_by: APIUser, secret_ids: list[str]) -> list[Secret]:
+    async def get_secrets_by_ids(self, requested_by: APIUser, secret_ids: list[ULID]) -> list[Secret]:
         """Get a specific user secrets from the database."""
+        secret_ids_str = map(str, secret_ids)
         async with self.session_maker() as session:
-            stmt = select(SecretORM).where(SecretORM.user_id == requested_by.id).where(SecretORM.id.in_(secret_ids))
+            stmt = select(SecretORM).where(SecretORM.user_id == requested_by.id).where(SecretORM.id.in_(secret_ids_str))
             res = await session.execute(stmt)
             orms = res.scalars()
             return [orm.dump() for orm in orms]
@@ -83,13 +85,13 @@ class UserSecretsRepo:
 
     @only_authenticated
     async def update_secret(
-        self, requested_by: APIUser, secret_id: str, encrypted_value: bytes, encrypted_key: bytes
+        self, requested_by: APIUser, secret_id: ULID, encrypted_value: bytes, encrypted_key: bytes
     ) -> Secret:
         """Update a secret."""
 
         async with self.session_maker() as session, session.begin():
             result = await session.execute(
-                select(SecretORM).where(SecretORM.id == secret_id).where(SecretORM.user_id == requested_by.id)
+                select(SecretORM).where(SecretORM.id == str(secret_id)).where(SecretORM.user_id == requested_by.id)
             )
             secret = result.scalar_one_or_none()
             if secret is None:
@@ -101,12 +103,12 @@ class UserSecretsRepo:
         return secret.dump()
 
     @only_authenticated
-    async def delete_secret(self, requested_by: APIUser, secret_id: str) -> None:
+    async def delete_secret(self, requested_by: APIUser, secret_id: ULID) -> None:
         """Delete a secret."""
 
         async with self.session_maker() as session, session.begin():
             result = await session.execute(
-                select(SecretORM).where(SecretORM.id == secret_id).where(SecretORM.user_id == requested_by.id)
+                select(SecretORM).where(SecretORM.id == str(secret_id)).where(SecretORM.user_id == requested_by.id)
             )
             secret = result.scalar_one_or_none()
             if secret is None:
