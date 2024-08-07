@@ -54,9 +54,17 @@ paths:
       summary: Remove one or all pinned projects
       parameters:
         - in: query
-          name: project_slug
+          description: query parameters
+          name: delete_pinned_params
+          style: form
+          explode: true
           schema:
-            type: string
+            type: object
+            additionalProperties: false
+            properties:
+              project_slug:
+                type: string
+                default: ""
       responses:
         "200":
           description: The updated user preferences
