@@ -1,6 +1,6 @@
 """Secrets ORM."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Optional
 
 from sqlalchemy import DateTime, ForeignKey, LargeBinary, MetaData, String, UniqueConstraint
@@ -33,8 +33,10 @@ class SecretORM(BaseORM):
     name: Mapped[str] = mapped_column(String(256))
     encrypted_value: Mapped[bytes] = mapped_column(LargeBinary())
     encrypted_key: Mapped[bytes] = mapped_column(LargeBinary())
-    modification_date: Mapped[datetime] = mapped_column("modification_date", DateTime(timezone=True))
     kind: Mapped[models.SecretKind]
+    modification_date: Mapped[datetime] = mapped_column(
+        "modification_date", DateTime(timezone=True), default_factory=lambda: datetime.now(UTC).replace(microsecond=0)
+    )
     id: Mapped[str] = mapped_column("id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False)
     user_id: Mapped[Optional[str]] = mapped_column(
         "user_id", ForeignKey(UserORM.keycloak_id, ondelete="CASCADE"), default=None, index=True, nullable=True
@@ -59,3 +61,9 @@ class SecretORM(BaseORM):
             modification_date=secret.modification_date,
             kind=secret.kind,
         )
+
+    def update(self, encrypted_value: bytes, encrypted_key: bytes) -> None:
+        """Update an existing secret."""
+        self.encrypted_value = encrypted_value
+        self.encrypted_key = encrypted_key
+        self.modification_date = datetime.now(UTC).replace(microsecond=0)

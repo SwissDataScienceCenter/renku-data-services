@@ -127,7 +127,7 @@ class EventError(BaseError):
     """Raised an irrecoverable error when generating events for the message queue."""
 
     code: int = 1501
-    message: str = "An unexpected error occured when handling or generating events for the message queue."
+    message: str = "An unexpected error occurred when handling or generating events for the message queue."
     status_code: int = 500
 
 
@@ -136,7 +136,7 @@ class SecretDecryptionError(BaseError):
     """Raised when an error occurs decrypting secrets."""
 
     code: int = 1510
-    message: str = "An error occured decrypting secrets."
+    message: str = "An error occurred decrypting secrets."
     status_code: int = 500
 
 
@@ -145,5 +145,5 @@ class SecretCreationError(BaseError):
     """Raised when an error occurs creating secrets."""
 
     code: int = 1511
-    message: str = "An error occured creating secrets."
+    message: str = "An error occurred creating secrets."
     status_code: int = 500
