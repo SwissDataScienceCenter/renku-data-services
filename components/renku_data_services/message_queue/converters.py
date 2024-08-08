@@ -41,7 +41,7 @@ class _ProjectEventConverter:
                     Event(
                         "project.created",
                         v2.ProjectCreated(
-                            id=project.id,
+                            id=str(project.id),
                             name=project.name,
                             namespace=project.namespace.slug,
                             slug=project.slug,
@@ -56,7 +56,7 @@ class _ProjectEventConverter:
                     Event(
                         "projectAuth.added",
                         v2.ProjectMemberAdded(
-                            projectId=project.id,
+                            projectId=str(project.id),
                             userId=project.created_by,
                             role=v2.MemberRole.OWNER,
                         ),
@@ -67,7 +67,7 @@ class _ProjectEventConverter:
                     Event(
                         "project.updated",
                         v2.ProjectUpdated(
-                            id=project.id,
+                            id=str(project.id),
                             name=project.name,
                             namespace=project.namespace.slug,
                             slug=project.slug,
@@ -79,7 +79,7 @@ class _ProjectEventConverter:
                     )
                 ]
             case v2.ProjectRemoved:
-                return [Event("project.removed", v2.ProjectRemoved(id=project.id))]
+                return [Event("project.removed", v2.ProjectRemoved(id=str(project.id)))]
             case _:
                 raise errors.EventError(message=f"Trying to convert a project to an unknown event type {event_type}")
 

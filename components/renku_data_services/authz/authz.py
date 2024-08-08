@@ -26,6 +26,7 @@ from authzed.api.v1.permission_service_pb2 import (
 )
 from sanic.log import logger
 from sqlalchemy.ext.asyncio import AsyncSession
+from ulid import ULID
 
 from renku_data_services import base_models
 from renku_data_services.authz.config import AuthzConfig
@@ -132,8 +133,8 @@ class AuthzOperation(StrEnum):
 
 class _AuthzConverter:
     @staticmethod
-    def project(id: str) -> ObjectReference:
-        return ObjectReference(object_type=ResourceType.project.value, object_id=id)
+    def project(id: ULID) -> ObjectReference:
+        return ObjectReference(object_type=ResourceType.project.value, object_id=str(id))
 
     @staticmethod
     def user(id: str | None) -> ObjectReference:
@@ -170,9 +171,9 @@ class _AuthzConverter:
         return ObjectReference(object_type=ResourceType.user_namespace, object_id=id)
 
     @staticmethod
-    def to_object(resource_type: ResourceType, resource_id: str | int) -> ObjectReference:
+    def to_object(resource_type: ResourceType, resource_id: str | ULID | int) -> ObjectReference:
         match (resource_type, resource_id):
-            case (ResourceType.project, sid) if isinstance(sid, str):
+            case (ResourceType.project, sid) if isinstance(sid, ULID):
                 return _AuthzConverter.project(sid)
             case (ResourceType.user, sid) if isinstance(sid, str) or sid is None:
                 return _AuthzConverter.user(sid)
@@ -242,23 +243,26 @@ def _is_allowed_on_resource(
     return decorator
 
 
+T = TypeVar("T", str, ULID)
+
+
 def _is_allowed(
     operation: Scope,
 ) -> Callable[
-    [Callable[Concatenate["Authz", base_models.APIUser, ResourceType, str, _P], Awaitable[_T]]],
-    Callable[Concatenate["Authz", base_models.APIUser, ResourceType, str, _P], Awaitable[_T]],
+    [Callable[Concatenate["Authz", base_models.APIUser, ResourceType, T, _P], Awaitable[_T]]],
+    Callable[Concatenate["Authz", base_models.APIUser, ResourceType, T, _P], Awaitable[_T]],
 ]:
     """A decorator that checks if the operation on a resource is allowed or not."""
 
     def decorator(
-        f: Callable[Concatenate["Authz", base_models.APIUser, ResourceType, str, _P], Awaitable[_T]],
-    ) -> Callable[Concatenate["Authz", base_models.APIUser, ResourceType, str, _P], Awaitable[_T]]:
+        f: Callable[Concatenate["Authz", base_models.APIUser, ResourceType, T, _P], Awaitable[_T]],
+    ) -> Callable[Concatenate["Authz", base_models.APIUser, ResourceType, T, _P], Awaitable[_T]]:
         @wraps(f)
         async def decorated_function(
             self: "Authz",
             user: base_models.APIUser,
             resource_type: ResourceType,
-            resource_id: str,
+            resource_id: T,
             *args: _P.args,
             **kwargs: _P.kwargs,
         ) -> _T:
@@ -294,7 +298,7 @@ class Authz:
         return self._client
 
     async def _has_permission(
-        self, user: base_models.APIUser, resource_type: ResourceType, resource_id: str | None, scope: Scope
+        self, user: base_models.APIUser, resource_type: ResourceType, resource_id: str | ULID | None, scope: Scope
     ) -> tuple[bool, ZedToken | None]:
         """Checks whether the provided user has a specific permission on the specific resource."""
         if not resource_id:
@@ -317,7 +321,7 @@ class Authz:
         return response.permissionship == CheckPermissionResponse.PERMISSIONSHIP_HAS_PERMISSION, response.checked_at
 
     async def has_permission(
-        self, user: base_models.APIUser, resource_type: ResourceType, resource_id: str, scope: Scope
+        self, user: base_models.APIUser, resource_type: ResourceType, resource_id: str | ULID, scope: Scope
     ) -> bool:
         """Checks whether the provided user has a specific permission on the specific resource."""
         res, _ = await self._has_permission(user, resource_type, resource_id, scope)
@@ -386,12 +390,13 @@ class Authz:
         self,
         user: base_models.APIUser,
         resource_type: ResourceType,
-        resource_id: str,
+        resource_id: _T,
         role: Role | None = None,
         *,
         zed_token: ZedToken | None = None,
     ) -> list[Member]:
         """Get all users that are members of a resource, if role is None then all roles are retrieved."""
+        resource_id: str = str(resource_id)
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
         sub_filter = SubjectFilter(subject_type=ResourceType.user.value)
         rel_filter = RelationshipFilter(
@@ -500,7 +505,7 @@ class Authz:
                             )
                         authz_change.extend(db_repo.authz._add_user_namespace(res.namespace))
                 case _:
-                    resource_id: str | None = "unknown"
+                    resource_id: str | ULID | None = "unknown"
                     if isinstance(result, (Project, Namespace, Group)):
                         resource_id = result.id
                     elif isinstance(result, (ProjectUpdate, NamespaceUpdate, GroupUpdate)):
@@ -619,7 +624,7 @@ class Authz:
     ) -> _AuthzChange:
         """Remove the relationships associated with the project."""
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
-        rel_filter = RelationshipFilter(resource_type=ResourceType.project.value, optional_resource_id=project.id)
+        rel_filter = RelationshipFilter(resource_type=ResourceType.project.value, optional_resource_id=str(project.id))
         responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
             ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
         )
@@ -640,6 +645,7 @@ class Authz:
         self, user: base_models.APIUser, project: Project, *, zed_token: ZedToken | None = None
     ) -> _AuthzChange:
         """Update the visibility of the project in the authorization database."""
+        project_id = str(project.id)
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
         project_res = _AuthzConverter.project(project.id)
         all_users_sub = SubjectReference(object=_AuthzConverter.all_users())
@@ -668,7 +674,7 @@ class Authz:
         )
         rel_filter = RelationshipFilter(
             resource_type=ResourceType.project.value,
-            optional_resource_id=project.id,
+            optional_resource_id=project_id,
             optional_subject_filter=SubjectFilter(
                 subject_type=ResourceType.user.value, optional_subject_id=all_users_sub.object.object_id
             ),
@@ -678,7 +684,7 @@ class Authz:
         )
         rel_filter = RelationshipFilter(
             resource_type=ResourceType.project.value,
-            optional_resource_id=project.id,
+            optional_resource_id=project_id,
             optional_subject_filter=SubjectFilter(
                 subject_type=ResourceType.anonymous_user.value,
                 optional_subject_id=anon_users_sub.object.object_id,
@@ -724,11 +730,12 @@ class Authz:
         self, user: base_models.APIUser, project: Project, *, zed_token: ZedToken | None = None
     ) -> _AuthzChange:
         """Update the namespace/group of the project in the authorization database."""
+        project_id = str(project.id)
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
         project_res = _AuthzConverter.project(project.id)
         project_namespace_filter = RelationshipFilter(
             resource_type=ResourceType.project.value,
-            optional_resource_id=project.id,
+            optional_resource_id=str(project_id),
             optional_relation=_Relation.project_namespace.value,
         )
         current_namespace: ReadRelationshipsResponse | None = await anext(
@@ -804,7 +811,7 @@ class Authz:
         self,
         user: base_models.APIUser,
         resource_type: ResourceType,
-        resource_id: str,
+        resource_id: ULID,
         members: list[Member],
         *,
         zed_token: ZedToken | None = None,
@@ -819,7 +826,8 @@ class Authz:
         undo: list[RelationshipUpdate] = []
         output: list[MembershipChange] = []
         expected_user_roles = {_Relation.viewer.value, _Relation.owner.value, _Relation.editor.value}
-        existing_owners_rels = await self._get_resource_owners(resource_type, resource_id, consistency)
+        resource_id_str = str(resource_id)
+        existing_owners_rels = await self._get_resource_owners(resource_type, resource_id_str, consistency)
         n_existing_owners = len(existing_owners_rels)
         for member in members:
             rel = Relationship(
@@ -829,7 +837,7 @@ class Authz:
             )
             existing_rel_filter = RelationshipFilter(
                 resource_type=resource_type.value,
-                optional_resource_id=resource_id,
+                optional_resource_id=resource_id_str,
                 optional_subject_filter=SubjectFilter(
                     subject_type=ResourceType.user, optional_subject_id=member.user_id
                 ),
@@ -922,12 +930,13 @@ class Authz:
         self,
         user: base_models.APIUser,
         resource_type: ResourceType,
-        resource_id: str,
+        resource_id: ULID,
         user_ids: list[str],
         *,
         zed_token: ZedToken | None = None,
     ) -> list[MembershipChange]:
         """Remove the specific members from the project, then return the list of members that were removed."""
+        resource_id: str = str(resource_id)
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
         add_members: list[RelationshipUpdate] = []
         remove_members: list[RelationshipUpdate] = []

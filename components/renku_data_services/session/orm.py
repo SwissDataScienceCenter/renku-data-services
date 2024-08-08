@@ -10,7 +10,6 @@ from ulid import ULID
 from renku_data_services.crc.orm import ResourceClassORM
 from renku_data_services.project.orm import ProjectORM
 from renku_data_services.session import models
-from renku_data_services.session.apispec import EnvironmentKind
 
 metadata_obj = MetaData(schema="sessions")  # Has to match alembic ini section name
 
@@ -48,7 +47,7 @@ class EnvironmentORM(BaseORM):
     """Default URL path to open in a session."""
 
     @classmethod
-    def load(cls, environment: models.Environment) -> "EnvironmentORM":
+    def load(cls, environment: models.UnsavedEnvironment) -> "EnvironmentORM":
         """Create EnvironmentORM from the session environment model."""
         return cls(
             name=environment.name,
@@ -92,7 +91,7 @@ class SessionLauncherORM(BaseORM):
     description: Mapped[str | None] = mapped_column("description", String(500))
     """Human-readable description of the session launcher."""
 
-    environment_kind: Mapped[EnvironmentKind]
+    environment_kind: Mapped[models.EnvironmentKind]
     """The kind of environment definition to use."""
 
     container_image: Mapped[str | None] = mapped_column("container_image", String(500))
@@ -124,7 +123,7 @@ class SessionLauncherORM(BaseORM):
     """Id of the resource class."""
 
     @classmethod
-    def load(cls, launcher: models.SessionLauncher) -> "SessionLauncherORM":
+    def load(cls, launcher: models.UnsavedSessionLauncher) -> "SessionLauncherORM":
         """Create SessionLauncherORM from the session launcher model."""
         return cls(
             name=launcher.name,
@@ -133,7 +132,7 @@ class SessionLauncherORM(BaseORM):
             description=launcher.description,
             environment_kind=launcher.environment_kind,
             container_image=launcher.container_image,
-            project_id=launcher.project_id,
+            project_id=str(launcher.project_id),
             environment_id=launcher.environment_id,
             resource_class_id=launcher.resource_class_id,
             default_url=launcher.default_url,
@@ -143,7 +142,7 @@ class SessionLauncherORM(BaseORM):
         """Create a session launcher model from the SessionLauncherORM."""
         return models.SessionLauncher(
             id=self.id,
-            project_id=self.project_id,
+            project_id=ULID.from_str(self.project_id),
             name=self.name,
             created_by=models.Member(id=self.created_by_id),
             creation_date=self.creation_date,
