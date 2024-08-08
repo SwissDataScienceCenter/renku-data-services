@@ -13,6 +13,7 @@ from renku_data_services.authz import models as authz_models
 from renku_data_services.namespace.orm import NamespaceORM
 from renku_data_services.project import models
 from renku_data_services.project.apispec import Visibility
+from renku_data_services.utils.sqlalchemy import ULIDType
 
 metadata_obj = MetaData(schema="projects")  # Has to match alembic ini section name
 
@@ -27,7 +28,7 @@ class ProjectORM(BaseORM):
     """A Renku native project."""
 
     __tablename__ = "projects"
-    id: Mapped[str] = mapped_column("id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
     name: Mapped[str] = mapped_column("name", String(99))
     visibility: Mapped[Visibility]
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())

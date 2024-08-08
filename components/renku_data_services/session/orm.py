@@ -104,7 +104,7 @@ class SessionLauncherORM(BaseORM):
     project: Mapped[ProjectORM] = relationship(init=False)
     environment: Mapped[EnvironmentORM | None] = relationship(init=False)
 
-    project_id: Mapped[str] = mapped_column(
+    project_id: Mapped[ULID] = mapped_column(
         "project_id", ForeignKey(ProjectORM.id, ondelete="CASCADE"), default=None, index=True
     )
     """Id of the project this session belongs to."""
