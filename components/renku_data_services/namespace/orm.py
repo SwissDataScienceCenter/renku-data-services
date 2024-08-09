@@ -13,6 +13,7 @@ from renku_data_services.errors import errors
 from renku_data_services.namespace import models
 from renku_data_services.users.models import UserInfo, UserWithNamespace
 from renku_data_services.users.orm import UserORM
+from renku_data_services.utils.sqlalchemy import ULIDType
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
@@ -27,7 +28,7 @@ class GroupORM(BaseORM):
 
     __tablename__ = "groups"
 
-    id: Mapped[str] = mapped_column("id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
     name: Mapped[str] = mapped_column("name", String(99), index=True)
     created_by: Mapped[str] = mapped_column(ForeignKey(UserORM.keycloak_id), index=True, nullable=False)
     creation_date: Mapped[datetime] = mapped_column("creation_date", DateTime(timezone=True), server_default=func.now())
@@ -54,9 +55,9 @@ class NamespaceORM(BaseORM):
         CheckConstraint("(user_id IS NULL) <> (group_id IS NULL)", name="either_group_id_or_user_id_is_set"),
     )
 
-    id: Mapped[str] = mapped_column("id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
     slug: Mapped[str] = mapped_column(String(99), index=True, unique=True, nullable=False)
-    group_id: Mapped[str | None] = mapped_column(
+    group_id: Mapped[ULID | None] = mapped_column(
         ForeignKey(GroupORM.id, ondelete="CASCADE", name="namespaces_group_id_fk"),
         default=None,
         nullable=True,
@@ -119,10 +120,10 @@ class NamespaceOldORM(BaseORM):
 
     __tablename__ = "namespaces_old"
 
-    id: Mapped[str] = mapped_column("id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
     slug: Mapped[str] = mapped_column(String(99), index=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(nullable=False, index=True, init=False, server_default=func.now())
-    latest_slug_id: Mapped[str] = mapped_column(
+    latest_slug_id: Mapped[ULID] = mapped_column(
         ForeignKey(NamespaceORM.id, ondelete="CASCADE"), nullable=False, index=True
     )
     latest_slug: Mapped[NamespaceORM] = relationship(lazy="joined", init=False, viewonly=True, repr=False)

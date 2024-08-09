@@ -91,10 +91,10 @@ class ProjectSlug(BaseORM):
 
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
     slug: Mapped[str] = mapped_column(String(99), index=True, nullable=False)
-    project_id: Mapped[str] = mapped_column(
+    project_id: Mapped[ULID] = mapped_column(
         ForeignKey(ProjectORM.id, ondelete="CASCADE", name="project_slugs_project_id_fk"), index=True
     )
-    namespace_id: Mapped[str] = mapped_column(
+    namespace_id: Mapped[ULID] = mapped_column(
         ForeignKey(NamespaceORM.id, ondelete="CASCADE", name="project_slugs_namespace_id_fk"), index=True
     )
     namespace: Mapped[NamespaceORM] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
