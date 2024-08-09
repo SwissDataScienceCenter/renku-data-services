@@ -22,4 +22,4 @@ class ULIDType(types.TypeDecorator):
         """Transform string from database into ULID."""
         if value is None:
             return None
-        return cast(ULID, ULID.from_str(value))
+        return cast(ULID, ULID.from_str(value))  # cast because mypy doesn't understand ULID type annotations
