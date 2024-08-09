@@ -317,7 +317,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/RCloneConfig"
+              $ref: "#/components/schemas/RCloneConfigValidate"
       responses:
         "204":
           description: The configuration is valid
@@ -392,6 +392,16 @@ components:
       example:
         project_id: 123456
     RCloneConfig:
+      type: object
+      description: Dictionary of rclone key:value pairs (based on schema from '/storage_schema')
+      additionalProperties:
+        oneOf:
+        - type: integer
+        - type: string
+          nullable: true
+        - type: boolean
+        - type: object
+    RCloneConfigValidate: #this is the same as RCloneConfig but duplicated so a class gets generated
       type: object
       description: Dictionary of rclone key:value pairs (based on schema from '/storage_schema')
       additionalProperties:

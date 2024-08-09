@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Any
 
-from sanic import HTTPResponse, Request, empty, json
+from sanic import HTTPResponse, Request, empty
 from sanic.response import JSONResponse
 from sanic_ext import validate
 from ulid import ULID
@@ -13,6 +13,7 @@ from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_body_root_model, validate_query
+from renku_data_services.base_models.validation import validated_json
 from renku_data_services.storage import apispec, models
 from renku_data_services.storage.db import StorageRepository, StorageV2Repository
 from renku_data_services.storage.rclone import RCloneValidator
@@ -57,7 +58,9 @@ class StorageBP(CustomBlueprint):
         ) -> JSONResponse:
             storage = await self.storage_repo.get_storage(user=user, project_id=query.project_id)
 
-            return json([dump_storage_with_sensitive_fields(s, validator) for s in storage])
+            return validated_json(
+                apispec.StorageGetResponse, [dump_storage_with_sensitive_fields(s, validator) for s in storage]
+            )
 
         return "/storage", ["GET"], _get
 
@@ -73,7 +76,7 @@ class StorageBP(CustomBlueprint):
         ) -> JSONResponse:
             storage = await self.storage_repo.get_storage_by_id(storage_id, user=user)
 
-            return json(dump_storage_with_sensitive_fields(storage, validator))
+            return validated_json(apispec.CloudStorageGet, dump_storage_with_sensitive_fields(storage, validator))
 
         return "/storage/<storage_id:ulid>", ["GET"], _get_one
 
@@ -104,7 +107,7 @@ class StorageBP(CustomBlueprint):
             validator.validate(storage.configuration.model_dump())
 
             res = await self.storage_repo.insert_storage(storage=storage, user=user)
-            return json(dump_storage_with_sensitive_fields(res, validator), 201)
+            return validated_json(apispec.CloudStorageGet, dump_storage_with_sensitive_fields(res, validator), 201)
 
         return "/storage", ["POST"], _post
 
@@ -138,7 +141,7 @@ class StorageBP(CustomBlueprint):
             validator.validate(new_storage.configuration.model_dump())
             body_dict = new_storage.model_dump()
             res = await self.storage_repo.update_storage(storage_id=storage_id, user=user, **body_dict)
-            return json(dump_storage_with_sensitive_fields(res, validator))
+            return validated_json(apispec.CloudStorageGet, dump_storage_with_sensitive_fields(res, validator))
 
         return "/storage/<storage_id:ulid>", ["PUT"], _put
 
@@ -168,7 +171,7 @@ class StorageBP(CustomBlueprint):
             body_dict = body.model_dump(exclude_none=True)
 
             res = await self.storage_repo.update_storage(storage_id=storage_id, user=user, **body_dict)
-            return json(dump_storage_with_sensitive_fields(res, validator))
+            return validated_json(apispec.CloudStorageGet, dump_storage_with_sensitive_fields(res, validator))
 
         return "/storage/<storage_id:ulid>", ["PATCH"], _patch
 
@@ -202,10 +205,12 @@ class StoragesV2BP(CustomBlueprint):
             query: apispec.StorageV2Params,
         ) -> JSONResponse:
             storage = await self.storage_v2_repo.get_storage(
-                user=user, include_secrets=True, project_id=query.project_id
+                user=user, include_secrets=True, project_id=ULID.from_str(query.project_id)
             )
 
-            return json([dump_storage_with_sensitive_fields_and_secrets(s, validator) for s in storage])
+            return validated_json(
+                apispec.StoragesV2GetResponse, [dump_storage_with_sensitive_fields_and_secrets(s, validator) for s in storage]
+            )
 
         return "/storages_v2", ["GET"], _get
 
@@ -221,7 +226,7 @@ class StoragesV2BP(CustomBlueprint):
         ) -> JSONResponse:
             storage = await self.storage_v2_repo.get_storage_by_id(storage_id, user=user)
 
-            return json(dump_storage_with_sensitive_fields_and_secrets(storage, validator))
+            return validated_json(apispec.CloudStorageGet, dump_storage_with_sensitive_fields_and_secrets(storage, validator))
 
         return "/storages_v2/<storage_id:ulid>", ["GET"], _get_one
 
@@ -252,7 +257,7 @@ class StoragesV2BP(CustomBlueprint):
             validator.validate(storage.configuration.model_dump())
 
             res = await self.storage_v2_repo.insert_storage(storage=storage, user=user)
-            return json(dump_storage_with_sensitive_fields(res, validator), 201)
+            return validated_json(apispec.CloudStorageGet, dump_storage_with_sensitive_fields(res, validator), 201)
 
         return "/storages_v2", ["POST"], _post
 
@@ -282,7 +287,7 @@ class StoragesV2BP(CustomBlueprint):
             body_dict = body.model_dump(exclude_none=True)
 
             res = await self.storage_v2_repo.update_storage(storage_id=storage_id, user=user, **body_dict)
-            return json(dump_storage_with_sensitive_fields(res, validator))
+            return validated_json(apispec.CloudStorageGet, dump_storage_with_sensitive_fields(res, validator))
 
         return "/storages_v2/<storage_id:ulid>", ["PATCH"], _patch
 
@@ -308,8 +313,8 @@ class StoragesV2BP(CustomBlueprint):
             result = await self.storage_v2_repo.upsert_storage_secrets(
                 storage_id=storage_id, user=user, secrets=secrets
             )
-            return json(
-                apispec.CloudStorageSecretGetList.model_validate(result).model_dump(exclude_none=True, mode="json"), 201
+            return validated_json(
+                apispec.CloudStorageSecretGetList,result, 201
             )
 
         return "/storages_v2/<storage_id:ulid>/secrets", ["POST"], _upsert_secrets
@@ -320,8 +325,8 @@ class StoragesV2BP(CustomBlueprint):
         @authenticate(self.authenticator)
         async def _get_secrets(request: Request, user: base_models.APIUser, storage_id: ULID) -> JSONResponse:
             result = await self.storage_v2_repo.get_storage_secrets(storage_id=storage_id, user=user)
-            return json(
-                apispec.CloudStorageSecretGetList.model_validate(result).model_dump(exclude_none=True, mode="json"), 200
+            return validated_json(
+                apispec.CloudStorageSecretGetList,result, 200
             )
 
         return "/storages_v2/<storage_id:ulid>/secrets", ["GET"], _get_secrets
@@ -345,29 +350,19 @@ class StorageSchemaBP(CustomBlueprint):
         """Get cloud storage for a repository."""
 
         async def _get(_: Request, validator: RCloneValidator) -> JSONResponse:
-            return json(validator.asdict())
+            return validated_json(apispec.RCloneSchema, validator.asdict())
 
         return "/storage_schema", ["GET"], _get
 
     def test_connection(self) -> BlueprintFactoryResponse:
         """Validate an RClone config."""
 
-        async def _test_connection(request: Request, validator: RCloneValidator) -> HTTPResponse:
-            if not request.json:
-                raise errors.ValidationError(message="The request body is empty. Please provide a valid JSON object.")
-            if not isinstance(request.json, dict):
-                raise errors.ValidationError(message="The request body is not a valid JSON object.")
-            if not request.json.get("configuration"):
-                raise errors.ValidationError(message="No 'configuration' sent.")
-            if not isinstance(request.json.get("configuration"), dict):
-                config_type = type(request.json.get("configuration"))
-                raise errors.ValidationError(
-                    message=f"The R clone configuration should be a dictionary, not {config_type.__name__}"
-                )
-            if not request.json.get("source_path"):
-                raise errors.ValidationError(message="'source_path' is required to test the connection.")
-            validator.validate(request.json["configuration"], keep_sensitive=True)
-            result = await validator.test_connection(request.json["configuration"], request.json["source_path"])
+        @validate(json=apispec.StorageSchemaTestConnectionPostRequest)
+        async def _test_connection(
+            request: Request, validator: RCloneValidator, body: apispec.StorageSchemaTestConnectionPostRequest
+        ) -> HTTPResponse:
+            validator.validate(body.configuration, keep_sensitive=True)
+            result = await validator.test_connection(body.configuration, body.source_path)
             if not result.success:
                 raise errors.ValidationError(message=result.error)
             return empty(204)
@@ -377,12 +372,13 @@ class StorageSchemaBP(CustomBlueprint):
     def validate(self) -> BlueprintFactoryResponse:
         """Validate an RClone config."""
 
-        async def _validate(request: Request, validator: RCloneValidator) -> HTTPResponse:
-            if not request.json:
+        @validate(json=apispec.RCloneConfigValidate)
+        async def _validate(
+            request: Request, validator: RCloneValidator, body: apispec.RCloneConfigValidate
+        ) -> HTTPResponse:
+            if body.root is None:
                 raise errors.ValidationError(message="The request body is empty. Please provide a valid JSON object.")
-            if not isinstance(request.json, dict):
-                raise errors.ValidationError(message="The request body is not a valid JSON object.")
-            validator.validate(request.json, keep_sensitive=True)
+            validator.validate(body.root, keep_sensitive=True)
             return empty(204)
 
         return "/storage_schema/validate", ["POST"], _validate
@@ -390,12 +386,11 @@ class StorageSchemaBP(CustomBlueprint):
     def obscure(self) -> BlueprintFactoryResponse:
         """Obscure values in config."""
 
-        async def _obscure(request: Request, validator: RCloneValidator) -> JSONResponse:
-            if not request.json:
-                raise errors.ValidationError(message="The request body is empty. Please provide a valid JSON object.")
-            if not isinstance(request.json, dict):
-                raise errors.ValidationError(message="The request body is not a valid JSON object.")
-            config = await validator.obscure_config(request.json)
-            return json(config)
+        @validate(json=apispec.StorageSchemaObscurePostRequest)
+        async def _obscure(
+            request: Request, validator: RCloneValidator, body: apispec.StorageSchemaObscurePostRequest
+        ) -> JSONResponse:
+            config = await validator.obscure_config(body.configuration)
+            return validated_json(apispec.RCloneConfigValidate, config)
 
         return "/storage_schema/obscure", ["POST"], _obscure
