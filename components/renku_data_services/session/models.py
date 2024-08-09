@@ -2,12 +2,20 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
+from typing import Self
 
 from pydantic import BaseModel, model_validator
 from ulid import ULID
 
 from renku_data_services import errors
-from renku_data_services.session.apispec import EnvironmentKind
+
+
+class EnvironmentKind(Enum):
+    """Environment kind enum."""
+
+    global_environment = "global_environment"
+    container_image = "container_image"
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -18,10 +26,9 @@ class Member(BaseModel):
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class Environment(BaseModel):
-    """Session environment model."""
+class UnsavedEnvironment(BaseModel):
+    """Session environment model that isn't in the db yet."""
 
-    id: str | None
     name: str
     creation_date: datetime
     description: str | None
@@ -31,11 +38,17 @@ class Environment(BaseModel):
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class SessionLauncher(BaseModel):
-    """Session launcher model."""
+class Environment(UnsavedEnvironment):  # type: ignore[misc]
+    """Session environment model."""
 
-    id: ULID | None
-    project_id: str
+    id: ULID
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedSessionLauncher(BaseModel):
+    """Session launcher model that isn't in the db yet."""
+
+    project_id: ULID
     name: str
     creation_date: datetime
     description: str | None
@@ -47,7 +60,7 @@ class SessionLauncher(BaseModel):
     created_by: Member
 
     @model_validator(mode="after")
-    def check_launcher_environment_kind(self) -> "SessionLauncher":
+    def check_launcher_environment_kind(self) -> Self:
         """Validates the environment of a launcher."""
 
         environment_kind = self.environment_kind
@@ -61,3 +74,10 @@ class SessionLauncher(BaseModel):
             raise errors.ValidationError(message="'container_image' not set when environment_kind=container_image")
 
         return self
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLauncher(UnsavedSessionLauncher):  # type: ignore[misc]
+    """Session launcher model."""
+
+    id: ULID

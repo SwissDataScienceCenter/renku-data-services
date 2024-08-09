@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from urllib.parse import unquote
 
-from sanic import HTTPResponse, Request, json
+from sanic import HTTPResponse, Request
 from sanic.response import JSONResponse
 
 import renku_data_services.base_models as base_models
@@ -11,6 +11,7 @@ from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.etag import extract_if_none_match
+from renku_data_services.base_models.validation import validated_json
 from renku_data_services.repositories import apispec
 from renku_data_services.repositories.apispec_base import RepositoryParams
 from renku_data_services.repositories.db import GitRepositoriesRepository
@@ -53,10 +54,7 @@ class RepositoriesBP(CustomBlueprint):
                 if result.repository_metadata and result.repository_metadata.etag is not None
                 else None
             )
-            return json(
-                apispec.RepositoryProviderMatch.model_validate(result).model_dump(exclude_none=True, mode="json"),
-                headers=headers,
-            )
+            return validated_json(apispec.RepositoryProviderMatch, result, headers=headers)
 
         return "/repositories/<repository_url>", ["GET"], _get_one_repository
 
