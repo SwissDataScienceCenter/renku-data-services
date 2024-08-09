@@ -77,7 +77,7 @@ class SessionLauncherORM(BaseORM):
 
     __tablename__ = "launchers"
 
-    id: Mapped[str] = mapped_column("id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
     """Id of this session launcher object."""
 
     name: Mapped[str] = mapped_column("name", String(99))

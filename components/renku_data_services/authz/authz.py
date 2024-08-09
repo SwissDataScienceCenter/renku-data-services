@@ -5,7 +5,7 @@ from collections.abc import AsyncIterable, Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import wraps
-from typing import ClassVar, Concatenate, ParamSpec, Protocol, TypeVar
+from typing import ClassVar, Concatenate, ParamSpec, Protocol, TypeVar, cast
 
 from authzed.api.v1 import AsyncClient
 from authzed.api.v1.core_pb2 import ObjectReference, Relationship, RelationshipUpdate, SubjectReference, ZedToken
@@ -162,12 +162,12 @@ class _AuthzConverter:
         return ObjectReference(object_type=ResourceType.user, object_id="*")
 
     @staticmethod
-    def group(id: str) -> ObjectReference:
-        return ObjectReference(object_type=ResourceType.group, object_id=id)
+    def group(id: ULID) -> ObjectReference:
+        return ObjectReference(object_type=ResourceType.group, object_id=str(id))
 
     @staticmethod
-    def user_namespace(id: str) -> ObjectReference:
-        return ObjectReference(object_type=ResourceType.user_namespace, object_id=id)
+    def user_namespace(id: ULID) -> ObjectReference:
+        return ObjectReference(object_type=ResourceType.user_namespace, object_id=str(id))
 
     @staticmethod
     def to_object(resource_type: ResourceType, resource_id: str | int) -> ObjectReference:
@@ -178,9 +178,9 @@ class _AuthzConverter:
                 return _AuthzConverter.user(sid)
             case (ResourceType.anonymous_user, _):
                 return _AuthzConverter.anonymous_users()
-            case (ResourceType.user_namespace, rid) if isinstance(rid, str):
+            case (ResourceType.user_namespace, rid) if isinstance(rid, ULID):
                 return _AuthzConverter.user_namespace(rid)
-            case (ResourceType.group, rid) if isinstance(rid, str):
+            case (ResourceType.group, rid) if isinstance(rid, ULID):
                 return _AuthzConverter.group(rid)
         raise errors.ProgrammingError(
             message=f"Unexpected or unknown resource type when checking permissions {resource_type}"
@@ -575,7 +575,7 @@ class Authz:
             object=(
                 _AuthzConverter.user_namespace(project.namespace.id)
                 if project.namespace.kind == NamespaceKind.user
-                else _AuthzConverter.group(project.namespace.underlying_resource_id)
+                else _AuthzConverter.group(cast(ULID, project.namespace.underlying_resource_id))
             )
         )
         project_in_platform = Relationship(
@@ -752,10 +752,14 @@ class Authz:
             else SubjectReference(object=_AuthzConverter.user_namespace(project.namespace.id))
         )
         old_namespace_sub = (
-            SubjectReference(object=_AuthzConverter.group(current_namespace.relationship.subject.object.object_id))
+            SubjectReference(
+                object=_AuthzConverter.group(ULID.from_str(current_namespace.relationship.subject.object.object_id))
+            )
             if current_namespace.relationship.subject.object.object_type == ResourceType.group.value
             else SubjectReference(
-                object=_AuthzConverter.user_namespace(current_namespace.relationship.subject.object.object_id)
+                object=_AuthzConverter.user_namespace(
+                    ULID.from_str(current_namespace.relationship.subject.object.object_id)
+                )
             )
         )
         new_namespace = Relationship(
@@ -1084,7 +1088,7 @@ class Authz:
                 message="Cannot remove a group in the authorization database if the group has no ID"
             )
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
-        rel_filter = RelationshipFilter(resource_type=ResourceType.group.value, optional_resource_id=group.id)
+        rel_filter = RelationshipFilter(resource_type=ResourceType.group.value, optional_resource_id=str(group.id))
         responses = self.client.ReadRelationships(
             ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
         )
@@ -1104,7 +1108,7 @@ class Authz:
         self,
         user: base_models.APIUser,
         resource_type: ResourceType,
-        resource_id: str,
+        resource_id: ULID,
         members: list[Member],
         *,
         zed_token: ZedToken | None = None,
@@ -1115,8 +1119,9 @@ class Authz:
         add_members: list[RelationshipUpdate] = []
         undo: list[RelationshipUpdate] = []
         output: list[MembershipChange] = []
+        resource_id_str = str(resource_id)
         expected_user_roles = {_Relation.viewer.value, _Relation.owner.value, _Relation.editor.value}
-        existing_owners_rels = await self._get_resource_owners(resource_type, resource_id, consistency)
+        existing_owners_rels = await self._get_resource_owners(resource_type, resource_id_str, consistency)
         n_existing_owners = len(existing_owners_rels)
         for member in members:
             rel = Relationship(
@@ -1126,7 +1131,7 @@ class Authz:
             )
             existing_rel_filter = RelationshipFilter(
                 resource_type=resource_type.value,
-                optional_resource_id=resource_id,
+                optional_resource_id=resource_id_str,
                 optional_subject_filter=SubjectFilter(
                     subject_type=ResourceType.user, optional_subject_id=member.user_id
                 ),
@@ -1222,7 +1227,7 @@ class Authz:
         self,
         user: base_models.APIUser,
         resource_type: ResourceType,
-        resource_id: str,
+        resource_id: ULID,
         user_ids: list[str],
         *,
         zed_token: ZedToken | None = None,
@@ -1233,12 +1238,13 @@ class Authz:
         remove_members: list[RelationshipUpdate] = []
         output: list[MembershipChange] = []
         existing_owners_rels: list[ReadRelationshipsResponse] | None = None
+        resource_id_str = str(resource_id)
         for user_id in user_ids:
             if user_id == "*":
                 raise errors.ValidationError(message="Cannot remove a group member with ID '*'")
             existing_rel_filter = RelationshipFilter(
                 resource_type=resource_type.value,
-                optional_resource_id=resource_id,
+                optional_resource_id=resource_id_str,
                 optional_subject_filter=SubjectFilter(subject_type=ResourceType.user, optional_subject_id=user_id),
             )
             existing_rels: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
@@ -1249,7 +1255,9 @@ class Authz:
             async for existing_rel in existing_rels:
                 if existing_rel.relationship.relation == _Relation.owner.value:
                     if existing_owners_rels is None:
-                        existing_owners_rels = await self._get_resource_owners(resource_type, resource_id, consistency)
+                        existing_owners_rels = await self._get_resource_owners(
+                            resource_type, resource_id_str, consistency
+                        )
                     if len(existing_owners_rels) == 1:
                         raise errors.ValidationError(
                             message="You are trying to remove the single last owner of the group, "

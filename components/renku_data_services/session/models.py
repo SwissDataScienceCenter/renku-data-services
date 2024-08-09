@@ -80,4 +80,4 @@ class UnsavedSessionLauncher(BaseModel):
 class SessionLauncher(UnsavedSessionLauncher):  # type: ignore[misc]
     """Session launcher model."""
 
-    id: str
+    id: ULID
