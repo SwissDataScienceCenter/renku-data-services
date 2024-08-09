@@ -2,7 +2,6 @@
 
 import asyncio
 from base64 import b64encode
-from typing import cast
 
 from cryptography.hazmat.primitives.asymmetric import rsa
 from kubernetes import client as k8s_client
@@ -64,7 +63,7 @@ async def create_k8s_secret(
                     raise
 
             decrypted_value = decrypt_string(decryption_key, user.id, secret.encrypted_value).encode()  # type: ignore
-            key = secret.name if not key_mapping else key_mapping[cast(str, secret.id)]
+            key = secret.name if not key_mapping else key_mapping[str(secret.id)]
             decrypted_secrets[key] = b64encode(decrypted_value).decode()
     except Exception as e:
         # don't wrap the error, we don't want secrets accidentally leaking.

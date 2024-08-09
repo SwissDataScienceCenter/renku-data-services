@@ -17,7 +17,7 @@ from renku_data_services.secrets import orm as secrets_schemas
 from renku_data_services.secrets.core import encrypt_user_secret
 from renku_data_services.secrets.models import SecretKind
 from renku_data_services.secrets.orm import SecretORM
-from renku_data_services.storage import apispec, models
+from renku_data_services.storage import models
 from renku_data_services.storage import orm as schemas
 from renku_data_services.users.db import UserRepo
 
@@ -165,7 +165,7 @@ class BaseStorageRepository(_Base):
             await session.delete(storage[0])
 
     async def upsert_storage_secrets(
-        self, storage_id: ULID, user: base_models.APIUser, secrets: list[apispec.CloudStorageSecretPost]
+        self, storage_id: ULID, user: base_models.APIUser, secrets: list[models.CloudStorageSecretUpsert]
     ) -> list[models.CloudStorageSecret]:
         """Create/update cloud storage secrets."""
         # NOTE: Check that user has proper access to the storage
@@ -207,7 +207,7 @@ class BaseStorageRepository(_Base):
 
                     storage_secret_orm = schemas.CloudStorageSecretsORM(
                         user_id=cast(str, user.id),
-                        storage_id=str(storage_id),
+                        storage_id=storage_id,
                         name=name,
                         secret_id=secret_orm.id,
                     )
@@ -297,6 +297,6 @@ class StorageV2Repository(BaseStorageRepository):
         scope = authz_models.Scope.WRITE if minimum_access_level == authz_models.Role.OWNER else authz_models.Scope.READ
         output = []
         for id in project_ids:
-            if await self.project_authz.has_permission(user, ResourceType.project, id, scope):
+            if await self.project_authz.has_permission(user, ResourceType.project, ULID.from_str(id), scope):
                 output.append(id)
         return output

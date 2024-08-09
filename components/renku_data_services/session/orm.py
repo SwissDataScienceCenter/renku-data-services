@@ -11,6 +11,7 @@ from renku_data_services.crc.orm import ResourceClassORM
 from renku_data_services.project.orm import ProjectORM
 from renku_data_services.session import models
 from renku_data_services.session.apispec import EnvironmentKind
+from renku_data_services.utils.sqlalchemy import ULIDType
 
 metadata_obj = MetaData(schema="sessions")  # Has to match alembic ini section name
 
@@ -77,7 +78,7 @@ class SessionLauncherORM(BaseORM):
 
     __tablename__ = "launchers"
 
-    id: Mapped[str] = mapped_column("id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
     """Id of this session launcher object."""
 
     name: Mapped[str] = mapped_column("name", String(99))

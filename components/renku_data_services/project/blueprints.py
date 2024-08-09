@@ -50,7 +50,7 @@ class ProjectsBP(CustomBlueprint):
             )
             return [
                 dict(
-                    id=p.id,
+                    id=str(p.id),
                     name=p.name,
                     namespace=p.namespace.slug,
                     slug=p.slug,
@@ -88,7 +88,7 @@ class ProjectsBP(CustomBlueprint):
             result = await self.project_repo.insert_project(user, project)
             return json(
                 dict(
-                    id=result.id,
+                    id=str(result.id),
                     name=result.name,
                     namespace=result.namespace.slug,
                     slug=result.slug,
@@ -120,7 +120,7 @@ class ProjectsBP(CustomBlueprint):
             headers = {"ETag": project.etag} if project.etag is not None else None
             return json(
                 dict(
-                    id=project.id,
+                    id=str(project.id),
                     name=project.name,
                     namespace=project.namespace.slug,
                     slug=project.slug,
@@ -153,7 +153,7 @@ class ProjectsBP(CustomBlueprint):
             headers = {"ETag": project.etag} if project.etag is not None else None
             return json(
                 dict(
-                    id=project.id,
+                    id=str(project.id),
                     name=project.name,
                     namespace=project.namespace.slug,
                     slug=project.slug,
@@ -207,7 +207,7 @@ class ProjectsBP(CustomBlueprint):
             updated_project = project_update.new
             return json(
                 dict(
-                    id=updated_project.id,
+                    id=str(updated_project.id),
                     name=updated_project.name,
                     namespace=updated_project.namespace.slug,
                     slug=updated_project.slug,
