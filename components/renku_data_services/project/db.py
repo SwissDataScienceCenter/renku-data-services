@@ -113,7 +113,7 @@ class ProjectRepository:
             authorized = await self.authz.has_permission(
                 user=user,
                 resource_type=ResourceType.project,
-                resource_id=ULID.from_str(project_orm.id),
+                resource_id=project_orm.id,
                 scope=Scope.READ,
             )
             if not authorized:
@@ -171,7 +171,7 @@ class ProjectRepository:
             creation_date=datetime.now(UTC).replace(microsecond=0),
             keywords=project.keywords,
         )
-        project_slug = schemas.ProjectSlug(slug, project_id=project_orm.id, namespace_id=ns.id)
+        project_slug = schemas.ProjectSlug(slug, project_id=str(project_orm.id), namespace_id=ns.id)
 
         session.add(project_slug)
         session.add(project_orm)
