@@ -9,6 +9,7 @@ from sqlalchemy.schema import UniqueConstraint
 from ulid import ULID
 
 from renku_data_services.storage import models
+from renku_data_services.utils.sqlalchemy import ULIDType
 
 JSONVariant = JSON().with_variant(JSONB(), "postgresql")
 
@@ -47,8 +48,8 @@ class CloudStorageORM(BaseORM):
     readonly: Mapped[bool] = mapped_column("readonly", Boolean(), default=True)
     """Whether this storage should be mounted readonly or not """
 
-    storage_id: Mapped[str] = mapped_column(
-        "storage_id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False
+    storage_id: Mapped[ULID] = mapped_column(
+        "storage_id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False
     )
     """Id of this storage."""
 

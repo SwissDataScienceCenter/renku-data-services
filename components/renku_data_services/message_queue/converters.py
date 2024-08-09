@@ -145,13 +145,14 @@ class _ProjectAuthzEventConverter:
     def to_events(member_changes: list[authz_models.MembershipChange]) -> list[Event]:
         output: list[Event] = []
         for change in member_changes:
+            resource_id = str(change.member.resource_id)
             match change.change:
                 case authz_models.Change.UPDATE:
                     output.append(
                         Event(
                             "projectAuth.updated",
                             v2.ProjectMemberUpdated(
-                                projectId=change.member.resource_id,
+                                projectId=resource_id,
                                 userId=change.member.user_id,
                                 role=_convert_member_role(change.member.role),
                             ),
@@ -162,7 +163,7 @@ class _ProjectAuthzEventConverter:
                         Event(
                             "projectAuth.removed",
                             v2.ProjectMemberRemoved(
-                                projectId=change.member.resource_id,
+                                projectId=resource_id,
                                 userId=change.member.user_id,
                             ),
                         )
@@ -172,7 +173,7 @@ class _ProjectAuthzEventConverter:
                         Event(
                             "projectAuth.added",
                             v2.ProjectMemberAdded(
-                                projectId=change.member.resource_id,
+                                projectId=resource_id,
                                 userId=change.member.user_id,
                                 role=_convert_member_role(change.member.role),
                             ),
@@ -191,13 +192,14 @@ class _GroupAuthzEventConverter:
     def to_events(member_changes: list[authz_models.MembershipChange]) -> list[Event]:
         output: list[Event] = []
         for change in member_changes:
+            resource_id = str(change.member.resource_id)
             match change.change:
                 case authz_models.Change.UPDATE:
                     output.append(
                         Event(
                             "memberGroup.updated",
                             v2.ProjectMemberUpdated(
-                                projectId=change.member.resource_id,
+                                projectId=resource_id,
                                 userId=change.member.user_id,
                                 role=_convert_member_role(change.member.role),
                             ),
@@ -208,7 +210,7 @@ class _GroupAuthzEventConverter:
                         Event(
                             "memberGroup.removed",
                             v2.ProjectMemberRemoved(
-                                projectId=change.member.resource_id,
+                                projectId=resource_id,
                                 userId=change.member.user_id,
                             ),
                         )
@@ -218,7 +220,7 @@ class _GroupAuthzEventConverter:
                         Event(
                             "memberGroup.added",
                             v2.ProjectMemberAdded(
-                                projectId=change.member.resource_id,
+                                projectId=resource_id,
                                 userId=change.member.user_id,
                                 role=_convert_member_role(change.member.role),
                             ),
@@ -239,32 +241,33 @@ class _GroupEventConverter:
             raise errors.ProgrammingError(
                 message="Cannot send group events to the message queue for a group that does not have an ID"
             )
+        group_id = str(group.id)
         match event_type:
             case v2.GroupAdded:
                 return [
                     Event(
                         "group.added",
                         v2.GroupAdded(
-                            id=group.id, name=group.name, description=group.description, namespace=group.slug
+                            id=group_id, name=group.name, description=group.description, namespace=group.slug
                         ),
                     ),
                     Event(
                         "memberGroup.added",
                         v2.GroupMemberAdded(
-                            groupId=group.id,
+                            groupId=group_id,
                             userId=group.created_by,
                             role=v2.MemberRole.OWNER,
                         ),
                     ),
                 ]
             case v2.GroupRemoved:
-                return [Event("group.removed", v2.GroupRemoved(id=group.id))]
+                return [Event("group.removed", v2.GroupRemoved(id=group_id))]
             case v2.GroupUpdated:
                 return [
                     Event(
                         "group.updated",
                         v2.GroupUpdated(
-                            id=group.id, name=group.name, description=group.description, namespace=group.slug
+                            id=group_id, name=group.name, description=group.description, namespace=group.slug
                         ),
                     )
                 ]

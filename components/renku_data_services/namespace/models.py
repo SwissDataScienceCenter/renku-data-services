@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
+from ulid import ULID
+
 from renku_data_services.authz.models import Role
 
 
@@ -16,7 +18,7 @@ class Group:
     created_by: str
     creation_date: datetime
     description: str | None = None
-    id: str | None = None
+    id: ULID | None = None
 
 
 @dataclass
@@ -50,11 +52,11 @@ class NamespaceKind(str, Enum):
 class Namespace:
     """A renku namespace."""
 
-    id: str
+    id: ULID
     slug: str
     kind: NamespaceKind
     created_by: str
-    underlying_resource_id: str  # The user or group ID depending on the Namespace kind
+    underlying_resource_id: ULID | str  # The user or group ID depending on the Namespace kind
     latest_slug: str | None = None
     name: str | None = None
 
