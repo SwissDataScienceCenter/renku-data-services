@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from enum import Enum
 
+from ulid import ULID
+
 from renku_data_services.errors import errors
 from renku_data_services.namespace.apispec import GroupRole
 
@@ -56,7 +58,7 @@ class Member:
 
     role: Role
     user_id: str
-    resource_id: str
+    resource_id: str | ULID
 
 
 class Change(Enum):

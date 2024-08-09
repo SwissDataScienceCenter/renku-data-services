@@ -76,7 +76,7 @@ class ProjectRepository:
 
     async def get_project(self, user: base_models.APIUser, project_id: ULID) -> models.Project:
         """Get one project from the database."""
-        authorized = await self.authz.has_permission(user, ResourceType.project, str(project_id), Scope.READ)
+        authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
         if not authorized:
             raise errors.MissingResourceError(
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
@@ -113,7 +113,7 @@ class ProjectRepository:
             authorized = await self.authz.has_permission(
                 user=user,
                 resource_type=ResourceType.project,
-                resource_id=str(project_orm.id),
+                resource_id=project_orm.id,
                 scope=Scope.READ,
             )
             if not authorized:
@@ -171,7 +171,7 @@ class ProjectRepository:
             creation_date=datetime.now(UTC).replace(microsecond=0),
             keywords=project.keywords,
         )
-        project_slug = schemas.ProjectSlug(slug, project_id=str(project_orm.id), namespace_id=ns.id)
+        project_slug = schemas.ProjectSlug(slug, project_id=project_orm.id, namespace_id=ns.id)
 
         session.add(project_slug)
         session.add(project_orm)
@@ -212,7 +212,7 @@ class ProjectRepository:
         if "namespace" in payload and payload["namespace"] != old_project.namespace:
             # NOTE: changing the namespace requires the user to be owner which means they should have DELETE permission
             required_scope = Scope.DELETE
-        authorized = await self.authz.has_permission(user, ResourceType.project, str(project_id), required_scope)
+        authorized = await self.authz.has_permission(user, ResourceType.project, project_id, required_scope)
         if not authorized:
             raise errors.MissingResourceError(
                 message=f"Project with id '{project_id_str}' does not exist or you do not have access to it."
@@ -273,7 +273,7 @@ class ProjectRepository:
         """Delete a project."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
-        authorized = await self.authz.has_permission(user, ResourceType.project, str(project_id), Scope.DELETE)
+        authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.DELETE)
         if not authorized:
             raise errors.MissingResourceError(
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
@@ -359,7 +359,7 @@ class ProjectMemberRepository:
         self, user: base_models.APIUser, project_id: ULID, *, session: AsyncSession | None = None
     ) -> list[Member]:
         """Get all members of a project."""
-        members = await self.authz.members(user, ResourceType.project, str(project_id))
+        members = await self.authz.members(user, ResourceType.project, project_id)
         members = [member for member in members if member.user_id and member.user_id != "*"]
         return members
 
@@ -391,7 +391,7 @@ class ProjectMemberRepository:
                 f"{requested_member_ids_set.difference(existing_member_ids)} cannot be found"
             )
 
-        output = await self.authz.upsert_project_members(user, ResourceType.project, str(project_id), members)
+        output = await self.authz.upsert_project_members(user, ResourceType.project, project_id, members)
         return output
 
     @with_db_transaction
@@ -404,5 +404,5 @@ class ProjectMemberRepository:
         if len(user_ids) == 0:
             raise errors.ValidationError(message="Please request at least 1 member to be removed from the project")
 
-        members = await self.authz.remove_project_members(user, ResourceType.project, str(project_id), user_ids)
+        members = await self.authz.remove_project_members(user, ResourceType.project, project_id, user_ids)
         return members

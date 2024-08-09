@@ -133,7 +133,9 @@ class SessionRepository:
 
     async def get_project_launchers(self, user: base_models.APIUser, project_id: str) -> list[models.SessionLauncher]:
         """Get all session launchers in a project from the database."""
-        authorized = await self.project_authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
+        authorized = await self.project_authz.has_permission(
+            user, ResourceType.project, ULID.from_str(project_id), Scope.READ
+        )
         if not authorized:
             raise errors.MissingResourceError(
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
@@ -157,9 +159,7 @@ class SessionRepository:
             launcher = res.one_or_none()
 
             authorized = (
-                await self.project_authz.has_permission(
-                    user, ResourceType.project, str(launcher.project_id), Scope.READ
-                )
+                await self.project_authz.has_permission(user, ResourceType.project, launcher.project_id, Scope.READ)
                 if launcher is not None
                 else False
             )
@@ -178,7 +178,9 @@ class SessionRepository:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
         project_id = new_launcher.project_id
-        authorized = await self.project_authz.has_permission(user, ResourceType.project, project_id, Scope.WRITE)
+        authorized = await self.project_authz.has_permission(
+            user, ResourceType.project, ULID.from_str(project_id), Scope.WRITE
+        )
         if not authorized:
             raise errors.MissingResourceError(
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
@@ -338,7 +340,7 @@ class SessionRepository:
             authorized = await self.project_authz.has_permission(
                 user,
                 ResourceType.project,
-                str(launcher.project_id),
+                launcher.project_id,
                 Scope.WRITE,
             )
             if not authorized:

@@ -5,6 +5,7 @@ from typing import Any
 from urllib.parse import ParseResult, urlparse
 
 from pydantic import BaseModel, Field, PrivateAttr, model_serializer, model_validator
+from ulid import ULID
 
 from renku_data_services import errors
 from renku_data_services.storage.rclone import RCloneValidator
@@ -59,7 +60,7 @@ class CloudStorage(BaseModel):
     configuration: RCloneConfig
     readonly: bool = Field(default=True)
 
-    storage_id: str | None = Field(default=None)
+    storage_id: ULID | None = Field(default=None)
 
     source_path: str = Field()
     """Path inside the cloud storage.
