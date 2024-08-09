@@ -157,7 +157,9 @@ class SessionRepository:
             launcher = res.one_or_none()
 
             authorized = (
-                await self.project_authz.has_permission(user, ResourceType.project, launcher.project_id, Scope.READ)
+                await self.project_authz.has_permission(
+                    user, ResourceType.project, str(launcher.project_id), Scope.READ
+                )
                 if launcher is not None
                 else False
             )
@@ -259,7 +261,7 @@ class SessionRepository:
             authorized = await self.project_authz.has_permission(
                 user,
                 ResourceType.project,
-                launcher.project_id,
+                str(launcher.project_id),
                 Scope.WRITE,
             )
             if not authorized:
@@ -336,7 +338,7 @@ class SessionRepository:
             authorized = await self.project_authz.has_permission(
                 user,
                 ResourceType.project,
-                launcher.project_id,
+                str(launcher.project_id),
                 Scope.WRITE,
             )
             if not authorized:

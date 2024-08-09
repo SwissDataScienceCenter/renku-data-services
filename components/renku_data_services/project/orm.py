@@ -54,7 +54,7 @@ class ProjectORM(BaseORM):
     def dump(self) -> models.Project:
         """Create a project model from the ProjectORM."""
         return models.Project(
-            id=self.id,
+            id=str(self.id),
             name=self.name,
             slug=self.slug.slug,
             namespace=self.slug.namespace.dump(),
