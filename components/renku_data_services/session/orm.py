@@ -133,7 +133,7 @@ class SessionLauncherORM(BaseORM):
             description=launcher.description,
             environment_kind=launcher.environment_kind,
             container_image=launcher.container_image,
-            project_id=launcher.project_id,
+            project_id=ULID.from_str(launcher.project_id),
             environment_id=launcher.environment_id,
             resource_class_id=launcher.resource_class_id,
             default_url=launcher.default_url,
@@ -143,7 +143,7 @@ class SessionLauncherORM(BaseORM):
         """Create a session launcher model from the SessionLauncherORM."""
         return models.SessionLauncher(
             id=self.id,
-            project_id=self.project_id,
+            project_id=str(self.project_id),
             name=self.name,
             created_by=models.Member(id=self.created_by_id),
             creation_date=self.creation_date,
