@@ -41,7 +41,7 @@ class UnsavedEnvironment(BaseModel):
 class Environment(UnsavedEnvironment):  # type: ignore[misc]
     """Session environment model."""
 
-    id: str
+    id: ULID
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

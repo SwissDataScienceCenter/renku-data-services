@@ -14,11 +14,25 @@ class BaseAPISpec(BaseModel):
 
         from_attributes = True
 
+    @field_validator("id", mode="before", check_fields=False)
+    @classmethod
+    def serialize_id(cls, id: str | ULID) -> str:
+        """Custom serializer that can handle ULIDs."""
+        return str(id)
+
     @field_validator("project_id", mode="before", check_fields=False)
     @classmethod
-    def serialize_id(cls, project_id: str | ULID) -> str:
+    def serialize_project_id(cls, project_id: str | ULID) -> str:
         """Custom serializer that can handle ULIDs."""
         return str(project_id)
+
+    @field_validator("environment_id", mode="before", check_fields=False)
+    @classmethod
+    def serialize_environment_id(cls, environment_id: str | ULID | None) -> str | None:
+        """Custom serializer that can handle ULIDs."""
+        if environment_id is None:
+            return None
+        return str(environment_id)
 
     @field_validator("environment_kind", mode="before", check_fields=False)
     @classmethod
