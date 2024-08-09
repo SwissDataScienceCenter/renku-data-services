@@ -10,7 +10,7 @@ from ulid import ULID
 from renku_data_services.crc.orm import ResourceClassORM
 from renku_data_services.project.orm import ProjectORM
 from renku_data_services.session import models
-from renku_data_services.session.apispec import EnvironmentKind
+from renku_data_services.utils.sqlalchemy import ULIDType
 
 metadata_obj = MetaData(schema="sessions")  # Has to match alembic ini section name
 
@@ -26,7 +26,7 @@ class EnvironmentORM(BaseORM):
 
     __tablename__ = "environments"
 
-    id: Mapped[str] = mapped_column("id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
     """Id of this session environment object."""
 
     name: Mapped[str] = mapped_column("name", String(99))
@@ -48,7 +48,7 @@ class EnvironmentORM(BaseORM):
     """Default URL path to open in a session."""
 
     @classmethod
-    def load(cls, environment: models.Environment) -> "EnvironmentORM":
+    def load(cls, environment: models.UnsavedEnvironment) -> "EnvironmentORM":
         """Create EnvironmentORM from the session environment model."""
         return cls(
             name=environment.name,
@@ -92,7 +92,7 @@ class SessionLauncherORM(BaseORM):
     description: Mapped[str | None] = mapped_column("description", String(500))
     """Human-readable description of the session launcher."""
 
-    environment_kind: Mapped[EnvironmentKind]
+    environment_kind: Mapped[models.EnvironmentKind]
     """The kind of environment definition to use."""
 
     container_image: Mapped[str | None] = mapped_column("container_image", String(500))
@@ -124,7 +124,7 @@ class SessionLauncherORM(BaseORM):
     """Id of the resource class."""
 
     @classmethod
-    def load(cls, launcher: models.SessionLauncher) -> "SessionLauncherORM":
+    def load(cls, launcher: models.UnsavedSessionLauncher) -> "SessionLauncherORM":
         """Create SessionLauncherORM from the session launcher model."""
         return cls(
             name=launcher.name,
