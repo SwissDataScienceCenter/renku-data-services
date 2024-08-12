@@ -6,16 +6,20 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urljoin, urlparse
 
 import requests
 from gitlab.const import Visibility as GitlabVisibility
 from gitlab.v4.objects.projects import Project as GitlabProject
+from kubernetes.client import V1ObjectMeta, V1Secret
 from marshmallow import ValidationError
-from sanic import Request, json
+from sanic import Request, empty, json
 from sanic.log import logger
 from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
+from toml import dumps
 from ulid import ULID
+from yaml import safe_dump
 
 from renku_data_services import base_models
 from renku_data_services.base_api.auth import authenticated_or_anonymous
@@ -38,18 +42,30 @@ from renku_data_services.notebooks.api.schemas.config_server_options import Serv
 from renku_data_services.notebooks.api.schemas.logs import ServerLogs
 from renku_data_services.notebooks.api.schemas.secrets import K8sUserSecrets
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
-from renku_data_services.notebooks.api.schemas.servers_get import NotebookResponse, ServersGetResponse
+from renku_data_services.notebooks.api.schemas.servers_get import (
+    NotebookResponse,
+    ServersGetResponse,
+)
 from renku_data_services.notebooks.api.schemas.servers_patch import PatchServerStatusEnum
 from renku_data_services.notebooks.config import _NotebooksConfig
 from renku_data_services.notebooks.crs import (
     AmaltheaSessionSpec,
     AmaltheaSessionV1Alpha1,
+    Authentication,
+    AuthenticationType,
     Culling,
     ExtraContainer,
+    ExtraVolume,
+    ExtraVolumeMount,
     Ingress,
+    InitContainer,
     Metadata,
     Resources,
+    SecretAsVolume,
+    SecretAsVolumeItem,
+    SecretRef,
     Session,
+    SessionEnvItem,
     Storage,
 )
 from renku_data_services.notebooks.errors.intermittent import AnonymousUserPatchError, PVDisabledError
@@ -678,7 +694,7 @@ class NotebooksBP(CustomBlueprint):
             await self.nb_config.k8s_client.delete_server(server_name, safe_username=user.id)
             return HTTPResponse(status=204)
 
-        return "/notebooks/servers/<server_name>", ["DELETE"],_stop_server
+        return "/notebooks/servers/<server_name>", ["DELETE"], _stop_server
 
     def server_options(self) -> BlueprintFactoryResponse:
         """Return a set of configurable server options."""
@@ -760,20 +776,29 @@ class NotebooksNewBP(CustomBlueprint):
             internal_gitlab_user: APIUser,
             body: apispec.LaunchNotebookRequest,
         ) -> JSONResponse:
-            gitlab_client = NotebooksGitlabClient(self.nb_config.git.url, internal_gitlab_user.access_token)
             server_name = renku_2_make_server_name(
                 safe_username=user.id, project_id=body.project_id, launcher_id=body.launcher_id
             )
+            existing_session = await self.nb_config.k8s_v2_client.get_server(user.id, server_name)
+            if existing_session is not None:
+                return json(
+                    apispec.NotebookResponseAmaltheaSession(
+                        image=existing_session.spec.session.image,
+                        name=existing_session.metadata.name,
+                        resources=apispec.UserPodResources.model_validate(
+                            existing_session.spec.session.resources, from_attributes=True
+                        ),
+                        started=existing_session.metadata.creationTimestamp,
+                        state=None,
+                        status=None,
+                        url=existing_session.status.url if existing_session.status else None,
+                    ).model_dump(exclude_none=True, mode="json")
+                )
+            gitlab_client = NotebooksGitlabClient(self.nb_config.git.url, internal_gitlab_user.access_token)
             project = await self.project_repo.get_project(user=user, project_id=body.project_id)
             launcher = await self.session_repo.get_launcher(user, ULID.from_str(body.launcher_id))
-            environment = None
-            if launcher.environment_id:
-                environment = await self.session_repo.get_environment(ULID.from_str(launcher.environment_id))
-            image = launcher.container_image
-            if image is None and environment is not None:
-                image = environment.container_image
-            if image is None:
-                raise errors.ProgrammingError(message="Cannot start a session without an image", quiet=True)
+            environment = launcher.environment
+            image = environment.container_image
             default_resource_class = await self.rp_repo.get_default_resource_class()
             if default_resource_class.id is None:
                 raise errors.ProgrammingError(message="The default reosurce class has to have an ID", quiet=True)
@@ -791,6 +816,8 @@ class NotebooksNewBP(CustomBlueprint):
                 )
             cloud_storage: list[RCloneStorage] = []
             repositories = [Repository(i.url, branch=i.branch, commit_sha=i.commit_sha) for i in body.repositories]
+            if not repositories:
+                repositories = [Repository(url=i) for i in project.repositories]
             server = Renku2UserServer(
                 user=user,
                 image=image,
@@ -811,17 +838,25 @@ class NotebooksNewBP(CustomBlueprint):
                 internal_gitlab_user=internal_gitlab_user,
             )
             cert_init, cert_vols = init_containers.certificates_container(self.nb_config)
-            session_init_containers = [cert_init]
-            extra_volumes = [i for i in cert_vols]
-            git_clone = init_containers.git_clone_container(server)
-            if git_clone:
-                session_init_containers.append(git_clone)
-            default_url = "/"
-            if launcher.default_url:
-                default_url = launcher.default_url
-            if not default_url and environment and environment.default_url:
-                default_url = environment.default_url
-            extra_containers: list[ExtraContainer] = [ExtraContainer.model_validate(git_proxy.main_container(server))]
+            session_init_containers = [InitContainer.model_validate(self.nb_config.k8s_v2_client.sanitize(cert_init))]
+            extra_volumes = [ExtraVolume.model_validate(self.nb_config.k8s_v2_client.sanitize(i)) for i in cert_vols]
+            if isinstance(user, AuthenticatedAPIUser):
+                extra_volumes.append(
+                    ExtraVolume(
+                        name="renku-authorized-emails",
+                        secret=SecretAsVolume(secretName=server_name),
+                        items=[SecretAsVolumeItem(key="authorized_emails", path="authorized_emails")],
+                    )
+                )
+            git_clone = init_containers.git_clone_container_v2(server)
+            if git_clone is not None:
+                session_init_containers.append(InitContainer.model_validate(git_clone))
+            extra_containers: list[ExtraContainer] = []
+            git_proxy_container = git_proxy.main_container(server)
+            if git_proxy_container is not None:
+                extra_containers.append(ExtraContainer.model_validate(self.nb_config.k8s_v2_client.sanitize(git_proxy_container)))
+
+            parsed_server_url = urlparse(server.server_url)
             manifest = AmaltheaSessionV1Alpha1(
                 metadata=Metadata(
                     name=server_name,
@@ -834,20 +869,25 @@ class NotebooksNewBP(CustomBlueprint):
                     hibernated=False,
                     session=Session(
                         image=image,
-                        urlPath=default_url,
-                        port=4180,
+                        urlPath=parsed_server_url.path,
+                        port=environment.port,
                         storage=Storage(
                             className=self.nb_config.sessions.storage.pvs_storage_class,
                             size=str(body.storage) + "Gi",
-                            mountPath="/home/jovyan/work",
+                            mountPath=environment.mount_directory.as_posix(),
                         ),
-                        workingDir="/home/jovyan/work",
-                        runAsUser=1000,
-                        runAsGroup=1000,
+                        workingDir=environment.working_directory.as_posix(),
+                        runAsUser=environment.uid,
+                        runAsGroup=environment.gid,
                         resources=Resources(claims=None, requests=None, limits=None),
                         extraVolumeMounts=[],
                         command=None,
                         args=None,
+                        shmSize="1G",
+                        env=[
+                            SessionEnvItem(name="RENKU_BASE_URL_PATH", value=parsed_server_url.path),
+                            SessionEnvItem(name="RENKU_BASE_URL", value=server.server_url),
+                        ],
                     ),
                     ingress=Ingress(
                         host=self.nb_config.sessions.ingress.host,
@@ -859,32 +899,138 @@ class NotebooksNewBP(CustomBlueprint):
                     initContainers=session_init_containers,
                     extraVolumes=extra_volumes,
                     culling=Culling(
-                        idle=f"{self.nb_config.sessions.culling.registered.idle_seconds}s",
-                        hibernated=f"{self.nb_config.sessions.culling.registered.hibernated_seconds}s",
-                        failed=f"{self.nb_config.sessions.culling.registered.failed_seconds}s",
                         maxAge=f"{self.nb_config.sessions.culling.registered.max_age_seconds}s",
-                        starting=f"{self.nb_config.sessions.culling.registered.pending_seconds}s",
+                        maxFailedDuration=f"{self.nb_config.sessions.culling.registered.failed_seconds}s",
+                        maxHibernatedDuration=f"{self.nb_config.sessions.culling.registered.hibernated_seconds}s",
+                        maxIdleDuration=f"{self.nb_config.sessions.culling.registered.idle_seconds}s",
+                        maxStartingDuration=f"{self.nb_config.sessions.culling.registered.pending_seconds}s",
                     ),
-                    authentication=None,
+                    authentication=Authentication(
+                        enabled=True,
+                        type=AuthenticationType.oauth2proxy
+                        if isinstance(user, AuthenticatedAPIUser)
+                        else AuthenticationType.token,
+                        secretRef=SecretRef(name=server_name, key="auth"),
+                        extraVolumeMounts=[
+                            ExtraVolumeMount(name="renku-authorized-emails", mountPath="/authorized_emails")
+                        ]
+                        if isinstance(user, AuthenticatedAPIUser)
+                        else [],
+                    ),
                 ),
                 status=None,
             )
-            manifest = await self.nb_config.k8s_v2_client.create_server(manifest, user.id)
+            parsed_proxy_url = urlparse(urljoin(server.server_url + "/", "oauth2"))
+            secret_data = {}
+            if isinstance(user, AuthenticatedAPIUser):
+                secret_data["auth"] = dumps(
+                    {
+                        "provider": "oidc",
+                        "client_id": self.nb_config.sessions.oidc.client_id,
+                        "oidc_issuer_url": self.nb_config.sessions.oidc.config_url.removesuffix(
+                            "/.well-known/openid-configuration"
+                        ),
+                        "session_cookie_minimal": True,
+                        "skip_provider_button": True,
+                        "redirect_url": urljoin(server.server_url + "/", "oauth2/callback"),
+                        "cookie_path": parsed_server_url.path,
+                        "proxy_prefix": parsed_proxy_url.path,
+                        "authenticated_emails_file": "/authorized_emails/authorized_emails",
+                        "client_secret": self.nb_config.sessions.oidc.client_secret,
+                    }
+                )
+                secret_data["authorized_emails"] = AuthenticatedAPIUser.email
+            else:
+                secret_data["auth"] = safe_dump(
+                    {
+                        "token": user.id,
+                        "cookie_key": "Renku-Auth-Anon-Id",
+                        "verbose": True,
+                    }
+                )
+            secret = V1Secret(metadata=V1ObjectMeta(name=server_name), string_data=secret_data)
+            secret = await self.nb_config.k8s_v2_client.create_secret(secret)
+            try:
+                manifest = await self.nb_config.k8s_v2_client.create_server(manifest, user.id)
+            except Exception:
+                await self.nb_config.k8s_v2_client.delete_secret(secret.metadata.name)
+                raise errors.ProgrammingError(message="Could not start the amalthea session")
             url = None
             if manifest.status:
                 url = manifest.status.url
             return json(
-                apispec.NotebookResponse(
-                    annotations=apispec.FieldUserPodAnnotations.model_validate(manifest.metadata.annotations),
+                apispec.NotebookResponseAmaltheaSession(
                     cloudstorage=[apispec.LaunchNotebookResponseCloudStorage.model_validate(i) for i in cloud_storage],
                     image=image,
                     name=server_name,
-                    resources=None,
+                    resources=apispec.UserPodResources.model_validate(
+                        manifest.spec.session.resources, from_attributes=True
+                    ),
                     started=manifest.metadata.creationTimestamp,
                     state=None,
                     status=None,
                     url=url,
-                ).model_dump()
+                ).model_dump(mode="json", exclude_none=True),
+                201,
             )
 
         return "/sessions", ["POST"], _handler
+
+    def get_all(self) -> BlueprintFactoryResponse:
+        """Get all sessions for a user."""
+
+        @authenticated_or_anonymous(self.authenticator)
+        async def _handler(_: Request, user: AuthenticatedAPIUser | AnonymousAPIUser) -> HTTPResponse:
+            sessions = await self.nb_config.k8s_v2_client.list_servers(user.id)
+            return json(
+                [
+                    apispec.NotebookResponseAmaltheaSession(
+                        image=session.spec.session.image,
+                        name=session.metadata.name,
+                        resources=apispec.UserPodResources.model_validate(
+                            session.spec.session.resources, from_attributes=True
+                        ),
+                        started=session.metadata.creationTimestamp,
+                        state=None,
+                        status=None,
+                        url=session.status.url if session.status else None,
+                    ).model_dump(exclude_none=True, mode="json")
+                    for session in sessions
+                ]
+            )
+
+        return "/sessions", ["GET"], _handler
+
+    def get_one(self) -> BlueprintFactoryResponse:
+        """Get a specific session for a user."""
+
+        @authenticated_or_anonymous(self.authenticator)
+        async def _handler(_: Request, user: AuthenticatedAPIUser | AnonymousAPIUser, session_id: str) -> HTTPResponse:
+            session = await self.nb_config.k8s_v2_client.get_server(session_id, user.id)
+            if session is None:
+                raise errors.ValidationError(message=f"The session with ID {session_id} does not exist.", quiet=True)
+            return json(
+                apispec.NotebookResponseAmaltheaSession(
+                    image=session.spec.session.image,
+                    name=session.metadata.name,
+                    resources=apispec.UserPodResources.model_validate(
+                        session.spec.session.resources, from_attributes=True
+                    ),
+                    started=session.metadata.creationTimestamp,
+                    state=None,
+                    status=None,
+                    url=session.status.url if session.status else None,
+                ).model_dump(exclude_none=True, mode="json")
+            )
+
+        return "/sessions/<session_id>", ["GET"], _handler
+
+    def delete(self) -> BlueprintFactoryResponse:
+        """Fully delete a session with the new operator."""
+
+        @authenticated_or_anonymous(self.authenticator)
+        async def _handler(_: Request, user: AuthenticatedAPIUser | AnonymousAPIUser, session_id: str) -> HTTPResponse:
+            await self.nb_config.k8s_v2_client.delete_server(session_id, user.id)
+            return empty()
+
+        return "/sessions/<session_id>", ["DELETE"], _handler

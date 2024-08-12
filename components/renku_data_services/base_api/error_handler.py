@@ -126,6 +126,7 @@ class CustomErrorHandler(ErrorHandler):
                 formatted_exception = errors.ValidationError(
                     message="The provided input is too large to be stored in the database"
                 )
+        breakpoint()
         self.log(request, formatted_exception)
         return json(
             self.api_spec.ErrorResponse(

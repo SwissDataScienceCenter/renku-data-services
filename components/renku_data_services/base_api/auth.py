@@ -5,7 +5,7 @@ from collections.abc import Callable, Coroutine
 from functools import wraps
 from typing import Any, Concatenate, ParamSpec, TypeVar, cast
 
-from sanic import Request
+from sanic import HTTPResponse, Request
 from ulid import ULID
 
 from renku_data_services import errors
@@ -47,7 +47,7 @@ def authenticate(
 
 async def _authenticate(authenticator: Authenticator, request: Request) -> AuthenticatedAPIUser:
     token = request.headers.get(authenticator.token_field)
-    if token is None or len(token) >= 8:
+    if token is None or len(token) < 7:
         raise errors.Unauthorized(message="You have to log in to access this endpoint.", quiet=True)
 
     token = token.removeprefix("Bearer ").removeprefix("bearer ")
@@ -73,14 +73,19 @@ async def _authenticate(authenticator: Authenticator, request: Request) -> Authe
 def authenticated_or_anonymous(
     authenticator: Authenticator,
 ) -> Callable[
-    [Callable[Concatenate[Request, AuthenticatedAPIUser | AnonymousAPIUser, _P], Coroutine[Any, Any, _T]]],
-    Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]],
+    [Callable[Concatenate[Request, AuthenticatedAPIUser | AnonymousAPIUser, _P], Coroutine[Any, Any, HTTPResponse]]],
+    Callable[Concatenate[Request, _P], Coroutine[Any, Any, HTTPResponse]],
 ]:
     """Decorator for a Sanic handler that adds the APIUser or AnonymousAPIUser model to the handler."""
 
+    anon_id_header_key: str = "Renku-Auth-Anon-Id"
+    anon_id_cookie_name: str = "Renku-Auth-Anon-Id"
+
     def decorator(
-        f: Callable[Concatenate[Request, AuthenticatedAPIUser | AnonymousAPIUser, _P], Coroutine[Any, Any, _T]],
-    ) -> Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]]:
+        f: Callable[
+            Concatenate[Request, AuthenticatedAPIUser | AnonymousAPIUser, _P], Coroutine[Any, Any, HTTPResponse]
+        ],
+    ) -> Callable[Concatenate[Request, _P], Coroutine[Any, Any, HTTPResponse]]:
         @wraps(f)
         async def decorated_function(request: Request, *args: _P.args, **kwargs: _P.kwargs) -> _T:
             try:
@@ -88,7 +93,10 @@ def authenticated_or_anonymous(
             except errors.Unauthorized:
                 # TODO: set the cookie on the user side if it is not set
                 # perhaps this will have to be done with another decorator...
-                anon_id = request.cookies.get("renku-anon-id")
+                # NOTE: The header takes precedence over the cookie
+                anon_id: str | None = request.headers.get(anon_id_header_key)
+                if anon_id is None:
+                    anon_id = request.cookies.get(anon_id_cookie_name)
                 if anon_id is None:
                     anon_id = f"anon-{str(ULID())}"
                 user = AnonymousAPIUser(id=anon_id)

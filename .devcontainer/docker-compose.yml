@@ -45,6 +45,7 @@ services:
       - "8080:8080"
       - "5678:5678"
       - "50051:50051"
+      - "8888:80"
 
   swagger:
     image: swaggerapi/swagger-ui

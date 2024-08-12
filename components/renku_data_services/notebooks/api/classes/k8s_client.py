@@ -3,13 +3,14 @@
 import base64
 import json
 import logging
+from contextlib import suppress
 from typing import Any, Generic, Optional, TypeVar, cast
 from urllib.parse import urljoin
 
 import httpx
 from kr8s import NotFoundError, ServerError
 from kr8s.asyncio.objects import APIObject, Pod, Secret, StatefulSet
-from kubernetes.client import V1Container
+from kubernetes.client import ApiClient, V1Container, V1Secret
 
 from renku_data_services.errors import errors
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
@@ -27,6 +28,8 @@ from renku_data_services.notebooks.util.kubernetes_ import find_env_var
 from renku_data_services.notebooks.util.retries import (
     retry_with_exponential_backoff_async,
 )
+
+sanitize_for_serialization = ApiClient().sanitize_for_serialization
 
 
 # NOTE The type ignore below is because the kr8s library has no type stubs, they claim pyright better handles type hints
@@ -70,6 +73,7 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
             self.server_type == JupyterServerV1Alpha1 and self._kr8s_type == AmaltheaSessionV1Alpha1Kr8s
         ):
             raise errors.ProgrammingError(message="Incompatible manifest and client types in k8s client")
+        self.sanitize = ApiClient().sanitize_for_serialization
 
     async def get_pod_logs(self, name: str, max_log_lines: Optional[int] = None) -> dict[str, str]:
         """Get the logs of all containers in the session."""
@@ -100,7 +104,10 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
 
     async def create_server(self, manifest: _SessionType) -> _SessionType:
         """Create a jupyter server in the cluster."""
-        js = await self._kr8s_type(manifest.model_dump())
+        # NOTE: You have to exclude none when using model dump below because otherwise we get
+        # namespace=null which seems to break the kr8s client or simply k8s does not translate
+        # namespace = null to the default namespace.
+        js = await self._kr8s_type(manifest.model_dump(exclude_none=True, mode="json"))
         server_name = manifest.metadata.name
         try:
             await js.create()
@@ -167,6 +174,8 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
         """Get a specific JupyterServer object."""
         try:
             server = await self._kr8s_type.get(name=name, namespace=self.namespace)
+        except NotFoundError:
+            return None
         except ServerError as err:
             if err.status not in [400, 404]:
                 logging.exception(f"Cannot get server {name} because of {err}")
@@ -317,6 +326,20 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
 
         await sts.patch(patches, type="json")
 
+    async def create_secret(self, secret: V1Secret) -> V1Secret:
+        """Create a new secret."""
+
+        new_secret = await Secret(self.sanitize(secret), self.namespace)
+        await new_secret.create()
+        return V1Secret(metadata=new_secret.metadata, data=new_secret.data, type=new_secret.raw.get("type"))
+
+    async def delete_secret(self, name: str) -> None:
+        """Delete a secret."""
+        secret = await Secret(dict(metadata=dict(name=name, namespace=self.namespace)))
+        with suppress(NotFoundError):
+            await secret.delete()
+        return None
+
 
 class ServerCache(Generic[_SessionType]):
     """Utility class for calling the jupyter server cache."""
@@ -381,6 +404,7 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
         self.username_label = username_label
         if not self.username_label:
             raise ProgrammingError("username_label has to be provided to K8sClient")
+        self.sanitize = self.renku_ns_client.sanitize
 
     async def list_servers(self, safe_username: str) -> list[_SessionType]:
         """Get a list of servers that belong to a user.
@@ -429,6 +453,7 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
         if server:
             # NOTE: server already exists
             return server
+        manifest.metadata.labels[self.username_label] = safe_username
         return await self.renku_ns_client.create_server(manifest)
 
     async def patch_server(
@@ -467,3 +492,11 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
     def preferred_namespace(self) -> str:
         """Get the preferred namespace for creating jupyter servers."""
         return self.renku_ns_client.namespace
+
+    async def create_secret(self, secret: V1Secret) -> V1Secret:
+        """Create a secret."""
+        return await self.renku_ns_client.create_secret(secret)
+
+    async def delete_secret(self, name: str) -> None:
+        """Delete a secret."""
+        return await self.renku_ns_client.delete_secret(name)

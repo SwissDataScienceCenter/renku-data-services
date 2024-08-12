@@ -69,6 +69,7 @@ authzed = "^0.16.0"
 cryptography = "^42.0.8"
 # see https://github.com/sanic-org/sanic/issues/2828 for setuptools dependency, remove when not needed anymore
 setuptools = { version = "^70.2.0" }
+toml = "^0.10.2"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.7.9"

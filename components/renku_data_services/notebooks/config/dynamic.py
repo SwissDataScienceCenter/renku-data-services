@@ -11,6 +11,7 @@ import yaml
 
 from ..api.schemas.config_server_options import ServerOptionsChoices, ServerOptionsDefaults
 
+latest_version: str = "1.25.3"
 
 def _parse_str_as_bool(val: Union[str, bool]) -> bool:
     if isinstance(val, str):
@@ -101,7 +102,7 @@ class _GitProxyConfig:
     sentry: _SentryConfig = field(default_factory=_SentryConfig.from_env)
     port: int = 8080
     health_port: int = 8081
-    image: str = "renku/git-https-proxy:latest"
+    image: str = f"renku/git-https-proxy:{latest_version}"
     renku_client_id: str = "renku"
 
     @classmethod
@@ -112,7 +113,7 @@ class _GitProxyConfig:
             sentry=_SentryConfig.from_env(prefix="NB_SESSIONS__GIT_PROXY__"),
             port=_parse_value_as_int(os.environ.get("NB_SESSIONS__GIT_PROXY__PORT", 8080)),
             health_port=_parse_value_as_int(os.environ.get("NB_SESSIONS__GIT_PROXY__HEALTH_PORT", 8081)),
-            image=os.environ.get("NB_SESSIONS__GIT_PROXY__IMAGE", "renku/git-https-proxy:latest"),
+            image=os.environ.get("NB_SESSIONS__GIT_PROXY__IMAGE", f"renku/git-https-proxy:{latest_version}"),
         )
 
 
@@ -121,7 +122,7 @@ class _GitRpcServerConfig:
     sentry: _SentryConfig = field(default_factory=_SentryConfig.from_env)
     host: str = "0.0.0.0"  # nosec B104
     port: int = 4000
-    image: str = "renku/git-rpc-server:latest"
+    image: str = f"renku/git-rpc-server:{latest_version}"
 
     def __post_init__(self) -> None:
         self.port = _parse_value_as_int(self.port)
@@ -129,7 +130,7 @@ class _GitRpcServerConfig:
     @classmethod
     def from_env(cls) -> Self:
         return cls(
-            image=os.environ.get("NB_SESSIONS__GIT_RPC_SERVER__IMAGE", "renku/git-rpc-server:latest"),
+            image=os.environ.get("NB_SESSIONS__GIT_RPC_SERVER__IMAGE", f"renku/git-rpc-server:{latest_version}"),
             host=os.environ.get("NB_SESSIONS__GIT_RPC_SERVER__HOST", "0.0.0.0"),  # nosec B104
             port=_parse_value_as_int(os.environ.get("NB_SESSIONS__GIT_RPC_SERVER__PORT", 4000)),
             sentry=_SentryConfig.from_env(prefix="NB_SESSIONS__GIT_RPC_SERVER__"),
@@ -138,13 +139,13 @@ class _GitRpcServerConfig:
 
 @dataclass
 class _GitCloneConfig:
-    image: str = "renku/git-clone:latest"
+    image: str = f"renku/git-clone:{latest_version}"
     sentry: _SentryConfig = field(default_factory=lambda: _SentryConfig(enabled=False))
 
     @classmethod
     def from_env(cls) -> Self:
         return cls(
-            image=os.environ.get("NB_SESSIONS__GIT_CLONE__IMAGE", "renku/git-rpc-server:latest"),
+            image=os.environ.get("NB_SESSIONS__GIT_CLONE__IMAGE", f"renku/git-clone:{latest_version}"),
             sentry=_SentryConfig.from_env(prefix="NB_SESSIONS__GIT_CLONE__"),
         )
 
@@ -203,7 +204,7 @@ class _CustomCaCertsConfig:
     @classmethod
     def from_env(cls) -> Self:
         return cls(
-            image=os.environ.get("NB_SESSIONS__CA_CERTS__IMAGE", "renku-jupyterserver"),
+            image=os.environ.get("NB_SESSIONS__CA_CERTS__IMAGE", "renku/certificates:0.0.2"),
             path=os.environ.get("NB_SESSIONS__CA_CERTS__PATH", "/auth/realms/Renku/.well-known/openid-configuration"),
             secrets=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__CA_CERTS__SECRETS", "[]"))),
         )
@@ -413,7 +414,7 @@ class _SessionConfig:
             git_proxy=_GitProxyConfig(renku_client_secret="not-defined"),
             git_rpc_server=_GitRpcServerConfig.from_env(),
             git_clone=_GitCloneConfig.from_env(),
-            ingress=_SessionIngress(host="127.0.0.1"),
+            ingress=_SessionIngress(host="localhost"),
             ca_certs=_CustomCaCertsConfig.from_env(),
             oidc=_SessionOidcConfig(
                 client_id="not-defined",
@@ -493,7 +494,7 @@ class _CloudStorage:
 
 @dataclass
 class _UserSecrets:
-    image: str = "renku/secrets_mount:latest"
+    image: str = f"renku/secrets_mount:{latest_version}"
     secrets_storage_service_url: str = "http://renku-secrets-storage"
 
     def __post_init__(self) -> None:
@@ -502,7 +503,7 @@ class _UserSecrets:
     @classmethod
     def from_env(cls) -> Self:
         return cls(
-            image=os.environ.get("NB_USER_SECRETS__IMAGE", "renku/secrets_mount:latest"),
+            image=os.environ.get("NB_USER_SECRETS__IMAGE", f"renku/secrets_mount:{latest_version}"),
             secrets_storage_service_url=os.environ.get(
                 "NB_USER_SECRETS__SECRETS_STORAGE_SERVICE_URL", "http://renku-secrets-storage"
             ),
