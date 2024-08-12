@@ -6,8 +6,8 @@ from renku_data_services.crc import models as rp_models
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.storage import models as storage_models
 from renku_data_services.storage.db import StorageRepository
-from renku_data_services.user_preferences import models as user_preferences_models
-from renku_data_services.user_preferences.db import UserPreferencesRepository
+from renku_data_services.users import models as user_preferences_models
+from renku_data_services.users.db import UserPreferencesRepository
 
 
 def remove_id_from_quota(quota: rp_models.Quota) -> rp_models.Quota:
@@ -79,7 +79,7 @@ async def create_user_preferences(
     project_slug: str, repo: UserPreferencesRepository, user: base_models.APIUser
 ) -> user_preferences_models.UserPreferences:
     """Create user preferencers by adding a pinned project"""
-    user_preferences = await repo.add_pinned_project(user=user, project_slug=project_slug)
+    user_preferences = await repo.add_pinned_project(requested_by=user, project_slug=project_slug)
     assert user_preferences is not None
     assert user_preferences.user_id is not None
     assert user_preferences.pinned_projects is not None

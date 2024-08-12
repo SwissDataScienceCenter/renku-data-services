@@ -28,7 +28,6 @@ import renku_data_services.crc
 import renku_data_services.platform
 import renku_data_services.repositories
 import renku_data_services.storage
-import renku_data_services.user_preferences
 import renku_data_services.users
 from renku_data_services import errors
 from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
@@ -60,8 +59,8 @@ from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.secrets.db import UserSecretsRepo
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository, StorageV2Repository
-from renku_data_services.user_preferences.config import UserPreferencesConfig
-from renku_data_services.user_preferences.db import UserPreferencesRepository
+from renku_data_services.users.config import UserPreferencesConfig
+from renku_data_services.users.db import UserPreferencesRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
@@ -187,10 +186,6 @@ class Config:
         with open(spec_file) as f:
             storage_spec = safe_load(f)
 
-        spec_file = Path(renku_data_services.user_preferences.__file__).resolve().parent / "api.spec.yaml"
-        with open(spec_file) as f:
-            user_preferences_spec = safe_load(f)
-
         spec_file = Path(renku_data_services.users.__file__).resolve().parent / "api.spec.yaml"
         with open(spec_file) as f:
             users = safe_load(f)
@@ -225,7 +220,6 @@ class Config:
         self.spec = merge_api_specs(
             crc_spec,
             storage_spec,
-            user_preferences_spec,
             users,
             projects,
             groups,

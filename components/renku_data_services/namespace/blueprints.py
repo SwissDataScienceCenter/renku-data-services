@@ -10,10 +10,10 @@ import renku_data_services.base_models as base_models
 from renku_data_services.authz.models import Role
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.errors import errors
 from renku_data_services.namespace import apispec
-from renku_data_services.namespace.apispec_params import GetNamespacesParams
 from renku_data_services.namespace.db import GroupRepository
 
 
@@ -28,9 +28,10 @@ class GroupsBP(CustomBlueprint):
         """List all groups."""
 
         @authenticate(self.authenticator)
+        @validate_query(query=apispec.PaginationRequest)
         @paginate
         async def _get_all(
-            _: Request, user: base_models.APIUser, pagination: PaginationRequest
+            _: Request, user: base_models.APIUser, pagination: PaginationRequest, query: apispec.PaginationRequest
         ) -> tuple[list[dict], int]:
             groups, rec_count = await self.group_repo.get_groups(user=user, pagination=pagination)
             return (
@@ -153,13 +154,12 @@ class GroupsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
+        @validate_query(query=apispec.NamespaceGetQuery)
         @paginate
         async def _get_namespaces(
-            request: Request, user: base_models.APIUser, pagination: PaginationRequest
+            request: Request, user: base_models.APIUser, pagination: PaginationRequest, query: apispec.NamespaceGetQuery
         ) -> tuple[list[dict], int]:
-            params = GetNamespacesParams.model_validate(dict(request.query_args))
-
-            minimum_role = Role.from_group_role(params.minimum_role) if params.minimum_role is not None else None
+            minimum_role = Role.from_group_role(query.minimum_role) if query.minimum_role is not None else None
 
             nss, total_count = await self.group_repo.get_namespaces(
                 user=user, pagination=pagination, minimum_role=minimum_role

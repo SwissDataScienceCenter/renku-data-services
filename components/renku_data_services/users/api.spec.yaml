@@ -45,11 +45,16 @@ paths:
       summary: List all users
       parameters:
         - in: query
-          name: exact_email
+          style: form
+          explode: true
+          name: user_params
           schema:
-            type: string
-          required: false
-          description: Return the user(s) with an exact match on the email provided
+            type: object
+            additionalProperties: false
+            properties:
+              exact_email:
+                type: string
+                description: Return the user(s) with an exact match on the email provided
       responses:
         "200":
           description: The list of users in the service (this is a subset of what is in Keycloak)
@@ -92,13 +97,17 @@ paths:
       summary: List all secrets for a user (keys only)
       parameters:
         - in: query
-          description: Filter results based on secret kind
-          name: kind
-          required: false
+          style: form
+          explode: true
+          name: user_secrets_params
           schema:
-            allOf:
-              - $ref: "#/components/schemas/SecretKind"
-              - default: general
+            type: object
+            additionalProperties: false
+            properties:
+              kind:
+                description: Filter results based on secret kind
+                $ref: "#/components/schemas/SecretKind"
+                default: general
       responses:
         "200":
           description: The user's secrets
@@ -143,7 +152,7 @@ paths:
           name: secret_id
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Ulid"
       responses:
         "200":
           description: The secret
@@ -168,7 +177,7 @@ paths:
           name: secret_id
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Ulid"
       requestBody:
         required: true
         content:
@@ -193,7 +202,7 @@ paths:
           name: secret_id
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/Ulid"
       responses:
         "204":
           description: The secret was deleted or didn't exist
@@ -222,6 +231,73 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/Version"
+
+  "/user/preferences":
+    get:
+      summary: Get user preferences for the currently logged in user
+      responses:
+        "200":
+          description: The user preferences
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/UserPreferences"
+        "404":
+          description: The user has no preferences saved
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - user_preferences
+  "/user/preferences/pinned_projects":
+    post:
+      summary: Add a pinned project
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/AddPinnedProject"
+      responses:
+        "200":
+          description: The updated user preferences
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/UserPreferences"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - user_preferences
+    delete:
+      summary: Remove one or all pinned projects
+      parameters:
+        - in: query
+          description: query parameters
+          name: delete_pinned_params
+          style: form
+          explode: true
+          schema:
+            type: object
+            additionalProperties: false
+            properties:
+              project_slug:
+                type: string
+                default: ""
+      responses:
+        "200":
+          description: The updated user preferences
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/UserPreferences"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - user_preferences
 
 components:
   schemas:
@@ -371,6 +447,39 @@ components:
       enum:
         - general
         - storage
+    UserPreferences:
+      type: object
+      description: The object containing user preferences
+      additionalProperties: false
+      properties:
+        user_id:
+          $ref: "#/components/schemas/UserId"
+        pinned_projects:
+          $ref: "#/components/schemas/PinnedProjects"
+      required: ["user_id", "pinned_projects"]
+    PinnedProjects:
+      type: object
+      description: The list of projects a user has pinned on their dashboard
+      properties:
+        project_slugs:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectSlug"
+    ProjectSlug:
+      type: string
+      description: The slug used to identify a project
+      minLength: 3
+      example: "user/my-project"
+      # limitations based on allowed characters in project slugs from Gitlab from here:
+      # https://docs.gitlab.com/ee/user/reserved_names.html
+      pattern: "[a-zA-Z0-9_.-/]"
+    AddPinnedProject:
+      type: object
+      additionalProperties: false
+      properties:
+        project_slug:
+          $ref: "#/components/schemas/ProjectSlug"
+      required: ["project_slug"]
     ErrorResponse:
       type: object
       properties:

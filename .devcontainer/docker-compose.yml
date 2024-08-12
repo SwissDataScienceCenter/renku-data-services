@@ -12,12 +12,12 @@ services:
       DB_USER: renku
       DB_NAME: renku
       DB_PASSWORD: renku
-      DB_HOST: 127.0.0.1 
+      DB_HOST: 127.0.0.1
       CORS_ALLOW_ALL_ORIGINS: "true"
       ALEMBIC_CONFIG: /workspace/components/renku_data_services/migrations/alembic.ini
-      AUTHZ_DB_HOST: 127.0.0.1 
-      AUTHZ_DB_GRPC_PORT: "50051" 
-      AUTHZ_DB_KEY: renku 
+      AUTHZ_DB_HOST: 127.0.0.1
+      AUTHZ_DB_GRPC_PORT: "50051"
+      AUTHZ_DB_KEY: renku
       AUTHZ_DB_NO_TLS_CONNECTION: "true"
       ZED_ENDPOINT: 127.0.0.1:50051
       ZED_TOKEN: renku
@@ -53,7 +53,7 @@ services:
       SWAGGER_JSON_URL: http://localhost:8000/api/data/spec.json
       PORT: "8080"
     network_mode: service:db
-  
+
   authz:
     image: authzed/spicedb:latest-debug
     restart: unless-stopped

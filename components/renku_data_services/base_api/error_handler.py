@@ -1,5 +1,8 @@
 """The error handler for the application."""
 
+import os
+import sys
+import traceback
 from collections.abc import Mapping, Set
 from sqlite3 import Error as SqliteError
 from typing import Any, Optional, Protocol, TypeVar, Union
@@ -128,6 +131,12 @@ class CustomErrorHandler(ErrorHandler):
                 )
         breakpoint()
         self.log(request, formatted_exception)
+        if formatted_exception.status_code == 500 and "PYTEST_CURRENT_TEST" in os.environ:
+            # TODO: Figure out how to do logging properly in here, I could not get the sanic logs to show up from here
+            # at all when running schemathesis. So 500 errors are hard to debug but print statements do show up.
+            # The above log statement does not show up in the logs that pytest shows after a test is done.
+            sys.stderr.write(f"A 500 error was raised because of {type(exception)} on request {request}\n")
+            traceback.print_exception(exception)
         return json(
             self.api_spec.ErrorResponse(
                 error=self.api_spec.Error(

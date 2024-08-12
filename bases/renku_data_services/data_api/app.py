@@ -22,8 +22,7 @@ from renku_data_services.project.blueprints import ProjectsBP
 from renku_data_services.repositories.blueprints import RepositoriesBP
 from renku_data_services.session.blueprints import EnvironmentsBP, SessionLaunchersBP
 from renku_data_services.storage.blueprints import StorageBP, StorageSchemaBP, StoragesV2BP
-from renku_data_services.user_preferences.blueprints import UserPreferencesBP
-from renku_data_services.users.blueprints import KCUsersBP, UserSecretsBP
+from renku_data_services.users.blueprints import KCUsersBP, UserPreferencesBP, UserSecretsBP
 
 
 def register_all_handlers(app: Sanic, config: Config) -> Sanic:

@@ -141,14 +141,14 @@ class ProjectRepository:
             raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
 
         if user.id is None:
-            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
         resource_type, resource_id = (
             (ResourceType.group, ns.group_id) if ns.group and ns.group_id else (ResourceType.user_namespace, ns.id)
         )
         has_permission = await self.authz.has_permission(user, resource_type, resource_id, Scope.WRITE)
         if not has_permission:
-            raise errors.Unauthorized(
+            raise errors.ForbiddenError(
                 message=f"The project cannot be created because you do not have sufficient permissions with the namespace {project.namespace}"  # noqa: E501
             )
 
@@ -246,7 +246,7 @@ class ProjectRepository:
             )
             has_permission = await self.authz.has_permission(user, resource_type, resource_id, Scope.WRITE)
             if not has_permission:
-                raise errors.Unauthorized(
+                raise errors.ForbiddenError(
                     message=f"The project cannot be created because you do not have sufficient permissions with the namespace {ns_slug}"  # noqa: E501
                 )
             project.slug.namespace_id = ns.id
