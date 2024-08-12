@@ -12,6 +12,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_admins, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_query
+from renku_data_services.base_models.validation import validated_json
 from renku_data_services.connected_services import apispec
 from renku_data_services.connected_services.apispec_base import AuthorizeParams, CallbackParams
 from renku_data_services.connected_services.db import ConnectedServicesRepository
@@ -30,9 +31,7 @@ class OAuth2ClientsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         async def _get_all(_: Request, user: base_models.APIUser) -> JSONResponse:
             clients = await self.connected_services_repo.get_oauth2_clients(user=user)
-            return json(
-                [apispec.Provider.model_validate(c).model_dump(exclude_none=True, mode="json") for c in clients]
-            )
+            return validated_json(apispec.ProviderList, clients)
 
         return "/oauth2/providers", ["GET"], _get_all
 
@@ -42,7 +41,7 @@ class OAuth2ClientsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         async def _get_one(_: Request, user: base_models.APIUser, provider_id: str) -> JSONResponse:
             client = await self.connected_services_repo.get_oauth2_client(provider_id=provider_id, user=user)
-            return json(apispec.Provider.model_validate(client).model_dump(exclude_none=True, mode="json"))
+            return validated_json(apispec.Provider, client)
 
         return "/oauth2/providers/<provider_id>", ["GET"], _get_one
 
@@ -54,7 +53,7 @@ class OAuth2ClientsBP(CustomBlueprint):
         @validate(json=apispec.ProviderPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.ProviderPost) -> JSONResponse:
             client = await self.connected_services_repo.insert_oauth2_client(user=user, new_client=body)
-            return json(apispec.Provider.model_validate(client).model_dump(exclude_none=True, mode="json"), 201)
+            return validated_json(apispec.Provider, client, 201)
 
         return "/oauth2/providers", ["POST"], _post
 
@@ -71,7 +70,7 @@ class OAuth2ClientsBP(CustomBlueprint):
             client = await self.connected_services_repo.update_oauth2_client(
                 user=user, provider_id=provider_id, **body_dict
             )
-            return json(apispec.Provider.model_validate(client).model_dump(exclude_none=True, mode="json"))
+            return validated_json(apispec.Provider, client)
 
         return "/oauth2/providers/<provider_id>", ["PATCH"], _patch
 
@@ -143,9 +142,7 @@ class OAuth2ConnectionsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         async def _get_all(_: Request, user: base_models.APIUser) -> JSONResponse:
             connections = await self.connected_services_repo.get_oauth2_connections(user=user)
-            return json(
-                [apispec.Connection.model_validate(c).model_dump(exclude_none=True, mode="json") for c in connections]
-            )
+            return validated_json(apispec.ConnectionList, connections)
 
         return "/oauth2/connections", ["GET"], _get_all
 
@@ -157,7 +154,7 @@ class OAuth2ConnectionsBP(CustomBlueprint):
             connection = await self.connected_services_repo.get_oauth2_connection(
                 connection_id=connection_id, user=user
             )
-            return json(apispec.Connection.model_validate(connection).model_dump(exclude_none=True, mode="json"))
+            return validated_json(apispec.Connection, connection)
 
         return "/oauth2/connections/<connection_id>", ["GET"], _get_one
 
@@ -169,7 +166,7 @@ class OAuth2ConnectionsBP(CustomBlueprint):
             account = await self.connected_services_repo.get_oauth2_connected_account(
                 connection_id=connection_id, user=user
             )
-            return json(apispec.ConnectedAccount.model_validate(account).model_dump(exclude_none=True, mode="json"))
+            return validated_json(apispec.ConnectedAccount, account)
 
         return "/oauth2/connections/<connection_id>/account", ["GET"], _get_account
 
