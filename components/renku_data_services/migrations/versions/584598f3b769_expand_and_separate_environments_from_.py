@@ -1,8 +1,8 @@
 """expand and separate environments from session launchers
 
 Revision ID: 584598f3b769
-Revises: dcc1c1ee662f
-Create Date: 2024-07-31 14:25:24.292285
+Revises: 17eea03f938e
+Create Date: 2024-08-12 14:25:24.292285
 
 """
 
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "584598f3b769"
-down_revision = "dcc1c1ee662f"
+down_revision = "17eea03f938e"
 branch_labels = None
 depends_on = None
 
