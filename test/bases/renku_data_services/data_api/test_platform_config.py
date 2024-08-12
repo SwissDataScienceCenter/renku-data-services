@@ -47,4 +47,4 @@ async def test_patch_platform_config_unauthorized(
 
     _, res = await sanic_client.patch("/api/data/platform/config", headers=headers, json=payload)
 
-    assert res.status_code == 401, res.text
+    assert res.status_code == 403, res.text

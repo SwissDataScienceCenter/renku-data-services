@@ -112,7 +112,7 @@ async def test_post_session_environment_unauthorized(sanic_client: SanicASGITest
 
     _, res = await sanic_client.post("/api/data/environments", headers=user_headers, json=payload)
 
-    assert res.status_code == 401, res.text
+    assert res.status_code == 403, res.text
 
 
 @pytest.mark.asyncio
@@ -152,7 +152,7 @@ async def test_patch_session_environment_unauthorized(
 
     _, res = await sanic_client.patch(f"/api/data/environments/{environment_id}", headers=user_headers, json=payload)
 
-    assert res.status_code == 401, res.text
+    assert res.status_code == 403, res.text
 
 
 @pytest.mark.asyncio
@@ -176,7 +176,7 @@ async def test_delete_session_environment_unauthorized(
 
     _, res = await sanic_client.delete(f"/api/data/environments/{environment_id}", headers=user_headers)
 
-    assert res.status_code == 401, res.text
+    assert res.status_code == 403, res.text
 
 
 @pytest.mark.asyncio
@@ -328,7 +328,7 @@ async def test_post_session_launcher_unauthorized(
 
     _, res = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
 
-    assert res.status_code == 401, res.text
+    assert res.status_code == 403, res.text
 
 
 @pytest.mark.asyncio

@@ -10,9 +10,8 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
-from renku_data_services.base_api.misc import validate_db_ids
+from renku_data_services.base_api.misc import validate_db_ids, validate_query
 from renku_data_services.crc import apispec, models
-from renku_data_services.crc.apispec_base import ResourceClassesFilter
 from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
@@ -31,9 +30,11 @@ class ResourcePoolsBP(CustomBlueprint):
         """List all resource pools."""
 
         @authenticate(self.authenticator)
-        async def _get_all(request: Request, user: base_models.APIUser) -> HTTPResponse:
-            res_filter = ResourceClassesFilter.model_validate(dict(request.query_args))
-            rps = await self.rp_repo.filter_resource_pools(api_user=user, **res_filter.dict())
+        @validate_query(query=apispec.ResourcePoolsParams)
+        async def _get_all(
+            request: Request, user: base_models.APIUser, query: apispec.ResourcePoolsParams
+        ) -> HTTPResponse:
+            rps = await self.rp_repo.filter_resource_pools(api_user=user, **query.model_dump())
             return json(
                 [apispec.ResourcePoolWithIdFiltered.model_validate(r).model_dump(exclude_none=True) for r in rps]
             )
@@ -57,12 +58,13 @@ class ResourcePoolsBP(CustomBlueprint):
         """Get a specific resource pool."""
 
         @authenticate(self.authenticator)
+        @validate_query(query=apispec.UserResourceParams)
         @validate_db_ids
-        async def _get_one(request: Request, user: base_models.APIUser, resource_pool_id: int) -> HTTPResponse:
+        async def _get_one(
+            request: Request, user: base_models.APIUser, resource_pool_id: int, query: apispec.UserResourceParams
+        ) -> HTTPResponse:
             rps: list[models.ResourcePool]
-            rps = await self.rp_repo.get_resource_pools(
-                api_user=user, id=resource_pool_id, name=request.args.get("name")
-            )
+            rps = await self.rp_repo.get_resource_pools(api_user=user, id=resource_pool_id, name=query.name)
             if len(rps) < 1:
                 raise errors.MissingResourceError(
                     message=f"The resource pool with id {resource_pool_id} cannot be found."
@@ -270,11 +272,12 @@ class ClassesBP(CustomBlueprint):
         """Get the classes of a specific resource pool."""
 
         @authenticate(self.authenticator)
+        @validate_query(query=apispec.ResourceClassParams)
         @validate_db_ids
-        async def _get_all(request: Request, user: base_models.APIUser, resource_pool_id: int) -> HTTPResponse:
-            res = await self.repo.get_classes(
-                api_user=user, resource_pool_id=resource_pool_id, name=request.args.get("name")
-            )
+        async def _get_all(
+            request: Request, user: base_models.APIUser, resource_pool_id: int, query: apispec.ResourceClassParams
+        ) -> HTTPResponse:
+            res = await self.repo.get_classes(api_user=user, resource_pool_id=resource_pool_id, name=query.name)
             return json([apispec.ResourceClassWithId.model_validate(r).model_dump(exclude_none=True) for r in res])
 
         return "/resource_pools/<resource_pool_id>/classes", ["GET"], _get_all

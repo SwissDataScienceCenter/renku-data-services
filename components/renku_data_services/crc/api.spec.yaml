@@ -15,29 +15,26 @@ paths:
       summary: Get all resource pool definitions
       parameters:
         - in: query
-          name: cpu
-          required: false
-          description: Filter for classes that meet or exceed the number of cpu cores
+          description: query parameters
+          name: resource_pools_params
+          style: form
+          explode: true
           schema:
-            $ref: "#/components/schemas/CpuFilter"
-        - in: query
-          name: gpu
-          required: false
-          description: Filter for classes that meet or exceed the number of gpus
-          schema:
-            $ref: "#/components/schemas/Gpu"
-        - in: query
-          name: memory
-          required: false
-          description: Filter for classes that meet or exceed the amount of memory in gigabytes
-          schema:
-            $ref: "#/components/schemas/MemoryFilter"
-        - in: query
-          name: max_storage
-          required: false
-          description: Filter for classes that meet or exceed the amount of max_storage in gigabytes
-          schema:
-            $ref: "#/components/schemas/StorageFilter"
+            type: object
+            additionalProperties: false
+            properties:
+              cpu:
+                $ref: "#/components/schemas/CpuFilter"
+                default: 0.0
+              gpu:
+                $ref: "#/components/schemas/Gpu"
+                default: 0
+              memory:
+                $ref: "#/components/schemas/MemoryFilter"
+                default: 0
+              max_storage:
+                $ref: "#/components/schemas/StorageFilter"
+                default: 0
       responses:
         "200":
           description: The resource pool definitions
@@ -330,10 +327,15 @@ paths:
             type: integer
         - in: query
           description: Filter for resource classes based on the provided name as a prefix. Omitting this parameter returns all classes.
-          name: name
+          name: resource_class_params
+          style: form
+          explode: true
           schema:
-            $ref: "#/components/schemas/Name"
-          required: false
+            type: object
+            additionalProperties: false
+            properties:
+              name:
+                $ref: "#/components/schemas/Name"
       responses:
         "200":
           description: The resource class in the specific pool
@@ -719,11 +721,16 @@ paths:
           schema:
             type: string
         - in: query
-          description: Filter for resource pools based on the provided name as a prefix. Omitting this parameter returns all resource pools.
-          name: name
+          description: Filter for resource classes based on the provided name as a prefix. Omitting this parameter returns all classes.
+          name: user_resource_params
+          style: form
+          explode: true
           schema:
-            $ref: "#/components/schemas/Name"
-          required: false
+            type: object
+            additionalProperties: false
+            properties:
+              name:
+                $ref: "#/components/schemas/Name"
       responses:
         "200":
           description: The resource pools that the user has access to

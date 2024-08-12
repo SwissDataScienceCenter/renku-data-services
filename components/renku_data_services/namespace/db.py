@@ -157,7 +157,7 @@ class GroupRepository:
             raise errors.ProgrammingError(message="A database session is required")
         group, _ = await self._get_group(session, user, slug)
         if user.id != group.created_by and not user.is_admin:
-            raise errors.Unauthorized(message="Only the owner and admins can modify groups")
+            raise errors.ForbiddenError(message="Only the owner and admins can modify groups")
         if group.namespace.slug != slug.lower():
             raise errors.UpdatingWithStaleContentError(
                 message=f"You cannot update a group by using its old slug {slug}.",
@@ -245,7 +245,7 @@ class GroupRepository:
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
         if not user.id:
-            raise errors.Unauthorized(message="Users need to be authenticated in order to remove group members.")
+            raise errors.UnauthorizedError(message="Users need to be authenticated in order to remove group members.")
         group, _ = await self._get_group(session, user, slug)
         output = await self.authz.remove_group_members(user, ResourceType.group, group.id, [user_id_to_delete])
         return output
@@ -264,7 +264,7 @@ class GroupRepository:
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
         if not user.id:
-            raise errors.Unauthorized(message="Users need to be authenticated in order to create groups.")
+            raise errors.UnauthorizedError(message="Users need to be authenticated in order to create groups.")
         creation_date = datetime.now(UTC).replace(microsecond=0)
         group = schemas.GroupORM(
             name=payload.name,

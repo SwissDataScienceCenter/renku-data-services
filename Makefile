@@ -2,11 +2,12 @@
 
 AMALTHEA_JS_VERSION ?= 0.11.0
 AMALTHEA_SESSIONS_VERSION ?= 0.0.1-new-operator-chart
+codegen_params = --input-file-type openapi --output-model-type pydantic_v2.BaseModel --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --set-default-enum-member --openapi-scopes schemas paths parameters --set-default-enum-member --use-one-literal-as-default --use-default
 
 define test_apispec_up_to_date
 	$(eval $@_NAME=$(1))
 	cp "components/renku_data_services/${$@_NAME}/apispec.py" "/tmp/apispec_orig.py"
-	poetry run datamodel-codegen --input components/renku_data_services/${$@_NAME}/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/${$@_NAME}/apispec.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.${$@_NAME}.apispec_base.BaseAPISpec --set-default-enum-member 
+	poetry run datamodel-codegen --input components/renku_data_services/${$@_NAME}/api.spec.yaml --output components/renku_data_services/${$@_NAME}/apispec.py --base-class renku_data_services.${$@_NAME}.apispec_base.BaseAPISpec $(codegen_params)
 	diff -I "^#   timestamp\: " "/tmp/apispec_orig.py" "components/renku_data_services/${$@_NAME}/apispec.py"
 	@RESULT=$?
 	cp "/tmp/apispec_orig.py" "components/renku_data_services/${$@_NAME}/apispec.py"
@@ -16,29 +17,27 @@ endef
 all: help
 
 components/renku_data_services/crc/apispec.py: components/renku_data_services/crc/api.spec.yaml
-	poetry run datamodel-codegen --input components/renku_data_services/crc/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/crc/apispec.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.crc.apispec_base.BaseAPISpec --set-default-enum-member 
+	poetry run datamodel-codegen --input components/renku_data_services/crc/api.spec.yaml --output components/renku_data_services/crc/apispec.py --base-class renku_data_services.crc.apispec_base.BaseAPISpec $(codegen_params)
 components/renku_data_services/storage/apispec.py: components/renku_data_services/storage/api.spec.yaml
-	poetry run datamodel-codegen --input components/renku_data_services/storage/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/storage/apispec.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.storage.apispec_base.BaseAPISpec --set-default-enum-member
+	poetry run datamodel-codegen --input components/renku_data_services/storage/api.spec.yaml --output components/renku_data_services/storage/apispec.py --base-class renku_data_services.storage.apispec_base.BaseAPISpec $(codegen_params)
 components/renku_data_services/users/apispec.py: components/renku_data_services/users/api.spec.yaml
-	poetry run datamodel-codegen --input components/renku_data_services/users/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/users/apispec.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.users.apispec_base.BaseAPISpec --set-default-enum-member
+	poetry run datamodel-codegen --input components/renku_data_services/users/api.spec.yaml --output components/renku_data_services/users/apispec.py --base-class renku_data_services.users.apispec_base.BaseAPISpec $(codegen_params)
 components/renku_data_services/project/apispec.py: components/renku_data_services/project/api.spec.yaml
-	poetry run datamodel-codegen --input components/renku_data_services/project/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/project/apispec.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.project.apispec_base.BaseAPISpec --set-default-enum-member
+	poetry run datamodel-codegen --input components/renku_data_services/project/api.spec.yaml --output components/renku_data_services/project/apispec.py --base-class renku_data_services.project.apispec_base.BaseAPISpec $(codegen_params)
 components/renku_data_services/session/apispec.py: components/renku_data_services/session/api.spec.yaml
-	poetry run datamodel-codegen --input components/renku_data_services/session/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/session/apispec.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.session.apispec_base.BaseAPISpec --set-default-enum-member
-components/renku_data_services/user_preferences/apispec.py: components/renku_data_services/user_preferences/api.spec.yaml
-	poetry run datamodel-codegen --input components/renku_data_services/user_preferences/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/user_preferences/apispec.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.user_preferences.apispec_base.BaseAPISpec --set-default-enum-member
+	poetry run datamodel-codegen --input components/renku_data_services/session/api.spec.yaml --output components/renku_data_services/session/apispec.py --base-class renku_data_services.session.apispec_base.BaseAPISpec $(codegen_params)
 components/renku_data_services/namespace/apispec.py: components/renku_data_services/namespace/api.spec.yaml
-	poetry run datamodel-codegen --input components/renku_data_services/namespace/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/namespace/apispec.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.namespace.apispec_base.BaseAPISpec --set-default-enum-member
+	poetry run datamodel-codegen --input components/renku_data_services/namespace/api.spec.yaml --output components/renku_data_services/namespace/apispec.py --base-class renku_data_services.namespace.apispec_base.BaseAPISpec $(codegen_params)
 components/renku_data_services/secrets/apispec.py: components/renku_data_services/secrets/api.spec.yaml
-	poetry run datamodel-codegen --input components/renku_data_services/secrets/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/secrets/apispec.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.secrets.apispec_base.BaseAPISpec --set-default-enum-member
+	poetry run datamodel-codegen --input components/renku_data_services/secrets/api.spec.yaml --output components/renku_data_services/secrets/apispec.py --base-class renku_data_services.secrets.apispec_base.BaseAPISpec $(codegen_params)
 components/renku_data_services/connected_services/apispec.py: components/renku_data_services/connected_services/api.spec.yaml
-	poetry run datamodel-codegen --input components/renku_data_services/connected_services/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/connected_services/apispec.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.connected_services.apispec_base.BaseAPISpec --set-default-enum-member
+	poetry run datamodel-codegen --input components/renku_data_services/connected_services/api.spec.yaml --output components/renku_data_services/connected_services/apispec.py --base-class renku_data_services.connected_services.apispec_base.BaseAPISpec $(codegen_params)
 components/renku_data_services/repositories/apispec.py: components/renku_data_services/repositories/api.spec.yaml
-	poetry run datamodel-codegen --input components/renku_data_services/repositories/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/repositories/apispec.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.repositories.apispec_base.BaseAPISpec --set-default-enum-member
+	poetry run datamodel-codegen --input components/renku_data_services/repositories/api.spec.yaml --output components/renku_data_services/repositories/apispec.py --base-class renku_data_services.repositories.apispec_base.BaseAPISpec $(codegen_params)
 components/renku_data_services/notebooks/apispec.py: components/renku_data_services/notebooks/api.spec.yaml
-	poetry run datamodel-codegen --input components/renku_data_services/notebooks/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/notebooks/apispec.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.notebooks.apispec_base.BaseAPISpec --set-default-enum-member
+	poetry run datamodel-codegen --input components/renku_data_services/notebooks/api.spec.yaml --output components/renku_data_services/notebooks/apispec.py --base-class renku_data_services.notebooks.apispec_base.BaseAPISpec $(codegen_params)
 components/renku_data_services/platform/apispec.py: components/renku_data_services/platform/api.spec.yaml
-	poetry run datamodel-codegen --input components/renku_data_services/platform/api.spec.yaml --input-file-type openapi --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/platform/apispec.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.platform.apispec_base.BaseAPISpec --set-default-enum-member
+	poetry run datamodel-codegen --input components/renku_data_services/platform/api.spec.yaml --output components/renku_data_services/platform/apispec.py --base-class renku_data_services.platform.apispec_base.BaseAPISpec $(codegen_params)
 
 ##@ Apispec
 
@@ -54,6 +53,7 @@ components/renku_data_services/connected_services/apispec.py \
 components/renku_data_services/repositories/apispec.py \
 components/renku_data_services/notebooks/apispec.py \
 components/renku_data_services/platform/apispec.py  ## Generate pydantic classes from apispec yaml files
+schemas: components/renku_data_services/crc/apispec.py components/renku_data_services/storage/apispec.py components/renku_data_services/users/apispec.py components/renku_data_services/project/apispec.py components/renku_data_services/namespace/apispec.py components/renku_data_services/secrets/apispec.py components/renku_data_services/connected_services/apispec.py components/renku_data_services/repositories/apispec.py components/renku_data_services/notebooks/apispec.py components/renku_data_services/platform/apispec.py  ## Generate pydantic classes from apispec yaml files
 	@echo "generated classes based on ApiSpec"
 
 ##@ Avro schemas
@@ -82,8 +82,6 @@ style_checks:  ## Run linting and style checks
 	@$(call test_apispec_up_to_date,"crc")
 	@echo "checking storage apispec is up to date"
 	@$(call test_apispec_up_to_date,"storage")
-	@echo "checking user preferences apispec is up to date"
-	@$(call test_apispec_up_to_date,"user_preferences")
 	@echo "checking users apispec is up to date"
 	@$(call test_apispec_up_to_date,"users")
 	@echo "checking project apispec is up to date"
