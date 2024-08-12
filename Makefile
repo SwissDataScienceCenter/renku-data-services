@@ -1,7 +1,7 @@
 .PHONY: schemas tests test_setup main_tests schemathesis_tests collect_coverage style_checks pre_commit_checks run download_avro check_avro avro_models update_avro kind_cluster install_amaltheas all
 
-AMALTHEA_JS_VERSION ?= 0.11.0
-AMALTHEA_SESSIONS_VERSION ?= 0.0.1-new-operator-chart
+AMALTHEA_JS_VERSION ?= 0.12.2
+AMALTHEA_SESSIONS_VERSION ?= 0.0.9-new-operator-chart
 
 define test_apispec_up_to_date
 	$(eval $@_NAME=$(1))
@@ -159,10 +159,11 @@ kind_cluster:  ## Creates a kind cluster for testing
 
 install_amaltheas:  ## Installs both version of amalthea in the. NOTE: It uses the currently active k8s context.
 	helm repo add renku https://swissdatasciencecenter.github.io/helm-charts
-	helm install amalthea-js renku/amalthea --version $(AMALTHEA_JS_VERSION)
-	helm install amalthea-sessions renku/amalthea-sessions --version $(AMALTHEA_SESSIONS_VERSION)
+	helm repo update
+	helm upgrade --install amalthea-js renku/amalthea --version $(AMALTHEA_JS_VERSION)
+	helm upgrade --install amalthea-sessions amalthea-sessions-0.0.9-new-operator-chart.tgz --version $(AMALTHEA_SESSIONS_VERSION)
 
 # TODO: Add the version variables from the top of the file here when the charts are fully published
 amalthea_schema:  ## Updates generates pydantic classes from CRDs
-	curl https://raw.githubusercontent.com/SwissDataScienceCenter/amalthea/main/config/crd/bases/amalthea.dev_amaltheasessions.yaml  | yq '.spec.versions[0].schema.openAPIV3Schema' | poetry run datamodel-codegen --input-file-type jsonschema --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/notebooks/cr_amalthea_session.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.notebooks.cr_base.BaseCRD --allow-extra-fields
+	curl https://raw.githubusercontent.com/SwissDataScienceCenter/amalthea/fix-amalthea-session-port/config/crd/bases/amalthea.dev_amaltheasessions.yaml | yq '.spec.versions[0].schema.openAPIV3Schema' | poetry run datamodel-codegen --input-file-type jsonschema --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/notebooks/cr_amalthea_session.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.notebooks.cr_base.BaseCRD --allow-extra-fields
 	curl https://raw.githubusercontent.com/SwissDataScienceCenter/amalthea/main/controller/crds/jupyter_server.yaml | yq '.spec.versions[0].schema.openAPIV3Schema' | poetry run datamodel-codegen --input-file-type jsonschema --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/notebooks/cr_jupyter_server.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.notebooks.cr_base.BaseCRD --allow-extra-fields

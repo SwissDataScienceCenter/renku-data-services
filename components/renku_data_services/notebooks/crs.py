@@ -14,12 +14,17 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     ExtraVolumeMount,
     Ingress,
     InitContainer,
+    SecretRef,
     Session,
     Storage,
 )
+from renku_data_services.notebooks.cr_amalthea_session import EnvItem2 as SessionEnvItem
+from renku_data_services.notebooks.cr_amalthea_session import Item4 as SecretAsVolumeItem
 from renku_data_services.notebooks.cr_amalthea_session import Model as _ASModel
 from renku_data_services.notebooks.cr_amalthea_session import Resources3 as Resources
+from renku_data_services.notebooks.cr_amalthea_session import Secret1 as SecretAsVolume
 from renku_data_services.notebooks.cr_amalthea_session import Spec as AmaltheaSessionSpec
+from renku_data_services.notebooks.cr_amalthea_session import Type as AuthenticationType
 from renku_data_services.notebooks.cr_amalthea_session import Type1 as CodeRepositoryType
 from renku_data_services.notebooks.cr_jupyter_server import Model as _JSModel
 from renku_data_services.notebooks.cr_jupyter_server import Patch
