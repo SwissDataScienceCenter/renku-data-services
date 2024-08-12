@@ -63,7 +63,7 @@ class SessionRepository:
         new_environment: models.UnsavedEnvironment,
     ) -> schemas.EnvironmentORM:
         if user.id is None:
-            raise errors.Unauthorized(
+            raise errors.UnauthorizedError(
                 message="You have to be authenticated to insert an environment in the DB.", quiet=True
             )
         environment = schemas.EnvironmentORM(
@@ -89,7 +89,7 @@ class SessionRepository:
     ) -> models.Environment:
         """Insert a new global session environment."""
         if user.id is None or not user.is_admin:
-            raise errors.Unauthorized(
+            raise errors.UnauthorizedError(
                 message="You do not have the required permissions for this operation.", quiet=True
             )
         if new_environment.environment_kind != models.EnvironmentKind.GLOBAL:

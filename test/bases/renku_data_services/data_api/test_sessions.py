@@ -112,7 +112,7 @@ async def test_post_session_environment_unauthorized(sanic_client: SanicASGITest
 
     _, res = await sanic_client.post("/api/data/environments", headers=user_headers, json=payload)
 
-    assert res.status_code == 403, res.text
+    assert res.status_code == 401, res.text
 
 
 @pytest.mark.asyncio
