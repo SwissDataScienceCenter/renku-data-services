@@ -498,6 +498,16 @@ async def test_patch_session_launcher_environment(
     )
     assert res.status_code == 200, res.text
 
+    # Should be able to patch some fields of the custom environment
+    patch_payload = {
+        "environment": {"container_image": "nginx:latest"},
+    }
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher_id}", headers=user_headers, json=patch_payload
+    )
+    assert res.status_code == 200, res.text
+    assert res.json["environment"]["container_image"] == "nginx:latest"
+
 
 @pytest.fixture
 def anonymous_user_headers() -> dict[str, str]:
@@ -549,12 +559,3 @@ async def test_starting_session_anonymous(
     assert res.status_code == 200, res.text
     assert len(res.json) > 0
     assert session_res.json["name"] in [i["name"] for i in res.json]
-    # Should be able to patch some fields of the custom environment
-    patch_payload = {
-        "environment": {"container_image": "nginx:latest"},
-    }
-    _, res = await sanic_client.patch(
-        f"/api/data/session_launchers/{launcher_id}", headers=user_headers, json=patch_payload
-    )
-    assert res.status_code == 200, res.text
-    assert res.json["environment"]["container_image"] == "nginx:latest"
