@@ -147,7 +147,7 @@ async def test_post_session_environment_unauthorized(sanic_client: SanicASGITest
 
     _, res = await sanic_client.post("/api/data/environments", headers=user_headers, json=payload)
 
-    assert res.status_code == 403, res.text
+    assert res.status_code == 401, res.text
 
 
 @pytest.mark.asyncio
@@ -549,3 +549,12 @@ async def test_starting_session_anonymous(
     assert res.status_code == 200, res.text
     assert len(res.json) > 0
     assert session_res.json["name"] in [i["name"] for i in res.json]
+    # Should be able to patch some fields of the custom environment
+    patch_payload = {
+        "environment": {"container_image": "nginx:latest"},
+    }
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher_id}", headers=user_headers, json=patch_payload
+    )
+    assert res.status_code == 200, res.text
+    assert res.json["environment"]["container_image"] == "nginx:latest"

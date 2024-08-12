@@ -76,15 +76,6 @@ class BaseSessionLauncher:
     environment: str | UnsavedEnvironment | Environment
     resource_class_id: int | None
 
-    @property
-    def environment_id(self) -> str | None:
-        """The environment ID."""
-        if isinstance(self.environment, str):
-            return self.environment
-        elif isinstance(self.environment, Environment):
-            return self.environment.id
-        return None
-
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedSessionLauncher(BaseSessionLauncher):
@@ -102,8 +93,3 @@ class SessionLauncher(BaseSessionLauncher):
     creation_date: datetime
     created_by: str
     environment: Environment
-
-    @property
-    def environment_id(self) -> str:
-        """The environment ID."""
-        return self.environment.id

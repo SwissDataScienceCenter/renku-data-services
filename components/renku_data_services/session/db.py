@@ -61,13 +61,11 @@ class SessionRepository:
         user: base_models.APIUser,
         session: AsyncSession,
         new_environment: models.UnsavedEnvironment,
-    ) -> models.Environment:
-        """Insert a new session environment."""
+    ) -> schemas.EnvironmentORM:
         if user.id is None:
-            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
-        if not user.is_admin:
-            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
-
+            raise errors.UnauthorizedError(
+                message="You have to be authenticated to insert an environment in the DB.", quiet=True
+            )
         environment = schemas.EnvironmentORM(
             name=new_environment.name,
             created_by_id=user.id,
@@ -91,7 +89,7 @@ class SessionRepository:
     ) -> models.Environment:
         """Insert a new global session environment."""
         if user.id is None or not user.is_admin:
-            raise errors.Unauthorized(
+            raise errors.UnauthorizedError(
                 message="You do not have the required permissions for this operation.", quiet=True
             )
         if new_environment.environment_kind != models.EnvironmentKind.GLOBAL:
