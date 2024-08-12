@@ -259,7 +259,41 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/NotebookResponse"
+                $ref: "#/components/schemas/NotebookResponseAmaltheaSession"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - sessions
+    get:
+      summary: Get a list of all sessions for a user
+      responses:
+        "200":
+          description: The session was created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotebookResponseAmaltheaSessionList"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - sessions
+  "/sessions/{session_id}":
+    delete:
+      parameters:
+      - description: The id of the session that should be deleted
+        in: path
+        name: session_id
+        required: true
+        schema:
+          type: string
+      summary: Fully remove a session
+      responses:
+        "204":
+          description: The session was deleted or it never existed in the first place
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotebookResponseAmaltheaSession"
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -369,7 +403,6 @@ components:
       required:
         - project_id
         - launcher_id
-        - image
       type: object
     LaunchNotebookRequestRepository:
       properties:
@@ -485,6 +518,33 @@ components:
         url:
           type: string
       type: object
+    NotebookResponseAmaltheaSession:
+      properties:
+        cloudstorage:
+          items:
+            "$ref": "#/components/schemas/LaunchNotebookResponseCloudStorage"
+          type: array
+        image:
+          type: string
+        name:
+          type: string
+        resources:
+          "$ref": "#/components/schemas/UserPodResources"
+        started:
+          format: date-time
+          nullable: true
+          type: string
+        state:
+          type: object
+        status:
+          "$ref": "#/components/schemas/ServerStatus"
+        url:
+          type: string
+      type: object
+    NotebookResponseAmaltheaSessionList:
+      items:
+        "$ref": "#/components/schemas/NotebookResponseAmaltheaSession"
+      type: array
     NotebooksServiceInfo:
       properties:
         anonymousSessionsEnabled:
@@ -666,8 +726,6 @@ components:
           "$ref": "#/components/schemas/ResourceRequests"
         usage:
           "$ref": "#/components/schemas/ResourceUsage"
-      required:
-      - requests
       type: object
     UserSecrets:
       properties:
