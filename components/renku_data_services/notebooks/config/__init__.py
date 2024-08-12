@@ -137,10 +137,10 @@ class _NotebooksConfig:
             crc_validator = CRCValidator(data_service_url)
             sessions_config = _SessionConfig.from_env()
             storage_validator = StorageValidator(data_service_url)
-            git_provider_helper = GitProviderHelper(data_service_url, sessions_config.ingress.host, git_config.url)
             amalthea_config = _AmaltheaConfig.from_env()
             amalthea_v2_config = _AmaltheaV2Config.from_env()
             git_config = _GitConfig.from_env()
+            git_provider_helper = GitProviderHelper(data_service_url, sessions_config.ingress.host, git_config.url)
 
         k8s_config = _K8sConfig.from_env()
         renku_ns_client = NamespacedK8sClient(
