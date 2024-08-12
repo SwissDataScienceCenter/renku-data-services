@@ -342,7 +342,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/ResourceClassesWithId"
+                $ref: "#/components/schemas/ResourceClassesWithIdResponse"
         "404":
           description: The resource pool does not exist
           content:
@@ -572,7 +572,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/NodeAffinityList"
+                $ref: "#/components/schemas/NodeAffinityListResponse"
         default:
           $ref: '#/components/responses/Error'
       tags:
@@ -994,9 +994,30 @@ components:
       type: array
       items:
         $ref: "#/components/schemas/ResourceClass"
-      minItems: 1
-      uniqueItems: true
     ResourceClassesWithId:
+      type: array
+      items:
+        $ref: "#/components/schemas/ResourceClassWithId"
+      uniqueItems: true
+      example:
+        - name: "resource class 1"
+          cpu: 1.5
+          memory: 2
+          gpu: 0
+          max_storage: 100
+          id: 1
+          default: true
+          default_storage: 10
+        - name: "resource class 2"
+          cpu: 4.5
+          memory: 10
+          gpu: 2
+          default_storage: 10
+          max_storage: 10000
+          id: 2
+          default: false
+    ResourceClassesWithIdResponse:
+      # Note: this needs to be separate from ResourceClassesWithId or it doesn't get generated
       type: array
       items:
         $ref: "#/components/schemas/ResourceClassWithId"
@@ -1456,6 +1477,15 @@ components:
       example:
         key: some-label-32
         required_during_scheduling: true
+    NodeAffinityListResponse:
+      type: array
+      description: A list of k8s labels used for tolerations and/or node affinity
+      items:
+        $ref: "#/components/schemas/NodeAffinity"
+      example: [{"key": "test-label-1", "required_during_scheduling": false}]
+      uniqueItems: true
+      default: []
+      minItems: 0
     NodeAffinityList:
       type: array
       description: A list of k8s labels used for tolerations and/or node affinity
