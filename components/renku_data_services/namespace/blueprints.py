@@ -101,7 +101,7 @@ class GroupsBP(CustomBlueprint):
                 [
                     dict(
                         id=m.id,
-                        email=m.email,
+                        namespace=m.namespace,
                         first_name=m.first_name,
                         last_name=m.last_name,
                         role=apispec.GroupRole(m.role.value),

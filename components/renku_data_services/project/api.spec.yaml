@@ -456,14 +456,14 @@ components:
         $ref: "#/components/schemas/ProjectMemberResponse"
       minItems: 0
     ProjectMemberResponse:
-      description: A member with full info (email, name, ...) and the access level to the project
+      description: A member with full info (namespace, name, ...) and the access level to the project
       type: object
       additionalProperties: false
       properties:
         id:
           $ref: "#/components/schemas/UserId"
-        email:
-          $ref: "#/components/schemas/UserEmail"
+        namespace:
+          $ref: "#/components/schemas/Slug"
         first_name:
           $ref: "#/components/schemas/UserFirstLastName"
         last_name:
@@ -491,14 +491,19 @@ components:
       example: John
       minLength: 1
       maxLength: 256
-    UserEmail:
+    Slug:
+      description: A command-line/url friendly name for a namespace
       type: string
-      # We can get invalid emails when people log in via Github or other services
-      # It seems that in some cases Keycloak does not verify emails and this will then fail
-      # See: https://github.com/SwissDataScienceCenter/renku-data-services/issues/367
-      # format: email
-      description: User email
-      example: some-user@gmail.com
+      minLength: 1
+      maxLength: 99
+      # Slug regex rules
+      # from https://docs.gitlab.com/ee/user/reserved_names.html#limitations-on-usernames-project-and-group-names
+      # - cannot end in .git
+      # - cannot end in .atom
+      # - cannot contain any combination of two or more consecutive -._
+      # - has to start with letter or number
+      pattern: '^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-zA-Z0-9][a-zA-Z0-9\-_.]*$'
+      example: "a-slug-example"
     ETag:
       type: string
       description: Entity Tag

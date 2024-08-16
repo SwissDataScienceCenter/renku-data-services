@@ -401,8 +401,8 @@ components:
       properties:
         id:
           $ref: "#/components/schemas/UserId"
-        email:
-          $ref: "#/components/schemas/UserEmail"
+        namespace:
+          $ref: "#/components/schemas/Slug"
         first_name:
           $ref: "#/components/schemas/UserFirstLastName"
         last_name:
@@ -447,7 +447,7 @@ components:
           role: "owner"
         - id: "another-keycloak-user-id"
           role: "member"
-          email: "user@email.com"
+          namespace: "user-slug"
           first_name: "John"
           last_name: "Doe"
     GroupMemberPatchRequestList:

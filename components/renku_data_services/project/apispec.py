@@ -78,8 +78,8 @@ class ProjectMemberResponse(BaseAPISpec):
         example="f74a228b-1790-4276-af5f-25c2424e9b0c",
         pattern="^[A-Za-z0-9]{1}[A-Za-z0-9-]+$",
     )
-    email: Optional[str] = Field(
-        None, description="User email", example="some-user@gmail.com"
+    namespace: Optional[str] = Field(
+        None, description="User namespace"
     )
     first_name: Optional[str] = Field(
         None,

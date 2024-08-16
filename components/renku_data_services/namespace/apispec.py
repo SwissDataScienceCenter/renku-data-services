@@ -185,8 +185,8 @@ class GroupMemberResponse(BaseAPISpec):
         example="f74a228b-1790-4276-af5f-25c2424e9b0c",
         pattern="^[A-Za-z0-9]{1}[A-Za-z0-9-]+$",
     )
-    email: Optional[str] = Field(
-        None, description="User email", example="some-user@gmail.com"
+    namespace: Optional[str] = Field(
+        None, description="User namespace", example="a-slug-example"
     )
     first_name: Optional[str] = Field(
         None,
@@ -227,7 +227,7 @@ class GroupMemberResponseList(RootModel[List[GroupMemberResponse]]):
             {
                 "id": "another-keycloak-user-id",
                 "role": "member",
-                "email": "user@email.com",
+                "namespace": "a-slug-example",
                 "first_name": "John",
                 "last_name": "Doe",
             },
