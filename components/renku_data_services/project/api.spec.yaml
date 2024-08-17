@@ -491,19 +491,6 @@ components:
       example: John
       minLength: 1
       maxLength: 256
-    Slug:
-      description: A command-line/url friendly name for a namespace
-      type: string
-      minLength: 1
-      maxLength: 99
-      # Slug regex rules
-      # from https://docs.gitlab.com/ee/user/reserved_names.html#limitations-on-usernames-project-and-group-names
-      # - cannot end in .git
-      # - cannot end in .atom
-      # - cannot contain any combination of two or more consecutive -._
-      # - has to start with letter or number
-      pattern: '^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-zA-Z0-9][a-zA-Z0-9\-_.]*$'
-      example: "a-slug-example"
     ETag:
       type: string
       description: Entity Tag

@@ -140,7 +140,7 @@ class GroupRepository:
             models.GroupMemberDetails(
                 id=member.keycloak_id,
                 role=members_dict[member.keycloak_id].role,
-                namespace=member.namespace,
+                namespace=member.namespace.slug,
                 first_name=member.first_name,
                 last_name=member.last_name,
             )
