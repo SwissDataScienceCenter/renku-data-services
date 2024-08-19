@@ -27,7 +27,7 @@ RUN env/bin/pip --no-cache-dir install projects/secrets_storage/dist/*.whl
 FROM python:3.12-slim-bookworm
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
-ENV PROMETHEUS_MULTIPROC_DIR=/prometheus
+ENV prometheus_multiproc_dir=/prometheus
 RUN mkdir /prometheus
 RUN apt-get update && apt-get install -y \
     tini && \
