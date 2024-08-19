@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import pytest
 
+from renku_data_services.namespace.models import Namespace, NamespaceKind
 from renku_data_services.users.models import UserInfo
 
 
@@ -13,6 +14,13 @@ async def test_get_all_users_as_admin(sanic_client, users) -> None:
         first_name="Admin",
         last_name="Adminson",
         email="admin@gmail.com",
+        namespace=Namespace(
+            id="admin-id",
+            slug="admin.adminson",
+            kind=NamespaceKind.user,
+            underlying_resource_id="admin-id",
+            created_by="admin-id",
+        ),
     )
     admin_token = {
         "id": admin.id,
@@ -29,28 +37,38 @@ async def test_get_all_users_as_admin(sanic_client, users) -> None:
     assert res.status_code == 200, res.text
     assert len(res.json) == len(users)
     retrieved_users = [
-        UserInfo(
-            id=user["id"],
-            first_name=user.get("first_name"),
-            last_name=user.get("last_name"),
-            email=user.get("email"),
+        (
+            user["id"],
+            user.get("first_name"),
+            user.get("last_name"),
+            user.get("email"),
         )
         for user in res.json
     ]
-    assert set(retrieved_users) == set(users)
+    existing_users = [
+        (
+            user.id,
+            user.first_name,
+            user.last_name,
+            user.email,
+        )
+        for user in users
+    ]
+    assert set(retrieved_users) == set(existing_users)
     for user in users:
         _, res = await sanic_client.get(
             f"/api/data/users/{user.id}",
             headers={"Authorization": f"bearer {json.dumps(admin_token)}"},
         )
         assert res.status_code == 200
-        retrieved_user = UserInfo(
+        retrieved_user = dict(
             id=res.json["id"],
             first_name=res.json.get("first_name"),
             last_name=res.json.get("last_name"),
             email=res.json.get("email"),
         )
-        assert user == retrieved_user
+        existing_user = dict(id=user.id, first_name=user.first_name, last_name=user.last_name, email=user.email)
+        assert existing_user == retrieved_user
 
 
 @pytest.mark.asyncio

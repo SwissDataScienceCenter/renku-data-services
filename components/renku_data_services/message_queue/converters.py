@@ -94,20 +94,20 @@ class _ProjectEventConverter:
 class _UserEventConverter:
     @staticmethod
     def to_events(
-        user: user_models.UserInfo | user_models.UserWithNamespace | user_models.UserWithNamespaceUpdate,
+        user: user_models.UserInfo | user_models.UserInfoUpdate,
         event_type: type[AvroModel] | type[events.AmbiguousEvent],
     ) -> list[Event]:
         match event_type:
             case v2.UserAdded | events.InsertUserNamespace:
-                user = cast(user_models.UserWithNamespace, user)
+                user = cast(user_models.UserInfo, user)
                 return [
                     _make_event(
                         "user.added",
                         v2.UserAdded(
-                            id=user.user.id,
-                            firstName=user.user.first_name,
-                            lastName=user.user.last_name,
-                            email=user.user.email,
+                            id=user.id,
+                            firstName=user.first_name,
+                            lastName=user.last_name,
+                            email=user.email,
                             namespace=user.namespace.slug,
                         ),
                     )
@@ -116,16 +116,16 @@ class _UserEventConverter:
                 user = cast(user_models.UserInfo, user)
                 return [_make_event("user.removed", v2.UserRemoved(id=user.id))]
             case events.UpdateOrInsertUser:
-                user = cast(user_models.UserWithNamespaceUpdate, user)
+                user = cast(user_models.UserInfoUpdate, user)
                 if user.old is None:
                     return [
                         _make_event(
                             "user.added",
                             v2.UserAdded(
-                                id=user.new.user.id,
-                                firstName=user.new.user.first_name,
-                                lastName=user.new.user.last_name,
-                                email=user.new.user.email,
+                                id=user.new.id,
+                                firstName=user.new.first_name,
+                                lastName=user.new.last_name,
+                                email=user.new.email,
                                 namespace=user.new.namespace.slug,
                             ),
                         )
@@ -135,10 +135,10 @@ class _UserEventConverter:
                         _make_event(
                             "user.updated",
                             v2.UserUpdated(
-                                id=user.new.user.id,
-                                firstName=user.new.user.first_name,
-                                lastName=user.new.user.last_name,
-                                email=user.new.user.email,
+                                id=user.new.id,
+                                firstName=user.new.first_name,
+                                lastName=user.new.last_name,
+                                email=user.new.email,
                                 namespace=user.new.namespace.slug,
                             ),
                         )
@@ -328,16 +328,16 @@ class EventConverter:
                 group_authz = cast(list[authz_models.MembershipChange], input)
                 return _GroupAuthzEventConverter.to_events(group_authz)
             case v2.UserAdded:
-                user_with_namespace = cast(user_models.UserWithNamespace, input)
+                user_with_namespace = cast(user_models.UserInfo, input)
                 return _UserEventConverter.to_events(user_with_namespace, event_type)
             case v2.UserRemoved:
                 user_info = cast(user_models.UserInfo, input)
                 return _UserEventConverter.to_events(user_info, event_type)
             case events.UpdateOrInsertUser:
-                user_with_namespace_update = cast(user_models.UserWithNamespaceUpdate, input)
+                user_with_namespace_update = cast(user_models.UserInfoUpdate, input)
                 return _UserEventConverter.to_events(user_with_namespace_update, event_type)
             case events.InsertUserNamespace:
-                user_namespaces = cast(list[user_models.UserWithNamespace], input)
+                user_namespaces = cast(list[user_models.UserInfo], input)
                 output: list[Event] = []
                 for namespace in user_namespaces:
                     output.extend(_UserEventConverter.to_events(namespace, event_type))

@@ -39,12 +39,13 @@ from renku_data_services.namespace.apispec import (
     GroupPostRequest,
 )
 from renku_data_services.namespace.db import GroupRepository
+from renku_data_services.namespace.models import Namespace, NamespaceKind
 from renku_data_services.namespace.orm import NamespaceORM
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.models import UnsavedProject
 from renku_data_services.users.db import UserRepo, UsersSync
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
-from renku_data_services.users.models import KeycloakAdminEvent, UserInfo, UserInfoUpdate
+from renku_data_services.users.models import KeycloakAdminEvent, UnsavedUserInfo, UserInfo, UserInfoFieldUpdate
 from renku_data_services.users.orm import UserORM
 
 
@@ -109,7 +110,7 @@ def get_kc_users(updates: list[UserInfo]) -> list[dict[str, Any]]:
     return output
 
 
-def get_kc_user_update_events(updates: list[UserInfoUpdate]) -> list[dict[str, Any]]:
+def get_kc_user_update_events(updates: list[UserInfoFieldUpdate]) -> list[dict[str, Any]]:
     output: list[dict[str, Any]] = []
     for update in updates:
         output.append(
@@ -206,14 +207,45 @@ def get_kc_roles(role_names: list[str]) -> dict[str, list[dict[str, Union[bool, 
 async def test_total_users_sync(
     get_app_configs: Callable[..., tuple[SyncConfig, UserRepo]], admin_user: APIUser
 ) -> None:
-    user1 = UserInfo("user-1-id", "John", "Doe", "john.doe@gmail.com")
-    user2 = UserInfo("user-2-id", "Jane", "Doe", "jane.doe@gmail.com")
+    user1 = UserInfo(
+        id="user-1-id",
+        first_name="John",
+        last_name="Doe",
+        email="john.doe@gmail.com",
+        namespace=Namespace(
+            id="user-1-id",
+            slug="user-1",
+            kind=NamespaceKind.user,
+            underlying_resource_id="user-1-id",
+            created_by="user-1-id",
+        ),
+    )
+    user2 = UserInfo(
+        id="user-2-id",
+        first_name="Jane",
+        last_name="Doe",
+        email="jane.doe@gmail.com",
+        namespace=Namespace(
+            id="user-2-id",
+            slug="user-2",
+            kind=NamespaceKind.user,
+            underlying_resource_id="user-2-id",
+            created_by="user-2-id",
+        ),
+    )
     assert admin_user.id
     admin_user_info = UserInfo(
         id=admin_user.id,
         first_name=admin_user.first_name,
         last_name=admin_user.last_name,
         email=admin_user.email,
+        namespace=Namespace(
+            id=admin_user.id,
+            slug="admin",
+            kind=NamespaceKind.user,
+            underlying_resource_id=admin_user.id,
+            created_by=admin_user.id,
+        ),
     )
     user_roles = {admin_user.id: get_kc_roles(["renku-admin"])}
     kc_api = DummyKeycloakAPI(users=get_kc_users([user1, user2, admin_user_info]), user_roles=user_roles)
@@ -223,24 +255,22 @@ async def test_total_users_sync(
     db_users = await user_repo.get_users(admin_user)
     kc_users = [UserInfo.from_kc_user_payload(user) for user in sync_config.kc_api.get_users()]
     kc_users.append(
-        UserInfo(
+        UnsavedUserInfo(
             id=admin_user.id,
             first_name=admin_user.first_name,
             last_name=admin_user.last_name,
             email=admin_user.email,
         )
     )
-    assert set(kc_users) == {user1, user2, admin_user_info}
+    assert set(u.id for u in kc_users) == set([user1.id, user2.id, admin_user_info.id])
     assert len(db_users) == 1  # listing users add the requesting user if not present
     await sync_config.syncer.users_sync(kc_api)
     db_users = await user_repo.get_users(admin_user)
-    db_users = [user.user for user in db_users]
-    assert set(kc_users) == set(db_users)
+    assert set(u.id for u in kc_users) == set(u.id for u in db_users)
     # Make sure doing users sync again does not change anything and works
     await sync_config.syncer.users_sync(kc_api)
     db_users = await user_repo.get_users(admin_user)
-    db_users = [user.user for user in db_users]
-    assert set(kc_users) == set(db_users)
+    assert set(u.id for u in kc_users) == set(u.id for u in db_users)
     # Make sure that the addition of the users resulted in the creation of namespaces
     nss, _ = await sync_config.syncer.group_repo.get_namespaces(
         user=APIUser(id=user1.id), pagination=PaginationRequest(1, 100)
@@ -282,7 +312,7 @@ async def test_user_events_update(get_app_configs, admin_user: APIUser) -> None:
     assert set(kc_users) == set(db_users)
     # Add update and create events
     user2 = UserInfo("user-2-id", "Jane", "Doe", "jane.doe@gmail.com")
-    user1_update = UserInfoUpdate("user-1-id", datetime.utcnow(), "first_name", "Johnathan")
+    user1_update = UserInfoFieldUpdate("user-1-id", datetime.utcnow(), "first_name", "Johnathan")
     user1_updated = UserInfo(**{**asdict(user1), "first_name": "Johnathan"})
     kc_api.user_events = get_kc_user_create_events([user2]) + get_kc_user_update_events([user1_update])
     # Process events and check if updates show up

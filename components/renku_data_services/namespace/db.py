@@ -49,25 +49,27 @@ class GroupRepository:
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.insert_many, ResourceType.user_namespace)
     @dispatch_message(events.InsertUserNamespace)
-    async def generate_user_namespaces(
-        self, *, session: AsyncSession | None = None
-    ) -> list[user_models.UserWithNamespace]:
+    async def generate_user_namespaces(self, *, session: AsyncSession | None = None) -> list[user_models.UserInfo]:
         """Generate user namespaces if the user table has data and the namespaces table is empty."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
         # NOTE: lock to make sure another instance of the data service cannot insert/update but can read
-        output: list[user_models.UserWithNamespace] = []
+        output: list[user_models.UserInfo] = []
         await session.execute(text("LOCK TABLE common.namespaces IN EXCLUSIVE MODE"))
         at_least_one_namespace = (await session.execute(select(schemas.NamespaceORM).limit(1))).one_or_none()
         if at_least_one_namespace:
             logger.info("Found at least one user namespace, skipping creation")
-            return output
+            return []
         logger.info("Found zero user namespaces, will try to create them from users table")
         res = await session.scalars(select(user_schemas.UserORM))
         for user in res:
-            ns = await self._insert_user_namespace(session, user, retry_enumerate=10, retry_random=True)
+            slug = base_models.Slug.from_user(user.email, user.first_name, user.last_name, user.keycloak_id)
+            ns = await self._insert_user_namespace(
+                session, user.keycloak_id, slug.value, retry_enumerate=10, retry_random=True
+            )
             logger.info(f"Creating user namespace {ns}")
-            output.append(user_models.UserWithNamespace(user.dump(), ns))
+            user.namespace = ns
+            output.append(user.dump())
         logger.info(f"Created {len(output)} user namespaces")
         return output
 
@@ -329,7 +331,7 @@ class GroupRepository:
                 output.append(ns_orm.dump())
             return output, group_count
 
-    async def _get_user_namespaces(self) -> AsyncGenerator[user_models.UserWithNamespace, None]:
+    async def _get_user_namespaces(self) -> AsyncGenerator[user_models.UserInfo, None]:
         """Lists all user namespaces without regard for authorization or permissions, used for migrations."""
         async with self.session_maker() as session, session.begin():
             namespaces = await session.stream_scalars(
@@ -379,39 +381,37 @@ class GroupRepository:
                 raise errors.ProgrammingError(message="Found a namespace that has no user associated with it.")
             return ns.dump()
 
+    async def _create_user_namespace_slug(
+        self, session: AsyncSession, user_slug: str, retry_enumerate: int = 0, retry_random: bool = False
+    ) -> str:
+        """Create a valid namespace slug for a user."""
+        nss = await session.scalars(
+            select(schemas.NamespaceORM.slug).where(schemas.NamespaceORM.slug.startswith(user_slug))
+        )
+        nslist = nss.all()
+        if user_slug not in nslist:
+            return user_slug
+        if retry_enumerate:
+            for inc in range(0, retry_enumerate + 1):
+                slug = f"{user_slug}-{inc}"
+                if slug not in nslist:
+                    return slug
+        if retry_random:
+            suffix = "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(8)])  # nosec B311
+            slug = f"{user_slug}-{suffix}"
+            if slug not in nslist:
+                return slug
+
+        raise errors.ValidationError(message=f"Cannot create generate a unique namespace slug for the user {user_slug}")
+
     async def _insert_user_namespace(
-        self, session: AsyncSession, user: schemas.UserORM, retry_enumerate: int = 0, retry_random: bool = False
-    ) -> models.Namespace:
+        self, session: AsyncSession, user_id: str, user_slug: str, retry_enumerate: int = 0, retry_random: bool = False
+    ) -> schemas.NamespaceORM:
         """Insert a new namespace for the user and optionally retry different variations to avoid collisions."""
-        original_slug = user.to_slug()
-        for inc in range(0, retry_enumerate + 1):
-            # NOTE: on iteration 0 we try with the optimal slug value derived from the user data without any suffix.
-            suffix = ""
-            if inc > 0:
-                suffix = f"-{inc}"
-            slug = base_models.Slug.from_name(original_slug.value.lower() + suffix)
-            ns = schemas.NamespaceORM(slug.value, user_id=user.keycloak_id)
-            try:
-                async with session.begin_nested():
-                    session.add(ns)
-                    await session.flush()
-            except IntegrityError:
-                if retry_enumerate == 0:
-                    raise errors.ValidationError(message=f"The user namespace slug {slug.value} already exists")
-                continue
-            else:
-                await session.refresh(ns)
-                return ns.dump()
-        if not retry_random:
-            raise errors.ValidationError(
-                message=f"Cannot create generate a unique namespace slug for the user with ID {user.keycloak_id}"
-            )
-        # NOTE: At this point the attempts to generate unique ID have ended and the only option is
-        # to add a small random suffix to avoid uniqueness constraints problems
-        suffix = "-" + "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(8)])  # nosec: B311
-        slug = base_models.Slug.from_name(original_slug.value.lower() + suffix)
-        ns = schemas.NamespaceORM(slug.value, user_id=user.keycloak_id)
+        namespace = await self._create_user_namespace_slug(session, user_slug, retry_enumerate, retry_random)
+        slug = base_models.Slug.from_name(namespace)
+        ns = schemas.NamespaceORM(slug.value, user_id=user_id)
         session.add(ns)
         await session.flush()
         await session.refresh(ns)
-        return ns.dump()
+        return ns

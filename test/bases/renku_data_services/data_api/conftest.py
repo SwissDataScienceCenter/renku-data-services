@@ -14,6 +14,7 @@ from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.authz.authz import _AuthzConverter
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.migrations.core import run_migrations_for_app
+from renku_data_services.namespace.models import Namespace, NamespaceKind
 from renku_data_services.secrets.config import Config as SecretsConfig
 from renku_data_services.secrets_storage_api.app import register_all_handlers as register_secrets_handlers
 from renku_data_services.storage.rclone import RCloneValidator
@@ -24,22 +25,62 @@ from test.bases.renku_data_services.background_jobs.test_sync import get_kc_user
 
 @pytest.fixture
 def admin_user() -> UserInfo:
-    return UserInfo(id="admin", first_name="Admin", last_name="Doe", email="admin.doe@gmail.com")
+    return UserInfo(
+        id="admin",
+        first_name="Admin",
+        last_name="Doe",
+        email="admin.doe@gmail.com",
+        namespace=Namespace(
+            id="admin", slug="admin.doe", kind=NamespaceKind.user, underlying_resource_id="admin", created_by="admin"
+        ),
+    )
 
 
 @pytest.fixture
 def regular_user() -> UserInfo:
-    return UserInfo(id="user", first_name="User", last_name="Doe", email="user.doe@gmail.com")
+    return UserInfo(
+        id="user",
+        first_name="User",
+        last_name="Doe",
+        email="user.doe@gmail.com",
+        namespace=Namespace(
+            id="user", slug="user", kind=NamespaceKind.user, underlying_resource_id="user", created_by="user"
+        ),
+    )
 
 
 @pytest.fixture
 def member_1_user() -> UserInfo:
-    return UserInfo(id="member-1", first_name="Member-1", last_name="Doe", email="member-1.doe@gmail.com")
+    return UserInfo(
+        id="member-1",
+        first_name="Member-1",
+        last_name="Doe",
+        email="member-1.doe@gmail.com",
+        namespace=Namespace(
+            id="member-1",
+            slug="member-1.doe",
+            kind=NamespaceKind.user,
+            underlying_resource_id="member-1",
+            created_by="member-1",
+        ),
+    )
 
 
 @pytest.fixture
 def member_2_user() -> UserInfo:
-    return UserInfo(id="member-2", first_name="Member-2", last_name="Doe", email="member-2.doe@gmail.com")
+    return UserInfo(
+        id="member-2",
+        first_name="Member-2",
+        last_name="Doe",
+        email="member-2.doe@gmail.com",
+        namespace=Namespace(
+            id="member-2",
+            slug="member-2.doe",
+            kind=NamespaceKind.user,
+            underlying_resource_id="member-2",
+            created_by="member-2",
+        ),
+    )
 
 
 @pytest.fixture
