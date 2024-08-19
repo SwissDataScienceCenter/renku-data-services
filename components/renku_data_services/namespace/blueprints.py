@@ -101,10 +101,10 @@ class GroupsBP(CustomBlueprint):
                 [
                     dict(
                         id=m.id,
-                        namespace=m.namespace,
                         first_name=m.first_name,
                         last_name=m.last_name,
                         role=apispec.GroupRole(m.role.value),
+                        namespace=m.namespace,
                     )
                     for m in members
                 ],

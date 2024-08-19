@@ -79,7 +79,12 @@ class ProjectMemberResponse(BaseAPISpec):
         pattern="^[A-Za-z0-9]{1}[A-Za-z0-9-]+$",
     )
     namespace: Optional[str] = Field(
-        None, description="User namespace"
+        None,
+        description="A command-line/url friendly name for a namespace",
+        example="a-slug-example",
+        max_length=99,
+        min_length=1,
+        pattern="^(?!.*\\.git$|.*\\.atom$|.*[\\-._][\\-._].*)[a-zA-Z0-9][a-zA-Z0-9\\-_.]*$",
     )
     first_name: Optional[str] = Field(
         None,
