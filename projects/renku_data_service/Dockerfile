@@ -28,10 +28,10 @@ RUN env/bin/pip --no-cache-dir install projects/renku_data_service/dist/*.whl
 FROM python:3.12-slim-bookworm
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
-ENV PROMETHEUS_MULTIPROC_DIR=/prometheus
+ENV prometheus_multiproc_dir=/prometheus
 RUN mkdir /prometheus
 RUN apt-get update && apt-get install -y \
-    tini && \
+    tini procps psmisc && \
     rm -rf /var/lib/apt/lists/* && \
     groupadd --gid $USER_GID renku && \
     adduser --gid $USER_GID --uid $USER_UID renku

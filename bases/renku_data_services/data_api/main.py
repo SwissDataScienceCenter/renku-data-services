@@ -148,6 +148,7 @@ if __name__ == "__main__":
     parser.add_argument("--fast", action="store_true", help="Enable Sanic fast mode")
     parser.add_argument("-d", "--dev", action="store_true", help="Enable Sanic development mode")
     parser.add_argument("--single-process", action="store_true", help="Do not use multiprocessing.")
+    parser.add_argument("--workers", type=int, default=1, help="Do not use multiprocessing.")
     args: dict[str, Any] = vars(parser.parse_args())
     loader = AppLoader(factory=create_app)
     app = loader.load()
