@@ -51,8 +51,8 @@ class K8sSecret(BaseAPISpec):
     secret_ids: List[Ulid] = Field(
         ..., description="The ids of the secrets to include", min_length=1
     )
-    owner_references: Optional[List[Dict[str, str]]] = Field(
-        None,
+    owner_references: List[Dict[str, str]] = Field(
+        ...,
         description="The resource in K8s that owns this secret",
         example=[
             {
@@ -63,3 +63,4 @@ class K8sSecret(BaseAPISpec):
             }
         ],
     )
+    key_mapping: Optional[Dict[str, str]] = None
