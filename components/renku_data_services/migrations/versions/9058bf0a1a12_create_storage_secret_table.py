@@ -1,7 +1,7 @@
 """create storage secret table
 
 Revision ID: 9058bf0a1a12
-Revises: 9c26ab37ff4c
+Revises: 17eea03f938e
 Create Date: 2024-06-14 17:22:27.013665
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "9058bf0a1a12"
-down_revision = "9c26ab37ff4c"
+down_revision = "17eea03f938e"
 branch_labels = None
 depends_on = None
 

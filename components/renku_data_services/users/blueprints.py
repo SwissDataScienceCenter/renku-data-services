@@ -155,7 +155,7 @@ class UserSecretsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _get_one(_: Request, user: base_models.APIUser, secret_id: str) -> JSONResponse:
+        async def _get_one(_: Request, user: base_models.APIUser, secret_id: ULID) -> JSONResponse:
             secret = await self.secret_repo.get_secret_by_id(requested_by=user, secret_id=secret_id)
             if not secret:
                 raise errors.MissingResourceError(message=f"The secret with id {secret_id} cannot be found.")
