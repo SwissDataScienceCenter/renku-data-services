@@ -244,6 +244,159 @@ paths:
           description: The server exists but could not be successfully hibernated.
       tags:
       - notebooks
+  "/sessions":
+    post:
+      summary: Launch a new session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionPostRequest"
+      responses:
+        "201":
+          description: The session was created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        "200":
+          description: The session already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - sessions
+    get:
+      summary: Get a list of all sessions for a user
+      responses:
+        "200":
+          description: Information about the sessions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionListResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - sessions
+  "/sessions/{session_id}":
+    get:
+      summary: Get information about a specific session
+      parameters:
+      - description: The id of the session
+        in: path
+        name: session_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Information about the session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - sessions
+    delete:
+      parameters:
+      - description: The id of the session that should be deleted
+        in: path
+        name: session_id
+        required: true
+        schema:
+          type: string
+      summary: Fully remove a session
+      responses:
+        "204":
+          description: The session was deleted or it never existed in the first place
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - sessions
+    patch:
+      summary: Patch a session
+      parameters:
+      - description: The id of the session
+        in: path
+        name: session_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionPatchRequest"
+      responses:
+        "200":
+          description: The session was patched
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - sessions
+  "/sessions/{session_id}/logs":
+    get:
+      summary: Get all logs from a specific session
+      parameters:
+      - description: The id of the session
+        in: path
+        name: session_id
+        required: true
+        schema:
+          type: string
+      - description: The maximum number of most-recent lines to return for each container
+        in: query
+        name: max_lines
+        required: false
+        schema:
+          type: integer
+          default: 250
+      responses:
+        "200":
+          description: The session logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionLogsResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - sessions
+  "/sessions/images":
+    get:
+      summary: Check if a session image exists
+      parameters:
+      - description: The Docker image URL (tag included) that should be fetched.
+        in: query
+        name: image_url
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: The docker image can be found
+        "404":
+          description: The docker image cannot be found or the user does not have permissions to access it
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - sessions
 components:
   schemas:
     BoolServerOptionsChoice:
@@ -723,6 +876,158 @@ components:
       - renku.io/projectName
       - renku.io/repository
       type: object
+    SessionPostRequest:
+      properties:
+        project_id:
+          $ref: "#/components/schemas/Ulid"
+        launcher_id:
+          $ref: "#/components/schemas/Ulid"
+        storage:
+          default: 1
+          type: integer
+          description: The size of disk storage for the session, in gigabytes
+        resource_class_id:
+          default: 
+          nullable: true
+          type: integer
+      required:
+        - project_id
+        - launcher_id
+      type: object
+    SessionResponse:
+      properties:
+        image:
+          type: string
+        name:
+          type: string
+        resources:
+          "$ref": "#/components/schemas/SessionResources"
+        started:
+          format: date-time
+          nullable: true
+          type: string
+        status:
+          "$ref": "#/components/schemas/SessionStatus"
+        url:
+          type: string
+        project_id:
+          $ref: "#/components/schemas/Ulid"
+        launcher_id:
+          $ref: "#/components/schemas/Ulid"
+        resource_class_id:
+          type: integer
+      required:
+        - image
+        - name
+        - resources
+        - started
+        - status
+        - url
+        - project_id
+        - launcher_id
+        - resource_class_id
+      type: object
+    SessionListResponse:
+      items:
+        "$ref": "#/components/schemas/SessionResponse"
+      type: array
+    SessionPatchRequest:
+      properties:
+        resource_class_id:
+          type: integer
+        state:
+          enum:
+          - running
+          - hibernated
+          type: string
+    SessionStatus:
+      properties:
+        details:
+          items:
+            "$ref": "#/components/schemas/SessionStatusDetail"
+          type: array
+        message:
+          type: string
+        state:
+          enum:
+          - running
+          - starting
+          - stopping
+          - failed
+          - hibernated
+          type: string
+        will_hibernate_at:
+          format: date-time
+          nullable: true
+          type: string
+        will_delete_at:
+          format: date-time
+          nullable: true
+          type: string
+      required:
+      - details
+      - readyNumContainers
+      - state
+      - totalNumContainers
+      type: object
+    SessionStatusDetail:
+      properties:
+        status:
+          enum:
+          - ready
+          - waiting
+          - executing
+          - failed
+          type: string
+        step:
+          type: string
+      required:
+      - status
+      - step
+      type: object
+    SessionResources:
+      properties:
+        requests:
+          "$ref": "#/components/schemas/SessionResourcesRequests"
+      type: object
+    SessionResourcesRequests:
+      properties:
+        cpu:
+          type: number
+          description: Fractional CPUs
+        gpu:
+          type: integer
+          description: Number of GPUs used
+          default: 0
+        memory:
+          type: integer
+          description: Ammount of RAM for the session, in gigabytes
+        storage:
+          type: integer
+          description: The size of disk storage for the session, in gigabytes
+      required:
+      - cpu
+      - memory
+      - storage
+      example:
+        cpu: 1.5
+        memory: 1
+        storage: 40
+        gpu: 0
+      type: object
+    SessionLogsResponse:
+      type: object
+      additionalProperties:
+        type: string
+      example:
+        "container-A": "Log line 1\nLog line 2"
+        "container-B": "Log line 1\nLog line 2"
+    Ulid:
+      description: ULID identifier
+      type: string
+      minLength: 26
+      maxLength: 26
+      pattern: "^[A-Z0-9]{26}$" # This is case-insensitive
   responses:
     Error:
       description: The schema for all 4xx and 5xx responses
