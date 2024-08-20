@@ -69,7 +69,9 @@ class CloudStorage(BaseModel):
     """
 
     target_path: str = Field(min_length=1)
-    """Path inside the target repository to mouhnt/clone data to."""
+    """Path inside the target repository to mount/clone data to."""
+
+    secrets: list["CloudStorageSecret"] = Field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict) -> "CloudStorage":
@@ -81,10 +83,10 @@ class CloudStorage(BaseModel):
             raise errors.ValidationError(message="'configuration' not set")
 
         if "source_path" not in data:
-            raise errors.ValidationError(message="project_id not set")
+            raise errors.ValidationError(message="'source_path' not set")
 
         if "target_path" not in data:
-            raise errors.ValidationError(message="project_id not set")
+            raise errors.ValidationError(message="'target_path' not set")
 
         if "type" not in data["configuration"]:
             raise errors.ValidationError(message="'type' not set in 'configuration'")
@@ -222,3 +224,19 @@ class CloudStorage(BaseModel):
 
         # default to S3 for unknown URLs, since these are way more common
         return CloudStorage.from_s3_url(storage_url, project_id, name, readonly, target_path)
+
+
+class CloudStorageSecret(BaseModel):
+    """Cloud storage secret model."""
+
+    user_id: str = Field()
+    storage_id: str = Field()
+    name: str = Field(min_length=1, max_length=99)
+    secret_id: str = Field()
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "CloudStorageSecret":
+        """Create the model from a plain dictionary."""
+        return cls(
+            user_id=data["user_id"], storage_id=data["storage_id"], name=data["name"], secret_id=data["secret_id"]
+        )

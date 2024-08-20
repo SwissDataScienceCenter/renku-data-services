@@ -264,7 +264,10 @@ class Config:
         """The DB adapter for V1 cloud storage configs."""
         if not self._storage_repo:
             self._storage_repo = StorageRepository(
-                session_maker=self.db.async_session_maker, gitlab_client=self.gitlab_client
+                session_maker=self.db.async_session_maker,
+                gitlab_client=self.gitlab_client,
+                user_repo=self.kc_user_repo,
+                secret_service_public_key=self.secrets_service_public_key,
             )
         return self._storage_repo
 
@@ -273,7 +276,10 @@ class Config:
         """The DB adapter for V2 cloud storage configs."""
         if not self._storage_v2_repo:
             self._storage_v2_repo = StorageV2Repository(
-                session_maker=self.db.async_session_maker, project_authz=self.authz
+                session_maker=self.db.async_session_maker,
+                project_authz=self.authz,
+                user_repo=self.kc_user_repo,
+                secret_service_public_key=self.secrets_service_public_key,
             )
         return self._storage_v2_repo
 

@@ -8,7 +8,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, RootModel
 from renku_data_services.notebooks.apispec_base import BaseAPISpec
 
 
@@ -210,6 +210,42 @@ class FieldUserPodAnnotations(BaseAPISpec):
     renku_io_username: Optional[str] = Field(None, alias="renku.io/username")
 
 
+class State2(Enum):
+    running = "running"
+    hibernated = "hibernated"
+
+
+class SessionPatchRequest(BaseAPISpec):
+    resource_class_id: Optional[int] = None
+    state: Optional[State2] = None
+
+
+class State3(Enum):
+    running = "running"
+    starting = "starting"
+    stopping = "stopping"
+    failed = "failed"
+    hibernated = "hibernated"
+
+
+class SessionStatusDetail(BaseAPISpec):
+    status: Status
+    step: str
+
+
+class SessionResourcesRequests(BaseAPISpec):
+    cpu: float = Field(..., description="Fractional CPUs")
+    gpu: int = Field(0, description="Number of GPUs used")
+    memory: int = Field(..., description="Ammount of RAM for the session, in gigabytes")
+    storage: int = Field(
+        ..., description="The size of disk storage for the session, in gigabytes"
+    )
+
+
+class SessionLogsResponse(RootModel[Optional[Dict[str, str]]]):
+    root: Optional[Dict[str, str]] = None
+
+
 class NotebooksImagesGetParametersQuery(BaseAPISpec):
     image_url: str
 
@@ -229,8 +265,12 @@ class NotebooksServersServerNameDeleteParametersQuery(BaseAPISpec):
     forced: bool = False
 
 
-class ErrorResponse(BaseAPISpec):
-    error: ErrorResponseNested
+class SessionsSessionIdLogsGetParametersQuery(BaseAPISpec):
+    max_lines: int = 250
+
+
+class SessionsImagesGetParametersQuery(BaseAPISpec):
+    image_url: str
 
 
 class LaunchNotebookRequest(BaseAPISpec):
@@ -277,6 +317,39 @@ class ServerStatus(BaseAPISpec):
     warnings: Optional[List[ServerStatusWarning]] = None
 
 
+class SessionPostRequest(BaseAPISpec):
+    project_id: str = Field(
+        ...,
+        description="ULID identifier",
+        max_length=26,
+        min_length=26,
+        pattern="^[A-Z0-9]{26}$",
+    )
+    launcher_id: str = Field(
+        ...,
+        description="ULID identifier",
+        max_length=26,
+        min_length=26,
+        pattern="^[A-Z0-9]{26}$",
+    )
+    storage: int = Field(
+        1, description="The size of disk storage for the session, in gigabytes"
+    )
+    resource_class_id: Optional[int] = None
+
+
+class SessionStatus(BaseAPISpec):
+    details: List[SessionStatusDetail]
+    message: Optional[str] = None
+    state: State3
+    will_hibernate_at: Optional[datetime] = None
+    will_delete_at: Optional[datetime] = None
+
+
+class SessionResources(BaseAPISpec):
+    requests: Optional[SessionResourcesRequests] = None
+
+
 class NotebookResponse(BaseAPISpec):
     annotations: Optional[FieldUserPodAnnotations] = None
     cloudstorage: Optional[List[LaunchNotebookResponseCloudStorage]] = None
@@ -291,3 +364,31 @@ class NotebookResponse(BaseAPISpec):
 
 class ServersGetResponse(BaseAPISpec):
     servers: Optional[Dict[str, NotebookResponse]] = None
+
+
+class SessionResponse(BaseAPISpec):
+    image: str
+    name: str
+    resources: SessionResources
+    started: Optional[datetime] = Field(...)
+    status: SessionStatus
+    url: str
+    project_id: str = Field(
+        ...,
+        description="ULID identifier",
+        max_length=26,
+        min_length=26,
+        pattern="^[A-Z0-9]{26}$",
+    )
+    launcher_id: str = Field(
+        ...,
+        description="ULID identifier",
+        max_length=26,
+        min_length=26,
+        pattern="^[A-Z0-9]{26}$",
+    )
+    resource_class_id: int
+
+
+class SessionListResponse(RootModel[List[SessionResponse]]):
+    root: List[SessionResponse]
