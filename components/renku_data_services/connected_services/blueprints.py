@@ -191,7 +191,11 @@ class OAuth2ConnectionsBP(CustomBlueprint):
         @validate_query(query=apispec.PaginationRequest)
         @paginate
         async def _get_installations(
-            _: Request, user: base_models.APIUser, connection_id: str, pagination: PaginationRequest
+            _: Request,
+            user: base_models.APIUser,
+            connection_id: str,
+            pagination: PaginationRequest,
+            query: apispec.PaginationRequest,
         ) -> tuple[list[dict[str, Any]], int]:
             installations_list = await self.connected_services_repo.get_oauth2_app_installations(
                 connection_id=connection_id,
