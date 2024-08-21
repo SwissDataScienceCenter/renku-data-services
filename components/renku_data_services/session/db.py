@@ -154,7 +154,7 @@ class SessionRepository:
         """Get one session launcher from the database."""
         async with self.session_maker() as session:
             res = await session.scalars(
-                select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.id == str(launcher_id))
+                select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.id == launcher_id)
             )
             launcher = res.one_or_none()
 
@@ -252,7 +252,7 @@ class SessionRepository:
 
         async with self.session_maker() as session, session.begin():
             res = await session.scalars(
-                select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.id == str(launcher_id))
+                select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.id == launcher_id)
             )
             launcher = res.one_or_none()
             if launcher is None:
@@ -330,7 +330,7 @@ class SessionRepository:
 
         async with self.session_maker() as session, session.begin():
             res = await session.scalars(
-                select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.id == str(launcher_id))
+                select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.id == launcher_id)
             )
             launcher = res.one_or_none()
 

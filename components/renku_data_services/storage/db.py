@@ -67,7 +67,7 @@ class BaseStorageRepository(_Base):
             stmt = select(schemas.CloudStorageORM)
 
             if project_id is not None:
-                stmt = stmt.where(schemas.CloudStorageORM.project_id == str(project_id))
+                stmt = stmt.where(schemas.CloudStorageORM.project_id == project_id)
             if id is not None:
                 stmt = stmt.where(schemas.CloudStorageORM.storage_id == id)
             if name is not None:
@@ -120,7 +120,7 @@ class BaseStorageRepository(_Base):
         """Update a cloud storage entry."""
         async with self.session_maker() as session, session.begin():
             res = await session.execute(
-                select(schemas.CloudStorageORM).where(schemas.CloudStorageORM.storage_id == str(storage_id))
+                select(schemas.CloudStorageORM).where(schemas.CloudStorageORM.storage_id == storage_id)
             )
             storage = res.scalars().one_or_none()
 
@@ -153,7 +153,7 @@ class BaseStorageRepository(_Base):
         """Delete a cloud storage entry."""
         async with self.session_maker() as session, session.begin():
             res = await session.execute(
-                select(schemas.CloudStorageORM).where(schemas.CloudStorageORM.storage_id == str(storage_id))
+                select(schemas.CloudStorageORM).where(schemas.CloudStorageORM.storage_id == storage_id)
             )
             storage = res.one_or_none()
 
@@ -223,7 +223,7 @@ class BaseStorageRepository(_Base):
             stmt = (
                 select(schemas.CloudStorageSecretsORM)
                 .where(schemas.CloudStorageSecretsORM.user_id == user.id)
-                .where(schemas.CloudStorageSecretsORM.storage_id == str(storage_id))
+                .where(schemas.CloudStorageSecretsORM.storage_id == storage_id)
             )
             result = await session.execute(stmt)
             storage_secrets_orm = result.scalars().all()
@@ -237,13 +237,13 @@ class BaseStorageRepository(_Base):
                 delete(SecretORM)
                 .where(schemas.CloudStorageSecretsORM.secret_id == SecretORM.id)
                 .where(schemas.CloudStorageSecretsORM.user_id == user.id)
-                .where(schemas.CloudStorageSecretsORM.storage_id == str(storage_id))
+                .where(schemas.CloudStorageSecretsORM.storage_id == storage_id)
             )
             await session.execute(stmt)
             stmt = (
                 delete(schemas.CloudStorageSecretsORM)
                 .where(schemas.CloudStorageSecretsORM.user_id == user.id)
-                .where(schemas.CloudStorageSecretsORM.storage_id == str(storage_id))
+                .where(schemas.CloudStorageSecretsORM.storage_id == storage_id)
             )
             await session.execute(stmt)
 

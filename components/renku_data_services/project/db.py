@@ -83,7 +83,7 @@ class ProjectRepository:
             )
 
         async with self.session_maker() as session:
-            stmt = select(schemas.ProjectORM).where(schemas.ProjectORM.id == str(project_id))
+            stmt = select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id)
             result = await session.execute(stmt)
             project_orm = result.scalars().first()
 
@@ -196,10 +196,10 @@ class ProjectRepository:
         project_id_str: str = str(project_id)
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
-        result = await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id_str))
+        result = await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
         project = result.one_or_none()
         if project is None:
-            raise errors.MissingResourceError(message=f"The project with id '{project_id_str}' cannot be found")
+            raise errors.MissingResourceError(message=f"The project with id '{project_id}' cannot be found")
         old_project = project.dump()
 
         required_scope = Scope.WRITE
@@ -215,7 +215,7 @@ class ProjectRepository:
         authorized = await self.authz.has_permission(user, ResourceType.project, project_id, required_scope)
         if not authorized:
             raise errors.MissingResourceError(
-                message=f"Project with id '{project_id_str}' does not exist or you do not have access to it."
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
 
         current_etag = project.dump().etag
@@ -228,7 +228,7 @@ class ProjectRepository:
                 for r in payload["repositories"]
             ]
             # Trigger update for ``updated_at`` column
-            await session.execute(update(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id_str).values())
+            await session.execute(update(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id).values())
 
         if "keywords" in payload and not payload["keywords"]:
             payload["keywords"] = None
@@ -279,17 +279,16 @@ class ProjectRepository:
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
 
-        project_id_str = str(project_id)
-        result = await session.execute(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id_str))
+        result = await session.execute(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
         project = result.scalar_one_or_none()
 
         if project is None:
             return None
 
-        await session.execute(delete(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id_str))
+        await session.execute(delete(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
 
         await session.execute(
-            delete(storage_schemas.CloudStorageORM).where(storage_schemas.CloudStorageORM.project_id == project_id_str)
+            delete(storage_schemas.CloudStorageORM).where(storage_schemas.CloudStorageORM.project_id == str(project_id))
         )
 
         return project.dump()
@@ -327,7 +326,7 @@ def _project_exists(
                 message="The decorator that checks if a project exists requires a database session in the "
                 f"keyword arguments, but instead it got {type(session)}"
             )
-        stmt = select(schemas.ProjectORM.id).where(schemas.ProjectORM.id == str(project_id))
+        stmt = select(schemas.ProjectORM.id).where(schemas.ProjectORM.id == project_id)
         res = await session.scalar(stmt)
         if not res:
             raise errors.MissingResourceError(
