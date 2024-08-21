@@ -65,7 +65,7 @@ class KeycloakAuthenticator(Authenticator):
             # misconfiguration most often rather than from the user having done something so we surface them.
             raise
         except jwt.InvalidTokenError:
-            raise errors.Unauthorized(
+            raise errors.UnauthorizedError(
                 message="Your credentials are invalid or expired, please log in again.", quiet=True
             )
 

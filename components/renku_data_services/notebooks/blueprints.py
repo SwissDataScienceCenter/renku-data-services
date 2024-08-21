@@ -25,8 +25,6 @@ from renku_data_services import base_models
 from renku_data_services.base_api.auth import authenticated_or_anonymous
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser, Authenticator
-from renku_data_services.connected_services.db import ConnectedServicesRepository
-from renku_data_services.connected_services.models import OAuth2TokenSet
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec
@@ -184,7 +182,7 @@ class NotebooksBP(CustomBlueprint):
                 server_name=server_name,
                 server_class=server_class,
                 user=user,
-                image=body.image,
+                image=body.image or self.nb_config.sessions.default_image,
                 resource_class_id=body.resource_class_id,
                 storage=body.storage,
                 environment_variables=body.environment_variables,
@@ -668,7 +666,9 @@ class NotebooksBP(CustomBlueprint):
                 # NOTE: The tokens in the session could expire if the session is hibernated long enough,
                 # here we inject new ones to make sure everything is valid when the session starts back up.
                 if user.access_token is None or user.refresh_token is None or internal_gitlab_user.access_token is None:
-                    raise errors.UnauthorizedError(message="Cannot patch the server if the user is not fully logged in.")
+                    raise errors.UnauthorizedError(
+                        message="Cannot patch the server if the user is not fully logged in."
+                    )
                 renku_tokens = RenkuTokens(access_token=user.access_token, refresh_token=user.refresh_token)
                 gitlab_token = GitlabToken(
                     access_token=internal_gitlab_user.access_token, expires_at=user.git_token_expires_at
@@ -769,31 +769,19 @@ class NotebooksNewBP(CustomBlueprint):
 
         @authenticated_or_anonymous(self.authenticator)
         @notebooks_internal_gitlab_authenticate(self.internal_gitlab_authenticator)
-        @validate(json=apispec.LaunchNotebookRequest)
+        @validate(json=apispec.SessionPostRequest)
         async def _handler(
             _: Request,
             user: AuthenticatedAPIUser | AnonymousAPIUser,
             internal_gitlab_user: APIUser,
-            body: apispec.LaunchNotebookRequest,
+            body: apispec.SessionPostRequest,
         ) -> JSONResponse:
             server_name = renku_2_make_server_name(
                 safe_username=user.id, project_id=body.project_id, launcher_id=body.launcher_id
             )
             existing_session = await self.nb_config.k8s_v2_client.get_server(user.id, server_name)
-            if existing_session is not None:
-                return json(
-                    apispec.NotebookResponseAmaltheaSession(
-                        image=existing_session.spec.session.image,
-                        name=existing_session.metadata.name,
-                        resources=apispec.UserPodResources.model_validate(
-                            existing_session.spec.session.resources, from_attributes=True
-                        ),
-                        started=existing_session.metadata.creationTimestamp,
-                        state=None,
-                        status=None,
-                        url=existing_session.status.url if existing_session.status else None,
-                    ).model_dump(exclude_none=True, mode="json")
-                )
+            if existing_session is not None and existing_session.spec is not None:
+                return json(existing_session.as_apispec().model_dump(exclude_none=True, mode="json"))
             gitlab_client = NotebooksGitlabClient(self.nb_config.git.url, internal_gitlab_user.access_token)
             project = await self.project_repo.get_project(user=user, project_id=body.project_id)
             launcher = await self.session_repo.get_launcher(user, ULID.from_str(body.launcher_id))
@@ -808,16 +796,15 @@ class NotebooksNewBP(CustomBlueprint):
             )
             work_dir = Path("/home/jovyan/work")
             user_secrets: K8sUserSecrets | None = None
-            if body.user_secrets:
-                user_secrets = K8sUserSecrets(
-                    name=server_name,
-                    user_secret_ids=body.user_secrets.user_secret_ids,
-                    mount_path=body.user_secrets.mount_path,
-                )
+            # if body.user_secrets:
+            #     user_secrets = K8sUserSecrets(
+            #         name=server_name,
+            #         user_secret_ids=body.user_secrets.user_secret_ids,
+            #         mount_path=body.user_secrets.mount_path,
+            #     )
             cloud_storage: list[RCloneStorage] = []
-            repositories = [Repository(i.url, branch=i.branch, commit_sha=i.commit_sha) for i in body.repositories]
-            if not repositories:
-                repositories = [Repository(url=i) for i in project.repositories]
+            # repositories = [Repository(i.url, branch=i.branch, commit_sha=i.commit_sha) for i in body.repositories]
+            repositories = [Repository(url=i) for i in project.repositories]
             server = Renku2UserServer(
                 user=user,
                 image=image,
@@ -844,8 +831,10 @@ class NotebooksNewBP(CustomBlueprint):
                 extra_volumes.append(
                     ExtraVolume(
                         name="renku-authorized-emails",
-                        secret=SecretAsVolume(secretName=server_name),
-                        items=[SecretAsVolumeItem(key="authorized_emails", path="authorized_emails")],
+                        secret=SecretAsVolume(
+                            secretName=server_name,
+                            items=[SecretAsVolumeItem(key="authorized_emails", path="authorized_emails")],
+                        ),
                     )
                 )
             git_clone = init_containers.git_clone_container_v2(server)
@@ -854,14 +843,18 @@ class NotebooksNewBP(CustomBlueprint):
             extra_containers: list[ExtraContainer] = []
             git_proxy_container = git_proxy.main_container(server)
             if git_proxy_container is not None:
-                extra_containers.append(ExtraContainer.model_validate(self.nb_config.k8s_v2_client.sanitize(git_proxy_container)))
+                extra_containers.append(
+                    ExtraContainer.model_validate(self.nb_config.k8s_v2_client.sanitize(git_proxy_container))
+                )
 
             parsed_server_url = urlparse(server.server_url)
+            annotations: dict[str, str] = {
+                "renku.io/project_id": body.project_id,
+                "renku.io/launcher_id": body.launcher_id,
+                "renku.io/resource_class_id": str(body.resource_class_id or default_resource_class.id),
+            }
             manifest = AmaltheaSessionV1Alpha1(
-                metadata=Metadata(
-                    name=server_name,
-                    annotations={},
-                ),
+                metadata=Metadata(name=server_name, annotations=annotations),
                 spec=AmaltheaSessionSpec(
                     adoptSecrets=True,
                     codeRepositories=[],
@@ -955,24 +948,8 @@ class NotebooksNewBP(CustomBlueprint):
             except Exception:
                 await self.nb_config.k8s_v2_client.delete_secret(secret.metadata.name)
                 raise errors.ProgrammingError(message="Could not start the amalthea session")
-            url = None
-            if manifest.status:
-                url = manifest.status.url
-            return json(
-                apispec.NotebookResponseAmaltheaSession(
-                    cloudstorage=[apispec.LaunchNotebookResponseCloudStorage.model_validate(i) for i in cloud_storage],
-                    image=image,
-                    name=server_name,
-                    resources=apispec.UserPodResources.model_validate(
-                        manifest.spec.session.resources, from_attributes=True
-                    ),
-                    started=manifest.metadata.creationTimestamp,
-                    state=None,
-                    status=None,
-                    url=url,
-                ).model_dump(mode="json", exclude_none=True),
-                201,
-            )
+
+            return json(manifest.as_apispec().model_dump(mode="json", exclude_none=True), 201)
 
         return "/sessions", ["POST"], _handler
 
@@ -982,22 +959,10 @@ class NotebooksNewBP(CustomBlueprint):
         @authenticated_or_anonymous(self.authenticator)
         async def _handler(_: Request, user: AuthenticatedAPIUser | AnonymousAPIUser) -> HTTPResponse:
             sessions = await self.nb_config.k8s_v2_client.list_servers(user.id)
-            return json(
-                [
-                    apispec.NotebookResponseAmaltheaSession(
-                        image=session.spec.session.image,
-                        name=session.metadata.name,
-                        resources=apispec.UserPodResources.model_validate(
-                            session.spec.session.resources, from_attributes=True
-                        ),
-                        started=session.metadata.creationTimestamp,
-                        state=None,
-                        status=None,
-                        url=session.status.url if session.status else None,
-                    ).model_dump(exclude_none=True, mode="json")
-                    for session in sessions
-                ]
-            )
+            output: list[dict] = []
+            for session in sessions:
+                output.append(session.as_apispec().model_dump(exclude_none=True, mode="json"))
+            return json(output)
 
         return "/sessions", ["GET"], _handler
 
@@ -1009,19 +974,7 @@ class NotebooksNewBP(CustomBlueprint):
             session = await self.nb_config.k8s_v2_client.get_server(session_id, user.id)
             if session is None:
                 raise errors.ValidationError(message=f"The session with ID {session_id} does not exist.", quiet=True)
-            return json(
-                apispec.NotebookResponseAmaltheaSession(
-                    image=session.spec.session.image,
-                    name=session.metadata.name,
-                    resources=apispec.UserPodResources.model_validate(
-                        session.spec.session.resources, from_attributes=True
-                    ),
-                    started=session.metadata.creationTimestamp,
-                    state=None,
-                    status=None,
-                    url=session.status.url if session.status else None,
-                ).model_dump(exclude_none=True, mode="json")
-            )
+            return json(session.as_apispec().model_dump(exclude_none=True, mode="json"))
 
         return "/sessions/<session_id>", ["GET"], _handler
 

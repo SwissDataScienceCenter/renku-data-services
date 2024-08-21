@@ -48,12 +48,12 @@ def authenticate(
 async def _authenticate(authenticator: Authenticator, request: Request) -> AuthenticatedAPIUser:
     token = request.headers.get(authenticator.token_field)
     if token is None or len(token) < 7:
-        raise errors.Unauthorized(message="You have to log in to access this endpoint.", quiet=True)
+        raise errors.UnauthorizedError(message="You have to log in to access this endpoint.", quiet=True)
 
     token = token.removeprefix("Bearer ").removeprefix("bearer ")
     user = await authenticator.authenticate(token, request)
     if not user.is_authenticated or user.id is None or user.access_token is None:
-        raise errors.Unauthorized(message="You have to log in to access this endpoint.", quiet=True)
+        raise errors.UnauthorizedError(message="You have to log in to access this endpoint.", quiet=True)
     if not user.email:
         raise errors.ProgrammingError(
             message="Expected the user's email to be present after authentication", quiet=True
@@ -87,10 +87,10 @@ def authenticated_or_anonymous(
         ],
     ) -> Callable[Concatenate[Request, _P], Coroutine[Any, Any, HTTPResponse]]:
         @wraps(f)
-        async def decorated_function(request: Request, *args: _P.args, **kwargs: _P.kwargs) -> _T:
+        async def decorated_function(request: Request, *args: _P.args, **kwargs: _P.kwargs) -> HTTPResponse:
             try:
                 user: AnonymousAPIUser | AuthenticatedAPIUser = await _authenticate(authenticator, request)
-            except errors.Unauthorized:
+            except errors.UnauthorizedError:
                 # TODO: set the cookie on the user side if it is not set
                 # perhaps this will have to be done with another decorator...
                 # NOTE: The header takes precedence over the cookie
