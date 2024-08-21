@@ -35,6 +35,7 @@ class OAuth2ClientORM(BaseORM):
     scope: Mapped[str] = mapped_column("scope", String())
     url: Mapped[str] = mapped_column("url", String())
     use_pkce: Mapped[bool] = mapped_column("use_pkce", Boolean(), server_default=false())
+    app_slug: Mapped[str] = mapped_column("app_slug", String(500), default="", server_default="")
     client_secret: Mapped[bytes | None] = mapped_column("client_secret", LargeBinary(), default=None, repr=False)
     creation_date: Mapped[datetime] = mapped_column(
         "creation_date", DateTime(timezone=True), default=None, server_default=func.now(), nullable=False
