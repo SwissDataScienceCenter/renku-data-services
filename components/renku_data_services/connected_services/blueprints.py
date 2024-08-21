@@ -1,6 +1,7 @@
 """Connected services blueprint."""
 
 from dataclasses import dataclass
+from typing import Any
 from urllib.parse import urlparse, urlunparse
 
 from sanic import HTTPResponse, Request, json, redirect
@@ -12,6 +13,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_admins, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_query
+from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.connected_services import apispec
 from renku_data_services.connected_services.apispec_base import AuthorizeParams, CallbackParams
@@ -169,6 +171,20 @@ class OAuth2ConnectionsBP(CustomBlueprint):
             return validated_json(apispec.ConnectedAccount, account)
 
         return "/oauth2/connections/<connection_id>/account", ["GET"], _get_account
+
+    def get_installations(self) -> BlueprintFactoryResponse:
+        """Get the installations for a specific OAuth2 connection."""
+
+        @authenticate(self.authenticator)
+        @validate_query(query=apispec.PaginationRequest)
+        @paginate
+        async def _get_installations(
+            request: Request, user: base_models.APIUser, pagination: PaginationRequest
+        ) -> tuple[list[dict[str, Any]], int]:
+            # TODO
+            return [], 0
+
+        return "/oauth2/connections/<connection_id>/installations", ["GET"], _get_installations
 
     def get_token(self) -> BlueprintFactoryResponse:
         """Get the access token for a specific OAuth2 connection."""
