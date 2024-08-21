@@ -57,6 +57,7 @@ class OAuth2ClientORM(BaseORM):
         return models.OAuth2Client(
             id=self.id,
             kind=self.kind,
+            app_slug=self.app_slug,
             client_id=self.client_id if user_is_admin else "",
             client_secret="redacted" if self.client_secret and user_is_admin else "",
             display_name=self.display_name,

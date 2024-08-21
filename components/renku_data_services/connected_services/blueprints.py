@@ -172,6 +172,18 @@ class OAuth2ConnectionsBP(CustomBlueprint):
 
         return "/oauth2/connections/<connection_id>/account", ["GET"], _get_account
 
+    def get_token(self) -> BlueprintFactoryResponse:
+        """Get the access token for a specific OAuth2 connection."""
+
+        @authenticate(self.authenticator)
+        async def _get_token(_: Request, user: base_models.APIUser, connection_id: str) -> JSONResponse:
+            token = await self.connected_services_repo.get_oauth2_connection_token(
+                connection_id=connection_id, user=user
+            )
+            return json(token.dump_for_api())
+
+        return "/oauth2/connections/<connection_id>/token", ["GET"], _get_token
+
     def get_installations(self) -> BlueprintFactoryResponse:
         """Get the installations for a specific OAuth2 connection."""
 
@@ -185,15 +197,3 @@ class OAuth2ConnectionsBP(CustomBlueprint):
             return [], 0
 
         return "/oauth2/connections/<connection_id>/installations", ["GET"], _get_installations
-
-    def get_token(self) -> BlueprintFactoryResponse:
-        """Get the access token for a specific OAuth2 connection."""
-
-        @authenticate(self.authenticator)
-        async def _get_token(_: Request, user: base_models.APIUser, connection_id: str) -> JSONResponse:
-            token = await self.connected_services_repo.get_oauth2_connection_token(
-                connection_id=connection_id, user=user
-            )
-            return json(token.dump_for_api())
-
-        return "/oauth2/connections/<connection_id>/token", ["GET"], _get_token

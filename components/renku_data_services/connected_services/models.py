@@ -12,6 +12,7 @@ class OAuth2Client:
     """OAuth2 Client model."""
 
     id: str
+    app_slug: str
     kind: ProviderKind
     client_id: str
     client_secret: str | None

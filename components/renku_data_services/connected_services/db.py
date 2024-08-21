@@ -80,6 +80,7 @@ class ConnectedServicesRepository:
         client = schemas.OAuth2ClientORM(
             id=new_client.id,
             kind=new_client.kind,
+            app_slug=new_client.app_slug or "",
             client_id=new_client.client_id,
             client_secret=encrypted_client_secret,
             display_name=new_client.display_name,
@@ -126,7 +127,7 @@ class ConnectedServicesRepository:
                 client.client_secret = None
 
             for key, value in kwargs.items():
-                if key in ["kind", "client_id", "display_name", "scope", "url", "use_pkce"]:
+                if key in ["kind", "app_slug", "client_id", "display_name", "scope", "url", "use_pkce"]:
                     setattr(client, key, value)
 
             await session.flush()
