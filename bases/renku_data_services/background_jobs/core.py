@@ -16,6 +16,7 @@ from renku_data_services.authz.authz import Authz, ResourceType, _AuthzConverter
 from renku_data_services.authz.models import Scope
 from renku_data_services.background_jobs.config import SyncConfig
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
+from renku_data_services.errors import errors
 from renku_data_services.message_queue.avro_models.io.renku.events import v2
 from renku_data_services.message_queue.converters import EventConverter
 from renku_data_services.namespace.models import NamespaceKind
@@ -97,7 +98,22 @@ async def fix_mismatched_project_namespace_ids(config: SyncConfig) -> None:
     async for rel in res:
         logging.info(f"Checking project namespace - group relation {rel} for correct group ID")
         project_id = rel.relationship.resource.object_id
-        project = await config.project_repo.get_project(api_user, project_id)
+        try:
+            project = await config.project_repo.get_project(api_user, project_id)
+        except errors.MissingResourceError:
+            logging.info(f"Couldn't find project {project_id}, deleting relation")
+            authz.client.WriteRelationships(
+                WriteRelationshipsRequest(
+                    updates=[
+                        RelationshipUpdate(
+                            operation=RelationshipUpdate.OPERATION_DELETE,
+                            relationship=rel.relationship,
+                        ),
+                    ]
+                )
+            )
+            continue
+
         if project.namespace.kind != NamespaceKind.group:
             continue
         correct_group_id = project.namespace.underlying_resource_id
