@@ -785,7 +785,7 @@ class NotebooksNewBP(CustomBlueprint):
             if existing_session is not None and existing_session.spec is not None:
                 return json(existing_session.as_apispec().model_dump(exclude_none=True, mode="json"))
             gitlab_client = NotebooksGitlabClient(self.nb_config.git.url, internal_gitlab_user.access_token)
-            project = await self.project_repo.get_project(user=user, project_id=body.project_id)
+            project = await self.project_repo.get_project(user=user, project_id=ULID.from_str(body.project_id))
             launcher = await self.session_repo.get_launcher(user, ULID.from_str(body.launcher_id))
             environment = launcher.environment
             image = environment.container_image

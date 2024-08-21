@@ -17,7 +17,6 @@ from renku_data_services.notebooks.api.classes.repository import (
     OAuth2Provider,
 )
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
-from renku_data_services.notebooks.config import CRCValidatorProto, GitProviderHelperProto, StorageValidatorProto
 from renku_data_services.notebooks.errors.intermittent import IntermittentError
 from renku_data_services.notebooks.errors.user import (
     AuthenticationError,
@@ -38,7 +37,7 @@ class CloudStorageConfig(NamedTuple):
 
 
 @dataclass
-class StorageValidator(StorageValidatorProto):
+class StorageValidator:
     """Cloud storage validator."""
 
     storage_url: str
@@ -102,7 +101,7 @@ class StorageValidator(StorageValidatorProto):
 
 
 @dataclass
-class DummyStorageValidator(StorageValidatorProto):
+class DummyStorageValidator:
     """Dummy cloud storage validator used for testing."""
 
     def get_storage_by_id(
@@ -121,7 +120,7 @@ class DummyStorageValidator(StorageValidatorProto):
 
 
 @dataclass
-class CRCValidator(CRCValidatorProto):
+class CRCValidator:
     """Calls to the CRC service to validate resource requests."""
 
     rp_repo: ResourcePoolRepository
@@ -216,7 +215,7 @@ class CRCValidator(CRCValidatorProto):
 
 
 @dataclass
-class DummyCRCValidator(CRCValidatorProto):
+class DummyCRCValidator:
     """Dummy validator for resource pools and classes."""
 
     options: ServerOptions = field(default_factory=lambda: ServerOptions(0.5, 1, 0, 1, "/lab", False, True))
@@ -246,7 +245,7 @@ class DummyCRCValidator(CRCValidatorProto):
 
 
 @dataclass
-class GitProviderHelper(GitProviderHelperProto):
+class GitProviderHelper:
     """Calls to the data service to configure git providers."""
 
     service_url: str
@@ -316,7 +315,7 @@ class GitProviderHelper(GitProviderHelperProto):
 
 
 @dataclass
-class DummyGitProviderHelper(GitProviderHelperProto):
+class DummyGitProviderHelper:
     """Helper for git providers."""
 
     def get_providers(self, user: APIUser) -> list[GitProvider]:

@@ -147,7 +147,7 @@ class SessionLaunchersBP(CustomBlueprint):
                     environment_kind=models.EnvironmentKind(body.environment.environment_kind.value),
                 )
             new_launcher = models.UnsavedSessionLauncher(
-                project_id=body.project_id,
+                project_id=ULID.from_str(body.project_id),
                 name=body.name,
                 description=body.description,
                 environment=environment,

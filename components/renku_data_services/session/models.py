@@ -72,8 +72,7 @@ class Environment(BaseEnvironment):
 class BaseSessionLauncher:
     """Session launcher model."""
 
-    id: ULID | None
-    project_id: str
+    project_id: ULID
     name: str
     description: str | None
     environment: str | UnsavedEnvironment | Environment

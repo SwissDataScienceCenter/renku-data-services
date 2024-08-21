@@ -121,22 +121,19 @@ class SessionLauncherORM(BaseORM):
         """Create SessionLauncherORM from the session launcher model."""
         return cls(
             name=launcher.name,
-            created_by_id=launcher.created_by.id,
+            created_by_id=launcher.created_by,
             creation_date=launcher.creation_date,
             description=launcher.description,
-            environment_kind=launcher.environment_kind,
-            container_image=launcher.container_image,
             project_id=ULID.from_str(launcher.project_id),
-            environment_id=launcher.environment_id,
+            environment_id=launcher.environment.id,
             resource_class_id=launcher.resource_class_id,
-            default_url=launcher.default_url,
         )
 
     def dump(self) -> models.SessionLauncher:
         """Create a session launcher model from the SessionLauncherORM."""
         return models.SessionLauncher(
             id=self.id,
-            project_id=str(self.project_id),
+            project_id=self.project_id,
             name=self.name,
             created_by=self.created_by_id,
             creation_date=self.creation_date,
