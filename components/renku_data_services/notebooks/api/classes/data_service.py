@@ -8,6 +8,8 @@ import requests
 from sanic.log import logger
 
 from renku_data_services.base_models import APIUser
+from renku_data_services.crc.db import ResourcePoolRepository
+from renku_data_services.crc.models import ResourceClass, ResourcePool
 from renku_data_services.notebooks.api.classes.repository import (
     INTERNAL_GITLAB_PROVIDER,
     GitProvider,
@@ -15,8 +17,8 @@ from renku_data_services.notebooks.api.classes.repository import (
     OAuth2Provider,
 )
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
+from renku_data_services.notebooks.config import CRCValidatorProto, GitProviderHelperProto, StorageValidatorProto
 from renku_data_services.notebooks.errors.intermittent import IntermittentError
-from renku_data_services.notebooks.errors.programming import ConfigurationError
 from renku_data_services.notebooks.errors.user import (
     AuthenticationError,
     InvalidCloudStorageConfiguration,
@@ -36,7 +38,7 @@ class CloudStorageConfig(NamedTuple):
 
 
 @dataclass
-class StorageValidator:
+class StorageValidator(StorageValidatorProto):
     """Cloud storage validator."""
 
     storage_url: str
@@ -100,10 +102,12 @@ class StorageValidator:
 
 
 @dataclass
-class DummyStorageValidator:
+class DummyStorageValidator(StorageValidatorProto):
     """Dummy cloud storage validator used for testing."""
 
-    def get_storage_by_id(self, user: APIUser, internal_gitlab_user: APIUser, project_id: int, storage_id: str) -> CloudStorageConfig:
+    def get_storage_by_id(
+        self, user: APIUser, internal_gitlab_user: APIUser, project_id: int, storage_id: str
+    ) -> CloudStorageConfig:
         """Get storage by ID."""
         raise NotImplementedError()
 
@@ -117,15 +121,12 @@ class DummyStorageValidator:
 
 
 @dataclass
-class CRCValidator:
+class CRCValidator(CRCValidatorProto):
     """Calls to the CRC service to validate resource requests."""
 
-    crc_url: str = "http://127.0.0.1/api/data"
+    rp_repo: ResourcePoolRepository
 
-    def __post_init__(self) -> None:
-        self.crc_url = self.crc_url.rstrip("/")
-
-    def validate_class_storage(
+    async def validate_class_storage(
         self,
         user: APIUser,
         class_id: int,
@@ -135,137 +136,117 @@ class CRCValidator:
 
         Storage in memory are assumed to be in gigabytes.
         """
-        resource_pools = self._get_resource_pools(user=user)
-        pool = None
-        res_class = None
+        resource_pools = await self.rp_repo.get_resource_pools(user)
+        pool: ResourcePool | None = None
+        res_class: ResourceClass | None = None
         for rp in resource_pools:
-            for cls in rp["classes"]:
-                if cls["id"] == class_id:
+            for cls in rp.classes:
+                if cls.id == class_id:
                     res_class = cls
                     pool = rp
                     break
         if pool is None or res_class is None:
             raise InvalidComputeResourceError(message=f"The resource class ID {class_id} does not exist.")
         if storage is None:
-            storage = res_class.get("default_storage", 1)
+            storage = res_class.default_storage
         if storage < 1:
             raise InvalidComputeResourceError(message="Storage requests have to be greater than or equal to 1GB.")
-        if storage > res_class.get("max_storage"):
+        if storage > res_class.max_storage:
             raise InvalidComputeResourceError(message="The requested storage surpasses the maximum value allowed.")
         options = ServerOptions.from_resource_class(res_class)
-        options.idle_threshold_seconds = pool.get("idle_threshold")
-        options.hibernation_threshold_seconds = pool.get("hibernation_threshold")
+        options.idle_threshold_seconds = pool.idle_threshold
+        options.hibernation_threshold_seconds = pool.hibernation_threshold
         options.set_storage(storage, gigabytes=True)
-        quota = pool.get("quota")
-        if quota is not None and isinstance(quota, dict):
-            options.priority_class = quota.get("id")
+        quota = pool.quota
+        if quota is not None:
+            options.priority_class = quota.id
         return options
 
-    def get_default_class(self) -> dict[str, Any]:
+    async def get_default_class(self) -> ResourceClass:
         """Get the default resource class from the default resource pool."""
-        pools = self._get_resource_pools()
-        default_pools = [p for p in pools if p.get("default", False)]
-        if len(default_pools) < 1:
-            raise ConfigurationError("Cannot find the default resource pool.")
-        default_pool = default_pools[0]
-        default_classes: list[dict[str, Any]] = [
-            cls for cls in default_pool.get("classes", []) if cls.get("default", False)
-        ]
-        if len(default_classes) < 1:
-            raise ConfigurationError("Cannot find the default resource class.")
-        return default_classes[0]
+        return await self.rp_repo.get_default_resource_class()
 
-    def find_acceptable_class(self, user: APIUser, requested_server_options: ServerOptions) -> Optional[ServerOptions]:
+    async def find_acceptable_class(
+        self, user: APIUser, requested_server_options: ServerOptions
+    ) -> Optional[ServerOptions]:
         """Find a resource class greater than or equal to the old-style server options being requested.
 
         Only classes available to the user are considered.
         """
-        resource_pools = self._get_resource_pools(user=user, server_options=requested_server_options)
+        resource_pools = await self._get_resource_pools(user=user, server_options=requested_server_options)
         # Difference and best candidate in the case that the resource class will be
         # greater than or equal to the request
         best_larger_or_equal_diff: ServerOptions | None = None
         best_larger_or_equal_class: ServerOptions | None = None
         zero_diff = ServerOptions(cpu=0, memory=0, gpu=0, storage=0)
         for resource_pool in resource_pools:
-            quota = resource_pool.get("quota")
-            for resource_class in resource_pool["classes"]:
+            quota = resource_pool.quota
+            for resource_class in resource_pool.classes:
                 resource_class_mdl = ServerOptions.from_resource_class(resource_class)
-                if quota is not None and isinstance(quota, dict):
-                    resource_class_mdl.priority_class = quota.get("id")
+                if quota is not None:
+                    resource_class_mdl.priority_class = quota.id
                 diff = resource_class_mdl - requested_server_options
                 if (
                     diff >= zero_diff
                     and (best_larger_or_equal_diff is None or diff < best_larger_or_equal_diff)
-                    and resource_class["matching"]
+                    and resource_class.matching
                 ):
                     best_larger_or_equal_diff = diff
                     best_larger_or_equal_class = resource_class_mdl
         return best_larger_or_equal_class
 
-    def _get_resource_pools(
+    async def _get_resource_pools(
         self,
-        user: Optional[APIUser] = None,
+        user: APIUser,
         server_options: Optional[ServerOptions] = None,
-    ) -> list[dict[str, Any]]:
-        headers = None
-        params = None
-        if user is not None and user.access_token is not None:
-            headers = {"Authorization": f"bearer {user.access_token}"}
+    ) -> list[ResourcePool]:
+        output: list[ResourcePool] = []
         if server_options is not None:
-            max_storage: float | int = 1
-            if server_options.storage is not None:
-                max_storage = (
-                    server_options.storage
-                    if server_options.gigabytes
-                    else round(server_options.storage / 1_000_000_000)
-                )
-            params = {
-                "cpu": server_options.cpu,
-                "gpu": server_options.gpu,
-                "memory": (
-                    server_options.memory if server_options.gigabytes else round(server_options.memory / 1_000_000_000)
-                ),
-                "max_storage": max_storage,
-            }
-        res = requests.get(self.crc_url + "/resource_pools", headers=headers, params=params, timeout=10)
-        if res.status_code != 200:
-            raise IntermittentError(
-                message="The compute resource access control service sent "
-                "an unexpected response, please try again later",
+            options_gb = server_options.to_gigabytes()
+            output = await self.rp_repo.filter_resource_pools(
+                user,
+                cpu=options_gb.cpu,
+                memory=round(options_gb.memory),
+                max_storage=round(options_gb.storage or 1),
+                gpu=options_gb.gpu,
             )
-        return cast(list[dict[str, Any]], res.json())
+        else:
+            output = await self.rp_repo.filter_resource_pools(user)
+        return output
 
 
 @dataclass
-class DummyCRCValidator:
+class DummyCRCValidator(CRCValidatorProto):
     """Dummy validator for resource pools and classes."""
 
     options: ServerOptions = field(default_factory=lambda: ServerOptions(0.5, 1, 0, 1, "/lab", False, True))
 
-    def validate_class_storage(self, user: APIUser, class_id: int, storage: int | None = None) -> ServerOptions:
+    async def validate_class_storage(self, user: APIUser, class_id: int, storage: int | None = None) -> ServerOptions:
         """Validate the storage against the resource class."""
         return self.options
 
-    def get_default_class(self) -> dict[str, Any]:
+    async def get_default_class(self) -> ResourceClass:
         """Get the default resource class."""
-        return {
-            "name": "resource class",
-            "cpu": 0.1,
-            "memory": 1,
-            "gpu": 0,
-            "max_storage": 100,
-            "default_storage": 1,
-            "id": 1,
-            "default": True,
-        }
+        return ResourceClass(
+            name="resource class",
+            cpu=0.1,
+            memory=1,
+            max_storage=100,
+            gpu=0,
+            id=1,
+            default_storage=1,
+            default=True,
+        )
 
-    def find_acceptable_class(self, user: APIUser, requested_server_options: ServerOptions) -> Optional[ServerOptions]:
+    async def find_acceptable_class(
+        self, user: APIUser, requested_server_options: ServerOptions
+    ) -> Optional[ServerOptions]:
         """Find an acceptable resource class based on the required options."""
         return self.options
 
 
 @dataclass
-class GitProviderHelper:
+class GitProviderHelper(GitProviderHelperProto):
     """Calls to the data service to configure git providers."""
 
     service_url: str
@@ -335,7 +316,7 @@ class GitProviderHelper:
 
 
 @dataclass
-class DummyGitProviderHelper:
+class DummyGitProviderHelper(GitProviderHelperProto):
     """Helper for git providers."""
 
     def get_providers(self, user: APIUser) -> list[GitProvider]:

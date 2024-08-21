@@ -5,6 +5,11 @@ from dataclasses import dataclass, field
 from typing import Any, Optional, Protocol, Self
 
 from renku_data_services.base_models import APIUser
+from renku_data_services.crc.db import ResourcePoolRepository
+from renku_data_services.crc.models import ResourceClass
+from renku_data_services.db_config.config import DBConfig
+from renku_data_services.k8s.clients import K8sCoreClient, K8sSchedulingClient
+from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.notebooks.api.classes.data_service import (
     CloudStorageConfig,
     CRCValidator,
@@ -37,14 +42,12 @@ from renku_data_services.notebooks.config.dynamic import (
 )
 from renku_data_services.notebooks.config.static import _ServersGetEndpointAnnotations
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
-from renku_data_services.storage.db import StorageRepository
-from renku_data_services.storage.rclone import RCloneValidator
 
 
 class CRCValidatorProto(Protocol):
     """Compute resource control validator."""
 
-    def validate_class_storage(
+    async def validate_class_storage(
         self,
         user: APIUser,
         class_id: int,
@@ -53,11 +56,13 @@ class CRCValidatorProto(Protocol):
         """Validate the resource class storage for the session."""
         ...
 
-    def get_default_class(self) -> dict[str, Any]:
+    async def get_default_class(self) -> ResourceClass:
         """Get the default resource class."""
         ...
 
-    def find_acceptable_class(self, user: APIUser, requested_server_options: ServerOptions) -> Optional[ServerOptions]:
+    async def find_acceptable_class(
+        self, user: APIUser, requested_server_options: ServerOptions
+    ) -> Optional[ServerOptions]:
         """Find a suitable resource class based on resource requirements."""
         ...
 
@@ -116,7 +121,7 @@ class _NotebooksConfig:
     )
 
     @classmethod
-    def from_env(cls) -> Self:
+    def from_env(cls, db_config: DBConfig) -> Self:
         dummy_stores = _parse_str_as_bool(os.environ.get("DUMMY_STORES", False))
         sessions_config: _SessionConfig
         git_config: _GitConfig
@@ -125,6 +130,8 @@ class _NotebooksConfig:
         crc_validator: CRCValidatorProto
         storage_validator: StorageValidatorProto
         git_provider_helper: GitProviderHelperProto
+        k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
+        quota_repo: QuotaRepository
         if dummy_stores:
             crc_validator = DummyCRCValidator()
             sessions_config = _SessionConfig._for_testing()
@@ -134,7 +141,9 @@ class _NotebooksConfig:
             amalthea_v2_config = _AmaltheaV2Config(cache_url="http://not.specified")
             git_config = _GitConfig("http://not.specified", "registry.not.specified")
         else:
-            crc_validator = CRCValidator(data_service_url)
+            quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
+            rp_repo = ResourcePoolRepository(db_config.async_session_maker, quota_repo)
+            crc_validator = CRCValidator(rp_repo)
             sessions_config = _SessionConfig.from_env()
             storage_validator = StorageValidator(data_service_url)
             amalthea_config = _AmaltheaConfig.from_env()

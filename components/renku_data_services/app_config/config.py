@@ -496,7 +496,7 @@ class Config:
         sentry = SentryConfig.from_env(prefix)
         trusted_proxies = TrustedProxiesConfig.from_env(prefix)
         message_queue = RedisQueue(redis)
-        nb_config = _NotebooksConfig.from_env()
+        nb_config = _NotebooksConfig.from_env(db)
 
         return cls(
             version=version,

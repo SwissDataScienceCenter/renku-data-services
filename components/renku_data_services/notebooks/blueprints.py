@@ -358,7 +358,9 @@ class NotebooksBP(CustomBlueprint):
         parsed_server_options: ServerOptions | None = None
         if resource_class_id is not None:
             # A resource class ID was passed in, validate with CRC service
-            parsed_server_options = nb_config.crc_validator.validate_class_storage(user, resource_class_id, storage)
+            parsed_server_options = await nb_config.crc_validator.validate_class_storage(
+                user, resource_class_id, storage
+            )
         elif server_options is not None:
             if isinstance(server_options, dict):
                 requested_server_options = ServerOptions(
@@ -377,7 +379,7 @@ class NotebooksBP(CustomBlueprint):
                     f"launching sessions: {type(server_options)}"
                 )
             # The old style API was used, try to find a matching class from the CRC service
-            parsed_server_options = nb_config.crc_validator.find_acceptable_class(user, requested_server_options)
+            parsed_server_options = await nb_config.crc_validator.find_acceptable_class(user, requested_server_options)
             if parsed_server_options is None:
                 raise UserInputError(
                     message="Cannot find suitable server options based on your request and "
@@ -388,15 +390,15 @@ class NotebooksBP(CustomBlueprint):
                 )
         else:
             # No resource class ID specified or old-style server options, use defaults from CRC
-            default_resource_class = nb_config.crc_validator.get_default_class()
-            max_storage_gb = default_resource_class.get("max_storage", 0)
+            default_resource_class = await nb_config.crc_validator.get_default_class()
+            max_storage_gb = default_resource_class.max_storage
             if storage is not None and storage > max_storage_gb:
                 raise UserInputError(
                     "The requested storage amount is higher than the "
                     f"allowable maximum for the default resource class of {max_storage_gb}GB."
                 )
             if storage is None:
-                storage = default_resource_class.get("default_storage") or 1
+                storage = default_resource_class.default_storage
             parsed_server_options = ServerOptions.from_resource_class(default_resource_class)
             # Storage in request is in GB
             parsed_server_options.set_storage(storage, gigabytes=True)
@@ -553,7 +555,7 @@ class NotebooksBP(CustomBlueprint):
                 raise UserInputError("The resource class can be changed only if the server is hibernated or failing")
 
             if resource_class_id:
-                parsed_server_options = self.nb_config.crc_validator.validate_class_storage(
+                parsed_server_options = await self.nb_config.crc_validator.validate_class_storage(
                     user,
                     resource_class_id,
                     storage=None,  # we do not care about validating storage
@@ -791,7 +793,7 @@ class NotebooksNewBP(CustomBlueprint):
             if default_resource_class.id is None:
                 raise errors.ProgrammingError(message="The default reosurce class has to have an ID", quiet=True)
             resource_class_id = body.resource_class_id or default_resource_class.id
-            parsed_server_options = self.nb_config.crc_validator.validate_class_storage(
+            parsed_server_options = await self.nb_config.crc_validator.validate_class_storage(
                 user, resource_class_id, body.storage
             )
             work_dir = Path("/home/jovyan/work")
