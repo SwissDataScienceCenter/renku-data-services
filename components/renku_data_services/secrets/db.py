@@ -60,11 +60,9 @@ class UserSecretsRepo:
         """Insert a new secret."""
 
         async with self.session_maker() as session, session.begin():
-            modification_date = datetime.now(UTC).replace(microsecond=0)
             orm = SecretORM(
                 name=secret.name,
-                modification_date=modification_date,
-                user_id=requested_by.id,
+                user_id=cast(str, requested_by.id),
                 encrypted_value=secret.encrypted_value,
                 encrypted_key=secret.encrypted_key,
                 kind=secret.kind,
@@ -97,9 +95,7 @@ class UserSecretsRepo:
             if secret is None:
                 raise errors.MissingResourceError(message=f"The secret with id '{secret_id}' cannot be found")
 
-            secret.encrypted_value = encrypted_value
-            secret.encrypted_key = encrypted_key
-            secret.modification_date = datetime.now(UTC).replace(microsecond=0)
+            secret.update(encrypted_value=encrypted_value, encrypted_key=encrypted_key)
         return secret.dump()
 
     @only_authenticated
