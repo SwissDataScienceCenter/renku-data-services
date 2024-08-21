@@ -33,6 +33,8 @@ jobs:
             type=ref,event=pr,prefix=cache-pr-,priority=600
             type=ref,event=branch,prefix=cache-,priority=500
             type=ref,event=tag,prefix=cache-,priority=500
+          flavor: |
+            latest=false
       - name: Extract Docker image name
         id: docker_image
         env:
