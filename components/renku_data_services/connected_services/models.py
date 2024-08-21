@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind
+from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind, RepositorySelection
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -80,3 +80,22 @@ class OAuth2TokenSet(dict):
         if self.expires_at is None:
             return None
         return datetime.fromtimestamp(self.expires_at, UTC).isoformat()
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class AppInstallation:
+    """A GitHub app installation."""
+
+    id: int
+    account_login: str
+    account_web_url: str
+    repository_selection: RepositorySelection
+    suspended_at: datetime | None = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class AppInstallationList:
+    """GitHub app installation list."""
+
+    total_count: int
+    installations: list[AppInstallation]

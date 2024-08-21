@@ -14,10 +14,12 @@ from sqlalchemy.orm import selectinload
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.connected_services import apispec, models
 from renku_data_services.connected_services import orm as schemas
-from renku_data_services.connected_services.apispec import ConnectionStatus
+from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind
 from renku_data_services.connected_services.provider_adapters import (
+    GitHubAdapter,
     ProviderAdapter,
     get_provider_adapter,
 )
@@ -323,6 +325,28 @@ class ConnectedServicesRepository:
             await oauth2_client.ensure_active_token(oauth2_client.token)
             token_model = models.OAuth2TokenSet.from_dict(oauth2_client.token)
             return token_model
+
+    async def get_oauth2_app_installations(
+        self, connection_id: str, user: base_models.APIUser, pagination: PaginationRequest
+    ) -> models.AppInstallationList:
+        """Get the installations from a OAuth2 connection."""
+        async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (
+            oauth2_client,
+            connection,
+            adapter,
+        ):
+            # NOTE: App installations are only available from GitHub
+            if connection.client.kind == ProviderKind.github and isinstance(adapter, GitHubAdapter):
+                request_url = urljoin(adapter.api_url, "user/installations")
+                params = dict(page=pagination.page, per_page=pagination.per_page)
+                response = await oauth2_client.get(request_url, params=params, headers=adapter.api_common_headers)
+
+                if response.status_code > 200:
+                    raise errors.UnauthorizedError(message="Could not get installation information.")
+
+                return adapter.api_validate_app_installations_response(response)
+
+            return models.AppInstallationList(total_count=0, installations=[])
 
     @asynccontextmanager
     async def get_async_oauth2_client(

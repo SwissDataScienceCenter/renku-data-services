@@ -369,7 +369,7 @@ components:
       additionalProperties: false
       properties:
         id:
-          type: number
+          type: integer
         account_login:
           type: string
         account_web_url:
@@ -381,6 +381,7 @@ components:
             - selected
         suspended_at:
           type: string
+          format: date-time
       required:
         - id
         - account_login
