@@ -40,15 +40,16 @@ class K8sSecretsBP(CustomBlueprint):
                 owner_references = [OwnerReference.from_dict(o) for o in body.owner_references]
             secret_ids = [ULID.from_str(id.root) for id in body.secret_ids]
             await create_k8s_secret(
-                user,
-                body.name,
-                body.namespace,
-                secret_ids,
-                owner_references,
-                self.user_secrets_repo,
-                self.secret_service_private_key,
-                self.previous_secret_service_private_key,
-                self.core_client,
+                user=user,
+                secret_name=body.name,
+                namespace=body.namespace,
+                secret_ids=secret_ids,
+                owner_references=owner_references,
+                secrets_repo=self.user_secrets_repo,
+                secret_service_private_key=self.secret_service_private_key,
+                previous_secret_service_private_key=self.previous_secret_service_private_key,
+                core_client=self.core_client,
+                key_mapping=body.key_mapping,
             )
 
             return json(body.name, 201)
