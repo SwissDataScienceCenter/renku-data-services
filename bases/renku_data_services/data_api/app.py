@@ -26,7 +26,7 @@ from renku_data_services.users.blueprints import KCUsersBP, UserPreferencesBP, U
 
 def register_all_handlers(app: Sanic, config: Config) -> Sanic:
     """Register all handlers on the application."""
-    app.router.register_pattern("ulid", ULID.from_str, r"^[0-9A-HJKMNP-TV-Z]{26}$")
+    app.router.register_pattern("ulid", ULID.from_str, r"^[0-7][0-9A-HJKMNP-TV-Z]{25}$")
     app.router.register_pattern("renku_slug", str, r"^[a-zA-Z0-9][a-zA-Z0-9\-_.]*$")
 
     url_prefix = "/api/data"

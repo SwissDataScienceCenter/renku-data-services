@@ -11,6 +11,7 @@ from renku_data_services.crc.orm import ResourceClassORM
 from renku_data_services.project.orm import ProjectORM
 from renku_data_services.session import models
 from renku_data_services.session.apispec import EnvironmentKind
+from renku_data_services.utils.sqlalchemy import ULIDType
 
 metadata_obj = MetaData(schema="sessions")  # Has to match alembic ini section name
 
@@ -77,7 +78,7 @@ class SessionLauncherORM(BaseORM):
 
     __tablename__ = "launchers"
 
-    id: Mapped[str] = mapped_column("id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
     """Id of this session launcher object."""
 
     name: Mapped[str] = mapped_column("name", String(99))
@@ -104,7 +105,7 @@ class SessionLauncherORM(BaseORM):
     project: Mapped[ProjectORM] = relationship(init=False)
     environment: Mapped[EnvironmentORM | None] = relationship(init=False)
 
-    project_id: Mapped[str] = mapped_column(
+    project_id: Mapped[ULID] = mapped_column(
         "project_id", ForeignKey(ProjectORM.id, ondelete="CASCADE"), default=None, index=True
     )
     """Id of the project this session belongs to."""
@@ -133,7 +134,7 @@ class SessionLauncherORM(BaseORM):
             description=launcher.description,
             environment_kind=launcher.environment_kind,
             container_image=launcher.container_image,
-            project_id=launcher.project_id,
+            project_id=ULID.from_str(launcher.project_id),
             environment_id=launcher.environment_id,
             resource_class_id=launcher.resource_class_id,
             default_url=launcher.default_url,
@@ -143,7 +144,7 @@ class SessionLauncherORM(BaseORM):
         """Create a session launcher model from the SessionLauncherORM."""
         return models.SessionLauncher(
             id=self.id,
-            project_id=self.project_id,
+            project_id=str(self.project_id),
             name=self.name,
             created_by=models.Member(id=self.created_by_id),
             creation_date=self.creation_date,
