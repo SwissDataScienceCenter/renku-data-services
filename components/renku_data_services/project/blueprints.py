@@ -267,7 +267,7 @@ class ProjectsBP(CustomBlueprint):
         async def _update_members(
             _: Request, user: base_models.APIUser, project_id: ULID, body: apispec.ProjectMemberListPatchRequest
         ) -> HTTPResponse:
-            members = [Member(Role(i.role.value), i.id, str(project_id)) for i in body.root]
+            members = [Member(Role(i.role.value), i.id, project_id) for i in body.root]
             await self.project_member_repo.update_members(user, project_id, members)
             return HTTPResponse(status=200)
 

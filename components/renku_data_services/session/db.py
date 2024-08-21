@@ -45,7 +45,7 @@ class SessionRepository:
         async with self.session_maker() as session:
             res = await session.scalars(
                 select(schemas.EnvironmentORM)
-                .where(schemas.EnvironmentORM.id == str(environment_id))
+                .where(schemas.EnvironmentORM.id == environment_id)
                 .where(schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.GLOBAL.value)
             )
             environment = res.one_or_none()
@@ -157,7 +157,7 @@ class SessionRepository:
         async with self.session_maker() as session, session.begin():
             res = await session.scalars(
                 select(schemas.EnvironmentORM)
-                .where(schemas.EnvironmentORM.id == str(environment_id))
+                .where(schemas.EnvironmentORM.id == environment_id)
                 .where(schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.GLOBAL.value)
             )
             environment = res.one_or_none()

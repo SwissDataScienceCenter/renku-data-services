@@ -71,7 +71,6 @@ def authenticate_2(
     return decorator
 
 
-
 def validate_path_user_id(
     f: Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]],
 ) -> Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]]:
