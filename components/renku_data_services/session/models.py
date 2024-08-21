@@ -5,6 +5,8 @@ from datetime import datetime
 from enum import StrEnum
 from pathlib import PurePosixPath
 
+from ulid import ULID
+
 from renku_data_services import errors
 
 
@@ -70,6 +72,7 @@ class Environment(BaseEnvironment):
 class BaseSessionLauncher:
     """Session launcher model."""
 
+    id: ULID | None
     project_id: str
     name: str
     description: str | None
@@ -89,7 +92,7 @@ class UnsavedSessionLauncher(BaseSessionLauncher):
 class SessionLauncher(BaseSessionLauncher):
     """Session launcher model that has been already saved in the DB."""
 
-    id: str
+    id: ULID
     creation_date: datetime
     created_by: str
     environment: Environment
