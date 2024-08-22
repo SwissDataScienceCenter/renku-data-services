@@ -252,3 +252,15 @@ def only(iterable, default=None, too_long=None):
         raise too_long or ValueError(msg)
 
     return first_value
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_setup(item):
+    mark = item.get_closest_marker(name="myskip")
+    if mark:
+        condition = next(iter(mark.args), True)
+        reason = mark.kwargs.get("reason")
+        item.add_marker(
+            pytest.mark.skipif(not os.getenv("PYTEST_FORCE_RUN_MYSKIPS", False) and condition, reason=reason),
+            append=False,
+        )
