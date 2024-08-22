@@ -107,6 +107,7 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
         # NOTE: You have to exclude none when using model dump below because otherwise we get
         # namespace=null which seems to break the kr8s client or simply k8s does not translate
         # namespace = null to the default namespace.
+        manifest.metadata.namespace = self.namespace
         js = await self._kr8s_type(manifest.model_dump(exclude_none=True, mode="json"))
         server_name = manifest.metadata.name
         try:
@@ -116,6 +117,8 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
             raise CannotStartServerError(
                 message=f"Cannot start the session {server_name}",
             )
+        # NOTE: If refresh is not called then upon creating the object the status is blank
+        await js.refresh()
         # NOTE: We wait for the cache to sync with the newly created server
         # If not then the user will get a non-null response from the POST request but
         # then immediately after a null response because the newly created server has

@@ -168,7 +168,9 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             resources=apispec.SessionResources(
                 requests=apispec.SessionResourcesRequests.model_validate(
                     self.spec.session.resources.requests, from_attributes=True
-                ),
+                )
+                if self.spec.session.resources.requests is not None
+                else None,
             ),
             started=self.metadata.creationTimestamp,
             status=apispec.SessionStatus(
