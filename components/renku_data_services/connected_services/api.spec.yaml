@@ -392,7 +392,7 @@ components:
       type: string
       minLength: 26
       maxLength: 26
-      pattern: "^[A-Z0-9]{26}$" # This is case-insensitive
+      pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"  # This is case-insensitive
     ProviderId:
       description: ID of a OAuth2 provider, e.g. "gitlab.com".
       type: string

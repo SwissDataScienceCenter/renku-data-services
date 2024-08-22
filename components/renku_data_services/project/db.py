@@ -10,6 +10,7 @@ from typing import Any, Concatenate, ParamSpec, TypeVar
 
 from sqlalchemy import Select, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
@@ -73,7 +74,7 @@ class ProjectRepository:
             total_elements = results[1].scalar() or 0
             return [p.dump() for p in projects_orm], total_elements
 
-    async def get_project(self, user: base_models.APIUser, project_id: str) -> models.Project:
+    async def get_project(self, user: base_models.APIUser, project_id: ULID) -> models.Project:
         """Get one project from the database."""
         authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
         if not authorized:
@@ -110,7 +111,10 @@ class ProjectRepository:
                 raise errors.MissingResourceError(message=not_found_msg)
 
             authorized = await self.authz.has_permission(
-                user=user, resource_type=ResourceType.project, resource_id=project_orm.id, scope=Scope.READ
+                user=user,
+                resource_type=ResourceType.project,
+                resource_id=project_orm.id,
+                scope=Scope.READ,
             )
             if not authorized:
                 raise errors.MissingResourceError(message=not_found_msg)
@@ -182,13 +186,14 @@ class ProjectRepository:
     async def update_project(
         self,
         user: base_models.APIUser,
-        project_id: str,
+        project_id: ULID,
         payload: dict[str, Any],
         etag: str | None = None,
         *,
         session: AsyncSession | None = None,
     ) -> models.ProjectUpdate:
         """Update a project entry."""
+        project_id_str: str = str(project_id)
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
         result = await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
@@ -219,7 +224,7 @@ class ProjectRepository:
 
         if "repositories" in payload:
             payload["repositories"] = [
-                schemas.ProjectRepositoryORM(url=r, project_id=project_id, project=project)
+                schemas.ProjectRepositoryORM(url=r, project_id=project_id_str, project=project)
                 for r in payload["repositories"]
             ]
             # Trigger update for ``updated_at`` column
@@ -263,7 +268,7 @@ class ProjectRepository:
     @Authz.authz_change(AuthzOperation.delete, ResourceType.project)
     @dispatch_message(avro_schema_v2.ProjectRemoved)
     async def delete_project(
-        self, user: base_models.APIUser, project_id: str, *, session: AsyncSession | None = None
+        self, user: base_models.APIUser, project_id: ULID, *, session: AsyncSession | None = None
     ) -> models.Project | None:
         """Delete a project."""
         if not session:
@@ -283,7 +288,7 @@ class ProjectRepository:
         await session.execute(delete(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
 
         await session.execute(
-            delete(storage_schemas.CloudStorageORM).where(storage_schemas.CloudStorageORM.project_id == project_id)
+            delete(storage_schemas.CloudStorageORM).where(storage_schemas.CloudStorageORM.project_id == str(project_id))
         )
 
         return project.dump()
@@ -303,15 +308,15 @@ def _filter_by_namespace_slug(statement: Select[tuple[_T]], namespace: str) -> S
 
 
 def _project_exists(
-    f: Callable[Concatenate[ProjectMemberRepository, base_models.APIUser, str, _P], Awaitable[_T]],
-) -> Callable[Concatenate[ProjectMemberRepository, base_models.APIUser, str, _P], Awaitable[_T]]:
+    f: Callable[Concatenate[ProjectMemberRepository, base_models.APIUser, ULID, _P], Awaitable[_T]],
+) -> Callable[Concatenate[ProjectMemberRepository, base_models.APIUser, ULID, _P], Awaitable[_T]]:
     """Checks if the project exists when adding or modifying project members."""
 
     @functools.wraps(f)
     async def decorated_func(
         self: ProjectMemberRepository,
         user: base_models.APIUser,
-        project_id: str,
+        project_id: ULID,
         *args: _P.args,
         **kwargs: _P.kwargs,
     ) -> _T:
@@ -350,7 +355,7 @@ class ProjectMemberRepository:
     @with_db_transaction
     @_project_exists
     async def get_members(
-        self, user: base_models.APIUser, project_id: str, *, session: AsyncSession | None = None
+        self, user: base_models.APIUser, project_id: ULID, *, session: AsyncSession | None = None
     ) -> list[Member]:
         """Get all members of a project."""
         members = await self.authz.members(user, ResourceType.project, project_id)
@@ -363,7 +368,7 @@ class ProjectMemberRepository:
     async def update_members(
         self,
         user: base_models.APIUser,
-        project_id: str,
+        project_id: ULID,
         members: list[Member],
         *,
         session: AsyncSession | None = None,
@@ -392,7 +397,7 @@ class ProjectMemberRepository:
     @_project_exists
     @dispatch_message(events.ProjectMembershipChanged)
     async def delete_members(
-        self, user: base_models.APIUser, project_id: str, user_ids: list[str], *, session: AsyncSession | None = None
+        self, user: base_models.APIUser, project_id: ULID, user_ids: list[str], *, session: AsyncSession | None = None
     ) -> list[MembershipChange]:
         """Delete members from a project."""
         if len(user_ids) == 0:

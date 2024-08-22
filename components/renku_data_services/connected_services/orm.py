@@ -11,6 +11,7 @@ from ulid import ULID
 
 from renku_data_services.connected_services import models
 from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind
+from renku_data_services.utils.sqlalchemy import ULIDType
 
 JSONVariant = JSON().with_variant(JSONB(), "postgresql")
 
@@ -74,7 +75,7 @@ class OAuth2ConnectionORM(BaseORM):
     """An OAuth2 connection."""
 
     __tablename__ = "oauth2_connections"
-    id: Mapped[str] = mapped_column("id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
     user_id: Mapped[str] = mapped_column("user_id", String())
     client_id: Mapped[str] = mapped_column(ForeignKey(OAuth2ClientORM.id, ondelete="CASCADE"), index=True)
     client: Mapped[OAuth2ClientORM] = relationship(init=False, repr=False)

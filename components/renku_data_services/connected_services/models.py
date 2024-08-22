@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from ulid import ULID
+
 from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind, RepositorySelection
 
 
@@ -29,7 +31,7 @@ class OAuth2Client:
 class OAuth2Connection:
     """OAuth2 connection model."""
 
-    id: str
+    id: ULID
     provider_id: str
     status: ConnectionStatus
 
