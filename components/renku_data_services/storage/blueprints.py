@@ -1,6 +1,7 @@
 """Cloud storage app."""
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from sanic import HTTPResponse, Request, empty, json
@@ -16,6 +17,7 @@ from renku_data_services.base_api.misc import validate_query
 from renku_data_services.storage import apispec, models
 from renku_data_services.storage.db import StorageRepository, StorageV2Repository
 from renku_data_services.storage.rclone import RCloneValidator
+from renku_data_services.utils.core import get_openbis_pat
 
 
 def dump_storage_with_sensitive_fields(storage: models.CloudStorage, validator: RCloneValidator) -> dict[str, Any]:
@@ -302,12 +304,49 @@ class StoragesV2BP(CustomBlueprint):
         """Create/update secrets for a cloud storage."""
 
         @authenticate(self.authenticator)
-        async def _upsert_secrets(request: Request, user: base_models.APIUser, storage_id: ULID) -> JSONResponse:
+        async def _upsert_secrets(
+            request: Request, user: base_models.APIUser, storage_id: ULID, validator: RCloneValidator
+        ) -> JSONResponse:
             # TODO: use @validate once sanic supports validating json lists
             body = apispec.CloudStorageSecretPostList.model_validate(request.json)
+
+            # NOTE: Check that user has proper access to the storage
+            storage = await self.storage_v2_repo.get_storage_by_id(storage_id=storage_id, user=user)
+
             secrets = [models.CloudStorageSecretUpsert.model_validate(s.model_dump()) for s in body.root]
+
+            provider = validator.providers[storage.storage_type]
+            sensitive_lookup = [o.name for o in provider.options if o.sensitive]
+            for secret in secrets:
+                if len(secret.value) > 0 and secret.name in sensitive_lookup:
+                    continue
+                raise errors.ValidationError(
+                    message=f"The '{secret.name}' property is not marked sensitive and can not be saved in the secret "
+                    f"storage."
+                )
+            expiration_timestamp = None
+
+            if storage.storage_type == "openbis":
+
+                async def openbis_transform_session_token_to_pat() -> tuple[str, datetime]:
+                    if len(secrets) == 1 and secrets[0].name == "session_token":
+                        try:
+                            return await get_openbis_pat(storage.configuration["host"], secrets[0].value)
+                        except Exception as e:
+                            raise errors.ProgrammingError(message=str(e))
+
+                    raise errors.ValidationError(message="The openBIS storage has only one secret: session_token")
+
+                (
+                    secrets[0].value,
+                    expiration_timestamp,
+                ) = await openbis_transform_session_token_to_pat()
+
             result = await self.storage_v2_repo.upsert_storage_secrets(
-                storage_id=storage_id, user=user, secrets=secrets
+                storage_id=storage_id,
+                user=user,
+                secrets=secrets,
+                expiration_timestamp=expiration_timestamp,
             )
             return json(
                 apispec.CloudStorageSecretGetList.model_validate(result).model_dump(exclude_none=True, mode="json"), 201

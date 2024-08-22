@@ -3,6 +3,7 @@ from typing import Any, Optional
 import pytest
 
 from renku_data_services.users.models import UserInfo
+from renku_data_services.utils.core import get_openbis_session_token
 
 
 @pytest.fixture
@@ -56,6 +57,36 @@ def create_storage(sanic_client, user_headers, admin_headers, create_project, pr
         return response.json
 
     return create_storage_helper
+
+
+@pytest.fixture
+def create_openbis_storage(sanic_client, user_headers, admin_headers, create_project, project_members):
+    async def create_openbis_storage_helper(
+        project_id: Optional[str] = None, admin: bool = False, **payload
+    ) -> dict[str, Any]:
+        if not project_id:
+            project = await create_project("Project", members=project_members)
+            project_id = project["id"]
+
+        headers = admin_headers if admin else user_headers
+        storage_payload = {
+            "project_id": project_id,
+            "name": "my-openbis-storage",
+            "configuration": {
+                "type": "openbis",
+                "host": "openbis-eln-lims.ethz.ch",  # Public openBIS demo instance.
+            },
+            "source_path": "/",
+            "target_path": "my/target",
+        }
+        storage_payload.update(payload)
+
+        _, response = await sanic_client.post("/api/data/storages_v2", headers=headers, json=storage_payload)
+
+        assert response.status_code == 201, response.text
+        return response.json
+
+    return create_openbis_storage_helper
 
 
 @pytest.mark.asyncio
@@ -326,15 +357,21 @@ async def test_storage_v2_create_secret(
 
     # NOTE: Save secrets for the same storage for another user
     payload = [
-        {"name": "another_user_secret", "value": "another value"},
+        {"name": "sse_kms_key_id", "value": "another value"},
     ]
-
     _, response = await sanic_client.post(
         f"/api/data/storages_v2/{storage_id}/secrets", headers=project_owner_member_headers, json=payload
     )
-
     assert response.status_code == 201, response.json
-    assert {s["name"] for s in response.json} == {"another_user_secret"}, response.json
+    assert {s["name"] for s in response.json} == {"sse_kms_key_id"}, response.json
+
+    payload = [
+        {"name": "not_sensitive", "value": "not_sensitive_value"},
+    ]
+    _, response = await sanic_client.post(
+        f"/api/data/storages_v2/{storage_id}/secrets", headers=project_owner_member_headers, json=payload
+    )
+    assert response.status_code == 422, response.json
 
     # NOTE: Get secrets for a storage
     _, response = await sanic_client.get(
@@ -364,6 +401,50 @@ async def test_storage_v2_create_secret(
     assert "secrets" in response.json[0], response.json
     assert {s["name"] for s in response.json[0]["secrets"]} == {"access_key_id", "secret_access_key"}, response.json
     assert {s["secret_id"] for s in response.json[0]["secrets"]} == created_secret_ids, response.json
+
+
+@pytest.mark.myskip(1 == 1, reason="Depends on a remote openBIS host which may not always be available.")
+@pytest.mark.asyncio
+async def test_storage_v2_create_openbis_secret(
+    sanic_client, create_openbis_storage, project_normal_member_headers, project_owner_member_headers
+) -> None:
+    storage = await create_openbis_storage()
+    storage_id = storage["storage"]["storage_id"]
+    openbis_session_token = await get_openbis_session_token(
+        host="openbis-eln-lims.ethz.ch",  # Public openBIS demo instance.
+        username="observer",
+        password="1234",
+    )
+
+    payload = [
+        {"name": "session_token", "value": openbis_session_token},
+    ]
+    _, response = await sanic_client.post(
+        f"/api/data/storages_v2/{storage_id}/secrets", headers=project_normal_member_headers, json=payload
+    )
+    assert response.status_code == 201, response.json
+    assert {s["name"] for s in response.json} == {"session_token"}
+    created_secret_ids = {s["secret_id"] for s in response.json}
+    assert len(created_secret_ids) == 1
+    assert response.json[0].keys() == {"secret_id", "name"}
+
+
+@pytest.mark.myskip(1 == 1, reason="Depends on a remote openBIS host which may not always be available.")
+@pytest.mark.asyncio
+async def test_storage_v2_create_openbis_secret_with_invalid_session_token(
+    sanic_client, create_openbis_storage, project_normal_member_headers, project_owner_member_headers
+) -> None:
+    storage = await create_openbis_storage()
+    storage_id = storage["storage"]["storage_id"]
+
+    payload = [
+        {"name": "session_token", "value": "1234"},
+    ]
+    _, response = await sanic_client.post(
+        f"/api/data/storages_v2/{storage_id}/secrets", headers=project_normal_member_headers, json=payload
+    )
+    assert response.status_code == 500, response.json
+    assert response.json["error"]["message"] == "An openBIS personal access token related request failed."
 
 
 @pytest.mark.asyncio
