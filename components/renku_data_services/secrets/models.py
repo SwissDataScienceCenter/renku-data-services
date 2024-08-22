@@ -5,6 +5,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from kubernetes import client as k8s_client
+from pydantic import Field
 from ulid import ULID
 
 
@@ -25,6 +26,7 @@ class Secret:
     encrypted_value: bytes = field(repr=False)
     encrypted_key: bytes = field(repr=False)
     kind: SecretKind
+    expiration_timestamp: datetime | None = Field(default=None)
     modification_date: datetime
 
     session_secret_slot_ids: list[ULID]
@@ -78,9 +80,10 @@ class UnsavedSecret:
     """Model to request the creation of a new user secret."""
 
     name: str
-    default_filename: str | None
     secret_value: str = field(repr=False)
     kind: SecretKind
+    expiration_timestamp: datetime | None = None
+    default_filename: str | None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -88,5 +91,6 @@ class SecretPatch:
     """Model for changes requested on a user secret."""
 
     name: str | None
-    default_filename: str | None
     secret_value: str | None = field(repr=False)
+    expiration_timestamp: datetime | None = None
+    default_filename: str | None

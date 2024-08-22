@@ -162,7 +162,7 @@ class RCloneValidator:
                         "Value": None,
                         "ShortOpt": "",
                         "Hide": 0,
-                        "Required": False,
+                        "Required": True,
                         "IsPassword": True,
                         "NoPrefix": False,
                         "Advanced": False,
@@ -572,7 +572,7 @@ class RCloneProviderSchema(BaseModel):
     @property
     def required_options(self) -> list[RCloneOption]:
         """Returns all required options for this provider."""
-        return [o for o in self.options if o.required]
+        return [o for o in self.options if o.required and not o.sensitive]
 
     @property
     def sensitive_options(self) -> list[RCloneOption]:
