@@ -115,8 +115,10 @@ function if you prefer to keep your favorite shell.
 ## Running Tests
 
 You can run style checks using `make style_checks`.
-To run the test test suite, use `make tests` (you likely need to run in the devcontainer for this to work, as it needs
-some surrounding services to run).
+To run the test suite, use `make tests` (you likely need to run in the devcontainer for this to work, as it needs some
+surrounding services to run).
+* Run a specific test e.g.: `poetry run pytest test/bases/renku_data_services/data_api/test_storage_v2.py::test_storage_v2_create_openbis_secret`
+* Also run tests marked with `@pytest.mark.myskip`: `PYTEST_FORCE_RUN_MYSKIPS=1 make tests`
 
 ## Migrations
 
