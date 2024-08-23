@@ -521,7 +521,7 @@ components:
       type: string
       # We can get invalid emails when people log in via Github or other services
       # It seems that in some cases Keycloak does not verify emails and this will then fail
-      # See: https://sentry.dev.renku.ch/organizations/sentry/issues/8672/events/a1bad3b6240b46a98823f2682836b435/
+      # See: https://github.com/SwissDataScienceCenter/renku-data-services/issues/367
       # format: email
       description: User email
       example: some-user@gmail.com
