@@ -66,6 +66,7 @@ authzed = "^0.16.0"
 cryptography = "^42.0.8"
 # see https://github.com/sanic-org/sanic/issues/2828 for setuptools dependency, remove when not needed anymore
 setuptools = { version = "^70.2.0" }
+aiofiles = "^24.1.0"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.7.9"
@@ -87,6 +88,7 @@ ruff = "^0.5.1"
 debugpy = "^1.8.2"
 pytest-xdist = { version = "^3.5.0", extras = ["psutil"] }
 types-requests = "^2.32.0.20240622"
+types-aiofiles = "^24.1.0.20240626"
 
 [build-system]
 requires = ["poetry-core"]
@@ -205,6 +207,7 @@ ignore_errors = true
 [[tool.mypy.overrides]]
 module = [
   "asyncpg.*",
+  "aiofiles.*",
   "authlib.*",
   "authzed.*",
   "avro_preprocessor.*",
