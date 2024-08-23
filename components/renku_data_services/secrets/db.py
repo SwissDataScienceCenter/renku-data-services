@@ -38,7 +38,7 @@ class UserSecretsRepo:
     async def get_secret_by_id(self, requested_by: APIUser, secret_id: ULID) -> Secret | None:
         """Get a specific user secret from the database."""
         async with self.session_maker() as session:
-            stmt = select(SecretORM).where(SecretORM.user_id == requested_by.id).where(SecretORM.id == str(secret_id))
+            stmt = select(SecretORM).where(SecretORM.user_id == requested_by.id).where(SecretORM.id == secret_id)
             res = await session.execute(stmt)
             orm = res.scalar_one_or_none()
             if orm is None:
@@ -89,7 +89,7 @@ class UserSecretsRepo:
 
         async with self.session_maker() as session, session.begin():
             result = await session.execute(
-                select(SecretORM).where(SecretORM.id == str(secret_id)).where(SecretORM.user_id == requested_by.id)
+                select(SecretORM).where(SecretORM.id == secret_id).where(SecretORM.user_id == requested_by.id)
             )
             secret = result.scalar_one_or_none()
             if secret is None:
@@ -104,7 +104,7 @@ class UserSecretsRepo:
 
         async with self.session_maker() as session, session.begin():
             result = await session.execute(
-                select(SecretORM).where(SecretORM.id == str(secret_id)).where(SecretORM.user_id == requested_by.id)
+                select(SecretORM).where(SecretORM.id == secret_id).where(SecretORM.user_id == requested_by.id)
             )
             secret = result.scalar_one_or_none()
             if secret is None:
