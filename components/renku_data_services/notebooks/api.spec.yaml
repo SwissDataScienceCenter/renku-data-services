@@ -959,10 +959,7 @@ components:
           nullable: true
           type: string
       required:
-      - details
-      - readyNumContainers
       - state
-      - totalNumContainers
       type: object
     SessionStatusDetail:
       properties:

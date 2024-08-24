@@ -129,7 +129,6 @@ class CustomErrorHandler(ErrorHandler):
                 formatted_exception = errors.ValidationError(
                     message="The provided input is too large to be stored in the database"
                 )
-        breakpoint()
         self.log(request, formatted_exception)
         if formatted_exception.status_code == 500 and "PYTEST_CURRENT_TEST" in os.environ:
             # TODO: Figure out how to do logging properly in here, I could not get the sanic logs to show up from here

@@ -224,7 +224,7 @@ class UserServer(ABC):
                     "enabled": True,
                     "clientId": self.config.sessions.oidc.client_id,
                     "clientSecret": {"value": self.config.sessions.oidc.client_secret},
-                    "issuerUrl": self.config.sessions.oidc.config_url.removesuffix("/.well-known/openid-configuration"),
+                    "issuerUrl": self.config.sessions.oidc.issuer_url,
                     "authorizedEmails": [self._user.email],
                 },
             }

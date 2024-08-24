@@ -2,9 +2,11 @@
 
 from datetime import datetime
 from typing import Any, cast
+from urllib.parse import urljoin
 
 from kubernetes.utils import parse_quantity
 from pydantic import BaseModel, Field, field_validator
+from sanic.log import logger
 from ulid import ULID
 
 from renku_data_services.errors import errors
@@ -147,10 +149,10 @@ class AmaltheaSessionV1Alpha1(_ASModel):
 
     def as_apispec(self) -> apispec.SessionResponse:
         """Convert the manifest into a form ready to be serialized and sent in a HTTP response."""
-        if self.status is None or self.status.url is None:
+        if self.status is None:
             raise errors.ProgrammingError(
                 message=f"The manifest for a session with name {self.metadata.name} cannot be serialized "
-                "because it is missing a status and/or URL in the status"
+                f"because it is missing a status"
             )
         if self.spec is None:
             raise errors.ProgrammingError(
@@ -162,6 +164,13 @@ class AmaltheaSessionV1Alpha1(_ASModel):
                 message=f"The manifest for a session with name {self.metadata.name} cannot be serialized "
                 "because it is missing the spec.session.resources field"
             )
+        url = "None"
+        if self.status.url is None or self.status.url == "" or self.status.url.lower() == "None":
+            if self.spec is not None and self.spec.ingress is not None:
+                scheme = "https" if self.spec.ingress.tlsSecretName is not None else "http"
+                url = urljoin(f"{scheme}://{self.spec.ingress.host}", self.spec.session.urlPath)
+        else:
+            url = self.status.url
         return apispec.SessionResponse(
             image=self.spec.session.image,
             name=self.metadata.name,
@@ -177,7 +186,7 @@ class AmaltheaSessionV1Alpha1(_ASModel):
                 details=[],
                 state=apispec.State3.running,
             ),
-            url=self.status.url,
+            url=url,
             project_id=str(self.project_id),
             launcher_id=str(self.launcher_id),
             resource_class_id=self.resource_class_id,

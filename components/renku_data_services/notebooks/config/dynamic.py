@@ -172,9 +172,9 @@ class _SessionOidcConfig:
     client_secret: str = field(repr=False)
     token_url: str
     auth_url: str
+    issuer_url: str
     client_id: str = "renku-jupyterserver"
     allow_unverified_email: Union[str, bool] = False
-    config_url: str = "/auth/realms/Renku/.well-known/openid-configuration"
 
     def __post_init__(self) -> None:
         self.allow_unverified_email = _parse_str_as_bool(self.allow_unverified_email)
@@ -189,9 +189,7 @@ class _SessionOidcConfig:
                 os.environ.get("NB_SESSIONS__OIDC__ALLOW_UNVERIFIED_EMAIL", False)
             ),
             client_id=os.environ.get("NB_SESSIONS__OIDC__CLIENT_ID", "renku-jupyterserver"),
-            config_url=os.environ.get(
-                "NB_SESSIONS__OIDC__CONFIG_URL", "/auth/realms/Renku/.well-known/openid-configuration"
-            ),
+            issuer_url=os.environ["NB_SESSIONS__OIDC__ISSUER_URL"],
         )
 
 

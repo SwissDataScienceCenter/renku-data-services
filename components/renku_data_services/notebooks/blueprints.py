@@ -1,7 +1,9 @@
 """Notebooks service API."""
 
+import base64
 import json as json_lib
 import logging
+import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -781,7 +783,7 @@ class NotebooksNewBP(CustomBlueprint):
             server_name = renku_2_make_server_name(
                 safe_username=user.id, project_id=body.project_id, launcher_id=body.launcher_id
             )
-            existing_session = await self.nb_config.k8s_v2_client.get_server(user.id, server_name)
+            existing_session = await self.nb_config.k8s_v2_client.get_server(server_name, user.id)
             if existing_session is not None and existing_session.spec is not None:
                 return json(existing_session.as_apispec().model_dump(exclude_none=True, mode="json"))
             gitlab_client = NotebooksGitlabClient(self.nb_config.git.url, internal_gitlab_user.access_token)
@@ -913,7 +915,6 @@ class NotebooksNewBP(CustomBlueprint):
                         else [],
                     ),
                 ),
-                status=None,
             )
             parsed_proxy_url = urlparse(urljoin(server.server_url + "/", "oauth2"))
             secret_data = {}
@@ -922,9 +923,7 @@ class NotebooksNewBP(CustomBlueprint):
                     {
                         "provider": "oidc",
                         "client_id": self.nb_config.sessions.oidc.client_id,
-                        "oidc_issuer_url": self.nb_config.sessions.oidc.config_url.removesuffix(
-                            "/.well-known/openid-configuration"
-                        ),
+                        "oidc_issuer_url": self.nb_config.sessions.oidc.issuer_url,
                         "session_cookie_minimal": True,
                         "skip_provider_button": True,
                         "redirect_url": urljoin(server.server_url + "/", "oauth2/callback"),
@@ -932,9 +931,11 @@ class NotebooksNewBP(CustomBlueprint):
                         "proxy_prefix": parsed_proxy_url.path,
                         "authenticated_emails_file": "/authorized_emails/authorized_emails",
                         "client_secret": self.nb_config.sessions.oidc.client_secret,
+                        "cookie_secret": base64.urlsafe_b64encode(os.urandom(32)).decode(),
+                        "insecure_oidc_allow_unverified_email": self.nb_config.sessions.oidc.allow_unverified_email,
                     }
                 )
-                secret_data["authorized_emails"] = AuthenticatedAPIUser.email
+                secret_data["authorized_emails"] = user.email
             else:
                 secret_data["auth"] = safe_dump(
                     {
