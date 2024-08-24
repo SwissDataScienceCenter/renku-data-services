@@ -66,6 +66,7 @@ kr8s = "^0.17.0"
 werkzeug = "^3.0.3"
 # see https://github.com/sanic-org/sanic/issues/2828 for setuptools dependency, remove when not needed anymore
 setuptools = { version = "^70.0.0" }
+aiofile = "^3.8.8"
 
 [tool.poetry.group.dev.dependencies]
 pyavro-gen = "^0.3.3"
