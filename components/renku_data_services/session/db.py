@@ -79,6 +79,8 @@ class SessionRepository:
             uid=new_environment.uid,
             gid=new_environment.gid,
             environment_kind=new_environment.environment_kind,
+            command=new_environment.command,
+            args=new_environment.args,
         )
 
         session.add(environment)
@@ -128,6 +130,8 @@ class SessionRepository:
                 "mount_directory",
                 "uid",
                 "gid",
+                "args",
+                "command",
             ]:
                 setattr(environment, key, value)
 
@@ -395,6 +399,8 @@ class SessionRepository:
                         uid=env_payload_valid.uid,
                         gid=env_payload_valid.gid,
                         environment_kind=models.EnvironmentKind(env_payload_valid.environment_kind.value),
+                        args=env_payload_valid.args,
+                        command=env_payload_valid.command,
                     )
                     new_env = await self.__insert_environment(user, session, new_unsaved_env)
                     launcher.environment = new_env
@@ -412,6 +418,8 @@ class SessionRepository:
                             "mount_directory",
                             "uid",
                             "gid",
+                            "args",
+                            "command",
                         ]:
                             setattr(launcher.environment, key, val)
 

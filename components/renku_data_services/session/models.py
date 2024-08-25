@@ -31,6 +31,8 @@ class BaseEnvironment:
     uid: int
     gid: int
     environment_kind: EnvironmentKind
+    args: list[str] | None = None
+    command: list[str] | None = None
 
 
 @dataclass(kw_only=True, frozen=True, eq=True)

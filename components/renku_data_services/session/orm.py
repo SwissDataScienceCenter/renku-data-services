@@ -3,7 +3,8 @@
 from datetime import datetime
 from pathlib import PurePosixPath
 
-from sqlalchemy import DateTime, MetaData, String
+from sqlalchemy import JSON, DateTime, MetaData, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
 from ulid import ULID
@@ -14,6 +15,7 @@ from renku_data_services.session import models
 from renku_data_services.utils.sqlalchemy import ULIDType
 
 metadata_obj = MetaData(schema="sessions")  # Has to match alembic ini section name
+JSONVariant = JSON().with_variant(JSONB(), "postgresql")
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
@@ -54,6 +56,8 @@ class EnvironmentORM(BaseORM):
     uid: Mapped[int] = mapped_column("uid")
     gid: Mapped[int] = mapped_column("gid")
     environment_kind: Mapped[models.EnvironmentKind] = mapped_column("environment_kind")
+    args: Mapped[list[str] | None] = mapped_column("args", JSONVariant, nullable=True)
+    command: Mapped[list[str] | None] = mapped_column("command", JSONVariant, nullable=True)
 
     def dump(self) -> models.Environment:
         """Create a session environment model from the EnvironmentORM."""
@@ -71,6 +75,8 @@ class EnvironmentORM(BaseORM):
             mount_directory=PurePosixPath(self.mount_directory),
             working_directory=PurePosixPath(self.working_directory),
             port=self.port,
+            args=self.args,
+            command=self.command,
         )
 
 
