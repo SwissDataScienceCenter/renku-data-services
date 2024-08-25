@@ -3,6 +3,7 @@
 import base64
 import json as json_lib
 import logging
+from math import floor
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -422,7 +423,7 @@ class NotebooksBP(CustomBlueprint):
             try:
                 for cstorage in cloudstorage:
                     storages.append(
-                        RCloneStorage.storage_from_schema(
+                        await RCloneStorage.storage_from_schema(
                             cstorage.model_dump(),
                             user=user,
                             project_id=gl_project_id,
@@ -675,7 +676,10 @@ class NotebooksBP(CustomBlueprint):
                     )
                 renku_tokens = RenkuTokens(access_token=user.access_token, refresh_token=user.refresh_token)
                 gitlab_token = GitlabToken(
-                    access_token=internal_gitlab_user.access_token, expires_at=user.git_token_expires_at
+                    access_token=internal_gitlab_user.access_token,
+                    expires_at=floor(user.access_token_expires_at.timestamp())
+                    if user.access_token_expires_at is not None
+                    else -1,
                 )
                 await self.nb_config.k8s_client.patch_tokens(server_name, renku_tokens, gitlab_token)
                 new_server = await self.nb_config.k8s_client.patch_server(
@@ -841,11 +845,11 @@ class NotebooksNewBP(CustomBlueprint):
                         ),
                     )
                 )
-            git_clone = init_containers.git_clone_container_v2(server)
+            git_clone = await init_containers.git_clone_container_v2(server)
             if git_clone is not None:
                 session_init_containers.append(InitContainer.model_validate(git_clone))
             extra_containers: list[ExtraContainer] = []
-            git_proxy_container = git_proxy.main_container(server)
+            git_proxy_container = await git_proxy.main_container(server)
             if git_proxy_container is not None:
                 extra_containers.append(
                     ExtraContainer.model_validate(self.nb_config.k8s_v2_client.sanitize(git_proxy_container))

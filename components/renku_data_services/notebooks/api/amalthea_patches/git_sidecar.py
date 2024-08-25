@@ -8,12 +8,13 @@ if TYPE_CHECKING:
     from renku_data_services.notebooks.api.classes.server import UserServer
 
 
-def main(server: "UserServer") -> list[dict[str, Any]]:
+async def main(server: "UserServer") -> list[dict[str, Any]]:
     """Adds the git sidecar container to the session statefulset."""
     # NOTE: Sessions can be persisted only for registered users
     if not server.user.is_authenticated:
         return []
-    if not server.repositories:
+    repositories = await server.repositories()
+    if not repositories:
         return []
 
     gitlab_project = getattr(server, "gitlab_project", None)

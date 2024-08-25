@@ -52,7 +52,7 @@ async def _authenticate(authenticator: Authenticator, request: Request) -> Authe
 
     token = token.removeprefix("Bearer ").removeprefix("bearer ")
     user = await authenticator.authenticate(token, request)
-    if not user.is_authenticated or user.id is None or user.access_token is None:
+    if not user.is_authenticated or user.id is None or user.access_token is None or user.refresh_token is None:
         raise errors.UnauthorizedError(message="You have to log in to access this endpoint.", quiet=True)
     if not user.email:
         raise errors.ProgrammingError(
@@ -67,6 +67,7 @@ async def _authenticate(authenticator: Authenticator, request: Request) -> Authe
         last_name=user.last_name,
         email=user.email,
         is_admin_init=user.is_admin,
+        refresh_token=user.refresh_token,
     )
 
 

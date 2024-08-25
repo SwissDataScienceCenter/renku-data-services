@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any, NamedTuple, Optional, cast
 from urllib.parse import urljoin, urlparse
 
-import requests
+import httpx
 from sanic.log import logger
 
 from renku_data_services.base_models import APIUser
@@ -45,7 +45,7 @@ class StorageValidator:
     def __post_init__(self) -> None:
         self.storage_url = self.storage_url.rstrip("/")
 
-    def get_storage_by_id(
+    async def get_storage_by_id(
         self, user: APIUser, internal_gitlab_user: APIUser, project_id: int, storage_id: str
     ) -> CloudStorageConfig:
         """Get a specific cloud storage configuration by ID."""
@@ -58,7 +58,8 @@ class StorageValidator:
         # TODO: remove project_id once authz on the data service works properly
         request_url = self.storage_url + f"/storage/{storage_id}?project_id={project_id}"
         logger.info(f"getting storage info by id: {request_url}")
-        res = requests.get(request_url, headers=headers, timeout=10)
+        async with httpx.AsyncClient() as client:
+            res = await client.get(request_url, headers=headers, timeout=10)
         if res.status_code == 404:
             raise MissingResourceError(message=f"Couldn't find cloud storage with id {storage_id}")
         if res.status_code == 401:
@@ -76,9 +77,10 @@ class StorageValidator:
             name=storage["name"],
         )
 
-    def validate_storage_configuration(self, configuration: dict[str, Any], source_path: str) -> None:
+    async def validate_storage_configuration(self, configuration: dict[str, Any], source_path: str) -> None:
         """Validate the cloud storage configuration."""
-        res = requests.post(self.storage_url + "/storage_schema/validate", json=configuration, timeout=10)
+        async with httpx.AsyncClient() as client:
+            res = await client.post(self.storage_url + "/storage_schema/validate", json=configuration, timeout=10)
         if res.status_code == 422:
             raise InvalidCloudStorageConfiguration(
                 message=f"The provided cloud storage configuration isn't valid: {res.json()}",
@@ -88,9 +90,10 @@ class StorageValidator:
                 message="The data service sent an unexpected response, please try again later",
             )
 
-    def obscure_password_fields_for_storage(self, configuration: dict[str, Any]) -> dict[str, Any]:
+    async def obscure_password_fields_for_storage(self, configuration: dict[str, Any]) -> dict[str, Any]:
         """Obscures password fields for use with rclone."""
-        res = requests.post(self.storage_url + "/storage_schema/obscure", json=configuration, timeout=10)
+        async with httpx.AsyncClient() as client:
+            res = await client.post(self.storage_url + "/storage_schema/obscure", json=configuration, timeout=10)
 
         if res.status_code != 200:
             raise InvalidCloudStorageConfiguration(
@@ -104,17 +107,17 @@ class StorageValidator:
 class DummyStorageValidator:
     """Dummy cloud storage validator used for testing."""
 
-    def get_storage_by_id(
+    async def get_storage_by_id(
         self, user: APIUser, internal_gitlab_user: APIUser, project_id: int, storage_id: str
     ) -> CloudStorageConfig:
         """Get storage by ID."""
         raise NotImplementedError()
 
-    def validate_storage_configuration(self, configuration: dict[str, Any], source_path: str) -> None:
+    async def validate_storage_configuration(self, configuration: dict[str, Any], source_path: str) -> None:
         """Validate the cloud storage configuration."""
         raise NotImplementedError()
 
-    def obscure_password_fields_for_storage(self, configuration: dict[str, Any]) -> dict[str, Any]:
+    async def obscure_password_fields_for_storage(self, configuration: dict[str, Any]) -> dict[str, Any]:
         """Obscure the password fields in a cloud storage configuration."""
         raise NotImplementedError()
 
@@ -256,16 +259,16 @@ class GitProviderHelper:
         self.service_url = self.service_url.rstrip("/")
         self.renku_url = self.renku_url.rstrip("/")
 
-    def get_providers(self, user: APIUser) -> list[GitProvider]:
+    async def get_providers(self, user: APIUser) -> list[GitProvider]:
         """Get the providers for the specific user."""
         if user is None or user.access_token is None:
             return []
-        connections = self.get_oauth2_connections(user=user)
+        connections = await self.get_oauth2_connections(user=user)
         providers: dict[str, GitProvider] = dict()
         for c in connections:
             if c.provider_id in providers:
                 continue
-            provider = self.get_oauth2_provider(c.provider_id)
+            provider = await self.get_oauth2_provider(c.provider_id)
             access_token_url = urljoin(
                 self.renku_url,
                 urlparse(f"{self.service_url}/oauth2/connections/{c.id}/token").path,
@@ -291,23 +294,25 @@ class GitProviderHelper:
         )
         return providers_list
 
-    def get_oauth2_connections(self, user: APIUser | None = None) -> list[OAuth2Connection]:
+    async def get_oauth2_connections(self, user: APIUser | None = None) -> list[OAuth2Connection]:
         """Get oauth2 connections."""
         if user is None or user.access_token is None:
             return []
         request_url = f"{self.service_url}/oauth2/connections"
         headers = {"Authorization": f"bearer {user.access_token}"}
-        res = requests.get(request_url, headers=headers, timeout=10)
+        async with httpx.AsyncClient() as client:
+            res = await client.get(request_url, headers=headers, timeout=10)
         if res.status_code != 200:
             raise IntermittentError(message="The data service sent an unexpected response, please try again later")
         connections = res.json()
         connections = [OAuth2Connection.from_dict(c) for c in connections if c["status"] == "connected"]
         return connections
 
-    def get_oauth2_provider(self, provider_id: str) -> OAuth2Provider:
+    async def get_oauth2_provider(self, provider_id: str) -> OAuth2Provider:
         """Get a specific provider."""
         request_url = f"{self.service_url}/oauth2/providers/{provider_id}"
-        res = requests.get(request_url, timeout=10)
+        async with httpx.AsyncClient() as client:
+            res = await client.get(request_url, timeout=10)
         if res.status_code != 200:
             raise IntermittentError(message="The data service sent an unexpected response, please try again later")
         provider = res.json()
@@ -318,6 +323,6 @@ class GitProviderHelper:
 class DummyGitProviderHelper:
     """Helper for git providers."""
 
-    def get_providers(self, user: APIUser) -> list[GitProvider]:
+    async def get_providers(self, user: APIUser) -> list[GitProvider]:
         """Get a list of providers."""
         return []

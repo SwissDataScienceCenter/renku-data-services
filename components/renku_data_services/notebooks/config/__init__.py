@@ -70,17 +70,17 @@ class CRCValidatorProto(Protocol):
 class StorageValidatorProto(Protocol):
     """Cloud storage validator protocol."""
 
-    def get_storage_by_id(
+    async def get_storage_by_id(
         self, user: APIUser, internal_gitlab_user: APIUser, project_id: int, storage_id: str
     ) -> CloudStorageConfig:
         """Get storage by ID."""
         ...
 
-    def validate_storage_configuration(self, configuration: dict[str, Any], source_path: str) -> None:
+    async def validate_storage_configuration(self, configuration: dict[str, Any], source_path: str) -> None:
         """Validate a storage configuration."""
         ...
 
-    def obscure_password_fields_for_storage(self, configuration: dict[str, Any]) -> dict[str, Any]:
+    async def obscure_password_fields_for_storage(self, configuration: dict[str, Any]) -> dict[str, Any]:
         """Obscure passsword fields in storage credentials."""
         ...
 
@@ -88,7 +88,7 @@ class StorageValidatorProto(Protocol):
 class GitProviderHelperProto(Protocol):
     """Git provider protocol."""
 
-    def get_providers(self, user: APIUser) -> list[GitProvider]:
+    async def get_providers(self, user: APIUser) -> list[GitProvider]:
         """Get a list of git providers."""
         ...
 

@@ -99,14 +99,14 @@ class UserServer(ABC):
         """Return server's k8s client."""
         return self._k8s_client
 
-    @property
-    def repositories(self) -> list[Repository]:
+    async def repositories(self) -> list[Repository]:
         """Get the list of repositories in the project."""
         # Configure git repository providers based on matching URLs.
         if not self._has_configured_git_providers:
+            git_providers = await self.git_providers()
             for repo in self._repositories:
                 found_provider = None
-                for provider in self.git_providers:
+                for provider in git_providers:
                     if urlparse(provider.url).netloc == urlparse(repo.url).netloc:
                         found_provider = provider
                         break
@@ -129,18 +129,18 @@ class UserServer(ABC):
             f"sessions/{self.server_name}?token={self._user.id}",
         )
 
-    @property
-    def git_providers(self) -> list[GitProvider]:
+    async def git_providers(self) -> list[GitProvider]:
         """The list of git providers."""
         if self._git_providers is None:
-            self._git_providers = self.config.git_provider_helper.get_providers(user=self.user)
+            self._git_providers = await self.config.git_provider_helper.get_providers(user=self.user)
         return self._git_providers
 
-    @property
-    def required_git_providers(self) -> list[GitProvider]:
+    async def required_git_providers(self) -> list[GitProvider]:
         """The list of required git providers."""
-        required_provider_ids: set[str] = set(r.provider for r in self.repositories if r.provider)
-        return [p for p in self.git_providers if p.id in required_provider_ids]
+        repositories = await self.repositories()
+        required_provider_ids: set[str] = set(r.provider for r in repositories if r.provider)
+        providers = await self.git_providers()
+        return [p for p in providers if p.id in required_provider_ids]
 
     def __str__(self) -> str:
         return f"<UserServer user: {self._user.id} server_name: {self.server_name}>"
@@ -155,7 +155,7 @@ class UserServer(ABC):
                     f"or Docker resources are missing: {', '.join(errors)}"
                 )
             )
-        manifest = JupyterServerV1Alpha1.model_validate(self._get_session_manifest())
+        manifest = JupyterServerV1Alpha1.model_validate(await self._get_session_manifest())
         return await self._k8s_client.create_server(manifest, self.safe_username)
 
     @staticmethod
@@ -192,9 +192,9 @@ class UserServer(ABC):
             errors.append(f"image {self.image} does not exist or cannot be accessed")
         return errors
 
-    def _get_session_manifest(self) -> dict[str, Any]:
+    async def _get_session_manifest(self) -> dict[str, Any]:
         """Compose the body of the user session for the k8s operator."""
-        patches = self._get_patches()
+        patches = await self._get_patches()
         self._check_environment_variables_overrides(patches)
 
         # Storage
@@ -279,7 +279,7 @@ class UserServer(ABC):
     def _get_renku_annotation_prefix(self) -> str:
         return self.config.session_get_endpoint_annotations.renku_annotation_prefix
 
-    def _get_patches(self) -> list[dict[str, Any]]:
+    async def _get_patches(self) -> list[dict[str, Any]]:
         return list(
             chain(
                 general_patches.test(self),
@@ -294,21 +294,21 @@ class UserServer(ABC):
                 jupyter_server_patches.disable_service_links(),
                 jupyter_server_patches.rstudio_env_variables(self),
                 jupyter_server_patches.user_secrets(self),
-                git_proxy_patches.main(self),
-                git_sidecar_patches.main(self),
+                await git_proxy_patches.main(self),
+                await git_sidecar_patches.main(self),
                 general_patches.oidc_unverified_email(self),
                 ssh_patches.main(self.config),
                 # init container for certs must come before all other init containers
                 # so that it runs first before all other init containers
                 init_containers_patches.certificates(self.config),
                 init_containers_patches.download_image(self),
-                init_containers_patches.git_clone(self),
+                await init_containers_patches.git_clone(self),
                 inject_certificates_patches.proxy(self),
                 # Cloud Storage needs to patch the git clone sidecar spec and so should come after
                 # the sidecars
                 # WARN: this patch depends on the index of the sidecar and so needs to be updated
                 # if sidercars are added or removed
-                cloudstorage_patches.main(self),
+                await cloudstorage_patches.main(self),
             )
         )
 

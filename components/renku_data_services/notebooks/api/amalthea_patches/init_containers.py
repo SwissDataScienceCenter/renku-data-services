@@ -15,10 +15,11 @@ if TYPE_CHECKING:
     # NOTE: If these are directly imported then you get circular imports.
     from renku_data_services.notebooks.api.classes.server import UserServer
 
-def git_clone_container_v2(server: "UserServer") -> dict[str, Any] | None:
+async def git_clone_container_v2(server: "UserServer") -> dict[str, Any] | None:
     """Returns the specification for the container that clones the user's repositories for new operator."""
     amalthea_session_work_volume: str = "amalthea-volume"
-    if not server.repositories:
+    repositories = await server.repositories()
+    if not repositories:
         return None
 
     etc_cert_volume_mount = get_certificates_volume_mounts(
@@ -105,7 +106,7 @@ def git_clone_container_v2(server: "UserServer") -> dict[str, Any] | None:
 
 
     # Set up git repositories
-    for idx, repo in enumerate(server.repositories):
+    for idx, repo in enumerate(repositories):
         obj_env = f"{prefix}REPOSITORIES_{idx}_"
         env.append(
             {
@@ -115,7 +116,8 @@ def git_clone_container_v2(server: "UserServer") -> dict[str, Any] | None:
         )
 
     # Set up git providers
-    for idx, provider in enumerate(server.required_git_providers):
+    required_git_providers = await server.required_git_providers()
+    for idx, provider in enumerate(required_git_providers):
         obj_env = f"{prefix}GIT_PROVIDERS_{idx}_"
         data = dict(id=provider.id, access_token_url=provider.access_token_url)
         env.append(
@@ -151,9 +153,10 @@ def git_clone_container_v2(server: "UserServer") -> dict[str, Any] | None:
         "env": env,
     }
 
-def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
+async def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
     """Returns the specification for the container that clones the user's repositories."""
-    if not server.repositories:
+    repositories = await server.repositories()
+    if not repositories:
         return None
 
     etc_cert_volume_mount = get_certificates_volume_mounts(
@@ -240,7 +243,7 @@ def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
 
 
     # Set up git repositories
-    for idx, repo in enumerate(server.repositories):
+    for idx, repo in enumerate(repositories):
         obj_env = f"{prefix}REPOSITORIES_{idx}_"
         env.append(
             {
@@ -250,7 +253,8 @@ def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
         )
 
     # Set up git providers
-    for idx, provider in enumerate(server.required_git_providers):
+    required_git_providers = await server.required_git_providers()
+    for idx, provider in enumerate(required_git_providers):
         obj_env = f"{prefix}GIT_PROVIDERS_{idx}_"
         data = dict(id=provider.id, access_token_url=provider.access_token_url)
         env.append(
@@ -287,9 +291,9 @@ def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
     }
 
 
-def git_clone(server: "UserServer") -> list[dict[str, Any]]:
+async def git_clone(server: "UserServer") -> list[dict[str, Any]]:
     """The patch for the init container that clones the git repository."""
-    container = git_clone_container(server)
+    container = await git_clone_container(server)
     if not container:
         return []
     return [

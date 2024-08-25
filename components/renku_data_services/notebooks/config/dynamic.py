@@ -419,6 +419,7 @@ class _SessionConfig:
                 client_secret="not-defined",
                 token_url="http://not.defined",
                 auth_url="http://not.defined",
+                issuer_url="http://not.defined",
             ),
             storage=_SessionStorageConfig.from_env(),
             containers=_SessionContainers.from_env(),

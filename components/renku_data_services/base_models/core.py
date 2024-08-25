@@ -3,6 +3,7 @@
 import re
 import unicodedata
 from dataclasses import InitVar, dataclass, field
+from datetime import datetime
 from enum import Enum, StrEnum
 from typing import ClassVar, Optional, Protocol
 
@@ -27,10 +28,12 @@ class APIUser:
 
     id: Optional[str] = None  # the sub claim in the access token - i.e. the Keycloak user ID
     access_token: Optional[str] = field(repr=False, default=None)
+    refresh_token: Optional[str] = field(repr=False, default=None)
     full_name: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     email: Optional[str] = None
+    access_token_expires_at: datetime | None = None
     is_admin_init: InitVar[bool] = False
     __is_admin: bool = field(init=False, repr=False)
 
@@ -55,6 +58,7 @@ class AuthenticatedAPIUser(APIUser):
     id: str
     email: str
     access_token: str = field(repr=False)
+    refresh_token: str = field(repr=False)
     full_name: str | None = None
     first_name: str | None = None
     last_name: str | None = None
@@ -70,6 +74,7 @@ class AnonymousAPIUser(APIUser):
     first_name = None
     last_name = None
     email = None
+    refresh_token = None
 
     @property
     def is_authenticated(self) -> bool:

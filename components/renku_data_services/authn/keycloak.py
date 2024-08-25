@@ -1,6 +1,7 @@
 """Keycloak user store."""
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Optional, cast
 
 import httpx
@@ -42,6 +43,7 @@ class KeycloakAuthenticator(Authenticator):
     algorithms: list[str]
     admin_role: str = "renku-admin"
     token_field: str = "Authorization"
+    refresh_token_header: str = "Renku-Auth-Refresh-Token"
 
     def __post_init__(self) -> None:
         if len(self.algorithms) == 0:
@@ -76,6 +78,7 @@ class KeycloakAuthenticator(Authenticator):
 
         parsed = self._validate(access_token)
         is_admin = self.admin_role in parsed.get("realm_access", {}).get("roles", [])
+        exp = parsed.get("exp")
         return base_models.APIUser(
             is_admin_init=is_admin,
             id=parsed.get("sub"),
@@ -84,4 +87,6 @@ class KeycloakAuthenticator(Authenticator):
             first_name=parsed.get("given_name"),
             last_name=parsed.get("family_name"),
             email=parsed.get("email"),
+            refresh_token=request.headers.get(self.refresh_token_header),
+            access_token_expires_at=datetime.fromtimestamp(exp) if exp is not None else None,
         )
