@@ -274,6 +274,10 @@ components:
           $ref: "#/components/schemas/EnvironmentMountDirectory"
         port:
           $ref: "#/components/schemas/EnvironmentPort"
+        command:
+          $ref: "#/components/schemas/EnvironmentCommand"
+        args:
+          $ref: "#/components/schemas/EnvironmentArgs"
       required:
         - id
         - name
@@ -359,6 +363,10 @@ components:
             - $ref: "#/components/schemas/EnvironmentPort"
             - default: 8080
           default: 8080
+        command:
+          $ref: "#/components/schemas/EnvironmentCommand"
+        args:
+          $ref: "#/components/schemas/EnvironmentArgs"
       required:
         - name
         - container_image
@@ -392,6 +400,10 @@ components:
           $ref: "#/components/schemas/EnvironmentMountDirectory"
         port:
           $ref: "#/components/schemas/EnvironmentPort"
+        command:
+          $ref: "#/components/schemas/EnvironmentCommand"
+        args:
+          $ref: "#/components/schemas/EnvironmentArgs"
     SessionLaunchersList:
       description: A list of Renku session launchers
       type: array
@@ -570,6 +582,18 @@ components:
     EnvironmentMountDirectory:
       type: string
       description: The location where the persistent storage for the session will be mounted, usually it should be identical to or a parent of the working directory
+      minLength: 1
+    EnvironmentCommand:
+      type: array
+      items:
+        type: string
+      description: The command that will be run i.e. will overwrite the image Dockerfile ENTRYPOINT, equivalent to command in Kubernetes
+      minLength: 1
+    EnvironmentArgs:
+      type: array
+      items:
+        type: string
+      description: The arguments that will follow the command, i.e. will overwrite the image Dockerfile CMD, equivalent to args in Kubernetes
       minLength: 1
     ErrorResponse:
       type: object
