@@ -79,6 +79,8 @@ class SessionRepository:
             uid=new_environment.uid,
             gid=new_environment.gid,
             environment_kind=new_environment.environment_kind,
+            command=new_environment.command,
+            args=new_environment.args,
         )
 
         session.add(environment)
@@ -128,6 +130,8 @@ class SessionRepository:
                 "mount_directory",
                 "uid",
                 "gid",
+                "args",
+                "command",
             ]:
                 setattr(environment, key, value)
 
@@ -138,7 +142,7 @@ class SessionRepository:
     ) -> models.Environment:
         """Update a global session environment entry."""
         if not user.is_admin:
-            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session, session.begin():
             return await self.__update_environment(
@@ -241,7 +245,7 @@ class SessionRepository:
                     message=f"Project with id '{project_id}' does not exist or you do not have access to it."
                 )
 
-            environment_id: str
+            environment_id: ULID
             environment: models.Environment
             environment_orm: schemas.EnvironmentORM | None
             if isinstance(new_launcher.environment, models.UnsavedEnvironment):
@@ -249,7 +253,7 @@ class SessionRepository:
                 environment = environment_orm.dump()
                 environment_id = environment.id
             else:
-                environment_id = new_launcher.environment
+                environment_id = ULID.from_str(new_launcher.environment)
                 res_env = await session.scalars(
                     select(schemas.EnvironmentORM)
                     .where(schemas.EnvironmentORM.id == environment_id)
@@ -351,7 +355,7 @@ class SessionRepository:
             if len(env_payload.keys()) == 1 and "id" in env_payload and isinstance(env_payload["id"], str):
                 # The environment ID is being changed or set
                 old_environment = launcher.environment
-                new_environment_id = env_payload["id"]
+                new_environment_id = ULID.from_str(env_payload["id"])
                 res_env = await session.scalars(
                     select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == new_environment_id)
                 )
@@ -397,6 +401,8 @@ class SessionRepository:
                         uid=env_payload_valid.uid,
                         gid=env_payload_valid.gid,
                         environment_kind=models.EnvironmentKind(env_payload_valid.environment_kind.value),
+                        args=env_payload_valid.args,
+                        command=env_payload_valid.command,
                     )
                     new_env = await self.__insert_environment(user, session, new_unsaved_env)
                     launcher.environment = new_env
@@ -414,6 +420,8 @@ class SessionRepository:
                             "mount_directory",
                             "uid",
                             "gid",
+                            "args",
+                            "command",
                         ]:
                             setattr(launcher.environment, key, val)
 

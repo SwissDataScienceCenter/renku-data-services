@@ -14,7 +14,7 @@ class BaseAPISpec(BaseModel):
 
         from_attributes = True
 
-    @field_validator("id", mode="before", check_fields=False)
+    @field_validator("id", "project_id", mode="before", check_fields=False)
     @classmethod
     def serialize_id(cls, id: str | ULID) -> str:
         """Custom serializer that can handle ULIDs."""

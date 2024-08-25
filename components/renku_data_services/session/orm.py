@@ -3,7 +3,8 @@
 from datetime import datetime
 from pathlib import PurePosixPath
 
-from sqlalchemy import DateTime, MetaData, String
+from sqlalchemy import JSON, DateTime, MetaData, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
 from ulid import ULID
@@ -11,8 +12,10 @@ from ulid import ULID
 from renku_data_services.crc.orm import ResourceClassORM
 from renku_data_services.project.orm import ProjectORM
 from renku_data_services.session import models
+from renku_data_services.utils.sqlalchemy import ULIDType
 
 metadata_obj = MetaData(schema="sessions")  # Has to match alembic ini section name
+JSONVariant = JSON().with_variant(JSONB(), "postgresql")
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
@@ -26,7 +29,7 @@ class EnvironmentORM(BaseORM):
 
     __tablename__ = "environments"
 
-    id: Mapped[str] = mapped_column("id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
     """Id of this session environment object."""
 
     name: Mapped[str] = mapped_column("name", String(99))
@@ -53,6 +56,8 @@ class EnvironmentORM(BaseORM):
     uid: Mapped[int] = mapped_column("uid")
     gid: Mapped[int] = mapped_column("gid")
     environment_kind: Mapped[models.EnvironmentKind] = mapped_column("environment_kind")
+    args: Mapped[list[str] | None] = mapped_column("args", JSONVariant, nullable=True)
+    command: Mapped[list[str] | None] = mapped_column("command", JSONVariant, nullable=True)
 
     def dump(self) -> models.Environment:
         """Create a session environment model from the EnvironmentORM."""
@@ -70,6 +75,8 @@ class EnvironmentORM(BaseORM):
             mount_directory=PurePosixPath(self.mount_directory),
             working_directory=PurePosixPath(self.working_directory),
             port=self.port,
+            args=self.args,
+            command=self.command,
         )
 
 
@@ -101,7 +108,7 @@ class SessionLauncherORM(BaseORM):
     )
     """Id of the project this session belongs to."""
 
-    environment_id: Mapped[str] = mapped_column(
+    environment_id: Mapped[ULID] = mapped_column(
         "environment_id", ForeignKey(EnvironmentORM.id), default=None, nullable=True, index=True
     )
     """Id of the session environment."""
@@ -120,22 +127,19 @@ class SessionLauncherORM(BaseORM):
         """Create SessionLauncherORM from the session launcher model."""
         return cls(
             name=launcher.name,
-            created_by_id=launcher.created_by.id,
+            created_by_id=launcher.created_by,
             creation_date=launcher.creation_date,
             description=launcher.description,
-            environment_kind=launcher.environment_kind,
-            container_image=launcher.container_image,
             project_id=ULID.from_str(launcher.project_id),
-            environment_id=launcher.environment_id,
             resource_class_id=launcher.resource_class_id,
-            default_url=launcher.default_url,
+            environment_id=launcher.environment.id,
         )
 
     def dump(self) -> models.SessionLauncher:
         """Create a session launcher model from the SessionLauncherORM."""
         return models.SessionLauncher(
             id=self.id,
-            project_id=str(self.project_id),
+            project_id=self.project_id,
             name=self.name,
             created_by=self.created_by_id,
             creation_date=self.creation_date,

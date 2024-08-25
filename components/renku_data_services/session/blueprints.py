@@ -59,6 +59,8 @@ class EnvironmentsBP(CustomBlueprint):
                 uid=body.uid,
                 gid=body.gid,
                 environment_kind=models.EnvironmentKind.GLOBAL,
+                command=body.command,
+                args=body.args,
             )
             environment = await self.session_repo.insert_environment(user=user, new_environment=unsaved_environment)
             return json(apispec.Environment.model_validate(environment).model_dump(exclude_none=True, mode="json"), 201)
@@ -145,9 +147,11 @@ class SessionLaunchersBP(CustomBlueprint):
                     uid=body.environment.uid,
                     gid=body.environment.gid,
                     environment_kind=models.EnvironmentKind(body.environment.environment_kind.value),
+                    args=body.environment.args,
+                    command=body.environment.command,
                 )
             new_launcher = models.UnsavedSessionLauncher(
-                project_id=body.project_id,
+                project_id=ULID.from_str(body.project_id),
                 name=body.name,
                 description=body.description,
                 environment=environment,
