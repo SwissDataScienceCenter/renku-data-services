@@ -6,8 +6,6 @@ from enum import StrEnum
 from pathlib import PurePosixPath
 
 from ulid import ULID
-from enum import StrEnum
-from pathlib import PurePosixPath
 
 from renku_data_services import errors
 
