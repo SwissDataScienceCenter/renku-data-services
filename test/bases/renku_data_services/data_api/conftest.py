@@ -7,6 +7,7 @@ import pytest_asyncio
 from authzed.api.v1 import Relationship, RelationshipUpdate, SubjectReference, WriteRelationshipsRequest
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
+from ulid import ULID
 
 from components.renku_data_services.utils.middleware import validate_null_byte
 from renku_data_services.app_config.config import Config
@@ -31,7 +32,7 @@ def admin_user() -> UserInfo:
         last_name="Doe",
         email="admin.doe@gmail.com",
         namespace=Namespace(
-            id="admin", slug="admin.doe", kind=NamespaceKind.user, underlying_resource_id="admin", created_by="admin"
+            id=ULID(), slug="admin.doe", kind=NamespaceKind.user, underlying_resource_id="admin", created_by="admin"
         ),
     )
 
@@ -44,7 +45,7 @@ def regular_user() -> UserInfo:
         last_name="Doe",
         email="user.doe@gmail.com",
         namespace=Namespace(
-            id="user", slug="user", kind=NamespaceKind.user, underlying_resource_id="user", created_by="user"
+            id=ULID(), slug="user", kind=NamespaceKind.user, underlying_resource_id="user", created_by="user"
         ),
     )
 
@@ -57,7 +58,7 @@ def member_1_user() -> UserInfo:
         last_name="Doe",
         email="member-1.doe@gmail.com",
         namespace=Namespace(
-            id="member-1",
+            id=ULID(),
             slug="member-1.doe",
             kind=NamespaceKind.user,
             underlying_resource_id="member-1",
@@ -74,7 +75,7 @@ def member_2_user() -> UserInfo:
         last_name="Doe",
         email="member-2.doe@gmail.com",
         namespace=Namespace(
-            id="member-2",
+            id=ULID(),
             slug="member-2.doe",
             kind=NamespaceKind.user,
             underlying_resource_id="member-2",

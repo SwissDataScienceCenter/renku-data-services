@@ -195,7 +195,7 @@ class UsersSync:
         kwargs.pop("keycloak_id", None)
         kwargs.pop("id", None)
         slug = base_models.Slug.from_user(
-            kwargs["email"], kwargs["first_name"], kwargs["last_name"], user_id
+            kwargs.get("email"), kwargs.get("first_name"), kwargs.get("last_name"), user_id
         ).value.lower()
         namespace = await self.group_repo._create_user_namespace_slug(
             session, user_slug=slug, retry_enumerate=5, retry_random=True
@@ -236,7 +236,7 @@ class UsersSync:
 
     @with_db_transaction
     @dispatch_message(avro_schema_v2.UserRemoved)
-    async def _remove_user(self, user_id: str, *, session: AsyncSession | None = None) -> UserInfo | None:
+    async def _remove_user(self, user_id: str, *, session: AsyncSession | None = None) -> str | None:
         """Remove a user from the database."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
@@ -248,9 +248,8 @@ class UsersSync:
             logger.info(f"User with ID {user_id} was not found.")
             return None
         logger.info(f"User with ID {user_id} was removed from the database.")
-        removed_user = user.dump()
         logger.info(f"User namespace with ID {user_id} was removed from the authorization database.")
-        return removed_user
+        return user_id
 
     async def users_sync(self, kc_api: IKeycloakAPI) -> None:
         """Sync all users from Keycloak into the users database."""

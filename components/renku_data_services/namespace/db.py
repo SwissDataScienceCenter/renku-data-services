@@ -392,7 +392,7 @@ class GroupRepository:
         if user_slug not in nslist:
             return user_slug
         if retry_enumerate:
-            for inc in range(0, retry_enumerate + 1):
+            for inc in range(1, retry_enumerate + 1):
                 slug = f"{user_slug}-{inc}"
                 if slug not in nslist:
                     return slug
