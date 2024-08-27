@@ -5,6 +5,9 @@ from datetime import datetime
 from enum import StrEnum
 from pathlib import PurePosixPath
 
+from pydantic import BaseModel, model_validator
+from ulid import ULID
+
 from renku_data_services import errors
 
 
@@ -70,6 +73,7 @@ class Environment(BaseEnvironment):
 class BaseSessionLauncher:
     """Session launcher model."""
 
+    id: ULID | None
     project_id: str
     name: str
     description: str | None
@@ -82,6 +86,7 @@ class UnsavedSessionLauncher(BaseSessionLauncher):
     """Session launcher model that has not been persisted in the DB."""
 
     environment: str | UnsavedEnvironment
+    id: ULID | None = None
     """When a string is passed for the environment it should be the ID of an existing environment."""
 
 
@@ -89,7 +94,7 @@ class UnsavedSessionLauncher(BaseSessionLauncher):
 class SessionLauncher(BaseSessionLauncher):
     """Session launcher model that has been already saved in the DB."""
 
-    id: str
+    id: ULID
     creation_date: datetime
     created_by: str
     environment: Environment

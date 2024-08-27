@@ -11,6 +11,7 @@ from sanic.log import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
@@ -282,7 +283,7 @@ class ConnectedServicesRepository:
             connections = result.all()
             return [c.dump() for c in connections]
 
-    async def get_oauth2_connection(self, connection_id: str, user: base_models.APIUser) -> models.OAuth2Connection:
+    async def get_oauth2_connection(self, connection_id: ULID, user: base_models.APIUser) -> models.OAuth2Connection:
         """Get one OAuth2 connection from the database."""
         if not user.is_authenticated or user.id is None:
             raise errors.MissingResourceError(
@@ -303,7 +304,7 @@ class ConnectedServicesRepository:
             return connection.dump()
 
     async def get_oauth2_connected_account(
-        self, connection_id: str, user: base_models.APIUser
+        self, connection_id: ULID, user: base_models.APIUser
     ) -> models.ConnectedAccount:
         """Get the account information from a OAuth2 connection."""
         async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (oauth2_client, _, adapter):
@@ -316,7 +317,9 @@ class ConnectedServicesRepository:
             account = adapter.api_validate_account_response(response)
             return account
 
-    async def get_oauth2_connection_token(self, connection_id: str, user: base_models.APIUser) -> models.OAuth2TokenSet:
+    async def get_oauth2_connection_token(
+        self, connection_id: ULID, user: base_models.APIUser
+    ) -> models.OAuth2TokenSet:
         """Get the OAuth2 access token from one connection from the database."""
         async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (oauth2_client, _, _):
             await oauth2_client.ensure_active_token(oauth2_client.token)
@@ -325,7 +328,7 @@ class ConnectedServicesRepository:
 
     @asynccontextmanager
     async def get_async_oauth2_client(
-        self, connection_id: str, user: base_models.APIUser
+        self, connection_id: ULID, user: base_models.APIUser
     ) -> AsyncGenerator[tuple[AsyncOAuth2Client, schemas.OAuth2ConnectionORM, ProviderAdapter], None]:
         """Get the AsyncOAuth2Client for the given connection_id and user."""
         if not user.is_authenticated or user.id is None:

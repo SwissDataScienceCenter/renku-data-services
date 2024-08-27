@@ -7,6 +7,7 @@ from typing import cast
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from ulid import ULID
 
 from renku_data_services.base_api.auth import APIUser, only_authenticated
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
@@ -34,7 +35,7 @@ class UserSecretsRepo:
             return [o.dump() for o in orm]
 
     @only_authenticated
-    async def get_secret_by_id(self, requested_by: APIUser, secret_id: str) -> Secret | None:
+    async def get_secret_by_id(self, requested_by: APIUser, secret_id: ULID) -> Secret | None:
         """Get a specific user secret from the database."""
         async with self.session_maker() as session:
             stmt = select(SecretORM).where(SecretORM.user_id == requested_by.id).where(SecretORM.id == secret_id)
@@ -45,10 +46,11 @@ class UserSecretsRepo:
             return orm.dump()
 
     @only_authenticated
-    async def get_secrets_by_ids(self, requested_by: APIUser, secret_ids: list[str]) -> list[Secret]:
+    async def get_secrets_by_ids(self, requested_by: APIUser, secret_ids: list[ULID]) -> list[Secret]:
         """Get a specific user secrets from the database."""
+        secret_ids_str = map(str, secret_ids)
         async with self.session_maker() as session:
-            stmt = select(SecretORM).where(SecretORM.user_id == requested_by.id).where(SecretORM.id.in_(secret_ids))
+            stmt = select(SecretORM).where(SecretORM.user_id == requested_by.id).where(SecretORM.id.in_(secret_ids_str))
             res = await session.execute(stmt)
             orms = res.scalars()
             return [orm.dump() for orm in orms]
@@ -58,11 +60,9 @@ class UserSecretsRepo:
         """Insert a new secret."""
 
         async with self.session_maker() as session, session.begin():
-            modification_date = datetime.now(UTC).replace(microsecond=0)
             orm = SecretORM(
                 name=secret.name,
-                modification_date=modification_date,
-                user_id=requested_by.id,
+                user_id=cast(str, requested_by.id),
                 encrypted_value=secret.encrypted_value,
                 encrypted_key=secret.encrypted_key,
                 kind=secret.kind,
@@ -83,7 +83,7 @@ class UserSecretsRepo:
 
     @only_authenticated
     async def update_secret(
-        self, requested_by: APIUser, secret_id: str, encrypted_value: bytes, encrypted_key: bytes
+        self, requested_by: APIUser, secret_id: ULID, encrypted_value: bytes, encrypted_key: bytes
     ) -> Secret:
         """Update a secret."""
 
@@ -95,13 +95,11 @@ class UserSecretsRepo:
             if secret is None:
                 raise errors.MissingResourceError(message=f"The secret with id '{secret_id}' cannot be found")
 
-            secret.encrypted_value = encrypted_value
-            secret.encrypted_key = encrypted_key
-            secret.modification_date = datetime.now(UTC).replace(microsecond=0)
+            secret.update(encrypted_value=encrypted_value, encrypted_key=encrypted_key)
         return secret.dump()
 
     @only_authenticated
-    async def delete_secret(self, requested_by: APIUser, secret_id: str) -> None:
+    async def delete_secret(self, requested_by: APIUser, secret_id: ULID) -> None:
         """Delete a secret."""
 
         async with self.session_maker() as session, session.begin():

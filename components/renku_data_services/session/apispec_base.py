@@ -2,7 +2,7 @@
 
 from pathlib import PurePosixPath
 
-from pydantic import BaseModel, field_validator
+from ulid import ULID
 
 
 class BaseAPISpec(BaseModel):
@@ -20,3 +20,9 @@ class BaseAPISpec(BaseModel):
         if isinstance(val, PurePosixPath):
             return val.as_posix()
         return val
+
+    @field_validator("id", mode="before", check_fields=False)
+    @classmethod
+    def serialize_id(cls, id: str | ULID) -> str:
+        """Custom serializer that can handle ULIDs."""
+        return str(id)

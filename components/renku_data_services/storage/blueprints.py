@@ -28,6 +28,15 @@ def dump_storage_with_sensitive_fields(storage: models.CloudStorage, validator: 
     ).model_dump(exclude_none=True)
 
 
+def dump_storage_with_sensitive_fields_and_secrets(
+    storage: models.CloudStorage, validator: RCloneValidator
+) -> dict[str, Any]:
+    """Dump a CloudStorage model alongside sensitive fields and its saved secrets."""
+    dumped_storage = dump_storage_with_sensitive_fields(storage, validator)
+    dumped_storage["secrets"] = [apispec.CloudStorageSecretGet.model_validate(s).model_dump() for s in storage.secrets]
+    return dumped_storage
+
+
 @dataclass(kw_only=True)
 class StorageBP(CustomBlueprint):
     """Handlers for manipulating storage definitions."""
@@ -195,9 +204,11 @@ class StoragesV2BP(CustomBlueprint):
             query: apispec.StorageV2Params,
         ) -> JSONResponse:
             storage: list[models.CloudStorage]
-            storage = await self.storage_v2_repo.get_storage(user=user, project_id=query.project_id)
+            storage = await self.storage_v2_repo.get_storage(
+                user=user, include_secrets=True, project_id=query.project_id
+            )
 
-            return json([dump_storage_with_sensitive_fields(s, validator) for s in storage])
+            return json([dump_storage_with_sensitive_fields_and_secrets(s, validator) for s in storage])
 
         return "/storages_v2", ["GET"], _get
 
@@ -213,7 +224,7 @@ class StoragesV2BP(CustomBlueprint):
         ) -> JSONResponse:
             storage = await self.storage_v2_repo.get_storage_by_id(storage_id, user=user)
 
-            return json(dump_storage_with_sensitive_fields(storage, validator))
+            return json(dump_storage_with_sensitive_fields_and_secrets(storage, validator))
 
         return "/storages_v2/<storage_id:ulid>", ["GET"], _get_one
 
@@ -254,7 +265,7 @@ class StoragesV2BP(CustomBlueprint):
         @authenticate(self.authenticator)
         @validate(json=apispec.CloudStoragePatch)
         async def _patch(
-            request: Request,
+            _: Request,
             user: base_models.APIUser,
             storage_id: ULID,
             body: apispec.CloudStoragePatch,
@@ -287,6 +298,45 @@ class StoragesV2BP(CustomBlueprint):
             return empty(204)
 
         return "/storages_v2/<storage_id:ulid>", ["DELETE"], _delete
+
+    def upsert_secrets(self) -> BlueprintFactoryResponse:
+        """Create/update secrets for a cloud storage."""
+
+        @authenticate(self.authenticator)
+        async def _upsert_secrets(request: Request, user: base_models.APIUser, storage_id: ULID) -> JSONResponse:
+            # TODO: use @validate once sanic supports validating json lists
+            body = apispec.CloudStorageSecretPostList.model_validate(request.json)
+            secrets = [models.CloudStorageSecretUpsert.model_validate(s.model_dump()) for s in body.root]
+            result = await self.storage_v2_repo.upsert_storage_secrets(
+                storage_id=storage_id, user=user, secrets=secrets
+            )
+            return json(
+                apispec.CloudStorageSecretGetList.model_validate(result).model_dump(exclude_none=True, mode="json"), 201
+            )
+
+        return "/storages_v2/<storage_id:ulid>/secrets", ["POST"], _upsert_secrets
+
+    def get_secrets(self) -> BlueprintFactoryResponse:
+        """Return all secrets for a cloud storage."""
+
+        @authenticate(self.authenticator)
+        async def _get_secrets(request: Request, user: base_models.APIUser, storage_id: ULID) -> JSONResponse:
+            result = await self.storage_v2_repo.get_storage_secrets(storage_id=storage_id, user=user)
+            return json(
+                apispec.CloudStorageSecretGetList.model_validate(result).model_dump(exclude_none=True, mode="json"), 200
+            )
+
+        return "/storages_v2/<storage_id:ulid>/secrets", ["GET"], _get_secrets
+
+    def delete_secrets(self) -> BlueprintFactoryResponse:
+        """Delete all secrets for a cloud storage."""
+
+        @authenticate(self.authenticator)
+        async def _delete_secrets(request: Request, user: base_models.APIUser, storage_id: ULID) -> HTTPResponse:
+            await self.storage_v2_repo.delete_storage_secrets(storage_id=storage_id, user=user)
+            return HTTPResponse(status=204)
+
+        return "/storages_v2/<storage_id:ulid>/secrets", ["DELETE"], _delete_secrets
 
 
 @dataclass(kw_only=True)

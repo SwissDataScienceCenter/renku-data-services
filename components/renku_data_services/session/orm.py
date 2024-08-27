@@ -78,7 +78,7 @@ class SessionLauncherORM(BaseORM):
 
     __tablename__ = "launchers"
 
-    id: Mapped[str] = mapped_column("id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
     """Id of this session launcher object."""
 
     name: Mapped[str] = mapped_column("name", String(99))
@@ -96,7 +96,7 @@ class SessionLauncherORM(BaseORM):
     project: Mapped[ProjectORM] = relationship(init=False)
     environment: Mapped[EnvironmentORM] = relationship(init=False, lazy="joined")
 
-    project_id: Mapped[str] = mapped_column(
+    project_id: Mapped[ULID] = mapped_column(
         "project_id", ForeignKey(ProjectORM.id, ondelete="CASCADE"), default=None, index=True
     )
     """Id of the project this session belongs to."""
@@ -115,11 +115,27 @@ class SessionLauncherORM(BaseORM):
     )
     """Id of the resource class."""
 
+    @classmethod
+    def load(cls, launcher: models.SessionLauncher) -> "SessionLauncherORM":
+        """Create SessionLauncherORM from the session launcher model."""
+        return cls(
+            name=launcher.name,
+            created_by_id=launcher.created_by.id,
+            creation_date=launcher.creation_date,
+            description=launcher.description,
+            environment_kind=launcher.environment_kind,
+            container_image=launcher.container_image,
+            project_id=ULID.from_str(launcher.project_id),
+            environment_id=launcher.environment_id,
+            resource_class_id=launcher.resource_class_id,
+            default_url=launcher.default_url,
+        )
+
     def dump(self) -> models.SessionLauncher:
         """Create a session launcher model from the SessionLauncherORM."""
         return models.SessionLauncher(
             id=self.id,
-            project_id=self.project_id,
+            project_id=str(self.project_id),
             name=self.name,
             created_by=self.created_by_id,
             creation_date=self.creation_date,
