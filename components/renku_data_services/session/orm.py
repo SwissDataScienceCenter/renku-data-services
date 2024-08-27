@@ -12,7 +12,7 @@ from ulid import ULID
 from renku_data_services.crc.orm import ResourceClassORM
 from renku_data_services.project.orm import ProjectORM
 from renku_data_services.session import models
-from renku_data_services.utils.sqlalchemy import ULIDType
+from renku_data_services.utils.sqlalchemy import PurePosixPathType, ULIDType
 
 metadata_obj = MetaData(schema="sessions")  # Has to match alembic ini section name
 JSONVariant = JSON().with_variant(JSONB(), "postgresql")
@@ -51,8 +51,8 @@ class EnvironmentORM(BaseORM):
     """Default URL path to open in a session."""
 
     port: Mapped[int] = mapped_column("port")
-    working_directory: Mapped[str] = mapped_column("working_directory", String())
-    mount_directory: Mapped[str] = mapped_column("mount_directory", String())
+    working_directory: Mapped[PurePosixPath] = mapped_column("working_directory", PurePosixPathType)
+    mount_directory: Mapped[PurePosixPath] = mapped_column("mount_directory", PurePosixPathType)
     uid: Mapped[int] = mapped_column("uid")
     gid: Mapped[int] = mapped_column("gid")
     environment_kind: Mapped[models.EnvironmentKind] = mapped_column("environment_kind")
@@ -72,8 +72,8 @@ class EnvironmentORM(BaseORM):
             gid=self.gid,
             uid=self.uid,
             environment_kind=self.environment_kind,
-            mount_directory=PurePosixPath(self.mount_directory),
-            working_directory=PurePosixPath(self.working_directory),
+            mount_directory=self.mount_directory,
+            working_directory=self.working_directory,
             port=self.port,
             args=self.args,
             command=self.command,

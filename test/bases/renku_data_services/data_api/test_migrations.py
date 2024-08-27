@@ -100,9 +100,8 @@ async def test_migration_to_f34b87ddd954(
 
 
 @pytest.mark.asyncio
-async def test_migration_to_584598f3b769(sanic_client_no_migrations: SanicASGITestClient, app_config: Config) -> None:
+async def test_migration_to_584598f3b769(app_config: Config) -> None:
     run_migrations_for_app("common", "dcc1c1ee662f")
-    sanic_client = sanic_client_no_migrations
     await app_config.kc_user_repo.initialize(app_config.kc_api)
     await app_config.group_repo.generate_user_namespaces()
     env_id = str(ULID())
@@ -122,14 +121,15 @@ async def test_migration_to_584598f3b769(sanic_client_no_migrations: SanicASGITe
             )
         )
     run_migrations_for_app("common", "584598f3b769")
-    _, response = await sanic_client.get("/api/data/environments")
-    assert response.status_code == 200, response.text
-    assert len(response.json) == 1
-    env = response.json[0]
+    async with app_config.db.async_session_maker() as session, session.begin():
+        res = await session.execute(sa.text("SELECT * FROM sessions.environments"))
+    data = res.all()
+    assert len(data) == 1
+    env = data[0]._mapping
     assert env["id"] == env_id
     assert env["name"] == "test"
     assert env["container_image"] == "test"
     assert env["default_url"] == "/test"
-    assert env["port"] == 4180
+    assert env["port"] == 8888
     assert env["uid"] == 1000
     assert env["gid"] == 1000

@@ -74,8 +74,8 @@ class SessionRepository:
             container_image=new_environment.container_image,
             default_url=new_environment.default_url,
             port=new_environment.port,
-            working_directory=new_environment.working_directory.as_posix(),
-            mount_directory=new_environment.mount_directory.as_posix(),
+            working_directory=new_environment.working_directory,
+            mount_directory=new_environment.mount_directory,
             uid=new_environment.uid,
             gid=new_environment.gid,
             environment_kind=new_environment.environment_kind,
@@ -229,9 +229,7 @@ class SessionRepository:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
         project_id = new_launcher.project_id
-        authorized = await self.project_authz.has_permission(
-            user, ResourceType.project, ULID.from_str(project_id), Scope.WRITE
-        )
+        authorized = await self.project_authz.has_permission(user, ResourceType.project, project_id, Scope.WRITE)
         if not authorized:
             raise errors.MissingResourceError(
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."

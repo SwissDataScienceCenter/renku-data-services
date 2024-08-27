@@ -21,7 +21,7 @@ working_dir: str = "/home/jovyan/work"
 mount_dir: str = "/home/jovyan/work"
 uid: int = 1000
 gid: int = 1000
-port: int = 4180
+port: int = 8888
 
 
 def upgrade() -> None:
