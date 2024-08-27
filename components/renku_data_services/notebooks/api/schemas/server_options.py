@@ -10,7 +10,6 @@ from renku_data_services.crc.models import ResourceClass
 from renku_data_services.notebooks.api.schemas.custom_fields import ByteSizeField, CpuField, GpuField
 from renku_data_services.notebooks.config.dynamic import CPUEnforcement
 from renku_data_services.notebooks.errors.programming import ProgrammingError
-from renku_data_services.crc.models import ResourceClass
 
 
 @dataclass

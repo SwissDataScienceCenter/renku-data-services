@@ -24,6 +24,7 @@ from typing import Any, TypeAlias, cast
 
 import escapism
 from kubernetes.client import V1Container
+
 from renku_data_services.notebooks.crs import Patch, PatchType
 
 from renku_data_services.notebooks.crs import Patch, PatchType

@@ -341,35 +341,6 @@ class ServerStatus(BaseAPISpec):
     warnings: Optional[List[ServerStatusWarning]] = None
 
 
-class SessionPostRequest(BaseAPISpec):
-    project_id: str = Field(
-        ...,
-        description="ULID identifier",
-        max_length=26,
-        min_length=26,
-        pattern="^[A-Z0-9]{26}$",
-    )
-    launcher_id: str = Field(
-        ...,
-        description="ULID identifier",
-        max_length=26,
-        min_length=26,
-        pattern="^[A-Z0-9]{26}$",
-    )
-    storage: int = Field(
-        1, description="The size of disk storage for the session, in gigabytes"
-    )
-    resource_class_id: Optional[int] = None
-
-
-class SessionStatus(BaseAPISpec):
-    details: Optional[List[SessionStatusDetail]] = None
-    message: Optional[str] = None
-    state: State3
-    will_hibernate_at: Optional[datetime] = None
-    will_delete_at: Optional[datetime] = None
-
-
 class SessionResources(BaseAPISpec):
     requests: Optional[SessionResourcesRequests] = None
 

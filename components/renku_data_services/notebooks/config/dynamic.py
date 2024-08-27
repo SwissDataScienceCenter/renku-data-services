@@ -13,6 +13,7 @@ from ..api.schemas.config_server_options import ServerOptionsChoices, ServerOpti
 
 latest_version: str = "1.25.3"
 
+
 def _parse_str_as_bool(val: Union[str, bool]) -> bool:
     if isinstance(val, str):
         return val.lower() == "true"
