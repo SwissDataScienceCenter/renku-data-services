@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, Union, cast
 
+from kubernetes.utils.quantity import parse_quantity
 from marshmallow import EXCLUDE, Schema, fields, pre_load, validate
 
 from renku_data_services.notebooks.api.classes.server_manifest import UserServerManifest

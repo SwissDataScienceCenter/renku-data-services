@@ -6,7 +6,8 @@ from collections.abc import Callable, Coroutine
 from functools import wraps
 from typing import Any, Concatenate, ParamSpec, TypeVar, cast
 
-from sanic import Request
+from sanic import HTTPResponse, Request
+from ulid import ULID
 
 from renku_data_services import errors
 from renku_data_services.base_models import AnyAPIUser, APIUser, Authenticator
@@ -180,3 +181,30 @@ def only_authenticated(f: Callable[_P, Coroutine[Any, Any, _T]]) -> Callable[_P,
         return response
 
     return decorated_function
+
+
+def internal_gitlab_authenticate(
+    authenticator: Authenticator,
+) -> Callable[
+    [Callable[Concatenate[Request, APIUser, APIUser, _P], Coroutine[Any, Any, _T]]],
+    Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]],
+]:
+    """Decorator for a Sanic handler that that adds a user for the internal gitlab user."""
+
+    def decorator(
+        f: Callable[Concatenate[Request, APIUser, APIUser, _P], Coroutine[Any, Any, _T]],
+    ) -> Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]]:
+        @wraps(f)
+        async def decorated_function(
+            request: Request,
+            user: APIUser,
+            *args: _P.args,
+            **kwargs: _P.kwargs,
+        ) -> _T:
+            access_token = str(request.headers.get("Gitlab-Access-Token"))
+            internal_gitlab_user = await authenticator.authenticate(access_token, request)
+            return await f(request, user, internal_gitlab_user, *args, **kwargs)
+
+        return decorated_function
+
+    return decorator
