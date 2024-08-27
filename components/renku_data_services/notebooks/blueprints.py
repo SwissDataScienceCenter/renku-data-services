@@ -882,8 +882,8 @@ class NotebooksNewBP(CustomBlueprint):
                         runAsGroup=environment.gid,
                         resources=Resources(claims=None, requests=None, limits=None),
                         extraVolumeMounts=[],
-                        command=None,
-                        args=None,
+                        command=environment.command,
+                        args=environment.args,
                         shmSize="1G",
                         env=[
                             SessionEnvItem(name="RENKU_BASE_URL_PATH", value=parsed_server_url.path),
