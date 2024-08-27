@@ -9,6 +9,7 @@ from marshmallow import Schema, fields
 from renku_data_services.notebooks.api.schemas.custom_fields import ByteSizeField, CpuField, GpuField
 from renku_data_services.notebooks.config.dynamic import CPUEnforcement
 from renku_data_services.notebooks.errors.programming import ProgrammingError
+from renku_data_services.crc.models import ResourceClass
 
 
 @dataclass
@@ -176,19 +177,22 @@ class ServerOptions:
         return resources
 
     @classmethod
-    def from_resource_class(cls, data: dict[str, Any]) -> Self:
+    def from_resource_class(cls, data: ResourceClass) -> Self:
         """Convert a CRC resource class to server options.
 
         Data Service uses GB for storage and memory whereas the notebook service uses bytes so we convert to bytes here.
         """
         return cls(
-            cpu=data["cpu"],
-            memory=data["memory"] * 1000000000,
-            gpu=data["gpu"],
-            storage=data["default_storage"] * 1000000000,
-            node_affinities=[NodeAffinity(**a) for a in data.get("node_affinities", [])],
-            tolerations=[Toleration(t) for t in data.get("tolerations", [])],
-            resource_class_id=data.get("id"),
+            cpu=data.cpu,
+            memory=data.memory * 1_000_000_000,
+            gpu=data.gpu,
+            storage=data.default_storage * 1_000_000_000,
+            node_affinities=[
+                NodeAffinity(key=a.key, required_during_scheduling=a.required_during_scheduling)
+                for a in data.node_affinities
+            ],
+            tolerations=[Toleration(t) for t in data.tolerations],
+            resource_class_id=data.id,
         )
 
     @classmethod

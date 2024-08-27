@@ -21,10 +21,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 from hashlib import md5
-from typing import Any, Self, TypeAlias
+from typing import Any, Self, TypeAlias, cast
 
 import escapism
 from kubernetes.client import V1Container
+from renku_data_services.notebooks.crs import Patch, PatchType
 
 
 def renku_1_make_server_name(safe_username: str, namespace: str, project: str, branch: str, commit_sha: str) -> str:
@@ -110,25 +111,17 @@ class PatchKind(StrEnum):
     merge: str = "application/merge-patch+json"
 
 
-@dataclass
-class Patch:
-    """Representation of a JSON patch."""
-
-    patch: JsonPatch | MergePatch
-    type: PatchKind
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> Self:
-        """Create a patch from a dictionary."""
-        return cls(data["patch"], PatchKind(data["type"]))
-
-
 def find_container(patches: list[Patch], container_name: str) -> dict[str, Any] | None:
     """Find the json patch corresponding a given container."""
+    # rfc 7386 patches are dictionaries, i.e. merge patch or json merge patch
+    # rfc 6902 patches are lists, i.e. json patch
     for patch_obj in patches:
-        if patch_obj.type != PatchKind.json or not isinstance(patch_obj.patch, list):
+        if patch_obj.type != PatchType.application_json_patch_json or not isinstance(patch_obj.patch, list):
             continue
         for p in patch_obj.patch:
+            if not isinstance(p, dict):
+                continue
+            p = cast(dict[str, Any], p)
             if (
                 p.get("op") == "add"
                 and p.get("path") == "/statefulset/spec/template/spec/containers/-"

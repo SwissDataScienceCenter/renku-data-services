@@ -34,16 +34,10 @@ class DefaultCullingThresholds(BaseAPISpec):
     registered: CullingThreshold
 
 
-class Error(BaseAPISpec):
-    code: int = Field(..., example=1404, gt=0)
-    detail: Optional[str] = Field(
-        None, example="A more detailed optional message showing what the problem was"
-    )
-    message: str = Field(..., example="Something went wrong - please try again later")
-
-
-class ErrorResponse(BaseAPISpec):
-    error: Error
+class ErrorResponseNested(BaseAPISpec):
+    code: int
+    detail: Optional[str] = None
+    message: str
 
 
 class Generated(BaseAPISpec):
@@ -156,7 +150,7 @@ class StringServerOptionsChoice(BaseAPISpec):
 
 
 class UserPodResources(BaseAPISpec):
-    requests: ResourceRequests
+    requests: Optional[ResourceRequests] = None
     usage: Optional[ResourceUsage] = None
 
 
@@ -244,11 +238,13 @@ class SessionStatus(BaseAPISpec):
 
 
 class SessionResourcesRequests(BaseAPISpec):
-    cpu: float = Field(..., description="Fractional CPUs")
+    cpu: Optional[float] = Field(None, description="Fractional CPUs")
     gpu: int = Field(0, description="Number of GPUs used")
-    memory: int = Field(..., description="Ammount of RAM for the session, in gigabytes")
-    storage: int = Field(
-        ..., description="The size of disk storage for the session, in gigabytes"
+    memory: Optional[int] = Field(
+        None, description="Ammount of RAM for the session, in gigabytes"
+    )
+    storage: Optional[int] = Field(
+        None, description="The size of disk storage for the session, in gigabytes"
     )
 
 
@@ -297,10 +293,14 @@ class SessionsImagesGetParametersQuery(BaseAPISpec):
     image_url: str
 
 
+class ErrorResponse(BaseAPISpec):
+    error: ErrorResponseNested
+
+
 class LaunchNotebookRequest(BaseAPISpec):
     project_id: str
     launcher_id: str
-    image: str
+    image: Optional[str] = None
     repositories: List[LaunchNotebookRequestRepository] = []
     cloudstorage: List[RCloneStorageRequest] = []
     storage: int = 1
@@ -339,6 +339,35 @@ class ServerStatus(BaseAPISpec):
     state: State1
     totalNumContainers: int = Field(..., ge=0)
     warnings: Optional[List[ServerStatusWarning]] = None
+
+
+class SessionPostRequest(BaseAPISpec):
+    project_id: str = Field(
+        ...,
+        description="ULID identifier",
+        max_length=26,
+        min_length=26,
+        pattern="^[A-Z0-9]{26}$",
+    )
+    launcher_id: str = Field(
+        ...,
+        description="ULID identifier",
+        max_length=26,
+        min_length=26,
+        pattern="^[A-Z0-9]{26}$",
+    )
+    storage: int = Field(
+        1, description="The size of disk storage for the session, in gigabytes"
+    )
+    resource_class_id: Optional[int] = None
+
+
+class SessionStatus(BaseAPISpec):
+    details: Optional[List[SessionStatusDetail]] = None
+    message: Optional[str] = None
+    state: State3
+    will_hibernate_at: Optional[datetime] = None
+    will_delete_at: Optional[datetime] = None
 
 
 class SessionResources(BaseAPISpec):

@@ -2,7 +2,8 @@
 
 import re
 import unicodedata
-from dataclasses import dataclass, field
+from dataclasses import InitVar, dataclass, field
+from datetime import datetime
 from enum import Enum, StrEnum
 from typing import ClassVar, Optional, Protocol
 
@@ -25,18 +26,65 @@ class Authenticator(Protocol):
 class APIUser:
     """The model for a user of the API, used for authentication."""
 
-    is_admin: bool = False
     id: Optional[str] = None  # the sub claim in the access token - i.e. the Keycloak user ID
     access_token: Optional[str] = field(repr=False, default=None)
+    refresh_token: Optional[str] = field(repr=False, default=None)
     full_name: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     email: Optional[str] = None
+    access_token_expires_at: datetime | None = None
+    is_admin_init: InitVar[bool] = False
+    __is_admin: bool = field(init=False, repr=False)
+
+    def __post_init__(self, is_admin_init: bool) -> None:
+        self.__is_admin: bool = is_admin_init
 
     @property
     def is_authenticated(self) -> bool:
         """Indicates whether the user has successfully logged in."""
         return self.id is not None
+
+    @property
+    def is_admin(self) -> bool:
+        """Indicates whether the user is a Renku platform administrator."""
+        return self.__is_admin
+
+
+@dataclass(kw_only=True)
+class AuthenticatedAPIUser(APIUser):
+    """The model for a an authenticated user of the API."""
+
+    id: str
+    email: str
+    access_token: str = field(repr=False)
+    refresh_token: str = field(repr=False)
+    full_name: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+
+
+@dataclass(kw_only=True)
+class AnonymousAPIUser(APIUser):
+    """The model for an anonymous user of the API."""
+
+    id: str
+    access_token = None
+    full_name = None
+    first_name = None
+    last_name = None
+    email = None
+    refresh_token = None
+
+    @property
+    def is_authenticated(self) -> bool:
+        """We cannot authenticate anonymous users, so this is by definition False."""
+        return False
+
+    @property
+    def is_admin(self) -> bool:
+        """Unauthenticated users cannot be admins."""
+        return False
 
 
 class ServiceAdminId(StrEnum):
@@ -52,7 +100,7 @@ class InternalServiceAdmin(APIUser):
 
     id: ServiceAdminId = ServiceAdminId.migrations
     is_admin: bool = field(default=True, init=False)
-    access_token: Optional[str] = field(repr=False, default=None, init=False)
+    access_token: str = field(repr=False, default="internal-service-admin", init=False)
     full_name: Optional[str] = field(default=None, init=False)
     first_name: Optional[str] = field(default=None, init=False)
     last_name: Optional[str] = field(default=None, init=False)

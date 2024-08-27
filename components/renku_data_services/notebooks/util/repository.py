@@ -1,5 +1,6 @@
 """Repository utilities."""
 
+import requests
 from typing import Any, Optional, cast
 
 import requests
