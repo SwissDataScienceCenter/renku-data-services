@@ -13,6 +13,7 @@ from ..api.schemas.config_server_options import ServerOptionsChoices, ServerOpti
 
 latest_version: str = "1.25.3"
 
+
 def _parse_str_as_bool(val: Union[str, bool]) -> bool:
     if isinstance(val, str):
         return val.lower() == "true"
@@ -409,14 +410,14 @@ class _SessionConfig:
     def _for_testing(cls) -> Self:
         return cls(
             culling=_SessionCullingConfig.from_env(),
-            git_proxy=_GitProxyConfig(renku_client_secret="not-defined"),
+            git_proxy=_GitProxyConfig(renku_client_secret="not-defined"),  # nosec B106
             git_rpc_server=_GitRpcServerConfig.from_env(),
             git_clone=_GitCloneConfig.from_env(),
             ingress=_SessionIngress(host="localhost"),
             ca_certs=_CustomCaCertsConfig.from_env(),
             oidc=_SessionOidcConfig(
                 client_id="not-defined",
-                client_secret="not-defined",
+                client_secret="not-defined",  # nosec B106
                 token_url="http://not.defined",
                 auth_url="http://not.defined",
                 issuer_url="http://not.defined",

@@ -171,6 +171,14 @@ class AmaltheaSessionV1Alpha1(_ASModel):
                 url = urljoin(f"{scheme}://{self.spec.ingress.host}", self.spec.session.urlPath)
         else:
             url = self.status.url
+        ready_containers = 0
+        total_containers = 0
+        if self.status.initContainerCounts is not None:
+            ready_containers += self.status.initContainerCounts.ready or 0
+            total_containers += self.status.initContainerCounts.total or 0
+        if self.status.containerCounts is not None:
+            ready_containers += self.status.containerCounts.ready or 0
+            total_containers += self.status.containerCounts.total or 0
         return apispec.SessionResponse(
             image=self.spec.session.image,
             name=self.metadata.name,
@@ -183,8 +191,9 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             ),
             started=self.metadata.creationTimestamp,
             status=apispec.SessionStatus(
-                details=[],
                 state=apispec.State3.running,
+                ready_containers=ready_containers,
+                total_containers=total_containers,
             ),
             url=url,
             project_id=str(self.project_id),

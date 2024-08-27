@@ -87,7 +87,7 @@ jobs:
           renku_notebooks: "${{ needs.check-deploy.outputs.renku-notebooks }}"
           renku_data_services: "@${{ github.head_ref }}"
           amalthea: "${{ needs.check-deploy.outputs.amalthea }}"
-          amalthea-sessions: "${{ needs.check-deploy.outputs.amalthea-sessions }}"
+          amalthea_sessions: "${{ needs.check-deploy.outputs.amalthea-sessions }}"
           extra_values: "${{ needs.check-deploy.outputs.extra-values }}"
 
   selenium-acceptance-tests:
