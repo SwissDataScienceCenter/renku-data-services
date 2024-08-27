@@ -360,7 +360,7 @@ components:
       type: string
       minLength: 26
       maxLength: 26
-      pattern: "^[A-Z0-9]{26}$" # This is case-insensitive
+      pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$" # This is case-insensitive
     ProjectName:
       description: Renku project name
       type: string
@@ -493,7 +493,10 @@ components:
       maxLength: 256
     UserEmail:
       type: string
-      format: email
+      # We can get invalid emails when people log in via Github or other services
+      # It seems that in some cases Keycloak does not verify emails and this will then fail
+      # See: https://github.com/SwissDataScienceCenter/renku-data-services/issues/367
+      # format: email
       description: User email
       example: some-user@gmail.com
     ETag:

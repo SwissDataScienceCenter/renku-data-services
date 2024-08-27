@@ -5,6 +5,7 @@ from typing import Any
 from urllib.parse import ParseResult, urlparse
 
 from pydantic import BaseModel, Field, PrivateAttr, model_serializer, model_validator
+from ulid import ULID
 
 from renku_data_services import errors
 from renku_data_services.storage.rclone import RCloneValidator
@@ -59,7 +60,7 @@ class CloudStorage(BaseModel):
     configuration: RCloneConfig
     readonly: bool = Field(default=True)
 
-    storage_id: str | None = Field(default=None)
+    storage_id: ULID | None = Field(default=None)
 
     source_path: str = Field()
     """Path inside the cloud storage.
@@ -230,9 +231,9 @@ class CloudStorageSecret(BaseModel):
     """Cloud storage secret model."""
 
     user_id: str = Field()
-    storage_id: str = Field()
+    storage_id: ULID = Field()
     name: str = Field(min_length=1, max_length=99)
-    secret_id: str = Field()
+    secret_id: ULID = Field()
 
     @classmethod
     def from_dict(cls, data: dict) -> "CloudStorageSecret":
@@ -240,3 +241,10 @@ class CloudStorageSecret(BaseModel):
         return cls(
             user_id=data["user_id"], storage_id=data["storage_id"], name=data["name"], secret_id=data["secret_id"]
         )
+
+
+class CloudStorageSecretUpsert(BaseModel):
+    """Insert/update storage secret data."""
+
+    name: str = Field()
+    value: str = Field()

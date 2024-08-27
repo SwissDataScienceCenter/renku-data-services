@@ -304,9 +304,11 @@ class StoragesV2BP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _upsert_secrets(request: Request, user: base_models.APIUser, storage_id: ULID) -> JSONResponse:
+            # TODO: use @validate once sanic supports validating json lists
             body = apispec.CloudStorageSecretPostList.model_validate(request.json)
+            secrets = [models.CloudStorageSecretUpsert.model_validate(s.model_dump()) for s in body.root]
             result = await self.storage_v2_repo.upsert_storage_secrets(
-                storage_id=storage_id, user=user, secrets=body.root
+                storage_id=storage_id, user=user, secrets=secrets
             )
             return json(
                 apispec.CloudStorageSecretGetList.model_validate(result).model_dump(exclude_none=True, mode="json"), 201
