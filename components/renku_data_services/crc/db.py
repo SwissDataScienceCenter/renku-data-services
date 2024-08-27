@@ -12,11 +12,10 @@ from dataclasses import dataclass, field
 from functools import wraps
 from typing import Any, Concatenate, Optional, ParamSpec, TypeVar, cast
 
-from sqlalchemy import NullPool, create_engine, delete, select, true
+from sqlalchemy import NullPool, create_engine, delete, false, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 from sqlalchemy.sql import Select, and_, not_, or_
-from sqlalchemy.sql.expression import false, true
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors

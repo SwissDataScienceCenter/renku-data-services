@@ -1,8 +1,6 @@
 """Base models for K8s CRD specifications."""
 
-from pydantic import BaseModel, Field
-
-
+from pydantic import BaseModel
 
 
 class BaseCRD(BaseModel):
@@ -12,4 +10,3 @@ class BaseCRD(BaseModel):
         """Do not exclude unknown properties."""
 
         extra = "allow"
-

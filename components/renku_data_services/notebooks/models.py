@@ -10,12 +10,16 @@ from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1
 
 @dataclass
 class SessionEnvVar:
+    """Environment variables for an amalthea session."""
+
     name: str
     value: str
 
 
 @dataclass
 class SessionUserSecrets:
+    """User secret mounted in an amalthea session."""
+
     mount_path: Path
     user_secret_ids: list[str]
 
@@ -45,6 +49,8 @@ class _MetadataValidation(BaseModel):
 
 
 class AmaltheaSessionManifest:
+    """The manifest for an amalthea session."""
+
     def __init__(self, manifest: AmaltheaSessionV1Alpha1) -> None:
         self._manifest = manifest
         self._metadata = _MetadataValidation.model_validate(self._manifest.metadata)
@@ -54,6 +60,7 @@ class AmaltheaSessionManifest:
 
     @property
     def env_vars(self) -> dict[str, SessionEnvVar]:
+        """Extract the environment variables from a manifest."""
         output: dict[str, SessionEnvVar] = {}
         assert self._manifest.spec
         for env in self._manifest.spec.session.env or []:
@@ -64,5 +71,6 @@ class AmaltheaSessionManifest:
 
     @property
     def requested_env_vars(self) -> dict[str, SessionEnvVar]:
+        """The environment variables requested."""
         requested_names = self._metadata.annotations.env_variable_names
         return {ikey: ival for ikey, ival in self.env_vars.items() if ikey in requested_names}

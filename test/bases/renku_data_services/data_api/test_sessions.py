@@ -1,11 +1,9 @@
 """Tests for sessions blueprints."""
 
 from asyncio import AbstractEventLoop
-from collections.abc import AsyncIterator, Coroutine
 from typing import Any
 
 import pytest
-import pytest_asyncio
 from pytest import FixtureRequest
 from sanic_testing.testing import SanicASGITestClient, TestingResponse
 

@@ -3,10 +3,10 @@
 import base64
 import json as json_lib
 import logging
-from math import floor
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from math import floor
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
@@ -784,15 +784,15 @@ class NotebooksNewBP(CustomBlueprint):
             internal_gitlab_user: APIUser,
             body: apispec.SessionPostRequest,
         ) -> JSONResponse:
+            # gitlab_client = NotebooksGitlabClient(self.nb_config.git.url, internal_gitlab_user.access_token)
+            launcher = await self.session_repo.get_launcher(user, ULID.from_str(body.launcher_id))
+            project = await self.project_repo.get_project(user=user, project_id=launcher.project_id)
             server_name = renku_2_make_server_name(
-                safe_username=user.id, project_id=body.project_id, launcher_id=body.launcher_id
+                safe_username=user.id, project_id=str(launcher.project_id), launcher_id=body.launcher_id
             )
             existing_session = await self.nb_config.k8s_v2_client.get_server(server_name, user.id)
             if existing_session is not None and existing_session.spec is not None:
                 return json(existing_session.as_apispec().model_dump(exclude_none=True, mode="json"))
-            gitlab_client = NotebooksGitlabClient(self.nb_config.git.url, internal_gitlab_user.access_token)
-            project = await self.project_repo.get_project(user=user, project_id=ULID.from_str(body.project_id))
-            launcher = await self.session_repo.get_launcher(user, ULID.from_str(body.launcher_id))
             environment = launcher.environment
             image = environment.container_image
             default_resource_class = await self.rp_repo.get_default_resource_class()
@@ -800,7 +800,7 @@ class NotebooksNewBP(CustomBlueprint):
                 raise errors.ProgrammingError(message="The default reosurce class has to have an ID", quiet=True)
             resource_class_id = body.resource_class_id or default_resource_class.id
             parsed_server_options = await self.nb_config.crc_validator.validate_class_storage(
-                user, resource_class_id, body.storage
+                user, resource_class_id, body.disk_storage
             )
             work_dir = Path("/home/jovyan/work")
             user_secrets: K8sUserSecrets | None = None
@@ -816,7 +816,7 @@ class NotebooksNewBP(CustomBlueprint):
             server = Renku2UserServer(
                 user=user,
                 image=image,
-                project_id=body.project_id,
+                project_id=str(launcher.project_id),
                 launcher_id=body.launcher_id,
                 server_name=server_name,
                 server_options=parsed_server_options,
@@ -857,7 +857,7 @@ class NotebooksNewBP(CustomBlueprint):
 
             parsed_server_url = urlparse(server.server_url)
             annotations: dict[str, str] = {
-                "renku.io/project_id": body.project_id,
+                "renku.io/project_id": str(launcher.project_id),
                 "renku.io/launcher_id": body.launcher_id,
                 "renku.io/resource_class_id": str(body.resource_class_id or default_resource_class.id),
             }
@@ -874,7 +874,7 @@ class NotebooksNewBP(CustomBlueprint):
                         port=environment.port,
                         storage=Storage(
                             className=self.nb_config.sessions.storage.pvs_storage_class,
-                            size=str(body.storage) + "Gi",
+                            size=str(body.disk_storage) + "G",
                             mountPath=environment.mount_directory.as_posix(),
                         ),
                         workingDir=environment.working_directory.as_posix(),

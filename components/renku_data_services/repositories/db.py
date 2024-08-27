@@ -1,7 +1,7 @@
 """Adapters for repositories database classes."""
 
-from collections.abc import Callable, Coroutine
-from typing import Any, Literal
+from collections.abc import Callable
+from typing import Literal
 from urllib.parse import urlparse
 
 from httpx import AsyncClient as HttpClient

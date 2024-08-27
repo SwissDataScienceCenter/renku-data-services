@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     # NOTE: If these are directly imported then you get circular imports.
     from renku_data_services.notebooks.api.classes.server import UserServer
 
+
 async def git_clone_container_v2(server: "UserServer") -> dict[str, Any] | None:
     """Returns the specification for the container that clones the user's repositories for new operator."""
     amalthea_session_work_volume: str = "amalthea-volume"
@@ -104,7 +105,6 @@ async def git_clone_container_v2(server: "UserServer") -> dict[str, Any] | None:
                 },
             )
 
-
     # Set up git repositories
     for idx, repo in enumerate(repositories):
         obj_env = f"{prefix}REPOSITORIES_{idx}_"
@@ -152,6 +152,7 @@ async def git_clone_container_v2(server: "UserServer") -> dict[str, Any] | None:
         ],
         "env": env,
     }
+
 
 async def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
     """Returns the specification for the container that clones the user's repositories."""
@@ -240,7 +241,6 @@ async def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
                     "value": server.user.full_name,
                 },
             )
-
 
     # Set up git repositories
     for idx, repo in enumerate(repositories):

@@ -18,13 +18,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from enum import StrEnum
 from hashlib import md5
-from typing import Any, Self, TypeAlias, cast
+from typing import Any, TypeAlias, cast
 
 import escapism
 from kubernetes.client import V1Container
+
 from renku_data_services.notebooks.crs import Patch, PatchType
 
 

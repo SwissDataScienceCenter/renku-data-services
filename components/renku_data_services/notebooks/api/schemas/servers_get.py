@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, Union, cast
 
-from kubernetes.utils.quantity import parse_quantity
 from marshmallow import EXCLUDE, Schema, fields, pre_load, validate
 
 from renku_data_services.notebooks.api.classes.server_manifest import UserServerManifest
@@ -403,9 +402,7 @@ class LaunchNotebookResponseWithoutStorage(Schema):
 
             hibernation_date_str = annotations.get("renku.io/hibernationDate")
 
-            hibernated_seconds_threshold = (
-                server.manifest.spec.culling.hibernatedSecondsThreshold
-            )
+            hibernated_seconds_threshold = server.manifest.spec.culling.hibernatedSecondsThreshold
 
             if hibernation_date_str and hibernated_seconds_threshold > 0 and not is_user_anonymous(server):
                 hibernation_date = datetime.fromisoformat(hibernation_date_str)
