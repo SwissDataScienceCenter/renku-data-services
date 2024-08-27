@@ -1,11 +1,18 @@
 """Gitlab authenticator."""
 
+import base64
 import contextlib
+import json
+import re
 import urllib.parse as parse
+from contextlib import suppress
 from dataclasses import dataclass
+from datetime import datetime
+from typing import Any
 
 import gitlab
 from sanic import Request
+from sanic.compat import Header
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
@@ -36,10 +43,10 @@ class GitlabAuthenticator:
         if self.token_field != "Authorization":  # nosec: B105
             access_token = str(request.headers.get(self.token_field))
 
-        result = await self._get_gitlab_api_user(access_token)
+        result = await self._get_gitlab_api_user(access_token, request.headers)
         return result
 
-    async def _get_gitlab_api_user(self, access_token: str) -> base_models.APIUser:
+    async def _get_gitlab_api_user(self, access_token: str, headers: Header) -> base_models.APIUser:
         """Get and validate a Gitlab API User."""
         client = gitlab.Gitlab(self.gitlab_url, oauth_token=access_token)
         try:
@@ -69,12 +76,35 @@ class GitlabAuthenticator:
             if len(name_parts) >= 1:
                 last_name = " ".join(name_parts)
 
+        _, _, _, expires_at = self.git_creds_from_headers(headers)
         return base_models.APIUser(
-            is_admin=False,
             id=str(user_id),
             access_token=access_token,
             first_name=first_name,
             last_name=last_name,
             email=email,
             full_name=full_name,
+            access_token_expires_at=expires_at,
+        )
+
+    @staticmethod
+    def git_creds_from_headers(headers: Header) -> tuple[Any, Any, Any, datetime | None]:
+        """Extract git credentials from the encoded header sent by the gateway."""
+        parsed_dict = json.loads(base64.decodebytes(headers["Renku-Auth-Git-Credentials"].encode()))
+        git_url, git_credentials = next(iter(parsed_dict.items()))
+        token_match = re.match(r"^[^\s]+\ ([^\s]+)$", git_credentials["AuthorizationHeader"])
+        git_token = token_match.group(1) if token_match is not None else None
+        git_token_expires_at_raw = git_credentials["AccessTokenExpiresAt"]
+        git_token_expires_at_num: float | None = None
+        with suppress(ValueError, TypeError):
+            git_token_expires_at_num = float(git_token_expires_at_raw)
+        git_token_expires_at: datetime | None = None
+        if git_token_expires_at_num is not None and git_token_expires_at_num > 0:
+            with suppress(ValueError):
+                git_token_expires_at = datetime.fromtimestamp(git_token_expires_at_num)
+        return (
+            git_url,
+            git_credentials["AuthorizationHeader"],
+            git_token,
+            git_token_expires_at,
         )

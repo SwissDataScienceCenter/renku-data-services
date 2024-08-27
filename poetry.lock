@@ -230,6 +230,20 @@ files = [
 test = ["coverage", "mypy", "pexpect", "ruff", "wheel"]
 
 [[package]]
+name = "asyncache"
+version = "0.3.1"
+description = "Helpers to use cachetools with async code."
+optional = false
+python-versions = ">=3.8,<4.0"
+files = [
+    {file = "asyncache-0.3.1-py3-none-any.whl", hash = "sha256:ef20a1024d265090dd1e0785c961cf98b9c32cc7d9478973dcf25ac1b80011f5"},
+    {file = "asyncache-0.3.1.tar.gz", hash = "sha256:9a1e60a75668e794657489bdea6540ee7e3259c483517b934670db7600bf5035"},
+]
+
+[package.dependencies]
+cachetools = ">=5.2.0,<6.0.0"
+
+[[package]]
 name = "asyncpg"
 version = "0.29.0"
 description = "An asyncio PostgreSQL driver"
@@ -1518,6 +1532,23 @@ socks = ["socksio (==1.*)"]
 zstd = ["zstandard (>=0.18.0)"]
 
 [[package]]
+name = "httpx-ws"
+version = "0.6.0"
+description = "WebSockets support for HTTPX"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "httpx_ws-0.6.0-py3-none-any.whl", hash = "sha256:437cfca94519a4e6ae06eb5573192df6c0da85c22b1a19cc1ea0b02b05a51d25"},
+    {file = "httpx_ws-0.6.0.tar.gz", hash = "sha256:60218f531fb474a2143af38568f4b7d94ba356780973443365c8e2c87882bb8c"},
+]
+
+[package.dependencies]
+anyio = ">=4"
+httpcore = ">=1.0.4"
+httpx = ">=0.23.1"
+wsproto = "*"
+
+[[package]]
 name = "hypothesis"
 version = "6.111.1"
 description = "A library for property-based testing"
@@ -1725,6 +1756,31 @@ files = [
 
 [package.dependencies]
 six = "*"
+
+[[package]]
+name = "kr8s"
+version = "0.17.0"
+description = "A Kubernetes API library"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "kr8s-0.17.0-py3-none-any.whl", hash = "sha256:7307bca7b125cdc8c41ec9d7a0b3b1273c4c76b10b992a054aaf1e38309f1445"},
+    {file = "kr8s-0.17.0.tar.gz", hash = "sha256:c2afe40461f1b1c853dcde755a64fe4837e05b931c6effbfff12ab32ae224445"},
+]
+
+[package.dependencies]
+anyio = ">=3.7.0"
+asyncache = ">=0.3.1"
+cryptography = ">=35"
+httpx = ">=0.24.1"
+httpx-ws = ">=0.5.2"
+python-box = ">=7.0.1"
+python-jsonpath = ">=0.7.1"
+pyyaml = ">=6.0"
+
+[package.extras]
+docs = ["furo (>=2023.3.27)", "myst-parser (>=1.0.0)", "sphinx (>=5.3.0)", "sphinx-autoapi (>=2.1.0)", "sphinx-autobuild (>=2021.3.14)", "sphinx-copybutton (>=0.5.1)", "sphinx-design (>=0.3.0)", "sphinxcontrib-mermaid (>=0.8.1)"]
+test = ["kubernetes (>=26.1.0)", "kubernetes-asyncio (>=24.2.3)", "kubernetes-validate (>=1.28.0)", "lightkube (>=0.13.0)", "pykube-ng (>=23.6.0)", "pytest (>=7.2.2)", "pytest-asyncio (>=0.20.3)", "pytest-cov (>=4.0.0)", "pytest-kind (>=22.11.1)", "pytest-rerunfailures (>=11.1.2)", "pytest-timeout (>=2.1.0)", "trio (>=0.22.0)", "types-pyyaml (>=6.0)"]
 
 [[package]]
 name = "kubernetes"
@@ -2726,6 +2782,41 @@ setproctitle = ["setproctitle"]
 testing = ["filelock"]
 
 [[package]]
+name = "python-box"
+version = "7.2.0"
+description = "Advanced Python dictionaries with dot notation access"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "python_box-7.2.0-cp310-cp310-macosx_11_0_x86_64.whl", hash = "sha256:6bdeec791e25258351388b3029a3ec5da302bb9ed3be175493c43cdc6c47f5e3"},
+    {file = "python_box-7.2.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c449f7b3756a71479fa9c61a86e344ac00ed782a66d7662590f0afa294249d18"},
+    {file = "python_box-7.2.0-cp310-cp310-win_amd64.whl", hash = "sha256:6b0d61f182d394106d963232854e495b51edc178faa5316a797be1178212d7e0"},
+    {file = "python_box-7.2.0-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:e2d752de8c1204255bf7b0c814c59ef48293c187a7e9fdcd2fefa28024b72032"},
+    {file = "python_box-7.2.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e8a6c35ea356a386077935958a5debcd5b229b9a1b3b26287a52dfe1a7e65d99"},
+    {file = "python_box-7.2.0-cp311-cp311-win_amd64.whl", hash = "sha256:32ed58ec4d9e5475efe69f9c7d773dfea90a6a01979e776da93fd2b0a5d04429"},
+    {file = "python_box-7.2.0-cp312-cp312-macosx_10_9_universal2.whl", hash = "sha256:2a2d664c6a27f7515469b6f1e461935a2038ee130b7d194b4b4db4e85d363618"},
+    {file = "python_box-7.2.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e8a5a7365db1aaf600d3e8a2747fcf6833beb5d45439a54318548f02e302e3ec"},
+    {file = "python_box-7.2.0-cp312-cp312-win_amd64.whl", hash = "sha256:739f827056ea148cbea3122d4617c994e829b420b1331183d968b175304e3a4f"},
+    {file = "python_box-7.2.0-cp38-cp38-macosx_11_0_x86_64.whl", hash = "sha256:2617ef3c3d199f55f63c908f540a4dc14ced9b18533a879e6171c94a6a436f23"},
+    {file = "python_box-7.2.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ffd866bed03087b1d8340014da8c3aaae19135767580641df1b4ae6fff6ac0aa"},
+    {file = "python_box-7.2.0-cp38-cp38-win_amd64.whl", hash = "sha256:9681f059e7e92bdf20782cd9ea6e533d4711fc7b8c57a462922a025d46add4d0"},
+    {file = "python_box-7.2.0-cp39-cp39-macosx_11_0_x86_64.whl", hash = "sha256:6b59b1e2741c9ceecdf5a5bd9b90502c24650e609cd824d434fed3b6f302b7bb"},
+    {file = "python_box-7.2.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e23fae825d809ae7520fdeac88bb52be55a3b63992120a00e381783669edf589"},
+    {file = "python_box-7.2.0-cp39-cp39-win_amd64.whl", hash = "sha256:573b1abdcb7bd745fa404444f060ee62fc35a74f067181e55dcb43cfe92f2827"},
+    {file = "python_box-7.2.0-py3-none-any.whl", hash = "sha256:a3c90832dd772cb0197fdb5bc06123b6e1b846899a1b53d9c39450d27a584829"},
+    {file = "python_box-7.2.0.tar.gz", hash = "sha256:551af20bdab3a60a2a21e3435120453c4ca32f7393787c3a5036e1d9fc6a0ede"},
+]
+
+[package.extras]
+all = ["msgpack", "ruamel.yaml (>=0.17)", "toml"]
+msgpack = ["msgpack"]
+pyyaml = ["PyYAML"]
+ruamel-yaml = ["ruamel.yaml (>=0.17)"]
+toml = ["toml"]
+tomli = ["tomli", "tomli-w"]
+yaml = ["ruamel.yaml (>=0.17)"]
+
+[[package]]
 name = "python-dateutil"
 version = "2.9.0.post0"
 description = "Extensions to the standard Python datetime module"
@@ -2758,6 +2849,17 @@ requests-toolbelt = ">=1.0.0"
 autocompletion = ["argcomplete (>=1.10.0,<3)"]
 graphql = ["gql[httpx] (>=3.5.0,<4)"]
 yaml = ["PyYaml (>=6.0.1)"]
+
+[[package]]
+name = "python-jsonpath"
+version = "1.1.1"
+description = "JSONPath, JSON Pointer and JSON Patch for Python."
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "python_jsonpath-1.1.1-py3-none-any.whl", hash = "sha256:43f2622b7aaaf4f45dd873e80cfd181058503e08ffdeac5218135f3a97bd0aec"},
+    {file = "python_jsonpath-1.1.1.tar.gz", hash = "sha256:d2944e1f7a1d6c8fa958724f9570b8f04a4e00ab6bf1e4733346ab8dcef1f74f"},
+]
 
 [[package]]
 name = "python-ulid"
@@ -3550,6 +3652,17 @@ doc = ["reno", "sphinx"]
 test = ["pytest", "tornado (>=4.5)", "typeguard"]
 
 [[package]]
+name = "toml"
+version = "0.10.2"
+description = "Python Library for Tom's Obvious, Minimal Language"
+optional = false
+python-versions = ">=2.6, !=3.0.*, !=3.1.*, !=3.2.*"
+files = [
+    {file = "toml-0.10.2-py2.py3-none-any.whl", hash = "sha256:806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b"},
+    {file = "toml-0.10.2.tar.gz", hash = "sha256:b3bda1d108d5dd99f4a20d24d9c348e91c4db7ab1b749200bded2f839ccbe68f"},
+]
+
+[[package]]
 name = "tomli"
 version = "2.0.1"
 description = "A lil' TOML parser"
@@ -3674,6 +3787,17 @@ python-versions = ">=3.8"
 files = [
     {file = "types-setuptools-72.2.0.20240821.tar.gz", hash = "sha256:e349b8015608879939f27ee370672f801287c46f5caa2d188d416336172c4965"},
     {file = "types_setuptools-72.2.0.20240821-py3-none-any.whl", hash = "sha256:260e89d6d3b42cc35f9f0f382d030713b7b547344a664c05c9175e6ba124fac7"},
+]
+
+[[package]]
+name = "types-toml"
+version = "0.10.8.20240310"
+description = "Typing stubs for toml"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "types-toml-0.10.8.20240310.tar.gz", hash = "sha256:3d41501302972436a6b8b239c850b26689657e25281b48ff0ec06345b8830331"},
+    {file = "types_toml-0.10.8.20240310-py3-none-any.whl", hash = "sha256:627b47775d25fa29977d9c70dc0cbab3f314f32c8d8d0c012f2ef5de7aaec05d"},
 ]
 
 [[package]]
@@ -4017,6 +4141,20 @@ MarkupSafe = ">=2.1.1"
 watchdog = ["watchdog (>=2.3)"]
 
 [[package]]
+name = "wsproto"
+version = "1.2.0"
+description = "WebSockets state-machine based protocol implementation"
+optional = false
+python-versions = ">=3.7.0"
+files = [
+    {file = "wsproto-1.2.0-py3-none-any.whl", hash = "sha256:b9acddd652b585d75b20477888c56642fdade28bdfd3579aa24a4d2c037dd736"},
+    {file = "wsproto-1.2.0.tar.gz", hash = "sha256:ad565f26ecb92588a3e43bc3d96164de84cd9902482b130d0ddbaa9664a85065"},
+]
+
+[package.dependencies]
+h11 = ">=0.9.0,<1"
+
+[[package]]
 name = "yarl"
 version = "1.9.4"
 description = "Yet another URL library"
@@ -4122,4 +4260,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "9856a37c6e5dde097df8a1300240980d10c925c218a2ee68086a93c33f438253"
+content-hash = "13536d89c5eb27ca4ff84d4a472a578dd2f67f790e478f7f753fe1ded9d40632"

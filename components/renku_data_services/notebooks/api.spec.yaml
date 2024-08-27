@@ -439,27 +439,24 @@ components:
       - registered
       type: object
     ErrorResponse:
-      type: object
       properties:
         error:
-          type: object
-          properties:
-            code:
-              type: integer
-              minimum: 0
-              exclusiveMinimum: true
-              example: 1404
-            detail:
-              type: string
-              example: "A more detailed optional message showing what the problem was"
-            message:
-              type: string
-              example: "Something went wrong - please try again later"
-          required:
-            - "code"
-            - "message"
+          "$ref": "#/components/schemas/ErrorResponseNested"
       required:
-        - "error"
+      - error
+      type: object
+    ErrorResponseNested:
+      properties:
+        code:
+          type: integer
+        detail:
+          type: string
+        message:
+          type: string
+      required:
+      - code
+      - message
+      type: object
     Generated:
       properties:
         enabled:
@@ -505,7 +502,6 @@ components:
       required:
         - project_id
         - launcher_id
-        - image
       type: object
     LaunchNotebookRequestRepository:
       properties:
@@ -802,8 +798,6 @@ components:
           "$ref": "#/components/schemas/ResourceRequests"
         usage:
           "$ref": "#/components/schemas/ResourceUsage"
-      required:
-      - requests
       type: object
     UserSecrets:
       properties:
@@ -990,10 +984,6 @@ components:
         storage:
           type: integer
           description: The size of disk storage for the session, in gigabytes
-      required:
-      - cpu
-      - memory
-      - storage
       example:
         cpu: 1.5
         memory: 1

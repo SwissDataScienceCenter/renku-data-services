@@ -1,9 +1,17 @@
 """Tests for sessions blueprints."""
 
+from asyncio import AbstractEventLoop
+from collections.abc import AsyncIterator, Coroutine
 from typing import Any
 
 import pytest
-from sanic_testing.testing import SanicASGITestClient
+import pytest_asyncio
+from pytest import FixtureRequest
+from sanic_testing.testing import SanicASGITestClient, TestingResponse
+
+from renku_data_services.app_config.config import Config
+from renku_data_services.crc.apispec import ResourcePool
+from renku_data_services.users.models import UserInfo
 
 
 @pytest.fixture
@@ -43,6 +51,33 @@ def create_session_launcher(sanic_client: SanicASGITestClient, user_headers):
         return res.json
 
     return create_session_launcher_helper
+
+
+@pytest.fixture
+def launch_session(
+    sanic_client: SanicASGITestClient,
+    user_headers: dict,
+    regular_user: UserInfo,
+    app_config: Config,
+    request: FixtureRequest,
+    event_loop: AbstractEventLoop,
+):
+    async def launch_session_helper(
+        payload: dict, headers: dict = user_headers, user: UserInfo = regular_user
+    ) -> TestingResponse:
+        _, res = await sanic_client.post("/api/data/sessions", headers=headers, json=payload)
+        assert res.status_code == 201, res.text
+        assert res.json is not None
+        assert "name" in res.json
+        session_id: str = res.json.get("name", "unknown")
+
+        def cleanup():
+            event_loop.run_until_complete(app_config.nb_config.k8s_v2_client.delete_server(session_id, user.id))
+
+        # request.addfinalizer(cleanup)
+        return res
+
+    return launch_session_helper
 
 
 @pytest.mark.asyncio
@@ -472,3 +507,55 @@ async def test_patch_session_launcher_environment(
     )
     assert res.status_code == 200, res.text
     assert res.json["environment"]["container_image"] == "nginx:latest"
+
+
+@pytest.fixture
+def anonymous_user_headers() -> dict[str, str]:
+    return {"Renku-Auth-Anon-Id": "some-random-value-1234"}
+
+
+@pytest.mark.asyncio
+async def test_starting_session_anonymous(
+    sanic_client: SanicASGITestClient,
+    create_project,
+    create_session_launcher,
+    user_headers,
+    app_config: Config,
+    admin_headers,
+    launch_session,
+    anonymous_user_headers,
+) -> None:
+    _, res = await sanic_client.post(
+        "/api/data/resource_pools",
+        json=ResourcePool.model_validate(app_config.default_resource_pool, from_attributes=True).model_dump(
+            mode="json", exclude_none=True
+        ),
+        headers=admin_headers,
+    )
+    assert res.status_code == 201, res.text
+    project: dict[str, Any] = await create_project(
+        "Some project",
+        visibility="public",
+        repositories=["https://github.com/SwissDataScienceCenter/renku-data-services"],
+    )
+    launcher: dict[str, Any] = await create_session_launcher(
+        "Launcher 1",
+        project_id=project["id"],
+        environment={
+            "container_image": "renku/renkulab-py:3.10-0.23.0-amalthea-sessions-3",
+            "environment_kind": "CUSTOM",
+            "name": "test",
+            "port": 8888,
+        },
+    )
+    launcher_id = launcher["id"]
+    project_id = project["id"]
+    payload = {"project_id": project_id, "launcher_id": launcher_id}
+    session_res = await launch_session(payload, headers=anonymous_user_headers)
+    _, res = await sanic_client.get(f"/api/data/sessions/{session_res.json['name']}", headers=anonymous_user_headers)
+    assert res.status_code == 200, res.text
+    assert res.json["name"] == session_res.json["name"]
+    _, res = await sanic_client.get("/api/data/sessions", headers=anonymous_user_headers)
+    assert res.status_code == 200, res.text
+    assert len(res.json) > 0
+    assert session_res.json["name"] in [i["name"] for i in res.json]
