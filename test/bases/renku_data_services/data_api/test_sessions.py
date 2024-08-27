@@ -152,7 +152,7 @@ async def test_patch_session_environment_unauthorized(
 
     _, res = await sanic_client.patch(f"/api/data/environments/{environment_id}", headers=user_headers, json=payload)
 
-    assert res.status_code == 403, res.text
+    assert res.status_code == 401, res.text
 
 
 @pytest.mark.asyncio
