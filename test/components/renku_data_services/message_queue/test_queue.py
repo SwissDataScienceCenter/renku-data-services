@@ -42,21 +42,21 @@ async def test_queue_send(app_config, monkeypatch) -> None:
     fakerepo = FakeRepo()
     await fakerepo.fake_db_method(some_arg="test")
 
-    events = await app_config.redis.redis_connection.xrange("project.removed")
+    events = await app_config.redis.redis_connection.xrange("search.sync")
     assert len(events) == 0
     pending_events = await app_config.event_repo._get_pending_events()
     assert len(pending_events) == 1
 
     await app_config.event_repo.send_pending_events()
 
-    events = await app_config.redis.redis_connection.xrange("project.removed")
+    events = await app_config.redis.redis_connection.xrange("search.sync")
     assert len(events) == 1
     pending_events = await app_config.event_repo._get_pending_events()
     assert len(pending_events) == 0
 
     await app_config.event_repo.send_pending_events()
 
-    events = await app_config.redis.redis_connection.xrange("project.removed")
+    events = await app_config.redis.redis_connection.xrange("search.sync")
     assert len(events) == 1
     pending_events = await app_config.event_repo._get_pending_events()
     assert len(pending_events) == 0
