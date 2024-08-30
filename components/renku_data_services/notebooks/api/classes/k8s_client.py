@@ -441,7 +441,11 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
     ) -> dict[str, str]:
         """Get the logs from the server."""
         # NOTE: this get_server ensures the user has access to the server without it you could read someone elses logs
-        _ = await self.get_server(server_name, safe_username)
+        server = await self.get_server(server_name, safe_username)
+        if not server:
+            raise MissingResourceError(
+                f"Cannot find server {server_name} for user " f"{safe_username} to retrieve logs."
+            )
         pod_name = f"{server_name}-0"
         return await self.renku_ns_client.get_pod_logs(pod_name, max_log_lines)
 
