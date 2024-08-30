@@ -21,7 +21,7 @@ details.
 
 1. `poetry install`
 2. `pre-commit install` to install pre commit hooks
-3. `DUMMY_STORES=true poetry run python bases/renku_data_services/data_api/main.py --debug --dev --fast`
+3. `make run` to run the server
 
 ## Developing
 
@@ -35,6 +35,31 @@ The container image can be built to be used as a local development service (for 
 `docker build -f projects/renku_data_services/Dockerfile . --build-arg DEV_BUILD=true -t renku-data-service`
 
 It can then be run as daemon: `docker run -d -e DUMMY_STORES=true --name renku-crc renku-data-service`
+
+### Developing with nix
+
+When using [nix](https://nixos.org/explore/), a development
+environment can be created:
+
+1. Run `nix develop` in the source root to drop into the development
+   environment.
+2. In another terminal, run `vm-run` (headless) to start a vm running
+   necessary external services, like the postgresql database.
+3. Potentially run `poetry-fix-cfg` to alter the `pyvenv.cfg` so that
+   poetry will use the env built by nix
+
+Then `make run`, `make tests` etc can be used as usual.
+
+The environment also contains other useful tools, like ruff-lsp,
+pyright and more. Instead of a vm, a development environment using
+NixOS containers is also available.
+
+The first invocation will take a while for the first run, as the
+python environment is being built. Subsequent calls are then instant.
+
+It will run a bash shell, check out [direnv](https://direnv.net/) and
+the [use flake](https://direnv.net/man/direnv-stdlib.1.html#codeuse-flake-ltinstallablegtcode)
+function if you prefer to keep your favorite shell.
 
 ## Migrations
 

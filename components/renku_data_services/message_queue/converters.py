@@ -199,8 +199,8 @@ class _GroupAuthzEventConverter:
                     output.append(
                         Event(
                             "memberGroup.updated",
-                            v2.ProjectMemberUpdated(
-                                projectId=resource_id,
+                            v2.GroupMemberUpdated(
+                                groupId=resource_id,
                                 userId=change.member.user_id,
                                 role=_convert_member_role(change.member.role),
                             ),
@@ -210,8 +210,8 @@ class _GroupAuthzEventConverter:
                     output.append(
                         Event(
                             "memberGroup.removed",
-                            v2.ProjectMemberRemoved(
-                                projectId=resource_id,
+                            v2.GroupMemberRemoved(
+                                groupId=resource_id,
                                 userId=change.member.user_id,
                             ),
                         )
@@ -220,8 +220,8 @@ class _GroupAuthzEventConverter:
                     output.append(
                         Event(
                             "memberGroup.added",
-                            v2.ProjectMemberAdded(
-                                projectId=resource_id,
+                            v2.GroupMemberAdded(
+                                groupId=resource_id,
                                 userId=change.member.user_id,
                                 role=_convert_member_role(change.member.role),
                             ),
