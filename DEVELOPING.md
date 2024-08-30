@@ -66,7 +66,7 @@ directly. They should always use domain models for communicating with other code
 
 ## Supporting Services
 
-Data Services mirrors users that it gets from [Keycloak](https://www.keycloak.org/) and keycloak is the source of truth
+Data Services mirrors users that it gets from [Keycloak](https://www.keycloak.org/) and Keycloak is the source of truth
 for users.
 We use [Authzed/SpiceDB](https://authzed.com/) for authorization. This enables complex transitive rules for who is permitted
 to perform which actions.
@@ -95,7 +95,7 @@ environment can be created:
 1. Run `nix develop` in the source root to drop into the development
    environment.
 2. In another terminal, run `vm-run` (headless) to start a vm running
-   necessary external services, like the postgresql database.
+   necessary external services, like the PostgreSQL database.
 3. Potentially run `poetry-fix-cfg` to alter the `pyvenv.cfg` so that
    poetry will use the env built by nix
 
