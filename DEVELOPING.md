@@ -83,7 +83,7 @@ If you use VSCode, this should be picked up automatically.
 Alternatively, you can run it with the [devcontainer cli](https://github.com/devcontainers/cli) by running:
 ```bash
 $ devcontainer up --workspace-folder .
-$ devcontainer exec ---container-id renku-data-services_devcontainer-data_service-1 -- bash
+$ devcontainer exec --container-id renku-data-services_devcontainer-data_service-1 -- bash
 ```
 The devcontainer contains Postgres, SpiceDB, the correct Python environment and other useful development tools.
 
