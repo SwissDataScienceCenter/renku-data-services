@@ -16,7 +16,7 @@ from gitlab.const import Visibility as GitlabVisibility
 from gitlab.v4.objects.projects import Project as GitlabProject
 from kubernetes.client import V1ObjectMeta, V1Secret
 from marshmallow import ValidationError
-from sanic import Request, empty, json
+from sanic import Request, empty, exceptions, json
 from sanic.log import logger
 from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
@@ -730,13 +730,17 @@ class NotebooksBP(CustomBlueprint):
         async def _server_logs(
             request: Request, user: AnonymousAPIUser | AuthenticatedAPIUser, server_name: str
         ) -> JSONResponse:
-            max_lines = int(request.query_args.get("max_lines", 250))
-            logs = self.nb_config.k8s_client.get_server_logs(
-                server_name=server_name,
-                max_log_lines=max_lines,
-                safe_username=user.id,
-            )
-            return json(ServerLogs().dump(logs))
+            args: dict[str, str | int] = request.get_args()
+            max_lines = int(args.get("max_lines", 250))
+            try:
+                logs = await self.nb_config.k8s_client.get_server_logs(
+                    server_name=server_name,
+                    safe_username=user.id,
+                    max_log_lines=max_lines,
+                )
+                return json(ServerLogs().dump(logs))
+            except MissingResourceError as err:
+                raise exceptions.NotFound(message=err.message)
 
         return "/notebooks/logs/<server_name>", ["GET"], _server_logs
 
