@@ -748,7 +748,7 @@ class NotebooksBP(CustomBlueprint):
         async def _check_docker_image(
             request: Request, user: AnonymousAPIUser | AuthenticatedAPIUser, internal_gitlab_user: APIUser
         ) -> HTTPResponse:
-            image_url = request.query_args.get("image_url")
+            image_url = request.get_args().get("image_url")
             if not isinstance(image_url, str):
                 raise ValueError("required string of image url")
             parsed_image = Image.from_path(image_url)
