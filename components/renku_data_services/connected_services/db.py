@@ -185,7 +185,7 @@ class ConnectedServicesRepository:
                 url: str
                 state: str
                 url, state = oauth2_client.create_authorization_url(
-                    adapter.authorization_url, code_verifier=code_verifier
+                    adapter.authorization_url, code_verifier=code_verifier, **adapter.authorization_url_extra_params
                 )
 
                 result_conn = await session.scalars(
@@ -308,11 +308,11 @@ class ConnectedServicesRepository:
     ) -> models.ConnectedAccount:
         """Get the account information from a OAuth2 connection."""
         async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (oauth2_client, _, adapter):
-            request_url = urljoin(adapter.api_url, "user")
+            request_url = urljoin(adapter.api_url, adapter.user_info_endpoint)
             response = await oauth2_client.get(request_url, headers=adapter.api_common_headers)
 
             if response.status_code > 200:
-                raise errors.UnauthorizedError(message="Could not get account information.")
+                raise errors.UnauthorizedError(message=f"Could not get account information.{response.json()}")
 
             account = adapter.api_validate_account_response(response)
             return account

@@ -14,8 +14,15 @@ from renku_data_services.connected_services.apispec import ProviderKind
 class ProviderAdapter(ABC):
     """Defines the functionality of OAuth2 client adapters."""
 
+    user_info_endpoint = "user"
+
     def __init__(self, client_url: str) -> None:
         self.client_url = client_url
+
+    @property
+    def authorization_url_extra_params(self) -> dict[str, str]:
+        """Extra parameters to add to the auth url."""
+        return {}
 
     @property
     @abstractmethod
@@ -102,9 +109,48 @@ class GitHubAdapter(ProviderAdapter):
         return external_models.GitHubConnectedAccount.model_validate(response.json()).to_connected_account()
 
 
+class GoogleDriveAdapter(ProviderAdapter):
+    """Adapter for Google Drive OAuth2 clients."""
+
+    user_info_endpoint = "userinfo"
+
+    @property
+    def authorization_url(self) -> str:
+        """The authorization URL for the OAuth2 protocol."""
+        return "https://accounts.google.com/o/oauth2/auth"
+
+    @property
+    def authorization_url_extra_params(self) -> dict[str, str]:
+        """Extra parameters to add to the auth url."""
+        return {"access_type": "offline"}
+
+    @property
+    def token_endpoint_url(self) -> str:
+        """The token endpoint URL for the OAuth2 protocol."""
+        return "https://oauth2.googleapis.com/token"
+
+    @property
+    def api_url(self) -> str:
+        """The URL used for API calls on the Resource Server."""
+        return "https://www.googleapis.com/oauth2/v2/"
+
+    @property
+    def api_common_headers(self) -> dict[str, str] | None:
+        """The HTTP headers used for API calls on the Resource Server."""
+        return {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+
+    def api_validate_account_response(self, response: Response) -> models.ConnectedAccount:
+        """Validates and returns the connected account response from the Resource Server."""
+        return external_models.GoogleDriveConnectedAccount.model_validate(response.json()).to_connected_account()
+
+
 _adapter_map: dict[ProviderKind, type[ProviderAdapter]] = {
     ProviderKind.gitlab: GitLabAdapter,
     ProviderKind.github: GitHubAdapter,
+    ProviderKind.drive: GoogleDriveAdapter,
 }
 
 

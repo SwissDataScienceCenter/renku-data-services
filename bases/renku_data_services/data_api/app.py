@@ -78,6 +78,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         name="storages_v2",
         url_prefix=url_prefix,
         storage_v2_repo=config.storage_v2_repo,
+        connected_services_repo=config.connected_services_repo,
         authenticator=config.authenticator,
     )
     storage_schema = StorageSchemaBP(name="storage_schema", url_prefix=url_prefix)

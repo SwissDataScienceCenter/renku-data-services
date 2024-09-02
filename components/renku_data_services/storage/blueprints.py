@@ -3,10 +3,13 @@
 from dataclasses import dataclass
 from typing import Any
 
+from renku_data_services.connected_services.db import ConnectedServicesRepository
 from sanic import HTTPResponse, Request, empty, json
+from sanic.log import logger
 from sanic.response import JSONResponse
 from sanic_ext import validate
 from ulid import ULID
+from json import dumps as json_dumps
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
@@ -189,6 +192,7 @@ class StoragesV2BP(CustomBlueprint):
     """Handlers for manipulating storage definitions."""
 
     storage_v2_repo: StorageV2Repository
+    connected_services_repo: ConnectedServicesRepository
     authenticator: base_models.Authenticator
 
     def get(self) -> BlueprintFactoryResponse:
@@ -251,6 +255,19 @@ class StoragesV2BP(CustomBlueprint):
                 body = apispec.CloudStorage(**request.json)
                 storage = models.UnsavedCloudStorage.from_dict(body.model_dump())
 
+            logger.info(storage.configuration.config)
+            if storage.configuration["type"] == "drive":
+                connections = await self.connected_services_repo.get_oauth2_connections(user=user)
+                logger.info(connections)
+                drive_connection = next((c for c in connections if c.provider_id == "drive"), None)
+                if drive_connection:
+                    logger.info(drive_connection)
+                    token = await self.connected_services_repo.get_oauth2_connection_token(
+                        drive_connection.id, user=user
+                    )
+                    token_str: str = json_dumps(token)
+                    logger.info(token_str)
+                    storage.configuration["token"] = token_str
             validator.validate(storage.configuration.model_dump())
 
             res = await self.storage_v2_repo.insert_storage(storage=storage, user=user)
