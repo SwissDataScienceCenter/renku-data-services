@@ -17,14 +17,14 @@ from sqlalchemy.orm import joinedload
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
-from renku_data_services.authz.models import Member, MembershipChange, Role, Scope
+from renku_data_services.authz.models import Member, MembershipChange, Role, Scope, UnsavedMember
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.message_queue import events
 from renku_data_services.message_queue.avro_models.io.renku.events.v2 import GroupAdded, GroupRemoved, GroupUpdated
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import dispatch_message
-from renku_data_services.namespace import apispec, models
+from renku_data_services.namespace import models
 from renku_data_services.namespace import orm as schemas
 from renku_data_services.users import models as user_models
 from renku_data_services.users import orm as user_schemas
@@ -192,21 +192,23 @@ class GroupRepository:
         self,
         user: base_models.APIUser,
         slug: str,
-        payload: apispec.GroupMemberPatchRequestList,
+        members: list[UnsavedMember],
         *,
         session: AsyncSession | None = None,
     ) -> list[MembershipChange]:
         """Update group members."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
-        group, existing_members = await self._get_group(session, user, slug, load_members=True)
+        group, _ = await self._get_group(session, user, slug, load_members=True)
         if group.namespace.slug != slug.lower():
             raise errors.UpdatingWithStaleContentError(
                 message=f"You cannot update group members by using an old group slug {slug}.",
                 detail=f"The latest slug is {group.namespace.slug}, please use this for updates.",
             )
-        members = [Member(Role.from_group_role(member.role), member.id, group.id) for member in payload.root]
-        output = await self.authz.upsert_group_members(user, ResourceType.group, group.id, members)
+
+        output = await self.authz.upsert_group_members(
+            user, ResourceType.group, group.id, [m.with_group(group.id) for m in members]
+        )
         return output
 
     @with_db_transaction
@@ -256,7 +258,7 @@ class GroupRepository:
     async def insert_group(
         self,
         user: base_models.APIUser,
-        payload: apispec.GroupPostRequest,
+        payload: models.UnsavedGroup,
         *,
         session: AsyncSession | None = None,
     ) -> models.Group:
