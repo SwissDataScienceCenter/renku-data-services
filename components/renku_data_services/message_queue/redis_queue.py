@@ -7,6 +7,7 @@ from functools import wraps
 from typing import Concatenate, ParamSpec, Protocol, TypeVar
 
 from dataclasses_avroschema.schema_generator import AvroModel
+from redis.asyncio.sentinel import MasterNotFoundError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.errors import errors
@@ -82,4 +83,8 @@ class RedisQueue(IMessageQueue):
         """Send a message on a channel."""
         message = copy.copy(event.serialize())
 
-        await self.config.redis_connection.xadd(event.queue, message)
+        try:
+            await self.config.redis_connection.xadd(event.queue, message)
+        except MasterNotFoundError:
+            self.config.reset_redis_connection()  # force redis reconnection
+            await self.config.redis_connection.xadd(event.queue, message)
