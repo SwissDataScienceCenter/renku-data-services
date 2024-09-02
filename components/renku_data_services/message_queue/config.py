@@ -73,3 +73,7 @@ class RedisConfig:
                     health_check_interval=60,
                 )
         return self._connection
+
+    def reset_redis_connection(self) -> None:
+        """Forces a full reconnect to redis."""
+        self._connection = None
