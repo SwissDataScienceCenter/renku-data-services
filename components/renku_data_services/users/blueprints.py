@@ -16,7 +16,7 @@ from renku_data_services.base_models.validation import validated_json
 from renku_data_services.errors import errors
 from renku_data_services.secrets.core import encrypt_user_secret
 from renku_data_services.secrets.db import UserSecretsRepo
-from renku_data_services.secrets.models import Secret, SecretKind
+from renku_data_services.secrets.models import SecretKind, UnsavedSecret
 from renku_data_services.users import apispec, models
 from renku_data_services.users.db import UserPreferencesRepository, UserRepo
 
@@ -179,7 +179,7 @@ class UserSecretsBP(CustomBlueprint):
                 secret_service_public_key=self.secret_service_public_key,
                 secret_value=body.value,
             )
-            secret = Secret(
+            secret = UnsavedSecret(
                 name=body.name,
                 encrypted_value=encrypted_value,
                 encrypted_key=encrypted_key,
