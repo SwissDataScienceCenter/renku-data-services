@@ -67,7 +67,7 @@ class BaseStorageRepository(_Base):
             stmt = select(schemas.CloudStorageORM)
 
             if project_id is not None:
-                stmt = stmt.where(schemas.CloudStorageORM.project_id == project_id)
+                stmt = stmt.where(schemas.CloudStorageORM.parent_id == project_id)
             if id is not None:
                 stmt = stmt.where(schemas.CloudStorageORM.storage_id == id)
             if name is not None:
@@ -86,10 +86,10 @@ class BaseStorageRepository(_Base):
                 return [s.dump() for s in storage_orms]
 
             accessible_projects = await self.filter_projects_by_access_level(
-                user, [s.project_id for s in storage_orms], authz_models.Role.VIEWER
+                user, [s.parent_id for s in storage_orms], authz_models.Role.VIEWER
             )
 
-            return [s.dump() for s in storage_orms if s.project_id in accessible_projects]
+            return [s.dump() for s in storage_orms if s.parent_id in accessible_projects]
 
     async def get_storage_by_id(self, storage_id: ULID, user: base_models.APIUser) -> models.CloudStorage:
         """Get a single storage by id."""
@@ -128,17 +128,16 @@ class BaseStorageRepository(_Base):
 
             if storage is None:
                 raise errors.MissingResourceError(message=f"The storage with id '{storage_id}' cannot be found")
-            if not await self.filter_projects_by_access_level(user, [storage.project_id], authz_models.Role.OWNER):
+            if not await self.filter_projects_by_access_level(user, [storage.parent_id], authz_models.Role.OWNER):
                 raise errors.ForbiddenError(message="User does not have access to this project")
-            if "project_id" in kwargs and cast(str, kwargs.get("project_id")) != storage.project_id:
+            if "project_id" in kwargs and cast(str, kwargs.get("project_id")) != storage.parent_id:
                 raise errors.ValidationError(message="Cannot change project id of existing storage.")
             name = cast(str, kwargs.get("name", storage.name))
             if storage.name != name:
-                existing_storage = await self.get_storage(user, project_id=storage.project_id, name=name)
+                existing_storage = await self.get_storage(user, project_id=storage.parent_id, name=name)
                 if existing_storage:
                     raise errors.ValidationError(
-                        message=f"A storage with name {storage.name} already exists for project "
-                        f"{storage.project_id}"
+                        message=f"A storage with name {storage.name} already exists for project " f"{storage.parent_id}"
                     )
 
             for key, value in kwargs.items():

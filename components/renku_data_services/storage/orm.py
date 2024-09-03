@@ -1,6 +1,6 @@
 """SQLAlchemy schemas for the cloud storage database."""
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import JSON, Boolean, ForeignKey, MetaData, String
 from sqlalchemy.dialects.postgresql import JSONB
@@ -8,10 +8,14 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_co
 from sqlalchemy.schema import Index, UniqueConstraint
 from ulid import ULID
 
+from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
 from renku_data_services.secrets.orm import SecretORM
 from renku_data_services.storage import models
 from renku_data_services.users.orm import UserORM
 from renku_data_services.utils.sqlalchemy import ULIDType
+
+if TYPE_CHECKING:
+    from renku_data_services.namespace.orm import EntitySlugORM
 
 JSONVariant = JSON().with_variant(JSONB(), "postgresql")
 
@@ -22,6 +26,7 @@ class BaseORM(MappedAsDataclass, DeclarativeBase):
     """Base class for all ORM classes."""
 
     metadata = metadata_obj
+    registry = COMMON_ORM_REGISTRY
 
 
 class CloudStorageORM(BaseORM):
@@ -29,8 +34,15 @@ class CloudStorageORM(BaseORM):
 
     __tablename__ = "cloud_storage"
 
-    project_id: Mapped[str] = mapped_column("project_id", String(), index=True)
-    """Id of the project."""
+    parent_id: Mapped[str] = mapped_column("parent_id", String(), index=True)
+    """Id of the parent (i.e. project or namespace)."""
+
+    kind: Mapped[models.CloudStorageKind]
+    """The kind of cloud storage, either v1_cloud_storage or v2_data_connector"""
+
+    slug: Mapped["EntitySlugORM | None"] = relationship(
+        lazy="joined", init=False, repr=False, viewonly=True, back_populates="cloud_storage"
+    )
 
     storage_type: Mapped[str] = mapped_column("storage_type", String(20))
     """Type of storage (e.g. s3), read-only based on 'configuration'."""
@@ -62,7 +74,7 @@ class CloudStorageORM(BaseORM):
 
     __table_args__ = (
         UniqueConstraint(
-            "project_id",
+            "parent_id",
             "name",
             name="_unique_name_uc",
         ),
@@ -72,7 +84,8 @@ class CloudStorageORM(BaseORM):
     def load(cls, storage: models.UnsavedCloudStorage) -> "CloudStorageORM":
         """Create CloudStorageORM from the cloud storage model."""
         return cls(
-            project_id=storage.project_id,
+            parent_id=storage.project_id,
+            kind=models.CloudStorageKind.v1_cloud_storage,
             name=storage.name,
             storage_type=storage.storage_type,
             configuration=storage.configuration.model_dump(),
@@ -84,7 +97,7 @@ class CloudStorageORM(BaseORM):
     def dump(self) -> models.CloudStorage:
         """Create a cloud storage model from the ORM object."""
         return models.CloudStorage(
-            project_id=self.project_id,
+            project_id=self.parent_id,
             name=self.name,
             storage_type=self.storage_type,
             configuration=models.RCloneConfig(config=self.configuration),

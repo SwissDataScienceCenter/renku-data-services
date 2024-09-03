@@ -1,6 +1,7 @@
 """Models for cloud storage."""
 
 from collections.abc import Generator, MutableMapping
+from enum import StrEnum
 from typing import Any
 from urllib.parse import ParseResult, urlparse
 
@@ -9,6 +10,13 @@ from ulid import ULID
 
 from renku_data_services import errors
 from renku_data_services.storage.rclone import RCloneValidator
+
+
+class CloudStorageKind(StrEnum):
+    """Storage kind."""
+
+    v1_cloud_storage: str = "v1_cloud_storage"
+    v2_data_connector: str = "v2_data_connector"
 
 
 class RCloneConfig(BaseModel, MutableMapping):

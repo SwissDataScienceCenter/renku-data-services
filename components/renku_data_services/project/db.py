@@ -172,7 +172,7 @@ class ProjectRepository:
             creation_date=datetime.now(UTC).replace(microsecond=0),
             keywords=project.keywords,
         )
-        project_slug = ns_schemas.EntitySlugORM(slug, project_id=project_orm.id, namespace_id=ns.id)
+        project_slug = ns_schemas.EntitySlugORM.create_project_slug(slug, project_id=project_orm.id, namespace_id=ns.id)
 
         session.add(project_orm)
         await session.flush()
@@ -292,7 +292,7 @@ class ProjectRepository:
         await session.execute(delete(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
 
         await session.execute(
-            delete(storage_schemas.CloudStorageORM).where(storage_schemas.CloudStorageORM.project_id == str(project_id))
+            delete(storage_schemas.CloudStorageORM).where(storage_schemas.CloudStorageORM.parent_id == str(project_id))
         )
 
         return project.dump()

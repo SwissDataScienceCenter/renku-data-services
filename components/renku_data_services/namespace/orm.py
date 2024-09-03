@@ -12,6 +12,7 @@ from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
 from renku_data_services.errors import errors
 from renku_data_services.namespace import models
 from renku_data_services.project.orm import ProjectORM
+from renku_data_services.storage.orm import CloudStorageORM
 from renku_data_services.users.models import UserInfo, UserWithNamespace
 from renku_data_services.users.orm import UserORM
 from renku_data_services.utils.sqlalchemy import ULIDType
@@ -164,25 +165,47 @@ class NamespaceOldORM(BaseORM):
 
 
 class EntitySlugORM(BaseORM):
-    """Project and namespace slugs."""
+    """Entity slugs."""
 
     __tablename__ = "entity_slugs"
-    __table_args__ = (Index("entity_slugs_unique_slugs", "namespace_id", "slug", unique=True),)
+    __table_args__ = (
+        Index("entity_slugs_unique_slugs", "namespace_id", "slug", unique=True),
+        CheckConstraint(
+            "(project_id IS NOT NULL) + (cloud_storage_id IS NOT NULL) BETWEEN 0 AND 1",
+            name="either_project_id_or_cloud_storage_id_is_set",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
     slug: Mapped[str] = mapped_column(String(99), index=True, nullable=False)
-    project_id: Mapped[ULID] = mapped_column(
-        ForeignKey(ProjectORM.id, ondelete="CASCADE", name="entity_slugs_project_id_fk"), index=True
+    project_id: Mapped[ULID | None] = mapped_column(
+        ForeignKey(ProjectORM.id, ondelete="CASCADE", name="entity_slugs_project_id_fk"), index=True, nullable=True
     )
-    project: Mapped[ProjectORM] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
+    project: Mapped[ProjectORM | None] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
+    cloud_storage_id: Mapped[ULID | None] = mapped_column(
+        ForeignKey(CloudStorageORM.storage_id, ondelete="CASCADE", name="entity_slugs_storage_id_fk"),
+        index=True,
+        nullable=True,
+    )
+    cloud_storage: Mapped[CloudStorageORM | None] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
     namespace_id: Mapped[ULID] = mapped_column(
         ForeignKey(NamespaceORM.id, ondelete="CASCADE", name="entity_slugs_namespace_id_fk"), index=True
     )
     namespace: Mapped[NamespaceORM] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
 
+    @classmethod
+    def create_project_slug(cls, slug: str, project_id: ULID, namespace_id: ULID) -> "EntitySlugORM":
+        """Create an entity slug for a project."""
+        return cls(
+            slug=slug,
+            project_id=project_id,
+            cloud_storage_id=None,
+            namespace_id=namespace_id,
+        )
+
 
 class EntitySlugOldORM(BaseORM):
-    """Project slugs history."""
+    """Entity slugs history."""
 
     __tablename__ = "entity_slugs_old"
 
