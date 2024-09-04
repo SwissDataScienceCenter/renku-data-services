@@ -1,14 +1,10 @@
 """Gitlab authenticator."""
 
-import base64
 import contextlib
-import json
-import re
 import urllib.parse as parse
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
 
 import gitlab
 from sanic import Request
@@ -30,6 +26,7 @@ class GitlabAuthenticator:
     gitlab_url: str
 
     token_field: str = "Gitlab-Access-Token"
+    expires_at_field: str = "Gitlab-Access-Token-Expires-At"
 
     def __post_init__(self) -> None:
         """Properly set gitlab url."""
@@ -76,7 +73,12 @@ class GitlabAuthenticator:
             if len(name_parts) >= 1:
                 last_name = " ".join(name_parts)
 
-        _, _, _, expires_at = self.git_creds_from_headers(headers)
+        expires_at: datetime | None = None
+        expires_at_raw: str | None = headers.get(self.expires_at_field)
+        if expires_at_raw is not None and len(expires_at_raw) > 0:
+            with suppress(ValueError):
+                expires_at = datetime.fromtimestamp(float(expires_at_raw))
+
         return base_models.APIUser(
             id=str(user_id),
             access_token=access_token,
@@ -85,26 +87,4 @@ class GitlabAuthenticator:
             email=email,
             full_name=full_name,
             access_token_expires_at=expires_at,
-        )
-
-    @staticmethod
-    def git_creds_from_headers(headers: Header) -> tuple[Any, Any, Any, datetime | None]:
-        """Extract git credentials from the encoded header sent by the gateway."""
-        parsed_dict = json.loads(base64.decodebytes(headers["Renku-Auth-Git-Credentials"].encode()))
-        git_url, git_credentials = next(iter(parsed_dict.items()))
-        token_match = re.match(r"^[^\s]+\ ([^\s]+)$", git_credentials["AuthorizationHeader"])
-        git_token = token_match.group(1) if token_match is not None else None
-        git_token_expires_at_raw = git_credentials["AccessTokenExpiresAt"]
-        git_token_expires_at_num: float | None = None
-        with suppress(ValueError, TypeError):
-            git_token_expires_at_num = float(git_token_expires_at_raw)
-        git_token_expires_at: datetime | None = None
-        if git_token_expires_at_num is not None and git_token_expires_at_num > 0:
-            with suppress(ValueError):
-                git_token_expires_at = datetime.fromtimestamp(git_token_expires_at_num)
-        return (
-            git_url,
-            git_credentials["AuthorizationHeader"],
-            git_token,
-            git_token_expires_at,
         )
