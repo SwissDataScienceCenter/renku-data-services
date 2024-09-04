@@ -25,6 +25,7 @@ from yaml import safe_load
 import renku_data_services.base_models as base_models
 import renku_data_services.connected_services
 import renku_data_services.crc
+import renku_data_services.data_connectors
 import renku_data_services.platform
 import renku_data_services.repositories
 import renku_data_services.storage
@@ -43,6 +44,7 @@ from renku_data_services.data_api.server_options import (
     ServerOptionsDefaults,
     generate_default_resource_pool,
 )
+from renku_data_services.data_connectors.db import DataConnectorRepository
 from renku_data_services.db_config import DBConfig
 from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
@@ -174,6 +176,7 @@ class Config:
     _connected_services_repo: ConnectedServicesRepository | None = field(default=None, repr=False, init=False)
     _git_repositories_repo: GitRepositoriesRepository | None = field(default=None, repr=False, init=False)
     _platform_repo: PlatformRepository | None = field(default=None, repr=False, init=False)
+    _data_connector_repo: DataConnectorRepository | None = field(default=None, repr=False, init=False)
 
     def __post_init__(self) -> None:
         spec_file = Path(renku_data_services.crc.__file__).resolve().parent / "api.spec.yaml"
@@ -212,6 +215,10 @@ class Config:
         with open(spec_file) as f:
             platform = safe_load(f)
 
+        spec_file = Path(renku_data_services.data_connectors.__file__).resolve().parent / "api.spec.yaml"
+        with open(spec_file) as f:
+            data_connectors = safe_load(f)
+
         self.spec = merge_api_specs(
             crc_spec,
             storage_spec,
@@ -222,6 +229,7 @@ class Config:
             connected_services,
             repositories,
             platform,
+            data_connectors,
         )
 
         if self.default_resource_pool_file is not None:
@@ -397,6 +405,15 @@ class Config:
                 session_maker=self.db.async_session_maker,
             )
         return self._platform_repo
+
+    @property
+    def data_connector_repo(self) -> DataConnectorRepository:
+        """The DB adapter for data connectors."""
+        if not self._data_connector_repo:
+            self._data_connector_repo = DataConnectorRepository(
+                session_maker=self.db.async_session_maker,
+            )
+        return self._data_connector_repo
 
     @classmethod
     def from_env(cls, prefix: str = "") -> "Config":
