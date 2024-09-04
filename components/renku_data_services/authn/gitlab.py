@@ -1,9 +1,6 @@
 """Gitlab authenticator."""
 
-import base64
 import contextlib
-import json
-import re
 import urllib.parse as parse
 from contextlib import suppress
 from dataclasses import dataclass
