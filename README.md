@@ -10,7 +10,7 @@ compute resources.
 
 1. `poetry install`
 2. `pre-commit install` to install pre commit hooks
-3. `DUMMY_STORES=true poetry run python bases/renku_data_services/data_api/main.py --debug --dev --fast`
+3. `make run` to run the server
 
 ## Developing
 
