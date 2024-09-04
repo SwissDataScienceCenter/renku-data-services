@@ -13,7 +13,7 @@ from renku_data_services.namespace import models as group_models
 from renku_data_services.project import models as project_models
 from renku_data_services.users import models as user_models
 
-QUEUE_NAME: Final[str] = "search.sync"
+QUEUE_NAME: Final[str] = "data_service.all_events"
 
 
 def _make_event(message_type: str, payload: AvroModel) -> Event:

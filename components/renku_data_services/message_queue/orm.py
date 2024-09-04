@@ -4,7 +4,7 @@ import base64
 import json
 from copy import deepcopy
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Optional
 
 from sqlalchemy import JSON, DateTime, MetaData, String
 from sqlalchemy.dialects.postgresql import JSONB
@@ -62,8 +62,12 @@ class EventORM(BaseORM):
             message["payload"] = base64.b64decode(message["payload"])
         return Event(self.queue, message)
 
-    def get_message_type(self) -> str:
+    def get_message_type(self) -> Optional[str]:
         """Return the message_type from the payload."""
         headers = self.payload.get("headers", "{}")
         headers_json = json.loads(headers)
-        return str(headers_json.get("type", ""))
+        message_type = str(headers_json.get("type", ""))
+        if message_type == "":
+            return None
+        else:
+            return message_type
