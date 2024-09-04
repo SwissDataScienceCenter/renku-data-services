@@ -153,17 +153,17 @@ class BaseStorageRepository(_Base):
     async def delete_storage(self, storage_id: ULID, user: base_models.APIUser) -> None:
         """Delete a cloud storage entry."""
         async with self.session_maker() as session, session.begin():
-            res = await session.execute(
+            res = await session.scalars(
                 select(schemas.CloudStorageORM).where(schemas.CloudStorageORM.storage_id == storage_id)
             )
             storage = res.one_or_none()
 
             if storage is None:
                 return
-            if not await self.filter_projects_by_access_level(user, [storage[0].project_id], authz_models.Role.OWNER):
+            if not await self.filter_projects_by_access_level(user, [storage.parent_id], authz_models.Role.OWNER):
                 raise errors.ForbiddenError(message="User does not have access to this project")
 
-            await session.delete(storage[0])
+            await session.delete(storage)
 
     async def upsert_storage_secrets(
         self, storage_id: ULID, user: base_models.APIUser, secrets: list[models.CloudStorageSecretUpsert]
