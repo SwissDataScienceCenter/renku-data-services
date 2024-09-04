@@ -32,6 +32,8 @@ from renku_data_services.notebooks.cr_amalthea_session import Item4 as SecretAsV
 from renku_data_services.notebooks.cr_amalthea_session import Model as _ASModel
 from renku_data_services.notebooks.cr_amalthea_session import Resources3 as Resources
 from renku_data_services.notebooks.cr_amalthea_session import Secret1 as SecretAsVolume
+from renku_data_services.notebooks.cr_amalthea_session import SecretRef as SecretRefKey
+from renku_data_services.notebooks.cr_amalthea_session import SecretRef1 as SecretRefWhole
 from renku_data_services.notebooks.cr_amalthea_session import Spec as AmaltheaSessionSpec
 from renku_data_services.notebooks.cr_amalthea_session import Type as AuthenticationType
 from renku_data_services.notebooks.cr_amalthea_session import Type1 as CodeRepositoryType

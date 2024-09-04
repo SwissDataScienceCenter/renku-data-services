@@ -67,7 +67,7 @@ class BaseStorageRepository(_Base):
             stmt = select(schemas.CloudStorageORM)
 
             if project_id is not None:
-                stmt = stmt.where(schemas.CloudStorageORM.project_id == project_id)
+                stmt = stmt.where(schemas.CloudStorageORM.project_id == str(project_id))
             if id is not None:
                 stmt = stmt.where(schemas.CloudStorageORM.storage_id == id)
             if name is not None:
@@ -102,7 +102,9 @@ class BaseStorageRepository(_Base):
 
         return storages[0]
 
-    async def insert_storage(self, storage: models.CloudStorage, user: base_models.APIUser) -> models.SavedCloudStorage:
+    async def insert_storage(
+        self, storage: models.UnsavedCloudStorage, user: base_models.APIUser
+    ) -> models.SavedCloudStorage:
         """Insert a new cloud storage entry."""
         if not await self.filter_projects_by_access_level(user, [storage.project_id], authz_models.Role.OWNER):
             raise errors.ForbiddenError(message="User does not have access to this project")

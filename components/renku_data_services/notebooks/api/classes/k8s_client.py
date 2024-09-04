@@ -351,10 +351,13 @@ class ServerCache(Generic[_SessionType]):
         self.url = url
         self.client = httpx.AsyncClient()
         self.server_type: type[_SessionType] = server_type
+        self.url_path_name = "servers"
+        if server_type == AmaltheaSessionV1Alpha1:
+            self.url_path_name = "sessions"
 
     async def list_servers(self, safe_username: str) -> list[_SessionType]:
         """List the jupyter servers."""
-        url = urljoin(self.url, f"/users/{safe_username}/servers")
+        url = urljoin(self.url, f"/users/{safe_username}/{self.url_path_name}")
         try:
             res = await self.client.get(url, timeout=10)
         except httpx.RequestError as err:
@@ -372,7 +375,7 @@ class ServerCache(Generic[_SessionType]):
 
     async def get_server(self, name: str) -> _SessionType | None:
         """Get a specific jupyter server."""
-        url = urljoin(self.url, f"/servers/{name}")
+        url = urljoin(self.url, f"/{self.url_path_name}/{name}")
         try:
             res = await self.client.get(url, timeout=10)
         except httpx.RequestError as err:
