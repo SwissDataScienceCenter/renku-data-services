@@ -24,6 +24,7 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     SecretRef,
     Session,
     Storage,
+    TlsSecret,
 )
 from renku_data_services.notebooks.cr_amalthea_session import EnvItem2 as SessionEnvItem
 from renku_data_services.notebooks.cr_amalthea_session import Item4 as SecretAsVolumeItem
@@ -167,7 +168,7 @@ class AmaltheaSessionV1Alpha1(_ASModel):
         url = "None"
         if self.status.url is None or self.status.url == "" or self.status.url.lower() == "None":
             if self.spec is not None and self.spec.ingress is not None:
-                scheme = "https" if self.spec.ingress.tlsSecretName is not None else "http"
+                scheme = "https" if self.spec.ingress.tlsSecret is not None else "http"
                 url = urljoin(f"{scheme}://{self.spec.ingress.host}", self.spec.session.urlPath)
         else:
             url = self.status.url

@@ -68,6 +68,7 @@ from renku_data_services.notebooks.crs import (
     Session,
     SessionEnvItem,
     Storage,
+    TlsSecret,
 )
 from renku_data_services.notebooks.errors.intermittent import AnonymousUserPatchError, PVDisabledError
 from renku_data_services.notebooks.errors.programming import ProgrammingError
@@ -864,7 +865,6 @@ class NotebooksNewBP(CustomBlueprint):
             manifest = AmaltheaSessionV1Alpha1(
                 metadata=Metadata(name=server_name, annotations=annotations),
                 spec=AmaltheaSessionSpec(
-                    adoptSecrets=True,
                     codeRepositories=[],
                     dataSources=[],
                     hibernated=False,
@@ -894,7 +894,9 @@ class NotebooksNewBP(CustomBlueprint):
                         host=self.nb_config.sessions.ingress.host,
                         ingressClassName=self.nb_config.sessions.ingress.annotations.get("kubernetes.io/ingress.class"),
                         annotations=self.nb_config.sessions.ingress.annotations,
-                        tlsSecretName=self.nb_config.sessions.ingress.tls_secret,
+                        tlsSecret=TlsSecret(adopt=False, name=self.nb_config.sessions.ingress.tls_secret)
+                        if self.nb_config.sessions.ingress.tls_secret is not None
+                        else None,
                     ),
                     extraContainers=extra_containers,
                     initContainers=session_init_containers,
@@ -911,7 +913,7 @@ class NotebooksNewBP(CustomBlueprint):
                         type=AuthenticationType.oauth2proxy
                         if isinstance(user, AuthenticatedAPIUser)
                         else AuthenticationType.token,
-                        secretRef=SecretRef(name=server_name, key="auth"),
+                        secretRef=SecretRef(name=server_name, key="auth", adopt=True),
                         extraVolumeMounts=[
                             ExtraVolumeMount(name="renku-authorized-emails", mountPath="/authorized_emails")
                         ]
