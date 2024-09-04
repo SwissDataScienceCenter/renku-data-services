@@ -439,6 +439,7 @@ components:
       - registered
       type: object
     ErrorResponse:
+      type: object
       properties:
         error:
           type: object
