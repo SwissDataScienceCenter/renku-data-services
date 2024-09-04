@@ -34,3 +34,26 @@ async def test_log_retrieval(
     _, res = await sanic_client.get(f"/api/data/notebooks/logs/{server_name}", headers=user_headers)
 
     assert res.status_code == expected_status_code, res.text
+
+
+@pytest.mark.asyncio
+async def test_server_options(sanic_client: SanicASGITestClient, user_headers):
+    _, res = await sanic_client.get("/api/data/notebooks/server_options", headers=user_headers)
+
+    assert res.status_code == 200, res.text
+    assert res.json == {
+        "cloudstorage": {"enabled": False},
+        "defaultUrl": {
+            "default": "/lab",
+            "displayName": "Default Environment",
+            "options": ["/lab"],
+            "order": 1,
+            "type": "enum",
+        },
+        "lfs_auto_fetch": {
+            "default": False,
+            "displayName": "Automatically fetch LFS data",
+            "order": 6,
+            "type": "boolean",
+        },
+    }
