@@ -43,7 +43,7 @@ class GroupMemberDetails:
 
     id: str
     role: Role
-    email: str | None = None
+    namespace: str | None = None
     first_name: str | None = None
     last_name: str | None = None
 

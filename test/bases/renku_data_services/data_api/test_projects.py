@@ -615,13 +615,7 @@ async def test_creator_is_added_as_owner_members(sanic_client, create_project, u
 
     assert len(response.json) == 1
     member = response.json[0]
-    assert member == {
-        "id": "user",
-        "email": "user.doe@gmail.com",
-        "first_name": "User",
-        "last_name": "Doe",
-        "role": "owner",
-    }
+    assert member == {"id": "user", "first_name": "User", "last_name": "Doe", "role": "owner", "namespace": "user.doe"}
 
 
 @pytest.mark.asyncio
@@ -687,10 +681,10 @@ async def test_delete_project_members(create_project, sanic_client, user_headers
     assert len(response.json) == 2
     assert {
         "id": "user",
-        "email": "user.doe@gmail.com",
         "first_name": "User",
         "last_name": "Doe",
         "role": "owner",
+        "namespace": "user.doe",
     } in response.json
 
 

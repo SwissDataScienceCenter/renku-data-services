@@ -136,13 +136,18 @@ class GroupRepository:
         members_dict = {i.user_id: i for i in members}
         stmt = select(user_schemas.UserORM).where(user_schemas.UserORM.keycloak_id.in_(members_dict.keys()))
         result = await session.scalars(stmt)
+
+        namespaces_stmt = select(schemas.NamespaceORM).where(schemas.NamespaceORM.user_id.in_(members_dict.keys()))
+        namespaces_result = await session.scalars(namespaces_stmt)
+        namespaces_dict = {ns.user_id: ns for ns in namespaces_result}
+
         return [
             models.GroupMemberDetails(
                 id=member.keycloak_id,
                 role=members_dict[member.keycloak_id].role,
-                email=member.email,
                 first_name=member.first_name,
                 last_name=member.last_name,
+                namespace=namespaces_dict[member.keycloak_id].slug,
             )
             for member in result
         ]

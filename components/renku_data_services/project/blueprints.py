@@ -240,10 +240,11 @@ class ProjectsBP(CustomBlueprint):
                 if not user_with_namespace:
                     raise errors.MissingResourceError(message=f"The user with ID {user_id} cannot be found.")
                 user_info = user_with_namespace.user
+                namespace_info = user_with_namespace.namespace
 
                 user_with_id = apispec.ProjectMemberResponse(
                     id=user_id,
-                    email=user_info.email,
+                    namespace=namespace_info.slug,
                     first_name=user_info.first_name,
                     last_name=user_info.last_name,
                     role=apispec.Role(member.role.value),
