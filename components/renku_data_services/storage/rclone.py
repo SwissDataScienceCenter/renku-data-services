@@ -246,6 +246,16 @@ class RCloneValidator:
                 continue
             raise errors.ValidationError(message=f"The '{key}' property is not marked as sensitive.")
 
+    def get_real_config(self, configuration: Union["RCloneConfig", dict[str, Any]]) -> dict[str, Any]:
+        """Converts a Renku rclone configuration to a real rclone config."""
+        real_config = dict(configuration)
+        if configuration["type"] == "openbis":
+            real_config["type"] = "sftp"
+            real_config["port"] = "2222"
+            real_config["user"] = "?"
+            real_config["pass"] = real_config.pop("session_token")
+        return real_config
+
     async def test_connection(
         self, configuration: Union["RCloneConfig", dict[str, Any]], source_path: str
     ) -> ConnectionResult:
@@ -255,15 +265,17 @@ class RCloneValidator:
         except errors.ValidationError as e:
             return ConnectionResult(False, str(e))
 
-        obscured_config = await self.obscure_config(configuration)
+        obscured_rclone_config = await self.obscure_config(self.get_real_config(configuration))
 
         with tempfile.NamedTemporaryFile(mode="w+", delete=False, encoding="utf-8") as f:
-            config = "\n".join(f"{k}={v}" for k, v in obscured_config.items())
-            f.write(f"[temp]\n{config}")
+            obscured_rclone_config_string = "\n".join(f"{k}={v}" for k, v in obscured_rclone_config.items())
+            f.write(f"[temp]\n{obscured_rclone_config_string}")
             f.close()
             proc = await asyncio.create_subprocess_exec(
                 "rclone",
                 "lsf",
+                "--low-level-retries=1",  # Connection tests should fail fast.
+                "--retries=1",  # Connection tests should fail fast.
                 "--config",
                 f.name,
                 f"temp:{source_path}",
