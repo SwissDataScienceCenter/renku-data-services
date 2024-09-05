@@ -75,6 +75,7 @@ def create_openbis_storage(sanic_client, user_headers, admin_headers, create_pro
             "configuration": {
                 "type": "openbis",
                 "host": "openbis-eln-lims.ethz.ch",  # Public openBIS demo instance.
+                "session_token": "dummy",
             },
             "source_path": "/",
             "target_path": "my/target",
@@ -408,6 +409,13 @@ async def test_storage_v2_create_secret(
 async def test_storage_v2_create_openbis_secret(
     sanic_client, create_openbis_storage, project_normal_member_headers, project_owner_member_headers
 ) -> None:
+    with pytest.raises(Exception, match="No session token was returned. Username and password may be incorrect."):
+        await get_openbis_session_token(
+            host="openbis-eln-lims.ethz.ch",  # Public openBIS demo instance.
+            username="invalid",
+            password="",
+        )
+
     storage = await create_openbis_storage()
     storage_id = storage["storage"]["storage_id"]
     openbis_session_token = await get_openbis_session_token(

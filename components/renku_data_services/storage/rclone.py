@@ -141,6 +141,13 @@ class RCloneValidator:
                         "Provider": "",
                         "Default": "",
                         "Value": None,
+                        "Examples": [
+                            {
+                                "Value": "openbis-eln-lims.ethz.ch",
+                                "Help": "Public openBIS demo instance",
+                                "Provider": "",
+                            },
+                        ],
                         "ShortOpt": "",
                         "Hide": 0,
                         "Required": True,
@@ -225,6 +232,19 @@ class RCloneValidator:
         provider = self.get_provider(configuration)
 
         provider.validate_config(configuration, keep_sensitive=keep_sensitive)
+
+    def validate_sensitive_data(
+        self, configuration: Union["RCloneConfig", dict[str, Any]], sensitive_data: dict[str, str]
+    ) -> None:
+        """Validates whether the provided sensitive data is marked as sensitive in the rclone schema."""
+        sensitive_options = self.get_provider(configuration).sensitive_options
+        sensitive_options_name_lookup = [o.name for o in sensitive_options]
+        sensitive_data_counter = 0
+        for key, value in sensitive_data.items():
+            if len(value) > 0 and key in sensitive_options_name_lookup:
+                sensitive_data_counter += 1
+                continue
+            raise errors.ValidationError(message=f"The '{key}' property is not marked as sensitive.")
 
     async def test_connection(
         self, configuration: Union["RCloneConfig", dict[str, Any]], source_path: str
@@ -416,7 +436,7 @@ class RCloneProviderSchema(BaseModel):
     @property
     def required_options(self) -> list[RCloneOption]:
         """Returns all required options for this provider."""
-        return [o for o in self.options if o.required and not o.sensitive]
+        return [o for o in self.options if o.required]
 
     @property
     def sensitive_options(self) -> list[RCloneOption]:

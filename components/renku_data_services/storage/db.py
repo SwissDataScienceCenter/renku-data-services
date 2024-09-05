@@ -188,16 +188,15 @@ class BaseStorageRepository(_Base):
             existing_secrets = {s.name: s for s in existing_storage_secrets_orm}
             stored_secrets = []
 
-            secret_names_values = {s.name: s.value for s in secrets}
-            for name, value in secret_names_values.items():
+            for secret in secrets:
                 encrypted_value, encrypted_key = await encrypt_user_secret(
                     user_repo=self.user_repo,
                     requested_by=user,
                     secret_service_public_key=self.secret_service_public_key,
-                    secret_value=value,
+                    secret_value=secret.value,
                 )
 
-                if storage_secret_orm := existing_secrets.get(name):
+                if storage_secret_orm := existing_secrets.get(secret.name):
                     storage_secret_orm.secret.update(
                         encrypted_value=encrypted_value,
                         encrypted_key=encrypted_key,
@@ -205,7 +204,7 @@ class BaseStorageRepository(_Base):
                     )
                 else:
                     secret_orm = secrets_schemas.SecretORM(
-                        name=f"{storage_id}-{name}",
+                        name=f"{storage_id}-{secret.name}",
                         user_id=cast(str, user.id),
                         encrypted_value=encrypted_value,
                         encrypted_key=encrypted_key,
@@ -217,7 +216,7 @@ class BaseStorageRepository(_Base):
                     storage_secret_orm = schemas.CloudStorageSecretsORM(
                         user_id=cast(str, user.id),
                         storage_id=storage_id,
-                        name=name,
+                        name=secret.name,
                         secret_id=secret_orm.id,
                     )
                     session.add(storage_secret_orm)
