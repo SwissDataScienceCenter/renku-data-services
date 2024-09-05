@@ -107,8 +107,13 @@ async def get_openbis_session_token(
     login = {"method": "login", "params": [username, password], "id": "2", "jsonrpc": "2.0"}
     async with httpx.AsyncClient(verify=get_ssl_context()) as client:
         response = await client.post(_get_url(host), json=login, timeout=timeout)
-        json: dict[str, str] = response.json()
-        return json["result"]
+        if response.status_code == 200:
+            json: dict[str, str] = response.json()
+            if "result" in json:
+                return json["result"]
+            raise Exception("No session token was returned. Username and password may be incorrect.")
+
+        raise Exception("An openBIS session token related request failed.")
 
 
 async def get_openbis_pat(
