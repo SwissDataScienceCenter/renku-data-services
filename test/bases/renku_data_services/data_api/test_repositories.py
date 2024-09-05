@@ -76,6 +76,23 @@ def create_oauth2_connection(oauth2_test_client: SanicASGITestClient, user_heade
 
 
 @pytest.mark.asyncio
+async def test_get_repository_without_connection(
+    oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_provider
+):
+    """Test getting internal Gitlab repository."""
+    await create_oauth2_provider("provider_1")
+    repository_url = "https://example.org/username/my_repo.git"
+
+    _, res = await oauth2_test_client.get(f"/api/data/repositories/{quote_plus(repository_url)}", headers=user_headers)
+
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    result = res.json
+    assert result.get("provider_id") == "provider_1"
+    assert "connection_id" not in result
+
+
+@pytest.mark.asyncio
 async def test_get_one_repository(oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_connection):
     connection = await create_oauth2_connection("provider_1")
     repository_url = "https://example.org/username/my_repo.git"

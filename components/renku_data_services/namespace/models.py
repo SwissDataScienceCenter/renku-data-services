@@ -9,16 +9,23 @@ from ulid import ULID
 from renku_data_services.authz.models import Role
 
 
-@dataclass
-class Group:
+@dataclass(kw_only=True)
+class UnsavedGroup:
     """Renku group."""
 
     slug: str
     name: str
+    description: str | None = None
+
+
+@dataclass(kw_only=True)
+class Group(UnsavedGroup):
+    """Renku group stored in the database."""
+
     created_by: str
     creation_date: datetime
-    description: str | None = None
-    id: ULID | None = None
+
+    id: ULID
 
 
 @dataclass

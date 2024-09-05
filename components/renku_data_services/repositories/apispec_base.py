@@ -17,8 +17,10 @@ class BaseAPISpec(BaseModel):
 
     @field_validator("connection_id", mode="before", check_fields=False)
     @classmethod
-    def serialize_connection_id(cls, connection_id: str | ULID) -> str:
+    def serialize_connection_id(cls, connection_id: str | ULID | None) -> str | None:
         """Custom serializer that can handle ULIDs."""
+        if connection_id is None:
+            return None
         return str(connection_id)
 
 
