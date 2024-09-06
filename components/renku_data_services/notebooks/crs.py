@@ -23,6 +23,7 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     InitContainer,
     SecretRef,
     Session,
+    State,
     Storage,
     TlsSecret,
 )
@@ -185,7 +186,7 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             name=self.metadata.name,
             resources=apispec.SessionResources(
                 requests=apispec.SessionResourcesRequests.model_validate(
-                    self.spec.session.resources.requests, from_attributes=True
+                    self.get_compute_resources(), from_attributes=True
                 )
                 if self.spec.session.resources.requests is not None
                 else None,
