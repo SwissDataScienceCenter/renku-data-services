@@ -79,7 +79,7 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
         """Get the logs of all containers in the session."""
         pod = cast(Pod, await Pod.get(name=name, namespace=self.namespace))
         logs: dict[str, str] = {}
-        containers = [i.name for i in pod.spec.containers] + [i.name for i in pod.spec.initContainers]
+        containers = [container.name for container in pod.spec.containers + pod.spec.get("initContainers", [])]
         for container in containers:
             try:
                 # NOTE: calling pod.logs without a container name set crashes the library

@@ -1,8 +1,15 @@
 """Tests for notebook blueprints."""
 
 import pytest
+from kr8s.objects import Pod, new_class
 from pytest_httpx import HTTPXMock
 from sanic_testing.testing import SanicASGITestClient
+
+JupyterServer = new_class(
+    kind="JupyterServer",
+    version="amalthea.dev/v1alpha1",
+    namespaced=True,
+)
 
 
 @pytest.fixture
@@ -10,6 +17,45 @@ def non_mocked_hosts() -> list:
     """Hosts that should not get mocked during tests."""
 
     return ["127.0.0.1"]
+
+
+@pytest.fixture(scope="module")
+def jupyter_server():
+    """Fake server to have the minimal set of objects for tests"""
+
+    session_name = "test-session"
+
+    jupyter_server = JupyterServer(
+        {
+            "metadata": {"name": session_name, "labels": {"renku.io/safe-username": "user"}},
+            "spec": {"jupyterServer": {"image": "debian/bookworm"}},
+        }
+    )
+
+    pod = Pod(
+        {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {"name": f"{session_name}-0", "labels": {"renku.io/safe-username": "user"}},
+            "spec": {
+                "containers": [
+                    {
+                        "name": "main",
+                        "image": "alpine:3",
+                        "command": ["sh", "-c", 'echo "Hello, Kubernetes!" && sleep 3600'],
+                    }
+                ],
+            },
+        }
+    )
+
+    pod.create()
+    pod.wait("condition=Ready")
+
+    jupyter_server.create()
+    yield session_name
+    pod.delete()
+    jupyter_server.delete()
 
 
 @pytest.mark.asyncio
@@ -23,9 +69,14 @@ async def test_check_docker_image(sanic_client: SanicASGITestClient, user_header
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("server_name,expected_status_code", [("unknown", 404)])
+@pytest.mark.parametrize("server_name,expected_status_code", [("unknown", 404), ("test-session", 200)])
 async def test_log_retrieval(
-    sanic_client: SanicASGITestClient, httpx_mock: HTTPXMock, user_headers, server_name, expected_status_code
+    sanic_client: SanicASGITestClient,
+    httpx_mock: HTTPXMock,
+    user_headers,
+    server_name,
+    expected_status_code,
+    jupyter_server,
 ):
     """Validate that the logs endpoint answers correctly"""
 
