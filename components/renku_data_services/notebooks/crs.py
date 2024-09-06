@@ -55,6 +55,7 @@ class Metadata(BaseModel):
     annotations: dict[str, str] = Field(default_factory=dict)
     uid: str | None = None
     creationTimestamp: datetime | None = None
+    deletionTimestamp: datetime | None = None
 
 
 class ComputeResources(BaseModel):
@@ -181,6 +182,16 @@ class AmaltheaSessionV1Alpha1(_ASModel):
         if self.status.containerCounts is not None:
             ready_containers += self.status.containerCounts.ready or 0
             total_containers += self.status.containerCounts.total or 0
+
+        if self.status.state in [State.Running, State.Hibernated, State.Failed]:
+            state = apispec.State3(self.status.state.value.lower())
+        elif self.status.state == State.RunningDegraded:
+            state = apispec.State3.running
+        elif self.status.state == State.NotReady and self.metadata.deletionTimestamp is not None:
+            state = apispec.State3.stopping
+        else:
+            state = apispec.State3.starting
+
         return apispec.SessionResponse(
             image=self.spec.session.image,
             name=self.metadata.name,
@@ -193,7 +204,7 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             ),
             started=self.metadata.creationTimestamp,
             status=apispec.SessionStatus(
-                state=apispec.State3.running,
+                state=state,
                 ready_containers=ready_containers,
                 total_containers=total_containers,
             ),
