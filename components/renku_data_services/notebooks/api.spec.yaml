@@ -977,7 +977,6 @@ components:
         gpu:
           type: integer
           description: Number of GPUs used
-          default: 0
         memory:
           type: integer
           description: Ammount of RAM for the session, in gigabytes

@@ -67,6 +67,7 @@ from renku_data_services.notebooks.crs import (
     SecretRef,
     Session,
     SessionEnvItem,
+    State,
     Storage,
     TlsSecret,
 )
@@ -996,3 +997,82 @@ class NotebooksNewBP(CustomBlueprint):
             return empty()
 
         return "/sessions/<session_id>", ["DELETE"], _handler
+
+    def patch(self) -> BlueprintFactoryResponse:
+        """Patch a session."""
+
+        @authenticated_or_anonymous(self.authenticator)
+        @validate(json=apispec.SessionPatchRequest)
+        async def _handler(
+            _: Request,
+            user: AuthenticatedAPIUser | AnonymousAPIUser,
+            session_id: str,
+            body: apispec.SessionPatchRequest,
+        ) -> HTTPResponse:
+            session = await self.nb_config.k8s_v2_client.get_server(session_id, user.id)
+            if session is None:
+                raise errors.MissingResourceError(
+                    message=f"The sesison with ID {session_id} does not exist", quiet=True
+                )
+            # TODO: Some patching should only be done when the session is in some states to avoid inadvertent restarts
+            patches: dict[str, Any] = {}
+            if body.resource_class_id is not None:
+                rcs = await self.rp_repo.get_classes(user, id=body.resource_class_id)
+                if len(rcs) == 0:
+                    raise errors.MissingResourceError(
+                        message=f"The resource class you requested with ID {body.resource_class_id} does not exist",
+                        quiet=True,
+                    )
+                rc = rcs[0]
+                patches |= dict(
+                    spec=dict(
+                        session=dict(
+                            resources=dict(requests=dict(cpu=f"{round(rc.cpu * 1000)}m", memory=f"{rc.memory}Gi"))
+                        )
+                    )
+                )
+                # TODO: Add a config to specifiy the gpu kind, there is also GpuKind enum in reosurce_pools
+                patches["spec"]["session"]["resources"]["requests"]["nvidia.com/gpu"] = rc.gpu
+                # NOTE: K8s fails if the gpus limit is not equal to the requests because it cannot be overcommited
+                patches["spec"]["session"]["resources"]["limits"] = {"nvidia.com/gpu": rc.gpu}
+            if (
+                body.state is not None
+                and body.state.value.lower() == State.Hibernated.value.lower()
+                and body.state.value.lower() != session.status.state.value.lower()
+            ):
+                if "spec" not in patches:
+                    patches["spec"] = {}
+                patches["spec"]["hibernated"] = True
+            elif (
+                body.state is not None
+                and body.state.value.lower() == State.Running.value.lower()
+                and session.status.state.value.lower() != body.state.value.lower()
+            ):
+                if "spec" not in patches:
+                    patches["spec"] = {}
+                patches["spec"]["hibernated"] = False
+
+            if len(patches) > 0:
+                new_session = await self.nb_config.k8s_v2_client.patch_server(session_id, user.id, patches)
+            else:
+                new_session = session
+
+            return json(new_session.as_apispec().model_dump(exclude_none=True, mode="json"))
+
+        return "/sessions/<session_id>", ["PATCH"], _handler
+
+    def logs(self) -> BlueprintFactoryResponse:
+        """Get logs from the session."""
+
+        @authenticated_or_anonymous(self.authenticator)
+        @validate(query=apispec.SessionsSessionIdLogsGetParametersQuery)
+        async def _handler(
+            _: Request,
+            user: AuthenticatedAPIUser | AnonymousAPIUser,
+            session_id: str,
+            query: apispec.SessionsSessionIdLogsGetParametersQuery,
+        ) -> HTTPResponse:
+            logs = await self.nb_config.k8s_v2_client.get_server_logs(session_id, user.id, query.max_lines)
+            return json(apispec.SessionLogsResponse.model_validate(logs).model_dump_json(exclude_none=True))
+
+        return "/sessions/<session_id>/logs", ["GET"], _handler

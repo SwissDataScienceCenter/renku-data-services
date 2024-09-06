@@ -463,7 +463,7 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
         self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> _SessionType:
         """Patch a server."""
-        server = self.get_server(server_name, safe_username)
+        server = await self.get_server(server_name, safe_username)
         if not server:
             raise MissingResourceError(
                 f"Cannot find server {server_name} for user " f"{safe_username} in order to patch it."
