@@ -701,7 +701,10 @@ class NotebooksBP(CustomBlueprint):
         async def _stop_server(
             request: Request, user: AnonymousAPIUser | AuthenticatedAPIUser, server_name: str
         ) -> HTTPResponse:
-            await self.nb_config.k8s_client.delete_server(server_name, safe_username=user.id)
+            try:
+                await self.nb_config.k8s_client.delete_server(server_name, safe_username=user.id)
+            except MissingResourceError as err:
+                raise exceptions.NotFound(message=err.message)
             return HTTPResponse(status=204)
 
         return "/notebooks/servers/<server_name>", ["DELETE"], _stop_server
