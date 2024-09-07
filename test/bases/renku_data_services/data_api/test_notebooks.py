@@ -59,6 +59,24 @@ def jupyter_server():
 
 
 @pytest.fixture()
+def dummy_jupyter_server():
+    """Dummy server for non pod related tests"""
+
+    session_name = "dummy-server"
+
+    jupyter_server = JupyterServer(
+        {
+            "metadata": {"name": session_name, "labels": {"renku.io/safe-username": "user"}},
+            "spec": {"jupyterServer": {"image": "debian/bookworm"}},
+        }
+    )
+
+    jupyter_server.create()
+    yield session_name
+    jupyter_server.delete()  # policy="foreground")
+
+
+@pytest.fixture()
 def authenticated_user_headers(user_headers):
     return dict({"Renku-Auth-Refresh-Token": "test-refresh-token"}, **user_headers)
 
@@ -66,7 +84,10 @@ def authenticated_user_headers(user_headers):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("image,expected_status_code", [("python:3.12", 200), ("shouldnotexist:0.42", 404)])
 async def test_check_docker_image(sanic_client: SanicASGITestClient, user_headers, image, expected_status_code):
-    """Validate that the images endpoint answers correctly."""
+    """Validate that the images endpoint answers correctly.
+
+    Needs the responses package in case docker queries must be mocked
+    """
 
     _, res = await sanic_client.get(f"/api/data/notebooks/images/?image_url={image}", headers=user_headers)
 
@@ -114,3 +135,21 @@ async def test_server_options(sanic_client: SanicASGITestClient, user_headers):
             "type": "boolean",
         },
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("server_name,expected_status_code", [("unknown", 404), ("dummy-server", 204)])
+async def test_stop_server(
+    sanic_client: SanicASGITestClient,
+    user_headers,
+    server_name,
+    expected_status_code,
+    dummy_jupyter_server,
+    authenticated_user_headers,
+    httpx_mock,
+):
+    httpx_mock.add_response(url=f"http://not.specified/servers/{server_name}", json={}, status_code=400)
+
+    _, res = await sanic_client.delete(f"/api/data/notebooks/servers/{server_name}", headers=authenticated_user_headers)
+
+    assert res.status_code == expected_status_code, res.text
