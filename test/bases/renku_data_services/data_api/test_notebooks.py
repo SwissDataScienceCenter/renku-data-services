@@ -58,6 +58,11 @@ def jupyter_server():
     jupyter_server.delete()
 
 
+@pytest.fixture()
+def authenticated_user_headers(user_headers):
+    return dict({"Renku-Auth-Refresh-Token": "test-refresh-token"}, **user_headers)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("image,expected_status_code", [("python:3.12", 200), ("shouldnotexist:0.42", 404)])
 async def test_check_docker_image(sanic_client: SanicASGITestClient, user_headers, image, expected_status_code):
@@ -77,12 +82,13 @@ async def test_log_retrieval(
     server_name,
     expected_status_code,
     jupyter_server,
+    authenticated_user_headers,
 ):
     """Validate that the logs endpoint answers correctly"""
 
-    httpx_mock.add_response(url=f"http://not.specified/servers/{server_name}", json={}, status_code=200)
+    httpx_mock.add_response(url=f"http://not.specified/servers/{server_name}", json={}, status_code=400)
 
-    _, res = await sanic_client.get(f"/api/data/notebooks/logs/{server_name}", headers=user_headers)
+    _, res = await sanic_client.get(f"/api/data/notebooks/logs/{server_name}", headers=authenticated_user_headers)
 
     assert res.status_code == expected_status_code, res.text
 
