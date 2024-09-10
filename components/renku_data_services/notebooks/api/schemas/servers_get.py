@@ -124,7 +124,7 @@ class LaunchNotebookResponseWithoutStorage(Schema):
 
         unknown = EXCLUDE
 
-    annotations = fields.Nested(_ServersGetEndpointAnnotations)
+    annotations = fields.Nested(_ServersGetEndpointAnnotations().schema)
     name = fields.Str()
     state = fields.Dict()
     started = fields.DateTime(format="iso", allow_none=True)

@@ -684,8 +684,11 @@ class NotebooksBP(CustomBlueprint):
                     server_name=server_name, safe_username=user.id, patch=patch
                 )
 
+            manifest = UserServerManifest(new_server, self.nb_config.sessions.default_image)
+            notebook_response = apispec.NotebookResponse().parse_obj(manifest)
             return json(
-                NotebookResponse().dump(UserServerManifest(new_server, self.nb_config.sessions.default_image)), 200
+                notebook_response.model_dump(),
+                200,
             )
 
         return "/notebooks/servers/<server_name>", ["PATCH"], _patch_server
