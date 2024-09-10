@@ -66,7 +66,18 @@ def dummy_jupyter_server():
 
     jupyter_server = JupyterServer(
         {
-            "metadata": {"name": session_name, "labels": {"renku.io/safe-username": "user"}},
+            "metadata": {
+                "name": session_name,
+                "labels": {"renku.io/safe-username": "user"},
+                "annotations": {
+                    "renku.io/branch": "dummy",
+                    "renku.io/commit-sha": "sha",
+                    "renku.io/default_image_used": "default/image",
+                    "renku.io/namespace": "default",
+                    "renku.io/projectName": "dummy",
+                    "renku.io/repository": "dummy",
+                },
+            },
             "spec": {"jupyterServer": {"image": "debian/bookworm"}},
         }
     )
@@ -99,7 +110,6 @@ async def test_check_docker_image(sanic_client: SanicASGITestClient, user_header
 async def test_log_retrieval(
     sanic_client: SanicASGITestClient,
     httpx_mock: HTTPXMock,
-    user_headers,
     server_name,
     expected_status_code,
     jupyter_server,
@@ -141,7 +151,6 @@ async def test_server_options(sanic_client: SanicASGITestClient, user_headers):
 @pytest.mark.parametrize("server_name,expected_status_code", [("unknown", 404), ("dummy-server", 204)])
 async def test_stop_server(
     sanic_client: SanicASGITestClient,
-    user_headers,
     server_name,
     expected_status_code,
     dummy_jupyter_server,
@@ -152,4 +161,27 @@ async def test_stop_server(
 
     _, res = await sanic_client.delete(f"/api/data/notebooks/servers/{server_name}", headers=authenticated_user_headers)
 
+    assert res.status_code == expected_status_code, res.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "server_name,expected_status_code, patch", [("unknown", 404, {}), ("dummy-server", 200, {"state": "hibernated"})]
+)
+async def test_patch_server(
+    sanic_client: SanicASGITestClient,
+    server_name,
+    expected_status_code,
+    patch,
+    dummy_jupyter_server,
+    authenticated_user_headers,
+    httpx_mock,
+):
+    httpx_mock.add_response(url=f"http://not.specified/servers/{server_name}", json={}, status_code=400)
+
+    _, res = await sanic_client.patch(
+        f"/api/data/notebooks/servers/{server_name}", json=patch, headers=authenticated_user_headers
+    )
+
+    # import pdb;pdb.set_trace()
     assert res.status_code == expected_status_code, res.text
