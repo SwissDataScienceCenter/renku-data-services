@@ -56,6 +56,7 @@ class ProjectsBP(CustomBlueprint):
                     slug=p.slug,
                     creation_date=p.creation_date.isoformat(),
                     created_by=p.created_by,
+                    updated_at=p.updated_at.isoformat() if p.updated_at else None,
                     repositories=p.repositories,
                     visibility=p.visibility.value,
                     description=p.description,
