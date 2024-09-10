@@ -41,8 +41,7 @@ def dispatch_message(
 ]:
     """Sends a message on the message queue.
 
-    The transform method is called with the arguments and result of the wrapped method. It is responsible for
-    creating the message type to dispatch. The message is sent based on the return type of the transform method.
+    A message is created based on the event type and result of the wrapped method.
     Messages are stored in the database in the same transaction as the changed entities, and are sent by a background
     job to ensure delivery of messages and prevent messages being sent in case of failing transactions or due to
     exceptions.
