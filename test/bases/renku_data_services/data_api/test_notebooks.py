@@ -1,5 +1,6 @@
 """Tests for notebook blueprints."""
 
+import re
 from unittest.mock import MagicMock
 
 import pytest
@@ -239,6 +240,30 @@ async def test_old_start_server(sanic_client: SanicASGITestClient, authenticated
     }
 
     _, res = await sanic_client.post("/api/data/notebooks/old/servers/", json=data, headers=authenticated_user_headers)
+
+    assert res.status_code == 201, res.text
+
+    server_name = res.json["name"]
+    _, res = await sanic_client.delete(f"/api/data/notebooks/servers/{server_name}", headers=authenticated_user_headers)
+
+    assert res.status_code == 204, res.text
+
+
+@pytest.mark.asyncio
+async def test_start_server(
+    sanic_client: SanicASGITestClient, httpx_mock: HTTPXMock, authenticated_user_headers, fake_gitlab
+):
+    httpx_mock.add_response(url=re.compile("http://not\\.specified/servers/.*"), json={}, status_code=400)
+
+    data = {
+        "branch": "main",
+        "commit_sha": "ee4b1c9fedc99abe5892ee95320bbd8471c5985b",
+        "project_id": "test-namespace/my-test",
+        "launcher_id": "test_launcher",
+        "image": "python:3.12-slim",
+    }
+
+    _, res = await sanic_client.post("/api/data/notebooks/servers/", json=data, headers=authenticated_user_headers)
 
     assert res.status_code == 201, res.text
 
