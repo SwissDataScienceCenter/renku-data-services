@@ -1,21 +1,21 @@
 """Cloud storage app."""
 
 from dataclasses import dataclass
+from json import dumps as json_dumps
 from typing import Any
 
-from renku_data_services.connected_services.db import ConnectedServicesRepository
 from sanic import HTTPResponse, Request, empty, json
 from sanic.log import logger
 from sanic.response import JSONResponse
 from sanic_ext import validate
 from ulid import ULID
-from json import dumps as json_dumps
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_query
+from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.storage import apispec, models
 from renku_data_services.storage.db import StorageRepository, StorageV2Repository
 from renku_data_services.storage.rclone import RCloneValidator
@@ -256,10 +256,12 @@ class StoragesV2BP(CustomBlueprint):
                 storage = models.UnsavedCloudStorage.from_dict(body.model_dump())
 
             logger.info(storage.configuration.config)
-            if storage.configuration["type"] == "drive":
+            if storage.configuration["type"] in ["drive", "onedrive", "dropbox"]:
                 connections = await self.connected_services_repo.get_oauth2_connections(user=user)
                 logger.info(connections)
-                drive_connection = next((c for c in connections if c.provider_id == "drive"), None)
+                drive_connection = next(
+                    (c for c in connections if c.provider_id == storage.configuration["type"]), None
+                )
                 if drive_connection:
                     logger.info(drive_connection)
                     token = await self.connected_services_repo.get_oauth2_connection_token(

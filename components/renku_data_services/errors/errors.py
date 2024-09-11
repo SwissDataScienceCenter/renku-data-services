@@ -46,6 +46,16 @@ class UnauthorizedError(BaseError):
 
 
 @dataclass
+class InvalidOAuth2Token(BaseError):
+    """Raised when a token for a connected service is invalid."""
+
+    code: int = 1401
+    message: str = "OAuth2 token for connected service invalid or expired."
+    status_code: int = 401
+    quiet: bool = True
+
+
+@dataclass
 class ForbiddenError(BaseError):
     """Raised when the provided credentials do not grant permission for the current operation."""
 

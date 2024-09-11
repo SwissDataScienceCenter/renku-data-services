@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from typing import Any, cast
 from urllib.parse import urljoin
 
+from authlib.integrations.base_client import InvalidTokenError
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from sanic.log import logger
 from sqlalchemy import select
@@ -309,11 +310,20 @@ class ConnectedServicesRepository:
         """Get the account information from a OAuth2 connection."""
         async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (oauth2_client, _, adapter):
             request_url = urljoin(adapter.api_url, adapter.user_info_endpoint)
-            response = await oauth2_client.get(request_url, headers=adapter.api_common_headers)
+            try:
+                if adapter.user_info_method == "POST":
+                    response = await oauth2_client.post(request_url, headers=adapter.api_common_headers)
+
+                else:
+                    response = await oauth2_client.get(request_url, headers=adapter.api_common_headers)
+            except InvalidTokenError as e:
+                raise errors.InvalidOAuth2Token() from e
 
             if response.status_code > 200:
+                logger.info(response.text)
                 raise errors.UnauthorizedError(message=f"Could not get account information.{response.json()}")
 
+            logger.info(f"Got identity response with fields: {response.json().keys()}")
             account = adapter.api_validate_account_response(response)
             return account
 

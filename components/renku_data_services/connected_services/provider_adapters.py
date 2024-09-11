@@ -15,6 +15,7 @@ class ProviderAdapter(ABC):
     """Defines the functionality of OAuth2 client adapters."""
 
     user_info_endpoint = "user"
+    user_info_method = "GET"
 
     def __init__(self, client_url: str) -> None:
         self.client_url = client_url
@@ -147,10 +148,89 @@ class GoogleDriveAdapter(ProviderAdapter):
         return external_models.GoogleDriveConnectedAccount.model_validate(response.json()).to_connected_account()
 
 
+class OneDriveAdapter(ProviderAdapter):
+    """Adapter for One Drive OAuth2 clients."""
+
+    user_info_endpoint = "userinfo"
+
+    @property
+    def authorization_url(self) -> str:
+        """The authorization URL for the OAuth2 protocol."""
+        return "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+
+    @property
+    def authorization_url_extra_params(self) -> dict[str, str]:
+        """Extra parameters to add to the auth url."""
+        return {"access_type": "offline"}
+
+    @property
+    def token_endpoint_url(self) -> str:
+        """The token endpoint URL for the OAuth2 protocol."""
+        return "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+
+    @property
+    def api_url(self) -> str:
+        """The URL used for API calls on the Resource Server."""
+        return "https://graph.microsoft.com/oidc/"
+
+    @property
+    def api_common_headers(self) -> dict[str, str] | None:
+        """The HTTP headers used for API calls on the Resource Server."""
+        return {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+
+    def api_validate_account_response(self, response: Response) -> models.ConnectedAccount:
+        """Validates and returns the connected account response from the Resource Server."""
+        return external_models.OneDriveConnectedAccount.model_validate(response.json()).to_connected_account()
+
+
+class DropboxAdapter(ProviderAdapter):
+    """Adapter for Dropbox OAuth2 clients."""
+
+    user_info_endpoint = "userinfo"
+    user_info_method = "POST"
+
+    @property
+    def authorization_url(self) -> str:
+        """The authorization URL for the OAuth2 protocol."""
+        return "https://www.dropbox.com/oauth2/authorize"
+
+    @property
+    def authorization_url_extra_params(self) -> dict[str, str]:
+        """Extra parameters to add to the auth url."""
+        return {"access_type": "offline"}
+
+    @property
+    def token_endpoint_url(self) -> str:
+        """The token endpoint URL for the OAuth2 protocol."""
+        return "https://api.dropboxapi.com/oauth2/token"
+
+    @property
+    def api_url(self) -> str:
+        """The URL used for API calls on the Resource Server."""
+        return "https://api.dropboxapi.com/2/openid/"
+
+    @property
+    def api_common_headers(self) -> dict[str, str] | None:
+        """The HTTP headers used for API calls on the Resource Server."""
+        return {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+
+    def api_validate_account_response(self, response: Response) -> models.ConnectedAccount:
+        """Validates and returns the connected account response from the Resource Server."""
+        return external_models.DropboxConnectedAccount.model_validate(response.json()).to_connected_account()
+
+
 _adapter_map: dict[ProviderKind, type[ProviderAdapter]] = {
     ProviderKind.gitlab: GitLabAdapter,
     ProviderKind.github: GitHubAdapter,
     ProviderKind.drive: GoogleDriveAdapter,
+    ProviderKind.onedrive: OneDriveAdapter,
+    ProviderKind.dropbox: DropboxAdapter,
 }
 
 

@@ -3438,7 +3438,7 @@
         "NoPrefix": false,
         "Advanced": true,
         "Exclusive": false,
-        "Sensitive": true,
+        "Sensitive": false,
         "DefaultStr": "",
         "ValueStr": "",
         "Type": "string"
@@ -7425,7 +7425,7 @@
         "NoPrefix": false,
         "Advanced": true,
         "Exclusive": false,
-        "Sensitive": true,
+        "Sensitive": false,
         "DefaultStr": "",
         "ValueStr": "",
         "Type": "string"

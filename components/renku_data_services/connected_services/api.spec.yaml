@@ -320,6 +320,8 @@ components:
         - "gitlab"
         - "github"
         - "drive"
+        - "onedrive"
+        - "dropbox"
       example: "gitlab"
     ClientId:
       description: |
