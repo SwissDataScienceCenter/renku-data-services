@@ -30,7 +30,7 @@ def session_tolerations(server: "UserServer") -> list[dict[str, Any]]:
                     "op": "add",
                     "path": "/statefulset/spec/template/spec/tolerations",
                     "value": default_tolerations
-                    + [i.json_match_expression() for i in server.server_options.tolerations],
+                    + [toleration.json_match_expression() for toleration in server.server_options.tolerations],
                 }
             ],
         }

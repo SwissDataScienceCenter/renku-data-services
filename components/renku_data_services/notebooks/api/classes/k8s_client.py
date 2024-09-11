@@ -83,7 +83,7 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
         for container in containers:
             try:
                 # NOTE: calling pod.logs without a container name set crashes the library
-                clogs: list[str] = [i async for i in pod.logs(container=container, tail_lines=max_log_lines)]
+                clogs: list[str] = [clog async for clog in pod.logs(container=container, tail_lines=max_log_lines)]
             except NotFoundError:
                 raise errors.MissingResourceError(message=f"The session pod {name} does not exist.")
             except ServerError as err:
@@ -243,8 +243,10 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
         except NotFoundError:
             return None
 
-        containers: list[V1Container] = [V1Container(**i) for i in sts.spec.template.spec.containers]
-        init_containers: list[V1Container] = [V1Container(**i) for i in sts.spec.template.spec.init_containers]
+        containers: list[V1Container] = [V1Container(**container) for container in sts.spec.template.spec.containers]
+        init_containers: list[V1Container] = [
+            V1Container(**container) for container in sts.spec.template.spec.init_containers
+        ]
 
         git_proxy_container_index, git_proxy_container = next(
             ((i, c) for i, c in enumerate(containers) if c.name == "git-proxy"),
@@ -368,7 +370,7 @@ class ServerCache(Generic[_SessionType]):
             )
             raise JSCacheError(f"The JSCache produced an unexpected status code: {res.status_code}")
 
-        return [self.server_type.model_validate(i) for i in res.json()]
+        return [self.server_type.model_validate(server) for server in res.json()]
 
     async def get_server(self, name: str) -> _SessionType | None:
         """Get a specific jupyter server."""
