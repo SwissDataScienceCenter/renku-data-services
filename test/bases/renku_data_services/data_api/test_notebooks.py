@@ -1,9 +1,13 @@
 """Tests for notebook blueprints."""
 
+from unittest.mock import MagicMock
+
 import pytest
 from kr8s.objects import Pod, new_class
 from pytest_httpx import HTTPXMock
 from sanic_testing.testing import SanicASGITestClient
+
+from .utils import AttributeDictionary
 
 JupyterServer = new_class(
     kind="JupyterServer",
@@ -183,5 +187,62 @@ async def test_patch_server(
         f"/api/data/notebooks/servers/{server_name}", json=patch, headers=authenticated_user_headers
     )
 
-    # import pdb;pdb.set_trace()
     assert res.status_code == expected_status_code, res.text
+
+
+@pytest.fixture
+def fake_gitlab_projects():
+    class GitLabProject(AttributeDictionary):
+        def __init__(self):
+            super().__init__({})
+
+        def get(self, name, default=None):
+            if name not in self:
+                return AttributeDictionary(
+                    {
+                        "path": "my-test",
+                        "path_with_namespace": "test-namespace/my-test",
+                        "branches": {"main": AttributeDictionary({})},
+                        "commits": {"ee4b1c9fedc99abe5892ee95320bbd8471c5985b": AttributeDictionary({})},
+                        "id": 5407,
+                        "http_url_to_repo": "https://gitlab-url.com/test-namespace/my-test.git",
+                        "web_url": "https://gitlab-url.com/test-namespace/my-test",
+                    }
+                )
+            return super().get(name, default)
+
+    return GitLabProject()
+
+
+@pytest.fixture()
+def fake_gitlab(mocker, fake_gitlab_projects):
+    gitlab = mocker.patch("renku_data_services.notebooks.api.classes.user.Gitlab")
+    gitlab_mock = MagicMock()
+    gitlab_mock.auth = MagicMock()
+    gitlab_mock.projects = fake_gitlab_projects
+    gitlab_mock.user = AttributeDictionary(
+        {"username": "john.doe", "name": "John Doe", "email": "john.doe@notebooks-tests.renku.ch"}
+    )
+    gitlab_mock.url = "https://gitlab-url.com"
+    gitlab.return_value = gitlab_mock
+    return gitlab
+
+
+@pytest.mark.asyncio
+async def test_old_start_server(sanic_client: SanicASGITestClient, authenticated_user_headers, fake_gitlab):
+    data = {
+        "branch": "main",
+        "commit_sha": "ee4b1c9fedc99abe5892ee95320bbd8471c5985b",
+        "namespace": "test-namespace",
+        "project": "my-test",
+        "image": "python:3.12-slim",
+    }
+
+    _, res = await sanic_client.post("/api/data/notebooks/old/servers/", json=data, headers=authenticated_user_headers)
+
+    assert res.status_code == 201, res.text
+
+    server_name = res.json["name"]
+    _, res = await sanic_client.delete(f"/api/data/notebooks/servers/{server_name}", headers=authenticated_user_headers)
+
+    assert res.status_code == 204, res.text
