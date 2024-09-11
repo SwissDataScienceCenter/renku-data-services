@@ -453,6 +453,8 @@ class NotebooksBP(CustomBlueprint):
             launcher_id=launcher_id,
             project_id=project_id,
             notebook=notebook,
+            internal_gitlab_user=internal_gitlab_user,  # Renku 1
+            gitlab_project=gl_project,  # Renku 1
         )
         server = server_class(
             user=user,
@@ -817,7 +819,6 @@ class NotebooksNewBP(CustomBlueprint):
             #         mount_path=body.user_secrets.mount_path,
             #     )
             cloud_storage: list[RCloneStorage] = []
-            # repositories = [Repository(i.url, branch=i.branch, commit_sha=i.commit_sha) for i in body.repositories]
             repositories = [Repository(url=repository) for repository in project.repositories]
             server = Renku2UserServer(
                 user=user,

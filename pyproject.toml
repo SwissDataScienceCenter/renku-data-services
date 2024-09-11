@@ -71,6 +71,7 @@ setuptools = { version = "^75.1.0" }
 toml = "^0.10.2"
 aiofiles = "^24.1.0"
 pytest-httpx = "^0.30.0"
+pytest-mock = "^3.14.0"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.7.9"
