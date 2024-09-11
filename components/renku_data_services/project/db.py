@@ -7,8 +7,9 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any, Concatenate, ParamSpec, TypeVar
 
-from sqlalchemy import Select, case, delete, func, select, update
+from sqlalchemy import Select, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.functions import coalesce
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
@@ -59,12 +60,7 @@ class ProjectRepository:
             if namespace:
                 stmt = _filter_by_namespace_slug(stmt, namespace)
 
-            stmt = stmt.order_by(
-                case(
-                    {schemas.ProjectORM.updated_at.is_not(None): schemas.ProjectORM.updated_at},
-                    else_=schemas.ProjectORM.creation_date,
-                ).desc()
-            )
+            stmt = stmt.order_by(coalesce(schemas.ProjectORM.updated_at, schemas.ProjectORM.creation_date).desc())
 
             stmt = stmt.limit(pagination.per_page).offset(pagination.offset)
 

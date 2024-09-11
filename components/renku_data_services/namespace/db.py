@@ -79,9 +79,14 @@ class GroupRepository:
         pagination: PaginationRequest,
     ) -> tuple[list[models.Group], int]:
         """Get all groups from the database."""
+        group_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.group, Scope.READ)
+
         async with self.session_maker() as session, session.begin():
-            stmt = select(schemas.GroupORM).limit(pagination.per_page).offset(pagination.offset)
-            stmt = stmt.order_by(schemas.GroupORM.creation_date.asc(), schemas.GroupORM.id.asc(), schemas.GroupORM.name)
+            stmt = select(schemas.GroupORM).where(schemas.GroupORM.id.in_(group_ids))
+            stmt = stmt.limit(pagination.per_page).offset(pagination.offset)
+            stmt = stmt.order_by(
+                schemas.GroupORM.creation_date.desc(), schemas.GroupORM.id.asc(), schemas.GroupORM.name
+            )
             result = await session.execute(stmt)
             groups_orm = result.scalars().all()
 
