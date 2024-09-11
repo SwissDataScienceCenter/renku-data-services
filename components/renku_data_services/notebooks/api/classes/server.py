@@ -510,6 +510,7 @@ class Renku2UserServer(UserServer):
         internal_gitlab_user: APIUser,
         using_default_image: bool = False,
         is_image_private: bool = False,
+        **_: dict,
     ):
         super().__init__(
             user=user,
@@ -532,6 +533,17 @@ class Renku2UserServer(UserServer):
         self.project_id = project_id
         self.launcher_id = launcher_id
 
+    def get_labels(self) -> dict[str, str | None]:
+        """Get the labels of the jupyter server."""
+        prefix = self._get_renku_annotation_prefix()
+        labels = super().get_labels()
+
+        # for validation purpose
+        for item in ["commit-sha", "gitlabProjectId"]:
+            labels[f"{prefix}{item}"] = ""
+
+        return labels
+
     def get_annotations(self) -> dict[str, str | None]:
         """Get the annotations of the session."""
         prefix = self._get_renku_annotation_prefix()
@@ -539,4 +551,9 @@ class Renku2UserServer(UserServer):
         annotations[f"{prefix}renkuVersion"] = "2.0"
         annotations[f"{prefix}projectId"] = self.project_id
         annotations[f"{prefix}launcherId"] = self.launcher_id
+
+        # for validation purpose
+        for item in ["commit-sha", "branch", "git-host", "namespace", "projectName", "gitlabProjectId", "repository"]:
+            annotations[f"{prefix}{item}"] = ""
+
         return annotations
