@@ -824,7 +824,7 @@ class NotebooksNewBP(CustomBlueprint):
             #     )
             cloud_storage: list[RCloneStorage] = []
             # repositories = [Repository(i.url, branch=i.branch, commit_sha=i.commit_sha) for i in body.repositories]
-            repositories = [Repository(url=i) for i in project.repositories]
+            repositories = [Repository(url=repository) for repository in project.repositories]
             server = Renku2UserServer(
                 user=user,
                 image=image,
@@ -846,7 +846,9 @@ class NotebooksNewBP(CustomBlueprint):
             )
             cert_init, cert_vols = init_containers.certificates_container(self.nb_config)
             session_init_containers = [InitContainer.model_validate(self.nb_config.k8s_v2_client.sanitize(cert_init))]
-            extra_volumes = [ExtraVolume.model_validate(self.nb_config.k8s_v2_client.sanitize(i)) for i in cert_vols]
+            extra_volumes = [
+                ExtraVolume.model_validate(self.nb_config.k8s_v2_client.sanitize(volume)) for volume in cert_vols
+            ]
             if isinstance(user, AuthenticatedAPIUser):
                 extra_volumes.append(
                     ExtraVolume(

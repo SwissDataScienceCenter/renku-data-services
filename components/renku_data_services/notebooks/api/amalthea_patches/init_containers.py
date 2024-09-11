@@ -334,9 +334,9 @@ def certificates_container(config: _NotebooksConfig) -> tuple[client.V1Container
         projected=client.V1ProjectedVolumeSource(
             default_mode=440,
             sources=[
-                {"secret": {"name": i.get("secret")}}
-                for i in config.sessions.ca_certs.secrets
-                if isinstance(i, dict) and i.get("secret") is not None
+                {"secret": {"name": secret.get("secret")}}
+                for secret in config.sessions.ca_certs.secrets
+                if isinstance(secret, dict) and secret.get("secret") is not None
             ],
         ),
     )
