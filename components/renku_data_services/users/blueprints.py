@@ -9,7 +9,7 @@ from sanic_ext import validate
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
-from renku_data_services.base_api.auth import authenticate, only_authenticated
+from renku_data_services.base_api.auth import authenticate, only_authenticated, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_models.validation import validated_json
@@ -23,7 +23,7 @@ from renku_data_services.users.db import UserPreferencesRepository, UserRepo
 
 @dataclass(kw_only=True)
 class KCUsersBP(CustomBlueprint):
-    """Handlers for creating and listing users."""
+    """Handlers for creating, listing, and deleting users."""
 
     repo: UserRepo
     authenticator: base_models.Authenticator
@@ -109,6 +109,18 @@ class KCUsersBP(CustomBlueprint):
 
         return "/users/<user_id>", ["GET"], _get_one
 
+    def delete_one(self) -> BlueprintFactoryResponse:
+        """Delete a specific user by their Keycloak ID."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        async def _delete_one(_: Request, user_id: str) -> HTTPResponse:
+            deletion_result = await self.repo.remove_user(user_id)
+            if deletion_result is None:
+                raise errors.MissingResourceError(message=f"The user with ID {user_id} cannot be found.")
+            return HTTPResponse(status=204)
+
+        return "/users/<user_id>", ["DELETE"], _delete_one
 
 @dataclass(kw_only=True)
 class UserSecretsBP(CustomBlueprint):

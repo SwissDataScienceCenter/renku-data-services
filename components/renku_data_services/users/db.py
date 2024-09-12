@@ -128,6 +128,30 @@ class UserRepo:
             return [user.namespace.dump_user() for user in users if user.namespace is not None]
 
     @only_authenticated
+    async def remove_user(self, id: str) -> UserInfo | None:
+        """Remove a user."""
+        async with self.session_maker() as session:
+            return await self._remove_user(user_id=id, session=session)
+
+    @with_db_transaction
+    @dispatch_message(avro_schema_v2.UserRemoved)
+    async def _remove_user(self, user_id: str, *, session: AsyncSession | None = None) -> UserInfo | None:
+        """Remove a user from the database."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required")
+        logger.info(f"Trying to remove user with ID {user_id}")
+        stmt = delete(UserORM).where(UserORM.keycloak_id == user_id).returning(UserORM)
+        user = await session.scalar(stmt)
+        await self.authz._remove_user_namespace(user_id)
+        if not user:
+            logger.info(f"User with ID {user_id} was not found.")
+            return None
+        logger.info(f"User with ID {user_id} was removed from the database.")
+        removed_user = user.dump()
+        logger.info(f"User namespace with ID {user_id} was removed from the authorization database.")
+        return removed_user
+
+    @only_authenticated
     async def get_or_create_user_secret_key(self, requested_by: APIUser) -> str:
         """Get a user's secret encryption key or create it if it doesn't exist."""
 
@@ -226,24 +250,6 @@ class UsersSync:
             UserWithNamespace(old_user, namespace), UserWithNamespace(existing_user.dump(), namespace)
         )
 
-    @with_db_transaction
-    @dispatch_message(avro_schema_v2.UserRemoved)
-    async def _remove_user(self, user_id: str, *, session: AsyncSession | None = None) -> UserInfo | None:
-        """Remove a user from the database."""
-        if not session:
-            raise errors.ProgrammingError(message="A database session is required")
-        logger.info(f"Trying to remove user with ID {user_id}")
-        stmt = delete(UserORM).where(UserORM.keycloak_id == user_id).returning(UserORM)
-        user = await session.scalar(stmt)
-        await self.authz._remove_user_namespace(user_id)
-        if not user:
-            logger.info(f"User with ID {user_id} was not found.")
-            return None
-        logger.info(f"User with ID {user_id} was removed from the database.")
-        removed_user = user.dump()
-        logger.info(f"User namespace with ID {user_id} was removed from the authorization database.")
-        return removed_user
-
     async def users_sync(self, kc_api: IKeycloakAPI) -> None:
         """Sync all users from Keycloak into the users database."""
         logger.info("Starting a total user database sync.")
@@ -304,7 +310,7 @@ class UsersSync:
                 latest_update_timestamp = update.timestamp_utc
             for deletion in parsed_deletions:
                 logger.info(f"Processing deletion event {deletion}")
-                await self._remove_user(deletion.user_id)
+                await UserRepo.remove_user(deletion.user_id)
                 latest_delete_timestamp = deletion.timestamp_utc
             # Update the latest processed event timestamp
             current_sync_latest_utc_timestamp = latest_update_timestamp
