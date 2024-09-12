@@ -52,7 +52,7 @@ class ProjectRepository:
         self, user: base_models.APIUser, pagination: PaginationRequest, namespace: str | None = None
     ) -> tuple[list[models.Project], int]:
         """Get all projects from the database."""
-        project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
+        project_ids = await self.authz.resource_ids_for_user_membership(user, ResourceType.project)
 
         async with self.session_maker() as session:
             stmt = select(schemas.ProjectORM)

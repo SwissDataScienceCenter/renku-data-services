@@ -358,6 +358,37 @@ class Authz:
                 ids.append(response.resource_object_id)
         return ids
 
+    async def resource_ids_for_user_membership(
+        self, user: base_models.APIUser, resource_type: ResourceType
+    ) -> list[str]:
+        """Return all resource IDs where the user is a member."""
+        sub = SubjectReference(
+            object=(
+                _AuthzConverter.to_object(ResourceType.user, user.id) if user.id else _AuthzConverter.anonymous_user()
+            )
+        )
+
+        resource_ids: list[str] = []
+
+        rel_filter = RelationshipFilter(
+            resource_type=resource_type.value,
+            optional_subject_filter=SubjectFilter(
+                subject_type=ResourceType.user.value, optional_subject_id=sub.object.object_id
+            ),
+        )
+
+        responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
+            ReadRelationshipsRequest(
+                consistency=Consistency(fully_consistent=True),
+                relationship_filter=rel_filter,
+            )
+        )
+
+        async for response in responses:
+            resource_ids.append(response.relationship.resource.object_id)
+
+        return resource_ids
+
     @_is_allowed(Scope.READ)  # The scope on the resource that allows the user to perform this check in the first place
     async def users_with_permission(
         self,
