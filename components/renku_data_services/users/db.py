@@ -179,12 +179,14 @@ class UsersSync:
         message_queue: IMessageQueue,
         event_repo: EventRepository,
         group_repo: GroupRepository,
+        user_repo: UserRepo,
         authz: Authz,
     ) -> None:
         self.session_maker = session_maker
         self.message_queue: IMessageQueue = message_queue
         self.event_repo: EventRepository = event_repo
         self.group_repo = group_repo
+        self.user_repo = user_repo
         self.authz = authz
 
     async def _get_user(self, id: str) -> UserInfo | None:
@@ -310,7 +312,7 @@ class UsersSync:
                 latest_update_timestamp = update.timestamp_utc
             for deletion in parsed_deletions:
                 logger.info(f"Processing deletion event {deletion}")
-                await UserRepo.remove_user(deletion.user_id)
+                await self.user_repo.remove_user(id=deletion.user_id)
                 latest_delete_timestamp = deletion.timestamp_utc
             # Update the latest processed event timestamp
             current_sync_latest_utc_timestamp = latest_update_timestamp
