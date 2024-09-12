@@ -73,7 +73,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user, app_co
 
     events = await app_config.event_repo._get_pending_events()
     assert len(events) == 6
-    project_created_event = next((e for e in events if e.queue == "project.created"), None)
+    project_created_event = next((e for e in events if e.get_message_type() == "project.created"), None)
     assert project_created_event
     created_event = deserialize_binary(
         b64decode(project_created_event.payload["payload"]), avro_schema_v2.ProjectCreated
@@ -81,7 +81,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user, app_co
     assert created_event.name == payload["name"]
     assert created_event.slug == payload["slug"]
     assert created_event.repositories == payload["repositories"]
-    project_auth_added = next((e for e in events if e.queue == "projectAuth.added"), None)
+    project_auth_added = next((e for e in events if e.get_message_type() == "projectAuth.added"), None)
     assert project_auth_added
     auth_event = deserialize_binary(b64decode(project_auth_added.payload["payload"]), avro_schema_v2.ProjectMemberAdded)
     assert auth_event.userId == "user"
@@ -165,7 +165,7 @@ async def test_project_creation_with_invalid_namespace(sanic_client, user_header
 
     _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
 
-    assert response.status_code == 401, response.text
+    assert response.status_code == 403, response.text
     assert "you do not have sufficient permissions" in response.json["error"]["message"]
 
 
@@ -301,7 +301,7 @@ async def test_delete_project(create_project, sanic_client, user_headers, app_co
 
     events = await app_config.event_repo._get_pending_events()
     assert len(events) == 15
-    project_removed_event = next((e for e in events if e.queue == "project.removed"), None)
+    project_removed_event = next((e for e in events if e.get_message_type() == "project.removed"), None)
     assert project_removed_event
     removed_event = deserialize_binary(
         b64decode(project_removed_event.payload["payload"]), avro_schema_v2.ProjectRemoved
@@ -338,7 +338,7 @@ async def test_patch_project(create_project, get_project, sanic_client, user_hea
 
     events = await app_config.event_repo._get_pending_events()
     assert len(events) == 11
-    project_updated_event = next((e for e in events if e.queue == "project.updated"), None)
+    project_updated_event = next((e for e in events if e.get_message_type() == "project.updated"), None)
     assert project_updated_event
     updated_event = deserialize_binary(
         b64decode(project_updated_event.payload["payload"]), avro_schema_v2.ProjectUpdated
@@ -517,7 +517,7 @@ async def test_patch_project_invalid_namespace(create_project, sanic_client, use
     project_id = project["id"]
     _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=headers, json=patch)
 
-    assert response.status_code == 401, response.text
+    assert response.status_code == 403, response.text
     assert "you do not have sufficient permissions" in response.json["error"]["message"]
 
 
@@ -615,13 +615,7 @@ async def test_creator_is_added_as_owner_members(sanic_client, create_project, u
 
     assert len(response.json) == 1
     member = response.json[0]
-    assert member == {
-        "id": "user",
-        "email": "user.doe@gmail.com",
-        "first_name": "User",
-        "last_name": "Doe",
-        "role": "owner",
-    }
+    assert member == {"id": "user", "first_name": "User", "last_name": "Doe", "role": "owner", "namespace": "user.doe"}
 
 
 @pytest.mark.asyncio
@@ -687,10 +681,10 @@ async def test_delete_project_members(create_project, sanic_client, user_headers
     assert len(response.json) == 2
     assert {
         "id": "user",
-        "email": "user.doe@gmail.com",
         "first_name": "User",
         "last_name": "Doe",
         "role": "owner",
+        "namespace": "user.doe",
     } in response.json
 
 
@@ -748,7 +742,7 @@ async def test_project_owner_cannot_remove_themselves_if_no_other_owner(
 
     # Try to remove the only owner
     _, response = await sanic_client.delete(f"/api/data/projects/{project_id}/members/{owner.id}", headers=user_headers)
-    assert response.status_code == 401
+    assert response.status_code == 422
 
     # Add another user as owner
     members = [{"id": member_1_user.id, "role": "owner"}]
@@ -778,7 +772,7 @@ async def test_cannot_change_role_for_last_project_owner(
     _, response = await sanic_client.patch(
         f"/api/data/projects/{project_id}/members", headers=user_headers, json=members
     )
-    assert response.status_code == 401
+    assert response.status_code == 422
 
     # Can change the owner role if another owner is added during an update
     members.append({"id": "member-1", "role": "owner"})
@@ -800,4 +794,4 @@ async def test_cannot_change_role_for_last_project_owner(
         f"/api/data/projects/{project_id}/members", headers=member_1_headers, json=members
     )
 
-    assert response.status_code == 401
+    assert response.status_code == 422

@@ -14,28 +14,12 @@ paths:
       summary: Get all projects
       parameters:
         - in: query
-          description: A namespace, used as a filter.
-          name: namespace
-          required: false
+          description: query parameters
+          name: params
+          style: form
+          explode: true
           schema:
-            type: string
-        - in: query
-          description: Result's page number starting from 1
-          name: page
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            default: 1
-        - in: query
-          description: The number of results per page
-          name: per_page
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 20
+            $ref: "#/components/schemas/ProjectGetQuery"
       responses:
         "200":
           description: List of projects
@@ -376,7 +360,7 @@ components:
       type: string
       minLength: 26
       maxLength: 26
-      pattern: "^[A-Z0-9]{26}$" # This is case-insensitive
+      pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$" # This is case-insensitive
     ProjectName:
       description: Renku project name
       type: string
@@ -472,14 +456,14 @@ components:
         $ref: "#/components/schemas/ProjectMemberResponse"
       minItems: 0
     ProjectMemberResponse:
-      description: A member with full info (email, name, ...) and the access level to the project
+      description: A member with full info (namespace, name, ...) and the access level to the project
       type: object
       additionalProperties: false
       properties:
         id:
           $ref: "#/components/schemas/UserId"
-        email:
-          $ref: "#/components/schemas/UserEmail"
+        namespace:
+          $ref: "#/components/schemas/Slug"
         first_name:
           $ref: "#/components/schemas/UserFirstLastName"
         last_name:
@@ -507,15 +491,34 @@ components:
       example: John
       minLength: 1
       maxLength: 256
-    UserEmail:
-      type: string
-      format: email
-      description: User email
-      example: some-user@gmail.com
     ETag:
       type: string
       description: Entity Tag
       example: "9EE498F9D565D0C41E511377425F32F3"
+    ProjectGetQuery:
+      description: Query params for project get request
+      allOf:
+      - $ref: "#/components/schemas/PaginationRequest"
+      - properties:
+          namespace:
+            description: A namespace, used as a filter.
+            type: string
+            default: ""
+    PaginationRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        page:
+          description: Result's page number starting from 1
+          type: integer
+          minimum: 1
+          default: 1
+        per_page:
+          description: The number of results per page
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
     ErrorResponse:
       type: object
       properties:

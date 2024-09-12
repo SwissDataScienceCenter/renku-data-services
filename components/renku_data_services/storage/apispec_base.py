@@ -1,6 +1,6 @@
 """Base models for API specifications."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, field_validator
 from ulid import ULID
 
 
@@ -12,24 +12,14 @@ class BaseAPISpec(BaseModel):
 
         from_attributes = True
 
+    @field_validator("storage_id", mode="before", check_fields=False)
+    @classmethod
+    def serialize_storage_id(cls, storage_id: str | ULID) -> str:
+        """Custom serializer that can handle ULIDs."""
+        return str(storage_id)
 
-class RepositoryFilter(BaseAPISpec):
-    """The schema for the query parameters used to filter repositories in old Renku."""
-
-    class Config:
-        """Configuration."""
-
-        extra = "ignore"
-
-    project_id: str = Field()
-
-
-class RepositoryFilterV2(BaseAPISpec):
-    """The schema for the query parameters used to filter repositories."""
-
-    class Config:
-        """Configuration."""
-
-        extra = "ignore"
-
-    project_id: ULID
+    @field_validator("secret_id", mode="before", check_fields=False)
+    @classmethod
+    def secret_storage_id(cls, secret_id: str | ULID) -> str:
+        """Custom serializer that can handle ULIDs."""
+        return str(secret_id)

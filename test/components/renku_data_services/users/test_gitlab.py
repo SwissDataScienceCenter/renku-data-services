@@ -73,7 +73,7 @@ async def test_gitlab_auth_no_user(monkeypatch) -> None:
         assert gl_auth.gitlab_url == "https://localhost"
         request = mock_request()
 
-        with pytest.raises(errors.Unauthorized):
+        with pytest.raises(errors.ForbiddenError):
             await gl_auth.authenticate("xxxxxx", request)
 
 
@@ -86,7 +86,7 @@ async def test_gitlab_auth_not_active(monkeypatch) -> None:
         assert gl_auth.gitlab_url == "https://localhost"
         request = mock_request()
 
-        with pytest.raises(errors.Unauthorized):
+        with pytest.raises(errors.ForbiddenError):
             await gl_auth.authenticate("xxxxxx", request)
 
 

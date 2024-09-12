@@ -12,8 +12,8 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_api.misc import validate_query
 from renku_data_services.storage import apispec, models
-from renku_data_services.storage.apispec_base import RepositoryFilter, RepositoryFilterV2
 from renku_data_services.storage.db import StorageRepository, StorageV2Repository
 from renku_data_services.storage.rclone import RCloneValidator
 
@@ -28,6 +28,15 @@ def dump_storage_with_sensitive_fields(storage: models.CloudStorage, validator: 
     ).model_dump(exclude_none=True)
 
 
+def dump_storage_with_sensitive_fields_and_secrets(
+    storage: models.CloudStorage, validator: RCloneValidator
+) -> dict[str, Any]:
+    """Dump a CloudStorage model alongside sensitive fields and its saved secrets."""
+    dumped_storage = dump_storage_with_sensitive_fields(storage, validator)
+    dumped_storage["secrets"] = [apispec.CloudStorageSecretGet.model_validate(s).model_dump() for s in storage.secrets]
+    return dumped_storage
+
+
 @dataclass(kw_only=True)
 class StorageBP(CustomBlueprint):
     """Handlers for manipulating storage definitions."""
@@ -39,10 +48,15 @@ class StorageBP(CustomBlueprint):
         """Get cloud storage for a repository."""
 
         @authenticate(self.authenticator)
-        async def _get(request: Request, user: base_models.APIUser, validator: RCloneValidator) -> JSONResponse:
-            res_filter = RepositoryFilter.model_validate(dict(request.query_args))
+        @validate_query(query=apispec.StorageParams)
+        async def _get(
+            request: Request,
+            user: base_models.APIUser,
+            validator: RCloneValidator,
+            query: apispec.StorageParams,
+        ) -> JSONResponse:
             storage: list[models.CloudStorage]
-            storage = await self.storage_repo.get_storage(user=user, **res_filter.model_dump())
+            storage = await self.storage_repo.get_storage(user=user, project_id=query.project_id)
 
             return json([dump_storage_with_sensitive_fields(s, validator) for s in storage])
 
@@ -69,7 +83,7 @@ class StorageBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _post(request: Request, user: base_models.APIUser, validator: RCloneValidator) -> JSONResponse:
-            storage: models.CloudStorage
+            storage: models.UnsavedCloudStorage
             if not isinstance(request.json, dict):
                 body_type = type(request.json)
                 raise errors.ValidationError(
@@ -77,7 +91,7 @@ class StorageBP(CustomBlueprint):
                 )
             if "storage_url" in request.json:
                 url_body = apispec.CloudStorageUrl(**request.json)
-                storage = models.CloudStorage.from_url(
+                storage = models.UnsavedCloudStorage.from_url(
                     storage_url=url_body.storage_url,
                     project_id=url_body.project_id.root,
                     name=url_body.name,
@@ -86,7 +100,7 @@ class StorageBP(CustomBlueprint):
                 )
             else:
                 body = apispec.CloudStorage(**request.json)
-                storage = models.CloudStorage.from_dict(body.model_dump())
+                storage = models.UnsavedCloudStorage.from_dict(body.model_dump())
 
             validator.validate(storage.configuration.model_dump())
 
@@ -111,7 +125,7 @@ class StorageBP(CustomBlueprint):
                 raise errors.ValidationError(message="The request body is not a valid JSON object.")
             if "storage_url" in request.json:
                 url_body = apispec.CloudStorageUrl(**request.json)
-                new_storage = models.CloudStorage.from_url(
+                new_storage = models.UnsavedCloudStorage.from_url(
                     storage_url=url_body.storage_url,
                     project_id=url_body.project_id.root,
                     name=url_body.name,
@@ -120,11 +134,10 @@ class StorageBP(CustomBlueprint):
                 )
             else:
                 body = apispec.CloudStorage(**request.json)
-                new_storage = models.CloudStorage.from_dict(body.model_dump())
+                new_storage = models.UnsavedCloudStorage.from_dict(body.model_dump())
 
             validator.validate(new_storage.configuration.model_dump())
             body_dict = new_storage.model_dump()
-            del body_dict["storage_id"]
             res = await self.storage_repo.update_storage(storage_id=storage_id, user=user, **body_dict)
             return json(dump_storage_with_sensitive_fields(res, validator))
 
@@ -182,12 +195,19 @@ class StoragesV2BP(CustomBlueprint):
         """Get cloud storage for a repository."""
 
         @authenticate(self.authenticator)
-        async def _get(request: Request, user: base_models.APIUser, validator: RCloneValidator) -> JSONResponse:
-            res_filter = RepositoryFilterV2.model_validate(dict(request.query_args))
+        @validate_query(query=apispec.StorageV2Params)
+        async def _get(
+            request: Request,
+            user: base_models.APIUser,
+            validator: RCloneValidator,
+            query: apispec.StorageV2Params,
+        ) -> JSONResponse:
             storage: list[models.CloudStorage]
-            storage = await self.storage_v2_repo.get_storage(user=user, **res_filter.model_dump())
+            storage = await self.storage_v2_repo.get_storage(
+                user=user, include_secrets=True, project_id=query.project_id
+            )
 
-            return json([dump_storage_with_sensitive_fields(s, validator) for s in storage])
+            return json([dump_storage_with_sensitive_fields_and_secrets(s, validator) for s in storage])
 
         return "/storages_v2", ["GET"], _get
 
@@ -203,7 +223,7 @@ class StoragesV2BP(CustomBlueprint):
         ) -> JSONResponse:
             storage = await self.storage_v2_repo.get_storage_by_id(storage_id, user=user)
 
-            return json(dump_storage_with_sensitive_fields(storage, validator))
+            return json(dump_storage_with_sensitive_fields_and_secrets(storage, validator))
 
         return "/storages_v2/<storage_id:ulid>", ["GET"], _get_one
 
@@ -212,7 +232,7 @@ class StoragesV2BP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _post(request: Request, user: base_models.APIUser, validator: RCloneValidator) -> JSONResponse:
-            storage: models.CloudStorage
+            storage: models.UnsavedCloudStorage
             if not isinstance(request.json, dict):
                 body_type = type(request.json)
                 raise errors.ValidationError(
@@ -220,7 +240,7 @@ class StoragesV2BP(CustomBlueprint):
                 )
             if "storage_url" in request.json:
                 url_body = apispec.CloudStorageUrl(**request.json)
-                storage = models.CloudStorage.from_url(
+                storage = models.UnsavedCloudStorage.from_url(
                     storage_url=url_body.storage_url,
                     project_id=url_body.project_id.root,
                     name=url_body.name,
@@ -229,7 +249,7 @@ class StoragesV2BP(CustomBlueprint):
                 )
             else:
                 body = apispec.CloudStorage(**request.json)
-                storage = models.CloudStorage.from_dict(body.model_dump())
+                storage = models.UnsavedCloudStorage.from_dict(body.model_dump())
 
             validator.validate(storage.configuration.model_dump())
 
@@ -244,7 +264,7 @@ class StoragesV2BP(CustomBlueprint):
         @authenticate(self.authenticator)
         @validate(json=apispec.CloudStoragePatch)
         async def _patch(
-            request: Request,
+            _: Request,
             user: base_models.APIUser,
             storage_id: ULID,
             body: apispec.CloudStoragePatch,
@@ -277,6 +297,45 @@ class StoragesV2BP(CustomBlueprint):
             return empty(204)
 
         return "/storages_v2/<storage_id:ulid>", ["DELETE"], _delete
+
+    def upsert_secrets(self) -> BlueprintFactoryResponse:
+        """Create/update secrets for a cloud storage."""
+
+        @authenticate(self.authenticator)
+        async def _upsert_secrets(request: Request, user: base_models.APIUser, storage_id: ULID) -> JSONResponse:
+            # TODO: use @validate once sanic supports validating json lists
+            body = apispec.CloudStorageSecretPostList.model_validate(request.json)
+            secrets = [models.CloudStorageSecretUpsert.model_validate(s.model_dump()) for s in body.root]
+            result = await self.storage_v2_repo.upsert_storage_secrets(
+                storage_id=storage_id, user=user, secrets=secrets
+            )
+            return json(
+                apispec.CloudStorageSecretGetList.model_validate(result).model_dump(exclude_none=True, mode="json"), 201
+            )
+
+        return "/storages_v2/<storage_id:ulid>/secrets", ["POST"], _upsert_secrets
+
+    def get_secrets(self) -> BlueprintFactoryResponse:
+        """Return all secrets for a cloud storage."""
+
+        @authenticate(self.authenticator)
+        async def _get_secrets(request: Request, user: base_models.APIUser, storage_id: ULID) -> JSONResponse:
+            result = await self.storage_v2_repo.get_storage_secrets(storage_id=storage_id, user=user)
+            return json(
+                apispec.CloudStorageSecretGetList.model_validate(result).model_dump(exclude_none=True, mode="json"), 200
+            )
+
+        return "/storages_v2/<storage_id:ulid>/secrets", ["GET"], _get_secrets
+
+    def delete_secrets(self) -> BlueprintFactoryResponse:
+        """Delete all secrets for a cloud storage."""
+
+        @authenticate(self.authenticator)
+        async def _delete_secrets(request: Request, user: base_models.APIUser, storage_id: ULID) -> HTTPResponse:
+            await self.storage_v2_repo.delete_storage_secrets(storage_id=storage_id, user=user)
+            return HTTPResponse(status=204)
+
+        return "/storages_v2/<storage_id:ulid>/secrets", ["DELETE"], _delete_secrets
 
 
 @dataclass(kw_only=True)

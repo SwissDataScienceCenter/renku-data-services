@@ -11,6 +11,8 @@ from renku_data_services.message_queue.avro_models.io.renku.events.v2.project_me
 from renku_data_services.message_queue.avro_models.io.renku.events.v2.project_member_updated import ProjectMemberUpdated
 from renku_data_services.message_queue.avro_models.io.renku.events.v2.project_removed import ProjectRemoved
 from renku_data_services.message_queue.avro_models.io.renku.events.v2.project_updated import ProjectUpdated
+from renku_data_services.message_queue.avro_models.io.renku.events.v2.reprovisioning_finished import ReprovisioningFinished
+from renku_data_services.message_queue.avro_models.io.renku.events.v2.reprovisioning_started import ReprovisioningStarted
 from renku_data_services.message_queue.avro_models.io.renku.events.v2.user_added import UserAdded
 from renku_data_services.message_queue.avro_models.io.renku.events.v2.user_removed import UserRemoved
 from renku_data_services.message_queue.avro_models.io.renku.events.v2.user_updated import UserUpdated

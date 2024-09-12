@@ -4,7 +4,7 @@ import secrets
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from sanic.log import logger
 from sqlalchemy import delete, func, select
@@ -20,15 +20,18 @@ from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import dispatch_message
 from renku_data_services.namespace.db import GroupRepository
+from renku_data_services.users.config import UserPreferencesConfig
 from renku_data_services.users.kc_api import IKeycloakAPI
 from renku_data_services.users.models import (
     KeycloakAdminEvent,
+    PinnedProjects,
     UserInfo,
     UserInfoUpdate,
+    UserPreferences,
     UserWithNamespace,
     UserWithNamespaceUpdate,
 )
-from renku_data_services.users.orm import LastKeycloakEventTimestamp, UserORM
+from renku_data_services.users.orm import LastKeycloakEventTimestamp, UserORM, UserPreferencesORM
 from renku_data_services.utils.core import with_db_transaction
 from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
 
@@ -58,7 +61,7 @@ class UserRepo:
 
     async def _add_api_user(self, user: APIUser) -> UserWithNamespace:
         if not user.id:
-            raise errors.Unauthorized(message="The user has to be authenticated to be inserted in the DB.")
+            raise errors.UnauthorizedError(message="The user has to be authenticated to be inserted in the DB.")
         result = await self._users_sync.update_or_insert_user(
             user_id=user.id,
             payload=dict(
@@ -99,7 +102,7 @@ class UserRepo:
     async def get_users(self, requested_by: APIUser, email: str | None = None) -> list[UserWithNamespace]:
         """Get users from the database."""
         if not email and not requested_by.is_admin:
-            raise errors.Unauthorized(message="Non-admin users cannot list all users.")
+            raise errors.ForbiddenError(message="Non-admin users cannot list all users.")
         users = await self._get_users(email)
 
         is_api_user_missing = not any([requested_by.id == user.user.id for user in users])
@@ -320,3 +323,97 @@ class UsersSync:
                     logger.info(
                         f"Updated the latest sync event timestamp in the database: {current_sync_latest_utc_timestamp}"
                     )
+
+
+@dataclass
+class UserPreferencesRepository:
+    """Repository for user preferences."""
+
+    session_maker: Callable[..., AsyncSession]
+    user_preferences_config: UserPreferencesConfig
+
+    @only_authenticated
+    async def get_user_preferences(
+        self,
+        requested_by: APIUser,
+    ) -> UserPreferences:
+        """Get user preferences from the database."""
+        async with self.session_maker() as session:
+            res = await session.scalars(select(UserPreferencesORM).where(UserPreferencesORM.user_id == requested_by.id))
+            user_preferences = res.one_or_none()
+
+            if user_preferences is None:
+                raise errors.MissingResourceError(message="Preferences not found for user.", quiet=True)
+            return user_preferences.dump()
+
+    @only_authenticated
+    async def delete_user_preferences(self, requested_by: APIUser) -> None:
+        """Delete user preferences from the database."""
+        async with self.session_maker() as session, session.begin():
+            res = await session.scalars(select(UserPreferencesORM).where(UserPreferencesORM.user_id == requested_by.id))
+            user_preferences = res.one_or_none()
+
+            if user_preferences is None:
+                return
+
+            await session.delete(user_preferences)
+
+    @only_authenticated
+    async def add_pinned_project(self, requested_by: APIUser, project_slug: str) -> UserPreferences:
+        """Adds a new pinned project to the user's preferences."""
+        async with self.session_maker() as session, session.begin():
+            res = await session.scalars(select(UserPreferencesORM).where(UserPreferencesORM.user_id == requested_by.id))
+            user_preferences = res.one_or_none()
+
+            if user_preferences is None:
+                new_preferences = UserPreferences(
+                    user_id=cast(str, requested_by.id), pinned_projects=PinnedProjects(project_slugs=[project_slug])
+                )
+                user_preferences = UserPreferencesORM.load(new_preferences)
+                session.add(user_preferences)
+                return user_preferences.dump()
+
+            project_slugs: list[str]
+            project_slugs = user_preferences.pinned_projects.get("project_slugs", [])
+
+            # Do nothing if the project is already listed
+            for slug in project_slugs:
+                if project_slug.lower() == slug.lower():
+                    return user_preferences.dump()
+
+            # Check if we have reached the maximum number of pins
+            if (
+                self.user_preferences_config.max_pinned_projects > 0
+                and len(project_slugs) >= self.user_preferences_config.max_pinned_projects
+            ):
+                raise errors.ValidationError(
+                    message="Maximum number of pinned projects already allocated"
+                    + f" (limit: {self.user_preferences_config.max_pinned_projects}, current: {len(project_slugs)})"
+                )
+
+            new_project_slugs = list(project_slugs) + [project_slug]
+            pinned_projects = PinnedProjects(project_slugs=new_project_slugs).model_dump()
+            user_preferences.pinned_projects = pinned_projects
+            return user_preferences.dump()
+
+    @only_authenticated
+    async def remove_pinned_project(self, requested_by: APIUser, project_slug: str) -> UserPreferences:
+        """Removes on or all pinned projects from the user's preferences."""
+        async with self.session_maker() as session, session.begin():
+            res = await session.scalars(select(UserPreferencesORM).where(UserPreferencesORM.user_id == requested_by.id))
+            user_preferences = res.one_or_none()
+
+            if user_preferences is None:
+                raise errors.MissingResourceError(message="Preferences not found for user.", quiet=True)
+
+            project_slugs: list[str]
+            project_slugs = user_preferences.pinned_projects.get("project_slugs", [])
+
+            # Remove all projects if `project_slug` is None
+            new_project_slugs = (
+                [slug for slug in project_slugs if project_slug.lower() != slug.lower()] if project_slug else []
+            )
+
+            pinned_projects = PinnedProjects(project_slugs=new_project_slugs).model_dump()
+            user_preferences.pinned_projects = pinned_projects
+            return user_preferences.dump()

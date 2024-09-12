@@ -21,7 +21,7 @@ def requests_statistics():
     stats = sorted(stats)
     p95 = stats[math.floor(0.95 * len(stats))]
 
-    assert p95 < timedelta(milliseconds=100)
+    assert p95 < timedelta(milliseconds=100), f"The p95 response time {p95} was >= 100 ms"
 
 
 @pytest_asyncio.fixture

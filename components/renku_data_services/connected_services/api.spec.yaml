@@ -123,10 +123,17 @@ paths:
           schema:
             type: string
         - in: query
-          name: next_url
+          description: query parameters
+          name: authorize_params
+          style: form
+          explode: true
           schema:
-            description: The URL to redirect the user to once the authorization flow has been completed.
-            type: string
+            type: object
+            additionalProperties: false
+            properties:
+              next_url:
+                description: The URL to redirect the user to once the authorization flow has been completed.
+                type: string
       responses:
         "302":
           description: The authorization URL for this OAuth2 Client.
@@ -302,7 +309,7 @@ components:
       type: string
       minLength: 26
       maxLength: 26
-      pattern: "^[A-Z0-9]{26}$"  # This is case-insensitive
+      pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"  # This is case-insensitive
     ProviderId:
       description: ID of a OAuth2 provider, e.g. "gitlab.com".
       type: string

@@ -2,18 +2,19 @@
 
 from dataclasses import dataclass
 
-from sanic import HTTPResponse, Request, json
+from sanic import HTTPResponse, Request
 from sanic.response import JSONResponse
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
-from renku_data_services.authz.models import Role
+from renku_data_services.authz.models import Role, UnsavedMember
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
+from renku_data_services.base_models.validation import validate_and_dump, validated_json
 from renku_data_services.errors import errors
-from renku_data_services.namespace import apispec
-from renku_data_services.namespace.apispec_params import GetNamespacesParams
+from renku_data_services.namespace import apispec, models
 from renku_data_services.namespace.db import GroupRepository
 
 
@@ -28,13 +29,14 @@ class GroupsBP(CustomBlueprint):
         """List all groups."""
 
         @authenticate(self.authenticator)
+        @validate_query(query=apispec.PaginationRequest)
         @paginate
         async def _get_all(
-            _: Request, user: base_models.APIUser, pagination: PaginationRequest
+            _: Request, user: base_models.APIUser, pagination: PaginationRequest, query: apispec.PaginationRequest
         ) -> tuple[list[dict], int]:
             groups, rec_count = await self.group_repo.get_groups(user=user, pagination=pagination)
             return (
-                [apispec.GroupResponse.model_validate(g).model_dump(exclude_none=True, mode="json") for g in groups],
+                validate_and_dump(apispec.GroupResponseList, groups),
                 rec_count,
             )
 
@@ -47,8 +49,9 @@ class GroupsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.GroupPostRequest)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.GroupPostRequest) -> JSONResponse:
-            result = await self.group_repo.insert_group(user=user, payload=body)
-            return json(apispec.GroupResponse.model_validate(result).model_dump(exclude_none=True, mode="json"), 201)
+            new_group = models.UnsavedGroup(**body.model_dump())
+            result = await self.group_repo.insert_group(user=user, payload=new_group)
+            return validated_json(apispec.GroupResponse, result, 201)
 
         return "/groups", ["POST"], _post
 
@@ -58,7 +61,7 @@ class GroupsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         async def _get_one(_: Request, user: base_models.APIUser, slug: str) -> JSONResponse:
             result = await self.group_repo.get_group(user=user, slug=slug)
-            return json(apispec.GroupResponse.model_validate(result).model_dump(exclude_none=True, mode="json"))
+            return validated_json(apispec.GroupResponse, result)
 
         return "/groups/<slug:renku_slug>", ["GET"], _get_one
 
@@ -84,7 +87,7 @@ class GroupsBP(CustomBlueprint):
         ) -> JSONResponse:
             body_dict = body.model_dump(exclude_none=True)
             res = await self.group_repo.update_group(user=user, slug=slug, payload=body_dict)
-            return json(apispec.GroupResponse.model_validate(res).model_dump(exclude_none=True, mode="json"))
+            return validated_json(apispec.GroupResponse, res)
 
         return "/groups/<slug:renku_slug>", ["PATCH"], _patch
 
@@ -94,17 +97,18 @@ class GroupsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         async def _get_all_members(_: Request, user: base_models.APIUser, slug: str) -> JSONResponse:
             members = await self.group_repo.get_group_members(user, slug)
-            return json(
+            return validated_json(
+                apispec.GroupMemberResponseList,
                 [
-                    apispec.GroupMemberResponse(
+                    dict(
                         id=m.id,
-                        email=m.email,
                         first_name=m.first_name,
                         last_name=m.last_name,
                         role=apispec.GroupRole(m.role.value),
-                    ).model_dump(exclude_none=True, mode="json")
+                        namespace=m.namespace,
+                    )
                     for m in members
-                ]
+                ],
             )
 
         return "/groups/<slug:renku_slug>/members", ["GET"], _get_all_members
@@ -114,25 +118,25 @@ class GroupsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _update_members(
-            request: Request,
-            user: base_models.APIUser,
-            slug: str,
-        ) -> JSONResponse:
+        async def _update_members(request: Request, user: base_models.APIUser, slug: str) -> JSONResponse:
+            # TODO: sanic validation does not support validating top-level json lists, switch this to @validate
+            # once sanic-org/sanic-ext/issues/198 is fixed
             body_validated = apispec.GroupMemberPatchRequestList.model_validate(request.json)
+            members = [UnsavedMember(Role.from_group_role(member.role), member.id) for member in body_validated.root]
             res = await self.group_repo.update_group_members(
                 user=user,
                 slug=slug,
-                payload=body_validated,
+                members=members,
             )
-            return json(
+            return validated_json(
+                apispec.GroupMemberPatchRequestList,
                 [
-                    apispec.GroupMemberPatchRequest(
+                    dict(
                         id=m.member.user_id,
                         role=apispec.GroupRole(m.member.role.value),
-                    ).model_dump(exclude_none=True, mode="json")
+                    )
                     for m in res
-                ]
+                ],
             )
 
         return "/groups/<slug:renku_slug>/members", ["PATCH"], _update_members
@@ -153,28 +157,30 @@ class GroupsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
+        @validate_query(query=apispec.NamespaceGetQuery)
         @paginate
         async def _get_namespaces(
-            request: Request, user: base_models.APIUser, pagination: PaginationRequest
+            request: Request, user: base_models.APIUser, pagination: PaginationRequest, query: apispec.NamespaceGetQuery
         ) -> tuple[list[dict], int]:
-            params = GetNamespacesParams.model_validate(dict(request.query_args))
-
-            minimum_role = Role.from_group_role(params.minimum_role) if params.minimum_role is not None else None
+            minimum_role = Role.from_group_role(query.minimum_role) if query.minimum_role is not None else None
 
             nss, total_count = await self.group_repo.get_namespaces(
                 user=user, pagination=pagination, minimum_role=minimum_role
             )
-            return [
-                apispec.NamespaceResponse(
-                    id=ns.id,
-                    name=ns.name,
-                    slug=ns.latest_slug if ns.latest_slug else ns.slug,
-                    created_by=ns.created_by,
-                    creation_date=None,  # NOTE: we do not save creation date in the DB
-                    namespace_kind=apispec.NamespaceKind(ns.kind.value),
-                ).model_dump(exclude_none=True, mode="json")
-                for ns in nss
-            ], total_count
+            return validate_and_dump(
+                apispec.NamespaceResponseList,
+                [
+                    dict(
+                        id=ns.id,
+                        name=ns.name,
+                        slug=ns.latest_slug if ns.latest_slug else ns.slug,
+                        created_by=ns.created_by,
+                        creation_date=None,  # NOTE: we do not save creation date in the DB
+                        namespace_kind=apispec.NamespaceKind(ns.kind.value),
+                    )
+                    for ns in nss
+                ],
+            ), total_count
 
         return "/namespaces", ["GET"], _get_namespaces
 
@@ -186,15 +192,16 @@ class GroupsBP(CustomBlueprint):
             ns = await self.group_repo.get_namespace_by_slug(user=user, slug=slug)
             if not ns:
                 raise errors.MissingResourceError(message=f"The namespace with slug {slug} does not exist")
-            return json(
-                apispec.NamespaceResponse(
+            return validated_json(
+                apispec.NamespaceResponse,
+                dict(
                     id=ns.id,
                     name=ns.name,
                     slug=ns.latest_slug if ns.latest_slug else ns.slug,
                     created_by=ns.created_by,
                     creation_date=None,  # NOTE: we do not save creation date in the DB
                     namespace_kind=apispec.NamespaceKind(ns.kind.value),
-                ).model_dump(exclude_none=True, mode="json")
+                ),
             )
 
         return "/namespaces/<slug:renku_slug>", ["GET"], _get_namespace

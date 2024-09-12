@@ -120,7 +120,7 @@ async def test_storage_v2_create_cannot_as_unauthorized_or_non_owner_or_non_memb
     _, response = await sanic_client.post("/api/data/storages_v2", headers=headers, json=payload)
 
     assert response
-    assert response.status_code == 401
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -198,7 +198,7 @@ async def test_storage_v2_cannot_delete_as_normal_member(
         f"/api/data/storages_v2/{storage_id}", headers=project_normal_member_headers
     )
 
-    assert response.status_code == 401
+    assert response.status_code == 403
 
     _, response = await sanic_client.get(f"/api/data/storages_v2/{storage_id}", headers=project_normal_member_headers)
 
@@ -216,7 +216,7 @@ async def test_storage_v2_cannot_delete_as_unauthorized_or_non_member(
 
     _, response = await sanic_client.delete(f"/api/data/storages_v2/{storage_id}", headers=headers)
 
-    assert response.status_code == 401
+    assert response.status_code == 403, response.text
 
 
 @pytest.mark.asyncio
@@ -255,7 +255,7 @@ async def test_storage_v2_cannot_patch_as_normal_member(
         f"/api/data/storages_v2/{storage_id}", headers=project_normal_member_headers, json=payload
     )
 
-    assert response.status_code == 401
+    assert response.status_code == 403
 
     _, response = await sanic_client.get(f"/api/data/storages_v2/{storage_id}", headers=project_normal_member_headers)
 
@@ -281,7 +281,7 @@ async def test_storage_v2_cannot_patch_as_unauthorized_or_non_member(
 
     _, response = await sanic_client.patch(f"/api/data/storages_v2/{storage_id}", headers=headers, json=payload)
 
-    assert response.status_code == 401
+    assert response.status_code == 403, response.text
 
 
 @pytest.mark.asyncio
@@ -301,3 +301,145 @@ async def test_storage_v2_is_deleted_if_project_is_deleted(
 
     # NOTE: If storage isn't deleted, the status code will be 401
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_storage_v2_create_secret(
+    sanic_client, create_storage, project_normal_member_headers, project_owner_member_headers
+) -> None:
+    storage = await create_storage()
+    storage_id = storage["storage"]["storage_id"]
+
+    payload = [
+        {"name": "access_key_id", "value": "access key id value"},
+        {"name": "secret_access_key", "value": "secret access key value"},
+    ]
+
+    _, response = await sanic_client.post(
+        f"/api/data/storages_v2/{storage_id}/secrets", headers=project_normal_member_headers, json=payload
+    )
+
+    assert response.status_code == 201, response.json
+    assert {s["name"] for s in response.json} == {"access_key_id", "secret_access_key"}, response.json
+    created_secret_ids = {s["secret_id"] for s in response.json}
+    assert len(created_secret_ids) == 2, response.json
+
+    # NOTE: Save secrets for the same storage for another user
+    payload = [
+        {"name": "another_user_secret", "value": "another value"},
+    ]
+
+    _, response = await sanic_client.post(
+        f"/api/data/storages_v2/{storage_id}/secrets", headers=project_owner_member_headers, json=payload
+    )
+
+    assert response.status_code == 201, response.json
+    assert {s["name"] for s in response.json} == {"another_user_secret"}, response.json
+
+    # NOTE: Get secrets for a storage
+    _, response = await sanic_client.get(
+        f"/api/data/storages_v2/{storage_id}/secrets", headers=project_normal_member_headers
+    )
+
+    assert response.status_code == 200
+    assert {s["name"] for s in response.json} == {"access_key_id", "secret_access_key"}, response.json
+
+    # NOTE: Test that saved secrets are returned when getting a specific storage
+    _, response = await sanic_client.get(f"/api/data/storages_v2/{storage_id}", headers=project_normal_member_headers)
+
+    assert response.status_code == 200
+    assert "secrets" in response.json, response.json
+    assert {s["name"] for s in response.json["secrets"]} == {"access_key_id", "secret_access_key"}, response.json
+    assert {s["secret_id"] for s in response.json["secrets"]} == created_secret_ids, response.json
+
+    # NOTE: Test that saved secrets are returned when getting all storages in a project
+    assert "project_id" in storage["storage"], storage
+    project_id = storage["storage"]["project_id"]
+    _, response = await sanic_client.get(
+        f"/api/data/storages_v2?project_id={project_id}", headers=project_normal_member_headers
+    )
+
+    assert response.status_code == 200
+    assert len(response.json) == 1
+    assert "secrets" in response.json[0], response.json
+    assert {s["name"] for s in response.json[0]["secrets"]} == {"access_key_id", "secret_access_key"}, response.json
+    assert {s["secret_id"] for s in response.json[0]["secrets"]} == created_secret_ids, response.json
+
+
+@pytest.mark.asyncio
+async def test_storage_v2_update_secret(sanic_client, create_storage, project_normal_member_headers) -> None:
+    storage = await create_storage()
+    storage_id = storage["storage"]["storage_id"]
+
+    payload = [
+        {"name": "access_key_id", "value": "access key id value"},
+        {"name": "secret_access_key", "value": "secret access key value"},
+    ]
+
+    _, response = await sanic_client.post(
+        f"/api/data/storages_v2/{storage_id}/secrets", headers=project_normal_member_headers, json=payload
+    )
+
+    assert response.status_code == 201, response.json
+    created_secret_ids = {s["secret_id"] for s in response.json}
+
+    payload = [
+        {"name": "access_key_id", "value": "new access key id value"},
+        {"name": "secret_access_key", "value": "new secret access key value"},
+    ]
+
+    _, response = await sanic_client.post(
+        f"/api/data/storages_v2/{storage_id}/secrets", headers=project_normal_member_headers, json=payload
+    )
+
+    assert response.status_code == 201, response.json
+    assert {s["name"] for s in response.json} == {"access_key_id", "secret_access_key"}, response.json
+    assert {s["secret_id"] for s in response.json} == created_secret_ids
+
+    _, response = await sanic_client.get(
+        f"/api/data/storages_v2/{storage_id}/secrets", headers=project_normal_member_headers
+    )
+
+    assert response.status_code == 200
+    assert {s["name"] for s in response.json} == {"access_key_id", "secret_access_key"}, response.json
+
+
+@pytest.mark.asyncio
+async def test_storage_v2_delete_secret(sanic_client, create_storage, project_normal_member_headers) -> None:
+    storage = await create_storage()
+    storage_id = storage["storage"]["storage_id"]
+
+    payload = [
+        {"name": "access_key_id", "value": "access key id value"},
+        {"name": "secret_access_key", "value": "secret access key value"},
+    ]
+
+    _, response = await sanic_client.post(
+        f"/api/data/storages_v2/{storage_id}/secrets", headers=project_normal_member_headers, json=payload
+    )
+
+    assert response.status_code == 201, response.json
+
+    _, response = await sanic_client.delete(
+        f"/api/data/storages_v2/{storage_id}/secrets", headers=project_normal_member_headers
+    )
+
+    assert response.status_code == 204, response.json
+
+    _, response = await sanic_client.get(
+        f"/api/data/storages_v2/{storage_id}/secrets", headers=project_normal_member_headers
+    )
+
+    assert response.status_code == 200
+    assert {s["name"] for s in response.json} == set(), response.json
+
+    # NOTE: Test that associated secrets are deleted
+    _, response = await sanic_client.get(
+        "/api/data/user/secrets", params={"kind": "storage"}, headers=project_normal_member_headers
+    )
+
+    assert response.status_code == 200
+    assert response.json == [], response.json
+
+    # TODO: Once saved secret sharing is implemented, add a test that makes sure shared secrets aren't deleted unless
+    # no other storage is using them

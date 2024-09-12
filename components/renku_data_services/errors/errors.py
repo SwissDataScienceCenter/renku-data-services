@@ -36,21 +36,23 @@ class GeneralBadRequest(BaseError):
 
 
 @dataclass
-class NoDefaultPoolAccessError(BaseError):
-    """Raised when the user does not have the right to access the default resource pool."""
-
-    code: int = 1400
-    message: str = "The user cannot access the default resource pool."
-    status_code: int = 400
-
-
-@dataclass
-class Unauthorized(BaseError):
+class UnauthorizedError(BaseError):
     """Raised when the user does not have the required credentials."""
 
     code: int = 1401
-    message: str = "The supplied credentials are missing or invalid."
+    message: str = "Credentials need to be supplied for this operation."
     status_code: int = 401
+    quiet: bool = True
+
+
+@dataclass
+class ForbiddenError(BaseError):
+    """Raised when the provided credentials do not grant permission for the current operation."""
+
+    code: int = 1403
+    message: str = "The supplied credentials do not grant permission for this operation."
+    status_code: int = 403
+    quiet: bool = True
 
 
 @dataclass
@@ -125,7 +127,7 @@ class EventError(BaseError):
     """Raised an irrecoverable error when generating events for the message queue."""
 
     code: int = 1501
-    message: str = "An unexpected error occured when handling or generating events for the message queue."
+    message: str = "An unexpected error occurred when handling or generating events for the message queue."
     status_code: int = 500
 
 
@@ -134,7 +136,7 @@ class SecretDecryptionError(BaseError):
     """Raised when an error occurs decrypting secrets."""
 
     code: int = 1510
-    message: str = "An error occured decrypting secrets."
+    message: str = "An error occurred decrypting secrets."
     status_code: int = 500
 
 
@@ -143,5 +145,5 @@ class SecretCreationError(BaseError):
     """Raised when an error occurs creating secrets."""
 
     code: int = 1511
-    message: str = "An error occured creating secrets."
+    message: str = "An error occurred creating secrets."
     status_code: int = 500

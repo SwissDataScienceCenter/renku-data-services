@@ -6,6 +6,7 @@ from typing import Any
 from sanic import HTTPResponse, Request, json
 from sanic.response import JSONResponse
 from sanic_ext import validate
+from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services.authz.models import Member, Role, Visibility
@@ -17,11 +18,11 @@ from renku_data_services.base_api.auth import (
 )
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.etag import if_match_required
+from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.errors import errors
 from renku_data_services.project import apispec
 from renku_data_services.project import models as project_models
-from renku_data_services.project.apispec_base import GetProjectsParams
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
 from renku_data_services.users.db import UserRepo
 
@@ -39,17 +40,17 @@ class ProjectsBP(CustomBlueprint):
         """List all projects."""
 
         @authenticate(self.authenticator)
+        @validate_query(query=apispec.ProjectGetQuery)
         @paginate
         async def _get_all(
-            request: Request, user: base_models.APIUser, pagination: PaginationRequest
+            request: Request, user: base_models.APIUser, pagination: PaginationRequest, query: apispec.ProjectGetQuery
         ) -> tuple[list[dict[str, Any]], int]:
-            params = GetProjectsParams.model_validate(dict(request.query_args))
             projects, total_num = await self.project_repo.get_projects(
-                user=user, pagination=pagination, namespace=params.namespace
+                user=user, pagination=pagination, namespace=query.namespace
             )
             return [
                 dict(
-                    id=p.id,
+                    id=str(p.id),
                     name=p.name,
                     namespace=p.namespace.slug,
                     slug=p.slug,
@@ -87,7 +88,7 @@ class ProjectsBP(CustomBlueprint):
             result = await self.project_repo.insert_project(user, project)
             return json(
                 dict(
-                    id=result.id,
+                    id=str(result.id),
                     name=result.name,
                     namespace=result.namespace.slug,
                     slug=result.slug,
@@ -110,7 +111,7 @@ class ProjectsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @validate_path_project_id
         async def _get_one(request: Request, user: base_models.APIUser, project_id: str) -> JSONResponse | HTTPResponse:
-            project = await self.project_repo.get_project(user=user, project_id=project_id)
+            project = await self.project_repo.get_project(user=user, project_id=ULID.from_str(project_id))
 
             etag = request.headers.get("If-None-Match")
             if project.etag is not None and project.etag == etag:
@@ -119,7 +120,7 @@ class ProjectsBP(CustomBlueprint):
             headers = {"ETag": project.etag} if project.etag is not None else None
             return json(
                 dict(
-                    id=project.id,
+                    id=str(project.id),
                     name=project.name,
                     namespace=project.namespace.slug,
                     slug=project.slug,
@@ -152,7 +153,7 @@ class ProjectsBP(CustomBlueprint):
             headers = {"ETag": project.etag} if project.etag is not None else None
             return json(
                 dict(
-                    id=project.id,
+                    id=str(project.id),
                     name=project.name,
                     namespace=project.namespace.slug,
                     slug=project.slug,
@@ -176,7 +177,7 @@ class ProjectsBP(CustomBlueprint):
         @only_authenticated
         @validate_path_project_id
         async def _delete(_: Request, user: base_models.APIUser, project_id: str) -> HTTPResponse:
-            await self.project_repo.delete_project(user=user, project_id=project_id)
+            await self.project_repo.delete_project(user=user, project_id=ULID.from_str(project_id))
             return HTTPResponse(status=204)
 
         return "/projects/<project_id>", ["DELETE"], _delete
@@ -195,7 +196,7 @@ class ProjectsBP(CustomBlueprint):
             body_dict = body.model_dump(exclude_none=True)
 
             project_update = await self.project_repo.update_project(
-                user=user, project_id=project_id, etag=etag, payload=body_dict
+                user=user, project_id=ULID.from_str(project_id), etag=etag, payload=body_dict
             )
             if not isinstance(project_update, project_models.ProjectUpdate):
                 raise errors.ProgrammingError(
@@ -206,7 +207,7 @@ class ProjectsBP(CustomBlueprint):
             updated_project = project_update.new
             return json(
                 dict(
-                    id=updated_project.id,
+                    id=str(updated_project.id),
                     name=updated_project.name,
                     namespace=updated_project.namespace.slug,
                     slug=updated_project.slug,
@@ -229,7 +230,7 @@ class ProjectsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @validate_path_project_id
         async def _get_all_members(_: Request, user: base_models.APIUser, project_id: str) -> JSONResponse:
-            members = await self.project_member_repo.get_members(user, project_id)
+            members = await self.project_member_repo.get_members(user, ULID.from_str(project_id))
 
             users = []
 
@@ -239,10 +240,11 @@ class ProjectsBP(CustomBlueprint):
                 if not user_with_namespace:
                     raise errors.MissingResourceError(message=f"The user with ID {user_id} cannot be found.")
                 user_info = user_with_namespace.user
+                namespace_info = user_with_namespace.namespace
 
                 user_with_id = apispec.ProjectMemberResponse(
                     id=user_id,
-                    email=user_info.email,
+                    namespace=namespace_info.slug,
                     first_name=user_info.first_name,
                     last_name=user_info.last_name,
                     role=apispec.Role(member.role.value),
@@ -261,7 +263,7 @@ class ProjectsBP(CustomBlueprint):
         async def _update_members(request: Request, user: base_models.APIUser, project_id: str) -> HTTPResponse:
             body_dump = apispec.ProjectMemberListPatchRequest.model_validate(request.json)
             members = [Member(Role(i.role.value), i.id, project_id) for i in body_dump.root]
-            await self.project_member_repo.update_members(user, project_id, members)
+            await self.project_member_repo.update_members(user, ULID.from_str(project_id), members)
             return HTTPResponse(status=200)
 
         return "/projects/<project_id>/members", ["PATCH"], _update_members
@@ -275,7 +277,7 @@ class ProjectsBP(CustomBlueprint):
         async def _delete_member(
             _: Request, user: base_models.APIUser, project_id: str, member_id: str
         ) -> HTTPResponse:
-            await self.project_member_repo.delete_members(user, project_id, [member_id])
+            await self.project_member_repo.delete_members(user, ULID.from_str(project_id), [member_id])
             return HTTPResponse(status=204)
 
         return "/projects/<project_id>/members/<member_id>", ["DELETE"], _delete_member

@@ -1,0 +1,12 @@
+{
+  "type": "record",
+  "name":"ReprovisioningFinished",
+  "namespace":"io.renku.events.v2",
+  "doc":"Event raised when a reprovisioning of data events finished",
+  "fields":[
+    {
+      "name":"id",
+      "type":"string"
+    }
+  ]
+}
