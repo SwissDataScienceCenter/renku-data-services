@@ -12,7 +12,7 @@ from ulid import ULID
 from renku_data_services.base_api.auth import APIUser, only_authenticated
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.errors import errors
-from renku_data_services.secrets.models import Secret, SecretKind
+from renku_data_services.secrets.models import Secret, SecretKind, UnsavedSecret
 from renku_data_services.secrets.orm import SecretORM
 
 
@@ -56,7 +56,7 @@ class UserSecretsRepo:
             return [orm.dump() for orm in orms]
 
     @only_authenticated
-    async def insert_secret(self, requested_by: APIUser, secret: Secret) -> Secret:
+    async def insert_secret(self, requested_by: APIUser, secret: UnsavedSecret) -> Secret:
         """Insert a new secret."""
 
         async with self.session_maker() as session, session.begin():

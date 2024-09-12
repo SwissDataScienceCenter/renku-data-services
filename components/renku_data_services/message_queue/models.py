@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Generic, TypeVar
+from typing import Any, Self, TypeVar
 
 from dataclasses_avroschema.schema_generator import AvroModel
 from dataclasses_avroschema.utils import standardize_custom_type
@@ -53,7 +53,7 @@ def deserialize_binary(data: bytes, model: type[TAvro]) -> TAvro:
 
 
 def _create_header(
-    message_type: str, content_type: str = "application/avro+binary", schema_version: str = "1"
+    message_type: str, content_type: str = "application/avro+binary", schema_version: str = "2"
 ) -> Header:
     """Create a message header."""
     return Header(
@@ -66,25 +66,25 @@ def _create_header(
     )
 
 
-_EventPayloadType = TypeVar("_EventPayloadType", AvroModel, dict[str, Any])
-
-
 @dataclass
-class Event(Generic[_EventPayloadType]):
-    """An event that should be sent to the message queue."""
+class Event:
+    """An event and the queue it is supposed to be sent to."""
 
     queue: str
-    payload: _EventPayloadType
+    _payload: dict[str, Any]
 
-    def serialize(self, schema_version: str = "2") -> dict[str, Any]:
-        """Create the avro message payload from the event."""
-        if isinstance(self.payload, dict):
-            return self.payload
+    def serialize(self) -> dict[str, Any]:
+        """Return the event as avro payload."""
+        return self._payload
+
+    @classmethod
+    def create(cls, queue: str, message_type: str, payload: AvroModel) -> Self:
+        """Create a new event from an avro model."""
         message_id = ULID().hex
-        headers = _create_header(self.queue, schema_version=schema_version).serialize_json()
+        headers = _create_header(message_type, schema_version="2").serialize_json()
         message: dict[str, Any] = {
             "id": message_id,
             "headers": headers,
-            "payload": _serialize_binary(self.payload),
+            "payload": _serialize_binary(payload),
         }
-        return message
+        return cls(queue, message)

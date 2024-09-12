@@ -69,7 +69,7 @@ class CloudStorageORM(BaseORM):
     )
 
     @classmethod
-    def load(cls, storage: models.CloudStorage) -> "CloudStorageORM":
+    def load(cls, storage: models.UnsavedCloudStorage) -> "CloudStorageORM":
         """Create CloudStorageORM from the cloud storage model."""
         return cls(
             project_id=storage.project_id,

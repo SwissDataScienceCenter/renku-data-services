@@ -51,7 +51,7 @@ class RCloneConfig(BaseModel, MutableMapping):
         yield from self.config.keys()
 
 
-class CloudStorage(BaseModel):
+class UnsavedCloudStorage(BaseModel):
     """Cloud Storage model."""
 
     project_id: str = Field(pattern=r"^[A-Z0-9]+$")
@@ -59,8 +59,6 @@ class CloudStorage(BaseModel):
     storage_type: str = Field(pattern=r"^[a-z0-9]+$")
     configuration: RCloneConfig
     readonly: bool = Field(default=True)
-
-    storage_id: ULID | None = Field(default=None)
 
     source_path: str = Field()
     """Path inside the cloud storage.
@@ -75,7 +73,7 @@ class CloudStorage(BaseModel):
     secrets: list["CloudStorageSecret"] = Field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, data: dict) -> "CloudStorage":
+    def from_dict(cls, data: dict) -> "UnsavedCloudStorage":
         """Create the model from a plain dictionary."""
 
         if "project_id" not in data:
@@ -94,7 +92,6 @@ class CloudStorage(BaseModel):
 
         return cls(
             project_id=data["project_id"],
-            storage_id=data.get("storage_id"),
             name=data["name"],
             configuration=RCloneConfig(config=data["configuration"]),
             storage_type=data["configuration"]["type"],
@@ -104,7 +101,9 @@ class CloudStorage(BaseModel):
         )
 
     @classmethod
-    def from_url(cls, storage_url: str, name: str, readonly: bool, project_id: str, target_path: str) -> "CloudStorage":
+    def from_url(
+        cls, storage_url: str, name: str, readonly: bool, project_id: str, target_path: str
+    ) -> "UnsavedCloudStorage":
         """Get Cloud Storage/rclone config from a storage URL.
 
         Example:
@@ -124,18 +123,18 @@ class CloudStorage(BaseModel):
 
         match parsed_url.scheme:
             case "s3":
-                return CloudStorage.from_s3_url(parsed_url, project_id, name, readonly, target_path)
+                return UnsavedCloudStorage.from_s3_url(parsed_url, project_id, name, readonly, target_path)
             case "azure" | "az":
-                return CloudStorage.from_azure_url(parsed_url, project_id, name, readonly, target_path)
+                return UnsavedCloudStorage.from_azure_url(parsed_url, project_id, name, readonly, target_path)
             case "http" | "https":
-                return CloudStorage._from_ambiguous_url(parsed_url, project_id, name, readonly, target_path)
+                return UnsavedCloudStorage._from_ambiguous_url(parsed_url, project_id, name, readonly, target_path)
             case _:
                 raise errors.ValidationError(message=f"Scheme '{parsed_url.scheme}' is not supported.")
 
     @classmethod
     def from_s3_url(
         cls, storage_url: ParseResult, project_id: str, name: str, readonly: bool, target_path: str
-    ) -> "CloudStorage":
+    ) -> "UnsavedCloudStorage":
         """Get Cloud storage from an S3 URL.
 
         Example:
@@ -166,7 +165,7 @@ class CloudStorage(BaseModel):
         else:
             configuration["endpoint"] = storage_url.netloc
 
-        return cls(
+        return UnsavedCloudStorage(
             project_id=project_id,
             name=name,
             storage_type="s3",
@@ -179,7 +178,7 @@ class CloudStorage(BaseModel):
     @classmethod
     def from_azure_url(
         cls, storage_url: ParseResult, project_id: str, name: str, readonly: bool, target_path: str
-    ) -> "CloudStorage":
+    ) -> "UnsavedCloudStorage":
         """Get Cloud storage from an Azure URL.
 
         Example:
@@ -202,7 +201,7 @@ class CloudStorage(BaseModel):
                     raise errors.ValidationError(message="Host cannot contain dots unless it's a core.windows.net URL")
 
                 source_path = f"{storage_url.hostname}{storage_url.path}"
-        return cls(
+        return UnsavedCloudStorage(
             project_id=project_id,
             name=name,
             storage_type="azureblob",
@@ -215,16 +214,22 @@ class CloudStorage(BaseModel):
     @classmethod
     def _from_ambiguous_url(
         cls, storage_url: ParseResult, project_id: str, name: str, readonly: bool, target_path: str
-    ) -> "CloudStorage":
+    ) -> "UnsavedCloudStorage":
         """Get cloud storage from an ambiguous storage url."""
         if storage_url.hostname is None:
             raise errors.ValidationError(message="Storage URL must contain a host")
 
         if storage_url.hostname.endswith(".windows.net"):
-            return CloudStorage.from_azure_url(storage_url, project_id, name, readonly, target_path)
+            return UnsavedCloudStorage.from_azure_url(storage_url, project_id, name, readonly, target_path)
 
         # default to S3 for unknown URLs, since these are way more common
-        return CloudStorage.from_s3_url(storage_url, project_id, name, readonly, target_path)
+        return UnsavedCloudStorage.from_s3_url(storage_url, project_id, name, readonly, target_path)
+
+
+class CloudStorage(UnsavedCloudStorage):
+    """Cloudstorage saved in the database."""
+
+    storage_id: ULID = Field(default=None)
 
 
 class CloudStorageSecret(BaseModel):

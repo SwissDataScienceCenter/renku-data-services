@@ -28,7 +28,7 @@ FROM python:3.12-slim-bookworm
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 RUN apt-get update && apt-get install -y \
-    tini && \
+    tini vim-tiny procps curl && \
     rm -rf /var/lib/apt/lists/* && \
     groupadd --gid $USER_GID renku && \
     adduser --gid $USER_GID --uid $USER_UID renku

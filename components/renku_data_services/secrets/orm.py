@@ -46,14 +46,17 @@ class SecretORM(BaseORM):
     def dump(self) -> models.Secret:
         """Create a secret object from the ORM object."""
         secret = models.Secret(
-            name=self.name, encrypted_value=self.encrypted_value, encrypted_key=self.encrypted_key, kind=self.kind
+            id=self.id,
+            name=self.name,
+            encrypted_value=self.encrypted_value,
+            encrypted_key=self.encrypted_key,
+            kind=self.kind,
         )
-        secret.id = self.id
         secret.modification_date = self.modification_date
         return secret
 
     @classmethod
-    def load(cls, secret: models.Secret) -> "SecretORM":
+    def load(cls, secret: models.UnsavedSecret) -> "SecretORM":
         """Create an ORM object from the user object."""
         return cls(
             name=secret.name,

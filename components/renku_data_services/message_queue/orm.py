@@ -1,9 +1,10 @@
 """SQLAlchemy schemas for the CRC database."""
 
 import base64
+import json
 from copy import deepcopy
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Optional
 
 from sqlalchemy import JSON, DateTime, MetaData, String
 from sqlalchemy.dialects.postgresql import JSONB
@@ -54,9 +55,19 @@ class EventORM(BaseORM):
         now_utc = datetime.now(UTC).replace(tzinfo=None)
         return cls(timestamp_utc=now_utc, queue=event.queue, payload=message)
 
-    def dump(self) -> Event[dict[str, Any]]:
+    def dump(self) -> Event:
         """Create an event from the ORM object."""
         message = deepcopy(self.payload)
         if "payload" in message and isinstance(message["payload"], str):
             message["payload"] = base64.b64decode(message["payload"])
         return Event(self.queue, message)
+
+    def get_message_type(self) -> Optional[str]:
+        """Return the message_type from the payload."""
+        headers = self.payload.get("headers", "{}")
+        headers_json = json.loads(headers)
+        message_type = str(headers_json.get("type", ""))
+        if message_type == "":
+            return None
+        else:
+            return message_type

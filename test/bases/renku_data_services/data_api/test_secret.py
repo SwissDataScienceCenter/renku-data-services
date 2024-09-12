@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from sanic_testing.testing import SanicASGITestClient
+from ulid import ULID
 
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.secrets.core import rotate_encryption_keys, rotate_single_encryption_key
@@ -300,7 +301,11 @@ async def test_single_secret_rotation():
     encrypted_key = encrypt_rsa(old_key.public_key(), encryption_key)
 
     secret = Secret(
-        name="test_secret", encrypted_value=encrypted_value, encrypted_key=encrypted_key, kind=SecretKind.general
+        id=ULID(),
+        name="test_secret",
+        encrypted_value=encrypted_value,
+        encrypted_key=encrypted_key,
+        kind=SecretKind.general,
     )
 
     rotated_secret = await rotate_single_encryption_key(secret, user_id, new_key, old_key)
