@@ -313,17 +313,14 @@ class ConnectedServicesRepository:
             try:
                 if adapter.user_info_method == "POST":
                     response = await oauth2_client.post(request_url, headers=adapter.api_common_headers)
-
                 else:
                     response = await oauth2_client.get(request_url, headers=adapter.api_common_headers)
             except InvalidTokenError as e:
                 raise errors.InvalidOAuth2Token() from e
 
             if response.status_code > 200:
-                logger.info(response.text)
                 raise errors.UnauthorizedError(message=f"Could not get account information.{response.json()}")
 
-            logger.info(f"Got identity response with fields: {response.json().keys()}")
             account = adapter.api_validate_account_response(response)
             return account
 
