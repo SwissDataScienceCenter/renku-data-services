@@ -114,7 +114,7 @@ class KCUsersBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        async def _delete_one(_: Request, user_id: str) -> HTTPResponse:
+        async def _delete_one(_: Request, user: base_models.APIUser, user_id: str) -> HTTPResponse:
             deletion_result = await self.repo.remove_user(user_id)
             if deletion_result is None:
                 raise errors.MissingResourceError(message=f"The user with ID {user_id} cannot be found.")
