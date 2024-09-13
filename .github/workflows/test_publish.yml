@@ -206,7 +206,7 @@ jobs:
         uses: actions/checkout@v4
       - name: Docker meta data services
         id: meta
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v5
         with:
           # list of Docker images to use as base name for tags
           images: |
@@ -240,7 +240,7 @@ jobs:
           cache-to: type=registry,ref=renku/renku-data-service:buildcache,mode=max
       - name: Docker meta background jobs
         id: meta-background-jobs
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v5
         with:
           # list of Docker images to use as base name for tags
           images: |
@@ -265,7 +265,7 @@ jobs:
           cache-to: type=registry,ref=renku/data-service-background-jobs:buildcache,mode=max
       - name: Docker meta secrets
         id: meta-secrets-storage
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v5
         with:
           # list of Docker images to use as base name for tags
           images: |
