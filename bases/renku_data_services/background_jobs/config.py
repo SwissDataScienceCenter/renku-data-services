@@ -68,11 +68,11 @@ class SyncConfig:
             authz=Authz(authz_config),
         )
         user_repo = UserRepo(
-            session_maker=session_maker,
-            message_queue=message_queue,
-            event_repo=event_repo,
-            group_repo=group_repo,
-            authz=Authz(authz_config),
+            session_maker,
+            message_queue,
+            event_repo,
+            group_repo,
+            Authz(authz_config),
         )
         syncer = UsersSync(
             session_maker,
