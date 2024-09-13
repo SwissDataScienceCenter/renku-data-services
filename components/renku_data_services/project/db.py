@@ -21,6 +21,7 @@ from renku_data_services.message_queue.avro_models.io.renku.events import v2 as 
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import dispatch_message
+from renku_data_services.namespace import orm as ns_schemas
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project import apispec as project_apispec
 from renku_data_services.project import models
@@ -105,7 +106,7 @@ class ProjectRepository:
         async with self.session_maker() as session:
             stmt = select(schemas.ProjectORM)
             stmt = _filter_by_namespace_slug(stmt, namespace)
-            stmt = stmt.where(schemas.ProjectSlug.slug == slug.lower())
+            stmt = stmt.where(ns_schemas.EntitySlugORM.slug == slug.lower())
             result = await session.execute(stmt)
             project_orm = result.scalars().first()
 
@@ -141,7 +142,7 @@ class ProjectRepository:
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
         ns = await session.scalar(
-            select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == project.namespace.lower())
+            select(ns_schemas.NamespaceORM).where(ns_schemas.NamespaceORM.slug == project.namespace.lower())
         )
         if not ns:
             raise errors.MissingResourceError(
@@ -177,10 +178,11 @@ class ProjectRepository:
             creation_date=datetime.now(UTC).replace(microsecond=0),
             keywords=project.keywords,
         )
-        project_slug = schemas.ProjectSlug(slug, project_id=project_orm.id, namespace_id=ns.id)
+        project_slug = ns_schemas.EntitySlugORM(slug, project_id=project_orm.id, namespace_id=ns.id)
 
-        session.add(project_slug)
         session.add(project_orm)
+        await session.flush()
+        session.add(project_slug)
         await session.flush()
         await session.refresh(project_orm)
 
@@ -247,7 +249,9 @@ class ProjectRepository:
 
         if "namespace" in payload:
             ns_slug = payload["namespace"]
-            ns = await session.scalar(select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == ns_slug.lower()))
+            ns = await session.scalar(
+                select(ns_schemas.NamespaceORM).where(ns_schemas.NamespaceORM.slug == ns_slug.lower())
+            )
             if not ns:
                 raise errors.MissingResourceError(message=f"The namespace with slug {ns_slug} does not exist")
             if not ns.group_id and not ns.user_id:
@@ -307,9 +311,9 @@ _T = TypeVar("_T")
 def _filter_by_namespace_slug(statement: Select[tuple[_T]], namespace: str) -> Select[tuple[_T]]:
     """Filters a select query on projects to a given namespace."""
     return (
-        statement.where(schemas.NamespaceORM.slug == namespace.lower())
-        .where(schemas.ProjectSlug.namespace_id == schemas.NamespaceORM.id)
-        .where(schemas.ProjectORM.id == schemas.ProjectSlug.project_id)
+        statement.where(ns_schemas.NamespaceORM.slug == namespace.lower())
+        .where(ns_schemas.EntitySlugORM.namespace_id == ns_schemas.NamespaceORM.id)
+        .where(schemas.ProjectORM.id == ns_schemas.EntitySlugORM.project_id)
     )
 
 
