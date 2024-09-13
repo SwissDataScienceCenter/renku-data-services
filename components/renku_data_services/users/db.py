@@ -44,7 +44,7 @@ class UserRepo:
     message_queue: IMessageQueue
     event_repo: EventRepository
     group_repo: GroupRepository
-    encryption_key: bytes = field(repr=False)
+    encryption_key: bytes | None = field(repr=False)
     authz: Authz
 
     def __post_init__(self) -> None:
@@ -154,6 +154,9 @@ class UserRepo:
     @only_authenticated
     async def get_or_create_user_secret_key(self, requested_by: APIUser) -> str:
         """Get a user's secret encryption key or create it if it doesn't exist."""
+
+        if self.encryption_key is None:
+            raise errors.ConfigurationError(message="Encryption key is not set")
 
         async with self.session_maker() as session, session.begin():
             stmt = select(UserORM).where(UserORM.keycloak_id == requested_by.id)
