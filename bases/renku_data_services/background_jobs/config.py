@@ -51,7 +51,6 @@ class SyncConfig:
         session_maker: Callable[..., AsyncSession] = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)  # type: ignore[call-overload]
         redis = RedisConfig.from_env(prefix)
         message_queue = RedisQueue(redis)
-        user_repo = UserRepo(session_maker=session_maker, message_queue=message_queue)
         authz_config = AuthzConfig.from_env()
         event_repo = EventRepository(session_maker=session_maker, message_queue=message_queue)
         group_repo = GroupRepository(
@@ -61,6 +60,13 @@ class SyncConfig:
             message_queue=message_queue,
         )
         project_repo = ProjectRepository(
+            session_maker=session_maker,
+            message_queue=message_queue,
+            event_repo=event_repo,
+            group_repo=group_repo,
+            authz=Authz(authz_config),
+        )
+        user_repo = UserRepo(
             session_maker=session_maker,
             message_queue=message_queue,
             event_repo=event_repo,
