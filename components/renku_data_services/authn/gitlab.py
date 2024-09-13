@@ -45,18 +45,18 @@ class GitlabAuthenticator:
         try:
             client.auth()  # needed for the user property to be set
         except gitlab.GitlabAuthenticationError:
-            raise errors.Unauthorized(message="User not authorized with Gitlab")
+            raise errors.UnauthorizedError(message="User not authorized with Gitlab")
         user = client.user
         if user is None:
-            raise errors.Unauthorized(message="User not authorized with Gitlab")
+            raise errors.UnauthorizedError(message="User not authorized with Gitlab")
 
         if user.state != "active":
-            raise errors.Unauthorized(message="User isn't active in Gitlab")
+            raise errors.ForbiddenError(message="User isn't active in Gitlab")
 
         user_id = user.id
 
         if user_id is None:
-            raise errors.Unauthorized(message="Could not get user id")
+            raise errors.UnauthorizedError(message="Could not get user id")
 
         full_name: str | None = user.name
         last_name: str | None = None

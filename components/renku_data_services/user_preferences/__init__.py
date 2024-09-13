@@ -1,1 +1,0 @@
-"""Blueprints for user preferences."""

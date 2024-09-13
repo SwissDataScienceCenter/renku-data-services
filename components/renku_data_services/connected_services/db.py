@@ -11,6 +11,7 @@ from sanic.log import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
@@ -69,8 +70,10 @@ class ConnectedServicesRepository:
         new_client: apispec.ProviderPost,
     ) -> models.OAuth2Client:
         """Insert a new OAuth2 Client environment."""
-        if user.id is None or not user.is_admin:
-            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+        if not user.is_admin:
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
         encrypted_client_secret = (
             encrypt_string(self.encryption_key, user.id, new_client.client_secret) if new_client.client_secret else None
@@ -105,7 +108,7 @@ class ConnectedServicesRepository:
     ) -> models.OAuth2Client:
         """Update an OAuth2 Client entry."""
         if not user.is_admin:
-            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session, session.begin():
             result = await session.scalars(
@@ -135,7 +138,7 @@ class ConnectedServicesRepository:
     async def delete_oauth2_client(self, user: base_models.APIUser, provider_id: str) -> None:
         """Delete an OAuth2 Client."""
         if not user.is_admin:
-            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session, session.begin():
             result = await session.scalars(
@@ -153,7 +156,7 @@ class ConnectedServicesRepository:
     ) -> str:
         """Authorize an OAuth2 Client."""
         if not user.is_authenticated or user.id is None:
-            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session, session.begin():
             result = await session.scalars(
@@ -220,7 +223,7 @@ class ConnectedServicesRepository:
         Returns the `next_url` parameter value the authorization flow was started with.
         """
         if not state:
-            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session, session.begin():
             result = await session.scalars(
@@ -231,7 +234,7 @@ class ConnectedServicesRepository:
             connection = result.one_or_none()
 
             if connection is None:
-                raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+                raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
             client = connection.client
             adapter = get_provider_adapter(client)
@@ -280,7 +283,7 @@ class ConnectedServicesRepository:
             connections = result.all()
             return [c.dump() for c in connections]
 
-    async def get_oauth2_connection(self, connection_id: str, user: base_models.APIUser) -> models.OAuth2Connection:
+    async def get_oauth2_connection(self, connection_id: ULID, user: base_models.APIUser) -> models.OAuth2Connection:
         """Get one OAuth2 connection from the database."""
         if not user.is_authenticated or user.id is None:
             raise errors.MissingResourceError(
@@ -301,7 +304,7 @@ class ConnectedServicesRepository:
             return connection.dump()
 
     async def get_oauth2_connected_account(
-        self, connection_id: str, user: base_models.APIUser
+        self, connection_id: ULID, user: base_models.APIUser
     ) -> models.ConnectedAccount:
         """Get the account information from a OAuth2 connection."""
         async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (oauth2_client, _, adapter):
@@ -309,12 +312,14 @@ class ConnectedServicesRepository:
             response = await oauth2_client.get(request_url, headers=adapter.api_common_headers)
 
             if response.status_code > 200:
-                raise errors.Unauthorized(message="Could not get account information.")
+                raise errors.UnauthorizedError(message="Could not get account information.")
 
             account = adapter.api_validate_account_response(response)
             return account
 
-    async def get_oauth2_connection_token(self, connection_id: str, user: base_models.APIUser) -> models.OAuth2TokenSet:
+    async def get_oauth2_connection_token(
+        self, connection_id: ULID, user: base_models.APIUser
+    ) -> models.OAuth2TokenSet:
         """Get the OAuth2 access token from one connection from the database."""
         async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (oauth2_client, _, _):
             await oauth2_client.ensure_active_token(oauth2_client.token)
@@ -323,7 +328,7 @@ class ConnectedServicesRepository:
 
     @asynccontextmanager
     async def get_async_oauth2_client(
-        self, connection_id: str, user: base_models.APIUser
+        self, connection_id: ULID, user: base_models.APIUser
     ) -> AsyncGenerator[tuple[AsyncOAuth2Client, schemas.OAuth2ConnectionORM, ProviderAdapter], None]:
         """Get the AsyncOAuth2Client for the given connection_id and user."""
         if not user.is_authenticated or user.id is None:
@@ -345,7 +350,7 @@ class ConnectedServicesRepository:
                 )
 
             if connection.status != ConnectionStatus.connected or connection.token is None:
-                raise errors.Unauthorized(message=f"OAuth2 connection with id '{connection_id}' is not valid.")
+                raise errors.UnauthorizedError(message=f"OAuth2 connection with id '{connection_id}' is not valid.")
 
             client = connection.client
             token = self._decrypt_token_set(token=connection.token, user_id=user.id)

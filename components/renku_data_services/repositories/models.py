@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 
+from ulid import ULID
+
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class RepositoryPermissions:
@@ -31,5 +33,5 @@ class RepositoryProviderMatch:
     """Repository provider match data."""
 
     provider_id: str
-    connection_id: str | None
+    connection_id: ULID | None
     repository_metadata: RepositoryMetadata | None

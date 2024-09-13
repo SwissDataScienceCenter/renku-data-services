@@ -56,8 +56,10 @@ class SessionRepository:
         new_environment: apispec.EnvironmentPost,
     ) -> models.Environment:
         """Insert a new session environment."""
-        if user.id is None or not user.is_admin:
-            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+        if not user.is_admin:
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
         environment_model = models.Environment(
             id=None,
@@ -79,7 +81,7 @@ class SessionRepository:
     ) -> models.Environment:
         """Update a session environment entry."""
         if not user.is_admin:
-            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session, session.begin():
             res = await session.scalars(
@@ -101,7 +103,7 @@ class SessionRepository:
     async def delete_environment(self, user: base_models.APIUser, environment_id: ULID) -> None:
         """Delete a session environment entry."""
         if not user.is_admin:
-            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session, session.begin():
             res = await session.scalars(
@@ -131,7 +133,9 @@ class SessionRepository:
 
     async def get_project_launchers(self, user: base_models.APIUser, project_id: str) -> list[models.SessionLauncher]:
         """Get all session launchers in a project from the database."""
-        authorized = await self.project_authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
+        authorized = await self.project_authz.has_permission(
+            user, ResourceType.project, ULID.from_str(project_id), Scope.READ
+        )
         if not authorized:
             raise errors.MissingResourceError(
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
@@ -150,7 +154,7 @@ class SessionRepository:
         """Get one session launcher from the database."""
         async with self.session_maker() as session:
             res = await session.scalars(
-                select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.id == str(launcher_id))
+                select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.id == launcher_id)
             )
             launcher = res.one_or_none()
 
@@ -171,10 +175,12 @@ class SessionRepository:
     ) -> models.SessionLauncher:
         """Insert a new session launcher."""
         if not user.is_authenticated or user.id is None:
-            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
         project_id = new_launcher.project_id
-        authorized = await self.project_authz.has_permission(user, ResourceType.project, project_id, Scope.WRITE)
+        authorized = await self.project_authz.has_permission(
+            user, ResourceType.project, ULID.from_str(project_id), Scope.WRITE
+        )
         if not authorized:
             raise errors.MissingResourceError(
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
@@ -229,8 +235,8 @@ class SessionRepository:
                 res_classes = await self.resource_pools.get_classes(api_user=user, id=resource_class_id)
                 resource_class_by_user = next((rc for rc in res_classes if rc.id == resource_class_id), None)
                 if resource_class_by_user is None:
-                    raise errors.Unauthorized(
-                        message=f"Resource class with id '{resource_class_id}' you do not have access to it."
+                    raise errors.ForbiddenError(
+                        message=f"You do not have access to resource class with id '{resource_class_id}'."
                     )
 
             launcher = schemas.SessionLauncherORM.load(launcher_model)
@@ -242,11 +248,11 @@ class SessionRepository:
     ) -> models.SessionLauncher:
         """Update a session launcher entry."""
         if not user.is_authenticated or user.id is None:
-            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session, session.begin():
             res = await session.scalars(
-                select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.id == str(launcher_id))
+                select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.id == launcher_id)
             )
             launcher = res.one_or_none()
             if launcher is None:
@@ -261,7 +267,7 @@ class SessionRepository:
                 Scope.WRITE,
             )
             if not authorized:
-                raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+                raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
             environment_id = kwargs.get("environment_id")
             if environment_id is not None:
@@ -288,8 +294,8 @@ class SessionRepository:
                 res_classes = await self.resource_pools.get_classes(api_user=user, id=resource_class_id)
                 resource_class_by_user = next((rc for rc in res_classes if rc.id == resource_class_id), None)
                 if resource_class_by_user is None:
-                    raise errors.Unauthorized(
-                        message=f"Resource class with id '{resource_class_id}' you do not have access to it."
+                    raise errors.ForbiddenError(
+                        message=f"You do not have access to resource class with id '{resource_class_id}'."
                     )
 
             for key, value in kwargs.items():
@@ -320,11 +326,11 @@ class SessionRepository:
     async def delete_launcher(self, user: base_models.APIUser, launcher_id: ULID) -> None:
         """Delete a session launcher entry."""
         if not user.is_authenticated or user.id is None:
-            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session, session.begin():
             res = await session.scalars(
-                select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.id == str(launcher_id))
+                select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.id == launcher_id)
             )
             launcher = res.one_or_none()
 
@@ -338,6 +344,6 @@ class SessionRepository:
                 Scope.WRITE,
             )
             if not authorized:
-                raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+                raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
             await session.delete(launcher)

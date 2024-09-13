@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from pydantic import BaseModel, model_validator
+from ulid import ULID
 
 from renku_data_services import errors
 from renku_data_services.session.apispec import EnvironmentKind
@@ -33,7 +34,7 @@ class Environment(BaseModel):
 class SessionLauncher(BaseModel):
     """Session launcher model."""
 
-    id: str | None
+    id: ULID | None
     project_id: str
     name: str
     creation_date: datetime

@@ -155,7 +155,7 @@ async def test_post_oauth2_provider_unauthorized(sanic_client: SanicASGITestClie
 
     _, res = await sanic_client.post("/api/data/oauth2/providers", headers=user_headers, json=payload)
 
-    assert res.status_code == 401, res.text
+    assert res.status_code == 403, res.text
 
 
 @pytest.mark.asyncio
@@ -193,7 +193,7 @@ async def test_patch_oauth2_provider_unauthorized(
 
     _, res = await sanic_client.patch(f"/api/data/oauth2/providers/{provider_id}", headers=user_headers, json=payload)
 
-    assert res.status_code == 401, res.text
+    assert res.status_code == 403, res.text
 
 
 @pytest.mark.asyncio
@@ -215,7 +215,7 @@ async def test_delete_oauth2_provider_unauthorized(
 
     _, res = await sanic_client.delete(f"/api/data/oauth2/providers/{provider_id}", headers=user_headers)
 
-    assert res.status_code == 401, res.text
+    assert res.status_code == 403, res.text
 
 
 @pytest.mark.asyncio

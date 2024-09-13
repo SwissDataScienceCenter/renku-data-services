@@ -219,7 +219,7 @@ def storage_test_client(app_config: Config) -> SanicASGITestClient:
                 "source_path": "bucket/myfolder",
                 "target_path": "my/target",
             },
-            401,
+            403,
             "",
         ),
         (
@@ -366,7 +366,7 @@ async def test_storage_deletion_unauthorized(storage_test_client, valid_storage_
         f"/api/data/storage/{storage_id}",
         headers={"Authorization": ""},
     )
-    assert res.status_code == 401
+    assert res.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -422,7 +422,7 @@ async def test_storage_put_unauthorized(storage_test_client, valid_storage_paylo
             }
         ),
     )
-    assert res.status_code == 401
+    assert res.status_code == 403, res.text
 
 
 @pytest.mark.asyncio
@@ -490,7 +490,7 @@ async def test_storage_patch_unauthorized(storage_test_client, valid_storage_pay
             }
         ),
     )
-    assert res.status_code == 401
+    assert res.status_code == 403, res.text
 
 
 @pytest.mark.asyncio

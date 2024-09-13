@@ -26,7 +26,7 @@ class NotebooksAuthenticator:
         headers_dict: dict[str, str] = {str(k): str(v) for (k, v) in request.headers.items()}
         user: RegisteredUser | AnonymousUser = RegisteredUser(headers_dict)
         if not self.config.anonymous_sessions_enabled and not user.authenticated:
-            raise errors.Unauthorized(message="You have to be authenticated to perform this operation.")
+            raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
         if not user.authenticated:
             user = AnonymousUser(headers_dict, self.config.git.url)
         return user

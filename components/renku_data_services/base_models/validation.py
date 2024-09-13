@@ -11,6 +11,23 @@ from sanic.response import JSONResponse
 from renku_data_services import errors
 
 
+def validate_and_dump(
+    model: type[BaseModel],
+    data: Any,
+    exclude_none: bool = True,
+) -> Any:
+    """Validate and dump with a pydantic model, ensuring proper validation errors."""
+    try:
+        body = model.model_validate(data).model_dump(exclude_none=exclude_none, mode="json")
+    except PydanticValidationError as err:
+        parts = [".".join(str(i) for i in field["loc"]) + ": " + field["msg"] for field in err.errors()]
+        message = (
+            f"The server could not construct a valid response. Errors found in the following fields: {', '.join(parts)}"
+        )
+        raise errors.ProgrammingError(message=message) from err
+    return body
+
+
 def validated_json(
     model: type[BaseModel],
     data: Any,
@@ -25,12 +42,5 @@ def validated_json(
 
     If the input data fails validation, an HTTP status code 500 will be raised.
     """
-    try:
-        body = model.model_validate(data).model_dump(exclude_none=exclude_none, mode="json")
-    except PydanticValidationError as err:
-        parts = [".".join(str(i) for i in field["loc"]) + ": " + field["msg"] for field in err.errors()]
-        message = (
-            f"The server could not construct a valid response. Errors found in the following fields: {', '.join(parts)}"
-        )
-        raise errors.ProgrammingError(message=message) from err
+    body = validate_and_dump(model, data, exclude_none)
     return json(body, status=status, headers=headers, content_type=content_type, dumps=dumps, **kwargs)

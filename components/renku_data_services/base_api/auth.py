@@ -59,7 +59,7 @@ def validate_path_project_id(
             )
         if not _path_project_id_regex.match(project_id):
             raise errors.ValidationError(
-                message=f"The 'project_id' path parameter {project_id} does not match the requried "
+                message=f"The 'project_id' path parameter {project_id} does not match the required "
                 f"regex {_path_project_id_regex}"
             )
 
@@ -109,9 +109,11 @@ def only_admins(
     @wraps(f)
     async def decorated_function(request: Request, user: APIUser, *args: _P.args, **kwargs: _P.kwargs) -> _T:
         if user is None or user.access_token is None:
-            raise errors.Unauthorized(message="Please provide valid access credentials in the Authorization header.")
+            raise errors.UnauthorizedError(
+                message="Please provide valid access credentials in the Authorization header."
+            )
         if not user.is_admin:
-            raise errors.Unauthorized(message="You do not have the required permissions for this operation.")
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
         # the user is authenticated and is an admin
         response = await f(request, user, *args, **kwargs)
@@ -144,7 +146,7 @@ def only_authenticated(f: Callable[_P, Awaitable[_T]]) -> Callable[_P, Awaitable
                 )
 
         if api_user is None or not api_user.is_authenticated:
-            raise errors.Unauthorized(message="You have to be authenticated to perform this operation.")
+            raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
 
         # the user is authenticated
         response = await f(*args, **kwargs)

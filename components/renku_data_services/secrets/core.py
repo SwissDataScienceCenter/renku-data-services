@@ -7,12 +7,14 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from kubernetes import client as k8s_client
 from prometheus_client import Counter, Enum
 from sanic.log import logger
+from ulid import ULID
 
 from renku_data_services import base_models, errors
 from renku_data_services.base_models.core import InternalServiceAdmin
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface
 from renku_data_services.secrets.db import UserSecretsRepo
 from renku_data_services.secrets.models import OwnerReference, Secret
+from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.cryptography import (
     decrypt_rsa,
     decrypt_string,
@@ -26,20 +28,27 @@ async def create_k8s_secret(
     user: base_models.APIUser,
     secret_name: str,
     namespace: str,
-    secret_ids: list[str],
+    secret_ids: list[ULID],
     owner_references: list[OwnerReference],
     secrets_repo: UserSecretsRepo,
     secret_service_private_key: rsa.RSAPrivateKey,
     previous_secret_service_private_key: rsa.RSAPrivateKey | None,
     core_client: K8sCoreClientInterface,
+    key_mapping: dict[str, str] | None,
 ) -> None:
     """Creates a single k8s secret from a list of user secrets stored in the DB."""
     secrets = await secrets_repo.get_secrets_by_ids(requested_by=user, secret_ids=secret_ids)
     found_secret_ids = {str(s.id) for s in secrets}
-    requested_secret_ids = set(secret_ids)
+    requested_secret_ids = set(map(str, secret_ids))
     missing_secret_ids = requested_secret_ids - found_secret_ids
     if len(missing_secret_ids) > 0:
         raise errors.MissingResourceError(message=f"Couldn't find secrets with ids {', '.join(missing_secret_ids)}")
+
+    if key_mapping:
+        if set(key_mapping) != requested_secret_ids:
+            raise errors.ValidationError(message="Key mapping must include all requested secret IDs")
+        if len(key_mapping) != len(set(key_mapping.values())):
+            raise errors.ValidationError(message="Key mapping values are not unique")
 
     decrypted_secrets = {}
     try:
@@ -54,10 +63,11 @@ async def create_k8s_secret(
                     raise
 
             decrypted_value = decrypt_string(decryption_key, user.id, secret.encrypted_value).encode()  # type: ignore
-            decrypted_secrets[secret.name] = b64encode(decrypted_value).decode()
+            key = secret.name if not key_mapping else key_mapping[str(secret.id)]
+            decrypted_secrets[key] = b64encode(decrypted_value).decode()
     except Exception as e:
         # don't wrap the error, we don't want secrets accidentally leaking.
-        raise errors.SecretDecryptionError(message=f"An error occured decrypting secrets: {str(type(e))}")
+        raise errors.SecretDecryptionError(message=f"An error occurred decrypting secrets: {str(type(e))}")
 
     owner_refs = []
     if owner_references:
@@ -75,7 +85,7 @@ async def create_k8s_secret(
         core_client.create_namespaced_secret(namespace, secret)
     except k8s_client.ApiException as e:
         # don't wrap the error, we don't want secrets accidentally leaking.
-        raise errors.SecretCreationError(message=f"An error occured creating secrets: {str(type(e))}")
+        raise errors.SecretCreationError(message=f"An error occurred creating secrets: {str(type(e))}")
 
 
 async def rotate_encryption_keys(
@@ -93,10 +103,10 @@ async def rotate_encryption_keys(
         "secrets_rotation_count",
         "Number of secrets rotated",
     )
-    runnning_metrics = Enum(
+    running_metrics = Enum(
         "secrets_rotation_state", "State of secrets rotation", states=["running", "finished", "errored"]
     )
-    runnning_metrics.state("running")
+    running_metrics.state("running")
     try:
         async for batch in secrets_repo.get_all_secrets_batched(requested_by, batch_size):
             updated_secrets = []
@@ -110,10 +120,10 @@ async def rotate_encryption_keys(
             await secrets_repo.update_secrets(requested_by, updated_secrets)
             processed_secrets_metrics.inc(len(updated_secrets))
     except:
-        runnning_metrics.state("errored")
+        running_metrics.state("errored")
         raise
     else:
-        runnning_metrics.state("finished")
+        running_metrics.state("finished")
 
 
 async def rotate_single_encryption_key(
@@ -122,7 +132,7 @@ async def rotate_single_encryption_key(
     """Rotate a single secret in place."""
     # try using new key first as a sanity check, in case it was already rotated
     try:
-        decryption_key = decrypt_rsa(new_key, secret.encrypted_key)
+        _ = decrypt_rsa(new_key, secret.encrypted_key)
     except ValueError:
         pass
     else:
@@ -138,3 +148,28 @@ async def rotate_single_encryption_key(
         logger.error(f"Couldn't decrypt secret {secret.name}({secret.id}): {e}")
         return None
     return secret
+
+
+async def encrypt_user_secret(
+    user_repo: UserRepo,
+    requested_by: base_models.APIUser,
+    secret_service_public_key: rsa.RSAPublicKey,
+    secret_value: str,
+) -> tuple[bytes, bytes]:
+    """Doubly encrypt a secret for a user.
+
+    Since RSA cannot encrypt arbitrary length strings, we use symmetric encryption with a random key and encrypt the
+    random key with RSA to get it to the secret service.
+    """
+    if requested_by.id is None:
+        raise errors.ValidationError(message="APIUser has no id")
+
+    user_secret_key = await user_repo.get_or_create_user_secret_key(requested_by=requested_by)
+
+    # encrypt once with user secret
+    encrypted_value = encrypt_string(user_secret_key.encode(), requested_by.id, secret_value)
+    # encrypt again with the secret service public key
+    secret_svc_encryption_key = generate_random_encryption_key()
+    doubly_encrypted_value = encrypt_string(secret_svc_encryption_key, requested_by.id, encrypted_value.decode())
+    encrypted_key = encrypt_rsa(secret_service_public_key, secret_svc_encryption_key)
+    return doubly_encrypted_value, encrypted_key

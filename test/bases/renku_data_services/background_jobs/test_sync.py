@@ -20,6 +20,7 @@ from bases.renku_data_services.background_jobs.config import SyncConfig
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.authz.authz import Authz, ResourceType, _AuthzConverter, _Relation
 from renku_data_services.authz.config import AuthzConfig
+from renku_data_services.authz.models import Role, UnsavedMember
 from renku_data_services.background_jobs.core import (
     bootstrap_user_namespaces,
     fix_mismatched_project_namespace_ids,
@@ -35,10 +36,7 @@ from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.namespace.apispec import (
-    GroupMemberPatchRequest,
-    GroupMemberPatchRequestList,
     GroupPostRequest,
-    GroupRole,
 )
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.namespace.orm import NamespaceORM
@@ -607,9 +605,7 @@ async def test_fixing_project_group_namespace_relations(
         )
     )
     # Add group member
-    await sync_config.group_repo.update_group_members(
-        user1_api, "group1", GroupMemberPatchRequestList([GroupMemberPatchRequest(id=user2.id, role=GroupRole.viewer)])
-    )
+    await sync_config.group_repo.update_group_members(user1_api, "group1", [UnsavedMember(Role.VIEWER, user2.id)])
     with pytest.raises(errors.MissingResourceError):
         await sync_config.project_repo.get_project(user2_api, project.id)
     await fix_mismatched_project_namespace_ids(sync_config)

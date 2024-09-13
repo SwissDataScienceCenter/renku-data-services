@@ -8,6 +8,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, NamedTuple
 
+from pydantic import BaseModel, Field
 from sanic.log import logger
 
 from renku_data_services.namespace.models import Namespace
@@ -264,3 +265,21 @@ class UserWithNamespaceUpdate(NamedTuple):
 
     old: UserWithNamespace | None
     new: UserWithNamespace
+
+
+class PinnedProjects(BaseModel):
+    """Pinned projects model."""
+
+    project_slugs: list[str] | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "PinnedProjects":
+        """Create model from a dict object."""
+        return cls(project_slugs=data.get("project_slugs"))
+
+
+class UserPreferences(BaseModel):
+    """User preferences model."""
+
+    user_id: str = Field(min_length=3)
+    pinned_projects: PinnedProjects

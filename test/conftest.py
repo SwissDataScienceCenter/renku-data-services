@@ -65,17 +65,13 @@ def authz_config(monkeypatch, free_port) -> Iterator[AuthzConfig]:
 @pytest.fixture
 def db_config(monkeypatch, worker_id, authz_config) -> Iterator[DBConfig]:
     db_name = str(ULID()).lower() + "_" + worker_id
-    user = "renku"
-    host = "127.0.0.1"
-    port = 5432
-    password = "renku"  # nosec: B105
+    user = os.getenv("DB_USER", "renku")
+    host = os.getenv("DB_HOST", "127.0.0.1")
+    port = os.getenv("DB_PORT", "5432")
+    password = os.getenv("DB_PASSWORD", "renku")  # nosec: B105
 
     monkeypatch.setenv("DUMMY_STORES", "true")
     monkeypatch.setenv("DB_NAME", db_name)
-    monkeypatch.setenv("DB_USER", user)
-    monkeypatch.setenv("DB_PASSWORD", password)
-    monkeypatch.setenv("DB_HOST", host)
-    monkeypatch.setenv("DB_PORT", port)
     with DatabaseJanitor(
         user=user,
         host=host,

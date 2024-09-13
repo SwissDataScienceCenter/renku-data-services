@@ -6,6 +6,7 @@ from enum import Enum
 
 from kubernetes import client as k8s_client
 from pydantic import BaseModel, Field
+from ulid import ULID
 
 
 class SecretKind(Enum):
@@ -15,15 +16,20 @@ class SecretKind(Enum):
     storage = "storage"
 
 
-class Secret(BaseModel):
-    """Secret objects."""
+class UnsavedSecret(BaseModel):
+    """Secret objects not stored in the database."""
 
     name: str
     encrypted_value: bytes = Field(repr=False)
     encrypted_key: bytes = Field(repr=False)
-    id: str | None = Field(default=None, init=False)
     modification_date: datetime = Field(default_factory=lambda: datetime.now(UTC).replace(microsecond=0), init=False)
     kind: SecretKind
+
+
+class Secret(UnsavedSecret):
+    """Secret object stored in the database."""
+
+    id: ULID = Field()
 
 
 @dataclass

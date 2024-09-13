@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 from httpx import AsyncClient as HttpClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
@@ -107,7 +108,7 @@ class GitRepositoriesRepository:
             )
 
     async def _get_repository_authenticated(
-        self, connection_id: str, repository_url: str, user: base_models.APIUser, etag: str | None
+        self, connection_id: ULID, repository_url: str, user: base_models.APIUser, etag: str | None
     ) -> models.RepositoryProviderMatch | Literal["304"]:
         """Get the metadata about a repository using an OAuth2 connection."""
         async with self.connected_services_repo.get_async_oauth2_client(connection_id=connection_id, user=user) as (

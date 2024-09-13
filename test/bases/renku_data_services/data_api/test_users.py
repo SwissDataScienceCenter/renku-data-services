@@ -67,7 +67,7 @@ async def test_get_all_users_as_non_admin(sanic_client, users) -> None:
         "/api/data/users",
         headers={"Authorization": f"bearer {json.dumps(access_token)}"},
     )
-    assert res.status_code == 401
+    assert res.status_code == 403
 
 
 @pytest.mark.asyncio

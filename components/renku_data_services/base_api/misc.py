@@ -3,10 +3,12 @@
 from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, NoReturn, ParamSpec, TypeVar, cast
+from typing import Any, Concatenate, NoReturn, ParamSpec, TypeVar, cast
 
+from pydantic import BaseModel
 from sanic import Request, json
 from sanic.response import JSONResponse
+from sanic_ext import validate
 
 from renku_data_services import errors
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
@@ -69,3 +71,29 @@ def validate_db_ids(f: Callable[_P, Awaitable[_T]]) -> Callable[_P, Coroutine[An
         return response
 
     return decorated_function
+
+
+def validate_query(
+    query: type[BaseModel],
+) -> Callable[
+    [Callable[Concatenate[Request, _P], Awaitable[_T]]],
+    Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]],
+]:
+    """Decorator for sanic query parameter validation.
+
+    Should be removed once sanic fixes this error in their validation code.
+    """
+
+    def decorator(
+        f: Callable[Concatenate[Request, _P], Awaitable[_T]],
+    ) -> Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]]:
+        @wraps(f)
+        async def decorated_function(request: Request, *args: _P.args, **kwargs: _P.kwargs) -> _T:
+            try:
+                return await validate(query=query)(f)(request, *args, **kwargs)
+            except KeyError:
+                raise errors.ValidationError(message="Failed to validate the query parameters")
+
+        return decorated_function
+
+    return decorator

@@ -71,3 +71,11 @@ target/
 # docker compose
 docker-compose.override.yml
 .devcontainer/.poetry_cache
+
+# direnv
+.direnv/
+.envrc
+
+# nix
+result
+*.qcow2

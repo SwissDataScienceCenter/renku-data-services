@@ -41,7 +41,7 @@ async def test_group_creation_basic(
 
     events = await app_config.event_repo._get_pending_events()
 
-    group_events = [e for e in events if e.queue == "group.added"]
+    group_events = [e for e in events if e.get_message_type() == "group.added"]
     assert len(group_events) == 1
     group_event = deserialize_binary(b64decode(group_events[0].payload["payload"]), GroupAdded)
     assert group_event.id == group["id"]
@@ -49,7 +49,7 @@ async def test_group_creation_basic(
     assert group_event.description == group["description"]
     assert group_event.namespace == group["slug"]
 
-    group_events = [e for e in events if e.queue == "memberGroup.added"]
+    group_events = [e for e in events if e.get_message_type() == "memberGroup.added"]
     assert len(group_events) == 1
     group_event = deserialize_binary(b64decode(group_events[0].payload["payload"]), GroupMemberAdded)
     assert group_event.userId == "user"
@@ -139,7 +139,7 @@ async def test_group_patch_delete(
 
     events = await app_config.event_repo._get_pending_events()
 
-    group_events = [e for e in events if e.queue == "group.updated"]
+    group_events = [e for e in events if e.get_message_type() == "group.updated"]
     assert len(group_events) == 1
     group_event = deserialize_binary(b64decode(group_events[0].payload["payload"]), GroupUpdated)
     assert group_event.id == group["id"]
@@ -156,7 +156,7 @@ async def test_group_patch_delete(
 
     events = await app_config.event_repo._get_pending_events()
 
-    group_events = [e for e in events if e.queue == "group.removed"]
+    group_events = [e for e in events if e.get_message_type() == "group.removed"]
     assert len(group_events) == 1
     group_event = deserialize_binary(b64decode(group_events[0].payload["payload"]), GroupRemoved)
     assert group_event.id == group["id"]
@@ -196,7 +196,7 @@ async def test_group_members(
 
     events = await app_config.event_repo._get_pending_events()
 
-    group_events = sorted([e for e in events if e.queue == "memberGroup.added"], key=lambda e: e.id)
+    group_events = sorted([e for e in events if e.get_message_type() == "memberGroup.added"], key=lambda e: e.id)
     assert len(group_events) == 2
     group_event = deserialize_binary(b64decode(group_events[1].payload["payload"]), GroupMemberAdded)
     assert group_event.userId == member_1["id"]
@@ -235,7 +235,7 @@ async def test_removing_single_group_owner_not_allowed(
     assert len(res_json) == 2
     # Trying to remove the single owner from the group will fail
     _, response = await sanic_client.delete("/api/data/groups/group-1/members/user", headers=user_headers)
-    assert response.status_code == 401
+    assert response.status_code == 422
     # Make the other member owner
     new_members = [{"id": "member-1", "role": "owner"}]
     _, response = await sanic_client.patch("/api/data/groups/group-1/members", headers=user_headers, json=new_members)
@@ -243,7 +243,7 @@ async def test_removing_single_group_owner_not_allowed(
 
     events = await app_config.event_repo._get_pending_events()
 
-    group_events = [e for e in events if e.queue == "memberGroup.updated"]
+    group_events = [e for e in events if e.get_message_type() == "memberGroup.updated"]
     assert len(group_events) == 1
     group_event = deserialize_binary(b64decode(group_events[0].payload["payload"]), GroupMemberUpdated)
     assert group_event.userId == "member-1"
@@ -256,7 +256,7 @@ async def test_removing_single_group_owner_not_allowed(
 
     events = await app_config.event_repo._get_pending_events()
 
-    group_events = [e for e in events if e.queue == "memberGroup.removed"]
+    group_events = [e for e in events if e.get_message_type() == "memberGroup.removed"]
     assert len(group_events) == 1
     group_event = deserialize_binary(b64decode(group_events[0].payload["payload"]), GroupMemberRemoved)
     assert group_event.userId == "user"
@@ -291,7 +291,7 @@ async def test_cannot_change_role_for_last_group_owner(
     new_roles = [{"id": regular_user.id, "role": "viewer"}]
     _, response = await sanic_client.patch("/api/data/groups/group-1/members", headers=user_headers, json=new_roles)
 
-    assert response.status_code == 401
+    assert response.status_code == 422
 
     # Can change the owner role if another owner is added during an update
     new_roles.append({"id": "member-1", "role": "owner"})
@@ -307,7 +307,7 @@ async def test_cannot_change_role_for_last_group_owner(
     new_roles = [{"id": regular_user.id, "role": "viewer"}, {"id": "member-1", "role": "viewer"}]
     _, response = await sanic_client.patch("/api/data/groups/group-1/members", headers=user_headers, json=new_roles)
 
-    assert response.status_code == 401
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio

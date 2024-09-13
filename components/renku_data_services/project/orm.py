@@ -13,6 +13,7 @@ from renku_data_services.authz import models as authz_models
 from renku_data_services.namespace.orm import NamespaceORM
 from renku_data_services.project import models
 from renku_data_services.project.apispec import Visibility
+from renku_data_services.utils.sqlalchemy import ULIDType
 
 metadata_obj = MetaData(schema="projects")  # Has to match alembic ini section name
 
@@ -27,7 +28,7 @@ class ProjectORM(BaseORM):
     """A Renku native project."""
 
     __tablename__ = "projects"
-    id: Mapped[str] = mapped_column("id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
     name: Mapped[str] = mapped_column("name", String(99))
     visibility: Mapped[Visibility]
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
@@ -90,10 +91,10 @@ class ProjectSlug(BaseORM):
 
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
     slug: Mapped[str] = mapped_column(String(99), index=True, nullable=False)
-    project_id: Mapped[str] = mapped_column(
+    project_id: Mapped[ULID] = mapped_column(
         ForeignKey(ProjectORM.id, ondelete="CASCADE", name="project_slugs_project_id_fk"), index=True
     )
-    namespace_id: Mapped[str] = mapped_column(
+    namespace_id: Mapped[ULID] = mapped_column(
         ForeignKey(NamespaceORM.id, ondelete="CASCADE", name="project_slugs_namespace_id_fk"), index=True
     )
     namespace: Mapped[NamespaceORM] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
