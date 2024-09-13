@@ -15,7 +15,7 @@ from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project.db import ProjectRepository
-from renku_data_services.users.db import UsersSync, UserRepo
+from renku_data_services.users.db import UserRepo, UsersSync
 from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
 
 
