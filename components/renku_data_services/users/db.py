@@ -315,7 +315,7 @@ class UsersSync:
                 latest_update_timestamp = update.timestamp_utc
             for deletion in parsed_deletions:
                 logger.info(f"Processing deletion event {deletion}")
-                await self.user_repo.remove_user(id=deletion.user_id)
+                await self.user_repo.remove_user(user_id=deletion.user_id)
                 latest_delete_timestamp = deletion.timestamp_utc
             # Update the latest processed event timestamp
             current_sync_latest_utc_timestamp = latest_update_timestamp
