@@ -127,7 +127,6 @@ class UserRepo:
 
             return [user.namespace.dump_user() for user in users if user.namespace is not None]
 
-    @only_authenticated
     async def remove_user(self, user_id: str) -> UserInfo | None:
         """Remove a user."""
         logger.info(f"remove_user: Trying to remove user with ID {user_id}")
