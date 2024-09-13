@@ -130,6 +130,7 @@ class UserRepo:
     @only_authenticated
     async def remove_user(self, user_id: str) -> UserInfo | None:
         """Remove a user."""
+        logger.info(f"remove_user: Trying to remove user with ID {user_id}")
         async with self.session_maker() as session:
             return await self._remove_user(user_id=user_id, session=session)
 
