@@ -1,4 +1,4 @@
-"""Migrate to entity slugs
+"""migrate to entity slugs
 
 Revision ID: a11752a5afba
 Revises: 9058bf0a1a12
