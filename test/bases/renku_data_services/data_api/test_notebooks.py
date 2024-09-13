@@ -33,7 +33,7 @@ def jupyter_server():
     jupyter_server = JupyterServer(
         {
             "metadata": {"name": session_name, "labels": {"renku.io/safe-username": "user"}},
-            "spec": {"jupyterServer": {"image": "debian/bookworm"}},
+            "spec": {"jupyterServer": {"image": "alpine:3"}},
         }
     )
 
@@ -83,13 +83,13 @@ def dummy_jupyter_server():
                     "renku.io/repository": "dummy",
                 },
             },
-            "spec": {"jupyterServer": {"image": "debian/bookworm"}},
+            "spec": {"jupyterServer": {"image": "debian:bookworm"}},
         }
     )
 
     jupyter_server.create()
     yield session_name
-    jupyter_server.delete()  # policy="foreground")
+    jupyter_server.delete()
 
 
 @pytest.fixture()
@@ -236,7 +236,7 @@ async def test_old_start_server(sanic_client: SanicASGITestClient, authenticated
         "commit_sha": "ee4b1c9fedc99abe5892ee95320bbd8471c5985b",
         "namespace": "test-namespace",
         "project": "my-test",
-        "image": "python:3.12-slim",
+        "image": "alpine:3",
     }
 
     _, res = await sanic_client.post("/api/data/notebooks/old/servers/", json=data, headers=authenticated_user_headers)
@@ -260,7 +260,7 @@ async def test_start_server(
         "commit_sha": "ee4b1c9fedc99abe5892ee95320bbd8471c5985b",
         "project_id": "test-namespace/my-test",
         "launcher_id": "test_launcher",
-        "image": "python:3.12-slim",
+        "image": "alpine:3",
     }
 
     _, res = await sanic_client.post("/api/data/notebooks/servers/", json=data, headers=authenticated_user_headers)
