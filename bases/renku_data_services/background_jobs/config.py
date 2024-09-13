@@ -15,7 +15,7 @@ from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project.db import ProjectRepository
-from renku_data_services.users.db import UsersSync
+from renku_data_services.users.db import UsersSync, UserRepo
 from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
 
 
@@ -51,7 +51,7 @@ class SyncConfig:
         session_maker: Callable[..., AsyncSession] = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)  # type: ignore[call-overload]
         redis = RedisConfig.from_env(prefix)
         message_queue = RedisQueue(redis)
-
+        user_repo = UserRepo(session_maker=session_maker, message_queue=message_queue)
         authz_config = AuthzConfig.from_env()
         event_repo = EventRepository(session_maker=session_maker, message_queue=message_queue)
         group_repo = GroupRepository(
@@ -67,11 +67,19 @@ class SyncConfig:
             group_repo=group_repo,
             authz=Authz(authz_config),
         )
+        user_repo = UserRepo(
+            session_maker=session_maker,
+            message_queue=message_queue,
+            event_repo=event_repo,
+            group_repo=group_repo,
+            authz=Authz(authz_config),
+        )
         syncer = UsersSync(
             session_maker,
             message_queue=message_queue,
             event_repo=event_repo,
             group_repo=group_repo,
+            user_repo=user_repo,
             authz=Authz(authz_config),
         )
         keycloak_url = os.environ[f"{prefix}KEYCLOAK_URL"]
