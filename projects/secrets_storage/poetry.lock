@@ -79,17 +79,6 @@ test = ["anyio[trio]", "coverage[toml] (>=7)", "exceptiongroup (>=1.2.0)", "hypo
 trio = ["trio (>=0.23)"]
 
 [[package]]
-name = "appier"
-version = "1.34.3"
-description = "Appier Framework"
-optional = false
-python-versions = "*"
-files = [
-    {file = "appier-1.34.3-py2.py3-none-any.whl", hash = "sha256:ac739267a56a865e5487dad69f1f9d9fd96cd0988745ed93fbbba8130c499fed"},
-    {file = "appier-1.34.3.tar.gz", hash = "sha256:29e903ee4dee12d7c745a582e4adf7beb98e081c14c2c83534864ffbd4a83cdb"},
-]
-
-[[package]]
 name = "argcomplete"
 version = "3.4.0"
 description = "Bash tab completion for argparse"
@@ -173,22 +162,20 @@ cryptography = "*"
 
 [[package]]
 name = "authzed"
-version = "0.18.1"
+version = "0.18.3"
 description = "Client library for SpiceDB."
 optional = false
 python-versions = "<4.0,>=3.8"
 files = [
-    {file = "authzed-0.18.1-py3-none-any.whl", hash = "sha256:d91e0b7a70aecf27b2485fe904bb5b31aaccb081b33cc9dce5347d74714cda44"},
-    {file = "authzed-0.18.1.tar.gz", hash = "sha256:90d38f93fd4c97983a23d89fa246f25e1c1552f618041921ba211a86022eb32f"},
+    {file = "authzed-0.18.3-py3-none-any.whl", hash = "sha256:367baa6f00dac68daad814f7db82464576530a11806ac4b17978d8c0e89511b7"},
+    {file = "authzed-0.18.3.tar.gz", hash = "sha256:a06a930c78fdbe61f5caf4415739a9941d23068527fcf91011edc1ae0188a4f5"},
 ]
 
 [package.dependencies]
-google_api = ">=0.1.12,<0.2.0"
-google-api-core = ">=2.4.0,<3.0.0"
+googleapis-common-protos = ">=1.65.0,<2.0.0"
 grpc-interceptor = ">=0.15.4,<0.16.0"
 grpcio = ">=1.63,<2.0"
 protobuf = ">=5.26,<6"
-typing-extensions = ">=3.7.4,<5"
 
 [[package]]
 name = "avro-preprocessor"
@@ -561,13 +548,13 @@ dev = ["black", "coveralls", "mypy", "pre-commit", "pylint", "pytest (>=5)", "py
 
 [[package]]
 name = "dataclasses-avroschema"
-version = "0.62.11"
+version = "0.63.0"
 description = "Generate Avro Schemas from Python classes. Serialize/Deserialize python instances with avro schemas"
 optional = false
 python-versions = "<4.0,>=3.8"
 files = [
-    {file = "dataclasses_avroschema-0.62.11-py3-none-any.whl", hash = "sha256:14ddc7b96a0717947b4b32ad9b7a3e9584ef807279cb7549cbb85ef2f5b373a6"},
-    {file = "dataclasses_avroschema-0.62.11.tar.gz", hash = "sha256:31b333d98effafabb641217e9c953c1193440de3851888192eab26f92705cbda"},
+    {file = "dataclasses_avroschema-0.63.0-py3-none-any.whl", hash = "sha256:81847f11f1dbaf6be940796a63c6d9c64885472d279d1811b2a35bb553220d29"},
+    {file = "dataclasses_avroschema-0.63.0.tar.gz", hash = "sha256:f20ca5e7a1cbdbe1b1cd2e775744f2835bbf46009d8f2f2d72acc481721e0125"},
 ]
 
 [package.dependencies]
@@ -580,7 +567,7 @@ typing-extensions = ">=4.2.0,<5.0.0"
 
 [package.extras]
 cli = ["dc-avro (>=0.6.4,<0.9.0)"]
-faker = ["faker (>=26.0.0,<28.0.0)"]
+faker = ["faker (>=26.0.0,<29.0.0)"]
 faust = ["faust-streaming (>=0.10.11,<0.12.0)"]
 pydantic = ["pydantic[email] (>=2.4.2,<3.0.0)"]
 
@@ -750,42 +737,6 @@ files = [
 ]
 
 [[package]]
-name = "google-api"
-version = "0.1.12"
-description = "Google API Client"
-optional = false
-python-versions = "*"
-files = [
-    {file = "google_api-0.1.12-py2.py3-none-any.whl", hash = "sha256:618f9f2076482a128c408867b5398b291938fe8e653ed7f8ed58fce5042f0c75"},
-    {file = "google_api-0.1.12.tar.gz", hash = "sha256:5611c87cdfc6b72927a5e2ea9299ddd6f3a206e29a342b86d3ff3ecc351c30a3"},
-]
-
-[package.dependencies]
-appier = "*"
-
-[[package]]
-name = "google-api-core"
-version = "2.8.0"
-description = "Google API client core library"
-optional = false
-python-versions = ">=3.6"
-files = [
-    {file = "google-api-core-2.8.0.tar.gz", hash = "sha256:065bb8e11c605fd232707ae50963dc1c8af5b3c95b4568887515985e6c1156b3"},
-    {file = "google_api_core-2.8.0-py3-none-any.whl", hash = "sha256:1b9f59236ce1bae9a687c1d4f22957e79a2669e53d032893f6bf0fca54f6931d"},
-]
-
-[package.dependencies]
-google-auth = ">=1.25.0,<3.0dev"
-googleapis-common-protos = ">=1.52.0,<2.0dev"
-protobuf = ">=3.12.0"
-requests = ">=2.18.0,<3.0.0dev"
-
-[package.extras]
-grpc = ["grpcio (>=1.33.2,<2.0dev)", "grpcio-status (>=1.33.2,<2.0dev)"]
-grpcgcp = ["grpcio-gcp (>=0.2.2)"]
-grpcio-gcp = ["grpcio-gcp (>=0.2.2)"]
-
-[[package]]
 name = "google-auth"
 version = "2.30.0"
 description = "Google Authentication Library"
@@ -810,17 +761,17 @@ requests = ["requests (>=2.20.0,<3.0.0.dev0)"]
 
 [[package]]
 name = "googleapis-common-protos"
-version = "1.63.1"
+version = "1.65.0"
 description = "Common protobufs used in Google APIs"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "googleapis-common-protos-1.63.1.tar.gz", hash = "sha256:c6442f7a0a6b2a80369457d79e6672bb7dcbaab88e0848302497e3ec80780a6a"},
-    {file = "googleapis_common_protos-1.63.1-py2.py3-none-any.whl", hash = "sha256:0e1c2cdfcbc354b76e4a211a35ea35d6926a835cba1377073c4861db904a1877"},
+    {file = "googleapis_common_protos-1.65.0-py2.py3-none-any.whl", hash = "sha256:2972e6c496f435b92590fd54045060867f3fe9be2c82ab148fc8885035479a63"},
+    {file = "googleapis_common_protos-1.65.0.tar.gz", hash = "sha256:334a29d07cddc3aa01dee4988f9afd9b2916ee2ff49d6b757155dc0d197852c0"},
 ]
 
 [package.dependencies]
-protobuf = ">=3.19.5,<3.20.0 || >3.20.0,<3.20.1 || >3.20.1,<4.21.1 || >4.21.1,<4.21.2 || >4.21.2,<4.21.3 || >4.21.3,<4.21.4 || >4.21.4,<4.21.5 || >4.21.5,<6.0.0.dev0"
+protobuf = ">=3.20.2,<4.21.1 || >4.21.1,<4.21.2 || >4.21.2,<4.21.3 || >4.21.3,<4.21.4 || >4.21.4,<4.21.5 || >4.21.5,<6.0.0.dev0"
 
 [package.extras]
 grpc = ["grpcio (>=1.44.0,<2.0.0.dev0)"]
@@ -1818,13 +1769,13 @@ six = ">=1.5"
 
 [[package]]
 name = "python-gitlab"
-version = "4.10.0"
+version = "4.11.1"
 description = "A python wrapper for the GitLab API"
 optional = false
 python-versions = ">=3.8.0"
 files = [
-    {file = "python_gitlab-4.10.0-py3-none-any.whl", hash = "sha256:53ea6d977fb26d256390636616ca91d127cd04bdefc6c5ce2d7711b8e5100b2a"},
-    {file = "python_gitlab-4.10.0.tar.gz", hash = "sha256:86f99c1915088e2d2573817aca8bf6bab5e4f12d42b04ef6b2df2abb528d57fd"},
+    {file = "python_gitlab-4.11.1-py3-none-any.whl", hash = "sha256:f15fe4f4cbaa58c04e422ad30a2d4fc7976294dfdf1f90f81ab927e5b2238f33"},
+    {file = "python_gitlab-4.11.1.tar.gz", hash = "sha256:7afa2f9c30618bc3daee95d2186a06e1cf18ca2fa97890eb55fd8ddc4e339812"},
 ]
 
 [package.dependencies]
@@ -1833,6 +1784,7 @@ requests-toolbelt = ">=1.0.0"
 
 [package.extras]
 autocompletion = ["argcomplete (>=1.10.0,<3)"]
+graphql = ["gql[httpx] (>=3.5.0,<4)"]
 yaml = ["PyYaml (>=6.0.1)"]
 
 [[package]]
@@ -2195,13 +2147,13 @@ tornado = ["tornado (>=6)"]
 
 [[package]]
 name = "setuptools"
-version = "74.1.2"
+version = "74.1.3"
 description = "Easily download, build, install, upgrade, and uninstall Python packages"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "setuptools-74.1.2-py3-none-any.whl", hash = "sha256:5f4c08aa4d3ebcb57a50c33b1b07e94315d7fc7230f7115e47fc99776c8ce308"},
-    {file = "setuptools-74.1.2.tar.gz", hash = "sha256:95b40ed940a1c67eb70fc099094bd6e99c6ee7c23aa2306f4d2697ba7916f9c6"},
+    {file = "setuptools-74.1.3-py3-none-any.whl", hash = "sha256:1cfd66bfcf197bce344da024c8f5b35acc4dcb7ca5202246a75296b4883f6851"},
+    {file = "setuptools-74.1.3.tar.gz", hash = "sha256:fbb126f14b0b9ffa54c4574a50ae60673bbe8ae0b1645889d10b3b14f5891d28"},
 ]
 
 [package.extras]
@@ -2528,13 +2480,13 @@ files = [
 
 [[package]]
 name = "urllib3"
-version = "2.2.2"
+version = "2.2.3"
 description = "HTTP library with thread-safe connection pooling, file post, and more."
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "urllib3-2.2.2-py3-none-any.whl", hash = "sha256:a448b2f64d686155468037e1ace9f2d2199776e17f0a46610480d311f73e3472"},
-    {file = "urllib3-2.2.2.tar.gz", hash = "sha256:dd505485549a7a552833da5e6063639d0d177c04f23bc3864e41e5dc5f612168"},
+    {file = "urllib3-2.2.3-py3-none-any.whl", hash = "sha256:ca899ca043dcb1bafa3e262d73aa25c465bfb49e0bd9dd5d59f1d0acba2f8fac"},
+    {file = "urllib3-2.2.3.tar.gz", hash = "sha256:e7d814a81dad81e6caf2ec9fdedb284ecc9c73076b62654547cc64ccdcae26e9"},
 ]
 
 [package.extras]
@@ -2687,4 +2639,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "5a4606132ea100efb89e579c6d35962ae51b019537f0009e822d237b21059217"
+content-hash = "e083fb93ad1c6d20f466b00a40d1ded5bf0f7304eea64e0a9a4f266a326d9c8a"
