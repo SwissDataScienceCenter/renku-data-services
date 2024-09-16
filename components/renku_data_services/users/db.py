@@ -9,7 +9,6 @@ from typing import Any, cast
 from sanic.log import logger
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from renku_data_services import base_models
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
@@ -76,9 +75,7 @@ class UserRepo:
     async def get_user(self, id: str) -> UserInfo | None:
         """Get a specific user from the database."""
         async with self.session_maker() as session:
-            result = await session.scalars(
-                select(UserORM).where(UserORM.keycloak_id == id).options(selectinload(UserORM.namespace))
-            )
+            result = await session.scalars(select(UserORM).where(UserORM.keycloak_id == id))
             user = result.one_or_none()
             if user is None:
                 return None
@@ -118,7 +115,6 @@ class UserRepo:
             stmt = select(UserORM)
             if email:
                 stmt = stmt.where(UserORM.email == email)
-            stmt = stmt.options(selectinload(UserORM.namespace))
             result = await session.scalars(stmt)
             users = result.all()
 
@@ -167,7 +163,7 @@ class UsersSync:
     async def _get_user(self, id: str) -> UserInfo | None:
         """Get a specific user."""
         async with self.session_maker() as session, session.begin():
-            stmt = select(UserORM).where(UserORM.keycloak_id == id).options(selectinload(UserORM.namespace))
+            stmt = select(UserORM).where(UserORM.keycloak_id == id)
             res = await session.execute(stmt)
             orm = res.scalar_one_or_none()
             return orm.dump() if orm else None
@@ -181,9 +177,7 @@ class UsersSync:
         """Update a user or insert it if it does not exist."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
-        res = await session.execute(
-            select(UserORM).where(UserORM.keycloak_id == user_id).options(selectinload(UserORM.namespace))
-        )
+        res = await session.execute(select(UserORM).where(UserORM.keycloak_id == user_id))
         existing_user = res.scalar_one_or_none()
         if existing_user:
             return await self._update_user(session=session, user_id=user_id, existing_user=existing_user, **payload)
@@ -196,7 +190,7 @@ class UsersSync:
         kwargs.pop("id", None)
         slug = base_models.Slug.from_user(
             kwargs.get("email"), kwargs.get("first_name"), kwargs.get("last_name"), user_id
-        ).value.lower()
+        ).value
         namespace = await self.group_repo._create_user_namespace_slug(
             session, user_slug=slug, retry_enumerate=5, retry_random=True
         )
@@ -213,9 +207,7 @@ class UsersSync:
         """Update a user."""
         if not existing_user:
             async with self.session_maker() as session, session.begin():
-                res = await session.execute(
-                    select(UserORM).where(UserORM.keycloak_id == user_id).options(selectinload(UserORM.namespace))
-                )
+                res = await session.execute(select(UserORM).where(UserORM.keycloak_id == user_id))
                 existing_user = res.scalar_one_or_none()
         if not existing_user:
             raise errors.MissingResourceError(message=f"The user with id '{user_id}' cannot be found")

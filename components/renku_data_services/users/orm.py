@@ -28,7 +28,7 @@ class UserORM(BaseORM):
 
     __tablename__ = "users"
     keycloak_id: Mapped[str] = mapped_column(String(36), unique=True, index=True)
-    namespace: Mapped["NamespaceORM"] = relationship(repr=False, back_populates="user")
+    namespace: Mapped["NamespaceORM"] = relationship(repr=False, back_populates="user", lazy="selectin")
     first_name: Mapped[Optional[str]] = mapped_column(String(256), default=None)
     last_name: Mapped[Optional[str]] = mapped_column(String(256), default=None)
     email: Mapped[Optional[str]] = mapped_column(String(320), default=None, index=True)
