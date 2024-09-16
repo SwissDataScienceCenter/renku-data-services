@@ -9,6 +9,7 @@ from sqlalchemy.schema import ForeignKey
 from ulid import ULID
 
 from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
+from renku_data_services.data_connectors.orm import DataConnectorORM
 from renku_data_services.errors import errors
 from renku_data_services.namespace import models
 from renku_data_services.project.orm import ProjectORM
@@ -165,7 +166,8 @@ class NamespaceOldORM(BaseORM):
             )
 
         name = (
-            f"{self.latest_slug.user.first_name} {self.latest_slug.user.last_name}"
+            f"{self.latest_slug.user.first_name} {
+                self.latest_slug.user.last_name}"
             if self.latest_slug.user.first_name and self.latest_slug.user.last_name
             else self.latest_slug.user.first_name or self.latest_slug.user.last_name
         )
@@ -181,25 +183,59 @@ class NamespaceOldORM(BaseORM):
 
 
 class EntitySlugORM(BaseORM):
-    """Project and namespace slugs."""
+    """Entity slugs."""
 
     __tablename__ = "entity_slugs"
-    __table_args__ = (Index("entity_slugs_unique_slugs", "namespace_id", "slug", unique=True),)
+    __table_args__ = (
+        Index("entity_slugs_unique_slugs", "namespace_id", "slug", unique=True),
+        CheckConstraint(
+            "CAST (project_id IS NOT NULL AS int) + CAST (data_connector_id IS NOT NULL AS int) BETWEEN 0 AND 1",
+            name="either_project_id_or_data_connector_id_is_set",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
     slug: Mapped[str] = mapped_column(String(99), index=True, nullable=False)
-    project_id: Mapped[ULID] = mapped_column(
-        ForeignKey(ProjectORM.id, ondelete="CASCADE", name="entity_slugs_project_id_fk"), index=True
+    project_id: Mapped[ULID | None] = mapped_column(
+        ForeignKey(ProjectORM.id, ondelete="CASCADE", name="entity_slugs_project_id_fk"), index=True, nullable=True
     )
-    project: Mapped[ProjectORM] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
+    project: Mapped[ProjectORM | None] = relationship(lazy="joined", init=False, repr=False, back_populates="slug")
+    data_connector_id: Mapped[ULID | None] = mapped_column(
+        ForeignKey(DataConnectorORM.id, ondelete="CASCADE", name="entity_slugs_data_connector_id_fk"),
+        index=True,
+        nullable=True,
+    )
+    data_connector: Mapped[DataConnectorORM | None] = relationship(
+        lazy="joined", init=False, repr=False, back_populates="slug"
+    )
     namespace_id: Mapped[ULID] = mapped_column(
         ForeignKey(NamespaceORM.id, ondelete="CASCADE", name="entity_slugs_namespace_id_fk"), index=True
     )
     namespace: Mapped[NamespaceORM] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
 
+    @classmethod
+    def create_project_slug(cls, slug: str, project_id: ULID, namespace_id: ULID) -> "EntitySlugORM":
+        """Create an entity slug for a project."""
+        return cls(
+            slug=slug,
+            project_id=project_id,
+            data_connector_id=None,
+            namespace_id=namespace_id,
+        )
+
+    @classmethod
+    def create_data_connector_slug(cls, slug: str, data_connector_id: ULID, namespace_id: ULID) -> "EntitySlugORM":
+        """Create an entity slug for a data connector."""
+        return cls(
+            slug=slug,
+            project_id=None,
+            data_connector_id=data_connector_id,
+            namespace_id=namespace_id,
+        )
+
 
 class EntitySlugOldORM(BaseORM):
-    """Project slugs history."""
+    """Entity slugs history."""
 
     __tablename__ = "entity_slugs_old"
 
