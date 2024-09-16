@@ -196,7 +196,7 @@ class DataConnectorRepository:
         data_connector_id: ULID,
         *,
         session: AsyncSession | None = None,
-    ) -> models.DataConnector | None:
+    ) -> None:
         """Delete a data connector."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required.")
@@ -208,8 +208,6 @@ class DataConnectorRepository:
             return None
 
         await session.delete(data_connector)
-
-        return data_connector.dump()
 
 
 _T = TypeVar("_T")
