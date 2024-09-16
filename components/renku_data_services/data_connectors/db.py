@@ -129,7 +129,6 @@ class DataConnectorRepository:
         )
 
         session.add(data_connector_orm)
-        await session.flush()
         session.add(data_connector_slug)
         await session.flush()
         await session.refresh(data_connector_orm)
