@@ -28,7 +28,7 @@ class EventRepository:
     async def _get_pending_events(self) -> list[schemas.EventORM]:
         """Get all pending events."""
         async with self.session_maker() as session:
-            stmt = select(schemas.EventORM)
+            stmt = select(schemas.EventORM).order_by(schemas.EventORM.timestamp_utc)
             events_orm = await session.scalars(stmt)
             return list(events_orm.all())
 
@@ -75,3 +75,8 @@ class EventRepository:
         async with self.session_maker() as session, session.begin():
             stmt = delete(schemas.EventORM).where(schemas.EventORM.id == id)
             await session.execute(stmt)
+
+    async def clear(self) -> None:
+        """Delete all events. This is only used when testing reprovisioning."""
+        async with self.session_maker() as session, session.begin():
+            await session.execute(delete(schemas.EventORM))

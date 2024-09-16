@@ -70,6 +70,20 @@ class ProjectRepository:
             total_elements = results[1] or 0
             return [p.dump() for p in projects_orm], total_elements
 
+    async def get_all_projects(self, requested_by: base_models.APIUser) -> list[models.Project]:
+        """Get all projects from the database when reprovisioning."""
+        if not requested_by.is_admin:
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session:
+            # NOTE: without awaiting the connection below, there are failures about how a connection has not
+            # been established in the DB but the query is getting executed.
+            _ = await session.connection()
+            stmt = select(schemas.ProjectORM)
+            results = await session.execute(stmt)
+            projects_orms = results.scalars().all()
+            return [p.dump() for p in projects_orms]
+
     async def get_project(self, user: base_models.APIUser, project_id: ULID) -> models.Project:
         """Get one project from the database."""
         authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)

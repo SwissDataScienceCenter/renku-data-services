@@ -90,6 +90,17 @@ class GroupRepository:
             n_total_elements = result.scalar() or 0
             return [g.dump() for g in groups_orm], n_total_elements
 
+    async def get_all_groups(self, requested_by: base_models.APIUser) -> list[models.Group]:
+        """Get all groups when reprovisioning."""
+        if not requested_by.is_admin:
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session, session.begin():
+            stmt = select(schemas.GroupORM)
+            results = await session.execute(stmt)
+            groups_orms = results.scalars().all()
+            return [g.dump() for g in groups_orms]
+
     async def _get_group(
         self, session: AsyncSession, user: base_models.APIUser, slug: str, load_members: bool = False
     ) -> tuple[schemas.GroupORM, list[Member]]:
