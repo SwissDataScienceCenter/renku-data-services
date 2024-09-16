@@ -135,21 +135,23 @@ class UserRepo:
 
     @with_db_transaction
     @dispatch_message(avro_schema_v2.UserRemoved)
-    async def _remove_user(self, user_id: str, *, session: AsyncSession | None = None) -> UserInfo | None:
+    async def _remove_user(self, user_id: str, *, session: AsyncSession | None = None) -> str | None:
         """Remove a user from the database."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
         logger.info(f"Trying to remove user with ID {user_id}")
-        stmt = delete(UserORM).where(UserORM.keycloak_id == user_id).returning(UserORM)
-        user = await session.scalar(stmt)
+
+        result = await session.execute(select(UserORM).where(UserORM.id == user_id))
+        user = result.scalar_one_or_none()
         await self.authz._remove_user_namespace(user_id)
-        if not user:
+        logger.info(f"User namespace with ID {user_id} was removed from the authorization database.")
+
+        if user is None:
             logger.info(f"User with ID {user_id} was not found.")
             return None
+        await session.delete(user)
         logger.info(f"User with ID {user_id} was removed from the database.")
-        removed_user = user.dump()
-        logger.info(f"User namespace with ID {user_id} was removed from the authorization database.")
-        return removed_user
+        return user_id
 
     @only_authenticated
     async def get_or_create_user_secret_key(self, requested_by: APIUser) -> str:
