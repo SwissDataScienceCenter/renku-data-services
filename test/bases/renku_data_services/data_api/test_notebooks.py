@@ -1,18 +1,18 @@
 """Tests for notebook blueprints."""
 
+import asyncio
 import re
+from collections.abc import AsyncIterator
 from unittest.mock import MagicMock
+from uuid import uuid4
 
 import pytest
-from kr8s.objects import Pod, new_class
+import pytest_asyncio
+from kr8s.asyncio.objects import Pod
 from pytest_httpx import HTTPXMock
 from sanic_testing.testing import SanicASGITestClient
 
-JupyterServer = new_class(
-    kind="JupyterServer",
-    version="amalthea.dev/v1alpha1",
-    namespaced=True,
-)
+from renku_data_services.notebooks.api.classes.k8s_client import JupyterServerV1Alpha1Kr8s
 
 
 @pytest.fixture
@@ -22,55 +22,69 @@ def non_mocked_hosts() -> list:
     return ["127.0.0.1"]
 
 
-@pytest.fixture(scope="module")
-def jupyter_server():
+@pytest.fixture
+def renku_image() -> str:
+    return "renku/renkulab-py:3.10-0.24.0"
+
+
+@pytest.fixture
+def unknown_server_name() -> str:
+    return "unknown"
+
+
+@pytest.fixture
+def server_name() -> str:
+    random_name_part = str(uuid4())
+    session_name = f"test-session-{random_name_part}"
+    return session_name
+
+
+@pytest.fixture
+def pod_name(server_name: str) -> str:
+    return f"{server_name}-0"
+
+
+@pytest_asyncio.fixture
+async def jupyter_server(renku_image: str, server_name: str, pod_name: str) -> AsyncIterator[JupyterServerV1Alpha1Kr8s]:
     """Fake server to have the minimal set of objects for tests"""
 
-    session_name = "test-session"
-
-    jupyter_server = JupyterServer(
+    server = await JupyterServerV1Alpha1Kr8s(
         {
-            "metadata": {"name": session_name, "labels": {"renku.io/safe-username": "user"}},
-            "spec": {"jupyterServer": {"image": "alpine:3"}},
+            "metadata": {"name": server_name, "labels": {"renku.io/safe-username": "user"}},
+            "spec": {"jupyterServer": {"image": renku_image}, "routing": {"host": "locahost"}, "auth": {"token": ""}},
         }
     )
 
-    pod = Pod(
-        {
-            "apiVersion": "v1",
-            "kind": "Pod",
-            "metadata": {"name": f"{session_name}-0", "labels": {"renku.io/safe-username": "user"}},
-            "spec": {
-                "containers": [
-                    {
-                        "name": "main",
-                        "image": "alpine:3",
-                        "command": ["sh", "-c", 'echo "Hello, Kubernetes!" && sleep 3600'],
-                    }
-                ],
-            },
-        }
-    )
-
-    pod.create()
-    pod.wait("condition=Ready")
-
-    jupyter_server.create()
-    yield session_name
-    pod.delete()
-    jupyter_server.delete()
+    await server.create()
+    pod = await Pod(dict(metadata=dict(name=pod_name)))
+    max_retries = 200
+    sleep_seconds = 0.2
+    retries = 0
+    while True:
+        retries += 1
+        pod_exists = await pod.exists()
+        if pod_exists:
+            break
+        if retries > max_retries:
+            raise ValueError(
+                f"The pod {pod_name} for the session {server_name} could not found even after {max_retries} "
+                f"retries with {sleep_seconds} seconds of sleep after each retry."
+            )
+        await asyncio.sleep(sleep_seconds)
+    await pod.refresh()
+    await pod.wait("condition=Ready")
+    yield server
+    await server.delete("Foreground")
 
 
-@pytest.fixture()
-def dummy_jupyter_server():
-    """Dummy server for non pod related tests"""
+@pytest_asyncio.fixture()
+async def practice_jupyter_server(renku_image: str, server_name: str) -> AsyncIterator[JupyterServerV1Alpha1Kr8s]:
+    """Fake server for non pod related tests"""
 
-    session_name = "dummy-server"
-
-    jupyter_server = JupyterServer(
+    server = await JupyterServerV1Alpha1Kr8s(
         {
             "metadata": {
-                "name": session_name,
+                "name": server_name,
                 "labels": {"renku.io/safe-username": "user"},
                 "annotations": {
                     "renku.io/branch": "dummy",
@@ -81,13 +95,13 @@ def dummy_jupyter_server():
                     "renku.io/repository": "dummy",
                 },
             },
-            "spec": {"jupyterServer": {"image": "debian:bookworm"}},
+            "spec": {"jupyterServer": {"image": renku_image}},
         }
     )
 
-    jupyter_server.create()
-    yield session_name
-    jupyter_server.delete()
+    await server.create()
+    yield server
+    await server.delete("Foreground")
 
 
 @pytest.fixture()
@@ -109,17 +123,21 @@ async def test_check_docker_image(sanic_client: SanicASGITestClient, user_header
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("server_name,expected_status_code", [("unknown", 404), ("test-session", 200)])
+@pytest.mark.parametrize(
+    "server_name_fixture,expected_status_code", [("unknown_server_name", 404), ("server_name", 200)]
+)
 async def test_log_retrieval(
     sanic_client: SanicASGITestClient,
     httpx_mock: HTTPXMock,
-    server_name,
+    request,
+    server_name_fixture,
     expected_status_code,
     jupyter_server,
     authenticated_user_headers,
 ):
     """Validate that the logs endpoint answers correctly"""
 
+    server_name = request.getfixturevalue(server_name_fixture)
     httpx_mock.add_response(url=f"http://not.specified/servers/{server_name}", json={}, status_code=400)
 
     _, res = await sanic_client.get(f"/api/data/notebooks/logs/{server_name}", headers=authenticated_user_headers)
@@ -151,15 +169,19 @@ async def test_server_options(sanic_client: SanicASGITestClient, user_headers):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("server_name,expected_status_code", [("unknown", 404), ("dummy-server", 204)])
+@pytest.mark.parametrize(
+    "server_name_fixture,expected_status_code", [("unknown_server_name", 404), ("server_name", 204)]
+)
 async def test_stop_server(
     sanic_client: SanicASGITestClient,
-    server_name,
+    httpx_mock: HTTPXMock,
+    request,
+    server_name_fixture,
     expected_status_code,
-    dummy_jupyter_server,
+    practice_jupyter_server,
     authenticated_user_headers,
-    httpx_mock,
 ):
+    server_name = request.getfixturevalue(server_name_fixture)
     httpx_mock.add_response(url=f"http://not.specified/servers/{server_name}", json={}, status_code=400)
 
     _, res = await sanic_client.delete(f"/api/data/notebooks/servers/{server_name}", headers=authenticated_user_headers)
@@ -169,17 +191,20 @@ async def test_stop_server(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "server_name,expected_status_code, patch", [("unknown", 404, {}), ("dummy-server", 200, {"state": "hibernated"})]
+    "server_name_fixture,expected_status_code, patch",
+    [("unknown_server_name", 404, {}), ("server_name", 200, {"state": "hibernated"})],
 )
 async def test_patch_server(
     sanic_client: SanicASGITestClient,
-    server_name,
+    httpx_mock: HTTPXMock,
+    request,
+    server_name_fixture,
     expected_status_code,
     patch,
-    dummy_jupyter_server,
+    practice_jupyter_server,
     authenticated_user_headers,
-    httpx_mock,
 ):
+    server_name = request.getfixturevalue(server_name_fixture)
     httpx_mock.add_response(url=f"http://not.specified/servers/{server_name}", json={}, status_code=400)
 
     _, res = await sanic_client.patch(
