@@ -139,6 +139,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         name="data_connectors",
         url_prefix=url_prefix,
         data_connector_repo=config.data_connector_repo,
+        data_connector_to_project_link_repo=config.data_connector_to_project_link_repo,
         authenticator=config.authenticator,
     )
     app.blueprint(

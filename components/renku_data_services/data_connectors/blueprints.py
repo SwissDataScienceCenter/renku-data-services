@@ -24,7 +24,7 @@ from renku_data_services.data_connectors.core import (
     validate_data_connector_patch,
     validate_unsaved_data_connector,
 )
-from renku_data_services.data_connectors.db import DataConnectorRepository
+from renku_data_services.data_connectors.db import DataConnectorProjectLinkRepository, DataConnectorRepository
 from renku_data_services.storage.rclone import RCloneValidator
 
 
@@ -33,6 +33,7 @@ class DataConnectorsBP(CustomBlueprint):
     """Handlers for manipulating data connectors."""
 
     data_connector_repo: DataConnectorRepository
+    data_connector_to_project_link_repo: DataConnectorProjectLinkRepository
     authenticator: base_models.Authenticator
 
     def get_all(self) -> BlueprintFactoryResponse:
@@ -179,6 +180,25 @@ class DataConnectorsBP(CustomBlueprint):
             return HTTPResponse(status=204)
 
         return "/data_connectors/<data_connector_id:ulid>", ["DELETE"], _delete
+
+    def get_all_project_links(self) -> BlueprintFactoryResponse:
+        """List all links from a given data connector to projects."""
+
+        @authenticate(self.authenticator)
+        async def _get_all_project_links(
+            _: Request,
+            user: base_models.APIUser,
+            data_connector_id: ULID,
+        ) -> JSONResponse:
+            links = await self.data_connector_to_project_link_repo.get_links_from(
+                user=user, data_connector_id=data_connector_id
+            )
+            return validated_json(
+                apispec.DataConnectorToProjectLinksList,
+                links,
+            )
+
+        return "/data_connectors/<data_connector_id:ulid>/project_links", ["GET"], _get_all_project_links
 
     @staticmethod
     def _dump_data_connector(data_connector: models.DataConnector, validator: RCloneValidator) -> dict[str, Any]:
