@@ -308,6 +308,50 @@ class DataConnectorProjectLinkRepository:
         self.session_maker = session_maker
         self.authz = authz
 
+    async def get_links_from(
+        self, user: base_models.APIUser, data_connector_id: ULID
+    ) -> list[models.DataConnectorProjectLink]:
+        """Get links from a given data connector."""
+        authorized = await self.authz.has_permission(user, ResourceType.data_connector, data_connector_id, Scope.READ)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Data connector with id '{data_connector_id}' does not exist or you do not have access to it."
+            )
+
+        project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
+
+        async with self.session_maker() as session:
+            stmt = (
+                select(schemas.DataConnectorProjectLinkORM)
+                .where(schemas.DataConnectorProjectLinkORM.data_connector_id == data_connector_id)
+                .where(schemas.DataConnectorProjectLinkORM.project_id.in_(project_ids))
+            )
+            result = await session.scalars(stmt)
+            links_orm = result.all()
+            return [link.dump() for link in links_orm]
+
+    async def get_links_to(self, user: base_models.APIUser, project_id: ULID) -> list[models.DataConnectorProjectLink]:
+        """Get links to a given project."""
+        authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
+
+        data_connector_ids = await self.authz.resources_with_permission(
+            user, user.id, ResourceType.data_connector, Scope.READ
+        )
+
+        async with self.session_maker() as session:
+            stmt = (
+                select(schemas.DataConnectorProjectLinkORM)
+                .where(schemas.DataConnectorProjectLinkORM.project_id == project_id)
+                .where(schemas.DataConnectorProjectLinkORM.data_connector_id.in_(data_connector_ids))
+            )
+            result = await session.scalars(stmt)
+            links_orm = result.all()
+            return [link.dump() for link in links_orm]
+
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.create_link, ResourceType.data_connector)
     async def insert_link(
