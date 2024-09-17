@@ -30,7 +30,7 @@ class KeycloakAdminEvent(Enum):
 
 
 @dataclass
-class UserInfoUpdate:
+class UserInfoFieldUpdate:
     """An update of a specific field of user information."""
 
     user_id: str
@@ -40,9 +40,9 @@ class UserInfoUpdate:
     old_value: str | None = None
 
     @classmethod
-    def from_json_user_events(self, val: Iterable[dict[str, Any]]) -> list["UserInfoUpdate"]:
+    def from_json_user_events(self, val: Iterable[dict[str, Any]]) -> list["UserInfoFieldUpdate"]:
         """Generate a list of updates from a json response from Keycloak."""
-        output: list[UserInfoUpdate] = []
+        output: list[UserInfoFieldUpdate] = []
         for event in val:
             details = event.get("details")
             user_id = event.get("userId")
@@ -64,7 +64,7 @@ class UserInfoUpdate:
                     email = details.get("email")
                     if email:
                         output.append(
-                            UserInfoUpdate(
+                            UserInfoFieldUpdate(
                                 field_name="email",
                                 new_value=email,
                                 timestamp_utc=timestamp_utc,
@@ -73,7 +73,7 @@ class UserInfoUpdate:
                         )
                     if first_name:
                         output.append(
-                            UserInfoUpdate(
+                            UserInfoFieldUpdate(
                                 field_name="first_name",
                                 new_value=first_name,
                                 timestamp_utc=timestamp_utc,
@@ -82,7 +82,7 @@ class UserInfoUpdate:
                         )
                     if last_name:
                         output.append(
-                            UserInfoUpdate(
+                            UserInfoFieldUpdate(
                                 field_name="last_name",
                                 new_value=last_name,
                                 timestamp_utc=timestamp_utc,
@@ -96,7 +96,7 @@ class UserInfoUpdate:
                     if first_name:
                         old_value = details.get("previous_first_name")
                         output.append(
-                            UserInfoUpdate(
+                            UserInfoFieldUpdate(
                                 field_name="first_name",
                                 new_value=first_name,
                                 old_value=old_value,
@@ -107,7 +107,7 @@ class UserInfoUpdate:
                     if last_name:
                         old_value = details.get("previous_last_name")
                         output.append(
-                            UserInfoUpdate(
+                            UserInfoFieldUpdate(
                                 field_name="last_name",
                                 new_value=last_name,
                                 old_value=old_value,
@@ -118,7 +118,7 @@ class UserInfoUpdate:
                     if email:
                         old_value = details.get("previous_email")
                         output.append(
-                            UserInfoUpdate(
+                            UserInfoFieldUpdate(
                                 field_name="email",
                                 new_value=email,
                                 old_value=old_value,
@@ -131,9 +131,9 @@ class UserInfoUpdate:
         return output
 
     @classmethod
-    def from_json_admin_events(self, val: Iterable[dict[str, Any]]) -> list["UserInfoUpdate"]:
+    def from_json_admin_events(self, val: Iterable[dict[str, Any]]) -> list["UserInfoFieldUpdate"]:
         """Generate a list of updates from a json response from Keycloak."""
-        output: list[UserInfoUpdate] = []
+        output: list[UserInfoFieldUpdate] = []
         for event in val:
             timestamp_epoch = event.get("time")
             if not timestamp_epoch:
@@ -165,7 +165,7 @@ class UserInfoUpdate:
                     first_name = payload.get("firstName")
                     if first_name:
                         output.append(
-                            UserInfoUpdate(
+                            UserInfoFieldUpdate(
                                 field_name="first_name",
                                 new_value=first_name,
                                 timestamp_utc=timestamp_utc,
@@ -175,7 +175,7 @@ class UserInfoUpdate:
                     last_name = payload.get("lastName")
                     if last_name:
                         output.append(
-                            UserInfoUpdate(
+                            UserInfoFieldUpdate(
                                 field_name="last_name",
                                 new_value=last_name,
                                 timestamp_utc=timestamp_utc,
@@ -185,7 +185,7 @@ class UserInfoUpdate:
                     email = payload.get("email")
                     if email:
                         output.append(
-                            UserInfoUpdate(
+                            UserInfoFieldUpdate(
                                 field_name="email",
                                 new_value=email,
                                 timestamp_utc=timestamp_utc,
@@ -194,7 +194,7 @@ class UserInfoUpdate:
                         )
                 case KeycloakAdminEvent.DELETE.value:
                     output.append(
-                        UserInfoUpdate(
+                        UserInfoFieldUpdate(
                             field_name="email",
                             new_value="",
                             timestamp_utc=timestamp_utc,
@@ -206,8 +206,8 @@ class UserInfoUpdate:
         return output
 
 
-@dataclass(eq=True, frozen=True)
-class UserInfo:
+@dataclass(eq=True, frozen=True, kw_only=True)
+class UnsavedUserInfo:
     """Keycloak user."""
 
     id: str
@@ -216,9 +216,9 @@ class UserInfo:
     email: str | None = None
 
     @classmethod
-    def from_kc_user_payload(self, payload: dict[str, Any]) -> "UserInfo":
+    def from_kc_user_payload(cls, payload: dict[str, Any]) -> "UnsavedUserInfo":
         """Create a user object from the user payload from the Keycloak admin API."""
-        return UserInfo(
+        return UnsavedUserInfo(
             id=payload["id"],
             first_name=payload.get("firstName"),
             last_name=payload.get("lastName"),
@@ -253,18 +253,18 @@ class UserInfo:
         }
 
 
-class UserWithNamespace(NamedTuple):
+@dataclass(eq=True, frozen=True, kw_only=True)
+class UserInfo(UnsavedUserInfo):
     """A tuple used to convey information about a user and their namespace."""
 
-    user: UserInfo
     namespace: Namespace
 
 
-class UserWithNamespaceUpdate(NamedTuple):
+class UserInfoUpdate(NamedTuple):
     """Used to convey information about an update of a user or their namespace."""
 
-    old: UserWithNamespace | None
-    new: UserWithNamespace
+    old: UserInfo | None
+    new: UserInfo
 
 
 class PinnedProjects(BaseModel):

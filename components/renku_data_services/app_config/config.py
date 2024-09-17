@@ -63,7 +63,7 @@ from renku_data_services.users.db import UserPreferencesRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
-from renku_data_services.users.models import UserInfo
+from renku_data_services.users.models import UnsavedUserInfo
 from renku_data_services.utils.core import merge_api_specs, oidc_discovery
 
 default_resource_pool = models.ResourcePool(
@@ -436,8 +436,8 @@ class Config:
             user_store = DummyUserStore(user_always_exists=user_always_exists)
             gitlab_client = DummyGitlabAPI()
             dummy_users = [
-                UserInfo("user1", "user1", "doe", "user1@doe.com"),
-                UserInfo("user2", "user2", "doe", "user2@doe.com"),
+                UnsavedUserInfo(id="user1", first_name="user1", last_name="doe", email="user1@doe.com"),
+                UnsavedUserInfo(id="user2", first_name="user2", last_name="doe", email="user2@doe.com"),
             ]
             kc_api = DummyKeycloakAPI(users=[i._to_keycloak_dict() for i in dummy_users])
             redis = RedisConfig.fake()

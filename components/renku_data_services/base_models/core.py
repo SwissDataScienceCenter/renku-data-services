@@ -4,7 +4,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum
-from typing import ClassVar, Optional, Protocol
+from typing import ClassVar, Optional, Protocol, Self
 
 from sanic import Request
 
@@ -122,7 +122,7 @@ class Slug:
         object.__setattr__(self, "value", value.lower())
 
     @classmethod
-    def from_name(cls, name: str) -> "Slug":
+    def from_name(cls, name: str) -> Self:
         """Takes a name with any amount of invalid characters and transforms it in a valid slug."""
         lower_case = name.lower()
         no_space = re.sub(r"\s+", "-", lower_case)
@@ -138,6 +138,24 @@ class Slug:
                 message="The name for the project contains too many invalid characters so a slug could not be generated"
             )
         return cls(no_dot_git_or_dot_atom_at_end)
+
+    @classmethod
+    def from_user(cls, email: str | None, first_name: str | None, last_name: str | None, keycloak_id: str) -> Self:
+        """Create a slug from a user."""
+        if email:
+            slug = email.split("@")[0]
+        elif first_name and last_name:
+            slug = first_name + "-" + last_name
+        elif last_name:
+            slug = last_name
+        elif first_name:
+            slug = first_name
+        else:
+            slug = "user_" + keycloak_id
+        # The length limit is 99 but leave some space for modifications that may be added down the line
+        # to filter out invalid characters or to generate a unique name
+        slug = slug[:80]
+        return cls.from_name(slug)
 
     def __true_div__(self, other: "Slug") -> str:
         """Joins two slugs into a path fraction without dashes at the beginning or end."""

@@ -9,8 +9,8 @@ from typing import Any, cast
 from sanic.log import logger
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
+from renku_data_services import base_models
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.base_api.auth import APIUser, only_authenticated
 from renku_data_services.errors import errors
@@ -20,16 +20,16 @@ from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import dispatch_message
 from renku_data_services.namespace.db import GroupRepository
+from renku_data_services.namespace.orm import NamespaceORM
 from renku_data_services.users.config import UserPreferencesConfig
 from renku_data_services.users.kc_api import IKeycloakAPI
 from renku_data_services.users.models import (
     KeycloakAdminEvent,
     PinnedProjects,
     UserInfo,
+    UserInfoFieldUpdate,
     UserInfoUpdate,
     UserPreferences,
-    UserWithNamespace,
-    UserWithNamespaceUpdate,
 )
 from renku_data_services.users.orm import LastKeycloakEventTimestamp, UserORM, UserPreferencesORM
 from renku_data_services.utils.core import with_db_transaction
@@ -59,7 +59,7 @@ class UserRepo:
             return
         await self._users_sync.users_sync(kc_api)
 
-    async def _add_api_user(self, user: APIUser) -> UserWithNamespace:
+    async def _add_api_user(self, user: APIUser) -> UserInfo:
         if not user.id:
             raise errors.UnauthorizedError(message="The user has to be authenticated to be inserted in the DB.")
         result = await self._users_sync.update_or_insert_user(
@@ -72,12 +72,10 @@ class UserRepo:
         )
         return result.new
 
-    async def get_user(self, id: str) -> UserWithNamespace | None:
+    async def get_user(self, id: str) -> UserInfo | None:
         """Get a specific user from the database."""
         async with self.session_maker() as session:
-            result = await session.scalars(
-                select(UserORM).where(UserORM.keycloak_id == id).options(selectinload(UserORM.namespace))
-            )
+            result = await session.scalars(select(UserORM).where(UserORM.keycloak_id == id))
             user = result.one_or_none()
             if user is None:
                 return None
@@ -85,7 +83,7 @@ class UserRepo:
                 raise errors.ProgrammingError(message=f"Cannot find a user namespace for user {id}.")
             return user.namespace.dump_user()
 
-    async def get_or_create_user(self, requested_by: APIUser, id: str) -> UserWithNamespace | None:
+    async def get_or_create_user(self, requested_by: APIUser, id: str) -> UserInfo | None:
         """Get a specific user from the database and create it potentially if it does not exist.
 
         If the caller is the same user that is being retrieved and they are authenticated and
@@ -99,25 +97,24 @@ class UserRepo:
             return user
 
     @only_authenticated
-    async def get_users(self, requested_by: APIUser, email: str | None = None) -> list[UserWithNamespace]:
+    async def get_users(self, requested_by: APIUser, email: str | None = None) -> list[UserInfo]:
         """Get users from the database."""
         if not email and not requested_by.is_admin:
             raise errors.ForbiddenError(message="Non-admin users cannot list all users.")
         users = await self._get_users(email)
 
-        is_api_user_missing = not any([requested_by.id == user.user.id for user in users])
+        is_api_user_missing = not any([requested_by.id == user.id for user in users])
 
         if not email and is_api_user_missing:
             api_user_info = await self._add_api_user(requested_by)
             users.append(api_user_info)
         return users
 
-    async def _get_users(self, email: str | None = None) -> list[UserWithNamespace]:
+    async def _get_users(self, email: str | None = None) -> list[UserInfo]:
         async with self.session_maker() as session:
             stmt = select(UserORM)
             if email:
                 stmt = stmt.where(UserORM.email == email)
-            stmt = stmt.options(selectinload(UserORM.namespace))
             result = await session.scalars(stmt)
             users = result.all()
 
@@ -125,7 +122,7 @@ class UserRepo:
                 if user.namespace is None:
                     raise errors.ProgrammingError(message=f"Cannot find a user namespace for user {id}.")
 
-            return [user.namespace.dump_user() for user in users if user.namespace is not None]
+            return [user.dump() for user in users if user.namespace is not None]
 
     @only_authenticated
     async def get_or_create_user_secret_key(self, requested_by: APIUser) -> str:
@@ -176,7 +173,7 @@ class UsersSync:
     @dispatch_message(events.UpdateOrInsertUser)
     async def update_or_insert_user(
         self, user_id: str, payload: dict[str, Any], *, session: AsyncSession | None = None
-    ) -> UserWithNamespaceUpdate:
+    ) -> UserInfoUpdate:
         """Update a user or insert it if it does not exist."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
@@ -187,21 +184,26 @@ class UsersSync:
         else:
             return await self._insert_user(session=session, user_id=user_id, **payload)
 
-    async def _insert_user(self, session: AsyncSession, user_id: str, **kwargs: Any) -> UserWithNamespaceUpdate:
+    async def _insert_user(self, session: AsyncSession, user_id: str, **kwargs: Any) -> UserInfoUpdate:
         """Insert a user."""
         kwargs.pop("keycloak_id", None)
         kwargs.pop("id", None)
-        new_user = UserORM(keycloak_id=user_id, **kwargs)
+        slug = base_models.Slug.from_user(
+            kwargs.get("email"), kwargs.get("first_name"), kwargs.get("last_name"), user_id
+        ).value
+        namespace = await self.group_repo._create_user_namespace_slug(
+            session, user_slug=slug, retry_enumerate=5, retry_random=True
+        )
+        slug = base_models.Slug.from_name(namespace)
+        new_user = UserORM(keycloak_id=user_id, namespace=NamespaceORM(slug=slug.value, user_id=user_id), **kwargs)
+        new_user.namespace.user = new_user
         session.add(new_user)
         await session.flush()
-        namespace = await self.group_repo._insert_user_namespace(
-            session, new_user, retry_enumerate=5, retry_random=True
-        )
-        return UserWithNamespaceUpdate(None, UserWithNamespace(new_user.dump(), namespace))
+        return UserInfoUpdate(None, new_user.dump())
 
     async def _update_user(
         self, session: AsyncSession, user_id: str, existing_user: UserORM | None, **kwargs: Any
-    ) -> UserWithNamespaceUpdate:
+    ) -> UserInfoUpdate:
         """Update a user."""
         if not existing_user:
             async with self.session_maker() as session, session.begin():
@@ -222,13 +224,11 @@ class UsersSync:
             raise errors.ProgrammingError(
                 message=f"Cannot find a user namespace for user {user_id} when updating the user."
             )
-        return UserWithNamespaceUpdate(
-            UserWithNamespace(old_user, namespace), UserWithNamespace(existing_user.dump(), namespace)
-        )
+        return UserInfoUpdate(old_user, existing_user.dump())
 
     @with_db_transaction
     @dispatch_message(avro_schema_v2.UserRemoved)
-    async def _remove_user(self, user_id: str, *, session: AsyncSession | None = None) -> UserInfo | None:
+    async def _remove_user(self, user_id: str, *, session: AsyncSession | None = None) -> str | None:
         """Remove a user from the database."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
@@ -240,9 +240,8 @@ class UsersSync:
             logger.info(f"User with ID {user_id} was not found.")
             return None
         logger.info(f"User with ID {user_id} was removed from the database.")
-        removed_user = user.dump()
         logger.info(f"User namespace with ID {user_id} was removed from the authorization database.")
-        return removed_user
+        return user_id
 
     async def users_sync(self, kc_api: IKeycloakAPI) -> None:
         """Sync all users from Keycloak into the users database."""
@@ -286,9 +285,9 @@ class UsersSync:
             delete_admin_events = kc_api.get_admin_events(
                 start_date=start_date, event_types=[KeycloakAdminEvent.DELETE]
             )
-            parsed_updates = UserInfoUpdate.from_json_admin_events(update_admin_events)
-            parsed_updates.extend(UserInfoUpdate.from_json_user_events(user_events))
-            parsed_deletions = UserInfoUpdate.from_json_admin_events(delete_admin_events)
+            parsed_updates = UserInfoFieldUpdate.from_json_admin_events(update_admin_events)
+            parsed_updates.extend(UserInfoFieldUpdate.from_json_user_events(user_events))
+            parsed_deletions = UserInfoFieldUpdate.from_json_admin_events(delete_admin_events)
             parsed_updates = sorted(parsed_updates, key=lambda x: x.timestamp_utc)
             parsed_deletions = sorted(parsed_deletions, key=lambda x: x.timestamp_utc)
             if previous_sync_latest_utc_timestamp is not None:

@@ -39,11 +39,11 @@ class KCUsersBP(CustomBlueprint):
                 apispec.UsersWithId,
                 [
                     dict(
-                        id=user.user.id,
+                        id=user.id,
                         username=user.namespace.slug,
-                        email=user.user.email,
-                        first_name=user.user.first_name,
-                        last_name=user.user.last_name,
+                        email=user.email,
+                        first_name=user.first_name,
+                        last_name=user.last_name,
                     )
                     for user in users
                 ],
@@ -65,11 +65,11 @@ class KCUsersBP(CustomBlueprint):
             return validated_json(
                 apispec.UserWithId,
                 dict(
-                    id=user_info.user.id,
+                    id=user_info.id,
                     username=user_info.namespace.slug,
-                    email=user_info.user.email,
-                    first_name=user_info.user.first_name,
-                    last_name=user_info.user.last_name,
+                    email=user_info.email,
+                    first_name=user_info.first_name,
+                    last_name=user_info.last_name,
                 ),
             )
 
@@ -99,11 +99,11 @@ class KCUsersBP(CustomBlueprint):
             return validated_json(
                 apispec.UserWithId,
                 dict(
-                    id=user_info.user.id,
+                    id=user_info.id,
                     username=user_info.namespace.slug,
-                    email=user_info.user.email,
-                    first_name=user_info.user.first_name,
-                    last_name=user_info.user.last_name,
+                    email=user_info.email,
+                    first_name=user_info.first_name,
+                    last_name=user_info.last_name,
                 ),
             )
 

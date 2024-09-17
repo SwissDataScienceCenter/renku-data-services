@@ -1,7 +1,7 @@
 """SQLAlchemy's schemas for the group database."""
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Self, cast
 
 from sqlalchemy import CheckConstraint, DateTime, MetaData, String, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
@@ -11,7 +11,7 @@ from ulid import ULID
 from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
 from renku_data_services.errors import errors
 from renku_data_services.namespace import models
-from renku_data_services.users.models import UserInfo, UserWithNamespace
+from renku_data_services.users.models import UserInfo
 from renku_data_services.users.orm import UserORM
 from renku_data_services.utils.sqlalchemy import ULIDType
 
@@ -103,7 +103,7 @@ class NamespaceORM(BaseORM):
             name=name,
         )
 
-    def dump_user(self) -> UserWithNamespace:
+    def dump_user(self) -> UserInfo:
         """Create a user with namespace from the ORM."""
         if self.user is None:
             raise errors.ProgrammingError(
@@ -111,8 +111,25 @@ class NamespaceORM(BaseORM):
                 "has no associated user with it."
             )
         ns = self.dump()
-        user_info = UserInfo(self.user.keycloak_id, self.user.first_name, self.user.last_name, self.user.email)
-        return UserWithNamespace(user_info, ns)
+        user_info = UserInfo(
+            id=self.user.keycloak_id,
+            first_name=self.user.first_name,
+            last_name=self.user.last_name,
+            email=self.user.email,
+            namespace=ns,
+        )
+        return user_info
+
+    @classmethod
+    def load(cls, ns: models.Namespace) -> Self:
+        """Create an ORM object from the user object."""
+        match ns.kind:
+            case models.NamespaceKind.group:
+                return cls(slug=ns.slug, group_id=cast(ULID, ns.underlying_resource_id))
+            case models.NamespaceKind.user:
+                return cls(slug=ns.slug, user_id=cast(str, ns.underlying_resource_id))
+
+        raise errors.ValidationError(message=f"Unknown namespace kind {ns.kind}")
 
 
 class NamespaceOldORM(BaseORM):
