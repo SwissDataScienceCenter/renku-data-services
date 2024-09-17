@@ -3,10 +3,12 @@
 These are applied through alembic migrations in the common migrations folder.
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import cast
 
 from authzed.api.v1 import SyncClient
-from authzed.api.v1.core_pb2 import SubjectReference
+from authzed.api.v1.core_pb2 import Relationship, RelationshipUpdate, SubjectReference
 from authzed.api.v1.permission_service_pb2 import (
     DeleteRelationshipsRequest,
     DeleteRelationshipsResponse,
@@ -15,6 +17,7 @@ from authzed.api.v1.permission_service_pb2 import (
     WriteRelationshipsRequest,
 )
 from authzed.api.v1.schema_service_pb2 import WriteSchemaRequest, WriteSchemaResponse
+from ulid import ULID
 
 from renku_data_services.authz.authz import ResourceType, _AuthzConverter, _Relation
 from renku_data_services.errors import errors
@@ -281,3 +284,156 @@ v3 = AuthzSchemaMigration(
         WriteSchemaRequest(schema=_v2),
     ],
 )
+
+_v4: str = """\
+definition user {}
+
+definition group {
+    relation group_platform: platform
+    relation owner: user
+    relation editor: user
+    relation viewer: user
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = public_viewer + read_children
+    permission read_children = viewer + write
+    permission write = editor + delete
+    permission change_membership = delete
+    permission delete = owner + group_platform->is_admin
+}
+
+definition user_namespace {
+    relation user_namespace_platform: platform
+    relation owner: user
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = public_viewer + read_children
+    permission read_children = delete
+    permission write = delete
+    permission delete = owner + user_namespace_platform->is_admin
+}
+
+definition anonymous_user {}
+
+definition platform {
+    relation admin: user
+    permission is_admin = admin
+}
+
+definition project {
+    relation project_platform: platform
+    relation project_namespace: user_namespace | group
+    relation owner: user
+    relation editor: user
+    relation viewer: user
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = public_viewer + viewer + write + project_namespace->read_children
+    permission read_linked_resources = viewer + editor + owner + project_platform->is_admin
+    permission write = editor + delete + project_namespace->write
+    permission change_membership = delete
+    permission delete = owner + project_platform->is_admin + project_namespace->delete
+}
+
+definition data_connector {
+    relation data_connector_platform: platform
+    relation data_connector_namespace: user_namespace | group
+    relation linked_to: project
+    relation owner: user
+    relation editor: user
+    relation viewer: user
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = public_viewer + viewer + write + \
+        data_connector_namespace->read_children + read_from_linked_resource
+    permission read_from_linked_resource = linked_to->read_linked_resources
+    permission write = editor + delete + data_connector_namespace->write
+    permission change_membership = delete
+    permission delete = owner + data_connector_platform->is_admin + data_connector_namespace->delete
+    permission add_link = delete + public_viewer
+}"""
+
+
+def generate_v4(public_project_ids: Iterable[str]) -> AuthzSchemaMigration:
+    """Creates the v4 schema migration."""
+    up: list[WriteRelationshipsRequest | DeleteRelationshipsRequest | WriteSchemaRequest] = [
+        DeleteRelationshipsRequest(
+            relationship_filter=RelationshipFilter(
+                resource_type=ResourceType.project.value,
+                optional_relation=_Relation.viewer.value,
+                optional_subject_filter=SubjectFilter(
+                    subject_type=ResourceType.user.value,
+                    optional_subject_id=SubjectReference(object=_AuthzConverter.all_users()).object.object_id,
+                ),
+            )
+        ),
+        DeleteRelationshipsRequest(
+            relationship_filter=RelationshipFilter(
+                resource_type=ResourceType.project.value,
+                optional_relation=_Relation.viewer.value,
+                optional_subject_filter=SubjectFilter(
+                    subject_type=ResourceType.anonymous_user.value,
+                    optional_subject_id=SubjectReference(object=_AuthzConverter.anonymous_users()).object.object_id,
+                ),
+            )
+        ),
+        WriteSchemaRequest(schema=_v4),
+    ]
+    down: list[WriteRelationshipsRequest | DeleteRelationshipsRequest | WriteSchemaRequest] = [
+        DeleteRelationshipsRequest(
+            relationship_filter=RelationshipFilter(
+                resource_type=ResourceType.project.value, optional_relation=_Relation.public_viewer.value
+            )
+        ),
+        DeleteRelationshipsRequest(
+            relationship_filter=RelationshipFilter(resource_type=ResourceType.data_connector.value)
+        ),
+        WriteSchemaRequest(schema=_v3),
+    ]
+
+    all_users_sub = SubjectReference(object=_AuthzConverter.all_users())
+    anon_users_sub = SubjectReference(object=_AuthzConverter.anonymous_users())
+    for project_id in public_project_ids:
+        project_res = _AuthzConverter.project(cast(ULID, ULID.from_str(project_id)))
+        all_users_are_viewers = Relationship(
+            resource=project_res,
+            relation=_Relation.public_viewer.value,
+            subject=all_users_sub,
+        )
+        anon_users_are_viewers = Relationship(
+            resource=project_res,
+            relation=_Relation.public_viewer.value,
+            subject=anon_users_sub,
+        )
+        down_all_users_are_viewers = Relationship(
+            resource=project_res,
+            relation=_Relation.viewer.value,
+            subject=all_users_sub,
+        )
+        down_anon_users_are_viewers = Relationship(
+            resource=project_res,
+            relation=_Relation.viewer.value,
+            subject=anon_users_sub,
+        )
+        up.append(
+            WriteRelationshipsRequest(
+                updates=[
+                    RelationshipUpdate(
+                        operation=RelationshipUpdate.OPERATION_TOUCH, relationship=all_users_are_viewers
+                    ),
+                    RelationshipUpdate(
+                        operation=RelationshipUpdate.OPERATION_TOUCH, relationship=anon_users_are_viewers
+                    ),
+                ],
+            )
+        )
+        down.append(
+            WriteRelationshipsRequest(
+                updates=[
+                    RelationshipUpdate(
+                        operation=RelationshipUpdate.OPERATION_TOUCH, relationship=down_all_users_are_viewers
+                    ),
+                    RelationshipUpdate(
+                        operation=RelationshipUpdate.OPERATION_TOUCH, relationship=down_anon_users_are_viewers
+                    ),
+                ],
+            )
+        )
+
+    return AuthzSchemaMigration(up=up, down=down)
