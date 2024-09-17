@@ -3,12 +3,14 @@
 import json
 import os
 from dataclasses import asdict
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 from kubernetes import client
 
+from renku_data_services.base_models.core import AnonymousAPIUser, AuthenticatedAPIUser
 from renku_data_services.notebooks.api.amalthea_patches.utils import get_certificates_volume_mounts
+from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.config import _NotebooksConfig
 
 if TYPE_CHECKING:
@@ -16,59 +18,63 @@ if TYPE_CHECKING:
     from renku_data_services.notebooks.api.classes.server import UserServer
 
 
-async def git_clone_container_v2(server: "UserServer") -> dict[str, Any] | None:
+async def git_clone_container_v2(
+    user: AuthenticatedAPIUser | AnonymousAPIUser,
+    config: _NotebooksConfig,
+    repositories: list[Repository],
+    git_providers: list[GitProvider],
+    workspace_mount_path: PurePosixPath,
+    work_dir: PurePosixPath,
+    lfs_auto_fetch: bool = False,
+) -> dict[str, Any] | None:
     """Returns the specification for the container that clones the user's repositories for new operator."""
     amalthea_session_work_volume: str = "amalthea-volume"
-    repositories = await server.repositories()
     if not repositories:
         return None
 
     etc_cert_volume_mount = get_certificates_volume_mounts(
-        server.config,
+        config,
         custom_certs=False,
         etc_certs=True,
         read_only_etc_certs=True,
     )
 
-    user_is_anonymous = not server.user.is_authenticated
+    user_is_anonymous = isinstance(user, AnonymousAPIUser)
     prefix = "GIT_CLONE_"
     env = [
-        {
-            "name": f"{prefix}WORKSPACE_MOUNT_PATH",
-            "value": server.workspace_mount_path.as_posix(),
-        },
+        {"name": f"{prefix}WORKSPACE_MOUNT_PATH", "value": workspace_mount_path.as_posix()},
         {
             "name": f"{prefix}MOUNT_PATH",
-            "value": server.work_dir.as_posix(),
+            "value": work_dir.as_posix(),
         },
         {
             "name": f"{prefix}LFS_AUTO_FETCH",
-            "value": "1" if server.server_options.lfs_auto_fetch else "0",
+            "value": "1" if lfs_auto_fetch else "0",
         },
         {
             "name": f"{prefix}USER__USERNAME",
-            "value": server.user.email,
+            "value": user.email,
         },
         {
             "name": f"{prefix}USER__RENKU_TOKEN",
-            "value": str(server.user.access_token),
+            "value": str(user.access_token),
         },
         {"name": f"{prefix}IS_GIT_PROXY_ENABLED", "value": "0" if user_is_anonymous else "1"},
         {
             "name": f"{prefix}SENTRY__ENABLED",
-            "value": str(server.config.sessions.git_clone.sentry.enabled).lower(),
+            "value": str(config.sessions.git_clone.sentry.enabled).lower(),
         },
         {
             "name": f"{prefix}SENTRY__DSN",
-            "value": server.config.sessions.git_clone.sentry.dsn,
+            "value": config.sessions.git_clone.sentry.dsn,
         },
         {
             "name": f"{prefix}SENTRY__ENVIRONMENT",
-            "value": server.config.sessions.git_clone.sentry.env,
+            "value": config.sessions.git_clone.sentry.env,
         },
         {
             "name": f"{prefix}SENTRY__SAMPLE_RATE",
-            "value": str(server.config.sessions.git_clone.sentry.sample_rate),
+            "value": str(config.sessions.git_clone.sentry.sample_rate),
         },
         {"name": "SENTRY_RELEASE", "value": os.environ.get("SENTRY_RELEASE")},
         {
@@ -80,10 +86,10 @@ async def git_clone_container_v2(server: "UserServer") -> dict[str, Any] | None:
             "value": str(Path(etc_cert_volume_mount[0]["mountPath"]) / "ca-certificates.crt"),
         },
     ]
-    if server.user.is_authenticated:
-        if server.user.email:
+    if user.is_authenticated:
+        if user.email:
             env.append(
-                {"name": f"{prefix}USER__EMAIL", "value": server.user.email},
+                {"name": f"{prefix}USER__EMAIL", "value": user.email},
             )
         full_name = server.user.get_full_name()
         if full_name:
@@ -105,7 +111,8 @@ async def git_clone_container_v2(server: "UserServer") -> dict[str, Any] | None:
         )
 
     # Set up git providers
-    required_git_providers = await server.required_git_providers()
+    required_provider_ids: set[str] = set(r.provider for r in repositories if r.provider)
+    required_git_providers = [p for p in git_providers if p.id in required_provider_ids]
     for idx, provider in enumerate(required_git_providers):
         obj_env = f"{prefix}GIT_PROVIDERS_{idx}_"
         data = dict(id=provider.id, access_token_url=provider.access_token_url)
@@ -117,7 +124,7 @@ async def git_clone_container_v2(server: "UserServer") -> dict[str, Any] | None:
         )
 
     return {
-        "image": server.config.sessions.git_clone.image,
+        "image": config.sessions.git_clone.image,
         "name": "git-clone",
         "resources": {
             "requests": {
@@ -134,7 +141,7 @@ async def git_clone_container_v2(server: "UserServer") -> dict[str, Any] | None:
         },
         "volumeMounts": [
             {
-                "mountPath": server.workspace_mount_path.as_posix(),
+                "mountPath": workspace_mount_path.as_posix(),
                 "name": amalthea_session_work_volume,
             },
             *etc_cert_volume_mount,
