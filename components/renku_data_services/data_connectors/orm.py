@@ -13,6 +13,7 @@ from renku_data_services.authz import models as authz_models
 from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
 from renku_data_services.data_connectors import models
 from renku_data_services.data_connectors.apispec import Visibility
+from renku_data_services.project.orm import ProjectORM
 from renku_data_services.secrets.orm import SecretORM
 from renku_data_services.users.orm import UserORM
 from renku_data_services.utils.sqlalchemy import ULIDType
@@ -113,6 +114,47 @@ class DataConnectorORM(BaseORM):
             source_path=self.source_path,
             target_path=self.target_path,
             readonly=self.readonly,
+        )
+
+
+class DataConnectorProjectLinkORM(BaseORM):
+    """A link from a data connector to a project in Renku 2.0."""
+
+    __tablename__ = "data_connector_to_project_links"
+
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    """ID of this data connector to project link."""
+
+    data_connector_id: Mapped[ULID] = mapped_column(ForeignKey(DataConnectorORM.id), index=True, nullable=False)
+    """ID of the data connector."""
+
+    project_id: Mapped[ULID] = mapped_column(ForeignKey(ProjectORM.id), index=True, nullable=False)
+    """ID of the project."""
+
+    created_by_id: Mapped[str] = mapped_column(ForeignKey(UserORM.keycloak_id), index=True, nullable=False)
+    """User ID of the creator of the data connector."""
+
+    creation_date: Mapped[datetime] = mapped_column(
+        "creation_date", DateTime(timezone=True), default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        "updated_at",
+        DateTime(timezone=True),
+        default=None,
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    def dump(self) -> models.DataConnectorProjectLink:
+        """Create a link model from the DataConnectorProjectLinkORM."""
+        return models.DataConnectorProjectLink(
+            id=self.id,
+            data_connector_id=self.data_connector_id,
+            project_id=self.project_id,
+            created_by=self.created_by_id,
+            creation_date=self.creation_date,
+            updated_at=self.updated_at,
         )
 
 

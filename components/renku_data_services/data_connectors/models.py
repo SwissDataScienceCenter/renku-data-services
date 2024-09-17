@@ -98,3 +98,21 @@ class DataConnectorUpdate:
 
     old: DataConnector
     new: DataConnector
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedDataConnectorProjectLink:
+    """Base model for a link from a data connector to a project."""
+
+    data_connector_id: ULID
+    project_id: ULID
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class DataConnectorProjectLink(UnsavedDataConnectorProjectLink):
+    """A link from a data connector to a project."""
+
+    id: ULID
+    created_by: str
+    creation_date: datetime
+    updated_at: datetime

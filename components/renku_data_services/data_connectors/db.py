@@ -297,6 +297,46 @@ class DataConnectorRepository:
         return data_connector
 
 
+class DataConnectorProjectLinkRepository:
+    """Repository for links from data connectors to projects."""
+
+    def __init__(
+        self,
+        session_maker: Callable[..., AsyncSession],
+        authz: Authz,
+    ) -> None:
+        self.session_maker = session_maker
+        self.authz = authz
+
+    @with_db_transaction
+    @Authz.authz_change(AuthzOperation.create_link, ResourceType.data_connector)
+    async def insert_link(
+        self,
+        user: base_models.APIUser,
+        link: models.UnsavedDataConnectorProjectLink,
+        *,
+        session: AsyncSession | None = None,
+    ) -> models.DataConnectorProjectLink:
+        """Insert a new link from a data connector to a project."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required.")
+
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        link_orm = schemas.DataConnectorProjectLinkORM(
+            data_connector_id=link.data_connector_id,
+            project_id=link.project_id,
+            created_by_id=user.id,
+        )
+
+        session.add(link_orm)
+        await session.flush()
+        await session.refresh(link_orm)
+
+        return link_orm.dump()
+
+
 _T = TypeVar("_T")
 
 

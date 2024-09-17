@@ -165,7 +165,69 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - data connectors
-
+  /data_connectors/{data_connector_id}/project_links:
+    parameters:
+      - in: path
+        name: data_connector_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+        description: the ID of the data connector
+    get:
+      summary: Get all links from a given data connector to projects
+      responses:
+        "200":
+          description: List of data connector to project links
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataConnectorProjectLinksList'
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - data connectors
+    post:
+      summary: Create a new link from a data connector to a project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataConnectorProjectLinkPost"
+      responses:
+        "201":
+          description: The data connector was connected to a project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataConnectorProjectLink"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - data connectors
+  /data_connectors/{data_connector_id}/project_links/{link_id}:
+    parameters:
+      - in: path
+        name: data_connector_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+        description: the ID of the data connector
+      - in: path
+        name: link_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+        description: the ID of the link between a data connector and a project
+    delete:
+      summary: Remove a link from a data connector to a project
+      responses:
+        "204":
+          description: The data connector was removed or did not exist in the first place
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - data connectors
   /data_connectors/{data_connector_id}/secrets:
     parameters:
       - in: path
@@ -401,6 +463,41 @@ components:
         - target_path
       example:
         storage_url: s3://giab
+    DataConnectorProjectLinksList:
+      description: A list of links from a data connector to a project
+      type: array
+      items:
+        $ref: "#/components/schemas/DataConnectorProjectLink"
+    DataConnectorProjectLink:
+      description: A link to be created from a data connector to a project in Renku 2.0
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        data_connector_id:
+          $ref: "#/components/schemas/Ulid"
+        project_id:
+          $ref: "#/components/schemas/Ulid"
+        creation_date:
+          $ref: "#/components/schemas/CreationDate"
+        created_by:
+          $ref: "#/components/schemas/UserId"
+      required:
+        - id
+        - data_connector_id
+        - project_id
+        - creation_date
+        - created_by
+    DataConnectorProjectLinkPost:
+      description: A link from a data connector to a project in Renku 2.0
+      type: object
+      additionalProperties: false
+      properties:
+        project_id:
+          $ref: "#/components/schemas/Ulid"
+      required:
+        - project_id
     CloudStorageSecretPost:
       type: object
       description: Data for storing secret for a storage field
