@@ -1,7 +1,6 @@
 """Tests for notebook blueprints."""
 
 import asyncio
-import re
 from collections.abc import AsyncIterator
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -9,7 +8,6 @@ from uuid import uuid4
 import pytest
 import pytest_asyncio
 from kr8s.asyncio.objects import Pod
-from pytest_httpx import HTTPXMock
 from sanic_testing.testing import SanicASGITestClient
 
 from renku_data_services.notebooks.api.classes.k8s_client import JupyterServerV1Alpha1Kr8s
@@ -128,7 +126,6 @@ async def test_check_docker_image(sanic_client: SanicASGITestClient, user_header
 )
 async def test_log_retrieval(
     sanic_client: SanicASGITestClient,
-    httpx_mock: HTTPXMock,
     request,
     server_name_fixture,
     expected_status_code,
@@ -138,7 +135,6 @@ async def test_log_retrieval(
     """Validate that the logs endpoint answers correctly"""
 
     server_name = request.getfixturevalue(server_name_fixture)
-    httpx_mock.add_response(url=f"http://not.specified/servers/{server_name}", json={}, status_code=400)
 
     _, res = await sanic_client.get(f"/api/data/notebooks/logs/{server_name}", headers=authenticated_user_headers)
 
@@ -174,7 +170,6 @@ async def test_server_options(sanic_client: SanicASGITestClient, user_headers):
 )
 async def test_stop_server(
     sanic_client: SanicASGITestClient,
-    httpx_mock: HTTPXMock,
     request,
     server_name_fixture,
     expected_status_code,
@@ -182,7 +177,6 @@ async def test_stop_server(
     authenticated_user_headers,
 ):
     server_name = request.getfixturevalue(server_name_fixture)
-    httpx_mock.add_response(url=f"http://not.specified/servers/{server_name}", json={}, status_code=400)
 
     _, res = await sanic_client.delete(f"/api/data/notebooks/servers/{server_name}", headers=authenticated_user_headers)
 
@@ -196,7 +190,6 @@ async def test_stop_server(
 )
 async def test_patch_server(
     sanic_client: SanicASGITestClient,
-    httpx_mock: HTTPXMock,
     request,
     server_name_fixture,
     expected_status_code,
@@ -205,7 +198,6 @@ async def test_patch_server(
     authenticated_user_headers,
 ):
     server_name = request.getfixturevalue(server_name_fixture)
-    httpx_mock.add_response(url=f"http://not.specified/servers/{server_name}", json={}, status_code=400)
 
     _, res = await sanic_client.patch(
         f"/api/data/notebooks/servers/{server_name}", json=patch, headers=authenticated_user_headers
@@ -298,11 +290,7 @@ async def test_old_start_server(sanic_client: SanicASGITestClient, authenticated
 
 
 @pytest.mark.asyncio
-async def test_start_server(
-    sanic_client: SanicASGITestClient, httpx_mock: HTTPXMock, authenticated_user_headers, fake_gitlab
-):
-    httpx_mock.add_response(url=re.compile("http://not\\.specified/servers/.*"), json={}, status_code=400)
-
+async def test_start_server(sanic_client: SanicASGITestClient, authenticated_user_headers, fake_gitlab):
     data = {
         "branch": "main",
         "commit_sha": "ee4b1c9fedc99abe5892ee95320bbd8471c5985b",
