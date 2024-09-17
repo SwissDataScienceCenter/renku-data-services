@@ -496,3 +496,35 @@ async def test_delete_data_connector(sanic_client: SanicASGITestClient, create_d
 
     assert response.status_code == 200, response.text
     assert {dc["name"] for dc in response.json} == {"Data connector 1", "Data connector 3"}
+
+
+@pytest.mark.asyncio
+async def test_get_data_connector_project_links_empty(
+    sanic_client: SanicASGITestClient, create_data_connector, user_headers
+) -> None:
+    data_connector = await create_data_connector("Data connector 1")
+
+    data_connector_id = data_connector["id"]
+    _, response = await sanic_client.get(
+        f"/api/data/data_connectors/{data_connector_id}/project_links", headers=user_headers
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert len(response.json) == 0
+
+
+@pytest.mark.asyncio
+async def test_post_data_connector_project_links(
+    sanic_client: SanicASGITestClient, create_data_connector, create_project, user_headers
+) -> None:
+    data_connector = await create_data_connector("Data connector 1")
+    project = await create_project("Project A")
+
+    data_connector_id = data_connector["id"]
+    payload = {"project_id": project["id"]}
+    _, response = await sanic_client.post(
+        f"/api/data/data_connectors/{data_connector_id}/project_links", headers=user_headers, json=payload
+    )
+
+    assert response.status_code == 201, response.text
