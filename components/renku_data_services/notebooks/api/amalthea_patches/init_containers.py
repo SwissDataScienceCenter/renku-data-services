@@ -91,7 +91,7 @@ async def git_clone_container_v2(
             env.append(
                 {"name": f"{prefix}USER__EMAIL", "value": user.email},
             )
-        full_name = server.user.get_full_name()
+        full_name = user.get_full_name()
         if full_name:
             env.append(
                 {

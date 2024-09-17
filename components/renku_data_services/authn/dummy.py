@@ -70,7 +70,7 @@ class DummyAuthenticator:
         )
 
         return base_models.APIUser(
-            is_admin_init=user_props.get("is_admin", False),
+            is_admin=user_props.get("is_admin", False),
             id=user_props.get("id", "some-id") if is_set else None,
             access_token=access_token,
             first_name=user_props.get("first_name", "John") if is_set else None,

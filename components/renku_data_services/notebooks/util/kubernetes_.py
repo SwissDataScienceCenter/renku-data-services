@@ -27,8 +27,6 @@ from kubernetes.client import V1Container
 
 from renku_data_services.notebooks.crs import Patch, PatchType
 
-from renku_data_services.notebooks.crs import Patch, PatchType
-
 
 def renku_1_make_server_name(safe_username: str, namespace: str, project: str, branch: str, commit_sha: str) -> str:
     """Form a unique server name for Renku 1.0 sessions.

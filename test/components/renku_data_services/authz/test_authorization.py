@@ -17,10 +17,10 @@ from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.namespace.models import Namespace, NamespaceKind
 from renku_data_services.project.models import Project
 
-admin_user = APIUser(is_admin_init=True, id="admin-id", access_token="some-token", full_name="admin")  # nosec B106
-anon_user = APIUser(is_admin_init=False)
-regular_user1 = APIUser(is_admin_init=False, id="user1-id", access_token="some-token1", full_name="some-user1")  # nosec B106
-regular_user2 = APIUser(is_admin_init=False, id="user2-id", access_token="some-token2", full_name="some-user2")  # nosec B106
+admin_user = APIUser(is_admin=True, id="admin-id", access_token="some-token", full_name="admin")  # nosec B106
+anon_user = APIUser(is_admin=False)
+regular_user1 = APIUser(is_admin=False, id="user1-id", access_token="some-token1", full_name="some-user1")  # nosec B106
+regular_user2 = APIUser(is_admin=False, id="user2-id", access_token="some-token2", full_name="some-user2")  # nosec B106
 
 
 @pytest_asyncio.fixture

@@ -931,8 +931,8 @@ class NotebooksNewBP(CustomBlueprint):
                         args=environment.args,
                         shmSize="1G",
                         env=[
-                            SessionEnvItem(name="RENKU_BASE_URL_PATH", value=base_server_url),
-                            SessionEnvItem(name="RENKU_BASE_URL", value=base_server_path),
+                            SessionEnvItem(name="RENKU_BASE_URL_PATH", value=base_server_path),
+                            SessionEnvItem(name="RENKU_BASE_URL", value=base_server_url),
                         ],
                     ),
                     ingress=Ingress(
