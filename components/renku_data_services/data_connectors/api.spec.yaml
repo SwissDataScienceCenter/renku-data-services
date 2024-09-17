@@ -181,7 +181,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DataConnectorProjectLinksList'
+                $ref: "#/components/schemas/DataConnectorToProjectLinksList"
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -193,14 +193,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/DataConnectorProjectLinkPost"
+              $ref: "#/components/schemas/DataConnectorToProjectLinkPost"
       responses:
         "201":
           description: The data connector was connected to a project
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DataConnectorProjectLink"
+                $ref: "#/components/schemas/DataConnectorToProjectLink"
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -463,13 +463,13 @@ components:
         - target_path
       example:
         storage_url: s3://giab
-    DataConnectorProjectLinksList:
+    DataConnectorToProjectLinksList:
       description: A list of links from a data connector to a project
       type: array
       items:
-        $ref: "#/components/schemas/DataConnectorProjectLink"
-    DataConnectorProjectLink:
-      description: A link to be created from a data connector to a project in Renku 2.0
+        $ref: "#/components/schemas/DataConnectorToProjectLink"
+    DataConnectorToProjectLink:
+      description: A link from a data connector to a project in Renku 2.0
       type: object
       additionalProperties: false
       properties:
@@ -489,8 +489,8 @@ components:
         - project_id
         - creation_date
         - created_by
-    DataConnectorProjectLinkPost:
-      description: A link from a data connector to a project in Renku 2.0
+    DataConnectorToProjectLinkPost:
+      description: A link to be created from a data connector to a project in Renku 2.0
       type: object
       additionalProperties: false
       properties:
