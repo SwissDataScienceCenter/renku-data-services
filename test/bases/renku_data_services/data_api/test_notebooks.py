@@ -8,8 +8,6 @@ from kr8s.objects import Pod, new_class
 from pytest_httpx import HTTPXMock
 from sanic_testing.testing import SanicASGITestClient
 
-from .utils import AttributeDictionary
-
 JupyterServer = new_class(
     kind="JupyterServer",
     version="amalthea.dev/v1alpha1",
@@ -189,6 +187,31 @@ async def test_patch_server(
     )
 
     assert res.status_code == expected_status_code, res.text
+
+
+class AttributeDictionary(dict):
+    """Enables accessing dictionary keys as attributes"""
+
+    def __init__(self, dictionary):
+        for key, value in dictionary.items():
+            # TODO check if key is a valid identifier
+            if key == "list":
+                raise ValueError("'list' is not allowed as a key")
+            if isinstance(value, dict):
+                value = AttributeDictionary(value)
+            elif isinstance(value, list):
+                value = [AttributeDictionary(v) if isinstance(v, dict) else v for v in value]
+            self.__setattr__(key, value)
+            self[key] = value
+
+    def list(self):
+        [value for _, value in self.items()]
+
+    def __setitem__(self, k, v):
+        if k == "list":
+            raise ValueError("'list' is not allowed as a key")
+        self.__setattr__(k, v)
+        return super().__setitem__(k, v)
 
 
 @pytest.fixture
