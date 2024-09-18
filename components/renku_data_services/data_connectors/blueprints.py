@@ -195,17 +195,40 @@ class DataConnectorsBP(CustomBlueprint):
             )
             return validated_json(
                 apispec.DataConnectorToProjectLinksList,
-                links,
+                [self._dump_data_connector_to_project_link(link) for link in links],
             )
 
         return "/data_connectors/<data_connector_id:ulid>/project_links", ["GET"], _get_all_project_links
+
+    def post_project_link(self) -> BlueprintFactoryResponse:
+        """Create a new link from a data connector to a project."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @validate(json=apispec.DataConnectorToProjectLinkPost)
+        async def _post_project_link(
+            _: Request,
+            user: base_models.APIUser,
+            data_connector_id: ULID,
+            body: apispec.DataConnectorToProjectLinkPost,
+        ) -> JSONResponse:
+            unsaved_link = models.UnsavedDataConnectorProjectLink(
+                data_connector_id=data_connector_id,
+                project_id=ULID.from_str(body.project_id),
+            )
+            link = await self.data_connector_to_project_link_repo.insert_link(user=user, link=unsaved_link)
+            return validated_json(
+                apispec.DataConnectorToProjectLink, self._dump_data_connector_to_project_link(link), status=201
+            )
+
+        return "/data_connectors/<data_connector_id:ulid>/project_links", ["POST"], _post_project_link
 
     @staticmethod
     def _dump_data_connector(data_connector: models.DataConnector, validator: RCloneValidator) -> dict[str, Any]:
         """Dumps a data connector for API responses."""
         storage = dump_storage_with_sensitive_fields(data_connector.storage, validator=validator)
         return dict(
-            id=data_connector.id,
+            id=str(data_connector.id),
             name=data_connector.name,
             namespace=data_connector.namespace.slug,
             slug=data_connector.slug,
@@ -217,4 +240,15 @@ class DataConnectorsBP(CustomBlueprint):
             description=data_connector.description,
             etag=data_connector.etag,
             keywords=data_connector.keywords or [],
+        )
+
+    @staticmethod
+    def _dump_data_connector_to_project_link(link: models.DataConnectorProjectLink) -> dict[str, Any]:
+        """Dumps a link from a data connector to a project for API responses."""
+        return dict(
+            id=str(link.id),
+            data_connector_id=str(link.data_connector_id),
+            project_id=str(link.project_id),
+            creation_date=link.creation_date,
+            created_by=link.created_by,
         )

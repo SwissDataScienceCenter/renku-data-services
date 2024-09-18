@@ -528,3 +528,20 @@ async def test_post_data_connector_project_links(
     )
 
     assert response.status_code == 201, response.text
+    assert response.json is not None
+    link = response.json
+    assert link.get("data_connector_id") == data_connector_id
+    assert link.get("project_id") == project["id"]
+    assert link.get("created_by") == "user"
+
+    # Check that the links list is not empty now
+    _, response = await sanic_client.get(
+        f"/api/data/data_connectors/{data_connector_id}/project_links", headers=user_headers
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert len(response.json) == 1
+    assert response.json[0].get("id") == link["id"]
+    assert response.json[0].get("data_connector_id") == data_connector_id
+    assert response.json[0].get("project_id") == project["id"]
