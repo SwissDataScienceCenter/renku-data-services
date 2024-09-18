@@ -212,7 +212,7 @@ class DataConnectorsBP(CustomBlueprint):
             data_connector_id: ULID,
             body: apispec.DataConnectorToProjectLinkPost,
         ) -> JSONResponse:
-            unsaved_link = models.UnsavedDataConnectorProjectLink(
+            unsaved_link = models.UnsavedDataConnectorToProjectLink(
                 data_connector_id=data_connector_id,
                 project_id=ULID.from_str(body.project_id),
             )
@@ -282,7 +282,7 @@ class DataConnectorsBP(CustomBlueprint):
         )
 
     @staticmethod
-    def _dump_data_connector_to_project_link(link: models.DataConnectorProjectLink) -> dict[str, Any]:
+    def _dump_data_connector_to_project_link(link: models.DataConnectorToProjectLink) -> dict[str, Any]:
         """Dumps a link from a data connector to a project for API responses."""
         return dict(
             id=str(link.id),

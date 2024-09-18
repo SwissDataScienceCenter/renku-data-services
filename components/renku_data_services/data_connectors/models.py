@@ -101,7 +101,7 @@ class DataConnectorUpdate:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class UnsavedDataConnectorProjectLink:
+class UnsavedDataConnectorToProjectLink:
     """Base model for a link from a data connector to a project."""
 
     data_connector_id: ULID
@@ -109,7 +109,7 @@ class UnsavedDataConnectorProjectLink:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class DataConnectorProjectLink(UnsavedDataConnectorProjectLink):
+class DataConnectorToProjectLink(UnsavedDataConnectorToProjectLink):
     """A link from a data connector to a project."""
 
     id: ULID

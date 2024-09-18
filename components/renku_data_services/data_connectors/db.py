@@ -319,7 +319,7 @@ class DataConnectorProjectLinkRepository:
 
     async def get_links_from(
         self, user: base_models.APIUser, data_connector_id: ULID
-    ) -> list[models.DataConnectorProjectLink]:
+    ) -> list[models.DataConnectorToProjectLink]:
         """Get links from a given data connector."""
         authorized = await self.authz.has_permission(user, ResourceType.data_connector, data_connector_id, Scope.READ)
         if not authorized:
@@ -332,15 +332,17 @@ class DataConnectorProjectLinkRepository:
 
         async with self.session_maker() as session:
             stmt = (
-                select(schemas.DataConnectorProjectLinkORM)
-                .where(schemas.DataConnectorProjectLinkORM.data_connector_id == data_connector_id)
-                .where(schemas.DataConnectorProjectLinkORM.project_id.in_(project_ids))
+                select(schemas.DataConnectorToProjectLinkORM)
+                .where(schemas.DataConnectorToProjectLinkORM.data_connector_id == data_connector_id)
+                .where(schemas.DataConnectorToProjectLinkORM.project_id.in_(project_ids))
             )
             result = await session.scalars(stmt)
             links_orm = result.all()
             return [link.dump() for link in links_orm]
 
-    async def get_links_to(self, user: base_models.APIUser, project_id: ULID) -> list[models.DataConnectorProjectLink]:
+    async def get_links_to(
+        self, user: base_models.APIUser, project_id: ULID
+    ) -> list[models.DataConnectorToProjectLink]:
         """Get links to a given project."""
         authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
         if not authorized:
@@ -355,9 +357,9 @@ class DataConnectorProjectLinkRepository:
 
         async with self.session_maker() as session:
             stmt = (
-                select(schemas.DataConnectorProjectLinkORM)
-                .where(schemas.DataConnectorProjectLinkORM.project_id == project_id)
-                .where(schemas.DataConnectorProjectLinkORM.data_connector_id.in_(data_connector_ids))
+                select(schemas.DataConnectorToProjectLinkORM)
+                .where(schemas.DataConnectorToProjectLinkORM.project_id == project_id)
+                .where(schemas.DataConnectorToProjectLinkORM.data_connector_id.in_(data_connector_ids))
             )
             result = await session.scalars(stmt)
             links_orm = result.all()
@@ -368,10 +370,10 @@ class DataConnectorProjectLinkRepository:
     async def insert_link(
         self,
         user: base_models.APIUser,
-        link: models.UnsavedDataConnectorProjectLink,
+        link: models.UnsavedDataConnectorToProjectLink,
         *,
         session: AsyncSession | None = None,
-    ) -> models.DataConnectorProjectLink:
+    ) -> models.DataConnectorToProjectLink:
         """Insert a new link from a data connector to a project."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required.")
@@ -397,7 +399,7 @@ class DataConnectorProjectLinkRepository:
                 message=f"Project with id '{link.project_id}' does not exist or you do not have access to it."
             )
 
-        link_orm = schemas.DataConnectorProjectLinkORM(
+        link_orm = schemas.DataConnectorToProjectLinkORM(
             data_connector_id=link.data_connector_id,
             project_id=link.project_id,
             created_by_id=user.id,
@@ -418,16 +420,16 @@ class DataConnectorProjectLinkRepository:
         link_id: ULID,
         *,
         session: AsyncSession | None = None,
-    ) -> models.DataConnectorProjectLink | None:
+    ) -> models.DataConnectorToProjectLink | None:
         """Delete a link from a data connector to a project."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required.")
 
         link_orm = (
             await session.scalars(
-                select(schemas.DataConnectorProjectLinkORM)
-                .where(schemas.DataConnectorProjectLinkORM.id == link_id)
-                .where(schemas.DataConnectorProjectLinkORM.data_connector_id == data_connector_id)
+                select(schemas.DataConnectorToProjectLinkORM)
+                .where(schemas.DataConnectorToProjectLinkORM.id == link_id)
+                .where(schemas.DataConnectorToProjectLinkORM.data_connector_id == data_connector_id)
             )
         ).one_or_none()
         if link_orm is None:

@@ -117,7 +117,7 @@ class DataConnectorORM(BaseORM):
         )
 
 
-class DataConnectorProjectLinkORM(BaseORM):
+class DataConnectorToProjectLinkORM(BaseORM):
     """A link from a data connector to a project in Renku 2.0."""
 
     __tablename__ = "data_connector_to_project_links"
@@ -146,9 +146,9 @@ class DataConnectorProjectLinkORM(BaseORM):
         nullable=False,
     )
 
-    def dump(self) -> models.DataConnectorProjectLink:
+    def dump(self) -> models.DataConnectorToProjectLink:
         """Create a link model from the DataConnectorProjectLinkORM."""
-        return models.DataConnectorProjectLink(
+        return models.DataConnectorToProjectLink(
             id=self.id,
             data_connector_id=self.data_connector_id,
             project_id=self.project_id,

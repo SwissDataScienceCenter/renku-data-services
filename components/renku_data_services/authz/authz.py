@@ -32,7 +32,7 @@ from renku_data_services import base_models
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.authz.models import Change, Member, MembershipChange, Role, Scope, Visibility
 from renku_data_services.base_models.core import InternalServiceAdmin
-from renku_data_services.data_connectors.models import DataConnector, DataConnectorProjectLink, DataConnectorUpdate
+from renku_data_services.data_connectors.models import DataConnector, DataConnectorToProjectLink, DataConnectorUpdate
 from renku_data_services.errors import errors
 from renku_data_services.namespace.models import Group, GroupUpdate, Namespace, NamespaceKind, NamespaceUpdate
 from renku_data_services.project.models import Project, ProjectUpdate
@@ -59,7 +59,7 @@ _AuthzChangeFuncResult = TypeVar(
     | list[UserInfo]
     | DataConnector
     | DataConnectorUpdate
-    | DataConnectorProjectLink
+    | DataConnectorToProjectLink
     | None,
 )
 _T = TypeVar("_T")
@@ -544,12 +544,12 @@ class Authz:
                         user = _extract_user_from_args(*func_args, **func_kwargs)
                         authz_change.extend(await db_repo.authz._update_data_connector_namespace(user, result.new))
                 case AuthzOperation.create_link, ResourceType.data_connector if isinstance(
-                    result, DataConnectorProjectLink
+                    result, DataConnectorToProjectLink
                 ):
                     user = _extract_user_from_args(*func_args, **func_kwargs)
                     authz_change = await db_repo.authz._add_data_connector_to_project_link(user, result)
                 case AuthzOperation.delete_link, ResourceType.data_connector if isinstance(
-                    result, DataConnectorProjectLink
+                    result, DataConnectorToProjectLink
                 ):
                     user = _extract_user_from_args(*func_args, **func_kwargs)
                     authz_change = await db_repo.authz._add_data_connector_to_project_link(user, result)
@@ -1633,7 +1633,7 @@ class Authz:
         return _AuthzChange(apply=apply_change, undo=undo_change)
 
     async def _add_data_connector_to_project_link(
-        self, user: base_models.APIUser, link: DataConnectorProjectLink
+        self, user: base_models.APIUser, link: DataConnectorToProjectLink
     ) -> _AuthzChange:
         """Links a data connector to a project."""
         # NOTE: we manually check for permissions here since it is not trivially expressed through decorators
@@ -1678,7 +1678,7 @@ class Authz:
     #     self, user: base_models.APIUser, data_connector: DataConnector, *, zed_token: ZedToken | None = None
     # ) -> _AuthzChange:
     async def _remove_data_connector_to_project_link(
-        self, user: base_models.APIUser, link: DataConnectorProjectLink
+        self, user: base_models.APIUser, link: DataConnectorToProjectLink
     ) -> _AuthzChange:
         """Remove the relationships associated with the link from a data connector to a project."""
         # NOTE: we manually check for permissions here since it is not trivially expressed through decorators
