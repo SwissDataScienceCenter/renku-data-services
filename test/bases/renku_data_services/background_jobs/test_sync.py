@@ -67,14 +67,12 @@ def get_app_configs(db_config: DBConfig, authz_config: AuthzConfig):
             group_authz=Authz(authz_config),
             message_queue=message_queue,
         )
-        project_repo = (
-            ProjectRepository(
-                session_maker=db_config.async_session_maker,
-                message_queue=message_queue,
-                event_repo=event_repo,
-                group_repo=group_repo,
-                authz=Authz(authz_config),
-            ),
+        project_repo = ProjectRepository(
+            session_maker=db_config.async_session_maker,
+            message_queue=message_queue,
+            event_repo=event_repo,
+            group_repo=group_repo,
+            authz=Authz(authz_config),
         )
         user_repo = UserRepo(
             db_config.async_session_maker,
