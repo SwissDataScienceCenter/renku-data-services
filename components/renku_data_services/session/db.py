@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager, nullcontext
 from datetime import UTC, datetime
-from pathlib import PurePosixPath
 from typing import Any
 
 from sqlalchemy import select
@@ -16,7 +16,7 @@ from renku_data_services import errors
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.crc.db import ResourcePoolRepository
-from renku_data_services.session import apispec, models
+from renku_data_services.session import models
 from renku_data_services.session import orm as schemas
 
 
@@ -297,20 +297,34 @@ class SessionRepository:
             return launcher.dump()
 
     async def update_launcher(
-        self, user: base_models.APIUser, launcher_id: ULID, **kwargs: Any
+        self,
+        user: base_models.APIUser,
+        launcher_id: ULID,
+        new_custom_environment: models.UnsavedEnvironment | None,
+        session: AsyncSession | None = None,
+        **kwargs: Any,
     ) -> models.SessionLauncher:
         """Update a session launcher entry."""
         if not user.is_authenticated or user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
-        async with self.session_maker() as session, session.begin():
+        session_ctx: AbstractAsyncContextManager = nullcontext()
+        tx: AbstractAsyncContextManager = nullcontext()
+        if not session:
+            session = self.session_maker()
+            session_ctx = session
+        if not session.in_transaction():
+            tx = session.begin()
+
+        async with session_ctx, tx:
             res = await session.scalars(
                 select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.id == launcher_id)
             )
             launcher = res.one_or_none()
             if launcher is None:
                 raise errors.MissingResourceError(
-                    message=f"Session launcher with id '{launcher_id}' does not exist or you do not have access to it."  # noqa: E501
+                    message=f"Session launcher with id '{launcher_id}' does not "
+                    "exist or you do not have access to it."
                 )
 
             authorized = await self.project_authz.has_permission(
@@ -349,11 +363,24 @@ class SessionRepository:
                 ]:
                     setattr(launcher, key, value)
 
-            env_payload: dict = kwargs.get("environment", {})
-            if len(env_payload.keys()) == 1 and "id" in env_payload and isinstance(env_payload["id"], str):
-                # The environment ID is being changed or set
+            await self.__update_launcher_environment(user, launcher, session, new_custom_environment, **kwargs)
+            return launcher.dump()
+
+    async def __update_launcher_environment(
+        self,
+        user: base_models.APIUser,
+        launcher: schemas.SessionLauncherORM,
+        session: AsyncSession,
+        new_custom_environment: models.UnsavedEnvironment | None,
+        **kwargs: Any,
+    ) -> None:
+        current_env_kind = launcher.environment.environment_kind
+        match new_custom_environment, current_env_kind, kwargs:
+            case None, _, {"id": env_id, **nothing_else} if len(nothing_else) == 0:
+                # The environment in the launcher is set via ID, the new ID has to refer
+                # to an environment that is GLOBAL.
                 old_environment = launcher.environment
-                new_environment_id = ULID.from_str(env_payload["id"])
+                new_environment_id = ULID.from_str(env_id)
                 res_env = await session.scalars(
                     select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == new_environment_id)
                 )
@@ -376,54 +403,37 @@ class SessionRepository:
                     # We remove the custom environment to avoid accumulating custom environments that are not associated
                     # with any launchers.
                     await session.delete(old_environment)
-            else:
-                # Fields other than the environment ID are being updated
-                if launcher.environment.environment_kind == models.EnvironmentKind.GLOBAL:
-                    # A global environment is being replaced with a custom one
-                    if env_payload.get("environment_kind") == models.EnvironmentKind.GLOBAL:
-                        raise errors.ValidationError(
-                            message="When one global environment is being replaced with another in a "
-                            "launcher only the new global environment ID should be specfied",
-                            quiet=True,
-                        )
-                    env_payload["environment_kind"] = models.EnvironmentKind.CUSTOM.value
-                    env_payload_valid = apispec.EnvironmentPostInLauncher.model_validate(env_payload)
-                    new_unsaved_env = models.UnsavedEnvironment(
-                        name=env_payload_valid.name,
-                        description=env_payload_valid.description,
-                        container_image=env_payload_valid.container_image,
-                        default_url=env_payload_valid.default_url,
-                        port=env_payload_valid.port,
-                        working_directory=PurePosixPath(env_payload_valid.working_directory),
-                        mount_directory=PurePosixPath(env_payload_valid.mount_directory),
-                        uid=env_payload_valid.uid,
-                        gid=env_payload_valid.gid,
-                        environment_kind=models.EnvironmentKind(env_payload_valid.environment_kind.value),
-                        args=env_payload_valid.args,
-                        command=env_payload_valid.command,
-                    )
-                    new_env = await self.__insert_environment(user, session, new_unsaved_env)
-                    launcher.environment = new_env
-                else:
-                    # Fields on the environment attached to the launcher are being changed.
-                    for key, val in env_payload.items():
-                        # NOTE: Only some fields can be updated.
-                        if key in [
-                            "name",
-                            "description",
-                            "container_image",
-                            "default_url",
-                            "port",
-                            "working_directory",
-                            "mount_directory",
-                            "uid",
-                            "gid",
-                            "args",
-                            "command",
-                        ]:
-                            setattr(launcher.environment, key, val)
-
-            return launcher.dump()
+            case None, models.EnvironmentKind.CUSTOM, {**rest} if (
+                rest.get("environment_kind") is None
+                or rest.get("environment_kind") == models.EnvironmentKind.CUSTOM.value
+            ):
+                # Custom environment being updated
+                for key, val in rest.items():
+                    # NOTE: Only some fields can be updated.
+                    if key in [
+                        "name",
+                        "description",
+                        "container_image",
+                        "default_url",
+                        "port",
+                        "working_directory",
+                        "mount_directory",
+                        "uid",
+                        "gid",
+                        "args",
+                        "command",
+                    ]:
+                        setattr(launcher.environment, key, val)
+            case models.UnsavedEnvironment(), models.EnvironmentKind.GLOBAL, {**nothing_else} if (
+                len(nothing_else) == 0 and new_custom_environment.environment_kind == models.EnvironmentKind.CUSTOM
+            ):
+                # Global environment replaced by a custom one
+                new_env = await self.__insert_environment(user, session, new_custom_environment)
+                launcher.environment = new_env
+            case _:
+                raise errors.ValidationError(
+                    message="Encountered an invalid payload for updating a launcher environment", quiet=True
+                )
 
     async def delete_launcher(self, user: base_models.APIUser, launcher_id: ULID) -> None:
         """Delete a session launcher entry."""
