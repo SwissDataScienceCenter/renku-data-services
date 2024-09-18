@@ -191,8 +191,7 @@ class DataConnectorRepository:
         session: AsyncSession | None = None,
     ) -> models.DataConnectorUpdate:
         """Update a data connector entry."""
-        not_found_msg = f"Data connector with id '{
-            data_connector_id}' does not exist or you do not have access to it."
+        not_found_msg = f"Data connector with id '{data_connector_id}' does not exist or you do not have access to it."
 
         if not session:
             raise errors.ProgrammingError(message="A database session is required.")
@@ -380,6 +379,24 @@ class DataConnectorProjectLinkRepository:
 
         if user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        data_connector = (
+            await session.scalars(
+                select(schemas.DataConnectorORM).where(schemas.DataConnectorORM.id == link.data_connector_id)
+            )
+        ).one_or_none()
+        if data_connector is None:
+            raise errors.MissingResourceError(
+                message=f"Data connector with id '{link.data_connector_id}' does not exist or you do not have access to it."  # noqa E501
+            )
+
+        project = (
+            await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == link.project_id))
+        ).one_or_none()
+        if project is None:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{link.project_id}' does not exist or you do not have access to it."
+            )
 
         link_orm = schemas.DataConnectorProjectLinkORM(
             data_connector_id=link.data_connector_id,

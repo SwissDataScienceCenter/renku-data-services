@@ -522,7 +522,8 @@ async def test_post_data_connector_project_links(
     project = await create_project("Project A")
 
     data_connector_id = data_connector["id"]
-    payload = {"project_id": project["id"]}
+    project_id = project["id"]
+    payload = {"project_id": project_id}
     _, response = await sanic_client.post(
         f"/api/data/data_connectors/{data_connector_id}/project_links", headers=user_headers, json=payload
     )
@@ -531,10 +532,10 @@ async def test_post_data_connector_project_links(
     assert response.json is not None
     link = response.json
     assert link.get("data_connector_id") == data_connector_id
-    assert link.get("project_id") == project["id"]
+    assert link.get("project_id") == project_id
     assert link.get("created_by") == "user"
 
-    # Check that the links list is not empty now
+    # Check that the links list from the data connector is not empty now
     _, response = await sanic_client.get(
         f"/api/data/data_connectors/{data_connector_id}/project_links", headers=user_headers
     )
@@ -544,4 +545,14 @@ async def test_post_data_connector_project_links(
     assert len(response.json) == 1
     assert response.json[0].get("id") == link["id"]
     assert response.json[0].get("data_connector_id") == data_connector_id
-    assert response.json[0].get("project_id") == project["id"]
+    assert response.json[0].get("project_id") == project_id
+
+    # Check that the links list to the project is not empty now
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/data_connector_links", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert len(response.json) == 1
+    assert response.json[0].get("id") == link["id"]
+    assert response.json[0].get("data_connector_id") == data_connector_id
+    assert response.json[0].get("project_id") == project_id

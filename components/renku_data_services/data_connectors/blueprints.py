@@ -223,6 +223,23 @@ class DataConnectorsBP(CustomBlueprint):
 
         return "/data_connectors/<data_connector_id:ulid>/project_links", ["POST"], _post_project_link
 
+    def get_all_data_connectors_links_from_project(self) -> BlueprintFactoryResponse:
+        """List all links from data connectors to a given project."""
+
+        @authenticate(self.authenticator)
+        async def _get_all_data_connectors_links_from_project(
+            _: Request,
+            user: base_models.APIUser,
+            project_id: ULID,
+        ) -> JSONResponse:
+            links = await self.data_connector_to_project_link_repo.get_links_to(user=user, project_id=project_id)
+            return validated_json(
+                apispec.DataConnectorToProjectLinksList,
+                [self._dump_data_connector_to_project_link(link) for link in links],
+            )
+
+        return "/projects/<project_id:ulid>/data_connector_links", ["GET"], _get_all_data_connectors_links_from_project
+
     @staticmethod
     def _dump_data_connector(data_connector: models.DataConnector, validator: RCloneValidator) -> dict[str, Any]:
         """Dumps a data connector for API responses."""
