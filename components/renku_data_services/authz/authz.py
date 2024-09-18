@@ -548,6 +548,11 @@ class Authz:
                 ):
                     user = _extract_user_from_args(*func_args, **func_kwargs)
                     authz_change = await db_repo.authz._add_data_connector_to_project_link(user, result)
+                case AuthzOperation.delete_link, ResourceType.data_connector if isinstance(
+                    result, DataConnectorProjectLink
+                ):
+                    user = _extract_user_from_args(*func_args, **func_kwargs)
+                    authz_change = await db_repo.authz._add_data_connector_to_project_link(user, result)
                 case _:
                     resource_id: str | ULID | None = "unknown"
                     if isinstance(result, (Project, Namespace, Group, DataConnector)):
@@ -1653,7 +1658,7 @@ class Authz:
         project_subject = SubjectReference(object=_AuthzConverter.project(link.project_id))
         relationship = Relationship(
             resource=data_connector_res,
-            relation=_Relation.linked_to,
+            relation=_Relation.linked_to.value,
             subject=project_subject,
         )
         apply = WriteRelationshipsRequest(
@@ -1667,3 +1672,45 @@ class Authz:
             undo=undo,
         )
         return change
+
+    # @_is_allowed_on_resource(Scope.DELETE, ResourceType.data_connector)
+    # async def _remove_data_connector(
+    #     self, user: base_models.APIUser, data_connector: DataConnector, *, zed_token: ZedToken | None = None
+    # ) -> _AuthzChange:
+    async def _remove_data_connector_to_project_link(
+        self, user: base_models.APIUser, link: DataConnectorProjectLink
+    ) -> _AuthzChange:
+        """Remove the relationships associated with the link from a data connector to a project."""
+        # NOTE: we manually check for permissions here since it is not trivially expressed through decorators
+        allowed_from = await self.has_permission(
+            user, ResourceType.data_connector, link.data_connector_id, Scope.DELETE
+        )
+        allowed_to, zed_token = await self._has_permission(user, ResourceType.project, link.project_id, Scope.WRITE)
+        allowed = allowed_from or allowed_to
+        if not allowed:
+            raise errors.MissingResourceError(
+                message=f"The user with ID {user.id} cannot perform operation {AuthzOperation.delete_link}"
+                f"on the data connector to project link with ID {link.id} or the resource does not exist."
+            )
+        consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
+        rel_filter = RelationshipFilter(
+            resource_type=ResourceType.data_connector.value,
+            optional_resource_id=str(link.data_connector_id),
+            optional_relation=_Relation.linked_to.value,
+            optional_subject_filter=SubjectFilter(
+                subject_type=ResourceType.project.value, optional_subject_id=str(link.project_id)
+            ),
+        )
+        responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
+            ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
+        )
+        rels: list[Relationship] = []
+        async for response in responses:
+            rels.append(response.relationship)
+        apply = WriteRelationshipsRequest(
+            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=i) for i in rels]
+        )
+        undo = WriteRelationshipsRequest(
+            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=i) for i in rels]
+        )
+        return _AuthzChange(apply=apply, undo=undo)

@@ -515,7 +515,7 @@ async def test_get_data_connector_project_links_empty(
 
 
 @pytest.mark.asyncio
-async def test_post_data_connector_project_links(
+async def test_post_data_connector_project_link(
     sanic_client: SanicASGITestClient, create_data_connector, create_project, user_headers
 ) -> None:
     data_connector = await create_data_connector("Data connector 1")
@@ -556,3 +556,41 @@ async def test_post_data_connector_project_links(
     assert response.json[0].get("id") == link["id"]
     assert response.json[0].get("data_connector_id") == data_connector_id
     assert response.json[0].get("project_id") == project_id
+
+
+@pytest.mark.asyncio
+async def test_delete_data_connector_project_link(
+    sanic_client: SanicASGITestClient, create_data_connector, create_project, user_headers
+) -> None:
+    data_connector = await create_data_connector("Data connector 1")
+    project = await create_project("Project A")
+    data_connector_id = data_connector["id"]
+    project_id = project["id"]
+    payload = {"project_id": project_id}
+    _, response = await sanic_client.post(
+        f"/api/data/data_connectors/{data_connector_id}/project_links", headers=user_headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+    link = response.json
+
+    _, response = await sanic_client.delete(
+        f"/api/data/data_connectors/{data_connector_id}/project_links/{link["id"]}", headers=user_headers
+    )
+
+    assert response.status_code == 204, response.text
+
+    # Check that the links list from the data connector is empty now
+    _, response = await sanic_client.get(
+        f"/api/data/data_connectors/{data_connector_id}/project_links", headers=user_headers
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert len(response.json) == 0
+
+    # Check that the links list to the project is empty now
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/data_connector_links", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert len(response.json) == 0

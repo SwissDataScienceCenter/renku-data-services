@@ -291,8 +291,7 @@ class DataConnectorRepository:
         authorized = await self.authz.has_permission(user, ResourceType.data_connector, data_connector_id, Scope.DELETE)
         if not authorized:
             raise errors.MissingResourceError(
-                message=f"Data connector with id '{
-                    data_connector_id}' does not exist or you do not have access to it."
+                message=f"Data connector with id '{data_connector_id}' does not exist or you do not have access to it."
             )
 
         result = await session.scalars(
@@ -409,6 +408,44 @@ class DataConnectorProjectLinkRepository:
         await session.refresh(link_orm)
 
         return link_orm.dump()
+
+    @with_db_transaction
+    @Authz.authz_change(AuthzOperation.delete_link, ResourceType.data_connector)
+    async def delete_link(
+        self,
+        user: base_models.APIUser,
+        data_connector_id: ULID,
+        link_id: ULID,
+        *,
+        session: AsyncSession | None = None,
+    ) -> models.DataConnectorProjectLink | None:
+        """Delete a link from a data connector to a project."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required.")
+
+        link_orm = (
+            await session.scalars(
+                select(schemas.DataConnectorProjectLinkORM)
+                .where(schemas.DataConnectorProjectLinkORM.id == link_id)
+                .where(schemas.DataConnectorProjectLinkORM.data_connector_id == data_connector_id)
+            )
+        ).one_or_none()
+        if link_orm is None:
+            return None
+
+        authorized_from = await self.authz.has_permission(
+            user, ResourceType.data_connector, data_connector_id, Scope.DELETE
+        )
+        authorized_to = await self.authz.has_permission(user, ResourceType.project, link_orm.project_id, Scope.WRITE)
+        authorized = authorized_from or authorized_to
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Data connector to project link '{link_id}' does not exist or you do not have access to it."
+            )
+
+        link = link_orm.dump()
+        await session.delete(link_orm)
+        return link
 
 
 _T = TypeVar("_T")
