@@ -14,7 +14,8 @@
 		"ghcr.io/mpriscella/features/kind:1": {},
 		"ghcr.io/devcontainers-contrib/features/gh-release:1": {
 			"repo": "authzed/zed",
-			"binaryNames": "zed"
+			"binaryNames": "zed",
+			"version": "v0.21.1"
 		},
 		"ghcr.io/devcontainers-contrib/features/spicedb:1": {},
 		"ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {
