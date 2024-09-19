@@ -249,6 +249,42 @@ async def test_patch_data_connector(sanic_client: SanicASGITestClient, create_da
 
 
 @pytest.mark.asyncio
+async def test_patch_data_connector_can_unset_storage_field(
+    sanic_client: SanicASGITestClient, create_data_connector, user_headers
+) -> None:
+    initial_storage = {
+        "configuration": {
+            "provider": "AWS",
+            "type": "s3",
+            "region": "us-east-1",
+            "access_key_id": "ACCESS KEY",
+            "secret_access_key": "SECRET",
+        },
+        "source_path": "my-bucket",
+        "target_path": "my_data",
+    }
+    data_connector = await create_data_connector("My data connector", storage=initial_storage)
+
+    headers = merge_headers(user_headers, {"If-Match": data_connector["etag"]})
+    data_connector_id = data_connector["id"]
+    patch = {"storage": {"configuration": {"region": None, "access_key_id": None, "secret_access_key": None}}}
+    _, response = await sanic_client.patch(
+        f"/api/data/data_connectors/{data_connector_id}", headers=headers, json=patch
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    new_configuration = response.json["storage"]["configuration"]
+    assert new_configuration is not None
+    assert new_configuration["provider"] == "AWS"
+    assert new_configuration["type"] == "s3"
+    assert "region" not in new_configuration
+    assert "access_key_id" not in new_configuration
+    assert "secret_access_key" not in new_configuration
+    assert len(response.json["storage"]["sensitive_fields"]) == 0
+
+
+@pytest.mark.asyncio
 async def test_delete_data_connector(sanic_client: SanicASGITestClient, create_data_connector, user_headers) -> None:
     await create_data_connector("Data connector 1")
     data_connector = await create_data_connector("Data connector 2")
