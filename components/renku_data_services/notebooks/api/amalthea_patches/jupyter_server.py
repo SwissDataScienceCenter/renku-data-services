@@ -257,7 +257,7 @@ def user_secrets(server: "UserServer") -> list[dict[str, Any]]:
         image=server.config.user_secrets.image,
         env=[
             client.V1EnvVar(name="DATA_SERVICE_URL", value=server.config.data_service_url),
-            client.V1EnvVar(name="RENKU_ACCESS_TOKEN", value=str(server.user.access_token)),  # type: ignore
+            client.V1EnvVar(name="RENKU_ACCESS_TOKEN", value=str(server.user.access_token)),  # type: ignore[operator]
             client.V1EnvVar(name="ENCRYPTED_SECRETS_MOUNT_PATH", value="/encrypted"),
             client.V1EnvVar(name="DECRYPTED_SECRETS_MOUNT_PATH", value="/decrypted"),
         ],

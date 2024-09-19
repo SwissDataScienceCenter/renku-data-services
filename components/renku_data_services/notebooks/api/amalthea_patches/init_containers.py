@@ -48,11 +48,11 @@ async def git_clone_container_v2(server: "UserServer") -> dict[str, Any] | None:
         },
         {
             "name": f"{prefix}USER__USERNAME",
-            "value": server.user.email,  # type: ignore
+            "value": server.user.email,  # type: ignore[operator]
         },
         {
             "name": f"{prefix}USER__RENKU_TOKEN",
-            "value": str(server.user.access_token),  # type: ignore
+            "value": str(server.user.access_token),  # type: ignore[operator]
         },
         {"name": f"{prefix}IS_GIT_PROXY_ENABLED", "value": "0" if user_is_anonymous else "1"},
         {
@@ -82,27 +82,27 @@ async def git_clone_container_v2(server: "UserServer") -> dict[str, Any] | None:
         },
     ]
     if server.user.is_authenticated:
-        if server.user.email:  # type: ignore
+        if server.user.email:  # type: ignore[operator]
             env.append(
-                {"name": f"{prefix}USER__EMAIL", "value": server.user.email},  # type: ignore
+                {"name": f"{prefix}USER__EMAIL", "value": server.user.email},  # type: ignore[operator]
             )
-        if server.user.full_name:  # type: ignore
+        if server.user.full_name:  # type: ignore[operator]
             env.append(
                 {
                     "name": f"{prefix}USER__FULL_NAME",
-                    "value": server.user.full_name,  # type: ignore
+                    "value": server.user.full_name,  # type: ignore[operator]
                 },
             )
-        elif server.user.first_name or server.user.last_name:  # type: ignore
-            full_name = server.user.first_name or ""  # type: ignore
+        elif server.user.first_name or server.user.last_name:  # type: ignore[operator]
+            full_name = server.user.first_name or ""  # type: ignore[operator]
             if full_name == "":
-                full_name = server.user.last_name or ""  # type: ignore
+                full_name = server.user.last_name or ""  # type: ignore[operator]
             else:
-                full_name += " " + (server.user.last_name or "")  # type: ignore
+                full_name += " " + (server.user.last_name or "")  # type: ignore[operator]
             env.append(
                 {
                     "name": f"{prefix}USER__FULL_NAME",
-                    "value": server.user.full_name,  # type: ignore
+                    "value": server.user.full_name,  # type: ignore[operator]
                 },
             )
 
@@ -185,11 +185,11 @@ async def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
         },
         {
             "name": f"{prefix}USER__USERNAME",
-            "value": server.user.email,  # type: ignore
+            "value": server.user.email,  # type: ignore[operator]
         },
         {
             "name": f"{prefix}USER__RENKU_TOKEN",
-            "value": str(server.user.access_token),  # type: ignore
+            "value": str(server.user.access_token),  # type: ignore[operator]
         },
         {"name": f"{prefix}IS_GIT_PROXY_ENABLED", "value": "0" if user_is_anonymous else "1"},
         {
@@ -219,27 +219,27 @@ async def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
         },
     ]
     if server.user.is_authenticated:
-        if server.user.email:  # type: ignore
+        if server.user.email:  # type: ignore[operator]
             env.append(
-                {"name": f"{prefix}USER__EMAIL", "value": server.user.email},  # type: ignore
+                {"name": f"{prefix}USER__EMAIL", "value": server.user.email},  # type: ignore[operator]
             )
-        if server.user.full_name:  # type: ignore
+        if server.user.full_name:  # type: ignore[operator]
             env.append(
                 {
                     "name": f"{prefix}USER__FULL_NAME",
-                    "value": server.user.full_name,  # type: ignore
+                    "value": server.user.full_name,  # type: ignore[operator]
                 },
             )
-        elif server.user.first_name or server.user.last_name:  # type: ignore
-            full_name = server.user.first_name or ""  # type: ignore
+        elif server.user.first_name or server.user.last_name:  # type: ignore[operator]
+            full_name = server.user.first_name or ""  # type: ignore[operator]
             if full_name == "":
-                full_name = server.user.last_name or ""  # type: ignore
+                full_name = server.user.last_name or ""  # type: ignore[operator]
             else:
-                full_name += " " + (server.user.last_name or "")  # type: ignore
+                full_name += " " + (server.user.last_name or "")  # type: ignore[operator]
             env.append(
                 {
                     "name": f"{prefix}USER__FULL_NAME",
-                    "value": server.user.full_name,  # type: ignore
+                    "value": server.user.full_name,  # type: ignore[operator]
                 },
             )
 
