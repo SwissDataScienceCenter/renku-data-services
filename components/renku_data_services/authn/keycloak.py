@@ -80,7 +80,7 @@ class KeycloakAuthenticator(Authenticator):
         is_admin = self.admin_role in parsed.get("realm_access", {}).get("roles", [])
         exp = parsed.get("exp")
         return base_models.APIUser(
-            is_admin_init=is_admin,
+            is_admin=is_admin,
             id=parsed.get("sub"),
             access_token=access_token,
             full_name=parsed.get("name"),
