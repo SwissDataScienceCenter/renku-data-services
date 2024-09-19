@@ -212,6 +212,10 @@ class Config:
         with open(spec_file) as f:
             platform = safe_load(f)
 
+        spec_file = Path(renku_data_services.message_queue.__file__).resolve().parent / "api.spec.yaml"
+        with open(spec_file) as f:
+            search = safe_load(f)
+
         self.spec = merge_api_specs(
             crc_spec,
             storage_spec,
@@ -222,6 +226,7 @@ class Config:
             connected_services,
             repositories,
             platform,
+            search,
         )
 
         if self.default_resource_pool_file is not None:
