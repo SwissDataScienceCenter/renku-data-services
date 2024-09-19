@@ -2,7 +2,7 @@
 
 import re
 import unicodedata
-from dataclasses import InitVar, dataclass, field
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, StrEnum
 from typing import ClassVar, Optional, Protocol
@@ -22,7 +22,7 @@ class Authenticator(Protocol):
         ...
 
 
-@dataclass(kw_only=True)
+@dataclass(kw_only=True, frozen=True)
 class APIUser:
     """The model for a user of the API, used for authentication."""
 
@@ -34,24 +34,15 @@ class APIUser:
     last_name: Optional[str] = None
     email: Optional[str] = None
     access_token_expires_at: datetime | None = None
-    is_admin_init: InitVar[bool] = False
-    __is_admin: bool = field(init=False, repr=False)
-
-    def __post_init__(self, is_admin_init: bool) -> None:
-        self.__is_admin: bool = is_admin_init
+    is_admin: bool = False
 
     @property
     def is_authenticated(self) -> bool:
         """Indicates whether the user has successfully logged in."""
         return self.id is not None
 
-    @property
-    def is_admin(self) -> bool:
-        """Indicates whether the user is a Renku platform administrator."""
-        return self.__is_admin
 
-
-@dataclass(kw_only=True)
+@dataclass(kw_only=True, frozen=True)
 class AuthenticatedAPIUser(APIUser):
     """The model for a an authenticated user of the API."""
 
@@ -64,7 +55,7 @@ class AuthenticatedAPIUser(APIUser):
     last_name: str | None = None
 
 
-@dataclass(kw_only=True)
+@dataclass(kw_only=True, frozen=True)
 class AnonymousAPIUser(APIUser):
     """The model for an anonymous user of the API."""
 
@@ -75,15 +66,11 @@ class AnonymousAPIUser(APIUser):
     last_name = None
     email = None
     refresh_token = None
+    is_admin: bool = field(init=False, default=False)
 
     @property
     def is_authenticated(self) -> bool:
         """We cannot authenticate anonymous users, so this is by definition False."""
-        return False
-
-    @property
-    def is_admin(self) -> bool:
-        """Unauthenticated users cannot be admins."""
         return False
 
 
@@ -94,7 +81,7 @@ class ServiceAdminId(StrEnum):
     secrets_rotation = "secrets_rotation"
 
 
-@dataclass(kw_only=True)
+@dataclass(kw_only=True, frozen=True)
 class InternalServiceAdmin(APIUser):
     """Used to gain complete admin access by internal code components when performing tasks not started by users."""
 
