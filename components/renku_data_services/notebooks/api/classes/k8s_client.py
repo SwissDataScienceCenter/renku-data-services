@@ -1,4 +1,4 @@
-"""An abstraction over the k8s client and the k8s-watcher."""
+"""An abstraction over the kr8s kubernetes client and the k8s-watcher."""
 
 import base64
 import json

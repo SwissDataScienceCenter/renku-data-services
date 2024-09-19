@@ -59,11 +59,10 @@ def renku_2_make_server_name(safe_username: str, project_id: str, launcher_id: s
     server_hash = md5(server_string_for_hashing.encode(), usedforsecurity=False).hexdigest().lower()
     prefix = _make_server_name_prefix(safe_username)
     # NOTE: A K8s object name can only contain lowercase alphanumeric characters, hyphens, or dots.
-    # Must be less than 253 characters long and start and end with an alphanumeric.
+    # Must be no more than 63 characters because the name is used to create a k8s Service and Services
+    # have more restrictions for their names beacuse their names have to make a valid hostname.
     # NOTE: We use server name as a label value, so, server name must be less than 63 characters.
-    # NOTE: Amalthea adds 11 characters to the server name in a label, so we have only
-    # 52 characters available.
-    # !NOTE: For now we limit the server name to 42 characters.
+    # !NOTE: For now we limit the server name to a max of 42 characters.
     # NOTE: This is 12 + 9 + 21 = 42 characters
     return f"{prefix[:12]}-renku-2-{server_hash[:21]}"
 

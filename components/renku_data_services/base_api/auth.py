@@ -110,31 +110,6 @@ def authenticated_or_anonymous(
     return decorator
 
 
-def only_authenticated_new(
-    authenticator: Authenticator,
-) -> Callable[
-    [Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]]],
-    Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]],
-]:
-    """Decorator for a Sanic handler that adds the APIUser model to the handler.
-
-    The APIUser must be authenticated, unauthenticated or anonymous users are not allowed.
-    """
-
-    def decorator(
-        f: Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]],
-    ) -> Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]]:
-        @wraps(f)
-        async def decorated_function(request: Request, user: APIUser, *args: _P.args, **kwargs: _P.kwargs) -> _T:
-            user = await _authenticate(authenticator, request)
-            response = await f(request, user, *args, **kwargs)
-            return response
-
-        return decorated_function
-
-    return decorator
-
-
 def validate_path_project_id(
     f: Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]],
 ) -> Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]]:

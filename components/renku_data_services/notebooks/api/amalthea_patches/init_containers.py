@@ -85,23 +85,12 @@ async def git_clone_container_v2(server: "UserServer") -> dict[str, Any] | None:
             env.append(
                 {"name": f"{prefix}USER__EMAIL", "value": server.user.email},
             )
-        if server.user.full_name:
+        full_name = server.user.get_full_name()
+        if full_name:
             env.append(
                 {
                     "name": f"{prefix}USER__FULL_NAME",
-                    "value": server.user.full_name,
-                },
-            )
-        elif server.user.first_name or server.user.last_name:
-            full_name = server.user.first_name or ""
-            if full_name == "":
-                full_name = server.user.last_name or ""
-            else:
-                full_name += " " + (server.user.last_name or "")
-            env.append(
-                {
-                    "name": f"{prefix}USER__FULL_NAME",
-                    "value": server.user.full_name,
+                    "value": full_name,
                 },
             )
 
@@ -222,23 +211,12 @@ async def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
             env.append(
                 {"name": f"{prefix}USER__EMAIL", "value": server.user.email},
             )
-        if server.user.full_name:
+        full_name = server.user.get_full_name()
+        if full_name:
             env.append(
                 {
                     "name": f"{prefix}USER__FULL_NAME",
-                    "value": server.user.full_name,
-                },
-            )
-        elif server.user.first_name or server.user.last_name:
-            full_name = server.user.first_name or ""
-            if full_name == "":
-                full_name = server.user.last_name or ""
-            else:
-                full_name += " " + (server.user.last_name or "")
-            env.append(
-                {
-                    "name": f"{prefix}USER__FULL_NAME",
-                    "value": server.user.full_name,
+                    "value": full_name,
                 },
             )
 

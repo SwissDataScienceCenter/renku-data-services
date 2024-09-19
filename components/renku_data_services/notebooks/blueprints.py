@@ -679,9 +679,11 @@ class NotebooksBP(CustomBlueprint):
                 renku_tokens = RenkuTokens(access_token=user.access_token, refresh_token=user.refresh_token)
                 gitlab_token = GitlabToken(
                     access_token=internal_gitlab_user.access_token,
-                    expires_at=floor(user.access_token_expires_at.timestamp())
-                    if user.access_token_expires_at is not None
-                    else -1,
+                    expires_at=(
+                        floor(user.access_token_expires_at.timestamp())
+                        if user.access_token_expires_at is not None
+                        else -1
+                    ),
                 )
                 await self.nb_config.k8s_client.patch_tokens(server_name, renku_tokens, gitlab_token)
                 new_server = await self.nb_config.k8s_client.patch_server(

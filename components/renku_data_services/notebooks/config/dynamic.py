@@ -440,14 +440,10 @@ class _K8sConfig:
     """Defines the k8s client and namespace."""
 
     renku_namespace: str = "default"
-    sessions_namespace: Optional[str] = None
 
     @classmethod
     def from_env(cls) -> Self:
-        return cls(
-            renku_namespace=os.environ.get("KUBERNETES_NAMESPACE", "default"),
-            sessions_namespace=os.environ.get("SESSIONS_NAMESPACE"),
-        )
+        return cls(renku_namespace=os.environ.get("KUBERNETES_NAMESPACE", "default"))
 
 
 @dataclass

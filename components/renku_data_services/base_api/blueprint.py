@@ -21,7 +21,7 @@ class CustomBlueprint:
     """
 
     name: str
-    url_prefix: str | None = None
+    url_prefix: str
     request_middlewares: list[RequestMiddlewareType] = field(default_factory=list, repr=False)
     response_middlewares: list[ResponseMiddlewareType] = field(default_factory=list, repr=False)
 

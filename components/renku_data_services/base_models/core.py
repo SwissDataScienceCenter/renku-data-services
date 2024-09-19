@@ -50,6 +50,13 @@ class APIUser:
         """Indicates whether the user is a Renku platform administrator."""
         return self.__is_admin
 
+    def get_full_name(self) -> str | None:
+        """Generate the closest thing to a full name if the full name field is not set."""
+        full_name = self.full_name or " ".join(filter(None, (self.first_name, self.last_name)))
+        if len(full_name) == 0:
+            return None
+        return full_name
+
 
 @dataclass(kw_only=True)
 class AuthenticatedAPIUser(APIUser):
