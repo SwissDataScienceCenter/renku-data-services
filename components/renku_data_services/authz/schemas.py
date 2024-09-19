@@ -346,7 +346,7 @@ definition data_connector {
     permission write = editor + delete + data_connector_namespace->write
     permission change_membership = delete
     permission delete = owner + data_connector_platform->is_admin + data_connector_namespace->delete
-    permission add_link = delete + public_viewer
+    permission add_link = write + public_viewer
 }"""
 
 
