@@ -515,7 +515,9 @@ components:
           minLength: 1
           maxLength: 99
         value:
-          $ref: "#/components/schemas/SecretValue"
+          oneOf:
+            - $ref: "#/components/schemas/SecretValue"
+            - type: 'null'
       required:
         - name
         - value
