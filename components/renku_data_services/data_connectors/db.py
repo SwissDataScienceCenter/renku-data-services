@@ -305,6 +305,27 @@ class DataConnectorRepository:
         await session.delete(data_connector_orm)
         return data_connector
 
+    async def get_data_connector_secrets(
+        self,
+        user: base_models.APIUser,
+        data_connector_id: ULID,
+    ) -> list[models.DataConnectorSecret]:
+        """Get data connectors secrets from the database."""
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session:
+            stmt = (
+                select(schemas.DataConnectorSecretORM)
+                .where(schemas.DataConnectorSecretORM.user_id == user.id)
+                .where(schemas.DataConnectorSecretORM.data_connector_id == data_connector_id)
+                .where(schemas.DataConnectorSecretORM.secret.user_id == user.id)
+            )
+            results = await session.scalars(stmt)
+            secrets = results.all()
+
+            return [secret.dump() for secret in secrets]
+
 
 class DataConnectorProjectLinkRepository:
     """Repository for links from data connectors to projects."""

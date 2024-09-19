@@ -116,3 +116,13 @@ class DataConnectorToProjectLink(UnsavedDataConnectorToProjectLink):
     created_by: str
     creation_date: datetime
     updated_at: datetime
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class DataConnectorSecret:
+    """Data connector secret model."""
+
+    name: str
+    user_id: str
+    data_connector_id: ULID
+    secret_id: ULID

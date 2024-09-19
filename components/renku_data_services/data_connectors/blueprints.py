@@ -272,7 +272,12 @@ class DataConnectorsBP(CustomBlueprint):
             user: base_models.APIUser,
             data_connector_id: ULID,
         ) -> JSONResponse:
-            raise NotImplementedError()
+            secrets = await self.data_connector_repo.get_data_connector_secrets(
+                user=user, data_connector_id=data_connector_id
+            )
+            return validated_json(
+                apispec.DataConnectorSecretsList, [self._dump_data_connector_secret(secret) for secret in secrets]
+            )
 
         return "/data_connectors/<data_connector_id:ulid>/secrets", ["GET"], _get_secrets
 
@@ -331,4 +336,12 @@ class DataConnectorsBP(CustomBlueprint):
             project_id=str(link.project_id),
             creation_date=link.creation_date,
             created_by=link.created_by,
+        )
+
+    @staticmethod
+    def _dump_data_connector_secret(secret: models.DataConnectorSecret) -> dict[str, Any]:
+        """Dumps a data connector secret for API responses."""
+        return dict(
+            name=secret.name,
+            secret_id=str(secret.secret_id),
         )

@@ -309,7 +309,7 @@ components:
         secrets:
           type: array
           items:
-            $ref: "#/components/schemas/DataConnectorSecretsList"
+            $ref: "#/components/schemas/DataConnectorSecret"
         creation_date:
           $ref: "#/components/schemas/CreationDate"
         created_by:
@@ -499,7 +499,7 @@ components:
       required:
         - project_id
     DataConnectorSecretsList:
-      description: A list of data connector secrets
+      description: A list of data connectors
       type: array
       items:
         $ref: "#/components/schemas/DataConnectorSecret"
