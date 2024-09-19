@@ -36,8 +36,8 @@ async def main_container(server: "UserServer") -> client.V1Container | None:
             name=f"{prefix}ANONYMOUS_SESSION",
             value="false" if server.user.is_authenticated else "true",
         ),
-        client.V1EnvVar(name=f"{prefix}RENKU_ACCESS_TOKEN", value=str(server.user.access_token)),
-        client.V1EnvVar(name=f"{prefix}RENKU_REFRESH_TOKEN", value=str(server.user.refresh_token)),
+        client.V1EnvVar(name=f"{prefix}RENKU_ACCESS_TOKEN", value=str(server.user.access_token)),  # type: ignore
+        client.V1EnvVar(name=f"{prefix}RENKU_REFRESH_TOKEN", value=str(server.user.refresh_token)),  # type: ignore
         client.V1EnvVar(name=f"{prefix}RENKU_REALM", value=server.config.keycloak_realm),
         client.V1EnvVar(
             name=f"{prefix}RENKU_CLIENT_ID",

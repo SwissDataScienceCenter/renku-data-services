@@ -506,7 +506,7 @@ class NotebooksBP(CustomBlueprint):
                 "secret_ids": [str(id_) for id_ in k8s_user_secret.user_secret_ids],
                 "owner_references": [owner_reference],
             }
-            headers = {"Authorization": f"bearer {user.access_token}"}
+            headers = {"Authorization": f"bearer {user.access_token}"}  # type: ignore
 
             async def _on_error(server_name: str, error_msg: str) -> None:
                 await nb_config.k8s_client.delete_server(server_name, safe_username=user.id)
