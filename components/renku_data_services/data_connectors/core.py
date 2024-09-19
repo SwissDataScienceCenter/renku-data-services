@@ -80,7 +80,8 @@ def validate_storage_patch(
     if patch.configuration is not None:
         # we need to apply the patch to the existing storage to properly validate it
         patch.configuration = {**storage.configuration, **patch.configuration}
-        for k, v in patch.configuration.items():
+        dict_items = list(patch.configuration.items())
+        for k, v in dict_items:
             if v is None:
                 # delete fields that were unset
                 del patch.configuration[k]
