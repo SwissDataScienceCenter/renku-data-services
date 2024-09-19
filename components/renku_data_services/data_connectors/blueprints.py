@@ -262,6 +262,47 @@ class DataConnectorsBP(CustomBlueprint):
 
         return "/projects/<project_id:ulid>/data_connector_links", ["GET"], _get_all_data_connectors_links_to_project
 
+    def get_secrets(self) -> BlueprintFactoryResponse:
+        """List all saved secrets for a data connector."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _get_secrets(
+            _: Request,
+            user: base_models.APIUser,
+            data_connector_id: ULID,
+        ) -> JSONResponse:
+            raise NotImplementedError()
+
+        return "/data_connectors/<data_connector_id:ulid>/secrets", ["GET"], _get_secrets
+
+    def post_secrets(self) -> BlueprintFactoryResponse:
+        """Create or update saved secrets for a data connector."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @validate(json=apispec.DataConnectorSecretPostList)
+        async def _post_secrets(
+            _: Request, user: base_models.APIUser, data_connector_id: ULID, body: apispec.DataConnectorSecretPostList
+        ) -> JSONResponse:
+            raise NotImplementedError()
+
+        return "/data_connectors/<data_connector_id:ulid>/secrets", ["POST"], _post_secrets
+
+    def delete_secrets(self) -> BlueprintFactoryResponse:
+        """Delete all saved secrets for a data connector."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _delete_secrets(
+            _: Request,
+            user: base_models.APIUser,
+            data_connector_id: ULID,
+        ) -> JSONResponse:
+            raise NotImplementedError()
+
+        return "/data_connectors/<data_connector_id:ulid>/secrets", ["DELETE"], _delete_secrets
+
     @staticmethod
     def _dump_data_connector(data_connector: models.DataConnector, validator: RCloneValidator) -> dict[str, Any]:
         """Dumps a data connector for API responses."""
