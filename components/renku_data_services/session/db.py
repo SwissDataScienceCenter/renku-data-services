@@ -363,7 +363,8 @@ class SessionRepository:
                 ]:
                     setattr(launcher, key, value)
 
-            await self.__update_launcher_environment(user, launcher, session, new_custom_environment, **kwargs)
+            env_payload = kwargs.get("environment", {})
+            await self.__update_launcher_environment(user, launcher, session, new_custom_environment, **env_payload)
             return launcher.dump()
 
     async def __update_launcher_environment(
