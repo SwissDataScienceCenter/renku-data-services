@@ -62,7 +62,6 @@ jobs:
           cacheFrom: |
             ${{ steps.docker_image.outputs.image_repository }}:${{ steps.docker_image.outputs.image_tag }}
             ${{ steps.docker_image.outputs.image_repository }}:${{ env.DEVCONTAINER_IMAGE_TAG_MAIN }}
-
   style-checks:
     runs-on: ubuntu-latest
     needs:
@@ -83,7 +82,6 @@ jobs:
           push: never
           skipContainerUserIdUpdate: false
           cacheFrom: ${{ needs.build-devcontainer.outputs.image_repository }}:${{ needs.build-devcontainer.outputs.image_tag }}
-
   optional-checks:
     runs-on: ubuntu-latest
     needs:
