@@ -4,7 +4,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum
-from typing import ClassVar, Optional, Protocol, Self
+from typing import ClassVar, NewType, Optional, Protocol, Self
 
 from sanic import Request
 
@@ -164,3 +164,12 @@ class Slug:
                 message=f"A path can be constructed only from 2 slugs, but the 'divisor' is of type {type(other)}"
             )
         return self.value + "/" + other.value
+
+
+ResetType = NewType("ResetType", object)
+"""This type represents that a value that may be None should be reset back to None or null.
+This type should have only one instance, defined in the same file as this type.
+"""
+
+RESET: ResetType = ResetType(object())
+"""The single instance of the ResetType, can be compared to similar to None, i.e. `if value is RESET`"""
