@@ -1,8 +1,10 @@
 """SQLAlchemy's schemas for the sessions database."""
 
 from datetime import datetime
+from pathlib import PurePosixPath
 
-from sqlalchemy import DateTime, MetaData, String
+from sqlalchemy import JSON, DateTime, MetaData, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
 from ulid import ULID
@@ -10,10 +12,10 @@ from ulid import ULID
 from renku_data_services.crc.orm import ResourceClassORM
 from renku_data_services.project.orm import ProjectORM
 from renku_data_services.session import models
-from renku_data_services.session.apispec import EnvironmentKind
-from renku_data_services.utils.sqlalchemy import ULIDType
+from renku_data_services.utils.sqlalchemy import PurePosixPathType, ULIDType
 
 metadata_obj = MetaData(schema="sessions")  # Has to match alembic ini section name
+JSONVariant = JSON().with_variant(JSONB(), "postgresql")
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
@@ -27,7 +29,7 @@ class EnvironmentORM(BaseORM):
 
     __tablename__ = "environments"
 
-    id: Mapped[str] = mapped_column("id", String(26), primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
     """Id of this session environment object."""
 
     name: Mapped[str] = mapped_column("name", String(99))
@@ -45,8 +47,17 @@ class EnvironmentORM(BaseORM):
     container_image: Mapped[str] = mapped_column("container_image", String(500))
     """Container image repository and tag."""
 
-    default_url: Mapped[str | None] = mapped_column("default_url", String(200))
+    default_url: Mapped[str] = mapped_column("default_url", String(200))
     """Default URL path to open in a session."""
+
+    port: Mapped[int] = mapped_column("port")
+    working_directory: Mapped[PurePosixPath] = mapped_column("working_directory", PurePosixPathType)
+    mount_directory: Mapped[PurePosixPath] = mapped_column("mount_directory", PurePosixPathType)
+    uid: Mapped[int] = mapped_column("uid")
+    gid: Mapped[int] = mapped_column("gid")
+    environment_kind: Mapped[models.EnvironmentKind] = mapped_column("environment_kind")
+    args: Mapped[list[str] | None] = mapped_column("args", JSONVariant, nullable=True)
+    command: Mapped[list[str] | None] = mapped_column("command", JSONVariant, nullable=True)
 
     def dump(self) -> models.Environment:
         """Create a session environment model from the EnvironmentORM."""
@@ -58,6 +69,14 @@ class EnvironmentORM(BaseORM):
             description=self.description,
             container_image=self.container_image,
             default_url=self.default_url,
+            gid=self.gid,
+            uid=self.uid,
+            environment_kind=self.environment_kind,
+            mount_directory=self.mount_directory,
+            working_directory=self.working_directory,
+            port=self.port,
+            args=self.args,
+            command=self.command,
         )
 
 
@@ -81,24 +100,15 @@ class SessionLauncherORM(BaseORM):
     description: Mapped[str | None] = mapped_column("description", String(500))
     """Human-readable description of the session launcher."""
 
-    environment_kind: Mapped[EnvironmentKind]
-    """The kind of environment definition to use."""
-
-    container_image: Mapped[str | None] = mapped_column("container_image", String(500))
-    """Container image repository and tag."""
-
-    default_url: Mapped[str | None] = mapped_column("default_url", String(200))
-    """Default URL path to open in a session."""
-
     project: Mapped[ProjectORM] = relationship(init=False)
-    environment: Mapped[EnvironmentORM | None] = relationship(init=False)
+    environment: Mapped[EnvironmentORM] = relationship(init=False, lazy="joined")
 
     project_id: Mapped[ULID] = mapped_column(
         "project_id", ForeignKey(ProjectORM.id, ondelete="CASCADE"), default=None, index=True
     )
     """Id of the project this session belongs to."""
 
-    environment_id: Mapped[str | None] = mapped_column(
+    environment_id: Mapped[ULID] = mapped_column(
         "environment_id", ForeignKey(EnvironmentORM.id), default=None, nullable=True, index=True
     )
     """Id of the session environment."""
@@ -112,6 +122,19 @@ class SessionLauncherORM(BaseORM):
     )
     """Id of the resource class."""
 
+    @classmethod
+    def load(cls, launcher: models.SessionLauncher) -> "SessionLauncherORM":
+        """Create SessionLauncherORM from the session launcher model."""
+        return cls(
+            name=launcher.name,
+            created_by_id=launcher.created_by.id,
+            creation_date=launcher.creation_date,
+            description=launcher.description,
+            project_id=ULID.from_str(launcher.project_id),
+            resource_class_id=launcher.resource_class_id,
+            environment_id=launcher.environment.id,
+        )
+
     def dump(self) -> models.SessionLauncher:
         """Create a session launcher model from the SessionLauncherORM."""
         return models.SessionLauncher(
@@ -121,9 +144,6 @@ class SessionLauncherORM(BaseORM):
             created_by=models.Member(id=self.created_by_id),
             creation_date=self.creation_date,
             description=self.description,
-            environment_kind=self.environment_kind,
-            environment_id=self.environment_id,
             resource_class_id=self.resource_class_id,
-            container_image=self.container_image,
-            default_url=self.default_url,
+            environment=self.environment.dump(),
         )
