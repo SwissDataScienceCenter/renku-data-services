@@ -1,6 +1,8 @@
 """Tests for notebook blueprints."""
 
 import asyncio
+import os
+import shutil
 from collections.abc import AsyncIterator
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -11,6 +13,21 @@ from kr8s.asyncio.objects import Pod
 from sanic_testing.testing import SanicASGITestClient
 
 from renku_data_services.notebooks.api.classes.k8s_client import JupyterServerV1Alpha1Kr8s
+
+from .utils import KindCluster, setup_amalthea
+
+os.environ["KUBECONFIG"] = ".kind-kube-config.yaml"
+
+
+@pytest.fixture(scope="module", autouse=True)
+def cluster() -> KindCluster:
+    if shutil.which("kind") is None:
+        pytest.skip("Requires kind for cluster creation")
+
+    with KindCluster("test-renku") as cluster:
+        setup_amalthea("amalthea-js", "amalthea", "0.12.2", cluster)
+
+        yield cluster
 
 
 @pytest.fixture
