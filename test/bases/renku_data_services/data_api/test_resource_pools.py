@@ -300,7 +300,7 @@ async def test_put_resource_class(
 ) -> None:
     _, res = await create_rp(valid_resource_pool_payload, sanic_client)
     assert res.status_code == 201
-    assert len(res.json.get("classes", [])) == 1
+    assert len(res.json.get("classes", [])) == 2
     res_cls_payload = {**res.json.get("classes", [])[0], "cpu": 5.0}
     res_cls_expected_response = {**res.json.get("classes", [])[0], "cpu": 5.0}
     res_cls_payload.pop("id", None)
@@ -672,7 +672,7 @@ async def test_patch_tolerations(
     rp = res.json
     rp_id = rp["id"]
     assert len(rp["classes"]) > 0
-    res_class = rp["classes"][0]
+    res_class = [i for i in rp["classes"] if len(i.get("tolerations", [])) > 0][0]
     res_class_id = res_class["id"]
     assert len(res_class["tolerations"]) == 1
     # Patch in a 2nd toleration
@@ -712,7 +712,7 @@ async def test_patch_affinities(
     rp = res.json
     rp_id = rp["id"]
     assert len(rp["classes"]) > 0
-    res_class = rp["classes"][0]
+    res_class = [i for i in rp["classes"] if len(i.get("node_affinities", [])) > 0][0]
     res_class_id = res_class["id"]
     assert len(res_class["node_affinities"]) == 1
     assert res_class["node_affinities"][0] == {"key": "affinity1", "required_during_scheduling": False}
@@ -766,7 +766,7 @@ async def test_remove_all_tolerations_put(
     rp = res.json
     rp_id = rp["id"]
     assert len(rp["classes"]) > 0
-    res_class = rp["classes"][0]
+    res_class = [i for i in rp["classes"] if len(i.get("tolerations", [])) > 0][0]
     res_class_id = res_class["id"]
     assert len(res_class["tolerations"]) == 1
     assert res_class["tolerations"][0] == "toleration1"
@@ -798,7 +798,7 @@ async def test_remove_all_affinities_put(
     rp = res.json
     rp_id = rp["id"]
     assert len(rp["classes"]) > 0
-    res_class = rp["classes"][0]
+    res_class = [i for i in rp["classes"] if len(i.get("node_affinities", [])) > 0][0]
     res_class_id = res_class["id"]
     assert len(res_class["node_affinities"]) == 1
     assert res_class["node_affinities"][0] == {"key": "affinity1", "required_during_scheduling": False}
@@ -830,7 +830,7 @@ async def test_put_tolerations(
     rp = res.json
     rp_id = rp["id"]
     assert len(rp["classes"]) > 0
-    res_class = rp["classes"][0]
+    res_class = [i for i in rp["classes"] if len(i.get("tolerations", [])) > 0][0]
     res_class_id = res_class["id"]
     assert len(res_class["tolerations"]) == 1
     assert res_class["tolerations"][0] == "toleration1"
@@ -862,7 +862,7 @@ async def test_put_affinities(
     rp = res.json
     rp_id = rp["id"]
     assert len(rp["classes"]) > 0
-    res_class = rp["classes"][0]
+    res_class = [i for i in rp["classes"] if len(i.get("node_affinities", [])) > 0][0]
     res_class_id = res_class["id"]
     assert len(res_class["node_affinities"]) == 1
     assert res_class["node_affinities"][0] == {"key": "affinity1", "required_during_scheduling": False}
@@ -900,7 +900,7 @@ async def test_get_all_tolerations(
     rp = res.json
     rp_id = rp["id"]
     assert len(rp["classes"]) > 0
-    res_class = rp["classes"][0]
+    res_class = [i for i in rp["classes"] if len(i.get("tolerations", [])) > 0][0]
     res_class_id = res_class["id"]
     _, res = await sanic_client.get(
         f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}/tolerations",
@@ -920,7 +920,7 @@ async def test_get_all_affinities(
     rp = res.json
     rp_id = rp["id"]
     assert len(rp["classes"]) > 0
-    res_class = rp["classes"][0]
+    res_class = [i for i in rp["classes"] if len(i.get("node_affinities", [])) > 0][0]
     res_class_id = res_class["id"]
     _, res = await sanic_client.get(
         f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}/node_affinities",
