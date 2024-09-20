@@ -9,7 +9,7 @@ from sanic_ext import validate
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
-from renku_data_services.base_api.auth import authenticate, only_admins, only_authenticated
+from renku_data_services.base_api.auth import authenticate, only_admins, only_authenticated, validate_path_user_id
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_models.validation import validated_json
@@ -113,6 +113,7 @@ class KCUsersBP(CustomBlueprint):
         """Delete a specific user by their Keycloak ID."""
 
         @authenticate(self.authenticator)
+        @validate_path_user_id
         @only_admins
         async def _delete_one(_: Request, requested_by: base_models.APIUser, user_id: str) -> HTTPResponse:
             deletion_result = await self.repo.remove_user(user_id=user_id)
