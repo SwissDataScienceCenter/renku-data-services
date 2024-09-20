@@ -692,6 +692,161 @@ async def test_post_data_connector_project_link(
 
 
 @pytest.mark.asyncio
+async def test_post_data_connector_project_link_unauthorized_if_not_project_editor(
+    sanic_client: SanicASGITestClient,
+    create_data_connector,
+    create_project,
+    user_headers,
+    member_1_headers,
+    member_1_user,
+) -> None:
+    _, response = await sanic_client.post(
+        "/api/data/groups", headers=user_headers, json={"name": "My Group", "slug": "my-group"}
+    )
+    assert response.status_code == 201, response.text
+    patch = [{"id": member_1_user.id, "role": "owner"}]
+    _, response = await sanic_client.patch("/api/data/groups/my-group/members", headers=user_headers, json=patch)
+    assert response.status_code == 200
+    data_connector = await create_data_connector("Data connector 1", namespace="my-group")
+    data_connector_id = data_connector["id"]
+    project = await create_project("Project A")
+    project_id = project["id"]
+    patch = [{"id": member_1_user.id, "role": "viewer"}]
+    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}/members", headers=user_headers, json=patch)
+    assert response.status_code == 200, response.text
+
+    # Check that "member_1" can view the project and data connector
+    _, response = await sanic_client.get(f"/api/data/data_connectors/{data_connector_id}", headers=member_1_headers)
+    assert response.status_code == 200, response.text
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=member_1_headers)
+    assert response.status_code == 200, response.text
+
+    payload = {"project_id": project_id}
+    _, response = await sanic_client.post(
+        f"/api/data/data_connectors/{data_connector_id}/project_links", headers=member_1_headers, json=payload
+    )
+
+    assert response.status_code == 404, response.text
+
+
+@pytest.mark.asyncio
+async def test_post_data_connector_project_link_unauthorized_if_not_data_connector_editor(
+    sanic_client: SanicASGITestClient,
+    create_data_connector,
+    create_project,
+    user_headers,
+    member_1_headers,
+    member_1_user,
+) -> None:
+    _, response = await sanic_client.post(
+        "/api/data/groups", headers=user_headers, json={"name": "My Group", "slug": "my-group"}
+    )
+    assert response.status_code == 201, response.text
+    patch = [{"id": member_1_user.id, "role": "viewer"}]
+    _, response = await sanic_client.patch("/api/data/groups/my-group/members", headers=user_headers, json=patch)
+    assert response.status_code == 200
+    data_connector = await create_data_connector("Data connector 1", namespace="my-group")
+    data_connector_id = data_connector["id"]
+    project = await create_project("Project A")
+    project_id = project["id"]
+    patch = [{"id": member_1_user.id, "role": "owner"}]
+    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}/members", headers=user_headers, json=patch)
+    assert response.status_code == 200, response.text
+
+    # Check that "member_1" can view the project and data connector
+    _, response = await sanic_client.get(f"/api/data/data_connectors/{data_connector_id}", headers=member_1_headers)
+    assert response.status_code == 200, response.text
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=member_1_headers)
+    assert response.status_code == 200, response.text
+
+    payload = {"project_id": project_id}
+    _, response = await sanic_client.post(
+        f"/api/data/data_connectors/{data_connector_id}/project_links", headers=member_1_headers, json=payload
+    )
+
+    assert response.status_code == 404, response.text
+
+
+@pytest.mark.asyncio
+async def test_post_data_connector_project_link_public_data_connector(
+    sanic_client: SanicASGITestClient,
+    create_data_connector,
+    create_project,
+    user_headers,
+    member_1_headers,
+    member_1_user,
+) -> None:
+    data_connector = await create_data_connector(
+        "Data connector 1", user=member_1_user, headers=member_1_headers, visibility="public"
+    )
+    data_connector_id = data_connector["id"]
+    project = await create_project("Project A")
+    project_id = project["id"]
+
+    # Check that "regular_user" can view the project and data connector
+    _, response = await sanic_client.get(f"/api/data/data_connectors/{data_connector_id}", headers=user_headers)
+    assert response.status_code == 200, response.text
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
+    assert response.status_code == 200, response.text
+
+    payload = {"project_id": project_id}
+    _, response = await sanic_client.post(
+        f"/api/data/data_connectors/{data_connector_id}/project_links", headers=user_headers, json=payload
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json is not None
+    link = response.json
+    assert link.get("data_connector_id") == data_connector_id
+    assert link.get("project_id") == project_id
+    assert link.get("created_by") == "user"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("project_role", ["viewer", "editor", "owner"])
+async def test_post_data_connector_project_link_extends_read_access(
+    sanic_client: SanicASGITestClient,
+    create_data_connector,
+    create_project,
+    user_headers,
+    member_1_headers,
+    member_1_user,
+    project_role,
+) -> None:
+    data_connector = await create_data_connector("Data connector 1")
+    data_connector_id = data_connector["id"]
+    project = await create_project("Project A")
+    project_id = project["id"]
+    patch = [{"id": member_1_user.id, "role": project_role}]
+    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}/members", headers=user_headers, json=patch)
+    assert response.status_code == 200, response.text
+
+    # Check that "member_1" can view the project
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=member_1_headers)
+    assert response.status_code == 200, response.text
+    # Check that "member_1" cannot view the data connector
+    _, response = await sanic_client.get(f"/api/data/data_connectors/{data_connector_id}", headers=member_1_headers)
+    assert response.status_code == 404, response.text
+
+    data_connector_id = data_connector["id"]
+    project_id = project["id"]
+    payload = {"project_id": project_id}
+    _, response = await sanic_client.post(
+        f"/api/data/data_connectors/{data_connector_id}/project_links", headers=user_headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+
+    # Check that "member_1" can now view the data connector
+    _, response = await sanic_client.get(f"/api/data/data_connectors/{data_connector_id}", headers=member_1_headers)
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == data_connector_id
+    assert response.json.get("name") == "Data connector 1"
+    assert response.json.get("namespace") == "user.doe"
+    assert response.json.get("slug") == "data-connector-1"
+
+
+@pytest.mark.asyncio
 async def test_delete_data_connector_project_link(
     sanic_client: SanicASGITestClient, create_data_connector, create_project, user_headers
 ) -> None:
