@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from typing import TypeVar
 
+from cryptography.hazmat.primitives.asymmetric import rsa
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
@@ -14,6 +15,10 @@ from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors import orm as schemas
 from renku_data_services.namespace import orm as ns_schemas
+from renku_data_services.secrets import orm as secrets_schemas
+from renku_data_services.secrets.core import encrypt_user_secret
+from renku_data_services.secrets.models import SecretKind
+from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.core import with_db_transaction
 
 
@@ -24,9 +29,13 @@ class DataConnectorRepository:
         self,
         session_maker: Callable[..., AsyncSession],
         authz: Authz,
+        user_repo: UserRepo,
+        secret_service_public_key: rsa.RSAPublicKey,
     ) -> None:
         self.session_maker = session_maker
         self.authz = authz
+        self.user_repo = user_repo
+        self.secret_service_public_key = secret_service_public_key
 
     async def get_data_connectors(
         self, user: base_models.APIUser, pagination: PaginationRequest, namespace: str | None = None
@@ -316,12 +325,70 @@ class DataConnectorRepository:
                 select(schemas.DataConnectorSecretORM)
                 .where(schemas.DataConnectorSecretORM.user_id == user.id)
                 .where(schemas.DataConnectorSecretORM.data_connector_id == data_connector_id)
-                .where(schemas.DataConnectorSecretORM.secret.user_id == user.id)
+                .where(secrets_schemas.SecretORM.user_id == user.id)
             )
             results = await session.scalars(stmt)
             secrets = results.all()
 
             return [secret.dump() for secret in secrets]
+
+    async def insert_or_update_data_connector_secrets(
+        self, user: base_models.APIUser, data_connector_id: ULID, secrets: list[models.DataConnectorSecretPut]
+    ) -> list[models.DataConnectorSecret]:
+        """Create or update data connector secrets."""
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        # NOTE: check that the user can access the data connector
+        await self.get_data_connector(user=user, data_connector_id=data_connector_id)
+
+        secrets_as_dict = {s.name: s.value for s in secrets}
+
+        async with self.session_maker() as session, session.begin():
+            stmt = (
+                select(schemas.DataConnectorSecretORM)
+                .where(schemas.DataConnectorSecretORM.user_id == user.id)
+                .where(schemas.DataConnectorSecretORM.data_connector_id == data_connector_id)
+                .where(secrets_schemas.SecretORM.user_id == user.id)
+            )
+            result = await session.scalars(stmt)
+            existing_secrets = result.all()
+            existing_secrets_as_dict = {s.name: s for s in existing_secrets}
+
+            all_secrets = []
+
+            for name, value in secrets_as_dict.items():
+                encrypted_value, encrypted_key = await encrypt_user_secret(
+                    user_repo=self.user_repo,
+                    requested_by=user,
+                    secret_service_public_key=self.secret_service_public_key,
+                    secret_value=value,
+                )
+
+                if data_connector_secret_orm := existing_secrets_as_dict.get(name):
+                    data_connector_secret_orm.secret.update(
+                        encrypted_value=encrypted_value, encrypted_key=encrypted_key
+                    )
+                else:
+                    secret_orm = secrets_schemas.SecretORM(
+                        name=f"{data_connector_id}-{name}",
+                        user_id=user.id,
+                        encrypted_value=encrypted_value,
+                        encrypted_key=encrypted_key,
+                        kind=SecretKind.storage,
+                    )
+                    data_connector_secret_orm = schemas.DataConnectorSecretORM(
+                        name=name,
+                        user_id=user.id,
+                        data_connector_id=data_connector_id,
+                        secret_id=secret_orm.id,
+                    )
+                    session.add(secret_orm)
+                    session.add(data_connector_secret_orm)
+
+                all_secrets.append(data_connector_secret_orm.dump())
+
+            return all_secrets
 
 
 class DataConnectorProjectLinkRepository:

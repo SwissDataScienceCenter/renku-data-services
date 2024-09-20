@@ -1013,7 +1013,9 @@ async def test_delete_project_after_linking(
 
 
 @pytest.mark.asyncio
-async def test_storage_v2_create_secret(sanic_client: SanicASGITestClient, create_data_connector, user_headers) -> None:
+async def test_put_data_connector_secrets(
+    sanic_client: SanicASGITestClient, create_data_connector, user_headers
+) -> None:
     data_connector = await create_data_connector("My data connector")
     data_connector_id = data_connector["id"]
 
@@ -1025,8 +1027,11 @@ async def test_storage_v2_create_secret(sanic_client: SanicASGITestClient, creat
         f"/api/data/data_connectors/{data_connector_id}/secrets", headers=user_headers, json=payload
     )
 
-    assert response.status_code == 201, response.json
-    assert response.json is None
+    assert response.status_code == 200, response.json
+    assert response.json is not None
+    secrets = response.json
+    assert len(secrets) == 2
+    assert {s["name"] for s in secrets} == {"access_key_id", "secret_access_key"}
 
     # storage = await create_storage()
     # storage_id = storage["storage"]["storage_id"]

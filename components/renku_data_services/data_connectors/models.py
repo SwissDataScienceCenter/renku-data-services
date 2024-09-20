@@ -126,3 +126,11 @@ class DataConnectorSecret:
     user_id: str
     data_connector_id: ULID
     secret_id: ULID
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class DataConnectorSecretPut:
+    """Secret to be saved for a data connector."""
+
+    name: str
+    value: str

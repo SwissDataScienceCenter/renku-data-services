@@ -262,7 +262,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/DataConnectorSecretPostList"
+              $ref: "#/components/schemas/DataConnectorSecretPutList"
       responses:
         "201":
           description: The secrets for cloud storage were saved
@@ -514,12 +514,12 @@ components:
       required:
         - name
         - secret_id
-    DataConnectorSecretPostList:
+    DataConnectorSecretPutList:
       description: List of secrets to be saved for a data connector
       type: array
       items:
-        $ref: "#/components/schemas/DataConnectorSecretPost"
-    DataConnectorSecretPost:
+        $ref: "#/components/schemas/DataConnectorSecretPut"
+    DataConnectorSecretPut:
       description: Information about a credential to save for a data connector
       properties:
         name:

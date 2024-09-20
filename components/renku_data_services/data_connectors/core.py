@@ -119,3 +119,14 @@ def validate_data_connector_patch(
         keywords=keywords,
         storage=storage,
     )
+
+
+def validate_data_connector_secrets_put(put: apispec.DataConnectorSecretPutList) -> list[models.DataConnectorSecretPut]:
+    """Validate the update to a data connector's secrets."""
+    return [
+        models.DataConnectorSecretPut(
+            name=secret.name,
+            value=secret.value,
+        )
+        for secret in put.root
+    ]
