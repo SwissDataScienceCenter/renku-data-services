@@ -132,8 +132,12 @@ class SessionLaunchersBP(CustomBlueprint):
         async def _patch(
             _: Request, user: base_models.APIUser, launcher_id: ULID, body: apispec.SessionLauncherPatch
         ) -> JSONResponse:
-            launcher_patch = validate_session_launcher_patch(body)
-            launcher = await self.session_repo.update_launcher(user=user, launcher_id=launcher_id, patch=launcher_patch)
+            async with self.session_repo.session_maker() as session, session.begin():
+                current_launcher = await self.session_repo.get_launcher(user, launcher_id)
+                launcher_patch = validate_session_launcher_patch(body, current_launcher)
+                launcher = await self.session_repo.update_launcher(
+                    user=user, launcher_id=launcher_id, patch=launcher_patch, session=session
+                )
             return validated_json(apispec.SessionLauncher, launcher)
 
         return "/session_launchers/<launcher_id:ulid>", ["PATCH"], _patch
