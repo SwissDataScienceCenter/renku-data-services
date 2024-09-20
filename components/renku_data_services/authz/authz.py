@@ -1467,7 +1467,7 @@ class Authz:
     async def _update_data_connector_visibility(
         self, user: base_models.APIUser, data_connector: DataConnector, *, zed_token: ZedToken | None = None
     ) -> _AuthzChange:
-        """Update the visibility of the project in the authorization database."""
+        """Update the visibility of the data connector in the authorization database."""
         data_connector_id_str = str(data_connector.id)
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
         data_connector_res = _AuthzConverter.data_connector(data_connector.id)
