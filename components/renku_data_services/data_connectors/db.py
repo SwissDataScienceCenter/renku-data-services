@@ -146,10 +146,7 @@ class DataConnectorRepository:
             .where(ns_schemas.EntitySlugORM.slug == slug)
         )
         if existing_slug is not None:
-            raise errors.ConflictError(
-                message=f"An entity with the slug '{
-                                       ns.slug}/{slug}' already exists."
-            )
+            raise errors.ConflictError(message=f"An entity with the slug '{ns.slug}/{slug}' already exists.")
 
         visibility_orm = (
             apispec.Visibility(data_connector.visibility)
@@ -418,6 +415,16 @@ class DataConnectorProjectLinkRepository:
         if project is None:
             raise errors.MissingResourceError(
                 message=f"Project with id '{link.project_id}' does not exist or you do not have access to it."
+            )
+
+        existing_link = await session.scalar(
+            select(schemas.DataConnectorToProjectLinkORM)
+            .where(schemas.DataConnectorToProjectLinkORM.data_connector_id == link.data_connector_id)
+            .where(schemas.DataConnectorToProjectLinkORM.project_id == link.project_id)
+        )
+        if existing_link is not None:
+            raise errors.ConflictError(
+                message=f"A link from data connector {link.data_connector_id} to project {link.project_id} already exists."  # noqa E501
             )
 
         link_orm = schemas.DataConnectorToProjectLinkORM(

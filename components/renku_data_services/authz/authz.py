@@ -548,6 +548,9 @@ class Authz:
                 ):
                     user = _extract_user_from_args(*func_args, **func_kwargs)
                     authz_change = await db_repo.authz._add_data_connector_to_project_link(user, result)
+                case AuthzOperation.delete_link, ResourceType.data_connector if result is None:
+                    # NOTE: This means that the link does not exist in the first place so nothing was deleted
+                    pass
                 case AuthzOperation.delete_link, ResourceType.data_connector if isinstance(
                     result, DataConnectorToProjectLink
                 ):
@@ -1673,10 +1676,6 @@ class Authz:
         )
         return change
 
-    # @_is_allowed_on_resource(Scope.DELETE, ResourceType.data_connector)
-    # async def _remove_data_connector(
-    #     self, user: base_models.APIUser, data_connector: DataConnector, *, zed_token: ZedToken | None = None
-    # ) -> _AuthzChange:
     async def _remove_data_connector_to_project_link(
         self, user: base_models.APIUser, link: DataConnectorToProjectLink
     ) -> _AuthzChange:
