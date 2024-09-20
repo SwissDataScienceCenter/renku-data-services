@@ -513,6 +513,7 @@ def anonymous_user_headers() -> dict[str, str]:
 
 
 @pytest.mark.asyncio
+@pytest.mark.skip(reason="Setup for testing sessions is not done yet.")  # TODO: enable in follwup PR
 async def test_starting_session_anonymous(
     sanic_client: SanicASGITestClient,
     create_project,
