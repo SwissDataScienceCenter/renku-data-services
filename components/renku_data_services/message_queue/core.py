@@ -13,7 +13,8 @@ from renku_data_services.message_queue.converters import (
     make_group_member_added_event,
     make_project_member_added_event,
 )
-from renku_data_services.message_queue.db import EventRepository
+from renku_data_services.message_queue.db import EventRepository, ReprovisioningRepository
+from renku_data_services.message_queue.models import Reprovisioning
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.users.db import UserRepo
@@ -22,6 +23,8 @@ from renku_data_services.users.db import UserRepo
 async def reprovision(
     session_maker: Callable[..., AsyncSession],
     requested_by: APIUser,
+    reprovisioning: Reprovisioning,
+    reprovisioning_repo: ReprovisioningRepository,
     event_repo: EventRepository,
     user_repo: UserRepo,
     group_repo: GroupRepository,
@@ -30,7 +33,9 @@ async def reprovision(
 ) -> None:
     """Create and send various data service events required for reprovisioning the search index."""
     async with session_maker() as session, session.begin():
-        start_event = make_event(message_type="reprovisioning.started", payload=v2.ReprovisioningStarted(id="42"))
+        start_event = make_event(
+            message_type="reprovisioning.started", payload=v2.ReprovisioningStarted(id=str(reprovisioning.id))
+        )
         await event_repo.store_event(session, start_event)
 
         all_users = await user_repo.get_users(requested_by=requested_by)
@@ -60,3 +65,5 @@ async def reprovision(
 
         start_event = make_event(message_type="reprovisioning.finished", payload=v2.ReprovisioningFinished(id="42"))
         await event_repo.store_event(session, start_event)
+
+    await reprovisioning_repo.stop()

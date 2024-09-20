@@ -76,9 +76,6 @@ class ProjectRepository:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session:
-            # NOTE: without awaiting the connection below, there are failures about how a connection has not
-            # been established in the DB but the query is getting executed.
-            _ = await session.connection()
             stmt = select(schemas.ProjectORM)
             results = await session.execute(stmt)
             projects_orms = results.scalars().all()

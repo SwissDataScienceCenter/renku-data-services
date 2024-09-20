@@ -146,6 +146,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         url_prefix=url_prefix,
         authenticator=config.authenticator,
         session_maker=config.db.async_session_maker,
+        reprovisioning_repo=config.reprovisioning_repo,
         event_repo=config.event_repo,
         user_repo=config.kc_user_repo,
         group_repo=config.group_repo,
