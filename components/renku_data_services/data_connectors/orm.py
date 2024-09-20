@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, MetaData, String, func
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
-from sqlalchemy.schema import Index
+from sqlalchemy.schema import Index, UniqueConstraint
 from ulid import ULID
 
 from renku_data_services.authz import models as authz_models
@@ -144,6 +144,14 @@ class DataConnectorToProjectLinkORM(BaseORM):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "data_connector_id",
+            "project_id",
+            name="_unique_data_connector_id_project_id_uc",
+        ),
     )
 
     def dump(self) -> models.DataConnectorToProjectLink:

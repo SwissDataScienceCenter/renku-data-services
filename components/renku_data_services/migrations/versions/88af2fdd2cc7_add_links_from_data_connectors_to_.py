@@ -39,6 +39,7 @@ def upgrade() -> None:
             ["projects.projects.id"],
         ),
         sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("data_connector_id", "project_id", name="_unique_data_connector_id_project_id_uc"),
         schema="storage",
     )
     op.create_index(
