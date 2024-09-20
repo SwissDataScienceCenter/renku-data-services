@@ -2,62 +2,100 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
+from pathlib import PurePosixPath
 
-from pydantic import BaseModel, model_validator
 from ulid import ULID
 
 from renku_data_services import errors
-from renku_data_services.session.apispec import EnvironmentKind
 
 
-@dataclass(frozen=True, eq=True, kw_only=True)
-class Member(BaseModel):
-    """Member model."""
+class EnvironmentKind(StrEnum):
+    """The type of environment."""
 
-    id: str
+    GLOBAL: str = "GLOBAL"
+    CUSTOM: str = "CUSTOM"
 
 
-@dataclass(frozen=True, eq=True, kw_only=True)
-class Environment(BaseModel):
-    """Session environment model."""
+@dataclass(kw_only=True, frozen=True, eq=True)
+class BaseEnvironment:
+    """Base session environment model."""
 
-    id: str | None
     name: str
-    creation_date: datetime
     description: str | None
     container_image: str
-    default_url: str | None
-    created_by: Member
+    default_url: str
+    port: int
+    working_directory: PurePosixPath
+    mount_directory: PurePosixPath
+    uid: int
+    gid: int
+    environment_kind: EnvironmentKind
+    args: list[str] | None = None
+    command: list[str] | None = None
+
+
+@dataclass(kw_only=True, frozen=True, eq=True)
+class UnsavedEnvironment(BaseEnvironment):
+    """Session environment model that has not been saved."""
+
+    port: int = 8888
+    description: str | None = None
+    working_directory: PurePosixPath = PurePosixPath("/home/jovyan/work")
+    mount_directory: PurePosixPath = PurePosixPath("/home/jovyan/work")
+    uid: int = 1000
+    gid: int = 1000
+
+    def __post_init__(self) -> None:
+        if not self.working_directory.is_absolute():
+            raise errors.ValidationError(message="The working directory for a session is supposed to be absolute")
+        if not self.mount_directory.is_absolute():
+            raise errors.ValidationError(message="The mount directory for a session is supposed to be absolute")
+        if self.working_directory.is_reserved():
+            raise errors.ValidationError(
+                message="The requested value for the working directory is reserved by the OS and cannot be used."
+            )
+        if self.mount_directory.is_reserved():
+            raise errors.ValidationError(
+                message="The requested value for the mount directory is reserved by the OS and cannot be used."
+            )
+
+
+@dataclass(kw_only=True, frozen=True, eq=True)
+class Environment(BaseEnvironment):
+    """Session environment model that has been saved in the DB."""
+
+    id: ULID
+    creation_date: datetime
+    created_by: str
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class SessionLauncher(BaseModel):
+class BaseSessionLauncher:
     """Session launcher model."""
 
     id: ULID | None
-    project_id: str
+    project_id: ULID
     name: str
-    creation_date: datetime
     description: str | None
-    environment_kind: EnvironmentKind
-    environment_id: str | None
+    environment: str | UnsavedEnvironment | Environment
     resource_class_id: int | None
-    container_image: str | None
-    default_url: str | None
-    created_by: Member
 
-    @model_validator(mode="after")
-    def check_launcher_environment_kind(self) -> "SessionLauncher":
-        """Validates the environment of a launcher."""
 
-        environment_kind = self.environment_kind
-        environment_id = self.environment_id
-        container_image = self.container_image
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedSessionLauncher(BaseSessionLauncher):
+    """Session launcher model that has not been persisted in the DB."""
 
-        if environment_kind == EnvironmentKind.global_environment and environment_id is None:
-            raise errors.ValidationError(message="'environment_id' not set when environment_kind=global_environment")
+    id: ULID | None = None
+    environment: str | UnsavedEnvironment
+    """When a string is passed for the environment it should be the ID of an existing environment."""
 
-        if environment_kind == EnvironmentKind.container_image and container_image is None:
-            raise errors.ValidationError(message="'container_image' not set when environment_kind=container_image")
 
-        return self
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLauncher(BaseSessionLauncher):
+    """Session launcher model that has been already saved in the DB."""
+
+    id: ULID
+    creation_date: datetime
+    created_by: str
+    environment: Environment
