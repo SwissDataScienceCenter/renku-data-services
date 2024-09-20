@@ -42,7 +42,7 @@ class UserORM(BaseORM):
             first_name=self.first_name,
             last_name=self.last_name,
             email=self.email,
-            namespace=self.namespace.dump() if self.namespace else None,
+            namespace=self.namespace.dump(),
         )
 
     @classmethod

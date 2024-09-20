@@ -332,7 +332,7 @@ class EventConverter:
                 return _UserEventConverter.to_events(user_with_namespace, event_type)
             case v2.UserRemoved:
                 user_info = cast(str, input)
-                return _UserEventConverter.to_events(user_info.id, event_type)
+                return _UserEventConverter.to_events(user_info, event_type)
             case events.UpdateOrInsertUser:
                 user_with_namespace_update = cast(user_models.UserInfoUpdate, input)
                 return _UserEventConverter.to_events(user_with_namespace_update, event_type)
