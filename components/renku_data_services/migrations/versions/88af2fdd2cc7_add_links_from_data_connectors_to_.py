@@ -26,18 +26,9 @@ def upgrade() -> None:
         sa.Column("created_by_id", sa.String(length=36), nullable=False),
         sa.Column("creation_date", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.ForeignKeyConstraint(
-            ["created_by_id"],
-            ["users.users.keycloak_id"],
-        ),
-        sa.ForeignKeyConstraint(
-            ["data_connector_id"],
-            ["storage.data_connectors.id"],
-        ),
-        sa.ForeignKeyConstraint(
-            ["project_id"],
-            ["projects.projects.id"],
-        ),
+        sa.ForeignKeyConstraint(["created_by_id"], ["users.users.keycloak_id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["data_connector_id"], ["storage.data_connectors.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["project_id"], ["projects.projects.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("data_connector_id", "project_id", name="_unique_data_connector_id_project_id_uc"),
         schema="storage",

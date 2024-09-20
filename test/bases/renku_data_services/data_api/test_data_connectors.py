@@ -947,3 +947,66 @@ async def test_delete_data_connector_project_link(
     assert response.status_code == 200, response.text
     assert response.json is not None
     assert len(response.json) == 0
+
+
+@pytest.mark.asyncio
+async def test_delete_data_connector_after_linking(
+    sanic_client: SanicASGITestClient, create_data_connector, create_project, user_headers
+) -> None:
+    data_connector = await create_data_connector("Data connector 1")
+    project = await create_project("Project A")
+    data_connector_id = data_connector["id"]
+    project_id = project["id"]
+    payload = {"project_id": project_id}
+    _, response = await sanic_client.post(
+        f"/api/data/data_connectors/{data_connector_id}/project_links", headers=user_headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+
+    _, response = await sanic_client.delete(f"/api/data/data_connectors/{data_connector_id}", headers=user_headers)
+
+    assert response.status_code == 204, response.text
+
+    # Check that the project still exists
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
+    assert response.status_code == 200, response.text
+
+    # Check that the links list to the project is empty now
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/data_connector_links", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert len(response.json) == 0
+
+
+@pytest.mark.asyncio
+async def test_delete_project_after_linking(
+    sanic_client: SanicASGITestClient, create_data_connector, create_project, user_headers
+) -> None:
+    data_connector = await create_data_connector("Data connector 1")
+    project = await create_project("Project A")
+    data_connector_id = data_connector["id"]
+    project_id = project["id"]
+    payload = {"project_id": project_id}
+    _, response = await sanic_client.post(
+        f"/api/data/data_connectors/{data_connector_id}/project_links", headers=user_headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+
+    _, response = await sanic_client.delete(f"/api/data/projects/{project_id}", headers=user_headers)
+
+    assert response.status_code == 204, response.text
+
+    # Check that the data connector still exists
+    _, response = await sanic_client.get(f"/api/data/data_connectors/{data_connector_id}", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+
+    # Check that the links list from the data connector is empty now
+    _, response = await sanic_client.get(
+        f"/api/data/data_connectors/{data_connector_id}/project_links", headers=user_headers
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert len(response.json) == 0
