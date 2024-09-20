@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import functools
-from asyncio import gather
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any, Concatenate, ParamSpec, TypeVar
@@ -69,9 +68,9 @@ class ProjectRepository:
             )
             if namespace:
                 stmt_count = _filter_by_namespace_slug(stmt_count, namespace)
-            results = await gather(session.execute(stmt), session.execute(stmt_count))
-            projects_orm = results[0].scalars().all()
-            total_elements = results[1].scalar() or 0
+            results = await session.scalars(stmt), await session.scalar(stmt_count)
+            projects_orm = results[0].all()
+            total_elements = results[1] or 0
             return [p.dump() for p in projects_orm], total_elements
 
     async def get_project(self, user: base_models.APIUser, project_id: ULID) -> models.Project:
