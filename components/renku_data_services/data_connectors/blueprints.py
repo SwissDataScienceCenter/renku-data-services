@@ -286,10 +286,13 @@ class DataConnectorsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        @validate(json=apispec.DataConnectorSecretPostList)
         async def _put_secrets(
-            _: Request, user: base_models.APIUser, data_connector_id: ULID, body: apispec.DataConnectorSecretPostList
+            request: Request,
+            user: base_models.APIUser,
+            data_connector_id: ULID,
         ) -> JSONResponse:
+            # NOTE: @validate does NOT work with list payloads
+            # body = apispec.DataConnectorSecretPostList.model_validate(request.json)
             raise NotImplementedError()
 
         return "/data_connectors/<data_connector_id:ulid>/secrets", ["PUT"], _put_secrets
