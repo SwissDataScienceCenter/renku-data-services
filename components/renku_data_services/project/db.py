@@ -54,9 +54,6 @@ class ProjectRepository:
         project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
 
         async with self.session_maker() as session:
-            # NOTE: without awaiting the connnection below there are failures about how a connection has not
-            # been established in the DB but the query is getting executed.
-            _ = await session.connection()
             stmt = select(schemas.ProjectORM)
             stmt = stmt.where(schemas.ProjectORM.id.in_(project_ids))
             if namespace:
