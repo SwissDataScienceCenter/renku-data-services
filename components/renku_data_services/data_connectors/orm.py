@@ -125,13 +125,17 @@ class DataConnectorToProjectLinkORM(BaseORM):
     id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
     """ID of this data connector to project link."""
 
-    data_connector_id: Mapped[ULID] = mapped_column(ForeignKey(DataConnectorORM.id), index=True, nullable=False)
+    data_connector_id: Mapped[ULID] = mapped_column(
+        ForeignKey(DataConnectorORM.id, ondelete="CASCADE"), index=True, nullable=False
+    )
     """ID of the data connector."""
 
-    project_id: Mapped[ULID] = mapped_column(ForeignKey(ProjectORM.id), index=True, nullable=False)
+    project_id: Mapped[ULID] = mapped_column(ForeignKey(ProjectORM.id, ondelete="CASCADE"), index=True, nullable=False)
     """ID of the project."""
 
-    created_by_id: Mapped[str] = mapped_column(ForeignKey(UserORM.keycloak_id), index=True, nullable=False)
+    created_by_id: Mapped[str] = mapped_column(
+        ForeignKey(UserORM.keycloak_id, ondelete="CASCADE"), index=True, nullable=False
+    )
     """User ID of the creator of the data connector."""
 
     creation_date: Mapped[datetime] = mapped_column(
