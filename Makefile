@@ -41,7 +41,17 @@ components/renku_data_services/platform/apispec.py: components/renku_data_servic
 
 ##@ Apispec
 
-schemas: components/renku_data_services/crc/apispec.py components/renku_data_services/storage/apispec.py components/renku_data_services/users/apispec.py components/renku_data_services/project/apispec.py components/renku_data_services/namespace/apispec.py components/renku_data_services/secrets/apispec.py components/renku_data_services/connected_services/apispec.py components/renku_data_services/repositories/apispec.py components/renku_data_services/notebooks/apispec.py components/renku_data_services/platform/apispec.py  ## Generate pydantic classes from apispec yaml files
+schemas: components/renku_data_services/crc/apispec.py \
+components/renku_data_services/storage/apispec.py \
+components/renku_data_services/users/apispec.py \
+components/renku_data_services/project/apispec.py \
+components/renku_data_services/session/apispec.py \
+components/renku_data_services/namespace/apispec.py \
+components/renku_data_services/secrets/apispec.py \
+components/renku_data_services/connected_services/apispec.py \
+components/renku_data_services/repositories/apispec.py \
+components/renku_data_services/notebooks/apispec.py \
+components/renku_data_services/platform/apispec.py  ## Generate pydantic classes from apispec yaml files
 	@echo "generated classes based on ApiSpec"
 
 ##@ Avro schemas
@@ -84,6 +94,8 @@ style_checks:  ## Run linting and style checks
 	@$(call test_apispec_up_to_date,"notebooks")
 	@echo "checking platform apispec is up to date"
 	@$(call test_apispec_up_to_date,"platform")
+	@echo "checking session apispec is up to date"
+	@$(call test_apispec_up_to_date,"session")
 	poetry run mypy
 	poetry run ruff format --check
 	poetry run ruff check .
