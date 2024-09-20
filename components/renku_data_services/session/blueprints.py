@@ -1,6 +1,7 @@
 """Session blueprint."""
 
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 
 from sanic import HTTPResponse, Request, json
 from sanic.response import JSONResponse
@@ -10,7 +11,7 @@ from ulid import ULID
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, validate_path_project_id
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
-from renku_data_services.session import apispec
+from renku_data_services.session import apispec, models
 from renku_data_services.session.db import SessionRepository
 
 
@@ -47,7 +48,21 @@ class EnvironmentsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @validate(json=apispec.EnvironmentPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.EnvironmentPost) -> JSONResponse:
-            environment = await self.session_repo.insert_environment(user=user, new_environment=body)
+            unsaved_environment = models.UnsavedEnvironment(
+                name=body.name,
+                description=body.description,
+                container_image=body.container_image,
+                default_url=body.default_url,
+                port=body.port,
+                working_directory=PurePosixPath(body.working_directory),
+                mount_directory=PurePosixPath(body.mount_directory),
+                uid=body.uid,
+                gid=body.gid,
+                environment_kind=models.EnvironmentKind.GLOBAL,
+                command=body.command,
+                args=body.args,
+            )
+            environment = await self.session_repo.insert_environment(user=user, new_environment=unsaved_environment)
             return json(apispec.Environment.model_validate(environment).model_dump(exclude_none=True, mode="json"), 201)
 
         return "/environments", ["POST"], _post
@@ -117,7 +132,32 @@ class SessionLaunchersBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @validate(json=apispec.SessionLauncherPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.SessionLauncherPost) -> JSONResponse:
-            launcher = await self.session_repo.insert_launcher(user=user, new_launcher=body)
+            environment: str | models.UnsavedEnvironment
+            if isinstance(body.environment, apispec.EnvironmentIdOnlyPost):
+                environment = body.environment.id
+            else:
+                environment = models.UnsavedEnvironment(
+                    name=body.environment.name,
+                    description=body.environment.description,
+                    container_image=body.environment.container_image,
+                    default_url=body.environment.default_url,
+                    port=body.environment.port,
+                    working_directory=PurePosixPath(body.environment.working_directory),
+                    mount_directory=PurePosixPath(body.environment.mount_directory),
+                    uid=body.environment.uid,
+                    gid=body.environment.gid,
+                    environment_kind=models.EnvironmentKind(body.environment.environment_kind.value),
+                    args=body.environment.args,
+                    command=body.environment.command,
+                )
+            new_launcher = models.UnsavedSessionLauncher(
+                project_id=ULID.from_str(body.project_id),
+                name=body.name,
+                description=body.description,
+                environment=environment,
+                resource_class_id=body.resource_class_id,
+            )
+            launcher = await self.session_repo.insert_launcher(user=user, new_launcher=new_launcher)
             return json(
                 apispec.SessionLauncher.model_validate(launcher).model_dump(exclude_none=True, mode="json"), 201
             )
@@ -132,8 +172,35 @@ class SessionLaunchersBP(CustomBlueprint):
         async def _patch(
             _: Request, user: base_models.APIUser, launcher_id: ULID, body: apispec.SessionLauncherPatch
         ) -> JSONResponse:
-            body_dict = body.model_dump(exclude_none=True)
-            launcher = await self.session_repo.update_launcher(user=user, launcher_id=launcher_id, **body_dict)
+            body_dict = body.model_dump(exclude_none=True, mode="json")
+            async with self.session_repo.session_maker() as session, session.begin():
+                current_launcher = await self.session_repo.get_launcher(user, launcher_id)
+                new_env: models.UnsavedEnvironment | None = None
+                if (
+                    isinstance(body.environment, apispec.EnvironmentPatchInLauncher)
+                    and current_launcher.environment.environment_kind == models.EnvironmentKind.GLOBAL
+                    and body.environment.environment_kind == apispec.EnvironmentKind.CUSTOM
+                ):
+                    # This means that the global environment is being swapped for a custom one,
+                    # so we have to create a brand new environment, but we have to validate here.
+                    validated_env = apispec.EnvironmentPostInLauncher.model_validate(body_dict.pop("environment"))
+                    new_env = models.UnsavedEnvironment(
+                        name=validated_env.name,
+                        description=validated_env.description,
+                        container_image=validated_env.container_image,
+                        default_url=validated_env.default_url,
+                        port=validated_env.port,
+                        working_directory=PurePosixPath(validated_env.working_directory),
+                        mount_directory=PurePosixPath(validated_env.mount_directory),
+                        uid=validated_env.uid,
+                        gid=validated_env.gid,
+                        environment_kind=models.EnvironmentKind(validated_env.environment_kind.value),
+                        args=validated_env.args,
+                        command=validated_env.command,
+                    )
+                launcher = await self.session_repo.update_launcher(
+                    user=user, launcher_id=launcher_id, new_custom_environment=new_env, session=session, **body_dict
+                )
             return json(apispec.SessionLauncher.model_validate(launcher).model_dump(exclude_none=True, mode="json"))
 
         return "/session_launchers/<launcher_id:ulid>", ["PATCH"], _patch
