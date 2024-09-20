@@ -418,7 +418,6 @@ class Config:
             )
         return self._data_connector_repo
 
-    # data_connector_to_project_link_repo
     @property
     def data_connector_to_project_link_repo(self) -> DataConnectorProjectLinkRepository:
         """The DB adapter for data connector to project links."""
