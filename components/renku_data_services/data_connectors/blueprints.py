@@ -281,18 +281,18 @@ class DataConnectorsBP(CustomBlueprint):
 
         return "/data_connectors/<data_connector_id:ulid>/secrets", ["GET"], _get_secrets
 
-    def post_secrets(self) -> BlueprintFactoryResponse:
+    def put_secrets(self) -> BlueprintFactoryResponse:
         """Create or update saved secrets for a data connector."""
 
         @authenticate(self.authenticator)
         @only_authenticated
         @validate(json=apispec.DataConnectorSecretPostList)
-        async def _post_secrets(
+        async def _put_secrets(
             _: Request, user: base_models.APIUser, data_connector_id: ULID, body: apispec.DataConnectorSecretPostList
         ) -> JSONResponse:
             raise NotImplementedError()
 
-        return "/data_connectors/<data_connector_id:ulid>/secrets", ["POST"], _post_secrets
+        return "/data_connectors/<data_connector_id:ulid>/secrets", ["PUT"], _put_secrets
 
     def delete_secrets(self) -> BlueprintFactoryResponse:
         """Delete all saved secrets for a data connector."""
