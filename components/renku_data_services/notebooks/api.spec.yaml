@@ -978,6 +978,7 @@ components:
         gpu:
           type: integer
           description: Number of GPUs used
+          default: 0
         memory:
           type: integer
           description: Ammount of RAM for the session, in gigabytes
@@ -1023,7 +1024,7 @@ components:
         storage_id:
           allOf:
             - "$ref": "#/components/schemas/Ulid"
-            - description: The storage ID is used to know which storage config from the DB should be overriden
+            - description: If the storage_id is provided then this config must replace an existing storage config in the session
       required:
         - configuration
         - source_path
