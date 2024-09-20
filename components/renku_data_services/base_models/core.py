@@ -5,34 +5,24 @@ import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, StrEnum
-from typing import ClassVar, Optional, Protocol, Self
+from typing import ClassVar, Optional, Protocol, Self, TypeVar
 
 from sanic import Request
 
 from renku_data_services.errors import errors
 
 
-class Authenticator(Protocol):
-    """Interface for authenticating users."""
-
-    token_field: str
-
-    async def authenticate(self, access_token: str, request: Request) -> "APIUser":
-        """Validates the user credentials (i.e. we can say that the user is a valid Renku user)."""
-        ...
-
-
 @dataclass(kw_only=True, frozen=True)
 class APIUser:
     """The model for a user of the API, used for authentication."""
 
-    id: Optional[str] = None  # the sub claim in the access token - i.e. the Keycloak user ID
-    access_token: Optional[str] = field(repr=False, default=None)
-    refresh_token: Optional[str] = field(repr=False, default=None)
-    full_name: Optional[str] = None
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    email: Optional[str] = None
+    id: str | None = None  # the sub claim in the access token - i.e. the Keycloak user ID
+    access_token: str | None = field(repr=False, default=None)
+    refresh_token: str | None = field(repr=False, default=None)
+    full_name: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    email: str | None = None
     access_token_expires_at: datetime | None = None
     is_admin: bool = False
 
@@ -40,7 +30,6 @@ class APIUser:
     def is_authenticated(self) -> bool:
         """Indicates whether the user has successfully logged in."""
         return self.id is not None
-
 
     def get_full_name(self) -> str | None:
         """Generate the closest thing to a full name if the full name field is not set."""
@@ -50,7 +39,6 @@ class APIUser:
         return full_name
 
 
-@dataclass(kw_only=True)
 @dataclass(kw_only=True, frozen=True)
 class AuthenticatedAPIUser(APIUser):
     """The model for a an authenticated user of the API."""
@@ -58,7 +46,7 @@ class AuthenticatedAPIUser(APIUser):
     id: str
     email: str
     access_token: str = field(repr=False)
-    refresh_token: str = field(repr=False)
+    refresh_token: str | None = field(default=None, repr=False)
     full_name: str | None = None
     first_name: str | None = None
     last_name: str | None = None
@@ -69,12 +57,6 @@ class AnonymousAPIUser(APIUser):
     """The model for an anonymous user of the API."""
 
     id: str
-    access_token = None
-    full_name = None
-    first_name = None
-    last_name = None
-    email = None
-    refresh_token = None
     is_admin: bool = field(init=False, default=False)
 
     @property
@@ -95,13 +77,17 @@ class InternalServiceAdmin(APIUser):
     """Used to gain complete admin access by internal code components when performing tasks not started by users."""
 
     id: ServiceAdminId = ServiceAdminId.migrations
-    is_admin: bool = field(default=True, init=False)
     access_token: str = field(repr=False, default="internal-service-admin", init=False)
-    full_name: Optional[str] = field(default=None, init=False)
-    first_name: Optional[str] = field(default=None, init=False)
-    last_name: Optional[str] = field(default=None, init=False)
-    email: Optional[str] = field(default=None, init=False)
-    is_authenticated: bool = field(default=True, init=False)
+    full_name: str | None = field(default=None, init=False)
+    first_name: str | None = field(default=None, init=False)
+    last_name: str | None = field(default=None, init=False)
+    email: str | None = field(default=None, init=False)
+    is_admin: bool = field(init=False, default=True)
+
+    @property
+    def is_authenticated(self) -> bool:
+        """Internal admin users are always authenticated."""
+        return True
 
 
 class GitlabAccessLevel(Enum):
@@ -208,3 +194,16 @@ class Slug:
                 message=f"A path can be constructed only from 2 slugs, but the 'divisor' is of type {type(other)}"
             )
         return self.value + "/" + other.value
+
+
+AnyAPIUser = TypeVar("AnyAPIUser", bound=APIUser, covariant=True)
+
+
+class Authenticator(Protocol[AnyAPIUser]):
+    """Interface for authenticating users."""
+
+    token_field: str
+
+    async def authenticate(self, access_token: str, request: Request) -> AnyAPIUser:
+        """Validates the user credentials (i.e. we can say that the user is a valid Renku user)."""
+        ...

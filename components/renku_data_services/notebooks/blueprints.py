@@ -25,7 +25,7 @@ from ulid import ULID
 from yaml import safe_dump
 
 from renku_data_services import base_models
-from renku_data_services.base_api.auth import authenticated_or_anonymous
+from renku_data_services.base_api.auth import authenticate, authenticate_2
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser, Authenticator
 from renku_data_services.crc.db import ResourcePoolRepository
@@ -74,9 +74,6 @@ from renku_data_services.notebooks.crs import (
 from renku_data_services.notebooks.errors.intermittent import AnonymousUserPatchError, PVDisabledError
 from renku_data_services.notebooks.errors.programming import ProgrammingError
 from renku_data_services.notebooks.errors.user import MissingResourceError, UserInputError
-from renku_data_services.notebooks.util.authn import (
-    notebooks_internal_gitlab_authenticate,
-)
 from renku_data_services.notebooks.util.kubernetes_ import (
     find_container,
     renku_1_make_server_name,
@@ -133,7 +130,7 @@ class NotebooksBP(CustomBlueprint):
     def user_servers(self) -> BlueprintFactoryResponse:
         """Return a JSON of running servers for the user."""
 
-        @authenticated_or_anonymous(self.authenticator)
+        @authenticate(self.authenticator)
         async def _user_servers(
             request: Request, user: AnonymousAPIUser | AuthenticatedAPIUser, **query_params: dict
         ) -> JSONResponse:
@@ -154,7 +151,7 @@ class NotebooksBP(CustomBlueprint):
     def user_server(self) -> BlueprintFactoryResponse:
         """Returns a user server based on its ID."""
 
-        @authenticated_or_anonymous(self.authenticator)
+        @authenticate(self.authenticator)
         async def _user_server(
             request: Request, user: AnonymousAPIUser | AuthenticatedAPIUser, server_name: str
         ) -> JSONResponse:
@@ -169,8 +166,7 @@ class NotebooksBP(CustomBlueprint):
     def launch_notebook(self) -> BlueprintFactoryResponse:
         """Start a renku session."""
 
-        @authenticated_or_anonymous(self.authenticator)
-        @notebooks_internal_gitlab_authenticate(self.internal_gitlab_authenticator)
+        @authenticate_2(self.authenticator, self.internal_gitlab_authenticator)
         @validate(json=apispec.LaunchNotebookRequest)
         async def _launch_notebook(
             request: Request,
@@ -215,8 +211,7 @@ class NotebooksBP(CustomBlueprint):
     def launch_notebook_old(self) -> BlueprintFactoryResponse:
         """Start a renku session using the old operator."""
 
-        @authenticated_or_anonymous(self.authenticator)
-        @notebooks_internal_gitlab_authenticate(self.internal_gitlab_authenticator)
+        @authenticate_2(self.authenticator, self.internal_gitlab_authenticator)
         @validate(json=apispec.LaunchNotebookRequestOld)
         async def _launch_notebook_old(
             request: Request,
@@ -528,8 +523,7 @@ class NotebooksBP(CustomBlueprint):
     def patch_server(self) -> BlueprintFactoryResponse:
         """Patch a user server by name based on the query param."""
 
-        @authenticated_or_anonymous(self.authenticator)
-        @notebooks_internal_gitlab_authenticate(self.internal_gitlab_authenticator)
+        @authenticate_2(self.authenticator, self.internal_gitlab_authenticator)
         @validate(json=apispec.PatchServerRequest)
         async def _patch_server(
             request: Request,
@@ -699,7 +693,7 @@ class NotebooksBP(CustomBlueprint):
     def stop_server(self) -> BlueprintFactoryResponse:
         """Stop user server by name."""
 
-        @authenticated_or_anonymous(self.authenticator)
+        @authenticate(self.authenticator)
         async def _stop_server(
             request: Request, user: AnonymousAPIUser | AuthenticatedAPIUser, server_name: str
         ) -> HTTPResponse:
@@ -728,7 +722,7 @@ class NotebooksBP(CustomBlueprint):
     def server_logs(self) -> BlueprintFactoryResponse:
         """Return the logs of the running server."""
 
-        @authenticated_or_anonymous(self.authenticator)
+        @authenticate(self.authenticator)
         async def _server_logs(
             request: Request, user: AnonymousAPIUser | AuthenticatedAPIUser, server_name: str
         ) -> JSONResponse:
@@ -745,8 +739,7 @@ class NotebooksBP(CustomBlueprint):
     def check_docker_image(self) -> BlueprintFactoryResponse:
         """Return the availability of the docker image."""
 
-        @authenticated_or_anonymous(self.authenticator)
-        @notebooks_internal_gitlab_authenticate(self.internal_gitlab_authenticator)
+        @authenticate_2(self.authenticator, self.internal_gitlab_authenticator)
         async def _check_docker_image(
             request: Request, user: AnonymousAPIUser | AuthenticatedAPIUser, internal_gitlab_user: APIUser
         ) -> HTTPResponse:
@@ -779,8 +772,7 @@ class NotebooksNewBP(CustomBlueprint):
     def start(self) -> BlueprintFactoryResponse:
         """Start a session with the new operator."""
 
-        @authenticated_or_anonymous(self.authenticator)
-        @notebooks_internal_gitlab_authenticate(self.internal_gitlab_authenticator)
+        @authenticate_2(self.authenticator, self.internal_gitlab_authenticator)
         @validate(json=apispec.SessionPostRequest)
         async def _handler(
             _: Request,
@@ -968,7 +960,7 @@ class NotebooksNewBP(CustomBlueprint):
     def get_all(self) -> BlueprintFactoryResponse:
         """Get all sessions for a user."""
 
-        @authenticated_or_anonymous(self.authenticator)
+        @authenticate(self.authenticator)
         async def _handler(_: Request, user: AuthenticatedAPIUser | AnonymousAPIUser) -> HTTPResponse:
             sessions = await self.nb_config.k8s_v2_client.list_servers(user.id)
             output: list[dict] = []
@@ -981,7 +973,7 @@ class NotebooksNewBP(CustomBlueprint):
     def get_one(self) -> BlueprintFactoryResponse:
         """Get a specific session for a user."""
 
-        @authenticated_or_anonymous(self.authenticator)
+        @authenticate(self.authenticator)
         async def _handler(_: Request, user: AuthenticatedAPIUser | AnonymousAPIUser, session_id: str) -> HTTPResponse:
             session = await self.nb_config.k8s_v2_client.get_server(session_id, user.id)
             if session is None:
@@ -993,7 +985,7 @@ class NotebooksNewBP(CustomBlueprint):
     def delete(self) -> BlueprintFactoryResponse:
         """Fully delete a session with the new operator."""
 
-        @authenticated_or_anonymous(self.authenticator)
+        @authenticate(self.authenticator)
         async def _handler(_: Request, user: AuthenticatedAPIUser | AnonymousAPIUser, session_id: str) -> HTTPResponse:
             await self.nb_config.k8s_v2_client.delete_server(session_id, user.id)
             return empty()
@@ -1003,7 +995,7 @@ class NotebooksNewBP(CustomBlueprint):
     def patch(self) -> BlueprintFactoryResponse:
         """Patch a session."""
 
-        @authenticated_or_anonymous(self.authenticator)
+        @authenticate(self.authenticator)
         @validate(json=apispec.SessionPatchRequest)
         async def _handler(
             _: Request,
@@ -1066,7 +1058,7 @@ class NotebooksNewBP(CustomBlueprint):
     def logs(self) -> BlueprintFactoryResponse:
         """Get logs from the session."""
 
-        @authenticated_or_anonymous(self.authenticator)
+        @authenticate(self.authenticator)
         @validate(query=apispec.SessionsSessionIdLogsGetParametersQuery)
         async def _handler(
             _: Request,
