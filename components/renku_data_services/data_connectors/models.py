@@ -33,7 +33,7 @@ class BaseDataConnector:
     slug: str
     visibility: Visibility
     created_by: str
-    creation_date: datetime = field(default_factory=lambda: datetime.now(UTC).replace(microsecond=0))
+    creation_date: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime | None = field(default=None)
     description: str | None = None
     keywords: list[str] | None = None
@@ -90,3 +90,11 @@ class CloudStorageCoreWithSensitiveFields(CloudStorageCore):
     """Remote storage configuration model with sensitive fields."""
 
     sensitive_fields: list["RCloneOption"]
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class DataConnectorUpdate:
+    """Information about the update of a data connector."""
+
+    old: DataConnector
+    new: DataConnector

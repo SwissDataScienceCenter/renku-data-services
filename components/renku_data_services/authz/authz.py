@@ -32,6 +32,7 @@ from renku_data_services import base_models
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.authz.models import Change, Member, MembershipChange, Role, Scope, Visibility
 from renku_data_services.base_models.core import InternalServiceAdmin
+from renku_data_services.data_connectors.models import DataConnector, DataConnectorUpdate
 from renku_data_services.errors import errors
 from renku_data_services.namespace.models import Group, GroupUpdate, Namespace, NamespaceKind, NamespaceUpdate
 from renku_data_services.project.models import Project, ProjectUpdate
@@ -51,7 +52,14 @@ class WithAuthz(Protocol):
 
 _AuthzChangeFuncResult = TypeVar(
     "_AuthzChangeFuncResult",
-    bound=Project | ProjectUpdate | Group | UserInfoUpdate | list[UserInfo] | None,
+    bound=Project
+    | ProjectUpdate
+    | Group
+    | UserInfoUpdate
+    | list[UserInfo]
+    | DataConnector
+    | DataConnectorUpdate
+    | None,
 )
 _T = TypeVar("_T")
 _WithAuthz = TypeVar("_WithAuthz", bound=WithAuthz)
@@ -87,6 +95,8 @@ class _Relation(StrEnum):
     group_platform: str = "group_platform"
     user_namespace_platform: str = "user_namespace_platform"
     project_namespace: str = "project_namespace"
+    data_connector_platform: str = "data_connector_platform"
+    data_connector_namespace: str = "data_connector_namespace"
 
     @classmethod
     def from_role(cls, role: Role) -> "_Relation":
@@ -119,6 +129,7 @@ class ResourceType(StrEnum):
     platform: str = "platform"
     group: str = "group"
     user_namespace: str = "user_namespace"
+    data_connector: str = "data_connector"
 
 
 class AuthzOperation(StrEnum):
@@ -171,6 +182,10 @@ class _AuthzConverter:
         return ObjectReference(object_type=ResourceType.user_namespace, object_id=str(id))
 
     @staticmethod
+    def data_connector(id: ULID) -> ObjectReference:
+        return ObjectReference(object_type=ResourceType.data_connector.value, object_id=str(id))
+
+    @staticmethod
     def to_object(resource_type: ResourceType, resource_id: str | ULID | int) -> ObjectReference:
         match (resource_type, resource_id):
             case (ResourceType.project, sid) if isinstance(sid, ULID):
@@ -183,6 +198,8 @@ class _AuthzConverter:
                 return _AuthzConverter.user_namespace(rid)
             case (ResourceType.group, rid) if isinstance(rid, ULID):
                 return _AuthzConverter.group(rid)
+            case (ResourceType.data_connector, dcid) if isinstance(dcid, ULID):
+                return _AuthzConverter.data_connector(dcid)
         raise errors.ProgrammingError(
             message=f"Unexpected or unknown resource type when checking permissions {resource_type}"
         )
@@ -215,13 +232,15 @@ def _is_allowed_on_resource(
                     message="The authorization decorator needs to have at least one positional argument after 'user'"
                 )
             potential_resource = args[0]
-            resource: Project | Group | Namespace | None = None
+            resource: Project | Group | Namespace | DataConnector | None = None
             match resource_type:
                 case ResourceType.project if isinstance(potential_resource, Project):
                     resource = potential_resource
                 case ResourceType.group if isinstance(potential_resource, Group):
                     resource = potential_resource
                 case ResourceType.user_namespace if isinstance(potential_resource, Namespace):
+                    resource = potential_resource
+                case ResourceType.data_connector if isinstance(potential_resource, DataConnector):
                     resource = potential_resource
                 case _:
                     raise errors.ProgrammingError(
@@ -535,11 +554,27 @@ class Authz:
                                 f"database updates for inserting namespaces but found {type(res)}"
                             )
                         authz_change.extend(db_repo.authz._add_user_namespace(res.namespace))
+                case AuthzOperation.create, ResourceType.data_connector if isinstance(result, DataConnector):
+                    authz_change = db_repo.authz._add_data_connector(result)
+                case AuthzOperation.delete, ResourceType.data_connector if result is None:
+                    # NOTE: This means that the data connector does not exist in the first place so nothing was deleted
+                    pass
+                case AuthzOperation.delete, ResourceType.data_connector if isinstance(result, DataConnector):
+                    user = _extract_user_from_args(*func_args, **func_kwargs)
+                    authz_change = await db_repo.authz._remove_data_connector(user, result)
+                case AuthzOperation.update, ResourceType.data_connector if isinstance(result, DataConnectorUpdate):
+                    authz_change = _AuthzChange()
+                    if result.old.visibility != result.new.visibility:
+                        user = _extract_user_from_args(*func_args, **func_kwargs)
+                        authz_change.extend(await db_repo.authz._update_data_connector_visibility(user, result.new))
+                    if result.old.namespace.id != result.new.namespace.id:
+                        user = _extract_user_from_args(*func_args, **func_kwargs)
+                        authz_change.extend(await db_repo.authz._update_data_connector_namespace(user, result.new))
                 case _:
                     resource_id: str | ULID | None = "unknown"
-                    if isinstance(result, (Project, Namespace, Group)):
+                    if isinstance(result, (Project, Namespace, Group, DataConnector)):
                         resource_id = result.id
-                    elif isinstance(result, (ProjectUpdate, NamespaceUpdate, GroupUpdate)):
+                    elif isinstance(result, (ProjectUpdate, NamespaceUpdate, GroupUpdate, DataConnectorUpdate)):
                         resource_id = result.new.id
                     raise errors.ProgrammingError(
                         message=f"Encountered an unknown authorization operation {op} on resource {resource} "
@@ -628,12 +663,12 @@ class Authz:
         if project.visibility == Visibility.PUBLIC:
             all_users_are_viewers = Relationship(
                 resource=project_res,
-                relation=_Relation.viewer.value,
+                relation=_Relation.public_viewer.value,
                 subject=all_users,
             )
             all_anon_users_are_viewers = Relationship(
                 resource=project_res,
-                relation=_Relation.viewer.value,
+                relation=_Relation.public_viewer.value,
                 subject=all_anon_users,
             )
             relationships.extend([all_users_are_viewers, all_anon_users_are_viewers])
@@ -683,12 +718,12 @@ class Authz:
         anon_users_sub = SubjectReference(object=_AuthzConverter.anonymous_users())
         all_users_are_viewers = Relationship(
             resource=project_res,
-            relation=_Relation.viewer.value,
+            relation=_Relation.public_viewer.value,
             subject=all_users_sub,
         )
         anon_users_are_viewers = Relationship(
             resource=project_res,
-            relation=_Relation.viewer.value,
+            relation=_Relation.public_viewer.value,
             subject=anon_users_sub,
         )
         make_public = WriteRelationshipsRequest(
@@ -1389,3 +1424,227 @@ class Authz:
             updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=i) for i in rels]
         )
         return _AuthzChange(apply=apply, undo=undo)
+
+    def _add_data_connector(self, data_connector: DataConnector) -> _AuthzChange:
+        """Create the new data connector and associated resources and relations in the DB."""
+        creator = SubjectReference(object=_AuthzConverter.user(data_connector.created_by))
+        data_connector_res = _AuthzConverter.data_connector(data_connector.id)
+        creator_is_owner = Relationship(resource=data_connector_res, relation=_Relation.owner.value, subject=creator)
+        all_users = SubjectReference(object=_AuthzConverter.all_users())
+        all_anon_users = SubjectReference(object=_AuthzConverter.anonymous_users())
+        data_connector_namespace = SubjectReference(
+            object=_AuthzConverter.user_namespace(data_connector.namespace.id)
+            if data_connector.namespace.kind == NamespaceKind.user
+            else _AuthzConverter.group(cast(ULID, data_connector.namespace.underlying_resource_id))
+        )
+        data_connector_in_platform = Relationship(
+            resource=data_connector_res,
+            relation=_Relation.data_connector_platform,
+            subject=SubjectReference(object=self._platform),
+        )
+        data_connector_in_namespace = Relationship(
+            resource=data_connector_res, relation=_Relation.data_connector_namespace, subject=data_connector_namespace
+        )
+        relationships = [creator_is_owner, data_connector_in_platform, data_connector_in_namespace]
+        if data_connector.visibility == Visibility.PUBLIC:
+            all_users_are_viewers = Relationship(
+                resource=data_connector_res,
+                relation=_Relation.public_viewer.value,
+                subject=all_users,
+            )
+            all_anon_users_are_viewers = Relationship(
+                resource=data_connector_res,
+                relation=_Relation.public_viewer.value,
+                subject=all_anon_users,
+            )
+            relationships.extend([all_users_are_viewers, all_anon_users_are_viewers])
+        apply = WriteRelationshipsRequest(
+            updates=[
+                RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=i) for i in relationships
+            ]
+        )
+        undo = WriteRelationshipsRequest(
+            updates=[
+                RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=i) for i in relationships
+            ]
+        )
+        return _AuthzChange(apply=apply, undo=undo)
+
+    @_is_allowed_on_resource(Scope.DELETE, ResourceType.data_connector)
+    async def _remove_data_connector(
+        self, user: base_models.APIUser, data_connector: DataConnector, *, zed_token: ZedToken | None = None
+    ) -> _AuthzChange:
+        """Remove the relationships associated with the data connector."""
+        consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
+        rel_filter = RelationshipFilter(
+            resource_type=ResourceType.data_connector.value, optional_resource_id=str(data_connector.id)
+        )
+        responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
+            ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
+        )
+        rels: list[Relationship] = []
+        async for response in responses:
+            rels.append(response.relationship)
+        apply = WriteRelationshipsRequest(
+            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=i) for i in rels]
+        )
+        undo = WriteRelationshipsRequest(
+            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=i) for i in rels]
+        )
+        return _AuthzChange(apply=apply, undo=undo)
+
+    # NOTE changing visibility is the same access level as removal
+    @_is_allowed_on_resource(Scope.DELETE, ResourceType.data_connector)
+    async def _update_data_connector_visibility(
+        self, user: base_models.APIUser, data_connector: DataConnector, *, zed_token: ZedToken | None = None
+    ) -> _AuthzChange:
+        """Update the visibility of the data connector in the authorization database."""
+        data_connector_id_str = str(data_connector.id)
+        consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
+        data_connector_res = _AuthzConverter.data_connector(data_connector.id)
+        all_users_sub = SubjectReference(object=_AuthzConverter.all_users())
+        anon_users_sub = SubjectReference(object=_AuthzConverter.anonymous_users())
+        all_users_are_viewers = Relationship(
+            resource=data_connector_res,
+            relation=_Relation.public_viewer.value,
+            subject=all_users_sub,
+        )
+        anon_users_are_viewers = Relationship(
+            resource=data_connector_res,
+            relation=_Relation.public_viewer.value,
+            subject=anon_users_sub,
+        )
+        make_public = WriteRelationshipsRequest(
+            updates=[
+                RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=all_users_are_viewers),
+                RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=anon_users_are_viewers),
+            ]
+        )
+        make_private = WriteRelationshipsRequest(
+            updates=[
+                RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=all_users_are_viewers),
+                RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=anon_users_are_viewers),
+            ]
+        )
+        rel_filter = RelationshipFilter(
+            resource_type=ResourceType.data_connector.value,
+            optional_resource_id=data_connector_id_str,
+            optional_subject_filter=SubjectFilter(
+                subject_type=ResourceType.user.value, optional_subject_id=all_users_sub.object.object_id
+            ),
+        )
+        current_relation_users: ReadRelationshipsResponse | None = await anext(
+            aiter(
+                self.client.ReadRelationships(
+                    ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
+                )
+            ),
+            None,
+        )
+        rel_filter = RelationshipFilter(
+            resource_type=ResourceType.project.value,
+            optional_resource_id=data_connector_id_str,
+            optional_subject_filter=SubjectFilter(
+                subject_type=ResourceType.anonymous_user.value,
+                optional_subject_id=anon_users_sub.object.object_id,
+            ),
+        )
+        current_relation_anon_users: ReadRelationshipsResponse | None = await anext(
+            aiter(
+                self.client.ReadRelationships(
+                    ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
+                )
+            ),
+            None,
+        )
+        data_connector_is_public_for_users = (
+            current_relation_users is not None
+            and current_relation_users.relationship.subject.object.object_type == ResourceType.user.value
+            and current_relation_users.relationship.subject.object.object_id == all_users_sub.object.object_id
+        )
+        data_connector_is_public_for_anon_users = (
+            current_relation_anon_users is not None
+            and current_relation_anon_users.relationship.subject.object.object_type == ResourceType.anonymous_user.value
+            and current_relation_anon_users.relationship.subject.object.object_id == anon_users_sub.object.object_id,
+        )
+        data_connector_already_public = data_connector_is_public_for_users and data_connector_is_public_for_anon_users
+        data_connector_already_private = not data_connector_already_public
+        match data_connector.visibility:
+            case Visibility.PUBLIC:
+                if data_connector_already_public:
+                    return _AuthzChange(apply=WriteRelationshipsRequest(), undo=WriteRelationshipsRequest())
+                return _AuthzChange(apply=make_public, undo=make_private)
+            case Visibility.PRIVATE:
+                if data_connector_already_private:
+                    return _AuthzChange(apply=WriteRelationshipsRequest(), undo=WriteRelationshipsRequest())
+                return _AuthzChange(apply=make_private, undo=make_public)
+        raise errors.ProgrammingError(
+            message=f"Encountered unknown data connector visibility {data_connector.visibility} when trying to "
+            f"make a visibility change for data connector with ID {data_connector.id}",
+        )
+
+    # NOTE changing namespace is the same access level as removal
+    @_is_allowed_on_resource(Scope.DELETE, ResourceType.data_connector)
+    async def _update_data_connector_namespace(
+        self, user: base_models.APIUser, data_connector: DataConnector, *, zed_token: ZedToken | None = None
+    ) -> _AuthzChange:
+        """Update the namespace of the data connector in the authorization database."""
+        consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
+        data_connector_res = _AuthzConverter.data_connector(data_connector.id)
+        data_connector_filter = RelationshipFilter(
+            resource_type=ResourceType.data_connector.value,
+            optional_resource_id=str(data_connector.id),
+            optional_relation=_Relation.data_connector_namespace.value,
+        )
+        current_namespace: ReadRelationshipsResponse | None = await anext(
+            aiter(
+                self.client.ReadRelationships(
+                    ReadRelationshipsRequest(relationship_filter=data_connector_filter, consistency=consistency)
+                )
+            ),
+            None,
+        )
+        if not current_namespace:
+            raise errors.ProgrammingError(
+                message=f"The data connector with ID {data_connector.id} whose namespace is being updated "
+                "does not currently have a namespace."
+            )
+        if current_namespace.relationship.subject.object.object_id == data_connector.namespace.id:
+            return _AuthzChange()
+        new_namespace_sub = (
+            SubjectReference(object=_AuthzConverter.group(data_connector.namespace.id))
+            if data_connector.namespace.kind == NamespaceKind.group
+            else SubjectReference(object=_AuthzConverter.user_namespace(data_connector.namespace.id))
+        )
+        old_namespace_sub = (
+            SubjectReference(
+                object=_AuthzConverter.group(ULID.from_str(current_namespace.relationship.subject.object.object_id))
+            )
+            if current_namespace.relationship.subject.object.object_type == ResourceType.group.value
+            else SubjectReference(
+                object=_AuthzConverter.user_namespace(
+                    ULID.from_str(current_namespace.relationship.subject.object.object_id)
+                )
+            )
+        )
+        new_namespace = Relationship(
+            resource=data_connector_res,
+            relation=_Relation.data_connector_namespace.value,
+            subject=new_namespace_sub,
+        )
+        old_namespace = Relationship(
+            resource=data_connector_res,
+            relation=_Relation.data_connector_namespace.value,
+            subject=old_namespace_sub,
+        )
+        apply_change = WriteRelationshipsRequest(
+            updates=[
+                RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=new_namespace),
+            ]
+        )
+        undo_change = WriteRelationshipsRequest(
+            updates=[
+                RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=old_namespace),
+            ]
+        )
+        return _AuthzChange(apply=apply_change, undo=undo_change)
