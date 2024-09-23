@@ -32,11 +32,14 @@ class PurePosixPathType(types.TypeDecorator):
     impl = types.String
     cache_ok = True
 
-    def process_bind_param(self, value: PurePosixPath | None, dialect: Dialect) -> str | None:
+    def process_bind_param(self, value: PurePosixPath | str | None, dialect: Dialect) -> str | None:
         """Transform value for storing in the database."""
         if value is None:
             return None
-        return value.as_posix()
+        elif isinstance(value, str):
+            return value
+        else:
+            return value.as_posix()
 
     def process_result_value(self, value: str | None, dialect: Dialect) -> PurePosixPath | None:
         """Transform string from database into PosixPath."""

@@ -1,241 +1,216 @@
-"""An abstraction over the k8s client and the k8s-watcher."""
+"""An abstraction over the kr8s kubernetes client and the k8s-watcher."""
 
 import base64
 import json
-from typing import Any, Optional, cast
+import logging
+from contextlib import suppress
+from typing import Any, Generic, Optional, TypeVar, cast
 from urllib.parse import urljoin
 
-import requests
-from kubernetes import client
-from kubernetes.client.exceptions import ApiException
-from kubernetes.client.models import V1Container, V1DeleteOptions
-from kubernetes.config import load_config
-from kubernetes.config.config_exception import ConfigException
-from kubernetes.config.incluster_config import SERVICE_CERT_FILENAME, SERVICE_TOKEN_FILENAME, InClusterConfigLoader
-from sanic.log import logger
+import httpx
+from kr8s import NotFoundError, ServerError
+from kr8s.asyncio.objects import APIObject, Pod, Secret, StatefulSet
+from kubernetes.client import ApiClient, V1Container, V1Secret
 
-from ...errors.intermittent import (
+from renku_data_services.errors import errors
+from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
+from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
+from renku_data_services.notebooks.errors.intermittent import (
     CannotStartServerError,
     DeleteServerError,
     IntermittentError,
     JSCacheError,
     PatchServerError,
 )
-from ...errors.programming import ProgrammingError
-from ...errors.user import MissingResourceError
-from ...util.kubernetes_ import find_env_var
-from ...util.retries import retry_with_exponential_backoff
-from .auth import GitlabToken, RenkuTokens
+from renku_data_services.notebooks.errors.programming import ProgrammingError
+from renku_data_services.notebooks.errors.user import MissingResourceError
+from renku_data_services.notebooks.util.kubernetes_ import find_env_var
+from renku_data_services.notebooks.util.retries import (
+    retry_with_exponential_backoff_async,
+)
+
+sanitize_for_serialization = ApiClient().sanitize_for_serialization
 
 
-class NamespacedK8sClient:
+# NOTE The type ignore below is because the kr8s library has no type stubs, they claim pyright better handles type hints
+class AmaltheaSessionV1Alpha1Kr8s(APIObject):  # type: ignore
+    """Spec for amalthea sessions used by the k8s client."""
+
+    kind: str = "AmaltheaSession"
+    version: str = "amalthea.dev/v1alpha1"
+    namespaced: bool = True
+    plural: str = "amaltheasessions"
+    singular: str = "amaltheasession"
+    scalable: bool = False
+    endpoint: str = "amaltheasessions"
+
+
+# NOTE The type ignore below is because the kr8s library has no type stubs, they claim pyright better handles type hints
+class JupyterServerV1Alpha1Kr8s(APIObject):  # type: ignore
+    """Spec for jupyter servers used by the k8s client."""
+
+    kind: str = "JupyterServer"
+    version: str = "amalthea.dev/v1alpha1"
+    namespaced: bool = True
+    plural: str = "jupyterservers"
+    singular: str = "jupyterserver"
+    scalable: bool = False
+    endpoint: str = "jupyterservers"
+
+
+_SessionType = TypeVar("_SessionType", JupyterServerV1Alpha1, AmaltheaSessionV1Alpha1)
+_Kr8sType = TypeVar("_Kr8sType", JupyterServerV1Alpha1Kr8s, AmaltheaSessionV1Alpha1Kr8s)
+
+
+class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
     """A kubernetes client that operates in a specific namespace."""
 
-    def __init__(
-        self,
-        namespace: str,
-        amalthea_group: str,
-        amalthea_version: str,
-        amalthea_plural: str,
-    ):
+    def __init__(self, namespace: str, server_type: type[_SessionType], kr8s_type: type[_Kr8sType]):
         self.namespace = namespace
-        self.amalthea_group = amalthea_group
-        self.amalthea_version = amalthea_version
-        self.amalthea_plural = amalthea_plural
-        # NOTE: Try to load in-cluster config first, if that fails try to load kube config
-        try:
-            InClusterConfigLoader(
-                token_filename=SERVICE_TOKEN_FILENAME,
-                cert_filename=SERVICE_CERT_FILENAME,
-            ).load_and_set()
-        except ConfigException:
-            load_config()
-        self._custom_objects = client.CustomObjectsApi(client.ApiClient())
-        self._custom_objects_patch = client.CustomObjectsApi(client.ApiClient())
-        self._custom_objects_patch.api_client.set_default_header("Content-Type", "application/json-patch+json")
-        self._core_v1 = client.CoreV1Api()
-        self._apps_v1 = client.AppsV1Api()
+        self.server_type: type[_SessionType] = server_type
+        self._kr8s_type: type[_Kr8sType] = kr8s_type
+        if (self.server_type == AmaltheaSessionV1Alpha1 and self._kr8s_type == JupyterServerV1Alpha1Kr8s) or (
+            self.server_type == JupyterServerV1Alpha1 and self._kr8s_type == AmaltheaSessionV1Alpha1Kr8s
+        ):
+            raise errors.ProgrammingError(message="Incompatible manifest and client types in k8s client")
+        self.sanitize = ApiClient().sanitize_for_serialization
 
-    def _get_container_logs(
-        self, pod_name: str, container_name: str, max_log_lines: Optional[int] = None
-    ) -> Optional[str]:
-        try:
-            logs = cast(
-                str,
-                self._core_v1.read_namespaced_pod_log(
-                    pod_name,
-                    self.namespace,
-                    container=container_name,
-                    tail_lines=max_log_lines,
-                    timestamps=True,
-                ),
-            )
-        except ApiException as err:
-            if err.status in [400, 404]:
-                return None  # container does not exist or is not ready yet
-            else:
-                raise IntermittentError(f"Logs cannot be read for pod {pod_name}, container {container_name}.")
-        else:
-            return logs
-
-    def get_pod_logs(self, name: str, containers: list[str], max_log_lines: Optional[int] = None) -> dict[str, str]:
+    async def get_pod_logs(self, name: str, max_log_lines: Optional[int] = None) -> dict[str, str]:
         """Get the logs of all containers in the session."""
-        output = {}
+        pod = cast(Pod, await Pod.get(name=name, namespace=self.namespace))
+        logs: dict[str, str] = {}
+        containers = [i.name for i in pod.spec.containers] + [i.name for i in pod.spec.initContainers]
         for container in containers:
-            logs = self._get_container_logs(pod_name=name, container_name=container, max_log_lines=max_log_lines)
-            if logs:
-                output[container] = logs
-        return output
+            try:
+                # NOTE: calling pod.logs without a container name set crashes the library
+                clogs: list[str] = [i async for i in pod.logs(container=container, tail_lines=max_log_lines)]
+            except NotFoundError:
+                raise errors.MissingResourceError(message=f"The session pod {name} does not exist.")
+            except ServerError as err:
+                if err.status == 404:
+                    raise errors.MissingResourceError(message=f"The session pod {name} does not exist.")
+                raise
+            else:
+                logs[container] = "\n".join(clogs)
+        return logs
 
-    def get_secret(self, name: str) -> Optional[dict[str, Any]]:
+    async def get_secret(self, name: str) -> Secret | None:
         """Read a specific secret from the cluster."""
         try:
-            secret = cast(dict[str, Any], self._core_v1.read_namespaced_secret(name, self.namespace))
-        except client.rest.ApiException:
+            secret = await Secret.get(name, self.namespace)
+        except NotFoundError:
             return None
         return secret
 
-    def create_server(self, manifest: dict[str, Any]) -> dict[str, Any]:
+    async def create_server(self, manifest: _SessionType) -> _SessionType:
         """Create a jupyter server in the cluster."""
-        server_name = manifest.get("metadata", {}).get("name")
+        # NOTE: You have to exclude none when using model dump below because otherwise we get
+        # namespace=null which seems to break the kr8s client or simply k8s does not translate
+        # namespace = null to the default namespace.
+        manifest.metadata.namespace = self.namespace
+        js = await self._kr8s_type(manifest.model_dump(exclude_none=True, mode="json"))
+        server_name = manifest.metadata.name
         try:
-            self._custom_objects.create_namespaced_custom_object(
-                group=self.amalthea_group,
-                version=self.amalthea_version,
-                namespace=self.namespace,
-                plural=self.amalthea_plural,
-                body=manifest,
-            )
-        except ApiException as e:
-            logger.exception(f"Cannot start server {server_name} because of {e}")
+            await js.create()
+        except ServerError as e:
+            logging.exception(f"Cannot start server {server_name} because of {e}")
             raise CannotStartServerError(
                 message=f"Cannot start the session {server_name}",
             )
+        # NOTE: If refresh is not called then upon creating the object the status is blank
+        await js.refresh()
         # NOTE: We wait for the cache to sync with the newly created server
         # If not then the user will get a non-null response from the POST request but
         # then immediately after a null response because the newly created server has
         # not made it into the cache. With this we wait for the cache to catch up
         # before we send the response from the POST request out. Exponential backoff
         # is used to avoid overwhelming the cache.
-        server = retry_with_exponential_backoff(lambda x: x is None)(self.get_server)(server_name)
+        server = await retry_with_exponential_backoff_async(lambda x: x is None)(self.get_server)(server_name)
         if server is None:
             raise CannotStartServerError(message=f"Cannot start the session {server_name}")
         return server
 
-    def patch_server(self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]]) -> dict[str, Any]:
+    async def patch_server(self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]]) -> _SessionType:
         """Patch the server."""
+        server = await self._kr8s_type(dict(metadata=dict(name=server_name, namespace=self.namespace)))
+        patch_type: str | None = None  # rfc7386 patch
+        if isinstance(patch, list):
+            patch_type = "json"  # rfc6902 patch
         try:
-            if isinstance(patch, list):  # noqa: SIM108
-                # NOTE: The _custom_objects_patch will only accept rfc6902 json-patch.
-                # We can recognize the type of patch because this is the only one that uses a list
-                client = self._custom_objects_patch
-            else:
-                # NOTE: The _custom_objects will accept the usual rfc7386 merge patches
-                client = self._custom_objects
-
-            server = cast(
-                dict[str, Any],
-                client.patch_namespaced_custom_object(
-                    group=self.amalthea_group,
-                    version=self.amalthea_version,
-                    namespace=self.namespace,
-                    plural=self.amalthea_plural,
-                    name=server_name,
-                    body=patch,
-                ),
-            )
-
-        except ApiException as e:
-            logger.exception(f"Cannot patch server {server_name} because of {e}")
+            await server.patch(patch, type=patch_type)
+        except ServerError as e:
+            logging.exception(f"Cannot patch server {server_name} because of {e}")
             raise PatchServerError()
 
-        return server
+        return self.server_type.model_validate(server.to_dict())
 
-    def patch_statefulset(
-        self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]] | client.V1StatefulSet
-    ) -> client.V1StatefulSet | None:
+    async def patch_statefulset(
+        self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]]
+    ) -> StatefulSet | None:
         """Patch a statefulset."""
+        sts = await StatefulSet(dict(metadata=dict(name=server_name, namespace=self.namespace)))
+        patch_type: str | None = None  # rfc7386 patch
+        if isinstance(patch, list):
+            patch_type = "json"  # rfc6902 patch
         try:
-            ss = self._apps_v1.patch_namespaced_stateful_set(
-                server_name,
-                self.namespace,
-                patch,
-            )
-        except ApiException as err:
+            await sts.patch(patch, type=patch_type)
+        except ServerError as err:
             if err.status == 404:
                 # NOTE: It can happen potentially that another request or something else
                 # deleted the session as this request was going on, in this case we ignore
                 # the missing statefulset
                 return None
             raise
-        return ss
+        return sts
 
-    def delete_server(self, server_name: str, forced: bool = False) -> Any:
+    async def delete_server(self, server_name: str) -> None:
         """Delete the server."""
+        server = await self._kr8s_type(dict(metadata=dict(name=server_name, namespace=self.namespace)))
         try:
-            status = self._custom_objects.delete_namespaced_custom_object(
-                group=self.amalthea_group,
-                version=self.amalthea_version,
-                namespace=self.namespace,
-                plural=self.amalthea_plural,
-                name=server_name,
-                grace_period_seconds=0 if forced else None,
-                body=V1DeleteOptions(propagation_policy="Foreground"),
-            )
-        except ApiException as e:
-            logger.exception(f"Cannot delete server {server_name} because of {e}")
+            await server.delete(propagation_policy="Foreground")
+        except ServerError as e:
+            logging.exception(f"Cannot delete server {server_name} because of {e}")
             raise DeleteServerError()
-        return status
+        return None
 
-    def get_server(self, name: str) -> Optional[dict[str, Any]]:
+    async def get_server(self, name: str) -> _SessionType | None:
         """Get a specific JupyterServer object."""
         try:
-            js = cast(
-                dict[str, Any],
-                self._custom_objects.get_namespaced_custom_object(
-                    name=name,
-                    group=self.amalthea_group,
-                    version=self.amalthea_version,
-                    namespace=self.namespace,
-                    plural=self.amalthea_plural,
-                ),
-            )
-        except ApiException as err:
+            server = await self._kr8s_type.get(name=name, namespace=self.namespace)
+        except NotFoundError:
+            return None
+        except ServerError as err:
             if err.status not in [400, 404]:
-                logger.exception(f"Cannot get server {name} because of {err}")
+                logging.exception(f"Cannot get server {name} because of {err}")
                 raise IntermittentError(f"Cannot get server {name} from the k8s API.")
             return None
-        return js
+        return self.server_type.model_validate(server.to_dict())
 
-    def list_servers(self, label_selector: Optional[str] = None) -> list[dict[str, Any]]:
+    async def list_servers(self, label_selector: Optional[str] = None) -> list[_SessionType]:
         """Get a list of k8s jupyterserver objects for a specific user."""
         try:
-            jss = self._custom_objects.list_namespaced_custom_object(
-                group=self.amalthea_group,
-                version=self.amalthea_version,
-                namespace=self.namespace,
-                plural=self.amalthea_plural,
-                label_selector=label_selector,
-            )
-        except ApiException as err:
+            servers = await self._kr8s_type.list(namespace=self.namespace, label_selector=label_selector)
+        except ServerError as err:
             if err.status not in [400, 404]:
-                logger.exception(f"Cannot list servers because of {err}")
+                logging.exception(f"Cannot list servers because of {err}")
                 raise IntermittentError(f"Cannot list servers from the k8s API with selector {label_selector}.")
             return []
-        return cast(list[dict[str, Any]], jss.get("items", []))
+        output: list[_SessionType] = (
+            [self.server_type.model_validate(servers.to_dict())]
+            if isinstance(servers, APIObject)
+            else [self.server_type.model_validate(server.to_dict()) for server in servers]
+        )
+        return output
 
-    def patch_image_pull_secret(self, server_name: str, gitlab_token: GitlabToken) -> None:
+    async def patch_image_pull_secret(self, server_name: str, gitlab_token: GitlabToken) -> None:
         """Patch the image pull secret used in a Renku session."""
         secret_name = f"{server_name}-image-secret"
         try:
-            secret = self._core_v1.read_namespaced_secret(secret_name, self.namespace)
-        except ApiException as err:
-            if err.status == 404:
-                # NOTE: In many cases the session does not have an image pull secret
-                # this happens when the repo for the project is public so images are public
-                return
-            raise
-        old_docker_config = json.loads(base64.b64decode(secret.data[".dockerconfigjson"]).decode())
+            secret = cast(Secret, await Secret.get(name=secret_name, namespace=self.namespace))
+        except NotFoundError:
+            return None
+        secret_data = secret.data.to_dict()
+        old_docker_config = json.loads(base64.b64decode(secret_data[".dockerconfigjson"]).decode())
         hostname = next(iter(old_docker_config["auths"].keys()), None)
         if not hostname:
             raise ProgrammingError(
@@ -259,26 +234,17 @@ class NamespacedK8sClient:
                 "value": base64.b64encode(json.dumps(new_docker_config).encode()).decode(),
             }
         ]
-        self._core_v1.patch_namespaced_secret(
-            secret_name,
-            self.namespace,
-            patch,
-        )
+        await secret.patch(patch, type="json")
 
-    def patch_statefulset_tokens(self, name: str, renku_tokens: RenkuTokens) -> None:
+    async def patch_statefulset_tokens(self, name: str, renku_tokens: RenkuTokens) -> None:
         """Patch the Renku and Gitlab access tokens that are used in the session statefulset."""
         try:
-            sts = self._apps_v1.read_namespaced_stateful_set(name, self.namespace)
-        except ApiException as err:
-            if err.status == 404:
-                # NOTE: It can happen potentially that another request or something else
-                # deleted the session as this request was going on, in this case we ignore
-                # the missing statefulset
-                return
-            raise
+            sts = cast(StatefulSet, await StatefulSet.get(name=name, namespace=self.namespace))
+        except NotFoundError:
+            return None
 
-        containers: list[V1Container] = sts.spec.template.spec.containers
-        init_containers: list[V1Container] = sts.spec.template.spec.init_containers
+        containers: list[V1Container] = [V1Container(**i) for i in sts.spec.template.spec.containers]
+        init_containers: list[V1Container] = [V1Container(**i) for i in sts.spec.template.spec.init_containers]
 
         git_proxy_container_index, git_proxy_container = next(
             ((i, c) for i, c in enumerate(containers) if c.name == "git-proxy"),
@@ -359,50 +325,61 @@ class NamespacedK8sClient:
             )
 
         if not patches:
-            return
+            return None
 
-        self._apps_v1.patch_namespaced_stateful_set(
-            name,
-            self.namespace,
-            patches,
-        )
+        await sts.patch(patches, type="json")
+
+    async def create_secret(self, secret: V1Secret) -> V1Secret:
+        """Create a new secret."""
+
+        new_secret = await Secret(self.sanitize(secret), self.namespace)
+        await new_secret.create()
+        return V1Secret(metadata=new_secret.metadata, data=new_secret.data, type=new_secret.raw.get("type"))
+
+    async def delete_secret(self, name: str) -> None:
+        """Delete a secret."""
+        secret = await Secret(dict(metadata=dict(name=name, namespace=self.namespace)))
+        with suppress(NotFoundError):
+            await secret.delete()
+        return None
 
 
-class JsServerCache:
+class ServerCache(Generic[_SessionType]):
     """Utility class for calling the jupyter server cache."""
 
-    def __init__(self, url: str):
+    def __init__(self, url: str, server_type: type[_SessionType]):
         self.url = url
+        self.client = httpx.AsyncClient()
+        self.server_type: type[_SessionType] = server_type
 
-    def list_servers(self, safe_username: str) -> list[dict[str, Any]]:
+    async def list_servers(self, safe_username: str) -> list[_SessionType]:
         """List the jupyter servers."""
         url = urljoin(self.url, f"/users/{safe_username}/servers")
         try:
-            res = requests.get(url, timeout=10)
-            res.raise_for_status()
-        except requests.HTTPError as err:
-            logger.warning(
+            res = await self.client.get(url, timeout=10)
+        except httpx.RequestError as err:
+            logging.warning(f"Jupyter server cache at {url} cannot be reached: {err}")
+            raise JSCacheError("The jupyter server cache is not available")
+        if res.status_code != 200:
+            logging.warning(
                 f"Listing servers at {url} from "
                 f"jupyter server cache failed with status code: {res.status_code} "
-                f"and error: {err}"
+                f"and body: {res.text}"
             )
-            raise JSCacheError(f"The JSCache produced an unexpected status code: {err}") from err
-        except requests.RequestException as err:
-            logger.warning(f"Jupyter server cache at {url} cannot be reached: {err}")
-            raise JSCacheError("The jupyter server cache is not available") from err
+            raise JSCacheError(f"The JSCache produced an unexpected status code: {res.status_code}")
 
-        return cast(list[dict[str, Any]], res.json())
+        return [self.server_type.model_validate(i) for i in res.json()]
 
-    def get_server(self, name: str) -> Optional[dict[str, Any]]:
+    async def get_server(self, name: str) -> _SessionType | None:
         """Get a specific jupyter server."""
         url = urljoin(self.url, f"/servers/{name}")
         try:
-            res = requests.get(url, timeout=10)
-        except requests.exceptions.RequestException as err:
-            logger.warning(f"Jupyter server cache at {url} cannot be reached: {err}")
+            res = await self.client.get(url, timeout=10)
+        except httpx.RequestError as err:
+            logging.warning(f"Jupyter server cache at {url} cannot be reached: {err}")
             raise JSCacheError("The jupyter server cache is not available")
         if res.status_code != 200:
-            logger.warning(
+            logging.warning(
                 f"Reading server at {url} from "
                 f"jupyter server cache failed with status code: {res.status_code} "
                 f"and body: {res.text}"
@@ -413,163 +390,116 @@ class JsServerCache:
             return None
         if len(output) > 1:
             raise ProgrammingError(f"Expected to find 1 server when getting server {name}, " f"found {len(output)}.")
-        return cast(dict[str, Any], output[0])
+        return self.server_type.model_validate(output[0])
 
 
-class K8sClient:
+class K8sClient(Generic[_SessionType, _Kr8sType]):
     """The K8s client that combines a namespaced client and a jupyter server cache."""
 
     def __init__(
         self,
-        js_cache: JsServerCache,
-        renku_ns_client: NamespacedK8sClient,
+        cache: ServerCache[_SessionType],
+        renku_ns_client: NamespacedK8sClient[_SessionType, _Kr8sType],
         username_label: str,
-        session_ns_client: Optional[NamespacedK8sClient] = None,
     ):
-        self.js_cache = js_cache
-        self.renku_ns_client = renku_ns_client
+        self.cache: ServerCache[_SessionType] = cache
+        self.renku_ns_client: NamespacedK8sClient[_SessionType, _Kr8sType] = renku_ns_client
         self.username_label = username_label
-        self.session_ns_client = session_ns_client
         if not self.username_label:
             raise ProgrammingError("username_label has to be provided to K8sClient")
+        self.sanitize = self.renku_ns_client.sanitize
 
-    def list_servers(self, safe_username: str) -> list[dict[str, Any]]:
+    async def list_servers(self, safe_username: str) -> list[_SessionType]:
         """Get a list of servers that belong to a user.
 
         Attempt to use the cache first but if the cache fails then use the k8s API.
         """
         try:
-            return self.js_cache.list_servers(safe_username)
+            return await self.cache.list_servers(safe_username)
         except JSCacheError:
-            logger.warning(f"Skipping the cache to list servers for user: {safe_username}")
+            logging.warning(f"Skipping the cache to list servers for user: {safe_username}")
             label_selector = f"{self.username_label}={safe_username}"
-            return self.renku_ns_client.list_servers(label_selector) + (
-                self.session_ns_client.list_servers(label_selector) if self.session_ns_client is not None else []
-            )
+            return await self.renku_ns_client.list_servers(label_selector)
 
-    def get_server(self, name: str, safe_username: str) -> Optional[dict[str, Any]]:
+    async def get_server(self, name: str, safe_username: str) -> _SessionType | None:
         """Attempt to get a specific server by name from the cache.
 
         If the request to the cache fails, fallback to the k8s API.
         """
         server = None
         try:
-            server = self.js_cache.get_server(name)
+            server = await self.cache.get_server(name)
         except JSCacheError:
-            output = []
-            res = None
-            if self.session_ns_client is not None:
-                res = self.session_ns_client.get_server(name)
-                if res:
-                    output.append(res)
-            res = self.renku_ns_client.get_server(name)
-            if res:
-                output.append(res)
-            if len(output) > 1:
-                raise ProgrammingError(
-                    "Expected less than two results for searching for " f"server {name}, but got {len(output)}"
-                )
-            if len(output) == 0:
-                return None
-            server = output[0]
+            server = await self.renku_ns_client.get_server(name)
 
-        if server and server.get("metadata", {}).get("labels", {}).get(self.username_label) != safe_username:
+        if server and server.metadata and server.metadata.labels.get(self.username_label) != safe_username:
             return None
         return server
 
-    def get_server_logs(
+    async def get_server_logs(
         self, server_name: str, safe_username: str, max_log_lines: Optional[int] = None
     ) -> dict[str, str]:
         """Get the logs from the server."""
-        server = self.get_server(server_name, safe_username)
-        if server is None:
-            raise MissingResourceError(
-                f"Cannot find server {server_name} for user {safe_username} to read the logs from."
-            )
-        containers = list(server.get("status", {}).get("containerStates", {}).get("init", {}).keys()) + list(
-            server.get("status", {}).get("containerStates", {}).get("regular", {}).keys()
-        )
-        namespace = server.get("metadata", {}).get("namespace")
+        # NOTE: this get_server ensures the user has access to the server without it you could read someone elses logs
+        _ = await self.get_server(server_name, safe_username)
         pod_name = f"{server_name}-0"
-        if namespace == self.renku_ns_client.namespace:
-            return self.renku_ns_client.get_pod_logs(pod_name, containers, max_log_lines)
-        if self.session_ns_client is None:
-            raise MissingResourceError(
-                f"Cannot find server {server_name} for user {safe_username} to read the logs from."
-            )
-        return self.session_ns_client.get_pod_logs(pod_name, containers, max_log_lines)
+        return await self.renku_ns_client.get_pod_logs(pod_name, max_log_lines)
 
-    def get_secret(self, name: str) -> Optional[dict[str, Any]]:
+    async def _get_secret(self, name: str) -> Secret | None:
         """Get a specific secret."""
-        if self.session_ns_client is not None:
-            secret = self.session_ns_client.get_secret(name)
-            if secret:
-                return secret
-        return self.renku_ns_client.get_secret(name)
+        return await self.renku_ns_client.get_secret(name)
 
-    def create_server(self, manifest: dict[str, Any], safe_username: str) -> dict[str, Any]:
+    async def create_server(self, manifest: _SessionType, safe_username: str) -> _SessionType:
         """Create a server."""
-        server_name = manifest.get("metadata", {}).get("name")
-        server = self.get_server(server_name, safe_username)
+        server_name = manifest.metadata.name
+        server = await self.get_server(server_name, safe_username)
         if server:
             # NOTE: server already exists
             return server
-        if not self.session_ns_client:
-            return self.renku_ns_client.create_server(manifest)
-        return self.session_ns_client.create_server(manifest)
+        manifest.metadata.labels[self.username_label] = safe_username
+        return await self.renku_ns_client.create_server(manifest)
 
-    def patch_server(
+    async def patch_server(
         self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
-    ) -> dict[str, Any]:
+    ) -> _SessionType:
         """Patch a server."""
-        server = self.get_server(server_name, safe_username)
+        server = await self.get_server(server_name, safe_username)
         if not server:
             raise MissingResourceError(
                 f"Cannot find server {server_name} for user " f"{safe_username} in order to patch it."
             )
+        return await self.renku_ns_client.patch_server(server_name=server_name, patch=patch)
 
-        namespace = server.get("metadata", {}).get("namespace")
-
-        if namespace == self.renku_ns_client.namespace:
-            return self.renku_ns_client.patch_server(server_name=server_name, patch=patch)
-        if self.session_ns_client is None:
-            raise MissingResourceError(
-                f"Cannot find server {server_name} for user " f"{safe_username} in order to patch it."
-            )
-        return self.session_ns_client.patch_server(server_name=server_name, patch=patch)
-
-    def patch_statefulset(
+    async def patch_statefulset(
         self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]]
-    ) -> client.V1StatefulSet | None:
+    ) -> StatefulSet | None:
         """Patch a statefulset."""
-        client = self.session_ns_client if self.session_ns_client else self.renku_ns_client
-        return client.patch_statefulset(server_name=server_name, patch=patch)
+        client = self.renku_ns_client
+        return await client.patch_statefulset(server_name=server_name, patch=patch)
 
-    def delete_server(self, server_name: str, safe_username: str, forced: bool = False) -> None:
+    async def delete_server(self, server_name: str, safe_username: str) -> None:
         """Delete the server."""
-        server = self.get_server(server_name, safe_username)
+        server = await self.get_server(server_name, safe_username)
         if not server:
-            raise MissingResourceError(
-                f"Cannot find server {server_name} for user " f"{safe_username} in order to delete it."
-            )
-        namespace = server.get("metadata", {}).get("namespace")
-        if namespace == self.renku_ns_client.namespace:
-            self.renku_ns_client.delete_server(server_name, forced)
-        if self.session_ns_client is None:
-            raise MissingResourceError(
-                f"Cannot find server {server_name} for user " f"{safe_username} in order to delete it."
-            )
-        self.session_ns_client.delete_server(server_name, forced)
+            return None
+        await self.renku_ns_client.delete_server(server_name)
+        return None
 
-    def patch_tokens(self, server_name: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken) -> None:
+    async def patch_tokens(self, server_name: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken) -> None:
         """Patch the Renku and Gitlab access tokens used in a session."""
-        client = self.session_ns_client if self.session_ns_client else self.renku_ns_client
-        client.patch_statefulset_tokens(server_name, renku_tokens)
-        client.patch_image_pull_secret(server_name, gitlab_token)
+        client = self.renku_ns_client
+        await client.patch_statefulset_tokens(server_name, renku_tokens)
+        await client.patch_image_pull_secret(server_name, gitlab_token)
 
     @property
     def preferred_namespace(self) -> str:
         """Get the preferred namespace for creating jupyter servers."""
-        if self.session_ns_client is not None:
-            return self.session_ns_client.namespace
         return self.renku_ns_client.namespace
+
+    async def create_secret(self, secret: V1Secret) -> V1Secret:
+        """Create a secret."""
+        return await self.renku_ns_client.create_secret(secret)
+
+    async def delete_secret(self, name: str) -> None:
+        """Delete a secret."""
+        return await self.renku_ns_client.delete_secret(name)
