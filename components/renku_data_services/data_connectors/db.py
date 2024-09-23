@@ -325,6 +325,7 @@ class DataConnectorRepository:
                 select(schemas.DataConnectorSecretORM)
                 .where(schemas.DataConnectorSecretORM.user_id == user.id)
                 .where(schemas.DataConnectorSecretORM.data_connector_id == data_connector_id)
+                .where(schemas.DataConnectorSecretORM.secret_id == secrets_schemas.SecretORM.id)
                 .where(secrets_schemas.SecretORM.user_id == user.id)
             )
             results = await session.scalars(stmt)
@@ -349,6 +350,7 @@ class DataConnectorRepository:
                 select(schemas.DataConnectorSecretORM)
                 .where(schemas.DataConnectorSecretORM.user_id == user.id)
                 .where(schemas.DataConnectorSecretORM.data_connector_id == data_connector_id)
+                .where(schemas.DataConnectorSecretORM.secret_id == secrets_schemas.SecretORM.id)
                 .where(secrets_schemas.SecretORM.user_id == user.id)
             )
             result = await session.scalars(stmt)
@@ -356,6 +358,8 @@ class DataConnectorRepository:
             existing_secrets_as_dict = {s.name: s for s in existing_secrets}
 
             all_secrets = []
+
+            print(existing_secrets_as_dict)
 
             for name, value in secrets_as_dict.items():
                 encrypted_value, encrypted_key = await encrypt_user_secret(
