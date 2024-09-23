@@ -19,48 +19,35 @@ from test.components.renku_data_services.storage_models.hypothesis import (
 from test.utils import create_storage
 
 
-def get_user(storage, valid: bool = True):
-    """Get an api user for a storage."""
-    if valid:
-        user = APIUser(
-            is_admin=True,
-            id="abcdefg",
-            access_token="abcdefg",
-            full_name="John Doe",  # nosec: B106
-        )
-        user._admin_project_id = storage.get("project_id")
-    else:
-        user = APIUser(
-            is_admin=True,
-            id="abcdefg",
-            access_token="abcdefg",
-            full_name="John Doe",  # nosec: B106
-        )
-        user._admin_project_id = storage.get("project_id") + "0"
-        user._member_project_id = storage.get("project_id") + "0"
-    return user
+@pytest.fixture()
+def user():
+    return APIUser(
+        is_admin=True,
+        id="abcdefg",
+        access_token="abcdefg",
+        full_name="John Doe",  # nosec: B106
+    )
 
 
 @given(storage=storage_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
-async def test_storage_insert_get(storage: dict[str, Any], app_config: Config) -> None:
+async def test_storage_insert_get(storage: dict[str, Any], app_config: Config, user: APIUser) -> None:
     run_migrations_for_app("common")
     storage_repo = app_config.storage_repo
     with contextlib.suppress(ValidationError, errors.ValidationError):
-        await create_storage(storage, storage_repo, user=get_user(storage))
+        await create_storage(storage, storage_repo, user=user)
 
 
 @given(storage=storage_strat(), new_source_path=a_path, new_target_path=a_path)
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_storage_update_path(
-    storage: dict[str, Any], new_source_path: str, new_target_path: str, app_config: Config
+    storage: dict[str, Any], new_source_path: str, new_target_path: str, app_config: Config, user: APIUser
 ) -> None:
     run_migrations_for_app("common")
     storage_repo = app_config.storage_repo
     try:
-        user = user = get_user(storage)
         inserted_storage = await create_storage(storage, storage_repo, user)
         assert inserted_storage.storage_id is not None
 
@@ -77,11 +64,12 @@ async def test_storage_update_path(
 @given(storage=storage_strat(), new_config=st.one_of(s3_configuration(), azure_configuration()))
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
-async def test_storage_update_config(storage: dict[str, Any], new_config: dict[str, Any], app_config: Config) -> None:
+async def test_storage_update_config(
+    storage: dict[str, Any], new_config: dict[str, Any], app_config: Config, user: APIUser
+) -> None:
     run_migrations_for_app("common")
     storage_repo = app_config.storage_repo
     try:
-        user = user = get_user(storage)
         inserted_storage = await create_storage(storage, storage_repo, user)
         assert inserted_storage.storage_id is not None
 
@@ -97,11 +85,10 @@ async def test_storage_update_config(storage: dict[str, Any], new_config: dict[s
 @given(storage=storage_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
-async def test_storage_delete(storage: dict[str, Any], app_config: Config) -> None:
+async def test_storage_delete(storage: dict[str, Any], app_config: Config, user: APIUser) -> None:
     run_migrations_for_app("common")
     storage_repo = app_config.storage_repo
     try:
-        user = user = get_user(storage)
         inserted_storage = await create_storage(storage, storage_repo, user)
         assert inserted_storage.storage_id is not None
         await storage_repo.delete_storage(storage_id=inserted_storage.storage_id, user=user)
