@@ -34,6 +34,8 @@ async def main_container(
     )
 
     prefix = "GIT_PROXY_"
+    git_providers = await server.git_providers()
+    repositories = await server.repositories()
     env = [
         client.V1EnvVar(name=f"{prefix}PORT", value=str(config.sessions.git_proxy.port)),
         client.V1EnvVar(name=f"{prefix}HEALTH_PORT", value=str(config.sessions.git_proxy.health_port)),
