@@ -120,7 +120,7 @@ class GroupsBP(CustomBlueprint):
         @only_authenticated
         @validate_body_root_model(json=apispec.GroupMemberPatchRequestList)
         async def _update_members(
-            request: Request, user: base_models.APIUser, slug: str, body: apispec.GroupMemberPatchRequestList
+            _: Request, user: base_models.APIUser, slug: str, body: apispec.GroupMemberPatchRequestList
         ) -> JSONResponse:
             members = [UnsavedMember(Role.from_group_role(member.role), member.id) for member in body.root]
             res = await self.group_repo.update_group_members(
