@@ -35,11 +35,11 @@ async def git_clone_container_v2(server: "UserServer") -> dict[str, Any] | None:
     env = [
         {
             "name": f"{prefix}WORKSPACE_MOUNT_PATH",
-            "value": server.workspace_mount_path.absolute().as_posix(),
+            "value": server.workspace_mount_path.as_posix(),
         },
         {
             "name": f"{prefix}MOUNT_PATH",
-            "value": server.work_dir.absolute().as_posix(),
+            "value": server.work_dir.as_posix(),
         },
         {
             "name": f"{prefix}LFS_AUTO_FETCH",
@@ -134,7 +134,7 @@ async def git_clone_container_v2(server: "UserServer") -> dict[str, Any] | None:
         },
         "volumeMounts": [
             {
-                "mountPath": server.workspace_mount_path.absolute().as_posix(),
+                "mountPath": server.workspace_mount_path.as_posix(),
                 "name": amalthea_session_work_volume,
             },
             *etc_cert_volume_mount,
@@ -161,11 +161,11 @@ async def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
     env = [
         {
             "name": f"{prefix}WORKSPACE_MOUNT_PATH",
-            "value": server.workspace_mount_path.absolute().as_posix(),
+            "value": server.workspace_mount_path.as_posix(),
         },
         {
             "name": f"{prefix}MOUNT_PATH",
-            "value": server.work_dir.absolute().as_posix(),
+            "value": server.work_dir.as_posix(),
         },
         {
             "name": f"{prefix}LFS_AUTO_FETCH",
@@ -260,7 +260,7 @@ async def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
         },
         "volumeMounts": [
             {
-                "mountPath": server.workspace_mount_path.absolute().as_posix(),
+                "mountPath": server.workspace_mount_path.as_posix(),
                 "name": "workspace",
             },
             *etc_cert_volume_mount,

@@ -3,7 +3,7 @@
 from abc import ABC
 from collections.abc import Sequence
 from itertools import chain
-from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
@@ -44,8 +44,8 @@ class UserServer(ABC):
         user_secrets: K8sUserSecrets | None,
         cloudstorage: Sequence[ICloudStorageRequest],
         k8s_client: K8sClient,
-        workspace_mount_path: Path,
-        work_dir: Path,
+        workspace_mount_path: PurePosixPath,
+        work_dir: PurePosixPath,
         config: _NotebooksConfig,
         internal_gitlab_user: APIUser,
         using_default_image: bool = False,
@@ -204,7 +204,7 @@ class UserServer(ABC):
                 "pvc": {
                     "enabled": True,
                     "storageClassName": self.config.sessions.storage.pvs_storage_class,
-                    "mountPath": self.workspace_mount_path.absolute().as_posix(),
+                    "mountPath": self.workspace_mount_path.as_posix(),
                 },
             }
         else:
@@ -213,7 +213,7 @@ class UserServer(ABC):
                 "size": storage_size,
                 "pvc": {
                     "enabled": False,
-                    "mountPath": self.workspace_mount_path.absolute().as_posix(),
+                    "mountPath": self.workspace_mount_path.as_posix(),
                 },
             }
         # Authentication
@@ -256,7 +256,7 @@ class UserServer(ABC):
                 "jupyterServer": {
                     "defaultUrl": self.server_options.default_url,
                     "image": self.image,
-                    "rootDir": self.work_dir.absolute().as_posix(),
+                    "rootDir": self.work_dir.as_posix(),
                     "resources": self.server_options.to_k8s_resources(
                         enforce_cpu_limits=self.config.sessions.enforce_cpu_limits
                     ),
@@ -375,8 +375,8 @@ class Renku1UserServer(UserServer):
         user_secrets: K8sUserSecrets | None,
         cloudstorage: Sequence[ICloudStorageRequest],
         k8s_client: K8sClient,
-        workspace_mount_path: Path,
-        work_dir: Path,
+        workspace_mount_path: PurePosixPath,
+        work_dir: PurePosixPath,
         config: _NotebooksConfig,
         gitlab_client: NotebooksGitlabClient,
         internal_gitlab_user: APIUser,
@@ -502,8 +502,8 @@ class Renku2UserServer(UserServer):
         user_secrets: K8sUserSecrets | None,
         cloudstorage: Sequence[ICloudStorageRequest],
         k8s_client: K8sClient,
-        workspace_mount_path: Path,
-        work_dir: Path,
+        workspace_mount_path: PurePosixPath,
+        work_dir: PurePosixPath,
         repositories: list[Repository],
         config: _NotebooksConfig,
         internal_gitlab_user: APIUser,
