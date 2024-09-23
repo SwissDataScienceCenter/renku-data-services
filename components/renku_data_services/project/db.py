@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import functools
-from asyncio import gather
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any, Concatenate, ParamSpec, TypeVar
@@ -56,9 +55,6 @@ class ProjectRepository:
         project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
 
         async with self.session_maker() as session:
-            # NOTE: without awaiting the connnection below there are failures about how a connection has not
-            # been established in the DB but the query is getting executed.
-            _ = await session.connection()
             stmt = select(schemas.ProjectORM)
             stmt = stmt.where(schemas.ProjectORM.id.in_(project_ids))
             if namespace:
@@ -70,9 +66,9 @@ class ProjectRepository:
             )
             if namespace:
                 stmt_count = _filter_by_namespace_slug(stmt_count, namespace)
-            results = await gather(session.execute(stmt), session.execute(stmt_count))
-            projects_orm = results[0].scalars().all()
-            total_elements = results[1].scalar() or 0
+            results = await session.scalars(stmt), await session.scalar(stmt_count)
+            projects_orm = results[0].all()
+            total_elements = results[1] or 0
             return [p.dump() for p in projects_orm], total_elements
 
     async def get_project(self, user: base_models.APIUser, project_id: ULID) -> models.Project:
