@@ -20,7 +20,10 @@
 		"ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {
 			"minikube": "none"
 		},
-		"ghcr.io/eitsupi/devcontainer-features/jq-likes:2": {},
+		"ghcr.io/eitsupi/devcontainer-features/jq-likes:2": {
+			"jqVersion": "latest",
+			"yqVersion": "latest"
+		},
 		"ghcr.io/dhoeric/features/k9s:1": {},
 		"ghcr.io/EliiseS/devcontainer-features/bash-profile:1": {
 			"command": "alias k=kubectl"

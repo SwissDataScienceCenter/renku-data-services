@@ -1,6 +1,6 @@
 """Classes and decorators used for paginating long responses."""
 
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Callable, Coroutine, Sequence
 from functools import wraps
 from math import ceil
 from typing import Any, Concatenate, NamedTuple, ParamSpec, cast
@@ -57,8 +57,8 @@ _P = ParamSpec("_P")
 
 
 def paginate(
-    f: Callable[Concatenate[Request, _P], Awaitable[tuple[Sequence[Any], int]]],
-) -> Callable[Concatenate[Request, _P], Awaitable[JSONResponse]]:
+    f: Callable[Concatenate[Request, _P], Coroutine[Any, Any, tuple[Sequence[Any], int]]],
+) -> Callable[Concatenate[Request, _P], Coroutine[Any, Any, JSONResponse]]:
     """Serializes the response to JSON and adds the required pagination headers to the response.
 
     The handler should return first the list of items and then the total count from the DB.
