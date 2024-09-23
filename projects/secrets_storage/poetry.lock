@@ -1091,23 +1091,6 @@ httpx = ">=0.23.1"
 wsproto = "*"
 
 [[package]]
-name = "httpx-ws"
-version = "0.6.0"
-description = "WebSockets support for HTTPX"
-optional = false
-python-versions = ">=3.8"
-files = [
-    {file = "httpx_ws-0.6.0-py3-none-any.whl", hash = "sha256:437cfca94519a4e6ae06eb5573192df6c0da85c22b1a19cc1ea0b02b05a51d25"},
-    {file = "httpx_ws-0.6.0.tar.gz", hash = "sha256:60218f531fb474a2143af38568f4b7d94ba356780973443365c8e2c87882bb8c"},
-]
-
-[package.dependencies]
-anyio = ">=4"
-httpcore = ">=1.0.4"
-httpx = ">=0.23.1"
-wsproto = "*"
-
-[[package]]
 name = "idna"
 version = "3.7"
 description = "Internationalized Domain Names in Applications (IDNA)"
@@ -2841,4 +2824,4 @@ h11 = ">=0.9.0,<1"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "9e5f5ec62eee96154f9285a33e0e3f649a9240ef30c217f94ec17031ced5a390"
+content-hash = "d1be5ecffdbecfc3ea6626f183f801b1070f465defed7772a9a0342f23e0c227"

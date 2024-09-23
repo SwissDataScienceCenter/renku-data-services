@@ -687,7 +687,7 @@ class NotebooksBP(CustomBlueprint):
                 )
 
             manifest = UserServerManifest(new_server, self.nb_config.sessions.default_image)
-            notebook_response = apispec.NotebookResponse().parse_obj(manifest)
+            notebook_response = apispec.NotebookResponse.parse_obj(manifest)
             return json(
                 notebook_response.model_dump(),
                 200,

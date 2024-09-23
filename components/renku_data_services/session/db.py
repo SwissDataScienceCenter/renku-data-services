@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, nullcontext
 from datetime import UTC, datetime
-from pathlib import PurePosixPath
 from typing import Any
 
 from sqlalchemy import select
