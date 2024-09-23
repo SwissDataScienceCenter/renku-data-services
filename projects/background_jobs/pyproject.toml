@@ -34,6 +34,7 @@ packages = [
   { include = "renku_data_services/platform", from = "../../components" },
   { include = "renku_data_services/data_connectors", from = "../../components" },
   { include = "renku_data_services/migrations", from = "../../components" },
+  { include = "renku_data_services/notebooks", from = "../../components" },
 ]
 
 [tool.poetry.dependencies]
@@ -67,6 +68,11 @@ aiofile = "^3.9.0"
 # google.protobuf.runtime_version.VersionError:
 # Detected incompatible Protobuf Gencode/Runtime versions when loading authzed/api/v1/core.proto: gencode 5.28.2 runtime 5.27.3.
 protobuf = "^5.28.3"
+escapism = "^1.0.1"
+kr8s = "^0.17.2"
+marshmallow = "^3.22.0"
+toml = "^0.10.2"
+werkzeug = "^3.0.4"
 
 [tool.poetry.group.dev.dependencies]
 pyavro-gen = "^0.3.3"
