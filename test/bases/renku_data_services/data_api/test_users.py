@@ -205,3 +205,112 @@ async def test_logged_in_user_check_adds_user_if_missing(sanic_client, users, ad
         for iuser in res.json
     ]
     assert user in users_response
+
+
+@pytest.mark.asyncio
+async def test_delete_user(sanic_client, user_headers, app_config, users) -> None:
+    # Create an admin user
+    admin = UserInfo(
+        id="admin-id",
+        first_name="Admin",
+        last_name="Adminson",
+        email="admin@gmail.com",
+        namespace=Namespace(
+            id=ULID(),
+            slug="admin.adminson",
+            kind=NamespaceKind.user,
+            underlying_resource_id="admin-id",
+            created_by="admin-id",
+        ),
+    )
+    admin_token = {
+        "id": admin.id,
+        "is_admin": True,
+        "first_name": admin.first_name,
+        "last_name": admin.last_name,
+        "email": admin.email,
+    }
+
+    # Create a user
+    user_id = str(uuid4())
+    user = dict(
+        id=user_id,
+        first_name="Peter",
+        last_name="Parker",
+        email="peter@spiderman.com",
+    )
+    access_token = {
+        "id": user_id,
+        "is_admin": False,
+        "first_name": user["first_name"],
+        "last_name": user["last_name"],
+        "email": user["email"],
+        "name": f"{user["first_name"]} {user["last_name"]}",
+    }
+    # Just by hitting the users endpoint with valid credentials the user will be aded to the database
+    _, res = await sanic_client.get(
+        f"/api/data/users/{user_id}",
+        headers={"Authorization": f"bearer {json.dumps(access_token)}"},
+    )
+
+    # Check that the user just added via acccess token is returned in the list when the admin lists all users
+    _, res = await sanic_client.get(
+        "/api/data/users",
+        headers={"Authorization": f"bearer {json.dumps(admin_token)}"},
+    )
+    assert res.status_code == 200
+    users_response = [
+        dict(
+            id=iuser["id"],
+            first_name=iuser.get("first_name"),
+            last_name=iuser.get("last_name"),
+            email=iuser.get("email"),
+        )
+        for iuser in res.json
+    ]
+    assert user in users_response
+
+
+    # Delete a user
+    _, res = await sanic_client.delete(
+        f"/api/data/users/{user_id}",
+        headers={"Authorization": f"bearer {json.dumps(admin_token)}"},
+    )
+
+    assert res.status_code == 204, res.text
+
+    # Check that the user just added via acccess token is now not returned in the list when the admin lists all users
+    _, res = await sanic_client.get(
+        "/api/data/users",
+        headers={"Authorization": f"bearer {json.dumps(admin_token)}"},
+    )
+    assert res.status_code == 200
+    users_response = [
+        dict(
+            id=iuser["id"],
+            first_name=iuser.get("first_name"),
+            last_name=iuser.get("last_name"),
+            email=iuser.get("email"),
+        )
+        for iuser in res.json
+    ]
+    assert user not in users_response
+
+    # Delete a project
+    # project_id = project["id"]
+    # _, response = await sanic_client.delete(f"/api/data/projects/{user_id}", headers=user_headers)
+
+    # events = await app_config.event_repo._get_pending_events()
+    # assert len(events) == 15
+    # project_removed_event = next((e for e in events if e.get_message_type() == "project.removed"), None)
+    # assert project_removed_event
+    # removed_event = deserialize_binary(
+    #     b64decode(project_removed_event.payload["payload"]), avro_schema_v2.ProjectRemoved
+    # )
+    # assert removed_event.id == project_id
+
+    # # Get all projects
+    # _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
+
+    # assert response.status_code == 200, response.text
+    # assert {p["name"] for p in response.json} == {"Project 1", "Project 2", "Project 4", "Project 5"}
