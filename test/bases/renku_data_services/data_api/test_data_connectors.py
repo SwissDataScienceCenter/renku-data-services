@@ -1088,7 +1088,7 @@ async def test_put_data_connector_secrets_update_secrets(
 
 
 @pytest.mark.asyncio
-async def test_put_data_connector_secrets_add_and_remove_secrets(
+async def test_put_data_connector_secrets_add_secrets(
     sanic_client: SanicASGITestClient, create_data_connector, user_headers
 ) -> None:
     data_connector = await create_data_connector("My data connector")
@@ -1122,6 +1122,21 @@ async def test_put_data_connector_secrets_add_and_remove_secrets(
     assert {s["name"] for s in secrets} == {"access_key_id", "password"}
     new_access_key_id_secret_id = next(filter(lambda s: s["name"] == "access_key_id", secrets), None)
     assert new_access_key_id_secret_id == access_key_id_secret_id
+
+    # Check that the secrets are returned from a GET request
+    _, response = await sanic_client.get(f"/api/data/data_connectors/{data_connector_id}/secrets", headers=user_headers)
+    assert response.status_code == 200, response.json
+    assert response.json is not None
+    secrets = response.json
+    assert len(secrets) == 3
+    assert {s["name"] for s in secrets} == {"access_key_id", "secret_access_key", "password"}
+
+    # Check the associated secrets
+    _, response = await sanic_client.get("/api/data/user/secrets", params={"kind": "storage"}, headers=user_headers)
+
+    assert response.status_code == 200
+    assert response.json is not None
+    assert len(response.json) == 3
 
 
 @pytest.mark.asyncio

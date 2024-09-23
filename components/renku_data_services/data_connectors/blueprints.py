@@ -313,8 +313,9 @@ class DataConnectorsBP(CustomBlueprint):
             _: Request,
             user: base_models.APIUser,
             data_connector_id: ULID,
-        ) -> JSONResponse:
-            raise NotImplementedError()
+        ) -> HTTPResponse:
+            await self.data_connector_repo.delete_data_connector_secrets(user=user, data_connector_id=data_connector_id)
+            return HTTPResponse(status=204)
 
         return "/data_connectors/<data_connector_id:ulid>/secrets", ["DELETE"], _delete_secrets
 

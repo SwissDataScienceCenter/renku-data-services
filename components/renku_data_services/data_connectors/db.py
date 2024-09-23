@@ -4,7 +4,7 @@ from collections.abc import Callable
 from typing import TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
@@ -393,6 +393,26 @@ class DataConnectorRepository:
                 all_secrets.append(data_connector_secret_orm.dump())
 
             return all_secrets
+
+    async def delete_data_connector_secrets(self, user: base_models.APIUser, data_connector_id: ULID) -> None:
+        """Delete data connector secrets."""
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session, session.begin():
+            stmt = (
+                delete(secrets_schemas.SecretORM)
+                .where(secrets_schemas.SecretORM.user_id == user.id)
+                .where(secrets_schemas.SecretORM.id == schemas.DataConnectorSecretORM.secret_id)
+                .where(schemas.DataConnectorSecretORM.data_connector_id == data_connector_id)
+            )
+            await session.execute(stmt)
+            stmt = (
+                delete(schemas.DataConnectorSecretORM)
+                .where(schemas.DataConnectorSecretORM.user_id == user.id)
+                .where(schemas.DataConnectorSecretORM.data_connector_id == data_connector_id)
+            )
+            await session.execute(stmt)
 
 
 class DataConnectorProjectLinkRepository:
