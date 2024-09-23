@@ -7,7 +7,7 @@ it all in one place.
 """
 
 from asyncio import gather
-from collections.abc import Awaitable, Callable, Collection, Sequence
+from collections.abc import Callable, Collection, Coroutine, Sequence
 from dataclasses import dataclass, field
 from functools import wraps
 from typing import Any, Concatenate, Optional, ParamSpec, TypeVar, cast
@@ -16,7 +16,6 @@ from sqlalchemy import NullPool, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select, and_, not_, or_
-from sqlalchemy.sql.expression import false, true
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
@@ -116,7 +115,9 @@ _P = ParamSpec("_P")
 _T = TypeVar("_T")
 
 
-def _only_admins(f: Callable[Concatenate[Any, _P], Awaitable[_T]]) -> Callable[Concatenate[Any, _P], Awaitable[_T]]:
+def _only_admins(
+    f: Callable[Concatenate[Any, _P], Coroutine[Any, Any, _T]],
+) -> Callable[Concatenate[Any, _P], Coroutine[Any, Any, _T]]:
     """Decorator that errors out if the user is not an admin.
 
     It expects the APIUser model to be a named parameter in the decorated function or
@@ -181,6 +182,21 @@ class ResourcePoolRepository(_Base):
                 quota = self.quotas_repo.get_quota(rp.quota) if rp.quota else None
                 output.append(rp.dump(quota))
             return output
+
+    async def get_default_resource_class(self) -> models.ResourceClass:
+        """Get the default resource class in the default resource pool."""
+        async with self.session_maker() as session:
+            stmt = (
+                select(schemas.ResourceClassORM)
+                .where(schemas.ResourceClassORM.default == true())
+                .where(schemas.ResourceClassORM.resource_pool.has(schemas.ResourcePoolORM.default == true()))
+            )
+            res = await session.scalar(stmt)
+            if res is None:
+                raise errors.ProgrammingError(
+                    message="Could not find the default class from the default resource pool, but this has to exist."
+                )
+            return res.dump()
 
     async def filter_resource_pools(
         self,

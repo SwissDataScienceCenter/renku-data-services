@@ -51,7 +51,7 @@ class AuthzSchemaMigration:
                     output.append(res)
                 case _:
                     raise errors.ProgrammingError(
-                        message=f"Found an uknown authorization migration type {type(request)}"
+                        message=f"Found an unknown authorization migration type {type(request)}"
                     )
         return output
 
