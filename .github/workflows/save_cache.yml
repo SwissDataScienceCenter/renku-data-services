@@ -1,0 +1,41 @@
+name: Create cache from commits on main
+
+on:
+  push:
+    branches:
+      - main
+      - chore-add-kind
+  workflow_dispatch:
+
+
+jobs:
+  save-poetry-cache:
+    runs-on: ubuntu-latest
+    env:
+      CACHE_KEY: main-branch-poetry-cache-ubuntu
+      CACHE_PATH: .devcontainer/.poetry_cache
+      DEVCONTAINER_IMAGE_CACHE: ghcr.io/swissdatasciencecenter/renku-data-services/devcontainer
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install python deps
+        uses: devcontainers/ci@v0.3
+        with:
+          runCmd: poetry install --with dev
+          push: always
+          skipContainerUserIdUpdate: false
+          imageName: ${{ env.DEVCONTAINER_IMAGE_CACHE }}
+          cacheFrom: ${{ env.DEVCONTAINER_IMAGE_CACHE }}
+      - uses: actions/cache/save@v3
+        name: Create cache
+        with:
+          path: ${{ env.CACHE_PATH }}
+          key: ${{ env.CACHE_KEY }}

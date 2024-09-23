@@ -77,6 +77,7 @@ def config_no_dummy_fixture(monkeypatch, secrets_key_pair, tmp_path):
     DBConfig._async_engine = None
 
 
+@pytest.mark.skip(reason="Re-enable when the k8s cluster for CI is fully setup")  # TODO: address in followup PR
 def test_config_no_dummy(config_no_dummy_fixture: conf.Config) -> None:
     config = config_no_dummy_fixture
     assert config.authenticator is not None

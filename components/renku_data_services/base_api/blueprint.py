@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from inspect import getmembers, ismethod
-from typing import Optional, cast
+from typing import cast
 
 from sanic import Blueprint
 from sanic.models.handler_types import RequestMiddlewareType, ResponseMiddlewareType, RouteHandler
@@ -21,7 +21,7 @@ class CustomBlueprint:
     """
 
     name: str
-    url_prefix: Optional[str] = None
+    url_prefix: str
     request_middlewares: list[RequestMiddlewareType] = field(default_factory=list, repr=False)
     response_middlewares: list[ResponseMiddlewareType] = field(default_factory=list, repr=False)
 

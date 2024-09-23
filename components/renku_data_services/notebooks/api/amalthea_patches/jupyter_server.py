@@ -5,13 +5,13 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from gitlab.v4.objects.users import CurrentUser
 from kubernetes import client
 
-from renku_data_services.notebooks.api.classes.user import RegisteredUser
+from renku_data_services.base_models.core import AuthenticatedAPIUser
 from renku_data_services.notebooks.errors.user import OverriddenEnvironmentVariableError
 
 if TYPE_CHECKING:
+    # NOTE: If these are directly imported then you get circular imports.
     from renku_data_services.notebooks.api.classes.server import UserServer
 
 
@@ -30,7 +30,7 @@ def env(server: "UserServer") -> list[dict[str, Any]]:
             "path": "/statefulset/spec/template/spec/containers/0/env/-",
             "value": {
                 "name": "RENKU_USERNAME",
-                "value": server.user.username,
+                "value": server.user.id,
             },
         },
         {
@@ -109,21 +109,17 @@ def args() -> list[dict[str, Any]]:
     return patches
 
 
-def image_pull_secret(server: "UserServer") -> list[dict[str, Any]]:
+def image_pull_secret(server: "UserServer", access_token: str | None) -> list[dict[str, Any]]:
     """Adds an image pull secret to the session if the session image is not public."""
     patches = []
-    if (
-        isinstance(server.user, RegisteredUser)
-        and isinstance(server.user.gitlab_user, CurrentUser)
-        and server.is_image_private
-    ):
+    if isinstance(server.user, AuthenticatedAPIUser) and server.is_image_private and access_token:
         image_pull_secret_name = server.server_name + "-image-secret"
         registry_secret = {
             "auths": {
                 server.config.git.registry: {
                     "Username": "oauth2",
-                    "Password": server.user.git_token,
-                    "Email": server.user.gitlab_user.email,
+                    "Password": access_token,
+                    "Email": server.user.email,
                 }
             }
         }

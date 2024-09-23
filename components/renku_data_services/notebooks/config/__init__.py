@@ -4,6 +4,12 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Optional, Protocol, Self
 
+from renku_data_services.base_models import APIUser
+from renku_data_services.crc.db import ResourcePoolRepository
+from renku_data_services.crc.models import ResourceClass
+from renku_data_services.db_config.config import DBConfig
+from renku_data_services.k8s.clients import K8sCoreClient, K8sSchedulingClient
+from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.notebooks.api.classes.data_service import (
     CloudStorageConfig,
     CRCValidator,
@@ -13,12 +19,18 @@ from renku_data_services.notebooks.api.classes.data_service import (
     GitProviderHelper,
     StorageValidator,
 )
-from renku_data_services.notebooks.api.classes.k8s_client import JsServerCache, K8sClient, NamespacedK8sClient
+from renku_data_services.notebooks.api.classes.k8s_client import (
+    AmaltheaSessionV1Alpha1Kr8s,
+    JupyterServerV1Alpha1Kr8s,
+    K8sClient,
+    NamespacedK8sClient,
+    ServerCache,
+)
 from renku_data_services.notebooks.api.classes.repository import GitProvider
-from renku_data_services.notebooks.api.classes.user import User
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
 from renku_data_services.notebooks.config.dynamic import (
     _AmaltheaConfig,
+    _AmaltheaV2Config,
     _CloudStorage,
     _GitConfig,
     _K8sConfig,
@@ -29,25 +41,28 @@ from renku_data_services.notebooks.config.dynamic import (
     _UserSecrets,
 )
 from renku_data_services.notebooks.config.static import _ServersGetEndpointAnnotations
+from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
 
 
 class CRCValidatorProto(Protocol):
     """Compute resource control validator."""
 
-    def validate_class_storage(
+    async def validate_class_storage(
         self,
-        user: User,
+        user: APIUser,
         class_id: int,
         storage: Optional[int] = None,
     ) -> ServerOptions:
         """Validate the resource class storage for the session."""
         ...
 
-    def get_default_class(self) -> dict[str, Any]:
+    async def get_default_class(self) -> ResourceClass:
         """Get the default resource class."""
         ...
 
-    def find_acceptable_class(self, user: User, requested_server_options: ServerOptions) -> Optional[ServerOptions]:
+    async def find_acceptable_class(
+        self, user: APIUser, requested_server_options: ServerOptions
+    ) -> Optional[ServerOptions]:
         """Find a suitable resource class based on resource requirements."""
         ...
 
@@ -55,15 +70,17 @@ class CRCValidatorProto(Protocol):
 class StorageValidatorProto(Protocol):
     """Cloud storage validator protocol."""
 
-    def get_storage_by_id(self, user: User, project_id: int, storage_id: str) -> CloudStorageConfig:
+    async def get_storage_by_id(
+        self, user: APIUser, internal_gitlab_user: APIUser, project_id: int, storage_id: str
+    ) -> CloudStorageConfig:
         """Get storage by ID."""
         ...
 
-    def validate_storage_configuration(self, configuration: dict[str, Any], source_path: str) -> None:
+    async def validate_storage_configuration(self, configuration: dict[str, Any], source_path: str) -> None:
         """Validate a storage configuration."""
         ...
 
-    def obscure_password_fields_for_storage(self, configuration: dict[str, Any]) -> dict[str, Any]:
+    async def obscure_password_fields_for_storage(self, configuration: dict[str, Any]) -> dict[str, Any]:
         """Obscure passsword fields in storage credentials."""
         ...
 
@@ -71,7 +88,7 @@ class StorageValidatorProto(Protocol):
 class GitProviderHelperProto(Protocol):
     """Git provider protocol."""
 
-    def get_providers(self, user: User) -> list[GitProvider]:
+    async def get_providers(self, user: APIUser) -> list[GitProvider]:
         """Get a list of git providers."""
         ...
 
@@ -89,7 +106,8 @@ class _NotebooksConfig:
     crc_validator: CRCValidatorProto
     storage_validator: StorageValidatorProto
     git_provider_helper: GitProviderHelperProto
-    k8s_client: K8sClient
+    k8s_client: K8sClient[JupyterServerV1Alpha1, JupyterServerV1Alpha1Kr8s]
+    k8s_v2_client: K8sClient[AmaltheaSessionV1Alpha1, AmaltheaSessionV1Alpha1Kr8s]
     current_resource_schema_version: int = 1
     anonymous_sessions_enabled: bool = False
     ssh_enabled: bool = False
@@ -103,54 +121,64 @@ class _NotebooksConfig:
     )
 
     @classmethod
-    def from_env(cls) -> Self:
-        dummy_stores = _parse_str_as_bool(os.environ.get("NB_DUMMY_STORES", False))
-        sessions_config = _SessionConfig.from_env()
-        git_config = _GitConfig.from_env()
-        data_service_url = os.environ["NB_DATA_SERVICE_URL"]
+    def from_env(cls, db_config: DBConfig) -> Self:
+        dummy_stores = _parse_str_as_bool(os.environ.get("DUMMY_STORES", False))
+        sessions_config: _SessionConfig
+        git_config: _GitConfig
+        data_service_url = os.environ.get("NB_DATA_SERVICE_URL", "http://127.0.0.1:8000")
         server_options = _ServerOptionsConfig.from_env()
         crc_validator: CRCValidatorProto
         storage_validator: StorageValidatorProto
         git_provider_helper: GitProviderHelperProto
+        k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
+        quota_repo: QuotaRepository
         if dummy_stores:
             crc_validator = DummyCRCValidator()
+            sessions_config = _SessionConfig._for_testing()
             storage_validator = DummyStorageValidator()
             git_provider_helper = DummyGitProviderHelper()
+            amalthea_config = _AmaltheaConfig(cache_url="http://not.specified")
+            amalthea_v2_config = _AmaltheaV2Config(cache_url="http://not.specified")
+            git_config = _GitConfig("http://not.specified", "registry.not.specified")
         else:
-            crc_validator = CRCValidator(data_service_url)
+            quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
+            rp_repo = ResourcePoolRepository(db_config.async_session_maker, quota_repo)
+            crc_validator = CRCValidator(rp_repo)
+            sessions_config = _SessionConfig.from_env()
             storage_validator = StorageValidator(data_service_url)
-            git_provider_helper = GitProviderHelper(data_service_url, sessions_config.ingress.host, git_config.url)
+            amalthea_config = _AmaltheaConfig.from_env()
+            amalthea_v2_config = _AmaltheaV2Config.from_env()
+            git_config = _GitConfig.from_env()
+            git_provider_helper = GitProviderHelper(
+                data_service_url, f"http://{sessions_config.ingress.host}", git_config.url
+            )
 
         k8s_config = _K8sConfig.from_env()
-        amalthea_config = _AmaltheaConfig.from_env()
         renku_ns_client = NamespacedK8sClient(
-            k8s_config.renku_namespace,
-            amalthea_config.group,
-            amalthea_config.version,
-            amalthea_config.plural,
+            k8s_config.renku_namespace, JupyterServerV1Alpha1, JupyterServerV1Alpha1Kr8s
         )
-        session_ns_client = None
-        if k8s_config.sessions_namespace:
-            session_ns_client = NamespacedK8sClient(
-                k8s_config.sessions_namespace,
-                amalthea_config.group,
-                amalthea_config.version,
-                amalthea_config.plural,
-            )
-        js_cache = JsServerCache(amalthea_config.cache_url)
+        js_cache = ServerCache(amalthea_config.cache_url, JupyterServerV1Alpha1)
         k8s_client = K8sClient(
-            js_cache=js_cache,
+            cache=js_cache,
             renku_ns_client=renku_ns_client,
-            session_ns_client=session_ns_client,
+            username_label="renku.io/safe-username",
+        )
+        v2_cache = ServerCache(amalthea_v2_config.cache_url, AmaltheaSessionV1Alpha1)
+        renku_ns_v2_client = NamespacedK8sClient(
+            k8s_config.renku_namespace, AmaltheaSessionV1Alpha1, AmaltheaSessionV1Alpha1Kr8s
+        )
+        k8s_v2_client = K8sClient(
+            cache=v2_cache,
+            renku_ns_client=renku_ns_v2_client,
             username_label="renku.io/safe-username",
         )
         return cls(
             server_options=server_options,
-            sessions=_SessionConfig.from_env(),
-            amalthea=_AmaltheaConfig.from_env(),
+            sessions=sessions_config,
+            amalthea=amalthea_config,
             sentry=_SentryConfig.from_env(),
-            git=_GitConfig.from_env(),
-            k8s=_K8sConfig.from_env(),
+            git=git_config,
+            k8s=k8s_config,
             cloud_storage=_CloudStorage.from_env(),
             user_secrets=_UserSecrets.from_env(),
             current_resource_schema_version=1,
@@ -164,4 +192,5 @@ class _NotebooksConfig:
             storage_validator=storage_validator,
             git_provider_helper=git_provider_helper,
             k8s_client=k8s_client,
+            k8s_v2_client=k8s_v2_client,
         )

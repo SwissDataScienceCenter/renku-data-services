@@ -35,7 +35,7 @@ paths:
         name: server_name
         required: true
         schema:
-          type: string
+          "$ref": "#/components/schemas/ServerName"
       - description: 'The maximum number of (most recent) lines to return from the logs.'
         in: query
         name: max_lines
@@ -152,7 +152,7 @@ paths:
         name: server_name
         required: true
         schema:
-          type: string
+          "$ref": "#/components/schemas/ServerName"
       - description: |
           If true, delete immediately disregarding the grace period
           of the underlying JupyterServer resource.
@@ -187,7 +187,7 @@ paths:
         name: server_name
         required: true
         schema:
-          type: string
+          "$ref": "#/components/schemas/ServerName"
       responses:
         '200':
           content:
@@ -211,7 +211,7 @@ paths:
         name: server_name
         required: true
         schema:
-          type: string
+          "$ref": "#/components/schemas/ServerName"
       requestBody:
         content:
           application/json:
@@ -505,7 +505,6 @@ components:
       required:
         - project_id
         - launcher_id
-        - image
       type: object
     LaunchNotebookRequestRepository:
       properties:
@@ -607,7 +606,7 @@ components:
         image:
           type: string
         name:
-          type: string
+          "$ref": "#/components/schemas/ServerName"
         resources:
           "$ref": "#/components/schemas/UserPodResources"
         started:
@@ -802,8 +801,6 @@ components:
           "$ref": "#/components/schemas/ResourceRequests"
         usage:
           "$ref": "#/components/schemas/ResourceUsage"
-      required:
-      - requests
       type: object
     UserSecrets:
       properties:
@@ -898,7 +895,7 @@ components:
         image:
           type: string
         name:
-          type: string
+          "$ref": "#/components/schemas/ServerName"
         resources:
           "$ref": "#/components/schemas/SessionResources"
         started:
@@ -983,17 +980,12 @@ components:
         gpu:
           type: integer
           description: Number of GPUs used
-          default: 0
         memory:
           type: integer
           description: Ammount of RAM for the session, in gigabytes
         storage:
           type: integer
           description: The size of disk storage for the session, in gigabytes
-      required:
-      - cpu
-      - memory
-      - storage
       example:
         cpu: 1.5
         memory: 1
@@ -1038,6 +1030,14 @@ components:
         - configuration
         - source_path
         - target_path
+    ServerName:
+      type: string
+      minLength: 5
+      # The actual limit from k8s is 63 characters but we leave some leeway in case we need to make changes
+      # Note that changing this should be compatible with the methods that generate server names in the code
+      maxLength: 50
+      pattern: '^[a-z]([-a-z0-9]*[a-z0-9])?$'
+      example: d185e68d-d43-renku-2-b9ac279a4e8a85ac28d08
   responses:
     Error:
       description: The schema for all 4xx and 5xx responses

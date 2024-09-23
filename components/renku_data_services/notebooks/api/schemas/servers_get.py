@@ -250,8 +250,8 @@ class LaunchNotebookResponseWithoutStorage(Schema):
         def get_all_container_statuses(server: UserServerManifest) -> list[dict[str, Any]]:
             return cast(
                 list[dict[str, Any]],
-                server.manifest["status"].get("mainPod", {}).get("status", {}).get("containerStatuses", [])
-                + server.manifest["status"].get("mainPod", {}).get("status", {}).get("initContainerStatuses", []),
+                server.manifest.status.get("mainPod", {}).get("status", {}).get("containerStatuses", [])
+                + server.manifest.status.get("mainPod", {}).get("status", {}).get("initContainerStatuses", []),
             )
 
         def get_failed_containers(container_statuses: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -275,17 +275,17 @@ class LaunchNotebookResponseWithoutStorage(Schema):
 
         def is_user_anonymous(server: UserServerManifest, prefix: str = "renku.io/") -> bool:
             js = server.manifest
-            annotations = js.get("metadata", {}).get("annotations", {})
+            annotations = js.metadata.annotations
             return (
-                str(annotations.get(f"{prefix}userId", "")).startswith("anon-")
-                and str(annotations.get(f"{prefix}username", "")).startswith("anon-")
-                and str(js.get("metadata", {}).get("name", "")).startswith("anon-")
+                annotations.get(f"{prefix}userId", "").startswith("anon-")
+                and annotations.get(f"{prefix}username", "").startswith("anon-")
+                and js.metadata.name.startswith("anon-")
             )
 
         def get_status_breakdown(server: UserServerManifest) -> list[dict[str, Any]]:
             js = server.manifest
-            init_container_summary = js.get("status", {}).get("containerStates", {}).get("init", {})
-            container_summary = js.get("status", {}).get("containerStates", {}).get("regular", {})
+            init_container_summary = js.status.get("containerStates", {}).get("init", {})
+            container_summary = js.status.get("containerStates", {}).get("regular", {})
             output = []
             init_container_name_desc_xref = OrderedDict(
                 [
@@ -303,7 +303,7 @@ class LaunchNotebookResponseWithoutStorage(Schema):
                     ("jupyter-server", "Starting session"),
                 ]
             )
-            current_state = js.get("status", {}).get("state")
+            current_state = js.status.get("state")
             if current_state is None or current_state == ServerStatusEnum.Starting.value:
                 # NOTE: This means that the server is starting and the statuses are not populated
                 # yet, therefore in this case we will use defaults and set all statuses to waiting
@@ -341,16 +341,16 @@ class LaunchNotebookResponseWithoutStorage(Schema):
 
         def get_status(server: UserServerManifest, started: datetime) -> dict[str, dict[str, Any]]:
             """Get the status of the jupyterserver."""
-            state = server.manifest.get("status", {}).get("state", ServerStatusEnum.Starting.value)
+            state = server.manifest.status.get("state", ServerStatusEnum.Starting.value)
             output = {
                 "state": state,
             }
             container_statuses = get_all_container_statuses(server)
             if state == ServerStatusEnum.Failed.value:
                 failed_container_statuses = get_failed_containers(container_statuses)
-                unschedulable_msg = get_unschedulable_message(server.manifest.get("status", {}).get("mainPod", {}))
+                unschedulable_msg = get_unschedulable_message(server.manifest.status.get("mainPod", {}))
                 event_based_messages = []
-                events = server.manifest.get("status", {}).get("events", {})
+                events = server.manifest.status.get("events", {})
                 for component in sorted(events.keys()):
                     message = events.get(component, {}).get("message")
                     if message is None:
@@ -376,11 +376,12 @@ class LaunchNotebookResponseWithoutStorage(Schema):
                 output["warnings"].append({"message": "Server was started using the default image."})
 
             now = datetime.now(UTC)
-            annotations = server.manifest.get("metadata", {}).get("annotations", {})
+            annotations = server.manifest.metadata.annotations
 
             last_activity_date_str = annotations.get("renku.io/lastActivityDate")
 
-            idle_threshold = server.manifest.get("spec", {}).get("culling", {}).get("idleSecondsThreshold", 0)
+            assert server.manifest.spec is not None
+            idle_threshold = server.manifest.spec.culling.idleSecondsThreshold
             critical: bool = False
 
             if idle_threshold > 0 and last_activity_date_str:
@@ -401,9 +402,7 @@ class LaunchNotebookResponseWithoutStorage(Schema):
 
             hibernation_date_str = annotations.get("renku.io/hibernationDate")
 
-            hibernated_seconds_threshold = (
-                server.manifest.get("spec", {}).get("culling", {}).get("hibernatedSecondsThreshold", 0)
-            )
+            hibernated_seconds_threshold = server.manifest.spec.culling.hibernatedSecondsThreshold
 
             if hibernation_date_str and hibernated_seconds_threshold > 0 and not is_user_anonymous(server):
                 hibernation_date = datetime.fromisoformat(hibernation_date_str)
@@ -421,7 +420,7 @@ class LaunchNotebookResponseWithoutStorage(Schema):
                     }
                 )
 
-            max_age_threshold = server.manifest.get("spec", {}).get("culling", {}).get("maxAgeSecondsThreshold", 0)
+            max_age_threshold = server.manifest.spec.culling.maxAgeSecondsThreshold
             age = (datetime.now(UTC) - started).total_seconds()
             remaining_session_time = max_age_threshold - age
 
@@ -464,7 +463,7 @@ class LaunchNotebookResponseWithoutStorage(Schema):
         def get_resource_usage(
             server: UserServerManifest,
         ) -> dict[str, Union[str, int]]:
-            usage = server.manifest.get("status", {}).get("mainPod", {}).get("resourceUsage", {})
+            usage = server.manifest.status.get("mainPod", {}).get("resourceUsage", {})
             formatted_output = {}
             if "cpuMillicores" in usage:
                 formatted_output["cpu"] = usage["cpuMillicores"] / 1000
@@ -474,7 +473,8 @@ class LaunchNotebookResponseWithoutStorage(Schema):
                 formatted_output["storage"] = usage["disk"]["usedBytes"]
             return formatted_output
 
-        started = datetime.fromisoformat(re.sub(r"Z$", "+00:00", server.manifest["metadata"]["creationTimestamp"]))
+        assert server.manifest.metadata.creationTimestamp is not None
+        started = server.manifest.metadata.creationTimestamp
 
         output = {
             "annotations": config.session_get_endpoint_annotations.sanitize_dict(
@@ -486,7 +486,7 @@ class LaunchNotebookResponseWithoutStorage(Schema):
                 }
             ),
             "name": server.name,
-            "state": {"pod_name": server.manifest["status"].get("mainPod", {}).get("name")},
+            "state": {"pod_name": server.manifest.status.get("mainPod", {}).get("name")},
             "started": started,
             "status": get_status(server, started),
             "url": server.url,
