@@ -23,6 +23,8 @@ services:
       ZED_TOKEN: renku
       ZED_INSECURE: "true"
       POETRY_CACHE_DIR: "/poetry_cache"
+      NB_SERVER_OPTIONS__DEFAULTS_PATH: /workspace/server_defaults.json
+      NB_SERVER_OPTIONS__UI_CHOICES_PATH: /workspace/server_options.json
     network_mode: service:db
     depends_on:
       - db
@@ -43,6 +45,7 @@ services:
       - "8080:8080"
       - "5678:5678"
       - "50051:50051"
+      - "8888:80"
 
   swagger:
     image: swaggerapi/swagger-ui
