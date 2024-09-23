@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from functools import wraps
 from typing import Any, Concatenate, NoReturn, ParamSpec, TypeVar, cast
 
-from pydantic import BaseModel
+from pydantic import BaseModel, RootModel
 from sanic import Request, json
 from sanic.response import JSONResponse
 from sanic_ext import validate
@@ -91,6 +91,34 @@ def validate_query(
         async def decorated_function(request: Request, *args: _P.args, **kwargs: _P.kwargs) -> _T:
             try:
                 return await validate(query=query)(f)(request, *args, **kwargs)
+            except KeyError:
+                raise errors.ValidationError(message="Failed to validate the query parameters")
+
+        return decorated_function
+
+    return decorator
+
+
+def validate_body_root_model(
+    json: type[RootModel],
+) -> Callable[
+    [Callable[Concatenate[Request, _P], Awaitable[_T]]],
+    Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]],
+]:
+    """Decorator for sanic json payload validation when the model is derived from RootModel.
+
+    Should be removed once sanic fixes this error in their validation code.
+    """
+
+    def decorator(
+        f: Callable[Concatenate[Request, _P], Awaitable[_T]],
+    ) -> Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]]:
+        @wraps(f)
+        async def decorated_function(request: Request, *args: _P.args, **kwargs: _P.kwargs) -> _T:
+            try:
+                if request.json is not None:
+                    request.parsed_json = {"root": request.parsed_json}  # type: ignore[assignment]
+                return await validate(json=json)(f)(request, *args, **kwargs)
             except KeyError:
                 raise errors.ValidationError(message="Failed to validate the query parameters")
 
