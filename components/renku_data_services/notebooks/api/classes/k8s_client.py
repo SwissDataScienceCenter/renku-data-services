@@ -198,7 +198,7 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
         output: list[_SessionType] = (
             [self.server_type.model_validate(servers.to_dict())]
             if isinstance(servers, APIObject)
-            else [self.server_type.model_validate(i.to_dict()) for i in servers]
+            else [self.server_type.model_validate(server.to_dict()) for server in servers]
         )
         return output
 

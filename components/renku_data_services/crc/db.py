@@ -185,7 +185,7 @@ class ResourcePoolRepository(_Base):
             return output
 
     async def get_default_resource_class(self) -> models.ResourceClass:
-        """Get the default reosurce class in the default resource pool."""
+        """Get the default resource class in the default resource pool."""
         async with self.session_maker() as session:
             stmt = (
                 select(schemas.ResourceClassORM)
