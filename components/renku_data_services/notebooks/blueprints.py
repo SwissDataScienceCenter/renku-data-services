@@ -847,14 +847,18 @@ class NotebooksNewBP(CustomBlueprint):
                     name=None,
                 )
                 for s in body.cloudstorage or []
-                if s.storage_id is not None
             }
             # NOTE: Check the cloud storage in the request body and if any match
             # then overwrite the projects cloud storages
-            # NOTE: Cloud storages in the session launch request body that are not form the DB are ignored
+            # NOTE: Cloud storages in the session launch request body that are not form the DB will cause a 422 error
             for csr_id, csr in cloud_storage_request.items():
-                if csr_id in cloud_storage:
-                    cloud_storage[csr_id] = csr
+                if csr_id not in cloud_storage:
+                    raise errors.MissingResourceError(
+                        message=f"You have requested a cloud storage with ID {csr_id} which does not exist "
+                        "or you dont have access to.",
+                        quiet=True,
+                    )
+                cloud_storage[csr_id] = csr
             # repositories = [Repository(i.url, branch=i.branch, commit_sha=i.commit_sha) for i in body.repositories]
             repositories = [Repository(url=i) for i in project.repositories]
             secrets_to_create: list[V1Secret] = []
@@ -877,7 +881,7 @@ class NotebooksNewBP(CustomBlueprint):
                 is_image_private=False,
                 internal_gitlab_user=internal_gitlab_user,
             )
-            # Generate the cloud starge secrets
+            # Generate the cloud storage secrets
             data_sources: list[DataSource] = []
             for ics, cs in enumerate(cloud_storage.values()):
                 secret_name = f"{server_name}-ds-{ics}"
