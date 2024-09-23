@@ -9,12 +9,14 @@ from sqlalchemy.orm import sessionmaker
 
 from renku_data_services.authz.authz import Authz
 from renku_data_services.authz.config import AuthzConfig
+from renku_data_services.data_connectors.db import BaseDataConnectorRepository, DataConnectorProjectLinkRepository
 from renku_data_services.errors import errors
 from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project.db import ProjectRepository
+from renku_data_services.storage.db import StorageV2Repository
 from renku_data_services.users.db import UsersSync
 from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
 
@@ -29,6 +31,12 @@ class SyncConfig:
     group_repo: GroupRepository
     event_repo: EventRepository
     project_repo: ProjectRepository
+
+    # NEW
+    storage_v2_repository: StorageV2Repository
+    data_connector_repository: BaseDataConnectorRepository
+    data_connector_project_link_repository: DataConnectorProjectLinkRepository
+
     session_maker: Callable[..., AsyncSession]
 
     @classmethod
@@ -67,6 +75,21 @@ class SyncConfig:
             group_repo=group_repo,
             authz=Authz(authz_config),
         )
+
+        # NEW
+        storage_v2_repository = StorageV2Repository(
+            session_maker=session_maker,
+            authz=Authz(authz_config),
+        )
+        data_connector_repository = BaseDataConnectorRepository(
+            session_maker=session_maker,
+            authz=Authz(authz_config),
+        )
+        data_connector_project_link_repository = DataConnectorProjectLinkRepository(
+            session_maker=session_maker,
+            authz=Authz(authz_config),
+        )
+
         syncer = UsersSync(
             session_maker,
             message_queue=message_queue,
@@ -79,4 +102,15 @@ class SyncConfig:
         client_secret = os.environ[f"{prefix}KEYCLOAK_CLIENT_SECRET"]
         realm = os.environ.get(f"{prefix}KEYCLOAK_REALM", "Renku")
         kc_api = KeycloakAPI(keycloak_url=keycloak_url, client_id=client_id, client_secret=client_secret, realm=realm)
-        return cls(syncer, kc_api, authz_config, group_repo, event_repo, project_repo, session_maker)
+        return cls(
+            syncer,
+            kc_api,
+            authz_config,
+            group_repo,
+            event_repo,
+            project_repo,
+            storage_v2_repository,
+            data_connector_repository,
+            data_connector_project_link_repository,
+            session_maker,
+        )

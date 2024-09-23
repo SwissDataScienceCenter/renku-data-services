@@ -22,20 +22,19 @@ from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.core import with_db_transaction
 
 
-class DataConnectorRepository:
-    """Repository for data connectors."""
+class BaseDataConnectorRepository:
+    """Base repository for data connectors.
+
+    Does not include methods for handling secrets.
+    """
 
     def __init__(
         self,
         session_maker: Callable[..., AsyncSession],
         authz: Authz,
-        user_repo: UserRepo,
-        secret_service_public_key: rsa.RSAPublicKey,
     ) -> None:
         self.session_maker = session_maker
         self.authz = authz
-        self.user_repo = user_repo
-        self.secret_service_public_key = secret_service_public_key
 
     async def get_data_connectors(
         self, user: base_models.APIUser, pagination: PaginationRequest, namespace: str | None = None
@@ -310,6 +309,21 @@ class DataConnectorRepository:
         data_connector = data_connector_orm.dump()
         await session.delete(data_connector_orm)
         return data_connector
+
+
+class DataConnectorRepository(BaseDataConnectorRepository):
+    """Repository for data connectors."""
+
+    def __init__(
+        self,
+        session_maker: Callable[..., AsyncSession],
+        authz: Authz,
+        user_repo: UserRepo,
+        secret_service_public_key: rsa.RSAPublicKey,
+    ) -> None:
+        super().__init__(session_maker, authz)
+        self.user_repo = user_repo
+        self.secret_service_public_key = secret_service_public_key
 
     async def get_data_connector_secrets(
         self,
