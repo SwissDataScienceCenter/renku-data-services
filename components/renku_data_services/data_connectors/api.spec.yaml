@@ -150,7 +150,7 @@ paths:
       summary: Get a data connector by namespace and project slug
       responses:
         "200":
-          description: The data connectors
+          description: The data connector
           content:
             application/json:
               schema:

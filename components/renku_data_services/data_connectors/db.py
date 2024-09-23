@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
 from renku_data_services import base_models, errors
+from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
+from renku_data_services.authz.models import Scope
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors import orm as schemas
@@ -21,20 +23,30 @@ class DataConnectorRepository:
     def __init__(
         self,
         session_maker: Callable[..., AsyncSession],
+        authz: Authz,
     ) -> None:
         self.session_maker = session_maker
+        self.authz = authz
 
     async def get_data_connectors(
-        self, pagination: PaginationRequest, namespace: str | None = None
+        self, user: base_models.APIUser, pagination: PaginationRequest, namespace: str | None = None
     ) -> tuple[list[models.DataConnector], int]:
         """Get multiple data connectors from the database."""
+        data_connector_ids = await self.authz.resources_with_permission(
+            user, user.id, ResourceType.data_connector, Scope.READ
+        )
+
         async with self.session_maker() as session:
-            stmt = select(schemas.DataConnectorORM)
+            stmt = select(schemas.DataConnectorORM).where(schemas.DataConnectorORM.id.in_(data_connector_ids))
             if namespace:
                 stmt = _filter_by_namespace_slug(stmt, namespace)
             stmt = stmt.limit(pagination.per_page).offset(pagination.offset)
             stmt = stmt.order_by(schemas.DataConnectorORM.id.desc())
-            stmt_count = select(func.count()).select_from(schemas.DataConnectorORM)
+            stmt_count = (
+                select(func.count())
+                .select_from(schemas.DataConnectorORM)
+                .where(schemas.DataConnectorORM.id.in_(data_connector_ids))
+            )
             if namespace:
                 stmt_count = _filter_by_namespace_slug(stmt_count, namespace)
             results = await session.scalars(stmt), await session.scalar(stmt_count)
@@ -44,22 +56,33 @@ class DataConnectorRepository:
 
     async def get_data_connector(
         self,
+        user: base_models.APIUser,
         data_connector_id: ULID,
     ) -> models.DataConnector:
         """Get one data connector from the database."""
+        not_found_msg = f"Data connector with id '{data_connector_id}' does not exist or you do not have access to it."
+
+        authorized = await self.authz.has_permission(user, ResourceType.data_connector, data_connector_id, Scope.READ)
+        if not authorized:
+            raise errors.MissingResourceError(message=not_found_msg)
+
         async with self.session_maker() as session:
             result = await session.scalars(
                 select(schemas.DataConnectorORM).where(schemas.DataConnectorORM.id == data_connector_id)
             )
             data_connector = result.one_or_none()
             if data_connector is None:
-                raise errors.MissingResourceError(
-                    message=f"Data connector with id '{data_connector_id}' does not exist or you do not have access to it."  # noqa: E501
-                )
+                raise errors.MissingResourceError(message=not_found_msg)
             return data_connector.dump()
 
-    async def get_data_connector_by_slug(self, namespace: str, slug: str) -> models.DataConnector:
+    async def get_data_connector_by_slug(
+        self, user: base_models.APIUser, namespace: str, slug: str
+    ) -> models.DataConnector:
         """Get one data connector from the database by slug."""
+        not_found_msg = (
+            f"Data connector with identifier '{namespace}/{slug}' does not exist or you do not have access to it."
+        )
+
         async with self.session_maker() as session:
             stmt = select(schemas.DataConnectorORM)
             stmt = _filter_by_namespace_slug(stmt, namespace)
@@ -67,12 +90,21 @@ class DataConnectorRepository:
             result = await session.scalars(stmt)
             data_connector = result.one_or_none()
             if data_connector is None:
-                raise errors.MissingResourceError(
-                    message=f"Data connector with identifier '{namespace}/{slug}' does not exist or you do not have access to it."  # noqa: E501
-                )
+                raise errors.MissingResourceError(message=not_found_msg)
+
+            authorized = await self.authz.has_permission(
+                user=user,
+                resource_type=ResourceType.data_connector,
+                resource_id=data_connector.id,
+                scope=Scope.READ,
+            )
+            if not authorized:
+                raise errors.MissingResourceError(message=not_found_msg)
+
             return data_connector.dump()
 
     @with_db_transaction
+    @Authz.authz_change(AuthzOperation.create, ResourceType.data_connector)
     async def insert_data_connector(
         self,
         user: base_models.APIUser,
@@ -96,6 +128,15 @@ class DataConnectorRepository:
 
         if user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        resource_type, resource_id = (
+            (ResourceType.group, ns.group_id) if ns.group and ns.group_id else (ResourceType.user_namespace, ns.id)
+        )
+        has_permission = await self.authz.has_permission(user, resource_type, resource_id, Scope.WRITE)
+        if not has_permission:
+            raise errors.ForbiddenError(
+                message=f"The data connector cannot be created because you do not have sufficient permissions with the namespace {data_connector.namespace}"  # noqa: E501
+            )
 
         slug = data_connector.slug or base_models.Slug.from_name(data_connector.name).value
 
@@ -136,15 +177,19 @@ class DataConnectorRepository:
         return data_connector_orm.dump()
 
     @with_db_transaction
+    @Authz.authz_change(AuthzOperation.update, ResourceType.data_connector)
     async def update_data_connector(
         self,
+        user: base_models.APIUser,
         data_connector_id: ULID,
         patch: models.DataConnectorPatch,
         etag: str,
         *,
         session: AsyncSession | None = None,
-    ) -> models.DataConnector:
+    ) -> models.DataConnectorUpdate:
         """Update a data connector entry."""
+        not_found_msg = f"Data connector with id '{data_connector_id}' does not exist or you do not have access to it."
+
         if not session:
             raise errors.ProgrammingError(message="A database session is required.")
         result = await session.scalars(
@@ -152,15 +197,27 @@ class DataConnectorRepository:
         )
         data_connector = result.one_or_none()
         if data_connector is None:
-            raise errors.MissingResourceError(
-                message=f"Data connector with id '{data_connector_id}' does not exist or you do not have access to it."
-            )
+            raise errors.MissingResourceError(message=not_found_msg)
+        old_data_connector = data_connector.dump()
+
+        required_scope = Scope.WRITE
+        if patch.visibility is not None and patch.visibility != old_data_connector.visibility:
+            # NOTE: changing the visibility requires the user to be owner which means they should have DELETE permission
+            required_scope = Scope.DELETE
+        if patch.namespace is not None and patch.namespace != old_data_connector.namespace.slug:
+            # NOTE: changing the namespace requires the user to be owner which means they should have DELETE permission # noqa E501
+            required_scope = Scope.DELETE
+        authorized = await self.authz.has_permission(
+            user, ResourceType.data_connector, data_connector_id, required_scope
+        )
+        if not authorized:
+            raise errors.MissingResourceError(message=not_found_msg)
 
         current_etag = data_connector.dump().etag
         if current_etag != etag:
             raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
 
-        # TODO: handle namespace or slug update
+        # TODO: handle slug update
         if patch.name is not None:
             data_connector.name = patch.name
         if patch.visibility is not None:
@@ -170,6 +227,23 @@ class DataConnectorRepository:
                 else apispec.Visibility(patch.visibility.value)
             )
             data_connector.visibility = visibility_orm
+        if patch.namespace is not None:
+            ns = await session.scalar(
+                select(ns_schemas.NamespaceORM).where(ns_schemas.NamespaceORM.slug == patch.namespace.lower())
+            )
+            if not ns:
+                raise errors.MissingResourceError(message=f"Rhe namespace with slug {patch.namespace} does not exist.")
+            if not ns.group_id and not ns.user_id:
+                raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
+            resource_type, resource_id = (
+                (ResourceType.group, ns.group_id) if ns.group and ns.group_id else (ResourceType.user_namespace, ns.id)
+            )
+            has_permission = await self.authz.has_permission(user, resource_type, resource_id, Scope.WRITE)
+            if not has_permission:
+                raise errors.ForbiddenError(
+                    message=f"The data connector cannot be moved because you do not have sufficient permissions with the namespace {patch.namespace}."  # noqa: E501
+                )
+            data_connector.slug.namespace_id = ns.id
         if patch.description is not None:
             data_connector.description = patch.description if patch.description else None
         if patch.keywords is not None:
@@ -188,26 +262,39 @@ class DataConnectorRepository:
         await session.flush()
         await session.refresh(data_connector)
 
-        return data_connector.dump()
+        return models.DataConnectorUpdate(
+            old=old_data_connector,
+            new=data_connector.dump(),
+        )
 
     @with_db_transaction
+    @Authz.authz_change(AuthzOperation.delete, ResourceType.data_connector)
     async def delete_data_connector(
         self,
+        user: base_models.APIUser,
         data_connector_id: ULID,
         *,
         session: AsyncSession | None = None,
-    ) -> None:
+    ) -> models.DataConnector | None:
         """Delete a data connector."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required.")
+        authorized = await self.authz.has_permission(user, ResourceType.data_connector, data_connector_id, Scope.DELETE)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Data connector with id '{data_connector_id}' does not exist or you do not have access to it."
+            )
+
         result = await session.scalars(
             select(schemas.DataConnectorORM).where(schemas.DataConnectorORM.id == data_connector_id)
         )
-        data_connector = result.one_or_none()
-        if data_connector is None:
+        data_connector_orm = result.one_or_none()
+        if data_connector_orm is None:
             return None
 
-        await session.delete(data_connector)
+        data_connector = data_connector_orm.dump()
+        await session.delete(data_connector_orm)
+        return data_connector
 
 
 _T = TypeVar("_T")

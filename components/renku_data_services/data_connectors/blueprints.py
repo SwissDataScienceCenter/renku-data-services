@@ -49,6 +49,7 @@ class DataConnectorsBP(CustomBlueprint):
             validator: RCloneValidator,
         ) -> tuple[list[dict[str, Any]], int]:
             data_connectors, total_num = await self.data_connector_repo.get_data_connectors(
+                user=user,
                 pagination=pagination,
                 namespace=query.namespace,
             )
@@ -84,11 +85,14 @@ class DataConnectorsBP(CustomBlueprint):
     def get_one(self) -> BlueprintFactoryResponse:
         """Get a specific data connector."""
 
+        @authenticate(self.authenticator)
         @extract_if_none_match
         async def _get_one(
-            _: Request, data_connector_id: ULID, etag: str | None, validator: RCloneValidator
+            _: Request, user: base_models.APIUser, data_connector_id: ULID, etag: str | None, validator: RCloneValidator
         ) -> HTTPResponse:
-            data_connector = await self.data_connector_repo.get_data_connector(data_connector_id=data_connector_id)
+            data_connector = await self.data_connector_repo.get_data_connector(
+                user=user, data_connector_id=data_connector_id
+            )
 
             if data_connector.etag == etag:
                 return HTTPResponse(status=304)
@@ -105,11 +109,19 @@ class DataConnectorsBP(CustomBlueprint):
     def get_one_by_slug(self) -> BlueprintFactoryResponse:
         """Get a specific data connector by namespace/entity slug."""
 
+        @authenticate(self.authenticator)
         @extract_if_none_match
         async def _get_one_by_slug(
-            _: Request, namespace: str, slug: str, etag: str | None, validator: RCloneValidator
+            _: Request,
+            user: base_models.APIUser,
+            namespace: str,
+            slug: str,
+            etag: str | None,
+            validator: RCloneValidator,
         ) -> HTTPResponse:
-            data_connector = await self.data_connector_repo.get_data_connector_by_slug(namespace=namespace, slug=slug)
+            data_connector = await self.data_connector_repo.get_data_connector_by_slug(
+                user=user, namespace=namespace, slug=slug
+            )
 
             if data_connector.etag == etag:
                 return HTTPResponse(status=304)
@@ -138,15 +150,17 @@ class DataConnectorsBP(CustomBlueprint):
             etag: str,
             validator: RCloneValidator,
         ) -> JSONResponse:
-            existing_dc = await self.data_connector_repo.get_data_connector(data_connector_id=data_connector_id)
+            existing_dc = await self.data_connector_repo.get_data_connector(
+                user=user, data_connector_id=data_connector_id
+            )
             dc_patch = validate_data_connector_patch(existing_dc, body, validator=validator)
-            data_connector = await self.data_connector_repo.update_data_connector(
-                data_connector_id=data_connector_id, patch=dc_patch, etag=etag
+            data_connector_update = await self.data_connector_repo.update_data_connector(
+                user=user, data_connector_id=data_connector_id, patch=dc_patch, etag=etag
             )
 
             return validated_json(
                 apispec.DataConnector,
-                self._dump_data_connector(data_connector, validator=validator),
+                self._dump_data_connector(data_connector_update.new, validator=validator),
             )
 
         return "/data_connectors/<data_connector_id:ulid>", ["PATCH"], _patch
@@ -161,7 +175,7 @@ class DataConnectorsBP(CustomBlueprint):
             user: base_models.APIUser,
             data_connector_id: ULID,
         ) -> HTTPResponse:
-            await self.data_connector_repo.delete_data_connector(data_connector_id=data_connector_id)
+            await self.data_connector_repo.delete_data_connector(user=user, data_connector_id=data_connector_id)
             return HTTPResponse(status=204)
 
         return "/data_connectors/<data_connector_id:ulid>", ["DELETE"], _delete
