@@ -3,7 +3,7 @@
 from dataclasses import asdict
 from typing import Any
 
-from renku_data_services import base_models
+from renku_data_services import base_models, errors
 from renku_data_services.authz.models import Visibility
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.storage import models as storage_models
@@ -121,10 +121,18 @@ def validate_data_connector_patch(
     )
 
 
-def validate_data_connector_secrets_put(put: apispec.DataConnectorSecretPutList) -> list[models.DataConnectorSecretPut]:
+def validate_data_connector_secrets_patch(
+    put: apispec.DataConnectorSecretPatchList,
+) -> list[models.DataConnectorSecretPatch]:
     """Validate the update to a data connector's secrets."""
+    seen_names: set[str] = set()
+    for secret in put.root:
+        if secret.name in seen_names:
+            raise errors.ValidationError(message=f"Found duplicate name '{secret.name}' in the list of secrets.")
+        seen_names.add(secret.name)
+
     return [
-        models.DataConnectorSecretPut(
+        models.DataConnectorSecretPatch(
             name=secret.name,
             value=secret.value,
         )

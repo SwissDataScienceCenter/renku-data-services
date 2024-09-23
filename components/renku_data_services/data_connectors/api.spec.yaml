@@ -255,14 +255,15 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - data connectors
-    put:
+    patch:
       summary: Save secrets for a data connector
+      description: New secrets will be added and existing secrets will have their value updated. Using `null` as a value will remove the corresponding secret.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/DataConnectorSecretPutList"
+              $ref: "#/components/schemas/DataConnectorSecretPatchList"
       responses:
         "201":
           description: The secrets for cloud storage were saved
@@ -514,12 +515,12 @@ components:
       required:
         - name
         - secret_id
-    DataConnectorSecretPutList:
+    DataConnectorSecretPatchList:
       description: List of secrets to be saved for a data connector
       type: array
       items:
-        $ref: "#/components/schemas/DataConnectorSecretPut"
-    DataConnectorSecretPut:
+        $ref: "#/components/schemas/DataConnectorSecretPatch"
+    DataConnectorSecretPatch:
       description: Information about a credential to save for a data connector
       properties:
         name:
@@ -534,6 +535,7 @@ components:
       type: string
       minLength: 1
       maxLength: 5000
+      nullable: true
     RCloneOption:
       type: object
       description: Single field on an RClone storage, like "remote" or "access_key_id"

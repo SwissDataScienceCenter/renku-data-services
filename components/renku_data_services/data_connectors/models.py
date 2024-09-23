@@ -129,8 +129,8 @@ class DataConnectorSecret:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class DataConnectorSecretPut:
+class DataConnectorSecretPatch:
     """Secret to be saved for a data connector."""
 
     name: str
-    value: str
+    value: str | None

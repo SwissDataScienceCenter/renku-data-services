@@ -22,7 +22,7 @@ from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors.core import (
     dump_storage_with_sensitive_fields,
     validate_data_connector_patch,
-    validate_data_connector_secrets_put,
+    validate_data_connector_secrets_patch,
     validate_unsaved_data_connector,
 )
 from renku_data_services.data_connectors.db import DataConnectorProjectLinkRepository, DataConnectorRepository
@@ -287,15 +287,15 @@ class DataConnectorsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        @validate_body_root_model(json=apispec.DataConnectorSecretPutList)
+        @validate_body_root_model(json=apispec.DataConnectorSecretPatchList)
         async def _put_secrets(
             request: Request,
             user: base_models.APIUser,
             data_connector_id: ULID,
-            body: apispec.DataConnectorSecretPutList,
+            body: apispec.DataConnectorSecretPatchList,
         ) -> JSONResponse:
-            unsaved_secrets = validate_data_connector_secrets_put(put=body)
-            secrets = await self.data_connector_repo.insert_or_update_data_connector_secrets(
+            unsaved_secrets = validate_data_connector_secrets_patch(put=body)
+            secrets = await self.data_connector_repo.patch_data_connector_secrets(
                 user=user, data_connector_id=data_connector_id, secrets=unsaved_secrets
             )
             return validated_json(

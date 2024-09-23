@@ -1013,7 +1013,7 @@ async def test_delete_project_after_linking(
 
 
 @pytest.mark.asyncio
-async def test_put_data_connector_secrets(
+async def test_patch_data_connector_secrets(
     sanic_client: SanicASGITestClient, create_data_connector, user_headers
 ) -> None:
     data_connector = await create_data_connector("My data connector")
@@ -1043,7 +1043,7 @@ async def test_put_data_connector_secrets(
 
 
 @pytest.mark.asyncio
-async def test_put_data_connector_secrets_update_secrets(
+async def test_patch_data_connector_secrets_update_secrets(
     sanic_client: SanicASGITestClient, create_data_connector, user_headers
 ) -> None:
     data_connector = await create_data_connector("My data connector")
@@ -1088,7 +1088,7 @@ async def test_put_data_connector_secrets_update_secrets(
 
 
 @pytest.mark.asyncio
-async def test_put_data_connector_secrets_add_secrets(
+async def test_patch_data_connector_secrets_add_and_remove_secrets(
     sanic_client: SanicASGITestClient, create_data_connector, user_headers
 ) -> None:
     data_connector = await create_data_connector("My data connector")
@@ -1109,6 +1109,7 @@ async def test_put_data_connector_secrets_add_secrets(
 
     payload = [
         {"name": "access_key_id", "value": "new access key id value"},
+        {"name": "secret_access_key", "value": None},
         {"name": "password", "value": "password"},
     ]
     _, response = await sanic_client.put(
@@ -1128,15 +1129,16 @@ async def test_put_data_connector_secrets_add_secrets(
     assert response.status_code == 200, response.json
     assert response.json is not None
     secrets = response.json
-    assert len(secrets) == 3
-    assert {s["name"] for s in secrets} == {"access_key_id", "secret_access_key", "password"}
+    assert len(secrets) == 2
+    assert {s["name"] for s in secrets} == {"access_key_id", "password"}
 
     # Check the associated secrets
     _, response = await sanic_client.get("/api/data/user/secrets", params={"kind": "storage"}, headers=user_headers)
 
     assert response.status_code == 200
     assert response.json is not None
-    assert len(response.json) == 3
+    assert len(response.json) == 2
+    assert {s["name"] for s in secrets} == {"access_key_id", "password"}
 
 
 @pytest.mark.asyncio

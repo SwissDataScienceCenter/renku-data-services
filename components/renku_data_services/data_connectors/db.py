@@ -333,10 +333,10 @@ class DataConnectorRepository:
 
             return [secret.dump() for secret in secrets]
 
-    async def insert_or_update_data_connector_secrets(
-        self, user: base_models.APIUser, data_connector_id: ULID, secrets: list[models.DataConnectorSecretPut]
+    async def patch_data_connector_secrets(
+        self, user: base_models.APIUser, data_connector_id: ULID, secrets: list[models.DataConnectorSecretPatch]
     ) -> list[models.DataConnectorSecret]:
-        """Create or update data connector secrets."""
+        """Create, update or remove data connector secrets."""
         if user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
@@ -359,9 +359,16 @@ class DataConnectorRepository:
 
             all_secrets = []
 
-            print(existing_secrets_as_dict)
-
             for name, value in secrets_as_dict.items():
+                if value is None:
+                    # Remove the secret
+                    data_connector_secret_orm = existing_secrets_as_dict.get(name)
+                    if data_connector_secret_orm is None:
+                        continue
+                    await session.delete(data_connector_secret_orm.secret)
+                    del existing_secrets_as_dict[name]
+                    continue
+
                 encrypted_value, encrypted_key = await encrypt_user_secret(
                     user_repo=self.user_repo,
                     requested_by=user,
