@@ -278,18 +278,6 @@ class Config:
         return self._storage_repo
 
     @property
-    def storage_v2_repo(self) -> StorageV2Repository:
-        """The DB adapter for V2 cloud storage configs."""
-        if not self._storage_v2_repo:
-            self._storage_v2_repo = StorageV2Repository(
-                session_maker=self.db.async_session_maker,
-                project_authz=self.authz,
-                user_repo=self.kc_user_repo,
-                secret_service_public_key=self.secrets_service_public_key,
-            )
-        return self._storage_v2_repo
-
-    @property
     def event_repo(self) -> EventRepository:
         """The DB adapter for cloud event configs."""
         if not self._event_repo:
