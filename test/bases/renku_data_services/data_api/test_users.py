@@ -270,7 +270,6 @@ async def test_delete_user(sanic_client, user_headers, app_config, users) -> Non
     ]
     assert user in users_response
 
-
     # Delete a user
     _, res = await sanic_client.delete(
         f"/api/data/users/{user_id}",
@@ -295,22 +294,3 @@ async def test_delete_user(sanic_client, user_headers, app_config, users) -> Non
         for iuser in res.json
     ]
     assert user not in users_response
-
-    # Delete a project
-    # project_id = project["id"]
-    # _, response = await sanic_client.delete(f"/api/data/projects/{user_id}", headers=user_headers)
-
-    # events = await app_config.event_repo._get_pending_events()
-    # assert len(events) == 15
-    # project_removed_event = next((e for e in events if e.get_message_type() == "project.removed"), None)
-    # assert project_removed_event
-    # removed_event = deserialize_binary(
-    #     b64decode(project_removed_event.payload["payload"]), avro_schema_v2.ProjectRemoved
-    # )
-    # assert removed_event.id == project_id
-
-    # # Get all projects
-    # _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
-
-    # assert response.status_code == 200, response.text
-    # assert {p["name"] for p in response.json} == {"Project 1", "Project 2", "Project 4", "Project 5"}
