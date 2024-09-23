@@ -124,14 +124,14 @@ class UserRepo:
 
             return [user.dump() for user in users if user.namespace is not None]
 
-    async def remove_user(self, user_id: str) -> UserInfo | None:
+    async def remove_user(self, user_id: str) -> str | None:
         """Remove a user."""
         logger.info(f"remove_user: Trying to remove user with ID {user_id}")
         return await self._remove_user(user_id=user_id)
 
     @with_db_transaction
     @dispatch_message(avro_schema_v2.UserRemoved)
-    async def _remove_user(self, user_id: str, *, session: AsyncSession | None = None) -> UserInfo | None:
+    async def _remove_user(self, user_id: str, *, session: AsyncSession | None = None) -> str | None:
         """Remove a user from the database."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
@@ -143,9 +143,8 @@ class UserRepo:
             logger.info(f"User with ID {user_id} was not found.")
             return None
         logger.info(f"User with ID {user_id} was removed from the database.")
-        removed_user = user.dump()
         logger.info(f"User namespace with ID {user_id} was removed from the authorization database.")
-        return removed_user
+        return user_id
 
     @only_authenticated
     async def get_or_create_user_secret_key(self, requested_by: APIUser) -> str:
