@@ -34,16 +34,10 @@ class DefaultCullingThresholds(BaseAPISpec):
     registered: CullingThreshold
 
 
-class Error(BaseAPISpec):
-    code: int = Field(..., example=1404, gt=0)
-    detail: Optional[str] = Field(
-        None, example="A more detailed optional message showing what the problem was"
-    )
-    message: str = Field(..., example="Something went wrong - please try again later")
-
-
-class ErrorResponse(BaseAPISpec):
-    error: Error
+class ErrorResponseNested(BaseAPISpec):
+    code: int
+    detail: Optional[str] = None
+    message: str
 
 
 class Generated(BaseAPISpec):
@@ -297,6 +291,10 @@ class SessionsSessionIdLogsGetParametersQuery(BaseAPISpec):
 
 class SessionsImagesGetParametersQuery(BaseAPISpec):
     image_url: str
+
+
+class ErrorResponse(BaseAPISpec):
+    error: ErrorResponseNested
 
 
 class LaunchNotebookRequest(BaseAPISpec):

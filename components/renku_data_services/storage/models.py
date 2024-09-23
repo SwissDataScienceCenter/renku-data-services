@@ -253,3 +253,9 @@ class CloudStorageSecretUpsert(BaseModel):
 
     name: str = Field()
     value: str = Field()
+
+
+class SavedCloudStorage(CloudStorage):
+    """A cloud storage that has been saved in the DB."""
+
+    storage_id: ULID
