@@ -208,29 +208,7 @@ async def test_logged_in_user_check_adds_user_if_missing(sanic_client, users, ad
 
 
 @pytest.mark.asyncio
-async def test_delete_user(sanic_client, user_headers, app_config, users) -> None:
-    # Create an admin user
-    admin = UserInfo(
-        id="admin-id",
-        first_name="Admin",
-        last_name="Adminson",
-        email="admin@gmail.com",
-        namespace=Namespace(
-            id=ULID(),
-            slug="admin.adminson",
-            kind=NamespaceKind.user,
-            underlying_resource_id="admin-id",
-            created_by="admin-id",
-        ),
-    )
-    admin_token = {
-        "id": admin.id,
-        "is_admin": True,
-        "first_name": admin.first_name,
-        "last_name": admin.last_name,
-        "email": admin.email,
-    }
-
+async def test_delete_user(sanic_client, admin_headers) -> None:
     # Create a user
     user_id = str(uuid4())
     user = dict(
@@ -247,7 +225,7 @@ async def test_delete_user(sanic_client, user_headers, app_config, users) -> Non
         "email": user["email"],
         "name": f"{user["first_name"]} {user["last_name"]}",
     }
-    # Just by hitting the users endpoint with valid credentials the user will be aded to the database
+    # Just by hitting the users endpoint with valid credentials the user will be added to the database
     _, res = await sanic_client.get(
         f"/api/data/users/{user_id}",
         headers={"Authorization": f"bearer {json.dumps(access_token)}"},
@@ -256,7 +234,7 @@ async def test_delete_user(sanic_client, user_headers, app_config, users) -> Non
     # Check that the user just added via acccess token is returned in the list when the admin lists all users
     _, res = await sanic_client.get(
         "/api/data/users",
-        headers={"Authorization": f"bearer {json.dumps(admin_token)}"},
+        headers=admin_headers,
     )
     assert res.status_code == 200
     users_response = [
@@ -273,7 +251,7 @@ async def test_delete_user(sanic_client, user_headers, app_config, users) -> Non
     # Delete a user
     _, res = await sanic_client.delete(
         f"/api/data/users/{user_id}",
-        headers={"Authorization": f"bearer {json.dumps(admin_token)}"},
+        headers=admin_headers,
     )
 
     assert res.status_code == 204, res.text
@@ -281,7 +259,7 @@ async def test_delete_user(sanic_client, user_headers, app_config, users) -> Non
     # Check that the user just added via acccess token is now not returned in the list when the admin lists all users
     _, res = await sanic_client.get(
         "/api/data/users",
-        headers={"Authorization": f"bearer {json.dumps(admin_token)}"},
+        headers=admin_headers,
     )
     assert res.status_code == 200
     users_response = [
