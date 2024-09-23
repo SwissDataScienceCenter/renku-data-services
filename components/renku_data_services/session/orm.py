@@ -131,8 +131,8 @@ class SessionLauncherORM(BaseORM):
             creation_date=launcher.creation_date,
             description=launcher.description,
             project_id=ULID.from_str(launcher.project_id),
-            resource_class_id=launcher.resource_class_id,
             environment_id=launcher.environment.id,
+            resource_class_id=launcher.resource_class_id,
         )
 
     def dump(self) -> models.SessionLauncher:
