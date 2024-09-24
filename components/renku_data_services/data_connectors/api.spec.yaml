@@ -526,11 +526,11 @@ components:
         name:
           $ref: "#/components/schemas/DataConnectorName"
         value:
-          $ref: "#/components/schemas/SecretValue"
+          $ref: "#/components/schemas/SecretValueNullable"
       required:
         - name
         - value
-    SecretValue:
+    SecretValueNullable:
       description: Secret value that can be any text
       type: string
       minLength: 1

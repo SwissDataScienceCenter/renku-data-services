@@ -115,12 +115,9 @@ def validate_body_root_model(
     ) -> Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]]:
         @wraps(f)
         async def decorated_function(request: Request, *args: _P.args, **kwargs: _P.kwargs) -> _T:
-            try:
-                if request.json is not None:
-                    request.parsed_json = {"root": request.parsed_json}  # type: ignore[assignment]
-                return await validate(json=json)(f)(request, *args, **kwargs)
-            except KeyError:
-                raise errors.ValidationError(message="Failed to validate the query parameters")
+            if request.json is not None:
+                request.parsed_json = {"root": request.parsed_json}  # type: ignore[assignment]
+            return await validate(json=json)(f)(request, *args, **kwargs)
 
         return decorated_function
 
