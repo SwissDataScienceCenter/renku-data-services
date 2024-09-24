@@ -11,7 +11,6 @@
 			"command": "poetry self add poetry-polylith-plugin"
 		},
 		"ghcr.io/devcontainers/features/docker-in-docker:2": {},
-		"ghcr.io/mpriscella/features/kind:1": {},
 		"ghcr.io/devcontainers-contrib/features/gh-release:1": {
 			"repo": "authzed/zed",
 			"binaryNames": "zed"
