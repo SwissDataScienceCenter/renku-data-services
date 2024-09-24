@@ -41,20 +41,20 @@ def merge_headers(*headers: dict[str, str]) -> dict[str, str]:
     return all_headers
 
 
-class KindCluster(AbstractContextManager):
+class K3DCluster(AbstractContextManager):
     """Context manager that will create and tear down a k3s cluster"""
 
     def __init__(
         self,
         cluster_name: str,
-        node_image: str = "kindest/node:v1.30.4",
-        kubeconfig: str = ".kind-kube-config.yaml",
-        kindconfig: str = "kind_config.yaml",
+        k3s_image="latest",
+        kubeconfig=".k3d-config.yaml",
+        extra_images=[],
     ):
         self.cluster_name = cluster_name
-        self.node_image = node_image
+        self.k3s_image = k3s_image
+        self.extra_images = extra_images
         self.kubeconfig = kubeconfig
-        self.kindconfig = kindconfig
         self.env = os.environ.copy()
         self.env["KUBECONFIG"] = self.kubeconfig
 
@@ -62,34 +62,53 @@ class KindCluster(AbstractContextManager):
         """create kind cluster"""
 
         create_cluster = [
-            "kind",
-            "create",
+            "k3d",
             "cluster",
-            "--name",
+            "create",
             self.cluster_name,
+            "--agents",
+            "1",
             "--image",
-            self.node_image,
-            "--kubeconfig",
-            self.kubeconfig,
-            "--config",
-            self.kindconfig,
+            self.k3s_image,
+            "--no-lb",
+            "--verbose",
+            "--wait",
+            "--k3s-arg",
+            "--disable=traefik@server:0",
+            "--k3s-arg",
+            "--disable=metrics-server@server:0",
         ]
 
-        try:
-            subprocess.run(create_cluster, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=self.env, check=True)
-        except subprocess.SubprocessError as err:
-            if err.output is not None:
-                print(err.output.decode())
-            else:
-                print(err)
-            raise
+        commands = [create_cluster]
+
+        for extra_image in self.extra_images:
+            upload_image = [
+                "k3d",
+                "image",
+                "import",
+                extra_image,
+                "-c",
+                self.cluster_name,
+            ]
+
+            commands.append(upload_image)
+
+        for command in commands:
+            try:
+                subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=self.env, check=True)
+            except subprocess.SubprocessError as err:
+                if err.output is not None:
+                    print(err.output.decode())
+                else:
+                    print(err)
+                raise
 
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """delete kind cluster"""
 
-        delete_cluster = ["kind", "delete", "cluster", "--name", self.cluster_name, "--kubeconfig", self.kubeconfig]
+        delete_cluster = ["k3d", "cluster", "delete", self.cluster_name]
         subprocess.run(delete_cluster, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=self.env, check=True)
 
         return False
@@ -99,7 +118,7 @@ class KindCluster(AbstractContextManager):
             return f.read()
 
 
-def setup_amalthea(install_name: str, app_name: str, version: str, cluster: KindCluster) -> None:
+def setup_amalthea(install_name: str, app_name: str, version: str, cluster: K3DCluster) -> None:
     k8s_config.load_kube_config_from_dict(yaml.safe_load(cluster.config_yaml()))
 
     core_api = k8s_client.CoreV1Api()

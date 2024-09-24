@@ -13,17 +13,17 @@ from renku_data_services.app_config.config import Config
 from renku_data_services.crc.apispec import ResourcePool
 from renku_data_services.users.models import UserInfo
 
-from .utils import KindCluster, setup_amalthea
+from .utils import K3DCluster, setup_amalthea
 
-os.environ["KUBECONFIG"] = ".kind-kube-config.yaml"
+os.environ["KUBECONFIG"] = ".k3d-config.yaml"
 
 
 @pytest.fixture(scope="module", autouse=True)
-def cluster() -> KindCluster:
+def cluster() -> K3DCluster:
     if shutil.which("kind") is None:
         pytest.skip("Requires kind for cluster creation")
 
-    with KindCluster("test-renku") as cluster:
+    with K3DCluster("test-renku") as cluster:
         setup_amalthea("amalthea-se", "amalthea-sessions", "0.0.10-new-operator-chart", cluster)
 
         yield cluster

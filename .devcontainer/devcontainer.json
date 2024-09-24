@@ -28,7 +28,8 @@
 		"ghcr.io/EliiseS/devcontainer-features/bash-profile:1": {
 			"command": "alias k=kubectl"
 		},
-		"ghcr.io/devcontainers-contrib/features/rclone:1": {}
+		"ghcr.io/devcontainers-contrib/features/rclone:1": {},
+		"./k3d": {}
 	},
 	"overrideFeatureInstallOrder": [
 		"ghcr.io/devcontainers-contrib/features/poetry",

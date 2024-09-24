@@ -14,17 +14,17 @@ from sanic_testing.testing import SanicASGITestClient
 
 from renku_data_services.notebooks.api.classes.k8s_client import JupyterServerV1Alpha1Kr8s
 
-from .utils import KindCluster, setup_amalthea
+from .utils import K3DCluster, setup_amalthea
 
-os.environ["KUBECONFIG"] = ".kind-kube-config.yaml"
+os.environ["KUBECONFIG"] = ".k3d-config.yaml"
 
 
 @pytest.fixture(scope="module", autouse=True)
-def cluster() -> KindCluster:
+def cluster() -> K3DCluster:
     if shutil.which("kind") is None:
         pytest.skip("Requires kind for cluster creation")
 
-    with KindCluster("test-renku") as cluster:
+    with K3DCluster("test-renku", extra_images=["renku/renkulab-py:3.10-0.24.0"]) as cluster:
         setup_amalthea("amalthea-js", "amalthea", "0.12.2", cluster)
 
         yield cluster
