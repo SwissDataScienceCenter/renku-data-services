@@ -45,11 +45,16 @@ class KindCluster(AbstractContextManager):
     """Context manager that will create and tear down a k3s cluster"""
 
     def __init__(
-        self, cluster_name: str, node_image: str = "kindest/node:v1.30.4", kubeconfig: str = ".kind-kube-config.yaml"
+        self,
+        cluster_name: str,
+        node_image: str = "kindest/node:v1.30.4",
+        kubeconfig: str = ".kind-kube-config.yaml",
+        kindconfig: str = "kind_config.yaml",
     ):
         self.cluster_name = cluster_name
         self.node_image = node_image
         self.kubeconfig = kubeconfig
+        self.kindconfig = kindconfig
         self.env = os.environ.copy()
         self.env["KUBECONFIG"] = self.kubeconfig
 
@@ -66,6 +71,8 @@ class KindCluster(AbstractContextManager):
             self.node_image,
             "--kubeconfig",
             self.kubeconfig,
+            "--config",
+            self.kindconfig,
         ]
 
         subprocess.run(create_cluster, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=self.env, check=True)
