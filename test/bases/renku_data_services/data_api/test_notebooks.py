@@ -24,7 +24,7 @@ def cluster() -> K3DCluster:
     if shutil.which("k3d") is None:
         pytest.skip("Requires k3d for cluster creation")
 
-    with K3DCluster("test-renku") as cluster:
+    with K3DCluster("renku-test-notebooks") as cluster:
         setup_amalthea("amalthea-js", "amalthea", "0.12.2", cluster)
 
         yield cluster
