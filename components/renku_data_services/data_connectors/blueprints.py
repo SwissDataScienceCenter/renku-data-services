@@ -282,14 +282,14 @@ class DataConnectorsBP(CustomBlueprint):
 
         return "/data_connectors/<data_connector_id:ulid>/secrets", ["GET"], _get_secrets
 
-    def put_secrets(self) -> BlueprintFactoryResponse:
-        """Create or update saved secrets for a data connector."""
+    def patch_secrets(self) -> BlueprintFactoryResponse:
+        """Create, update or delete saved secrets for a data connector."""
 
         @authenticate(self.authenticator)
         @only_authenticated
         @validate_body_root_model(json=apispec.DataConnectorSecretPatchList)
-        async def _put_secrets(
-            request: Request,
+        async def _patch_secrets(
+            _: Request,
             user: base_models.APIUser,
             data_connector_id: ULID,
             body: apispec.DataConnectorSecretPatchList,
@@ -302,7 +302,7 @@ class DataConnectorsBP(CustomBlueprint):
                 apispec.DataConnectorSecretsList, [self._dump_data_connector_secret(secret) for secret in secrets]
             )
 
-        return "/data_connectors/<data_connector_id:ulid>/secrets", ["PUT"], _put_secrets
+        return "/data_connectors/<data_connector_id:ulid>/secrets", ["PATCH"], _patch_secrets
 
     def delete_secrets(self) -> BlueprintFactoryResponse:
         """Delete all saved secrets for a data connector."""

@@ -1023,7 +1023,7 @@ async def test_patch_data_connector_secrets(
         {"name": "access_key_id", "value": "access key id value"},
         {"name": "secret_access_key", "value": "secret access key value"},
     ]
-    _, response = await sanic_client.put(
+    _, response = await sanic_client.patch(
         f"/api/data/data_connectors/{data_connector_id}/secrets", headers=user_headers, json=payload
     )
 
@@ -1052,7 +1052,7 @@ async def test_patch_data_connector_secrets_update_secrets(
         {"name": "access_key_id", "value": "access key id value"},
         {"name": "secret_access_key", "value": "secret access key value"},
     ]
-    _, response = await sanic_client.put(
+    _, response = await sanic_client.patch(
         f"/api/data/data_connectors/{data_connector_id}/secrets", headers=user_headers, json=payload
     )
     assert response.status_code == 200, response.json
@@ -1066,7 +1066,7 @@ async def test_patch_data_connector_secrets_update_secrets(
         {"name": "access_key_id", "value": "new access key id value"},
         {"name": "secret_access_key", "value": "new secret access key value"},
     ]
-    _, response = await sanic_client.put(
+    _, response = await sanic_client.patch(
         f"/api/data/data_connectors/{data_connector_id}/secrets", headers=user_headers, json=payload
     )
 
@@ -1097,7 +1097,7 @@ async def test_patch_data_connector_secrets_add_and_remove_secrets(
         {"name": "access_key_id", "value": "access key id value"},
         {"name": "secret_access_key", "value": "secret access key value"},
     ]
-    _, response = await sanic_client.put(
+    _, response = await sanic_client.patch(
         f"/api/data/data_connectors/{data_connector_id}/secrets", headers=user_headers, json=payload
     )
     assert response.status_code == 200, response.json
@@ -1112,7 +1112,7 @@ async def test_patch_data_connector_secrets_add_and_remove_secrets(
         {"name": "secret_access_key", "value": None},
         {"name": "password", "value": "password"},
     ]
-    _, response = await sanic_client.put(
+    _, response = await sanic_client.patch(
         f"/api/data/data_connectors/{data_connector_id}/secrets", headers=user_headers, json=payload
     )
 
@@ -1151,7 +1151,7 @@ async def test_delete_data_connector_secrets(
         {"name": "access_key_id", "value": "access key id value"},
         {"name": "secret_access_key", "value": "secret access key value"},
     ]
-    _, response = await sanic_client.put(
+    _, response = await sanic_client.patch(
         f"/api/data/data_connectors/{data_connector_id}/secrets", headers=user_headers, json=payload
     )
     assert response.status_code == 200, response.json
