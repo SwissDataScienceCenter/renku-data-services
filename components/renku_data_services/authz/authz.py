@@ -51,7 +51,7 @@ class WithAuthz(Protocol):
 
 _AuthzChangeFuncResult = TypeVar(
     "_AuthzChangeFuncResult",
-    bound=Project | ProjectUpdate | Group | UserInfoUpdate | list[UserInfo] | None,
+    bound=Project | ProjectUpdate | Group | UserInfoUpdate | list[UserInfo] | str | None,
 )
 _T = TypeVar("_T")
 _WithAuthz = TypeVar("_WithAuthz", bound=WithAuthz)
@@ -496,6 +496,11 @@ class Authz:
                 case AuthzOperation.update_or_insert, ResourceType.user if isinstance(result, UserInfoUpdate):
                     if result.old is None:
                         authz_change = db_repo.authz._add_user_namespace(result.new.namespace)
+                case AuthzOperation.delete, ResourceType.user if isinstance(result, str):
+                    authz_change = await db_repo.authz._remove_user_namespace(result)
+                case AuthzOperation.delete, ResourceType.user if result is None:
+                    # NOTE: This means that the user does not exist in the first place so nothing was deleted
+                    pass
                 case AuthzOperation.insert_many, ResourceType.user_namespace if isinstance(result, list):
                     for res in result:
                         if not isinstance(res, UserInfo):

@@ -130,6 +130,7 @@ class UserRepo:
         return await self._remove_user(user_id=user_id)
 
     @with_db_transaction
+    @Authz.authz_change(AuthzOperation.delete, ResourceType.user)
     @dispatch_message(avro_schema_v2.UserRemoved)
     async def _remove_user(self, user_id: str, *, session: AsyncSession | None = None) -> str | None:
         """Remove a user from the database."""
