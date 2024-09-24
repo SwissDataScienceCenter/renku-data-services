@@ -9,14 +9,13 @@ from sqlalchemy.orm import sessionmaker
 
 from renku_data_services.authz.authz import Authz
 from renku_data_services.authz.config import AuthzConfig
-from renku_data_services.data_connectors.db import BaseDataConnectorRepository, DataConnectorProjectLinkRepository
+from renku_data_services.data_connectors.migration_utils import DataConnectorMigrationTool
 from renku_data_services.errors import errors
 from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project.db import ProjectRepository
-from renku_data_services.storage.db import StorageV2Repository
 from renku_data_services.users.db import UsersSync
 from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
 
@@ -33,9 +32,7 @@ class SyncConfig:
     project_repo: ProjectRepository
 
     # NEW
-    storage_v2_repository: StorageV2Repository
-    data_connector_repository: BaseDataConnectorRepository
-    data_connector_project_link_repository: DataConnectorProjectLinkRepository
+    data_connector_migration_tool: DataConnectorMigrationTool
 
     session_maker: Callable[..., AsyncSession]
 
@@ -77,15 +74,7 @@ class SyncConfig:
         )
 
         # NEW
-        storage_v2_repository = StorageV2Repository(
-            session_maker=session_maker,
-            authz=Authz(authz_config),
-        )
-        data_connector_repository = BaseDataConnectorRepository(
-            session_maker=session_maker,
-            authz=Authz(authz_config),
-        )
-        data_connector_project_link_repository = DataConnectorProjectLinkRepository(
+        data_connector_migration_tool = DataConnectorMigrationTool(
             session_maker=session_maker,
             authz=Authz(authz_config),
         )
@@ -109,8 +98,6 @@ class SyncConfig:
             group_repo,
             event_repo,
             project_repo,
-            storage_v2_repository,
-            data_connector_repository,
-            data_connector_project_link_repository,
+            data_connector_migration_tool,
             session_maker,
         )

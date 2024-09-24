@@ -11,8 +11,6 @@ from ulid import ULID
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.authz import models as authz_models
-from renku_data_services.authz.authz import Authz, ResourceType
-from renku_data_services.authz.models import Scope
 from renku_data_services.storage import models
 from renku_data_services.storage import orm as schemas
 from renku_data_services.users.db import UserRepo
@@ -182,26 +180,26 @@ class StorageRepository(BaseStorageRepository):
         return await self.gitlab_client.filter_projects_by_access_level(user, project_ids, gitlab_access_level)
 
 
-class StorageV2Repository:
-    """Repository for V2 cloud storage."""
+# class StorageV2Repository:
+#     """Repository for V2 cloud storage."""
 
-    def __init__(self, session_maker: Callable[..., AsyncSession], authz: Authz) -> None:
-        self.session_maker = session_maker
-        self.authz = authz
+#     def __init__(self, session_maker: Callable[..., AsyncSession], authz: Authz) -> None:
+#         self.session_maker = session_maker
+#         self.authz = authz
 
-    async def _get_storages_v2(self, requested_by: base_models.APIUser) -> list[models.CloudStorage]:
-        """Get the storages associated with a Renku 2.0 project."""
-        if requested_by.id is None:
-            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
-        if not requested_by.is_admin:
-            raise errors.ForbiddenError(message="Only admins can perform this operation.")
+#     async def _get_storages_v2(self, requested_by: base_models.APIUser) -> list[models.CloudStorage]:
+#         """Get the storages associated with a Renku 2.0 project."""
+#         if requested_by.id is None:
+#             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+#         if not requested_by.is_admin:
+#             raise errors.ForbiddenError(message="Only admins can perform this operation.")
 
-        all_project_ids = await self.authz.resources_with_permission(
-            requested_by=requested_by, user_id=requested_by.id, resource_type=ResourceType.project, scope=Scope.READ
-        )
+#         all_project_ids = await self.authz.resources_with_permission(
+#             requested_by=requested_by, user_id=requested_by.id, resource_type=ResourceType.project, scope=Scope.READ
+#         )
 
-        async with self.session_maker() as session:
-            stmt = select(schemas.CloudStorageORM).where(schemas.CloudStorageORM.project_id.in_(all_project_ids))
-            result = await session.scalars(stmt)
-            storages = result.all()
-            return [storage.dump() for storage in storages]
+#         async with self.session_maker() as session:
+#             stmt = select(schemas.CloudStorageORM).where(schemas.CloudStorageORM.project_id.in_(all_project_ids))
+#             result = await session.scalars(stmt)
+#             storages = result.all()
+#             return [storage.dump() for storage in storages]

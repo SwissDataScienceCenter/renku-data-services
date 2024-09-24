@@ -16,8 +16,7 @@ from ulid import ULID
 from renku_data_services.authz.authz import Authz, ResourceType, _AuthzConverter, _Relation
 from renku_data_services.authz.models import Scope
 from renku_data_services.background_jobs.config import SyncConfig
-from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId, Slug
-from renku_data_services.data_connectors import models as data_connector_models
+from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.errors import errors
 from renku_data_services.message_queue.avro_models.io.renku.events import v2
 from renku_data_services.message_queue.converters import EventConverter
@@ -271,51 +270,51 @@ async def migrate_storages_v2_to_data_connectors(config: SyncConfig) -> None:
     """Move storages_v2 to data_connectors."""
     logger = logging.getLogger("background_jobs").getChild(migrate_storages_v2_to_data_connectors.__name__)
 
-    api_user = InternalServiceAdmin(id=ServiceAdminId.migrations)
-    storages_v2 = await config.storage_v2_repository._get_storages_v2(requested_by=api_user)
-    for storage in storages_v2:
-        project_id = ULID.from_str(storage.project_id)
-        project = await config.project_repo.get_project(user=api_user, project_id=project_id)
+    # api_user = InternalServiceAdmin(id=ServiceAdminId.migrations)
+    # storages_v2 = await config.storage_v2_repository._get_storages_v2(requested_by=api_user)
+    # for storage in storages_v2:
+    #     project_id = ULID.from_str(storage.project_id)
+    #     project = await config.project_repo.get_project(user=api_user, project_id=project_id)
 
-        data_connector_slug = Slug.from_name(storage.name).value
+    #     data_connector_slug = Slug.from_name(storage.name).value
 
-        unsaved_storage = data_connector_models.CloudStorageCore(
-            storage_type=storage.storage_type,
-            configuration=storage.configuration.config,
-            source_path=storage.source_path,
-            target_path=storage.target_path,
-            readonly=storage.readonly,
-        )
-        unsaved_data_connector = data_connector_models.UnsavedDataConnector(
-            name=storage.name,
-            namespace=project.namespace.slug,
-            slug=data_connector_slug,
-            visibility=project.visibility,
-            created_by="",
-            storage=unsaved_storage,
-        )
-        data_connector = await config.data_connector_repository.insert_data_connector(
-            user=api_user, data_connector=unsaved_data_connector
-        )
-        logger.info(f"data connector = {data_connector}")
-        # try:
-        #     data_connector = await config.data_connector_repository.insert_data_connector(
-        #       user=api_user, data_connector=unsaved_data_connector)
-        # except errors.ConflictError:
-        #     # Retry with a random suffix
-        #     suffix = "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(8)])
-        #     data_connector_slug = f"{data_connector_slug}-{suffix}"
-        #     unsaved_data_connector = data_connector_models.UnsavedDataConnector(
-        #         name=storage.name,
-        #         namespace=project.namespace.slug,
-        #         slug=data_connector_slug,
-        #         visibility=project.visibility,
-        #         created_by="",
-        #         storage=unsaved_storage,
-        #     )
-        #     data_connector = await config.data_connector_repository.insert_data_connector(
-        #       user=api_user, data_connector=unsaved_data_connector)
+    #     unsaved_storage = data_connector_models.CloudStorageCore(
+    #         storage_type=storage.storage_type,
+    #         configuration=storage.configuration.config,
+    #         source_path=storage.source_path,
+    #         target_path=storage.target_path,
+    #         readonly=storage.readonly,
+    #     )
+    #     unsaved_data_connector = data_connector_models.UnsavedDataConnector(
+    #         name=storage.name,
+    #         namespace=project.namespace.slug,
+    #         slug=data_connector_slug,
+    #         visibility=project.visibility,
+    #         created_by="",
+    #         storage=unsaved_storage,
+    #     )
+    #     data_connector = await config.data_connector_repository.insert_data_connector(
+    #         user=api_user, data_connector=unsaved_data_connector
+    #     )
+    #     logger.info(f"data connector = {data_connector}")
+    #     # try:
+    #     #     data_connector = await config.data_connector_repository.insert_data_connector(
+    #     #       user=api_user, data_connector=unsaved_data_connector)
+    #     # except errors.ConflictError:
+    #     #     # Retry with a random suffix
+    #     #     suffix = "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(8)])
+    #     #     data_connector_slug = f"{data_connector_slug}-{suffix}"
+    #     #     unsaved_data_connector = data_connector_models.UnsavedDataConnector(
+    #     #         name=storage.name,
+    #     #         namespace=project.namespace.slug,
+    #     #         slug=data_connector_slug,
+    #     #         visibility=project.visibility,
+    #     #         created_by="",
+    #     #         storage=unsaved_storage,
+    #     #     )
+    #     #     data_connector = await config.data_connector_repository.insert_data_connector(
+    #     #       user=api_user, data_connector=unsaved_data_connector)
 
-        # Adjust the owner
+    #     # Adjust the owner
 
     pass
