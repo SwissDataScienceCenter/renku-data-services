@@ -79,7 +79,16 @@ class K3DCluster(AbstractContextManager):
             "--disable=metrics-server@server:0",
         ]
 
-        commands = [create_cluster]
+        try:
+            subprocess.run(create_cluster, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=self.env, check=True)
+        except subprocess.SubprocessError as err:
+            if err.output is not None:
+                print(err.output.decode())
+            else:
+                print(err)
+            raise
+
+        extra_commands = []
 
         for extra_image in self.extra_images:
             upload_image = [
@@ -91,9 +100,9 @@ class K3DCluster(AbstractContextManager):
                 self.cluster_name,
             ]
 
-            commands.append(upload_image)
+            extra_commands.append(upload_image)
 
-        for command in commands:
+        for command in extra_commands:
             try:
                 subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=self.env, check=True)
             except subprocess.SubprocessError as err:
@@ -101,6 +110,7 @@ class K3DCluster(AbstractContextManager):
                     print(err.output.decode())
                 else:
                     print(err)
+                self._delete_cluster()
                 raise
 
         return self
@@ -108,10 +118,14 @@ class K3DCluster(AbstractContextManager):
     def __exit__(self, exc_type, exc_val, exc_tb):
         """delete kind cluster"""
 
+        self._delete_cluster()
+        return False
+
+    def _delete_cluster(self):
+        """delete kind cluster"""
+
         delete_cluster = ["k3d", "cluster", "delete", self.cluster_name]
         subprocess.run(delete_cluster, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=self.env, check=True)
-
-        return False
 
     def config_yaml(self):
         with open(self.kubeconfig) as f:

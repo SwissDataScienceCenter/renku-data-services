@@ -20,8 +20,8 @@ os.environ["KUBECONFIG"] = ".k3d-config.yaml"
 
 @pytest.fixture(scope="module", autouse=True)
 def cluster() -> K3DCluster:
-    if shutil.which("kind") is None:
-        pytest.skip("Requires kind for cluster creation")
+    if shutil.which("k3d") is None:
+        pytest.skip("Requires k3d for cluster creation")
 
     with K3DCluster("test-renku") as cluster:
         setup_amalthea("amalthea-se", "amalthea-sessions", "0.0.10-new-operator-chart", cluster)
