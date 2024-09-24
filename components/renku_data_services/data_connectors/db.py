@@ -60,8 +60,7 @@ class DataConnectorRepository:
         data_connector_id: ULID,
     ) -> models.DataConnector:
         """Get one data connector from the database."""
-        not_found_msg = f"Data connector with id '{
-            data_connector_id}' does not exist or you do not have access to it."
+        not_found_msg = f"Data connector with id '{data_connector_id}' does not exist or you do not have access to it."
 
         authorized = await self.authz.has_permission(user, ResourceType.data_connector, data_connector_id, Scope.READ)
         if not authorized:
@@ -80,8 +79,9 @@ class DataConnectorRepository:
         self, user: base_models.APIUser, namespace: str, slug: str
     ) -> models.DataConnector:
         """Get one data connector from the database by slug."""
-        not_found_msg = f"Data connector with identifier '{
-                namespace}/{slug}' does not exist or you do not have access to it."
+        not_found_msg = (
+            f"Data connector with identifier '{namespace}/{slug}' does not exist or you do not have access to it."
+        )
 
         async with self.session_maker() as session:
             stmt = select(schemas.DataConnectorORM)
@@ -235,10 +235,7 @@ class DataConnectorRepository:
                 select(ns_schemas.NamespaceORM).where(ns_schemas.NamespaceORM.slug == patch.namespace.lower())
             )
             if not ns:
-                raise errors.MissingResourceError(
-                    message=f"Rhe namespace with slug {
-                                                  patch.namespace} does not exist."
-                )
+                raise errors.MissingResourceError(message=f"The namespace with slug {patch.namespace} does not exist.")
             if not ns.group_id and not ns.user_id:
                 raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
             resource_type, resource_id = (
