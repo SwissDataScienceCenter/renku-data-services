@@ -75,7 +75,14 @@ class KindCluster(AbstractContextManager):
             self.kindconfig,
         ]
 
-        subprocess.run(create_cluster, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=self.env, check=True)
+        try:
+            subprocess.run(create_cluster, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=self.env, check=True)
+        except subprocess.SubprocessError as err:
+            if err.output is not None:
+                print(err.output.decode())
+            else:
+                print(err)
+            raise
 
         return self
 
