@@ -7,5 +7,5 @@ from renku_data_services import errors
 
 async def validate_null_byte(request: Request) -> None:
     """Validate that a request does not contain a null byte."""
-    if "\\u0000".encode() in request.body:  # noqa: UP012
+    if b"\\u0000" in request.body:
         raise errors.ValidationError(message="Null byte found in request")
