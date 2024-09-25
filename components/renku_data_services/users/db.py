@@ -139,7 +139,6 @@ class UserRepo:
         logger.info(f"Trying to remove user with ID {user_id}")
         stmt = delete(UserORM).where(UserORM.keycloak_id == user_id).returning(UserORM)
         user = await session.scalar(stmt)
-        await self.authz._remove_user_namespace(user_id)
         if not user:
             logger.info(f"User with ID {user_id} was not found.")
             return None
