@@ -715,6 +715,28 @@ files = [
 python-dateutil = ">=2.4"
 
 [[package]]
+name = "fakeredis"
+version = "2.24.1"
+description = "Python implementation of redis API, can be used for testing purposes."
+optional = false
+python-versions = "<4.0,>=3.7"
+files = [
+    {file = "fakeredis-2.24.1-py3-none-any.whl", hash = "sha256:09d3049a29910f80c0ef5789c31bef3dbb9727bd43a67ee8598217f4efd12f35"},
+    {file = "fakeredis-2.24.1.tar.gz", hash = "sha256:4a52ab0edad53543ac5e3a41d761f91012613ed583344da54ae6473e05b0f6d0"},
+]
+
+[package.dependencies]
+redis = ">=4"
+sortedcontainers = ">=2,<3"
+
+[package.extras]
+bf = ["pyprobables (>=0.6,<0.7)"]
+cf = ["pyprobables (>=0.6,<0.7)"]
+json = ["jsonpath-ng (>=1.6,<2.0)"]
+lua = ["lupa (>=2.1,<3.0)"]
+probabilistic = ["pyprobables (>=0.6,<0.7)"]
+
+[[package]]
 name = "fastavro"
 version = "1.9.4"
 description = "Fast read/write of AVRO files"
@@ -2331,6 +2353,17 @@ files = [
 ]
 
 [[package]]
+name = "sortedcontainers"
+version = "2.4.0"
+description = "Sorted Containers -- Sorted List, Sorted Dict, Sorted Set"
+optional = false
+python-versions = "*"
+files = [
+    {file = "sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0"},
+    {file = "sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88"},
+]
+
+[[package]]
 name = "sqlalchemy"
 version = "2.0.35"
 description = "Database Abstraction Library"
@@ -2824,4 +2857,4 @@ h11 = ">=0.9.0,<1"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "9e5f5ec62eee96154f9285a33e0e3f649a9240ef30c217f94ec17031ced5a390"
+content-hash = "5545a1968f16a0f7b7be44a3866c91bfb3bb8536c8b2b79a7d60b5cc270b9cfc"
