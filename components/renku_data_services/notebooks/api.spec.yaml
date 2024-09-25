@@ -454,11 +454,8 @@ components:
             message:
               type: string
               example: "Something went wrong - please try again later"
-          required:
-            - "code"
-            - "message"
-      required:
-        - "error"
+          required: ["code", "message"]
+      required: ["error"]
     Generated:
       properties:
         enabled:
@@ -881,7 +878,7 @@ components:
           type: integer
           description: The size of disk storage for the session, in gigabytes
         resource_class_id:
-          default: 
+          default:
           nullable: true
           type: integer
         cloudstorage:

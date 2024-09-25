@@ -97,7 +97,7 @@ class UserServerManifest:
     @property
     def hibernation(self) -> Optional[dict[str, Any]]:
         """Return hibernation annotation."""
-        hibernation = self.manifest.metadata.annotations.get("hibernation")
+        hibernation = self.manifest.metadata.annotations.get("renku.io/hibernation")
         return json.loads(hibernation) if hibernation else None
 
     @property

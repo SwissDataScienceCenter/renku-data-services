@@ -263,9 +263,9 @@ components:
           $ref: "#/components/schemas/ContainerImage"
         default_url:
           $ref: "#/components/schemas/DefaultUrl"
-        uid: 
+        uid:
           $ref: "#/components/schemas/EnvironmentUid"
-        gid: 
+        gid:
           $ref: "#/components/schemas/EnvironmentGid"
         working_directory:
           $ref: "#/components/schemas/EnvironmentWorkingDirectory"
@@ -337,12 +337,12 @@ components:
             - $ref: "#/components/schemas/DefaultUrl"
             - default: /lab
           default: /lab
-        uid: 
+        uid:
           allOf:
             - $ref: "#/components/schemas/EnvironmentUid"
             - default: 1000
           default: 1000
-        gid: 
+        gid:
           allOf:
             - $ref: "#/components/schemas/EnvironmentGid"
             - default: 1000
@@ -389,9 +389,9 @@ components:
           $ref: "#/components/schemas/ContainerImage"
         default_url:
           $ref: "#/components/schemas/DefaultUrl"
-        uid: 
+        uid:
           $ref: "#/components/schemas/EnvironmentUid"
-        gid: 
+        gid:
           $ref: "#/components/schemas/EnvironmentGid"
         working_directory:
           $ref: "#/components/schemas/EnvironmentWorkingDirectory"
