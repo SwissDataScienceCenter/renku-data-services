@@ -79,11 +79,11 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
         """Get the logs of all containers in the session."""
         pod = cast(Pod, await Pod.get(name=name, namespace=self.namespace))
         logs: dict[str, str] = {}
-        containers = [i.name for i in pod.spec.containers] + [i.name for i in pod.spec.initContainers]
+        containers = [container.name for container in pod.spec.containers + pod.spec.get("initContainers", [])]
         for container in containers:
             try:
                 # NOTE: calling pod.logs without a container name set crashes the library
-                clogs: list[str] = [i async for i in pod.logs(container=container, tail_lines=max_log_lines)]
+                clogs: list[str] = [clog async for clog in pod.logs(container=container, tail_lines=max_log_lines)]
             except NotFoundError:
                 raise errors.MissingResourceError(message=f"The session pod {name} does not exist.")
             except ServerError as err:
@@ -243,8 +243,10 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
         except NotFoundError:
             return None
 
-        containers: list[V1Container] = [V1Container(**i) for i in sts.spec.template.spec.containers]
-        init_containers: list[V1Container] = [V1Container(**i) for i in sts.spec.template.spec.init_containers]
+        containers: list[V1Container] = [V1Container(**container) for container in sts.spec.template.spec.containers]
+        init_containers: list[V1Container] = [
+            V1Container(**container) for container in sts.spec.template.spec.init_containers
+        ]
 
         git_proxy_container_index, git_proxy_container = next(
             ((i, c) for i, c in enumerate(containers) if c.name == "git-proxy"),
@@ -368,7 +370,7 @@ class ServerCache(Generic[_SessionType]):
             )
             raise JSCacheError(f"The JSCache produced an unexpected status code: {res.status_code}")
 
-        return [self.server_type.model_validate(i) for i in res.json()]
+        return [self.server_type.model_validate(server) for server in res.json()]
 
     async def get_server(self, name: str) -> _SessionType | None:
         """Get a specific jupyter server."""
@@ -441,7 +443,11 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
     ) -> dict[str, str]:
         """Get the logs from the server."""
         # NOTE: this get_server ensures the user has access to the server without it you could read someone elses logs
-        _ = await self.get_server(server_name, safe_username)
+        server = await self.get_server(server_name, safe_username)
+        if not server:
+            raise MissingResourceError(
+                f"Cannot find server {server_name} for user " f"{safe_username} to retrieve logs."
+            )
         pod_name = f"{server_name}-0"
         return await self.renku_ns_client.get_pod_logs(pod_name, max_log_lines)
 
@@ -481,9 +487,10 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
         """Delete the server."""
         server = await self.get_server(server_name, safe_username)
         if not server:
-            return None
-        await self.renku_ns_client.delete_server(server_name)
-        return None
+            raise MissingResourceError(
+                f"Cannot find server {server_name} for user " f"{safe_username} in order to delete it."
+            )
+        return await self.renku_ns_client.delete_server(server_name)
 
     async def patch_tokens(self, server_name: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken) -> None:
         """Patch the Renku and Gitlab access tokens used in a session."""
