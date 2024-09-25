@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
+from gitlab.v4.objects.projects import Project
 from sanic.log import logger
 
 from renku_data_services.base_models import AnonymousAPIUser, AuthenticatedAPIUser
@@ -22,7 +23,6 @@ from renku_data_services.notebooks.api.amalthea_patches import ssh as ssh_patche
 from renku_data_services.notebooks.api.classes.cloud_storage import ICloudStorageRequest
 from renku_data_services.notebooks.api.classes.k8s_client import JupyterServerV1Alpha1Kr8s, K8sClient
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
-from renku_data_services.notebooks.api.classes.user import NotebooksGitlabClient
 from renku_data_services.notebooks.api.schemas.secrets import K8sUserSecrets
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
 from renku_data_services.notebooks.config import _NotebooksConfig
@@ -155,7 +155,8 @@ class UserServer(ABC):
                     f"or Docker resources are missing: {', '.join(errors)}"
                 )
             )
-        manifest = JupyterServerV1Alpha1.model_validate(await self._get_session_manifest())
+        session_manifest = await self._get_session_manifest()
+        manifest = JupyterServerV1Alpha1.model_validate(session_manifest)
         return await self._k8s_client.create_server(manifest, self.safe_username)
 
     @staticmethod
@@ -321,7 +322,9 @@ class UserServer(ABC):
             f"{prefix}commit-sha": None,
             f"{prefix}gitlabProjectId": None,
             f"{prefix}safe-username": self.safe_username,
-            f"{prefix}quota": self.server_options.priority_class,
+            f"{prefix}quota": self.server_options.priority_class
+            if self.server_options.priority_class is not None
+            else "",
             f"{prefix}userId": self._user.id,
         }
         return labels
@@ -378,23 +381,23 @@ class Renku1UserServer(UserServer):
         workspace_mount_path: Path,
         work_dir: Path,
         config: _NotebooksConfig,
-        gitlab_client: NotebooksGitlabClient,
+        gitlab_project: Project | None,
         internal_gitlab_user: APIUser,
         using_default_image: bool = False,
         is_image_private: bool = False,
+        **_: dict,
     ):
-        self.gitlab_client = gitlab_client
+        self.gitlab_project = gitlab_project
         self.internal_gitlab_user = internal_gitlab_user
-        gitlab_project_name = f"{namespace}/{project}"
-        gitlab_project = self.gitlab_client.get_renku_project(gitlab_project_name)
+        self.gitlab_project_name = f"{namespace}/{project}"
         single_repository = (
             Repository(
-                url=gitlab_project.http_url_to_repo,
-                dirname=gitlab_project.path,
+                url=self.gitlab_project.http_url_to_repo,
+                dirname=self.gitlab_project.path,
                 branch=branch,
                 commit_sha=commit_sha,
             )
-            if gitlab_project is not None
+            if self.gitlab_project is not None
             else None
         )
 
@@ -422,8 +425,6 @@ class Renku1UserServer(UserServer):
         self.commit_sha = commit_sha
         self.notebook = notebook
         self.git_host = urlparse(config.git.url).netloc
-        self.gitlab_project_name = gitlab_project_name
-        self.gitlab_project = gitlab_project
         self.single_repository = single_repository
 
     def _get_start_errors(self) -> list[str]:
@@ -509,6 +510,7 @@ class Renku2UserServer(UserServer):
         internal_gitlab_user: APIUser,
         using_default_image: bool = False,
         is_image_private: bool = False,
+        **_: dict,
     ):
         super().__init__(
             user=user,
@@ -531,6 +533,17 @@ class Renku2UserServer(UserServer):
         self.project_id = project_id
         self.launcher_id = launcher_id
 
+    def get_labels(self) -> dict[str, str | None]:
+        """Get the labels of the jupyter server."""
+        prefix = self._get_renku_annotation_prefix()
+        labels = super().get_labels()
+
+        # for validation purpose
+        for item in ["commit-sha", "gitlabProjectId"]:
+            labels[f"{prefix}{item}"] = ""
+
+        return labels
+
     def get_annotations(self) -> dict[str, str | None]:
         """Get the annotations of the session."""
         prefix = self._get_renku_annotation_prefix()
@@ -538,4 +551,9 @@ class Renku2UserServer(UserServer):
         annotations[f"{prefix}renkuVersion"] = "2.0"
         annotations[f"{prefix}projectId"] = self.project_id
         annotations[f"{prefix}launcherId"] = self.launcher_id
+
+        # for validation purpose
+        for item in ["commit-sha", "branch", "git-host", "namespace", "projectName", "gitlabProjectId", "repository"]:
+            annotations[f"{prefix}{item}"] = ""
+
         return annotations
