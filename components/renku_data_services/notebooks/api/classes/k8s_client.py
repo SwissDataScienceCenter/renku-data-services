@@ -449,7 +449,7 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
         server = await self.get_server(server_name, safe_username)
         if not server:
             raise errors.MissingResourceError(
-                message=f"Cannot find server {server_name} for user " f"{safe_username} to retrieve logs."
+                message=f"Cannot find server {server_name} for user {safe_username} to retrieve logs."
             )
         pod_name = f"{server_name}-0"
         return await self.renku_ns_client.get_pod_logs(pod_name, max_log_lines)
@@ -490,9 +490,10 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
         """Delete the server."""
         server = await self.get_server(server_name, safe_username)
         if not server:
-            return None
-        await self.renku_ns_client.delete_server(server_name)
-        return None
+            raise MissingResourceError(
+                f"Cannot find server {server_name} for user " f"{safe_username} in order to delete it."
+            )
+        return await self.renku_ns_client.delete_server(server_name)
 
     async def patch_tokens(self, server_name: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken) -> None:
         """Patch the Renku and Gitlab access tokens used in a session."""
