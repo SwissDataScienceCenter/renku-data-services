@@ -64,12 +64,12 @@ class ServerOptions:
             self.storage = 1
         elif self.storage is None and not self.gigabytes:
             self.storage = 1_000_000_000
-        if not all([isinstance(i, NodeAffinity) for i in self.node_affinities]):
+        if not all([isinstance(affinity, NodeAffinity) for affinity in self.node_affinities]):
             raise ProgrammingError(
                 message="Cannot create a ServerOptions dataclass with node "
                 "affinities that are not of type NodeAffinity"
             )
-        if not all([isinstance(i, Toleration) for i in self.tolerations]):
+        if not all([isinstance(toleration, Toleration) for toleration in self.tolerations]):
             raise ProgrammingError(
                 message="Cannot create a ServerOptions dataclass with tolerations that are not of type Toleration"
             )
