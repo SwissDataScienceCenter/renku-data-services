@@ -1,10 +1,12 @@
 import json
 import os
+import shutil
 import subprocess
 from base64 import b64decode
 from contextlib import AbstractContextManager
 from typing import Any
 
+import pytest
 import yaml
 from dataclasses_avroschema import AvroModel
 from kubernetes import client as k8s_client
@@ -199,3 +201,13 @@ def setup_amalthea(install_name: str, app_name: str, version: str, cluster: K3DC
             break
     else:
         assert False, "Timeout waiting on amalthea to run"
+
+
+class ClusterRequired:
+    @pytest.fixture(scope="class", autouse=True)
+    def cluster(self) -> K3DCluster:
+        if shutil.which("k3d") is None:
+            pytest.skip("Requires k3d for cluster creation")
+
+        with K3DCluster("renku-test-notebooks") as cluster:
+            yield cluster

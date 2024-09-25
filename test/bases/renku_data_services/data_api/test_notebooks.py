@@ -2,8 +2,8 @@
 
 import asyncio
 import os
-import shutil
-from collections.abc import AsyncIterator, Iterator
+
+from collections.abc import AsyncIterator
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -13,19 +13,10 @@ from kr8s.asyncio.objects import Pod
 from sanic_testing.testing import SanicASGITestClient
 
 from renku_data_services.notebooks.api.classes.k8s_client import JupyterServerV1Alpha1Kr8s
-from test.bases.renku_data_services.data_api.utils import K3DCluster, setup_amalthea
 
+from .utils import ClusterRequired, setup_amalthea
 
-@pytest.fixture(scope="module", autouse=True)
-def cluster() -> Iterator[K3DCluster]:
-    os.environ["KUBECONFIG"] = ".k3d-config.yaml"
-    if shutil.which("k3d") is None:
-        pytest.skip("Requires k3d for cluster creation")
-
-    with K3DCluster("renku-test-notebooks") as cluster:
-        setup_amalthea("amalthea-js", "amalthea", "0.12.2", cluster)
-
-        yield cluster
+os.environ["KUBECONFIG"] = ".k3d-config.yaml"
 
 
 @pytest.fixture
@@ -136,24 +127,35 @@ async def test_check_docker_image(sanic_client: SanicASGITestClient, user_header
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "server_name_fixture,expected_status_code", [("unknown_server_name", 404), ("server_name", 200)]
-)
-async def test_log_retrieval(
-    sanic_client: SanicASGITestClient,
-    request,
-    server_name_fixture,
-    expected_status_code,
-    jupyter_server,
-    authenticated_user_headers,
-):
-    """Validate that the logs endpoint answers correctly"""
+async def test_version(sanic_client: SanicASGITestClient, user_headers):
+    _, res = await sanic_client.get("/api/data/notebooks/version", headers=user_headers)
 
-    server_name = request.getfixturevalue(server_name_fixture)
+    assert res.status_code == 200, res.text
 
-    _, res = await sanic_client.get(f"/api/data/notebooks/logs/{server_name}", headers=authenticated_user_headers)
-
-    assert res.status_code == expected_status_code, res.text
+    assert res.json == {
+        "name": "renku-notebooks",
+        "versions": [
+            {
+                "data": {
+                    "anonymousSessionsEnabled": False,
+                    "cloudstorageClass": "csi-rclone",
+                    "cloudstorageEnabled": False,
+                    "defaultCullingThresholds": {
+                        "anonymous": {
+                            "hibernation": 1,
+                            "idle": 86400,
+                        },
+                        "registered": {
+                            "hibernation": 86400,
+                            "idle": 86400,
+                        },
+                    },
+                    "sshEnabled": False,
+                },
+                "version": "0.0.0",
+            },
+        ],
+    }
 
 
 @pytest.mark.asyncio
@@ -180,45 +182,87 @@ async def test_server_options(sanic_client: SanicASGITestClient, user_headers):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "server_name_fixture,expected_status_code", [("unknown_server_name", 204), ("server_name", 204)]
-)
-async def test_stop_server(
-    sanic_client: SanicASGITestClient,
-    request,
-    server_name_fixture,
-    expected_status_code,
-    practice_jupyter_server,
-    authenticated_user_headers,
-):
-    server_name = request.getfixturevalue(server_name_fixture)
+@pytest.mark.parametrize("image,expected_status_code", [("python:3.12", 200), ("shouldnotexist:0.42", 404)])
+async def test_check_docker_image(sanic_client: SanicASGITestClient, user_headers, image, expected_status_code):
+    """Validate that the images endpoint answers correctly.
 
-    _, res = await sanic_client.delete(f"/api/data/notebooks/servers/{server_name}", headers=authenticated_user_headers)
+    Needs the responses package in case docker queries must be mocked
+    """
+
+    _, res = await sanic_client.get(f"/api/data/notebooks/images/?image_url={image}", headers=user_headers)
 
     assert res.status_code == expected_status_code, res.text
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "server_name_fixture,expected_status_code, patch",
-    [("unknown_server_name", 404, {}), ("server_name", 200, {"state": "hibernated"})],
-)
-async def test_patch_server(
-    sanic_client: SanicASGITestClient,
-    request,
-    server_name_fixture,
-    expected_status_code,
-    patch,
-    practice_jupyter_server,
-    authenticated_user_headers,
-):
-    server_name = request.getfixturevalue(server_name_fixture)
+class TestNotebooks(ClusterRequired):
+    @pytest.fixture(scope="class", autouse=True)
+    def amalthea(self, cluster) -> None:
+        setup_amalthea("amalthea-js", "amalthea", "0.12.2", cluster)
 
-    _, res = await sanic_client.patch(
-        f"/api/data/notebooks/servers/{server_name}", json=patch, headers=authenticated_user_headers
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "server_name_fixture,expected_status_code", [("unknown_server_name", 404), ("server_name", 200)]
     )
+    async def test_log_retrieval(
+        self,
+        sanic_client: SanicASGITestClient,
+        request,
+        server_name_fixture,
+        expected_status_code,
+        jupyter_server,
+        authenticated_user_headers,
+    ):
+        """Validate that the logs endpoint answers correctly"""
 
-    assert res.status_code == expected_status_code, res.text
+        server_name = request.getfixturevalue(server_name_fixture)
+
+        _, res = await sanic_client.get(f"/api/data/notebooks/logs/{server_name}", headers=authenticated_user_headers)
+
+        assert res.status_code == expected_status_code, res.text
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "server_name_fixture,expected_status_code", [("unknown_server_name", 404), ("server_name", 204)]
+    )
+    async def test_stop_server(
+        self,
+        sanic_client: SanicASGITestClient,
+        request,
+        server_name_fixture,
+        expected_status_code,
+        practice_jupyter_server,
+        authenticated_user_headers,
+    ):
+        server_name = request.getfixturevalue(server_name_fixture)
+
+        _, res = await sanic_client.delete(
+            f"/api/data/notebooks/servers/{server_name}", headers=authenticated_user_headers
+        )
+
+        assert res.status_code == expected_status_code, res.text
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "server_name_fixture,expected_status_code, patch",
+        [("unknown_server_name", 404, {}), ("server_name", 200, {"state": "hibernated"})],
+    )
+    async def test_patch_server(
+        self,
+        sanic_client: SanicASGITestClient,
+        request,
+        server_name_fixture,
+        expected_status_code,
+        patch,
+        practice_jupyter_server,
+        authenticated_user_headers,
+    ):
+        server_name = request.getfixturevalue(server_name_fixture)
+
+        _, res = await sanic_client.patch(
+            f"/api/data/notebooks/servers/{server_name}", json=patch, headers=authenticated_user_headers
+        )
+
+        assert res.status_code == expected_status_code, res.text
 
 
 class AttributeDictionary(dict):
