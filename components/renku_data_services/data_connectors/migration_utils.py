@@ -10,10 +10,11 @@ from ulid import ULID
 
 from renku_data_services import base_models, errors
 from renku_data_services.authz.authz import Authz, ResourceType, Role
+from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import Slug
 from renku_data_services.data_connectors import models
-from renku_data_services.data_connectors.db import DataConnectorRepository
-from renku_data_services.data_connectors import orm as schemas
+from renku_data_services.data_connectors.db import DataConnectorProjectLinkRepository, DataConnectorRepository
+from renku_data_services.namespace.models import NamespaceKind
 from renku_data_services.project import models as projects_models
 from renku_data_services.project import orm as projects_schemas
 from renku_data_services.project.db import ProjectRepository
@@ -28,15 +29,19 @@ class DataConnectorMigrationTool:
         self,
         session_maker: Callable[..., AsyncSession],
         data_connector_repo: DataConnectorRepository,
+        data_connector_project_link_repo: DataConnectorProjectLinkRepository,
         project_repo: ProjectRepository,
         authz: Authz,
     ) -> None:
         self.session_maker = session_maker
         self.data_connector_repo = data_connector_repo
+        self.data_connector_project_link_repo = data_connector_project_link_repo
         self.project_repo = project_repo
         self.authz = authz
 
-    async def migrate_storage_v2(self, requested_by: base_models.APIUser, storage: storage_models.CloudStorage) -> None:
+    async def migrate_storage_v2(
+        self, requested_by: base_models.APIUser, storage: storage_models.CloudStorage
+    ) -> models.DataConnector:
         """Move a storage_v2 entity to the data connectors table."""
         if requested_by.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
@@ -46,10 +51,17 @@ class DataConnectorMigrationTool:
         project_id = ULID.from_str(storage.project_id)
         project = await self.project_repo.get_project(user=requested_by, project_id=project_id)
 
+        # Find an owner
+        data_connector_owner = await self._find_owner(requested_by=requested_by, project=project)
+        if data_connector_owner is None:
+            raise errors.ProgrammingError(
+                message=f"Could not find an owner for storage {storage.name} with project {project_id}."
+            )
+
         # Try to create the data connector with the default slug first
         try:
             data_connector = await self._insert_data_connector(
-                requested_by=requested_by, storage=storage, project=project
+                user=data_connector_owner, storage=storage, project=project
             )
         except errors.ConflictError:
             # Retry with a random suffix in the slug
@@ -57,19 +69,71 @@ class DataConnectorMigrationTool:
             data_connector_slug = Slug.from_name(storage.name).value
             data_connector_slug = f"{data_connector_slug}-{suffix}"
             data_connector = await self._insert_data_connector(
-                requested_by=requested_by, storage=storage, project=project, data_connector_slug=data_connector_slug
+                user=data_connector_owner, storage=storage, project=project, data_connector_slug=data_connector_slug
             )
 
-        # Adjust the owner
-        data_connector_owner = await self._find_owner(requested_by=requested_by, project=project)
-        if data_connector_owner:
-            pass
+        # Link the data connector to the project
+        unsaved_link = models.UnsavedDataConnectorToProjectLink(
+            data_connector_id=data_connector.id,
+            project_id=project_id,
+        )
+        await self.data_connector_project_link_repo.insert_link(user=data_connector_owner, link=unsaved_link)
 
-        raise NotImplementedError()
+        return data_connector
+
+    async def _find_owner(
+        self, requested_by: base_models.APIUser, project: projects_models.Project
+    ) -> base_models.APIUser | None:
+        """Find an owner from the project or its namespace."""
+        if requested_by.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+        if not requested_by.is_admin:
+            raise errors.ForbiddenError(message="Only admins can perform this operation.")
+
+        # Use the corresponding user in the case of a user namespace
+        if project.namespace.kind == NamespaceKind.user:
+            user_id = str(project.namespace.underlying_resource_id)
+            return base_models.APIUser(is_admin=False, id=user_id)
+
+        if not isinstance(project.namespace.underlying_resource_id, ULID):
+            raise errors.ProgrammingError(
+                message=f"Group namespace {project.namespace.slug} has an invalid underlying resource id {project.namespace.underlying_resource_id}."  # noqa E501
+            )
+
+        group_id = project.namespace.underlying_resource_id
+        project_members = await self.authz.members(requested_by, ResourceType.project, project.id)
+
+        # Try with the project creator
+        project_creator = next(filter(lambda m: m.user_id == project.created_by, project_members), None)
+        if project_creator is not None:
+            project_creator_api_user = base_models.APIUser(is_admin=False, id=project_creator.user_id)
+            can_create_data_connector = await self.authz.has_permission(
+                project_creator_api_user, ResourceType.group, group_id, Scope.WRITE
+            )
+            if can_create_data_connector:
+                return project_creator_api_user
+
+        # Try to find a project owner which can create the data connector
+        for member in project_members:
+            if member.role != Role.OWNER:
+                continue
+            member_api_user = base_models.APIUser(is_admin=False, id=member.user_id)
+            can_create_data_connector = await self.authz.has_permission(
+                member_api_user, ResourceType.group, group_id, Scope.WRITE
+            )
+            if can_create_data_connector:
+                return member_api_user
+
+        # Use any group owner as a last resort
+        group_members = await self.authz.members(requested_by, ResourceType.group, group_id)
+        found_owner = next(filter(lambda m: m.role == Role.OWNER, group_members), None)
+        if found_owner is not None:
+            return base_models.APIUser(is_admin=False, id=found_owner.user_id)
+        return None
 
     async def _insert_data_connector(
         self,
-        requested_by: base_models.APIUser,
+        user: base_models.APIUser,
         storage: storage_models.CloudStorage,
         project: projects_models.Project,
         data_connector_slug: str | None = None,
@@ -94,29 +158,11 @@ class DataConnectorMigrationTool:
         )
 
         data_connector = await self.data_connector_repo.insert_data_connector(
-            user=requested_by, data_connector=unsaved_data_connector
+            user=user, data_connector=unsaved_data_connector
         )
         return data_connector
 
-    async def _find_owner(self, requested_by: base_models.APIUser, project: projects_models.Project) -> str | None:
-        """Find the owner of a project, defaulting to its creator if possible."""
-        if requested_by.id is None:
-            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
-        if not requested_by.is_admin:
-            raise errors.ForbiddenError(message="Only admins can perform this operation.")
-
-        owners = await self.authz.members(requested_by, ResourceType.project, project.id, Role.OWNER)
-        creator = next(filter(lambda owner: owner.user_id == project.created_by, owners), None)
-        if creator is not None:
-            return creator.user_id
-        if owners:
-            return owners[0].user_id
-        # TODO: Log warning f"Project owner list is empty for project {project.id}."
-        return None
-    
-    # async def _update_owner(self, )
-
-    async def _get_storages_v2(self, requested_by: base_models.APIUser) -> list[storage_models.CloudStorage]:
+    async def get_storages_v2(self, requested_by: base_models.APIUser) -> list[storage_models.CloudStorage]:
         """Get the storages associated with a Renku 2.0 project."""
         if requested_by.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")

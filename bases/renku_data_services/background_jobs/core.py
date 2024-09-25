@@ -270,51 +270,30 @@ async def migrate_storages_v2_to_data_connectors(config: SyncConfig) -> None:
     """Move storages_v2 to data_connectors."""
     logger = logging.getLogger("background_jobs").getChild(migrate_storages_v2_to_data_connectors.__name__)
 
-    # api_user = InternalServiceAdmin(id=ServiceAdminId.migrations)
-    # storages_v2 = await config.storage_v2_repository._get_storages_v2(requested_by=api_user)
-    # for storage in storages_v2:
-    #     project_id = ULID.from_str(storage.project_id)
-    #     project = await config.project_repo.get_project(user=api_user, project_id=project_id)
+    api_user = InternalServiceAdmin(id=ServiceAdminId.migrations)
+    storages_v2 = await config.data_connector_migration_tool.get_storages_v2(requested_by=api_user)
 
-    #     data_connector_slug = Slug.from_name(storage.name).value
+    if not storages_v2:
+        return
 
-    #     unsaved_storage = data_connector_models.CloudStorageCore(
-    #         storage_type=storage.storage_type,
-    #         configuration=storage.configuration.config,
-    #         source_path=storage.source_path,
-    #         target_path=storage.target_path,
-    #         readonly=storage.readonly,
-    #     )
-    #     unsaved_data_connector = data_connector_models.UnsavedDataConnector(
-    #         name=storage.name,
-    #         namespace=project.namespace.slug,
-    #         slug=data_connector_slug,
-    #         visibility=project.visibility,
-    #         created_by="",
-    #         storage=unsaved_storage,
-    #     )
-    #     data_connector = await config.data_connector_repository.insert_data_connector(
-    #         user=api_user, data_connector=unsaved_data_connector
-    #     )
-    #     logger.info(f"data connector = {data_connector}")
-    #     # try:
-    #     #     data_connector = await config.data_connector_repository.insert_data_connector(
-    #     #       user=api_user, data_connector=unsaved_data_connector)
-    #     # except errors.ConflictError:
-    #     #     # Retry with a random suffix
-    #     #     suffix = "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(8)])
-    #     #     data_connector_slug = f"{data_connector_slug}-{suffix}"
-    #     #     unsaved_data_connector = data_connector_models.UnsavedDataConnector(
-    #     #         name=storage.name,
-    #     #         namespace=project.namespace.slug,
-    #     #         slug=data_connector_slug,
-    #     #         visibility=project.visibility,
-    #     #         created_by="",
-    #     #         storage=unsaved_storage,
-    #     #     )
-    #     #     data_connector = await config.data_connector_repository.insert_data_connector(
-    #     #       user=api_user, data_connector=unsaved_data_connector)
+    logger.info(f"Migrating {len(storages_v2)} cloud storage v2 items to data connectors.")
+    failed_storages: list[str] = []
+    first_error: Exception | None = None
+    for storage in storages_v2:
+        try:
+            data_connector = await config.data_connector_migration_tool.migrate_storage_v2(
+                requested_by=api_user, storage=storage
+            )
+            logger.info(f"Migrated {storage.name} to {data_connector.namespace.slug}/{data_connector.slug}.")
+        except Exception as err:
+            logger.error(f"Failed to migrate {storage.name}.")
+            logger.error(err)
+            failed_storages.append(str(storage.storage_id))
+            if first_error is None:
+                first_error = err
 
-    #     # Adjust the owner
-
-    pass
+    logger.info(f"Migrated {len(storages_v2)-len(failed_storages)}/{len(storages_v2)} data connectors.")
+    if failed_storages:
+        logger.error(f"Migration failed for storages: {failed_storages}.")
+    if first_error is not None:
+        raise first_error
