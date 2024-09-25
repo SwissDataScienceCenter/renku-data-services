@@ -683,6 +683,17 @@ class Authz:
         rels: list[Relationship] = []
         async for response in responses:
             rels.append(response.relationship)
+        # Project is also a subject for "linked_to" relations
+        rel_filter = RelationshipFilter(
+            optional_subject_filter=SubjectFilter(
+                subject_type=ResourceType.project.value, optional_subject_id=str(project.id)
+            )
+        )
+        responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
+            ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
+        )
+        async for response in responses:
+            rels.append(response.relationship)
         apply = WriteRelationshipsRequest(
             updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=i) for i in rels]
         )
