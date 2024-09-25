@@ -582,7 +582,7 @@ class Authz:
                 resource_type = ResourceType.user_namespace
             case _ if isinstance(resource, Namespace):
                 raise errors.ProgrammingError(
-                    message=f"Cannot handle deletetion of namespace {resource.id} of kind {resource.kind.value}."
+                    message=f"Cannot handle deletetion of namespace {resource.slug} of kind {resource.kind.value}."
                 )
             case _ if isinstance(resource, Project):
                 resource_type = ResourceType.project
