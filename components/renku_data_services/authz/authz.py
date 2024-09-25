@@ -473,7 +473,7 @@ class Authz:
                     authz_change = db_repo.authz._add_project(result)
                 case AuthzOperation.delete, ResourceType.project if isinstance(result, Project):
                     user = _extract_user_from_args(*func_args, **func_kwargs)
-                    authz_change = await db_repo.authz._remove_project(user, result)
+                    authz_change = await db_repo.authz._remove_entity(user, result)
                 case AuthzOperation.delete, ResourceType.project if result is None:
                     # NOTE: This means that the project does not exist in the first place so nothing was deleted
                     pass
@@ -489,7 +489,7 @@ class Authz:
                     authz_change = db_repo.authz._add_group(result)
                 case AuthzOperation.delete, ResourceType.group if isinstance(result, Group):
                     user = _extract_user_from_args(*func_args, **func_kwargs)
-                    authz_change = await db_repo.authz._remove_group(user, result)
+                    authz_change = await db_repo.authz._remove_entity(user, result)
                 case AuthzOperation.delete, ResourceType.group if result is None:
                     # NOTE: This means that the group does not exist in the first place so nothing was deleted
                     pass
@@ -569,6 +569,65 @@ class Authz:
 
         return decorator
 
+    async def _remove_entity(
+        self, user: base_models.APIUser, resource: UserInfo | Group | Namespace | Project
+    ) -> _AuthzChange:
+        resource_type: ResourceType
+        match resource:
+            case _ if isinstance(resource, UserInfo):
+                resource_type = ResourceType.user
+            case _ if isinstance(resource, Group):
+                resource_type = ResourceType.group
+            case _ if isinstance(resource, Namespace) and resource.kind == NamespaceKind.user:
+                resource_type = ResourceType.user_namespace
+            case _ if isinstance(resource, Namespace):
+                raise errors.ProgrammingError(
+                    message=f"Cannot handle deletetion of namespace {resource.id} of kind {resource.kind.value}."
+                )
+            case _ if isinstance(resource, Project):
+                resource_type = ResourceType.project
+            case _:
+                raise errors.ProgrammingError(message="Cannot handle deletion of unknown resource.")
+        resource_id = str(resource.id)
+
+        @_is_allowed_on_resource(Scope.DELETE, resource_type)
+        async def _remove_entity_wrapped(
+            authz: Authz,
+            user: base_models.APIUser,
+            resource: UserInfo | Group | Namespace | Project,
+            *,
+            zed_token: ZedToken | None = None,
+        ) -> _AuthzChange:
+            consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
+            rels: list[Relationship] = []
+            # Get relations where the entity is the resource
+            rel_filter = RelationshipFilter(resource_type=resource_type.value, optional_resource_id=resource_id)
+            responses: AsyncIterable[ReadRelationshipsResponse] = authz.client.ReadRelationships(
+                ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
+            )
+            async for response in responses:
+                rels.append(response.relationship)
+            # Get relations where the entity is the subject
+            rel_filter = RelationshipFilter(
+                optional_subject_filter=SubjectFilter(subject_type=resource_type, optional_subject_id=resource_id)
+            )
+            responses: AsyncIterable[ReadRelationshipsResponse] = authz.client.ReadRelationships(
+                ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
+            )
+            async for response in responses:
+                rels.append(response.relationship)
+            apply = WriteRelationshipsRequest(
+                updates=[
+                    RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=i) for i in rels
+                ]
+            )
+            undo = WriteRelationshipsRequest(
+                updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=i) for i in rels]
+            )
+            return _AuthzChange(apply=apply, undo=undo)
+
+        return await _remove_entity_wrapped(self, user, resource)
+
     def _add_project(self, project: Project) -> _AuthzChange:
         """Create the new project and associated resources and relations in the DB."""
         creator = SubjectReference(object=_AuthzConverter.user(project.created_by))
@@ -615,27 +674,6 @@ class Authz:
             updates=[
                 RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=i) for i in relationships
             ]
-        )
-        return _AuthzChange(apply=apply, undo=undo)
-
-    @_is_allowed_on_resource(Scope.DELETE, ResourceType.project)
-    async def _remove_project(
-        self, user: base_models.APIUser, project: Project, *, zed_token: ZedToken | None = None
-    ) -> _AuthzChange:
-        """Remove the relationships associated with the project."""
-        consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
-        rel_filter = RelationshipFilter(resource_type=ResourceType.project.value, optional_resource_id=str(project.id))
-        responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
-            ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
-        )
-        rels: list[Relationship] = []
-        async for response in responses:
-            rels.append(response.relationship)
-        apply = WriteRelationshipsRequest(
-            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=i) for i in rels]
-        )
-        undo = WriteRelationshipsRequest(
-            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=i) for i in rels]
         )
         return _AuthzChange(apply=apply, undo=undo)
 
@@ -1025,7 +1063,7 @@ class Authz:
         return _AuthzChange(apply=apply, undo=undo)
 
     async def _remove_admin(self, user_id: str) -> _AuthzChange:
-        """Add a deployment-wide administrator in the authorization database."""
+        """Remove a deployment-wide administrator from the authorization database."""
         existing_admin_ids = await self._get_admin_user_ids()
         rel = Relationship(
             resource=_AuthzConverter.platform(),
@@ -1083,31 +1121,6 @@ class Authz:
             updates=[
                 RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=i) for i in relationships
             ]
-        )
-        return _AuthzChange(apply=apply, undo=undo)
-
-    @_is_allowed_on_resource(Scope.DELETE, ResourceType.group)
-    async def _remove_group(
-        self, user: base_models.APIUser, group: Group, *, zed_token: ZedToken | None = None
-    ) -> _AuthzChange:
-        """Remove the group from the authorization database."""
-        if not group.id:
-            raise errors.ProgrammingError(
-                message="Cannot remove a group in the authorization database if the group has no ID"
-            )
-        consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
-        rel_filter = RelationshipFilter(resource_type=ResourceType.group.value, optional_resource_id=str(group.id))
-        responses = self.client.ReadRelationships(
-            ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
-        )
-        rels: list[Relationship] = []
-        async for response in responses:
-            rels.append(response.relationship)
-        apply = WriteRelationshipsRequest(
-            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=i) for i in rels]
-        )
-        undo = WriteRelationshipsRequest(
-            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=i) for i in rels]
         )
         return _AuthzChange(apply=apply, undo=undo)
 
@@ -1341,6 +1354,7 @@ class Authz:
         )
         return _AuthzChange(apply=apply, undo=undo)
 
+    # TODO: remove this method and replace it with _remove_entity()
     async def _remove_user_namespace(self, user_id: str, zed_token: ZedToken | None = None) -> _AuthzChange:
         """Remove the user namespace from the authorization database."""
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
