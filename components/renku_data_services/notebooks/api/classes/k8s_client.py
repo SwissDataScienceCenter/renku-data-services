@@ -487,8 +487,8 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
         """Delete the server."""
         server = await self.get_server(server_name, safe_username)
         if not server:
-            raise MissingResourceError(
-                f"Cannot find server {server_name} for user " f"{safe_username} in order to delete it."
+            raise errors.MissingResourceError(
+                message=f"Cannot find server {server_name} for user " f"{safe_username} in order to delete it."
             )
         return await self.renku_ns_client.delete_server(server_name)
 
