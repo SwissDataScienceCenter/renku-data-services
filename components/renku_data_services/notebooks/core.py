@@ -62,3 +62,14 @@ async def user_server(
     if server is None:
         raise MissingResourceError(message=f"The server {server_name} does not exist.")
     return UserServerManifest(server, config.sessions.default_image)
+
+
+def server_options(config: NotebooksConfig) -> dict:
+    """Returns the server's options configured."""
+
+    return {
+        **config.server_options.ui_choices,
+        "cloudstorage": {
+            "enabled": config.cloud_storage.enabled,
+        },
+    }

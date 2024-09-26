@@ -684,16 +684,7 @@ class NotebooksBP(CustomBlueprint):
         """Return a set of configurable server options."""
 
         async def _server_options(request: Request) -> JSONResponse:
-            return json(
-                ServerOptionsEndpointResponse().dump(
-                    {
-                        **self.nb_config.server_options.ui_choices,
-                        "cloudstorage": {
-                            "enabled": self.nb_config.cloud_storage.enabled,
-                        },
-                    },
-                )
-            )
+            return json(ServerOptionsEndpointResponse().dump(core.server_options(self.nb_config)))
 
         return "/notebooks/server_options", ["GET"], _server_options
 
