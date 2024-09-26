@@ -30,6 +30,8 @@ from renku_data_services.background_jobs.core import (
 )
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models import APIUser
+from renku_data_services.data_connectors.db import DataConnectorProjectLinkRepository, DataConnectorRepository
+from renku_data_services.data_connectors.migration_utils import DataConnectorMigrationTool
 from renku_data_services.db_config import DBConfig
 from renku_data_services.errors import errors
 from renku_data_services.message_queue.config import RedisConfig
@@ -81,14 +83,33 @@ def get_app_configs(db_config: DBConfig, authz_config: AuthzConfig):
             group_repo=group_repo,
             authz=Authz(authz_config),
         )
+
+        # NEW
+        data_connector_repo = DataConnectorRepository(
+            session_maker=db_config.async_session_maker,
+            authz=Authz(authz_config),
+        )
+        data_connector_project_link_repo = DataConnectorProjectLinkRepository(
+            session_maker=db_config.async_session_maker,
+            authz=Authz(authz_config),
+        )
+        data_connector_migration_tool = DataConnectorMigrationTool(
+            session_maker=db_config.async_session_maker,
+            data_connector_repo=data_connector_repo,
+            data_connector_project_link_repo=data_connector_project_link_repo,
+            project_repo=project_repo,
+            authz=Authz(authz_config),
+        )
+
         config = SyncConfig(
             syncer=users_sync,
             kc_api=kc_api,
             authz_config=authz_config,
             group_repo=group_repo,
             event_repo=event_repo,
-            session_maker=db_config.async_session_maker,
             project_repo=project_repo,
+            data_connector_migration_tool=data_connector_migration_tool,
+            session_maker=db_config.async_session_maker,
         )
         user_repo = UserRepo(
             db_config.async_session_maker,
