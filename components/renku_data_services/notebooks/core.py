@@ -76,6 +76,18 @@ def server_options(config: NotebooksConfig) -> dict:
     }
 
 
+async def server_logs(
+    config: NotebooksConfig, user: AnonymousAPIUser | AuthenticatedAPIUser, server_name: str, max_lines: int
+) -> dict:
+    """Returns the logs of the given server."""
+
+    return await config.k8s_client.get_server_logs(
+        server_name=server_name,
+        safe_username=user.id,
+        max_log_lines=max_lines,
+    )
+
+
 def docker_image_exists(config: NotebooksConfig, image_url: str, internal_gitlab_user: APIUser) -> bool:
     """Returns whether the passed docker image url exists.
 

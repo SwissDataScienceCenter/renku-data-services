@@ -698,14 +698,10 @@ class NotebooksBP(CustomBlueprint):
             args: dict[str, str | int] = request.get_args()
             max_lines = int(args.get("max_lines", 250))
             try:
-                logs = await self.nb_config.k8s_client.get_server_logs(
-                    server_name=server_name,
-                    safe_username=user.id,
-                    max_log_lines=max_lines,
-                )
-                return json(ServerLogs().dump(logs))
-            except MissingResourceError as err:
-                raise errors.MissingResourceError(message=err.message)
+                logs = await core.server_logs(self.nb_config, user, server_name, max_lines)
+            except errors.MissingResourceError as err:
+                raise exceptions.NotFound(message=err.message)
+            return json(ServerLogs().dump(logs))
 
         return "/notebooks/logs/<server_name>", ["GET"], _server_logs
 
