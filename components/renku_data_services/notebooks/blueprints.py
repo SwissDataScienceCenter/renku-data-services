@@ -30,7 +30,7 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser, Authenticator
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.errors import errors
-from renku_data_services.notebooks import apispec
+from renku_data_services.notebooks import apispec, core
 from renku_data_services.notebooks.api.amalthea_patches import git_proxy, init_containers
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
 from renku_data_services.notebooks.api.classes.image import Image
@@ -102,32 +102,7 @@ class NotebooksBP(CustomBlueprint):
         """Return notebook services version."""
 
         async def _version(_: Request) -> JSONResponse:
-            culling = self.nb_config.sessions.culling
-            info = {
-                "name": "renku-notebooks",
-                "versions": [
-                    {
-                        "version": self.nb_config.version,
-                        "data": {
-                            "anonymousSessionsEnabled": self.nb_config.anonymous_sessions_enabled,
-                            "cloudstorageEnabled": self.nb_config.cloud_storage.enabled,
-                            "cloudstorageClass": self.nb_config.cloud_storage.storage_class,
-                            "sshEnabled": self.nb_config.ssh_enabled,
-                            "defaultCullingThresholds": {
-                                "registered": {
-                                    "idle": culling.registered.idle_seconds,
-                                    "hibernation": culling.registered.hibernated_seconds,
-                                },
-                                "anonymous": {
-                                    "idle": culling.anonymous.idle_seconds,
-                                    "hibernation": culling.anonymous.hibernated_seconds,
-                                },
-                            },
-                        },
-                    }
-                ],
-            }
-            return json(info)
+            return json(core.notebooks_info(self.nb_config))
 
         return "/notebooks/version", ["GET"], _version
 
@@ -138,16 +113,8 @@ class NotebooksBP(CustomBlueprint):
         async def _user_servers(
             request: Request, user: AnonymousAPIUser | AuthenticatedAPIUser, **query_params: dict
         ) -> JSONResponse:
-            servers = [
-                UserServerManifest(s, self.nb_config.sessions.default_image)
-                for s in await self.nb_config.k8s_client.list_servers(user.id)
-            ]
             filter_attrs = list(filter(lambda x: x[1] is not None, request.get_query_args()))
-            filtered_servers = {}
-            ann_prefix = self.nb_config.session_get_endpoint_annotations.renku_annotation_prefix
-            for server in servers:
-                if all([server.annotations.get(f"{ann_prefix}{key}") == value for key, value in filter_attrs]):
-                    filtered_servers[server.server_name] = server
+            filtered_servers = await core.user_servers(self.nb_config, user, filter_attrs)
             return json(ServersGetResponse().dump({"servers": filtered_servers}))
 
         return "/notebooks/servers", ["GET"], _user_servers
@@ -159,10 +126,8 @@ class NotebooksBP(CustomBlueprint):
         async def _user_server(
             request: Request, user: AnonymousAPIUser | AuthenticatedAPIUser, server_name: str
         ) -> JSONResponse:
-            server = await self.nb_config.k8s_client.get_server(server_name, user.id)
-            if server is None:
-                raise errors.MissingResourceError(message=f"The server {server_name} does not exist.")
-            server = UserServerManifest(server, self.nb_config.sessions.default_image)
+
+            server = await core.user_server(self.nb_config, user, server_name)
             return json(NotebookResponse().dump(server))
 
         return "/notebooks/servers/<server_name>", ["GET"], _user_server

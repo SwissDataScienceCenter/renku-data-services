@@ -201,6 +201,23 @@ class TestNotebooks(ClusterRequired):
             setup_amalthea("amalthea-js", "amalthea", "0.12.2", cluster)
 
     @pytest.mark.asyncio
+    async def test_user_server_list(
+        self,
+        sanic_client: SanicASGITestClient,
+        request,
+        server_name,
+        jupyter_server,
+        authenticated_user_headers,
+    ):
+        """Validate that the user server list endpoint answers correctly"""
+
+        _, res = await sanic_client.get("/api/data/notebooks/servers", headers=authenticated_user_headers)
+
+        assert res.status_code == 200, res.text
+        assert "servers" in res.json
+        assert len(res.json["servers"]) == 1
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "server_name_fixture,expected_status_code", [("unknown_server_name", 404), ("server_name", 200)]
     )
