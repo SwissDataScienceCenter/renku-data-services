@@ -1,7 +1,8 @@
 """Notebooks service core implementation."""
 
-from renku_data_services.base_models import AnonymousAPIUser, AuthenticatedAPIUser
+from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser
 from renku_data_services.errors.errors import MissingResourceError
+from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.classes.server_manifest import UserServerManifest
 from renku_data_services.notebooks.config import NotebooksConfig
 
@@ -73,3 +74,17 @@ def server_options(config: NotebooksConfig) -> dict:
             "enabled": config.cloud_storage.enabled,
         },
     }
+
+
+def docker_image_exists(config: NotebooksConfig, image_url: str, internal_gitlab_user: APIUser) -> bool:
+    """Returns whether the passed docker image url exists.
+
+    If the user is logged in the internal GitLab (Renku V1), set the
+    credentials for the check.
+    """
+
+    parsed_image = Image.from_path(image_url)
+    image_repo = parsed_image.repo_api()
+    if parsed_image.hostname == config.git.registry and internal_gitlab_user.access_token:
+        image_repo = image_repo.with_oauth2_token(internal_gitlab_user.access_token)
+    return image_repo.image_exists(parsed_image)

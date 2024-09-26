@@ -720,14 +720,12 @@ class NotebooksBP(CustomBlueprint):
             internal_gitlab_user: APIUser,
             query: apispec.NotebooksImagesGetParametersQuery,
         ) -> HTTPResponse:
-            parsed_image = Image.from_path(query.image_url)
-            image_repo = parsed_image.repo_api()
-            if parsed_image.hostname == self.nb_config.git.registry and internal_gitlab_user.access_token:
-                image_repo = image_repo.with_oauth2_token(internal_gitlab_user.access_token)
-            if await image_repo.image_exists(parsed_image):
-                return HTTPResponse(status=200)
-            else:
-                return HTTPResponse(status=404)
+            image_url = request.get_args().get("image_url")
+            if not isinstance(image_url, str):
+                raise ValueError("required string of image url")
+
+            status = 200 if core.docker_image_exists(self.nb_config, image_url, internal_gitlab_user) else 404
+            return HTTPResponse(status=status)
 
         return "/notebooks/images", ["GET"], _check_docker_image
 
