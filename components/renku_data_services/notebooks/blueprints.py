@@ -85,7 +85,8 @@ from renku_data_services.notebooks.util.repository import get_status
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.session.db import SessionRepository
-from renku_data_services.storage.db import StorageV2Repository
+
+# from renku_data_services.storage.db import StorageV2Repository
 
 
 @dataclass(kw_only=True)
@@ -772,7 +773,7 @@ class NotebooksNewBP(CustomBlueprint):
     project_repo: ProjectRepository
     session_repo: SessionRepository
     rp_repo: ResourcePoolRepository
-    storage_repo: StorageV2Repository
+    # storage_repo: StorageV2Repository
 
     def start(self) -> BlueprintFactoryResponse:
         """Start a session with the new operator."""
@@ -811,31 +812,35 @@ class NotebooksNewBP(CustomBlueprint):
             #         user_secret_ids=body.user_secrets.user_secret_ids,
             #         mount_path=body.user_secrets.mount_path,
             #     )
-            cloud_storages_db = await self.storage_repo.get_storage(
-                user=user, project_id=project.id, include_secrets=True
-            )
-            cloud_storage: dict[str, RCloneStorage] = {
-                str(s.storage_id): RCloneStorage(
-                    source_path=s.source_path,
-                    mount_folder=(work_dir / s.target_path).as_posix(),
-                    configuration=s.configuration.model_dump(mode="python"),
-                    readonly=s.readonly,
-                    config=self.nb_config,
-                    name=s.name,
-                )
-                for s in cloud_storages_db
-            }
-            cloud_storage_request: dict[str, RCloneStorage] = {
-                s.storage_id: RCloneStorage(
-                    source_path=s.source_path,
-                    mount_folder=(work_dir / s.target_path).as_posix(),
-                    configuration=s.configuration,
-                    readonly=s.readonly,
-                    config=self.nb_config,
-                    name=None,
-                )
-                for s in body.cloudstorage or []
-            }
+
+            # TODO
+            # cloud_storages_db = await self.storage_repo.get_storage(
+            #     user=user, project_id=project.id, include_secrets=True
+            # )
+            cloud_storage: dict[str, RCloneStorage] = {}
+            # cloud_storage: dict[str, RCloneStorage] = {
+            #     str(s.storage_id): RCloneStorage(
+            #         source_path=s.source_path,
+            #         mount_folder=(work_dir / s.target_path).as_posix(),
+            #         configuration=s.configuration.model_dump(mode="python"),
+            #         readonly=s.readonly,
+            #         config=self.nb_config,
+            #         name=s.name,
+            #     )
+            #     for s in cloud_storages_db
+            # }
+            cloud_storage_request: dict[str, RCloneStorage] = {}
+            # cloud_storage_request: dict[str, RCloneStorage] = {
+            #     s.storage_id: RCloneStorage(
+            #         source_path=s.source_path,
+            #         mount_folder=(work_dir / s.target_path).as_posix(),
+            #         configuration=s.configuration,
+            #         readonly=s.readonly,
+            #         config=self.nb_config,
+            #         name=None,
+            #     )
+            #     for s in body.cloudstorage or []
+
             # NOTE: Check the cloud storage in the request body and if any match
             # then overwrite the projects cloud storages
             # NOTE: Cloud storages in the session launch request body that are not form the DB will cause a 422 error

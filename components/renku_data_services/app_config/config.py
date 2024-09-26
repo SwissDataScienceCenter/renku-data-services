@@ -60,7 +60,7 @@ from renku_data_services.project.db import ProjectMemberRepository, ProjectRepos
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.secrets.db import UserSecretsRepo
 from renku_data_services.session.db import SessionRepository
-from renku_data_services.storage.db import StorageRepository, StorageV2Repository
+from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.config import UserPreferencesConfig
 from renku_data_services.users.db import UserPreferencesRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
@@ -166,7 +166,6 @@ class Config:
     _user_repo: UserRepository | None = field(default=None, repr=False, init=False)
     _rp_repo: ResourcePoolRepository | None = field(default=None, repr=False, init=False)
     _storage_repo: StorageRepository | None = field(default=None, repr=False, init=False)
-    _storage_v2_repo: StorageV2Repository | None = field(default=None, repr=False, init=False)
     _project_repo: ProjectRepository | None = field(default=None, repr=False, init=False)
     _group_repo: GroupRepository | None = field(default=None, repr=False, init=False)
     _event_repo: EventRepository | None = field(default=None, repr=False, init=False)
@@ -282,18 +281,6 @@ class Config:
                 secret_service_public_key=self.secrets_service_public_key,
             )
         return self._storage_repo
-
-    @property
-    def storage_v2_repo(self) -> StorageV2Repository:
-        """The DB adapter for V2 cloud storage configs."""
-        if not self._storage_v2_repo:
-            self._storage_v2_repo = StorageV2Repository(
-                session_maker=self.db.async_session_maker,
-                project_authz=self.authz,
-                user_repo=self.kc_user_repo,
-                secret_service_public_key=self.secrets_service_public_key,
-            )
-        return self._storage_v2_repo
 
     @property
     def event_repo(self) -> EventRepository:

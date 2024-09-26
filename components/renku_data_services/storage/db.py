@@ -11,7 +11,6 @@ from ulid import ULID
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.authz import models as authz_models
-from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.storage import models
 from renku_data_services.storage import orm as schemas
 from renku_data_services.users.db import UserRepo
@@ -50,7 +49,7 @@ class BaseStorageRepository(_Base):
         project_id: str | ULID | None = None,
         name: str | None = None,
         filter_by_access_level: bool = True,
-    ) -> list[models.SavedCloudStorage]:
+    ) -> list[models.CloudStorage]:
         """Get a storage from the database."""
         async with self.session_maker() as session:
             if not project_id and not name and not id:
@@ -79,7 +78,7 @@ class BaseStorageRepository(_Base):
 
             return [s.dump() for s in storage_orms if s.project_id in accessible_projects]
 
-    async def get_storage_by_id(self, storage_id: ULID, user: base_models.APIUser) -> models.SavedCloudStorage:
+    async def get_storage_by_id(self, storage_id: ULID, user: base_models.APIUser) -> models.CloudStorage:
         """Get a single storage by id."""
         storages = await self.get_storage(user, id=str(storage_id), filter_by_access_level=False)
 
@@ -92,7 +91,7 @@ class BaseStorageRepository(_Base):
 
     async def insert_storage(
         self, storage: models.UnsavedCloudStorage, user: base_models.APIUser
-    ) -> models.SavedCloudStorage:
+    ) -> models.CloudStorage:
         """Insert a new cloud storage entry."""
         if not await self.filter_projects_by_access_level(user, [storage.project_id], authz_models.Role.OWNER):
             raise errors.ForbiddenError(message="User does not have access to this project")
@@ -106,9 +105,7 @@ class BaseStorageRepository(_Base):
             session.add(orm)
         return orm.dump()
 
-    async def update_storage(
-        self, storage_id: ULID, user: base_models.APIUser, **kwargs: dict
-    ) -> models.SavedCloudStorage:
+    async def update_storage(self, storage_id: ULID, user: base_models.APIUser, **kwargs: dict) -> models.CloudStorage:
         """Update a cloud storage entry."""
         async with self.session_maker() as session, session.begin():
             res = await session.execute(
@@ -183,29 +180,29 @@ class StorageRepository(BaseStorageRepository):
         return await self.gitlab_client.filter_projects_by_access_level(user, project_ids, gitlab_access_level)
 
 
-class StorageV2Repository(BaseStorageRepository):
-    """Repository for V2 cloud storage."""
+# class StorageV2Repository(BaseStorageRepository):
+#     """Repository for V2 cloud storage."""
 
-    def __init__(
-        self,
-        project_authz: Authz,
-        session_maker: Callable[..., AsyncSession],
-        user_repo: UserRepo,
-        secret_service_public_key: rsa.RSAPublicKey,
-    ) -> None:
-        super().__init__(session_maker, user_repo, secret_service_public_key)
-        self.project_authz: Authz = project_authz
+#     def __init__(
+#         self,
+#         project_authz: Authz,
+#         session_maker: Callable[..., AsyncSession],
+#         user_repo: UserRepo,
+#         secret_service_public_key: rsa.RSAPublicKey,
+#     ) -> None:
+#         super().__init__(session_maker, user_repo, secret_service_public_key)
+#         self.project_authz: Authz = project_authz
 
-    async def filter_projects_by_access_level(
-        self, user: base_models.APIUser, project_ids: list[str], minimum_access_level: authz_models.Role
-    ) -> list[str]:
-        """Get a list of project IDs of which the user is a member with a specific access level."""
-        if not user.is_authenticated or not project_ids:
-            return []
+#     async def filter_projects_by_access_level(
+#         self, user: base_models.APIUser, project_ids: list[str], minimum_access_level: authz_models.Role
+#     ) -> list[str]:
+#         """Get a list of project IDs of which the user is a member with a specific access level."""
+#         if not user.is_authenticated or not project_ids:
+#             return []
 
-        scope = authz_models.Scope.WRITE if minimum_access_level == authz_models.Role.OWNER else authz_models.Scope.READ
-        output = []
-        for id in project_ids:
-            if await self.project_authz.has_permission(user, ResourceType.project, ULID.from_str(id), scope):
-                output.append(id)
-        return output
+#         scope = authz_models.Scope.WRITE if minimum_access_level == authz_models.Role.OWNER else authz_models.Scope.READ
+#         output = []
+#         for id in project_ids:
+#             if await self.project_authz.has_permission(user, ResourceType.project, ULID.from_str(id), scope):
+#                 output.append(id)
+#         return output
