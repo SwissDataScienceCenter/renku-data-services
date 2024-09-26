@@ -197,7 +197,8 @@ async def test_check_docker_image(sanic_client: SanicASGITestClient, user_header
 class TestNotebooks(ClusterRequired):
     @pytest.fixture(scope="class", autouse=True)
     def amalthea(self, cluster) -> None:
-        setup_amalthea("amalthea-js", "amalthea", "0.12.2", cluster)
+        if cluster is not None:
+            setup_amalthea("amalthea-js", "amalthea", "0.12.2", cluster)
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(

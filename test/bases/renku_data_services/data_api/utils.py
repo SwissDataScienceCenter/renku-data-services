@@ -205,9 +205,15 @@ def setup_amalthea(install_name: str, app_name: str, version: str, cluster: K3DC
 
 class ClusterRequired:
     @pytest.fixture(scope="class", autouse=True)
-    def cluster(self) -> K3DCluster:
-        if shutil.which("k3d") is None:
-            pytest.skip("Requires k3d for cluster creation")
+    def cluster(self, disable_cluster_creation) -> K3DCluster | None:
+        if disable_cluster_creation:
+            cmd = ["kubectl", "--kubeconfig", os.path.expanduser("~/.kube/config"), "config", "view", "--raw"]
+            with open(".k3d-config.yaml", "w") as config:
+                subprocess.run(cmd, stdout=config, check=True)
+            yield
+        else:
+            if shutil.which("k3d") is None:
+                pytest.skip("Requires k3d for cluster creation")
 
-        with K3DCluster("renku-test-notebooks") as cluster:
-            yield cluster
+            with K3DCluster("renku-test-notebooks") as cluster:
+                yield cluster
