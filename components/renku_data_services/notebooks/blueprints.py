@@ -1,7 +1,6 @@
 """Notebooks service API."""
 
 import base64
-import json as json_lib
 import logging
 import os
 from dataclasses import dataclass
@@ -16,7 +15,7 @@ from gitlab.const import Visibility as GitlabVisibility
 from gitlab.v4.objects.projects import Project as GitlabProject
 from kubernetes.client import V1ObjectMeta, V1Secret
 from marshmallow import ValidationError
-from sanic import Request, empty, json
+from sanic import Request, empty, exceptions, json
 from sanic.log import logger
 from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
@@ -32,7 +31,6 @@ from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec, core
 from renku_data_services.notebooks.api.amalthea_patches import git_proxy, init_containers
-from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
 from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.classes.repository import Repository
 from renku_data_services.notebooks.api.classes.server import Renku1UserServer, Renku2UserServer, UserServer
@@ -47,8 +45,12 @@ from renku_data_services.notebooks.api.schemas.servers_get import (
     NotebookResponse,
     ServersGetResponse,
 )
+<<<<<<< HEAD
 from renku_data_services.notebooks.api.schemas.servers_patch import PatchServerStatusEnum
 from renku_data_services.notebooks.config import NotebooksConfig
+=======
+from renku_data_services.notebooks.config import _NotebooksConfig
+>>>>>>> f44866f (refactor(notebooks): move server stop logic to core)
 from renku_data_services.notebooks.crs import (
     AmaltheaSessionSpec,
     AmaltheaSessionV1Alpha1,
@@ -73,15 +75,13 @@ from renku_data_services.notebooks.crs import (
     Storage,
     TlsSecret,
 )
-from renku_data_services.notebooks.errors.intermittent import AnonymousUserPatchError, PVDisabledError
+from renku_data_services.notebooks.errors.intermittent import AnonymousUserPatchError
 from renku_data_services.notebooks.errors.programming import ProgrammingError
 from renku_data_services.notebooks.errors.user import MissingResourceError
 from renku_data_services.notebooks.util.kubernetes_ import (
-    find_container,
     renku_1_make_server_name,
     renku_2_make_server_name,
 )
-from renku_data_services.notebooks.util.repository import get_status
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.session.db import SessionRepository
@@ -505,161 +505,10 @@ class NotebooksBP(CustomBlueprint):
             server_name: str,
             body: apispec.PatchServerRequest,
         ) -> JSONResponse:
-            if not self.nb_config.sessions.storage.pvs_enabled:
-                raise PVDisabledError()
-
             if isinstance(user, AnonymousAPIUser):
                 raise AnonymousUserPatchError()
 
-            patch_body = body
-            server = await self.nb_config.k8s_client.get_server(server_name, user.id)
-            if server is None:
-                raise errors.MissingResourceError(message=f"The server with name {server_name} cannot be found")
-            if server.spec is None:
-                raise errors.ProgrammingError(message="The server manifest is absent")
-
-            new_server = server
-            currently_hibernated = server.spec.jupyterServer.hibernated
-            currently_failing = server.status.get("state", "running") == "failed"
-            state = PatchServerStatusEnum.from_api_state(body.state) if body.state is not None else None
-            resource_class_id = patch_body.resource_class_id
-            if server and not (currently_hibernated or currently_failing) and resource_class_id:
-                raise errors.ValidationError(
-                    message="The resource class can be changed only if the server is hibernated or failing"
-                )
-
-            if resource_class_id:
-                parsed_server_options = await self.nb_config.crc_validator.validate_class_storage(
-                    user,
-                    resource_class_id,
-                    storage=None,  # we do not care about validating storage
-                )
-                js_patch: list[dict[str, Any]] = [
-                    {
-                        "op": "replace",
-                        "path": "/spec/jupyterServer/resources",
-                        "value": parsed_server_options.to_k8s_resources(self.nb_config.sessions.enforce_cpu_limits),
-                    },
-                    {
-                        "op": "replace",
-                        # NOTE: ~1 is how you escape '/' in json-patch
-                        "path": "/metadata/annotations/renku.io~1resourceClassId",
-                        "value": str(resource_class_id),
-                    },
-                ]
-                if parsed_server_options.priority_class:
-                    js_patch.append(
-                        {
-                            "op": "replace",
-                            # NOTE: ~1 is how you escape '/' in json-patch
-                            "path": "/metadata/labels/renku.io~1quota",
-                            "value": parsed_server_options.priority_class,
-                        }
-                    )
-                elif server.metadata.labels.get("renku.io/quota"):
-                    js_patch.append(
-                        {
-                            "op": "remove",
-                            # NOTE: ~1 is how you escape '/' in json-patch
-                            "path": "/metadata/labels/renku.io~1quota",
-                        }
-                    )
-                new_server = await self.nb_config.k8s_client.patch_server(
-                    server_name=server_name, safe_username=user.id, patch=js_patch
-                )
-                ss_patch: list[dict[str, Any]] = [
-                    {
-                        "op": "replace",
-                        "path": "/spec/template/spec/priorityClassName",
-                        "value": parsed_server_options.priority_class,
-                    }
-                ]
-                await self.nb_config.k8s_client.patch_statefulset(server_name=server_name, patch=ss_patch)
-
-            if state == PatchServerStatusEnum.Hibernated:
-                # NOTE: Do nothing if server is already hibernated
-                currently_hibernated = server.spec.jupyterServer.hibernated
-                if server and currently_hibernated:
-                    logger.warning(f"Server {server_name} is already hibernated.")
-
-                    return json(
-                        NotebookResponse().dump(UserServerManifest(server, self.nb_config.sessions.default_image)), 200
-                    )
-
-                hibernation: dict[str, str | bool] = {"branch": "", "commit": "", "dirty": "", "synchronized": ""}
-
-                sidecar_patch = find_container(server.spec.patches, "git-sidecar")
-                status = (
-                    get_status(
-                        server_name=server_name,
-                        access_token=user.access_token,
-                        hostname=self.nb_config.sessions.ingress.host,
-                    )
-                    if sidecar_patch is not None
-                    else None
-                )
-                if status:
-                    hibernation = {
-                        "branch": status.get("branch", ""),
-                        "commit": status.get("commit", ""),
-                        "dirty": not status.get("clean", True),
-                        "synchronized": status.get("ahead", 0) == status.get("behind", 0) == 0,
-                    }
-
-                hibernation["date"] = datetime.now(UTC).isoformat(timespec="seconds")
-
-                patch = {
-                    "metadata": {
-                        "annotations": {
-                            "renku.io/hibernation": json_lib.dumps(hibernation),
-                            "renku.io/hibernationBranch": hibernation["branch"],
-                            "renku.io/hibernationCommitSha": hibernation["commit"],
-                            "renku.io/hibernationDirty": str(hibernation["dirty"]).lower(),
-                            "renku.io/hibernationSynchronized": str(hibernation["synchronized"]).lower(),
-                            "renku.io/hibernationDate": hibernation["date"],
-                        },
-                    },
-                    "spec": {
-                        "jupyterServer": {
-                            "hibernated": True,
-                        },
-                    },
-                }
-
-                new_server = await self.nb_config.k8s_client.patch_server(
-                    server_name=server_name, safe_username=user.id, patch=patch
-                )
-            elif state == PatchServerStatusEnum.Running:
-                # NOTE: We clear hibernation annotations in Amalthea to avoid flickering in the UI (showing
-                # the repository as dirty when resuming a session for a short period of time).
-                patch = {
-                    "spec": {
-                        "jupyterServer": {
-                            "hibernated": False,
-                        },
-                    },
-                }
-                # NOTE: The tokens in the session could expire if the session is hibernated long enough,
-                # here we inject new ones to make sure everything is valid when the session starts back up.
-                if user.access_token is None or user.refresh_token is None or internal_gitlab_user.access_token is None:
-                    raise errors.UnauthorizedError(
-                        message="Cannot patch the server if the user is not fully logged in."
-                    )
-                renku_tokens = RenkuTokens(access_token=user.access_token, refresh_token=user.refresh_token)
-                gitlab_token = GitlabToken(
-                    access_token=internal_gitlab_user.access_token,
-                    expires_at=(
-                        floor(user.access_token_expires_at.timestamp())
-                        if user.access_token_expires_at is not None
-                        else -1
-                    ),
-                )
-                await self.nb_config.k8s_client.patch_tokens(server_name, renku_tokens, gitlab_token)
-                new_server = await self.nb_config.k8s_client.patch_server(
-                    server_name=server_name, safe_username=user.id, patch=patch
-                )
-
-            manifest = UserServerManifest(new_server, self.nb_config.sessions.default_image)
+            manifest = await core.patch_server(self.nb_config, user, internal_gitlab_user, server_name, body)
             notebook_response = apispec.NotebookResponse.parse_obj(manifest)
             return json(
                 notebook_response.model_dump(),
@@ -675,7 +524,10 @@ class NotebooksBP(CustomBlueprint):
         async def _stop_server(
             _: Request, user: AnonymousAPIUser | AuthenticatedAPIUser, server_name: str
         ) -> HTTPResponse:
-            await self.nb_config.k8s_client.delete_server(server_name, safe_username=user.id)
+            try:
+                await core.stop_server(self.nb_config, user, server_name)
+            except errors.MissingResourceError as err:
+                raise exceptions.NotFound(message=err.message)
             return HTTPResponse(status=204)
 
         return "/notebooks/servers/<server_name>", ["DELETE"], _stop_server
