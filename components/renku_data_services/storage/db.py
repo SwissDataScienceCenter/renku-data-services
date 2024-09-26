@@ -1,6 +1,7 @@
 """Adapters for storage database classes."""
 
 from collections.abc import Callable
+from datetime import datetime
 from typing import cast
 
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -167,18 +168,18 @@ class BaseStorageRepository(_Base):
             await session.delete(storage[0])
 
     async def upsert_storage_secrets(
-        self, storage_id: ULID, user: base_models.APIUser, secrets: list[models.CloudStorageSecretUpsert]
+        self,
+        storage_id: ULID,
+        user: base_models.APIUser,
+        secrets: list[models.CloudStorageSecretUpsert],
+        expiration_timestamp: datetime | None,
     ) -> list[models.CloudStorageSecret]:
         """Create/update cloud storage secrets."""
-        # NOTE: Check that user has proper access to the storage
-        storage = await self.get_storage_by_id(storage_id=storage_id, user=user)
-
-        secret_names_values = {s.name: s.value for s in secrets}
         async with self.session_maker() as session, session.begin():
             stmt = (
                 select(schemas.CloudStorageSecretsORM)
                 .where(schemas.CloudStorageSecretsORM.user_id == user.id)
-                .where(schemas.CloudStorageSecretsORM.storage_id == storage.storage_id)
+                .where(schemas.CloudStorageSecretsORM.storage_id == storage_id)
                 .options(selectinload(schemas.CloudStorageSecretsORM.secret))
             )
             result = await session.execute(stmt)
@@ -187,30 +188,35 @@ class BaseStorageRepository(_Base):
             existing_secrets = {s.name: s for s in existing_storage_secrets_orm}
             stored_secrets = []
 
-            for name, value in secret_names_values.items():
+            for secret in secrets:
                 encrypted_value, encrypted_key = await encrypt_user_secret(
                     user_repo=self.user_repo,
                     requested_by=user,
                     secret_service_public_key=self.secret_service_public_key,
-                    secret_value=value,
+                    secret_value=secret.value,
                 )
 
-                if storage_secret_orm := existing_secrets.get(name):
-                    storage_secret_orm.secret.update(encrypted_value=encrypted_value, encrypted_key=encrypted_key)
+                if storage_secret_orm := existing_secrets.get(secret.name):
+                    storage_secret_orm.secret.update(
+                        encrypted_value=encrypted_value,
+                        encrypted_key=encrypted_key,
+                        expiration_timestamp=expiration_timestamp,
+                    )
                 else:
                     secret_orm = secrets_schemas.SecretORM(
-                        name=f"{storage_id}-{name}",
+                        name=f"{storage_id}-{secret.name}",
                         user_id=cast(str, user.id),
                         encrypted_value=encrypted_value,
                         encrypted_key=encrypted_key,
                         kind=SecretKind.storage,
+                        expiration_timestamp=expiration_timestamp,
                     )
                     session.add(secret_orm)
 
                     storage_secret_orm = schemas.CloudStorageSecretsORM(
                         user_id=cast(str, user.id),
                         storage_id=storage_id,
-                        name=name,
+                        name=secret.name,
                         secret_id=secret_orm.id,
                     )
                     session.add(storage_secret_orm)

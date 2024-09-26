@@ -14,6 +14,7 @@ from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_query
 from renku_data_services.storage import apispec, models
+from renku_data_services.storage.core import storage_secrets_preparation
 from renku_data_services.storage.db import StorageRepository, StorageV2Repository
 from renku_data_services.storage.rclone import RCloneValidator
 
@@ -302,12 +303,26 @@ class StoragesV2BP(CustomBlueprint):
         """Create/update secrets for a cloud storage."""
 
         @authenticate(self.authenticator)
-        async def _upsert_secrets(request: Request, user: base_models.APIUser, storage_id: ULID) -> JSONResponse:
+        async def _upsert_secrets(
+            request: Request, user: base_models.APIUser, storage_id: ULID, validator: RCloneValidator
+        ) -> JSONResponse:
             # TODO: use @validate once sanic supports validating json lists
             body = apispec.CloudStorageSecretPostList.model_validate(request.json)
+
+            # NOTE: Check that user has proper access to the storage
+            storage = await self.storage_v2_repo.get_storage_by_id(storage_id=storage_id, user=user)
+
             secrets = [models.CloudStorageSecretUpsert.model_validate(s.model_dump()) for s in body.root]
+            validator.validate_sensitive_data(storage.configuration, {s.name: s.value for s in secrets})
+            (
+                secrets,
+                expiration_timestamp,
+            ) = await storage_secrets_preparation(secrets, storage)
             result = await self.storage_v2_repo.upsert_storage_secrets(
-                storage_id=storage_id, user=user, secrets=secrets
+                storage_id=storage_id,
+                user=user,
+                secrets=secrets,
+                expiration_timestamp=expiration_timestamp,
             )
             return json(
                 apispec.CloudStorageSecretGetList.model_validate(result).model_dump(exclude_none=True, mode="json"), 201
