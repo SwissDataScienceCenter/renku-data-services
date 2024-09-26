@@ -25,7 +25,11 @@ from renku_data_services.data_connectors.core import (
     validate_data_connector_secrets_patch,
     validate_unsaved_data_connector,
 )
-from renku_data_services.data_connectors.db import DataConnectorProjectLinkRepository, DataConnectorRepository
+from renku_data_services.data_connectors.db import (
+    DataConnectorProjectLinkRepository,
+    DataConnectorRepository,
+    DataConnectorSecretRepository,
+)
 from renku_data_services.storage.rclone import RCloneValidator
 
 
@@ -34,6 +38,7 @@ class DataConnectorsBP(CustomBlueprint):
     """Handlers for manipulating data connectors."""
 
     data_connector_repo: DataConnectorRepository
+    data_connector_secret_repo: DataConnectorSecretRepository
     data_connector_to_project_link_repo: DataConnectorProjectLinkRepository
     authenticator: base_models.Authenticator
 
@@ -273,7 +278,7 @@ class DataConnectorsBP(CustomBlueprint):
             user: base_models.APIUser,
             data_connector_id: ULID,
         ) -> JSONResponse:
-            secrets = await self.data_connector_repo.get_data_connector_secrets(
+            secrets = await self.data_connector_secret_repo.get_data_connector_secrets(
                 user=user, data_connector_id=data_connector_id
             )
             return validated_json(
@@ -295,7 +300,7 @@ class DataConnectorsBP(CustomBlueprint):
             body: apispec.DataConnectorSecretPatchList,
         ) -> JSONResponse:
             unsaved_secrets = validate_data_connector_secrets_patch(put=body)
-            secrets = await self.data_connector_repo.patch_data_connector_secrets(
+            secrets = await self.data_connector_secret_repo.patch_data_connector_secrets(
                 user=user, data_connector_id=data_connector_id, secrets=unsaved_secrets
             )
             return validated_json(
@@ -314,7 +319,9 @@ class DataConnectorsBP(CustomBlueprint):
             user: base_models.APIUser,
             data_connector_id: ULID,
         ) -> HTTPResponse:
-            await self.data_connector_repo.delete_data_connector_secrets(user=user, data_connector_id=data_connector_id)
+            await self.data_connector_secret_repo.delete_data_connector_secrets(
+                user=user, data_connector_id=data_connector_id
+            )
             return HTTPResponse(status=204)
 
         return "/data_connectors/<data_connector_id:ulid>/secrets", ["DELETE"], _delete_secrets

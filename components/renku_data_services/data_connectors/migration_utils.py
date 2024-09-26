@@ -65,7 +65,7 @@ class DataConnectorMigrationTool:
             )
         except errors.ConflictError:
             # Retry with a random suffix in the slug
-            suffix = "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(8)])
+            suffix = "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(8)])  # nosec B311
             data_connector_slug = Slug.from_name(storage.name).value
             data_connector_slug = f"{data_connector_slug}-{suffix}"
             data_connector = await self._insert_data_connector(

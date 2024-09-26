@@ -75,8 +75,14 @@ class SyncConfig:
         )
 
         # NEW
-        data_connector_repo = DataConnectorRepository()
-        data_connector_project_link_repo = DataConnectorProjectLinkRepository()
+        data_connector_repo = DataConnectorRepository(
+            session_maker=session_maker,
+            authz=Authz(authz_config),
+        )
+        data_connector_project_link_repo = DataConnectorProjectLinkRepository(
+            session_maker=session_maker,
+            authz=Authz(authz_config),
+        )
         data_connector_migration_tool = DataConnectorMigrationTool(
             session_maker=session_maker,
             data_connector_repo=data_connector_repo,
