@@ -713,14 +713,9 @@ class NotebooksBP(CustomBlueprint):
             image_url = request.get_args().get("image_url")
             if not isinstance(image_url, str):
                 raise ValueError("required string of image url")
-            parsed_image = Image.from_path(image_url)
-            image_repo = parsed_image.repo_api()
-            if parsed_image.hostname == self.nb_config.git.registry and internal_gitlab_user.access_token:
-                image_repo = image_repo.with_oauth2_token(internal_gitlab_user.access_token)
-            if image_repo.image_exists(parsed_image):
-                return HTTPResponse(status=200)
-            else:
-                return HTTPResponse(status=404)
+
+            status = 200 if core.docker_image_exists(self.nb_config, image_url, internal_gitlab_user) else 404
+            return HTTPResponse(status=status)
 
         return "/notebooks/images", ["GET"], _check_docker_image
 
