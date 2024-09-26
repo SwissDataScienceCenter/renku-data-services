@@ -116,7 +116,7 @@ class KCUsersBP(CustomBlueprint):
         @validate_path_user_id
         @only_admins
         async def _delete_one(_: Request, requested_by: base_models.APIUser, user_id: str) -> HTTPResponse:
-            await self.repo.remove_user(user_id=user_id)
+            await self.repo.remove_user(requested_by=requested_by, user_id=user_id)
             return HTTPResponse(status=204)
 
         return "/users/<user_id>", ["DELETE"], _delete_one
