@@ -1,7 +1,6 @@
 """Notebooks service API."""
 
 import base64
-import logging
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -10,11 +9,7 @@ from pathlib import PurePosixPath
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
-import requests
-from gitlab.const import Visibility as GitlabVisibility
-from gitlab.v4.objects.projects import Project as GitlabProject
 from kubernetes.client import V1ObjectMeta, V1Secret
-from marshmallow import ValidationError
 from sanic import Request, empty, exceptions, json
 from sanic.log import logger
 from sanic.response import HTTPResponse, JSONResponse
@@ -31,10 +26,8 @@ from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec, core
 from renku_data_services.notebooks.api.amalthea_patches import git_proxy, init_containers
-from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.classes.repository import Repository
-from renku_data_services.notebooks.api.classes.server import Renku1UserServer, Renku2UserServer, UserServer
-from renku_data_services.notebooks.api.classes.server_manifest import UserServerManifest
+from renku_data_services.notebooks.api.classes.server import Renku1UserServer, Renku2UserServer
 from renku_data_services.notebooks.api.classes.user import NotebooksGitlabClient
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_data_services.notebooks.api.schemas.config_server_options import ServerOptionsEndpointResponse
@@ -45,12 +38,8 @@ from renku_data_services.notebooks.api.schemas.servers_get import (
     NotebookResponse,
     ServersGetResponse,
 )
-<<<<<<< HEAD
-from renku_data_services.notebooks.api.schemas.servers_patch import PatchServerStatusEnum
 from renku_data_services.notebooks.config import NotebooksConfig
-=======
-from renku_data_services.notebooks.config import _NotebooksConfig
->>>>>>> f44866f (refactor(notebooks): move server stop logic to core)
+
 from renku_data_services.notebooks.crs import (
     AmaltheaSessionSpec,
     AmaltheaSessionV1Alpha1,
@@ -76,8 +65,7 @@ from renku_data_services.notebooks.crs import (
     TlsSecret,
 )
 from renku_data_services.notebooks.errors.intermittent import AnonymousUserPatchError
-from renku_data_services.notebooks.errors.programming import ProgrammingError
-from renku_data_services.notebooks.errors.user import MissingResourceError
+
 from renku_data_services.notebooks.util.kubernetes_ import (
     renku_1_make_server_name,
     renku_2_make_server_name,
@@ -147,7 +135,7 @@ class NotebooksBP(CustomBlueprint):
                 safe_username=user.id, project_id=body.project_id, launcher_id=body.launcher_id
             )
             server_class = Renku2UserServer
-            server, status_code = await self.launch_notebook_helper(
+            server, status_code = await core.launch_notebook_helper(
                 nb_config=self.nb_config,
                 server_name=server_name,
                 server_class=server_class,
@@ -206,7 +194,7 @@ class NotebooksBP(CustomBlueprint):
                 else None
             )
 
-            server, status_code = await self.launch_notebook_helper(
+            server, status_code = await core.launch_notebook_helper(
                 nb_config=self.nb_config,
                 server_name=server_name,
                 server_class=server_class,
@@ -235,263 +223,6 @@ class NotebooksBP(CustomBlueprint):
             return json(NotebookResponse().dump(server), status_code)
 
         return "/notebooks/old/servers", ["POST"], _launch_notebook_old
-
-    @staticmethod
-    async def launch_notebook_helper(
-        nb_config: NotebooksConfig,
-        server_name: str,
-        server_class: type[UserServer],
-        user: AnonymousAPIUser | AuthenticatedAPIUser,
-        image: str,
-        resource_class_id: int | None,
-        storage: int | None,
-        environment_variables: dict[str, str],
-        user_secrets: apispec.UserSecrets | None,
-        default_url: str,
-        lfs_auto_fetch: bool,
-        cloudstorage: list[apispec.RCloneStorageRequest],
-        server_options: ServerOptions | dict | None,
-        namespace: str | None,  # Renku 1.0
-        project: str | None,  # Renku 1.0
-        branch: str | None,  # Renku 1.0
-        commit_sha: str | None,  # Renku 1.0
-        notebook: str | None,  # Renku 1.0
-        gl_project: GitlabProject | None,  # Renku 1.0
-        gl_project_path: str | None,  # Renku 1.0
-        project_id: str | None,  # Renku 2.0
-        launcher_id: str | None,  # Renku 2.0
-        repositories: list[apispec.LaunchNotebookRequestRepository] | None,  # Renku 2.0
-        internal_gitlab_user: APIUser,
-    ) -> tuple[UserServerManifest, int]:
-        """Helper function to launch a Jupyter server."""
-        server = await nb_config.k8s_client.get_server(server_name, user.id)
-
-        if server:
-            return UserServerManifest(
-                server, nb_config.sessions.default_image, nb_config.sessions.storage.pvs_enabled
-            ), 200
-
-        gl_project_path = gl_project_path if gl_project_path is not None else ""
-
-        # Add annotation for old and new notebooks
-        is_image_private = False
-        using_default_image = False
-        if image:
-            # A specific image was requested
-            parsed_image = Image.from_path(image)
-            image_repo = parsed_image.repo_api()
-            image_exists_publicly = await image_repo.image_exists(parsed_image)
-            image_exists_privately = False
-            if (
-                not image_exists_publicly
-                and parsed_image.hostname == nb_config.git.registry
-                and internal_gitlab_user.access_token
-            ):
-                image_repo = image_repo.with_oauth2_token(internal_gitlab_user.access_token)
-                image_exists_privately = await image_repo.image_exists(parsed_image)
-            if not image_exists_privately and not image_exists_publicly:
-                using_default_image = True
-                image = nb_config.sessions.default_image
-                parsed_image = Image.from_path(image)
-            if image_exists_privately:
-                is_image_private = True
-        elif gl_project is not None:
-            # An image was not requested specifically, use the one automatically built for the commit
-            if commit_sha is None:
-                raise errors.ValidationError(
-                    message="Cannot run a session with an image based on a commit sha if the commit sha is not known."
-                )
-            image = f"{nb_config.git.registry}/{gl_project.path_with_namespace.lower()}:{commit_sha[:7]}"
-            parsed_image = Image(
-                nb_config.git.registry,
-                gl_project.path_with_namespace.lower(),
-                commit_sha[:7],
-            )
-            # NOTE: a project pulled from the Gitlab API without credentials has no visibility attribute
-            # and by default it can only be public since only public projects are visible to
-            # non-authenticated users. Also, a nice footgun from the Gitlab API Python library.
-            is_image_private = getattr(gl_project, "visibility", GitlabVisibility.PUBLIC) != GitlabVisibility.PUBLIC
-            image_repo = parsed_image.repo_api()
-            if is_image_private and internal_gitlab_user.access_token:
-                image_repo = image_repo.with_oauth2_token(internal_gitlab_user.access_token)
-            if not await image_repo.image_exists(parsed_image):
-                raise errors.MissingResourceError(
-                    message=(
-                        f"Cannot start the session because the following the image {image} does not "
-                        "exist or the user does not have the permissions to access it."
-                    )
-                )
-        else:
-            raise errors.ValidationError(message="Cannot determine which Docker image to use.")
-
-        parsed_server_options: ServerOptions | None = None
-        if resource_class_id is not None:
-            # A resource class ID was passed in, validate with CRC service
-            parsed_server_options = await nb_config.crc_validator.validate_class_storage(
-                user, resource_class_id, storage
-            )
-        elif server_options is not None:
-            if isinstance(server_options, dict):
-                requested_server_options = ServerOptions(
-                    memory=server_options["mem_request"],
-                    storage=server_options["disk_request"],
-                    cpu=server_options["cpu_request"],
-                    gpu=server_options["gpu_request"],
-                    lfs_auto_fetch=server_options["lfs_auto_fetch"],
-                    default_url=server_options["defaultUrl"],
-                )
-            elif isinstance(server_options, ServerOptions):
-                requested_server_options = server_options
-            else:
-                raise ProgrammingError(
-                    message="Got an unexpected type of server options when "
-                    f"launching sessions: {type(server_options)}"
-                )
-            # The old style API was used, try to find a matching class from the CRC service
-            parsed_server_options = await nb_config.crc_validator.find_acceptable_class(user, requested_server_options)
-            if parsed_server_options is None:
-                raise errors.ValidationError(
-                    message="Cannot find suitable server options based on your request and "
-                    "the available resource classes.",
-                    detail="You are receiving this error because you are using the old API for "
-                    "selecting resources. Updating to the new API which includes specifying only "
-                    "a specific resource class ID and storage is preferred and more convenient.",
-                )
-        else:
-            # No resource class ID specified or old-style server options, use defaults from CRC
-            default_resource_class = await nb_config.crc_validator.get_default_class()
-            max_storage_gb = default_resource_class.max_storage
-            if storage is not None and storage > max_storage_gb:
-                raise errors.ValidationError(
-                    message="The requested storage amount is higher than the "
-                    f"allowable maximum for the default resource class of {max_storage_gb}GB."
-                )
-            if storage is None:
-                storage = default_resource_class.default_storage
-            parsed_server_options = ServerOptions.from_resource_class(default_resource_class)
-            # Storage in request is in GB
-            parsed_server_options.set_storage(storage, gigabytes=True)
-
-        if default_url is not None:
-            parsed_server_options.default_url = default_url
-
-        if lfs_auto_fetch is not None:
-            parsed_server_options.lfs_auto_fetch = lfs_auto_fetch
-
-        image_work_dir = await image_repo.image_workdir(parsed_image) or PurePosixPath("/")
-        mount_path = image_work_dir / "work"
-
-        server_work_dir = mount_path / gl_project_path
-
-        storages: list[RCloneStorage] = []
-        if cloudstorage:
-            gl_project_id = gl_project.id if gl_project is not None else 0
-            try:
-                for cstorage in cloudstorage:
-                    storages.append(
-                        await RCloneStorage.storage_from_schema(
-                            cstorage.model_dump(),
-                            user=user,
-                            project_id=gl_project_id,
-                            work_dir=server_work_dir,
-                            config=nb_config,
-                            internal_gitlab_user=internal_gitlab_user,
-                        )
-                    )
-            except ValidationError as e:
-                raise errors.ValidationError(message=f"Couldn't load cloud storage config: {str(e)}")
-            mount_points = set(s.mount_folder for s in storages if s.mount_folder and s.mount_folder != "/")
-            if len(mount_points) != len(storages):
-                raise errors.ValidationError(
-                    message="Storage mount points must be set, can't be at the root of the project and must be unique."
-                )
-            if any(s1.mount_folder.startswith(s2.mount_folder) for s1 in storages for s2 in storages if s1 != s2):
-                raise errors.ValidationError(
-                    message="Cannot mount a cloud storage into the mount point of another cloud storage."
-                )
-
-        repositories = repositories or []
-
-        k8s_user_secret = None
-        if user_secrets:
-            k8s_user_secret = K8sUserSecrets(f"{server_name}-secret", **user_secrets.model_dump())
-
-        extra_kwargs: dict = dict(
-            commit_sha=commit_sha,
-            branch=branch,
-            project=project,
-            namespace=namespace,
-            launcher_id=launcher_id,
-            project_id=project_id,
-            notebook=notebook,
-            internal_gitlab_user=internal_gitlab_user,  # Renku 1
-            gitlab_project=gl_project,  # Renku 1
-        )
-        server = server_class(
-            user=user,
-            image=image,
-            server_name=server_name,
-            server_options=parsed_server_options,
-            environment_variables=environment_variables,
-            user_secrets=k8s_user_secret,
-            cloudstorage=storages,
-            k8s_client=nb_config.k8s_client,
-            workspace_mount_path=mount_path,
-            work_dir=server_work_dir,
-            using_default_image=using_default_image,
-            is_image_private=is_image_private,
-            repositories=[Repository.from_dict(r.model_dump()) for r in repositories],
-            config=nb_config,
-            **extra_kwargs,
-        )
-
-        if len(server.safe_username) > 63:
-            raise errors.ValidationError(
-                message="A username cannot be longer than 63 characters, "
-                f"your username is {len(server.safe_username)} characters long.",
-                detail="This can occur if your username has been changed manually or by an admin.",
-            )
-
-        manifest = await server.start()
-        if manifest is None:
-            raise errors.ProgrammingError(message="Failed to start server.")
-
-        logging.debug(f"Server {server.server_name} has been started")
-
-        if k8s_user_secret is not None:
-            owner_reference = {
-                "apiVersion": "amalthea.dev/v1alpha1",
-                "kind": "JupyterServer",
-                "name": server.server_name,
-                "uid": manifest.metadata.uid,
-                "controller": True,
-            }
-            request_data = {
-                "name": k8s_user_secret.name,
-                "namespace": server.k8s_client.preferred_namespace,
-                "secret_ids": [str(id_) for id_ in k8s_user_secret.user_secret_ids],
-                "owner_references": [owner_reference],
-            }
-            headers = {"Authorization": f"bearer {user.access_token}"}
-
-            async def _on_error(server_name: str, error_msg: str) -> None:
-                await nb_config.k8s_client.delete_server(server_name, safe_username=user.id)
-                raise RuntimeError(error_msg)
-
-            try:
-                response = requests.post(
-                    nb_config.user_secrets.secrets_storage_service_url + "/api/secrets/kubernetes",
-                    json=request_data,
-                    headers=headers,
-                    timeout=10,
-                )
-            except requests.exceptions.ConnectionError:
-                await _on_error(server.server_name, "User secrets storage service could not be contacted {exc}")
-
-            if response.status_code != 201:
-                await _on_error(server.server_name, f"User secret could not be created {response.json()}")
-
-        return UserServerManifest(manifest, nb_config.sessions.default_image), 201
 
     def patch_server(self) -> BlueprintFactoryResponse:
         """Patch a user server by name based on the query param."""
