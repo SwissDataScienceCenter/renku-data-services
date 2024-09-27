@@ -178,31 +178,3 @@ class StorageRepository(BaseStorageRepository):
         )
 
         return await self.gitlab_client.filter_projects_by_access_level(user, project_ids, gitlab_access_level)
-
-
-# class StorageV2Repository(BaseStorageRepository):
-#     """Repository for V2 cloud storage."""
-
-#     def __init__(
-#         self,
-#         project_authz: Authz,
-#         session_maker: Callable[..., AsyncSession],
-#         user_repo: UserRepo,
-#         secret_service_public_key: rsa.RSAPublicKey,
-#     ) -> None:
-#         super().__init__(session_maker, user_repo, secret_service_public_key)
-#         self.project_authz: Authz = project_authz
-
-#     async def filter_projects_by_access_level(
-#         self, user: base_models.APIUser, project_ids: list[str], minimum_access_level: authz_models.Role
-#     ) -> list[str]:
-#         """Get a list of project IDs of which the user is a member with a specific access level."""
-#         if not user.is_authenticated or not project_ids:
-#             return []
-
-#         scope = authz_models.Scope.WRITE if minimum_access_level == authz_models.Role.OWNER else authz_models.Scope.READ
-#         output = []
-#         for id in project_ids:
-#             if await self.project_authz.has_permission(user, ResourceType.project, ULID.from_str(id), scope):
-#                 output.append(id)
-#         return output
