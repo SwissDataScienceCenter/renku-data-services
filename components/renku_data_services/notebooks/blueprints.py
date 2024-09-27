@@ -16,7 +16,7 @@ from gitlab.const import Visibility as GitlabVisibility
 from gitlab.v4.objects.projects import Project as GitlabProject
 from kubernetes.client import V1ObjectMeta, V1Secret
 from marshmallow import ValidationError
-from sanic import Request, empty, exceptions, json
+from sanic import Request, empty, json
 from sanic.log import logger
 from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
@@ -75,7 +75,7 @@ from renku_data_services.notebooks.crs import (
 )
 from renku_data_services.notebooks.errors.intermittent import AnonymousUserPatchError, PVDisabledError
 from renku_data_services.notebooks.errors.programming import ProgrammingError
-from renku_data_services.notebooks.errors.user import MissingResourceError, UserInputError
+from renku_data_services.notebooks.errors.user import MissingResourceError
 from renku_data_services.notebooks.util.kubernetes_ import (
     find_container,
     renku_1_make_server_name,
@@ -161,7 +161,7 @@ class NotebooksBP(CustomBlueprint):
         ) -> JSONResponse:
             server = await self.nb_config.k8s_client.get_server(server_name, user.id)
             if server is None:
-                raise MissingResourceError(message=f"The server {server_name} does not exist.")
+                raise errors.MissingResourceError(message=f"The server {server_name} does not exist.")
             server = UserServerManifest(server, self.nb_config.sessions.default_image)
             return json(NotebookResponse().dump(server))
 
@@ -350,14 +350,14 @@ class NotebooksBP(CustomBlueprint):
             if is_image_private and internal_gitlab_user.access_token:
                 image_repo = image_repo.with_oauth2_token(internal_gitlab_user.access_token)
             if not image_repo.image_exists(parsed_image):
-                raise MissingResourceError(
+                raise errors.MissingResourceError(
                     message=(
                         f"Cannot start the session because the following the image {image} does not "
                         "exist or the user does not have the permissions to access it."
                     )
                 )
         else:
-            raise UserInputError(message="Cannot determine which Docker image to use.")
+            raise errors.ValidationError(message="Cannot determine which Docker image to use.")
 
         parsed_server_options: ServerOptions | None = None
         if resource_class_id is not None:
@@ -385,7 +385,7 @@ class NotebooksBP(CustomBlueprint):
             # The old style API was used, try to find a matching class from the CRC service
             parsed_server_options = await nb_config.crc_validator.find_acceptable_class(user, requested_server_options)
             if parsed_server_options is None:
-                raise UserInputError(
+                raise errors.ValidationError(
                     message="Cannot find suitable server options based on your request and "
                     "the available resource classes.",
                     detail="You are receiving this error because you are using the old API for "
@@ -397,8 +397,8 @@ class NotebooksBP(CustomBlueprint):
             default_resource_class = await nb_config.crc_validator.get_default_class()
             max_storage_gb = default_resource_class.max_storage
             if storage is not None and storage > max_storage_gb:
-                raise UserInputError(
-                    "The requested storage amount is higher than the "
+                raise errors.ValidationError(
+                    message="The requested storage amount is higher than the "
                     f"allowable maximum for the default resource class of {max_storage_gb}GB."
                 )
             if storage is None:
@@ -434,14 +434,16 @@ class NotebooksBP(CustomBlueprint):
                         )
                     )
             except ValidationError as e:
-                raise UserInputError(f"Couldn't load cloud storage config: {str(e)}")
+                raise errors.ValidationError(message=f"Couldn't load cloud storage config: {str(e)}")
             mount_points = set(s.mount_folder for s in storages if s.mount_folder and s.mount_folder != "/")
             if len(mount_points) != len(storages):
-                raise UserInputError(
-                    "Storage mount points must be set, can't be at the root of the project and must be unique."
+                raise errors.ValidationError(
+                    message="Storage mount points must be set, can't be at the root of the project and must be unique."
                 )
             if any(s1.mount_folder.startswith(s2.mount_folder) for s1 in storages for s2 in storages if s1 != s2):
-                raise UserInputError("Cannot mount a cloud storage into the mount point of another cloud storage.")
+                raise errors.ValidationError(
+                    message="Cannot mount a cloud storage into the mount point of another cloud storage."
+                )
 
         repositories = repositories or []
 
@@ -479,7 +481,7 @@ class NotebooksBP(CustomBlueprint):
         )
 
         if len(server.safe_username) > 63:
-            raise UserInputError(
+            raise errors.ValidationError(
                 message="A username cannot be longer than 63 characters, "
                 f"your username is {len(server.safe_username)} characters long.",
                 detail="This can occur if your username has been changed manually or by an admin.",
@@ -557,7 +559,9 @@ class NotebooksBP(CustomBlueprint):
             state = PatchServerStatusEnum.from_api_state(body.state) if body.state is not None else None
             resource_class_id = patch_body.resource_class_id
             if server and not (currently_hibernated or currently_failing) and resource_class_id:
-                raise UserInputError("The resource class can be changed only if the server is hibernated or failing")
+                raise errors.ValidationError(
+                    message="The resource class can be changed only if the server is hibernated or failing"
+                )
 
             if resource_class_id:
                 parsed_server_options = await self.nb_config.crc_validator.validate_class_storage(
@@ -704,12 +708,9 @@ class NotebooksBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _stop_server(
-            request: Request, user: AnonymousAPIUser | AuthenticatedAPIUser, server_name: str
+            _: Request, user: AnonymousAPIUser | AuthenticatedAPIUser, server_name: str
         ) -> HTTPResponse:
-            try:
-                await self.nb_config.k8s_client.delete_server(server_name, safe_username=user.id)
-            except MissingResourceError as err:
-                raise exceptions.NotFound(message=err.message)
+            await self.nb_config.k8s_client.delete_server(server_name, safe_username=user.id)
             return HTTPResponse(status=204)
 
         return "/notebooks/servers/<server_name>", ["DELETE"], _stop_server
@@ -748,7 +749,7 @@ class NotebooksBP(CustomBlueprint):
                 )
                 return json(ServerLogs().dump(logs))
             except MissingResourceError as err:
-                raise exceptions.NotFound(message=err.message)
+                raise errors.MissingResourceError(message=err.message)
 
         return "/notebooks/logs/<server_name>", ["GET"], _server_logs
 
