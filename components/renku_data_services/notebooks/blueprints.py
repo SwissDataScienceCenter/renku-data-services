@@ -7,7 +7,7 @@ import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from math import floor
-from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
@@ -16,7 +16,7 @@ from gitlab.const import Visibility as GitlabVisibility
 from gitlab.v4.objects.projects import Project as GitlabProject
 from kubernetes.client import V1ObjectMeta, V1Secret
 from marshmallow import ValidationError
-from sanic import Request, empty, exceptions, json
+from sanic import Request, empty, json
 from sanic.log import logger
 from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
@@ -55,6 +55,7 @@ from renku_data_services.notebooks.crs import (
     Authentication,
     AuthenticationType,
     Culling,
+    DataSource,
     ExtraContainer,
     ExtraVolume,
     ExtraVolumeMount,
@@ -64,7 +65,8 @@ from renku_data_services.notebooks.crs import (
     Resources,
     SecretAsVolume,
     SecretAsVolumeItem,
-    SecretRef,
+    SecretRefKey,
+    SecretRefWhole,
     Session,
     SessionEnvItem,
     State,
@@ -73,7 +75,7 @@ from renku_data_services.notebooks.crs import (
 )
 from renku_data_services.notebooks.errors.intermittent import AnonymousUserPatchError, PVDisabledError
 from renku_data_services.notebooks.errors.programming import ProgrammingError
-from renku_data_services.notebooks.errors.user import MissingResourceError, UserInputError
+from renku_data_services.notebooks.errors.user import MissingResourceError
 from renku_data_services.notebooks.util.kubernetes_ import (
     find_container,
     renku_1_make_server_name,
@@ -83,6 +85,7 @@ from renku_data_services.notebooks.util.repository import get_status
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.session.db import SessionRepository
+from renku_data_services.storage.db import StorageV2Repository
 
 
 @dataclass(kw_only=True)
@@ -93,6 +96,7 @@ class NotebooksBP(CustomBlueprint):
     nb_config: _NotebooksConfig
     git_repo: GitRepositoriesRepository
     internal_gitlab_authenticator: base_models.Authenticator
+    rp_repo: ResourcePoolRepository
 
     def version(self) -> BlueprintFactoryResponse:
         """Return notebook services version."""
@@ -157,7 +161,7 @@ class NotebooksBP(CustomBlueprint):
         ) -> JSONResponse:
             server = await self.nb_config.k8s_client.get_server(server_name, user.id)
             if server is None:
-                raise MissingResourceError(message=f"The server {server_name} does not exist.")
+                raise errors.MissingResourceError(message=f"The server {server_name} does not exist.")
             server = UserServerManifest(server, self.nb_config.sessions.default_image)
             return json(NotebookResponse().dump(server))
 
@@ -346,14 +350,14 @@ class NotebooksBP(CustomBlueprint):
             if is_image_private and internal_gitlab_user.access_token:
                 image_repo = image_repo.with_oauth2_token(internal_gitlab_user.access_token)
             if not image_repo.image_exists(parsed_image):
-                raise MissingResourceError(
+                raise errors.MissingResourceError(
                     message=(
                         f"Cannot start the session because the following the image {image} does not "
                         "exist or the user does not have the permissions to access it."
                     )
                 )
         else:
-            raise UserInputError(message="Cannot determine which Docker image to use.")
+            raise errors.ValidationError(message="Cannot determine which Docker image to use.")
 
         parsed_server_options: ServerOptions | None = None
         if resource_class_id is not None:
@@ -381,7 +385,7 @@ class NotebooksBP(CustomBlueprint):
             # The old style API was used, try to find a matching class from the CRC service
             parsed_server_options = await nb_config.crc_validator.find_acceptable_class(user, requested_server_options)
             if parsed_server_options is None:
-                raise UserInputError(
+                raise errors.ValidationError(
                     message="Cannot find suitable server options based on your request and "
                     "the available resource classes.",
                     detail="You are receiving this error because you are using the old API for "
@@ -393,8 +397,8 @@ class NotebooksBP(CustomBlueprint):
             default_resource_class = await nb_config.crc_validator.get_default_class()
             max_storage_gb = default_resource_class.max_storage
             if storage is not None and storage > max_storage_gb:
-                raise UserInputError(
-                    "The requested storage amount is higher than the "
+                raise errors.ValidationError(
+                    message="The requested storage amount is higher than the "
                     f"allowable maximum for the default resource class of {max_storage_gb}GB."
                 )
             if storage is None:
@@ -409,7 +413,7 @@ class NotebooksBP(CustomBlueprint):
         if lfs_auto_fetch is not None:
             parsed_server_options.lfs_auto_fetch = lfs_auto_fetch
 
-        image_work_dir = image_repo.image_workdir(parsed_image) or Path("/")
+        image_work_dir = image_repo.image_workdir(parsed_image) or PurePosixPath("/")
         mount_path = image_work_dir / "work"
 
         server_work_dir = mount_path / gl_project_path
@@ -424,20 +428,22 @@ class NotebooksBP(CustomBlueprint):
                             cstorage.model_dump(),
                             user=user,
                             project_id=gl_project_id,
-                            work_dir=server_work_dir.absolute(),
+                            work_dir=server_work_dir,
                             config=nb_config,
                             internal_gitlab_user=internal_gitlab_user,
                         )
                     )
             except ValidationError as e:
-                raise UserInputError(f"Couldn't load cloud storage config: {str(e)}")
+                raise errors.ValidationError(message=f"Couldn't load cloud storage config: {str(e)}")
             mount_points = set(s.mount_folder for s in storages if s.mount_folder and s.mount_folder != "/")
             if len(mount_points) != len(storages):
-                raise UserInputError(
-                    "Storage mount points must be set, can't be at the root of the project and must be unique."
+                raise errors.ValidationError(
+                    message="Storage mount points must be set, can't be at the root of the project and must be unique."
                 )
             if any(s1.mount_folder.startswith(s2.mount_folder) for s1 in storages for s2 in storages if s1 != s2):
-                raise UserInputError("Cannot mount a cloud storage into the mount point of another cloud storage.")
+                raise errors.ValidationError(
+                    message="Cannot mount a cloud storage into the mount point of another cloud storage."
+                )
 
         repositories = repositories or []
 
@@ -475,7 +481,7 @@ class NotebooksBP(CustomBlueprint):
         )
 
         if len(server.safe_username) > 63:
-            raise UserInputError(
+            raise errors.ValidationError(
                 message="A username cannot be longer than 63 characters, "
                 f"your username is {len(server.safe_username)} characters long.",
                 detail="This can occur if your username has been changed manually or by an admin.",
@@ -553,7 +559,9 @@ class NotebooksBP(CustomBlueprint):
             state = PatchServerStatusEnum.from_api_state(body.state) if body.state is not None else None
             resource_class_id = patch_body.resource_class_id
             if server and not (currently_hibernated or currently_failing) and resource_class_id:
-                raise UserInputError("The resource class can be changed only if the server is hibernated or failing")
+                raise errors.ValidationError(
+                    message="The resource class can be changed only if the server is hibernated or failing"
+                )
 
             if resource_class_id:
                 parsed_server_options = await self.nb_config.crc_validator.validate_class_storage(
@@ -700,12 +708,9 @@ class NotebooksBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _stop_server(
-            request: Request, user: AnonymousAPIUser | AuthenticatedAPIUser, server_name: str
+            _: Request, user: AnonymousAPIUser | AuthenticatedAPIUser, server_name: str
         ) -> HTTPResponse:
-            try:
-                await self.nb_config.k8s_client.delete_server(server_name, safe_username=user.id)
-            except MissingResourceError as err:
-                raise exceptions.NotFound(message=err.message)
+            await self.nb_config.k8s_client.delete_server(server_name, safe_username=user.id)
             return HTTPResponse(status=204)
 
         return "/notebooks/servers/<server_name>", ["DELETE"], _stop_server
@@ -744,7 +749,7 @@ class NotebooksBP(CustomBlueprint):
                 )
                 return json(ServerLogs().dump(logs))
             except MissingResourceError as err:
-                raise exceptions.NotFound(message=err.message)
+                raise errors.MissingResourceError(message=err.message)
 
         return "/notebooks/logs/<server_name>", ["GET"], _server_logs
 
@@ -780,6 +785,7 @@ class NotebooksNewBP(CustomBlueprint):
     project_repo: ProjectRepository
     session_repo: SessionRepository
     rp_repo: ResourcePoolRepository
+    storage_repo: StorageV2Repository
 
     def start(self) -> BlueprintFactoryResponse:
         """Start a session with the new operator."""
@@ -810,7 +816,7 @@ class NotebooksNewBP(CustomBlueprint):
             parsed_server_options = await self.nb_config.crc_validator.validate_class_storage(
                 user, resource_class_id, body.disk_storage
             )
-            work_dir = Path("/home/jovyan/work")
+            work_dir = environment.working_directory
             user_secrets: K8sUserSecrets | None = None
             # if body.user_secrets:
             #     user_secrets = K8sUserSecrets(
@@ -818,8 +824,45 @@ class NotebooksNewBP(CustomBlueprint):
             #         user_secret_ids=body.user_secrets.user_secret_ids,
             #         mount_path=body.user_secrets.mount_path,
             #     )
-            cloud_storage: list[RCloneStorage] = []
-            repositories = [Repository(url=repository) for repository in project.repositories]
+            cloud_storages_db = await self.storage_repo.get_storage(
+                user=user, project_id=project.id, include_secrets=True
+            )
+            cloud_storage: dict[str, RCloneStorage] = {
+                str(s.storage_id): RCloneStorage(
+                    source_path=s.source_path,
+                    mount_folder=(work_dir / s.target_path).as_posix(),
+                    configuration=s.configuration.model_dump(mode="python"),
+                    readonly=s.readonly,
+                    config=self.nb_config,
+                    name=s.name,
+                )
+                for s in cloud_storages_db
+            }
+            cloud_storage_request: dict[str, RCloneStorage] = {
+                s.storage_id: RCloneStorage(
+                    source_path=s.source_path,
+                    mount_folder=(work_dir / s.target_path).as_posix(),
+                    configuration=s.configuration,
+                    readonly=s.readonly,
+                    config=self.nb_config,
+                    name=None,
+                )
+                for s in body.cloudstorage or []
+            }
+            # NOTE: Check the cloud storage in the request body and if any match
+            # then overwrite the projects cloud storages
+            # NOTE: Cloud storages in the session launch request body that are not form the DB will cause a 422 error
+            for csr_id, csr in cloud_storage_request.items():
+                if csr_id not in cloud_storage:
+                    raise errors.MissingResourceError(
+                        message=f"You have requested a cloud storage with ID {csr_id} which does not exist "
+                        "or you dont have access to.",
+                        quiet=True,
+                    )
+                cloud_storage[csr_id] = csr
+            # repositories = [Repository(i.url, branch=i.branch, commit_sha=i.commit_sha) for i in body.repositories]
+            repositories = [Repository(url=i) for i in project.repositories]
+            secrets_to_create: list[V1Secret] = []
             server = Renku2UserServer(
                 user=user,
                 image=image,
@@ -829,7 +872,7 @@ class NotebooksNewBP(CustomBlueprint):
                 server_options=parsed_server_options,
                 environment_variables={},
                 user_secrets=user_secrets,
-                cloudstorage=cloud_storage,
+                cloudstorage=[i for i in cloud_storage.values()],
                 k8s_client=self.nb_config.k8s_v2_client,
                 workspace_mount_path=work_dir,
                 work_dir=work_dir,
@@ -839,6 +882,14 @@ class NotebooksNewBP(CustomBlueprint):
                 is_image_private=False,
                 internal_gitlab_user=internal_gitlab_user,
             )
+            # Generate the cloud storage secrets
+            data_sources: list[DataSource] = []
+            for ics, cs in enumerate(cloud_storage.values()):
+                secret_name = f"{server_name}-ds-{ics}"
+                secrets_to_create.append(cs.secret(secret_name, server.k8s_client.preferred_namespace))
+                data_sources.append(
+                    DataSource(mountPath=cs.mount_folder, secretRef=SecretRefWhole(name=secret_name, adopt=True))
+                )
             cert_init, cert_vols = init_containers.certificates_container(self.nb_config)
             session_init_containers = [InitContainer.model_validate(self.nb_config.k8s_v2_client.sanitize(cert_init))]
             extra_volumes = [
@@ -874,7 +925,6 @@ class NotebooksNewBP(CustomBlueprint):
                 metadata=Metadata(name=server_name, annotations=annotations),
                 spec=AmaltheaSessionSpec(
                     codeRepositories=[],
-                    dataSources=[],
                     hibernated=False,
                     session=Session(
                         image=image,
@@ -921,13 +971,14 @@ class NotebooksNewBP(CustomBlueprint):
                         type=AuthenticationType.oauth2proxy
                         if isinstance(user, AuthenticatedAPIUser)
                         else AuthenticationType.token,
-                        secretRef=SecretRef(name=server_name, key="auth", adopt=True),
+                        secretRef=SecretRefKey(name=server_name, key="auth", adopt=True),
                         extraVolumeMounts=[
                             ExtraVolumeMount(name="renku-authorized-emails", mountPath="/authorized_emails")
                         ]
                         if isinstance(user, AuthenticatedAPIUser)
                         else [],
                     ),
+                    dataSources=data_sources,
                 ),
             )
             parsed_proxy_url = urlparse(urljoin(server.server_url + "/", "oauth2"))
@@ -958,12 +1009,14 @@ class NotebooksNewBP(CustomBlueprint):
                         "verbose": True,
                     }
                 )
-            secret = V1Secret(metadata=V1ObjectMeta(name=server_name), string_data=secret_data)
-            secret = await self.nb_config.k8s_v2_client.create_secret(secret)
+            secrets_to_create.append(V1Secret(metadata=V1ObjectMeta(name=server_name), string_data=secret_data))
+            for s in secrets_to_create:
+                await self.nb_config.k8s_v2_client.create_secret(s)
             try:
                 manifest = await self.nb_config.k8s_v2_client.create_server(manifest, user.id)
             except Exception:
-                await self.nb_config.k8s_v2_client.delete_secret(secret.metadata.name)
+                for s in secrets_to_create:
+                    await self.nb_config.k8s_v2_client.delete_secret(s.metadata.name)
                 raise errors.ProgrammingError(message="Could not start the amalthea session")
 
             return json(manifest.as_apispec().model_dump(mode="json", exclude_none=True), 201)
@@ -1080,6 +1133,6 @@ class NotebooksNewBP(CustomBlueprint):
             query: apispec.SessionsSessionIdLogsGetParametersQuery,
         ) -> HTTPResponse:
             logs = await self.nb_config.k8s_v2_client.get_server_logs(session_id, user.id, query.max_lines)
-            return json(apispec.SessionLogsResponse.model_validate(logs).model_dump_json(exclude_none=True))
+            return json(apispec.SessionLogsResponse.model_validate(logs).model_dump(exclude_none=True))
 
         return "/sessions/<session_id>/logs", ["GET"], _handler

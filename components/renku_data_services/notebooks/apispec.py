@@ -263,8 +263,8 @@ class SessionCloudStoragePost(BaseAPISpec):
     readonly: bool = True
     source_path: str
     target_path: str
-    storage_id: Optional[str] = Field(
-        None,
+    storage_id: str = Field(
+        ...,
         description="ULID identifier",
         max_length=26,
         min_length=26,

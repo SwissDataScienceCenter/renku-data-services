@@ -43,7 +43,7 @@ def env(server: "UserServer") -> list[dict[str, Any]]:
             "path": "/statefulset/spec/template/spec/containers/0/env/-",
             "value": {
                 "name": "NOTEBOOK_DIR",
-                "value": server.work_dir.absolute().as_posix(),
+                "value": server.work_dir.as_posix(),
             },
         },
         {
@@ -53,7 +53,7 @@ def env(server: "UserServer") -> list[dict[str, Any]]:
             # relative to $HOME.
             "value": {
                 "name": "MOUNT_PATH",
-                "value": server.work_dir.absolute().as_posix(),
+                "value": server.work_dir.as_posix(),
             },
         },
         {
@@ -223,7 +223,7 @@ def rstudio_env_variables(server: "UserServer") -> list[dict[str, Any]]:
                     "path": "/statefulset/spec/template/spec/containers/0/volumeMounts/-",
                     "value": {
                         "name": secret_name,
-                        "mountPath": mount_location.absolute().as_posix(),
+                        "mountPath": mount_location.as_posix(),
                         "subPath": mount_location.name,
                         "readOnly": True,
                     },

@@ -183,7 +183,7 @@ async def test_server_options(sanic_client: SanicASGITestClient, user_headers):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "server_name_fixture,expected_status_code", [("unknown_server_name", 404), ("server_name", 204)]
+    "server_name_fixture,expected_status_code", [("unknown_server_name", 204), ("server_name", 204)]
 )
 async def test_stop_server(
     sanic_client: SanicASGITestClient,

@@ -74,9 +74,9 @@ class CloudStorageORM(BaseORM):
             readonly=storage.readonly,
         )
 
-    def dump(self) -> models.CloudStorage:
+    def dump(self) -> models.SavedCloudStorage:
         """Create a cloud storage model from the ORM object."""
-        return models.CloudStorage(
+        return models.SavedCloudStorage(
             project_id=self.project_id,
             name=self.name,
             storage_type=self.storage_type,
