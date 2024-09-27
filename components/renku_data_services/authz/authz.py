@@ -457,7 +457,7 @@ class Authz:
             member = Member(
                 user_id=response.relationship.subject.object.object_id,
                 role=member_role,
-                resource_id=response.relationship.resource.object_id,
+                resource_id=ULID.from_str(response.relationship.resource.object_id),
             )
 
             yield member

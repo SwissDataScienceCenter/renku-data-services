@@ -362,6 +362,8 @@ class SessionRepository:
 
             env_payload = kwargs.get("environment", {})
             await self.__update_launcher_environment(user, launcher, session, new_custom_environment, **env_payload)
+            await session.flush()
+            await session.refresh(launcher)
             return launcher.dump()
 
     async def __update_launcher_environment(
