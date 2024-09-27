@@ -131,36 +131,7 @@ class NotebooksBP(CustomBlueprint):
             internal_gitlab_user: APIUser,
             body: apispec.LaunchNotebookRequest,
         ) -> JSONResponse:
-            server_name = renku_2_make_server_name(
-                safe_username=user.id, project_id=body.project_id, launcher_id=body.launcher_id
-            )
-            server_class = Renku2UserServer
-            server, status_code = await core.launch_notebook_helper(
-                nb_config=self.nb_config,
-                server_name=server_name,
-                server_class=server_class,
-                user=user,
-                image=body.image or self.nb_config.sessions.default_image,
-                resource_class_id=body.resource_class_id,
-                storage=body.storage,
-                environment_variables=body.environment_variables,
-                user_secrets=body.user_secrets,
-                default_url=self.nb_config.server_options.default_url_default,
-                lfs_auto_fetch=self.nb_config.server_options.lfs_auto_fetch_default,
-                cloudstorage=body.cloudstorage,
-                server_options=None,
-                namespace=None,
-                project=None,
-                branch=None,
-                commit_sha=None,
-                notebook=None,
-                gl_project=None,
-                gl_project_path=None,
-                project_id=body.project_id,
-                launcher_id=body.launcher_id,
-                repositories=body.repositories,
-                internal_gitlab_user=internal_gitlab_user,
-            )
+            server, status_code = await core.launch_notebook(self.nb_config, user, internal_gitlab_user, body)
             return json(NotebookResponse().dump(server), status_code)
 
         return "/notebooks/servers", ["POST"], _launch_notebook

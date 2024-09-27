@@ -17,7 +17,7 @@ from renku_data_services.notebooks import apispec
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
 from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.classes.repository import Repository
-from renku_data_services.notebooks.api.classes.server import UserServer
+from renku_data_services.notebooks.api.classes.server import Renku2UserServer, UserServer
 from renku_data_services.notebooks.api.classes.server_manifest import UserServerManifest
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_data_services.notebooks.api.schemas.secrets import K8sUserSecrets
@@ -27,7 +27,10 @@ from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.notebooks.errors import intermittent
 from renku_data_services.notebooks.errors import user as user_errors
 from renku_data_services.notebooks.util import repository
-from renku_data_services.notebooks.util.kubernetes_ import find_container
+from renku_data_services.notebooks.util.kubernetes_ import (
+    find_container,
+    renku_2_make_server_name,
+)
 
 
 def notebooks_info(config: NotebooksConfig) -> dict:
@@ -536,3 +539,42 @@ async def launch_notebook_helper(
             await _on_error(server.server_name, f"User secret could not be created {response.json()}")
 
     return UserServerManifest(manifest, nb_config.sessions.default_image), 201
+
+
+async def launch_notebook(
+    config: _NotebooksConfig,
+    user: AnonymousAPIUser | AuthenticatedAPIUser,
+    internal_gitlab_user: APIUser,
+    launch_request: apispec.LaunchNotebookRequest,
+) -> tuple[UserServerManifest, int]:
+    """Starts a server."""
+
+    server_name = renku_2_make_server_name(
+        safe_username=user.id, project_id=launch_request.project_id, launcher_id=launch_request.launcher_id
+    )
+    return await launch_notebook_helper(
+        nb_config=config,
+        server_name=server_name,
+        server_class=Renku2UserServer,
+        user=user,
+        image=launch_request.image or config.sessions.default_image,
+        resource_class_id=launch_request.resource_class_id,
+        storage=launch_request.storage,
+        environment_variables=launch_request.environment_variables,
+        user_secrets=launch_request.user_secrets,
+        default_url=config.server_options.default_url_default,
+        lfs_auto_fetch=config.server_options.lfs_auto_fetch_default,
+        cloudstorage=launch_request.cloudstorage,
+        server_options=None,
+        namespace=None,
+        project=None,
+        branch=None,
+        commit_sha=None,
+        notebook=None,
+        gl_project=None,
+        gl_project_path=None,
+        project_id=launch_request.project_id,
+        launcher_id=launch_request.launcher_id,
+        repositories=launch_request.repositories,
+        internal_gitlab_user=internal_gitlab_user,
+    )
