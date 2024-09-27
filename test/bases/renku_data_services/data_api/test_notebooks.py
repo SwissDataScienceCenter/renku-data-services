@@ -113,6 +113,69 @@ def authenticated_user_headers(user_headers):
     return dict({"Renku-Auth-Refresh-Token": "test-refresh-token"}, **user_headers)
 
 
+class AttributeDictionary(dict):
+    """Enables accessing dictionary keys as attributes"""
+
+    def __init__(self, dictionary):
+        for key, value in dictionary.items():
+            # TODO check if key is a valid identifier
+            if key == "list":
+                raise ValueError("'list' is not allowed as a key")
+            if isinstance(value, dict):
+                value = AttributeDictionary(value)
+            elif isinstance(value, list):
+                value = [AttributeDictionary(v) if isinstance(v, dict) else v for v in value]
+            self.__setattr__(key, value)
+            self[key] = value
+
+    def list(self):
+        [value for _, value in self.items()]
+
+    def __setitem__(self, k, v):
+        if k == "list":
+            raise ValueError("'list' is not allowed as a key")
+        self.__setattr__(k, v)
+        return super().__setitem__(k, v)
+
+
+@pytest.fixture
+def fake_gitlab_projects():
+    class GitLabProject(AttributeDictionary):
+        def __init__(self):
+            super().__init__({})
+
+        def get(self, name, default=None):
+            if name not in self:
+                return AttributeDictionary(
+                    {
+                        "path": "my-test",
+                        "path_with_namespace": "test-namespace/my-test",
+                        "branches": {"main": AttributeDictionary({})},
+                        "commits": {"ee4b1c9fedc99abe5892ee95320bbd8471c5985b": AttributeDictionary({})},
+                        "id": 5407,
+                        "http_url_to_repo": "https://gitlab-url.com/test-namespace/my-test.git",
+                        "web_url": "https://gitlab-url.com/test-namespace/my-test",
+                    }
+                )
+            return super().get(name, default)
+
+    return GitLabProject()
+
+
+@pytest.fixture()
+def fake_gitlab(mocker, fake_gitlab_projects):
+    gitlab = mocker.patch("renku_data_services.notebooks.api.classes.user.Gitlab")
+    gitlab_mock = MagicMock()
+    gitlab_mock.auth = MagicMock()
+    gitlab_mock.projects = fake_gitlab_projects
+    gitlab_mock.user = AttributeDictionary(
+        {"username": "john.doe", "name": "John Doe", "email": "john.doe@notebooks-tests.renku.ch"}
+    )
+    gitlab_mock.url = "https://gitlab-url.com"
+    gitlab.return_value = gitlab_mock
+    return gitlab
+
+
 @pytest.mark.asyncio
 async def test_version(sanic_client: SanicASGITestClient, user_headers):
     _, res = await sanic_client.get("/api/data/notebooks/version", headers=user_headers)
@@ -269,105 +332,46 @@ class TestNotebooks(ClusterRequired):
 
         assert res.status_code == expected_status_code, res.text
 
+    @pytest.mark.asyncio
+    async def test_old_start_server(self, sanic_client: SanicASGITestClient, authenticated_user_headers, fake_gitlab):
+        data = {
+            "branch": "main",
+            "commit_sha": "ee4b1c9fedc99abe5892ee95320bbd8471c5985b",
+            "namespace": "test-namespace",
+            "project": "my-test",
+            "image": "alpine:3",
+        }
 
-class AttributeDictionary(dict):
-    """Enables accessing dictionary keys as attributes"""
+        _, res = await sanic_client.post(
+            "/api/data/notebooks/old/servers/", json=data, headers=authenticated_user_headers
+        )
 
-    def __init__(self, dictionary):
-        for key, value in dictionary.items():
-            # TODO check if key is a valid identifier
-            if key == "list":
-                raise ValueError("'list' is not allowed as a key")
-            if isinstance(value, dict):
-                value = AttributeDictionary(value)
-            elif isinstance(value, list):
-                value = [AttributeDictionary(v) if isinstance(v, dict) else v for v in value]
-            self.__setattr__(key, value)
-            self[key] = value
+        assert res.status_code == 201, res.text
 
-    def list(self):
-        [value for _, value in self.items()]
+        server_name = res.json["name"]
+        _, res = await sanic_client.delete(
+            f"/api/data/notebooks/servers/{server_name}", headers=authenticated_user_headers
+        )
 
-    def __setitem__(self, k, v):
-        if k == "list":
-            raise ValueError("'list' is not allowed as a key")
-        self.__setattr__(k, v)
-        return super().__setitem__(k, v)
+        assert res.status_code == 204, res.text
 
+    @pytest.mark.asyncio
+    async def test_start_server(self, sanic_client: SanicASGITestClient, authenticated_user_headers, fake_gitlab):
+        data = {
+            "branch": "main",
+            "commit_sha": "ee4b1c9fedc99abe5892ee95320bbd8471c5985b",
+            "project_id": "test-namespace/my-test",
+            "launcher_id": "test_launcher",
+            "image": "alpine:3",
+        }
 
-@pytest.fixture
-def fake_gitlab_projects():
-    class GitLabProject(AttributeDictionary):
-        def __init__(self):
-            super().__init__({})
+        _, res = await sanic_client.post("/api/data/notebooks/servers/", json=data, headers=authenticated_user_headers)
 
-        def get(self, name, default=None):
-            if name not in self:
-                return AttributeDictionary(
-                    {
-                        "path": "my-test",
-                        "path_with_namespace": "test-namespace/my-test",
-                        "branches": {"main": AttributeDictionary({})},
-                        "commits": {"ee4b1c9fedc99abe5892ee95320bbd8471c5985b": AttributeDictionary({})},
-                        "id": 5407,
-                        "http_url_to_repo": "https://gitlab-url.com/test-namespace/my-test.git",
-                        "web_url": "https://gitlab-url.com/test-namespace/my-test",
-                    }
-                )
-            return super().get(name, default)
+        assert res.status_code == 201, res.text
 
-    return GitLabProject()
+        server_name = res.json["name"]
+        _, res = await sanic_client.delete(
+            f"/api/data/notebooks/servers/{server_name}", headers=authenticated_user_headers
+        )
 
-
-@pytest.fixture()
-def fake_gitlab(mocker, fake_gitlab_projects):
-    gitlab = mocker.patch("renku_data_services.notebooks.api.classes.user.Gitlab")
-    gitlab_mock = MagicMock()
-    gitlab_mock.auth = MagicMock()
-    gitlab_mock.projects = fake_gitlab_projects
-    gitlab_mock.user = AttributeDictionary(
-        {"username": "john.doe", "name": "John Doe", "email": "john.doe@notebooks-tests.renku.ch"}
-    )
-    gitlab_mock.url = "https://gitlab-url.com"
-    gitlab.return_value = gitlab_mock
-    return gitlab
-
-
-@pytest.mark.asyncio
-async def test_old_start_server(sanic_client: SanicASGITestClient, authenticated_user_headers, fake_gitlab):
-    data = {
-        "branch": "main",
-        "commit_sha": "ee4b1c9fedc99abe5892ee95320bbd8471c5985b",
-        "namespace": "test-namespace",
-        "project": "my-test",
-        "image": "alpine:3",
-    }
-
-    _, res = await sanic_client.post("/api/data/notebooks/old/servers/", json=data, headers=authenticated_user_headers)
-
-    assert res.status_code == 201, res.text
-
-    server_name = res.json["name"]
-    _, res = await sanic_client.delete(f"/api/data/notebooks/servers/{server_name}", headers=authenticated_user_headers)
-
-    assert res.status_code == 204, res.text
-
-
-@pytest.mark.asyncio
-async def test_start_server(sanic_client: SanicASGITestClient, authenticated_user_headers, fake_gitlab):
-    data = {
-        "branch": "main",
-        "commit_sha": "ee4b1c9fedc99abe5892ee95320bbd8471c5985b",
-        "project_id": "test-namespace/my-test",
-        "launcher_id": "test_launcher",
-        "image": "alpine:3",
-    }
-
-    _, res = await sanic_client.post("/api/data/notebooks/servers/", json=data, headers=authenticated_user_headers)
-
-    assert res.status_code == 201, res.text
-
-    server_name = res.json["name"]
-    _, res = await sanic_client.delete(f"/api/data/notebooks/servers/{server_name}", headers=authenticated_user_headers)
-
-    assert res.status_code == 204, res.text
+        assert res.status_code == 204, res.text
