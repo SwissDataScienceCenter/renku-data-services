@@ -49,7 +49,7 @@ class BaseStorageRepository(_Base):
         project_id: str | ULID | None = None,
         name: str | None = None,
         filter_by_access_level: bool = True,
-    ) -> list[models.CloudStorage]:
+    ) -> list[models.SavedCloudStorage]:
         """Get a storage from the database."""
         async with self.session_maker() as session:
             if not project_id and not name and not id:
@@ -60,7 +60,7 @@ class BaseStorageRepository(_Base):
             stmt = select(schemas.CloudStorageORM)
 
             if project_id is not None:
-                stmt = stmt.where(schemas.CloudStorageORM.project_id == project_id)
+                stmt = stmt.where(schemas.CloudStorageORM.project_id == str(project_id))
             if id is not None:
                 stmt = stmt.where(schemas.CloudStorageORM.storage_id == id)
             if name is not None:
@@ -78,7 +78,7 @@ class BaseStorageRepository(_Base):
 
             return [s.dump() for s in storage_orms if s.project_id in accessible_projects]
 
-    async def get_storage_by_id(self, storage_id: ULID, user: base_models.APIUser) -> models.CloudStorage:
+    async def get_storage_by_id(self, storage_id: ULID, user: base_models.APIUser) -> models.SavedCloudStorage:
         """Get a single storage by id."""
         storages = await self.get_storage(user, id=str(storage_id), filter_by_access_level=False)
 
@@ -91,7 +91,7 @@ class BaseStorageRepository(_Base):
 
     async def insert_storage(
         self, storage: models.UnsavedCloudStorage, user: base_models.APIUser
-    ) -> models.CloudStorage:
+    ) -> models.SavedCloudStorage:
         """Insert a new cloud storage entry."""
         if not await self.filter_projects_by_access_level(user, [storage.project_id], authz_models.Role.OWNER):
             raise errors.ForbiddenError(message="User does not have access to this project")
@@ -105,7 +105,9 @@ class BaseStorageRepository(_Base):
             session.add(orm)
         return orm.dump()
 
-    async def update_storage(self, storage_id: ULID, user: base_models.APIUser, **kwargs: dict) -> models.CloudStorage:
+    async def update_storage(
+        self, storage_id: ULID, user: base_models.APIUser, **kwargs: dict
+    ) -> models.SavedCloudStorage:
         """Update a cloud storage entry."""
         async with self.session_maker() as session, session.begin():
             res = await session.execute(

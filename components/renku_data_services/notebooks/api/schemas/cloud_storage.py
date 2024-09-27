@@ -2,14 +2,17 @@
 
 from configparser import ConfigParser
 from io import StringIO
-from pathlib import Path
-from typing import Any, Optional, Self
+from pathlib import PurePosixPath
+from typing import Any, Final, Optional, Self
 
+from kubernetes import client
 from marshmallow import EXCLUDE, Schema, ValidationError, fields, validates_schema
 
 from renku_data_services.base_models import APIUser
 from renku_data_services.notebooks.api.classes.cloud_storage import ICloudStorageRequest
 from renku_data_services.notebooks.config import _NotebooksConfig
+
+_sanitize_for_serialization = client.ApiClient().sanitize_for_serialization
 
 
 class RCloneStorageRequest(Schema):
@@ -36,6 +39,8 @@ class RCloneStorageRequest(Schema):
 class RCloneStorage(ICloudStorageRequest):
     """RClone based storage."""
 
+    pvc_secret_annotation_name: Final[str] = "csi-rclone.dev/secretName"
+
     def __init__(
         self,
         source_path: str,
@@ -60,7 +65,7 @@ class RCloneStorage(ICloudStorageRequest):
         user: APIUser,
         internal_gitlab_user: APIUser,
         project_id: int,
-        work_dir: Path,
+        work_dir: PurePosixPath,
         config: _NotebooksConfig,
     ) -> Self:
         """Create storage object from request."""
@@ -92,8 +97,73 @@ class RCloneStorage(ICloudStorageRequest):
         await config.storage_validator.validate_storage_configuration(configuration, source_path)
         return cls(source_path, configuration, readonly, mount_folder, name, config)
 
+    def pvc(
+        self,
+        base_name: str,
+        namespace: str,
+        labels: dict[str, str] | None = None,
+        annotations: dict[str, str] | None = None,
+    ) -> client.V1PersistentVolumeClaim:
+        """The PVC for mounting cloud storage."""
+        return client.V1PersistentVolumeClaim(
+            metadata=client.V1ObjectMeta(
+                name=base_name,
+                namespace=namespace,
+                annotations={self.pvc_secret_annotation_name: base_name} | (annotations or {}),
+                labels={"name": base_name} | (labels or {}),
+            ),
+            spec=client.V1PersistentVolumeClaimSpec(
+                access_modes=["ReadOnlyMany" if self.readonly else "ReadWriteMany"],
+                resources=client.V1VolumeResourceRequirements(requests={"storage": "10Gi"}),
+                storage_class_name=self.config.cloud_storage.storage_class,
+            ),
+        )
+
+    def volume_mount(self, base_name: str) -> client.V1VolumeMount:
+        """The volume mount for cloud storage."""
+        return client.V1VolumeMount(
+            mount_path=self.mount_folder,
+            name=base_name,
+            read_only=self.readonly,
+        )
+
+    def volume(self, base_name: str) -> client.V1Volume:
+        """The volume entry for the statefulset specification."""
+        return client.V1Volume(
+            name=base_name,
+            persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
+                claim_name=base_name, read_only=self.readonly
+            ),
+        )
+
+    def secret(
+        self,
+        base_name: str,
+        namespace: str,
+        labels: dict[str, str] | None = None,
+        annotations: dict[str, str] | None = None,
+    ) -> client.V1Secret:
+        """The secret containing the configuration for the rclone csi driver."""
+        return client.V1Secret(
+            metadata=client.V1ObjectMeta(
+                name=base_name,
+                namespace=namespace,
+                annotations=annotations,
+                labels={"name": base_name} | (labels or {}),
+            ),
+            string_data={
+                "remote": self.name or base_name,
+                "remotePath": self.source_path,
+                "configData": self.config_string(self.name or base_name),
+            },
+        )
+
     def get_manifest_patch(
-        self, base_name: str, namespace: str, labels: dict = {}, annotations: dict = {}
+        self,
+        base_name: str,
+        namespace: str,
+        labels: dict[str, str] | None = None,
+        annotations: dict[str, str] | None = None,
     ) -> list[dict[str, Any]]:
         """Get server manifest patch."""
         patches = []
@@ -104,57 +174,22 @@ class RCloneStorage(ICloudStorageRequest):
                     {
                         "op": "add",
                         "path": f"/{base_name}-pv",
-                        "value": {
-                            "apiVersion": "v1",
-                            "kind": "PersistentVolumeClaim",
-                            "metadata": {
-                                "name": base_name,
-                                "labels": {"name": base_name},
-                            },
-                            "spec": {
-                                "accessModes": ["ReadOnlyMany" if self.readonly else "ReadWriteMany"],
-                                "resources": {"requests": {"storage": "10Gi"}},
-                                "storageClassName": self.config.cloud_storage.storage_class,
-                            },
-                        },
+                        "value": _sanitize_for_serialization(self.pvc(base_name, namespace, labels, annotations)),
                     },
                     {
                         "op": "add",
                         "path": f"/{base_name}-secret",
-                        "value": {
-                            "apiVersion": "v1",
-                            "kind": "Secret",
-                            "metadata": {
-                                "name": base_name,
-                                "labels": {"name": base_name},
-                            },
-                            "type": "Opaque",
-                            "stringData": {
-                                "remote": self.name or base_name,
-                                "remotePath": self.source_path,
-                                "configData": self.config_string(self.name or base_name),
-                            },
-                        },
+                        "value": _sanitize_for_serialization(self.secret(base_name, namespace, labels, annotations)),
                     },
                     {
                         "op": "add",
                         "path": "/statefulset/spec/template/spec/containers/0/volumeMounts/-",
-                        "value": {
-                            "mountPath": self.mount_folder,
-                            "name": base_name,
-                            "readOnly": self.readonly,
-                        },
+                        "value": _sanitize_for_serialization(self.volume_mount(base_name)),
                     },
                     {
                         "op": "add",
                         "path": "/statefulset/spec/template/spec/volumes/-",
-                        "value": {
-                            "name": base_name,
-                            "persistentVolumeClaim": {
-                                "claimName": base_name,
-                                "readOnly": self.readonly,
-                            },
-                        },
+                        "value": _sanitize_for_serialization(self.volume(base_name)),
                     },
                 ],
             }
