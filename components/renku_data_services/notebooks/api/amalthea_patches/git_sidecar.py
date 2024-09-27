@@ -22,7 +22,7 @@ async def main(server: "UserServer") -> list[dict[str, Any]]:
     commit_sha = getattr(server, "commit_sha", None)
 
     volume_mount = {
-        "mountPath": server.work_dir.absolute().as_posix(),
+        "mountPath": server.work_dir.as_posix(),
         "name": "workspace",
     }
     if gl_project_path:
@@ -51,7 +51,7 @@ async def main(server: "UserServer") -> list[dict[str, Any]]:
                         "env": [
                             {
                                 "name": "GIT_RPC_MOUNT_PATH",
-                                "value": server.work_dir.absolute().as_posix(),
+                                "value": server.work_dir.as_posix(),
                             },
                             {
                                 "name": "GIT_RPC_PORT",

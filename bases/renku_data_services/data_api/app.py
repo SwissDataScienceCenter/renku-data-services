@@ -142,6 +142,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         nb_config=config.nb_config,
         internal_gitlab_authenticator=config.gitlab_authenticator,
         git_repo=config.git_repositories_repo,
+        rp_repo=config.rp_repo,
     )
     notebooks_new = NotebooksNewBP(
         name="notebooks",
@@ -150,6 +151,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         nb_config=config.nb_config,
         project_repo=config.project_repo,
         session_repo=config.session_repo,
+        storage_repo=config.storage_v2_repo,
         rp_repo=config.rp_repo,
         internal_gitlab_authenticator=config.gitlab_authenticator,
     )
