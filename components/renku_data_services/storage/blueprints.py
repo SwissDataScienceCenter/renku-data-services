@@ -12,7 +12,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
-from renku_data_services.base_api.misc import validate_query
+from renku_data_services.base_api.misc import validate_body_root_model, validate_query
 from renku_data_services.storage import apispec, models
 from renku_data_services.storage.db import StorageRepository, StorageV2Repository
 from renku_data_services.storage.rclone import RCloneValidator
@@ -302,9 +302,10 @@ class StoragesV2BP(CustomBlueprint):
         """Create/update secrets for a cloud storage."""
 
         @authenticate(self.authenticator)
-        async def _upsert_secrets(request: Request, user: base_models.APIUser, storage_id: ULID) -> JSONResponse:
-            # TODO: use @validate once sanic supports validating json lists
-            body = apispec.CloudStorageSecretPostList.model_validate(request.json)
+        @validate_body_root_model(json=apispec.CloudStorageSecretPostList)
+        async def _upsert_secrets(
+            _: Request, user: base_models.APIUser, storage_id: ULID, body: apispec.CloudStorageSecretPostList
+        ) -> JSONResponse:
             secrets = [models.CloudStorageSecretUpsert.model_validate(s.model_dump()) for s in body.root]
             result = await self.storage_v2_repo.upsert_storage_secrets(
                 storage_id=storage_id, user=user, secrets=secrets
