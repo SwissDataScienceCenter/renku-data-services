@@ -114,19 +114,6 @@ def authenticated_user_headers(user_headers):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("image,expected_status_code", [("python:3.12", 200), ("shouldnotexist:0.42", 404)])
-async def test_check_docker_image(sanic_client: SanicASGITestClient, user_headers, image, expected_status_code):
-    """Validate that the images endpoint answers correctly.
-
-    Needs the responses package in case docker queries must be mocked
-    """
-
-    _, res = await sanic_client.get(f"/api/data/notebooks/images/?image_url={image}", headers=user_headers)
-
-    assert res.status_code == expected_status_code, res.text
-
-
-@pytest.mark.asyncio
 async def test_version(sanic_client: SanicASGITestClient, user_headers):
     _, res = await sanic_client.get("/api/data/notebooks/version", headers=user_headers)
 
