@@ -1,9 +1,11 @@
 import json
 import os
+import shutil
 import subprocess
 from contextlib import AbstractContextManager
 from typing import Any
 
+import pytest
 import yaml
 from kubernetes import client as k8s_client
 from kubernetes import config as k8s_config
@@ -159,3 +161,19 @@ def setup_amalthea(install_name: str, app_name: str, version: str, cluster: K3DC
             break
     else:
         assert False, "Timeout waiting on amalthea to run"
+
+
+class ClusterRequired:
+    @pytest.fixture(scope="class", autouse=True)
+    def cluster(self, disable_cluster_creation) -> K3DCluster | None:
+        if disable_cluster_creation:
+            cmd = ["kubectl", "--kubeconfig", os.path.expanduser("~/.kube/config"), "config", "view", "--raw"]
+            with open(".k3d-config.yaml", "w") as config:
+                subprocess.run(cmd, stdout=config, check=True)
+            yield
+        else:
+            if shutil.which("k3d") is None:
+                pytest.skip("Requires k3d for cluster creation")
+
+            with K3DCluster("renku-test-notebooks") as cluster:
+                yield cluster
