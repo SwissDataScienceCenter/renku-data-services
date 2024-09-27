@@ -17,8 +17,9 @@ from renku_data_services.notebooks import apispec
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
 from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.classes.repository import Repository
-from renku_data_services.notebooks.api.classes.server import Renku2UserServer, UserServer
+from renku_data_services.notebooks.api.classes.server import Renku1UserServer, Renku2UserServer, UserServer
 from renku_data_services.notebooks.api.classes.server_manifest import UserServerManifest
+from renku_data_services.notebooks.api.classes.user import NotebooksGitlabClient
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_data_services.notebooks.api.schemas.secrets import K8sUserSecrets
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
@@ -29,6 +30,7 @@ from renku_data_services.notebooks.errors import user as user_errors
 from renku_data_services.notebooks.util import repository
 from renku_data_services.notebooks.util.kubernetes_ import (
     find_container,
+    renku_1_make_server_name,
     renku_2_make_server_name,
 )
 
@@ -576,5 +578,61 @@ async def launch_notebook(
         project_id=launch_request.project_id,
         launcher_id=launch_request.launcher_id,
         repositories=launch_request.repositories,
+        internal_gitlab_user=internal_gitlab_user,
+    )
+
+
+async def launch_notebook_old(
+    config: _NotebooksConfig,
+    user: AnonymousAPIUser | AuthenticatedAPIUser,
+    internal_gitlab_user: APIUser,
+    launch_request: apispec.LaunchNotebookRequestOld,
+) -> tuple[UserServerManifest, int]:
+    """Starts a server using the old operator."""
+
+    server_name = renku_1_make_server_name(
+        user.id, launch_request.namespace, launch_request.project, launch_request.branch, launch_request.commit_sha
+    )
+    project_slug = f"{launch_request.namespace}/{launch_request.project}"
+    gitlab_client = NotebooksGitlabClient(config.git.url, APIUser.access_token)
+    gl_project = gitlab_client.get_renku_project(project_slug)
+    if gl_project is None:
+        raise errors.MissingResourceError(message=f"Cannot find gitlab project with slug {project_slug}")
+    gl_project_path = gl_project.path
+    server_class = Renku1UserServer
+    server_options = (
+        ServerOptions.from_server_options_request_schema(
+            launch_request.serverOptions.model_dump(),
+            config.server_options.default_url_default,
+            config.server_options.lfs_auto_fetch_default,
+        )
+        if launch_request.serverOptions is not None
+        else None
+    )
+
+    return await launch_notebook_helper(
+        nb_config=config,
+        server_name=server_name,
+        server_class=server_class,
+        user=user,
+        image=launch_request.image or config.sessions.default_image,
+        resource_class_id=launch_request.resource_class_id,
+        storage=launch_request.storage,
+        environment_variables=launch_request.environment_variables,
+        user_secrets=launch_request.user_secrets,
+        default_url=launch_request.default_url,
+        lfs_auto_fetch=launch_request.lfs_auto_fetch,
+        cloudstorage=launch_request.cloudstorage,
+        server_options=server_options,
+        namespace=launch_request.namespace,
+        project=launch_request.project,
+        branch=launch_request.branch,
+        commit_sha=launch_request.commit_sha,
+        notebook=launch_request.notebook,
+        gl_project=gl_project,
+        gl_project_path=gl_project_path,
+        project_id=None,
+        launcher_id=None,
+        repositories=None,
         internal_gitlab_user=internal_gitlab_user,
     )
