@@ -353,10 +353,13 @@ class ServerCache(Generic[_SessionType]):
         self.url = url
         self.client = httpx.AsyncClient()
         self.server_type: type[_SessionType] = server_type
+        self.url_path_name = "servers"
+        if server_type == AmaltheaSessionV1Alpha1:
+            self.url_path_name = "sessions"
 
     async def list_servers(self, safe_username: str) -> list[_SessionType]:
         """List the jupyter servers."""
-        url = urljoin(self.url, f"/users/{safe_username}/servers")
+        url = urljoin(self.url, f"/users/{safe_username}/{self.url_path_name}")
         try:
             res = await self.client.get(url, timeout=10)
         except httpx.RequestError as err:
@@ -374,7 +377,7 @@ class ServerCache(Generic[_SessionType]):
 
     async def get_server(self, name: str) -> _SessionType | None:
         """Get a specific jupyter server."""
-        url = urljoin(self.url, f"/servers/{name}")
+        url = urljoin(self.url, f"/{self.url_path_name}/{name}")
         try:
             res = await self.client.get(url, timeout=10)
         except httpx.RequestError as err:
@@ -487,10 +490,9 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
         """Delete the server."""
         server = await self.get_server(server_name, safe_username)
         if not server:
-            raise MissingResourceError(
-                f"Cannot find server {server_name} for user " f"{safe_username} in order to delete it."
-            )
-        return await self.renku_ns_client.delete_server(server_name)
+            return None
+        await self.renku_ns_client.delete_server(server_name)
+        return None
 
     async def patch_tokens(self, server_name: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken) -> None:
         """Patch the Renku and Gitlab access tokens used in a session."""

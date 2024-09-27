@@ -55,7 +55,6 @@ class StorageBP(CustomBlueprint):
             validator: RCloneValidator,
             query: apispec.StorageParams,
         ) -> JSONResponse:
-            storage: list[models.CloudStorage]
             storage = await self.storage_repo.get_storage(user=user, project_id=query.project_id)
 
             return json([dump_storage_with_sensitive_fields(s, validator) for s in storage])
@@ -202,7 +201,6 @@ class StoragesV2BP(CustomBlueprint):
             validator: RCloneValidator,
             query: apispec.StorageV2Params,
         ) -> JSONResponse:
-            storage: list[models.CloudStorage]
             storage = await self.storage_v2_repo.get_storage(
                 user=user, include_secrets=True, project_id=query.project_id
             )
