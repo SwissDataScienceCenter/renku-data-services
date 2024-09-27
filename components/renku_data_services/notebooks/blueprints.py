@@ -27,13 +27,11 @@ from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec, core
 from renku_data_services.notebooks.api.amalthea_patches import git_proxy, init_containers
 from renku_data_services.notebooks.api.classes.repository import Repository
-from renku_data_services.notebooks.api.classes.server import Renku1UserServer, Renku2UserServer
-from renku_data_services.notebooks.api.classes.user import NotebooksGitlabClient
+from renku_data_services.notebooks.api.classes.server import Renku2UserServer
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_data_services.notebooks.api.schemas.config_server_options import ServerOptionsEndpointResponse
 from renku_data_services.notebooks.api.schemas.logs import ServerLogs
 from renku_data_services.notebooks.api.schemas.secrets import K8sUserSecrets
-from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
 from renku_data_services.notebooks.api.schemas.servers_get import (
     NotebookResponse,
     ServersGetResponse,
@@ -67,7 +65,6 @@ from renku_data_services.notebooks.crs import (
 from renku_data_services.notebooks.errors.intermittent import AnonymousUserPatchError
 
 from renku_data_services.notebooks.util.kubernetes_ import (
-    renku_1_make_server_name,
     renku_2_make_server_name,
 )
 from renku_data_services.project.db import ProjectRepository
@@ -147,49 +144,11 @@ class NotebooksBP(CustomBlueprint):
             internal_gitlab_user: APIUser,
             body: apispec.LaunchNotebookRequestOld,
         ) -> JSONResponse:
-            server_name = renku_1_make_server_name(user.id, body.namespace, body.project, body.branch, body.commit_sha)
-            project_slug = f"{body.namespace}/{body.project}"
-            gitlab_client = NotebooksGitlabClient(self.nb_config.git.url, APIUser.access_token)
-            gl_project = gitlab_client.get_renku_project(project_slug)
-            if gl_project is None:
-                raise errors.MissingResourceError(message=f"Cannot find gitlab project with slug {project_slug}")
-            gl_project_path = gl_project.path
-            server_class = Renku1UserServer
-            server_options = (
-                ServerOptions.from_server_options_request_schema(
-                    body.serverOptions.model_dump(),
-                    self.nb_config.server_options.default_url_default,
-                    self.nb_config.server_options.lfs_auto_fetch_default,
-                )
-                if body.serverOptions is not None
-                else None
-            )
-
-            server, status_code = await core.launch_notebook_helper(
-                nb_config=self.nb_config,
-                server_name=server_name,
-                server_class=server_class,
-                user=user,
-                image=body.image or self.nb_config.sessions.default_image,
-                resource_class_id=body.resource_class_id,
-                storage=body.storage,
-                environment_variables=body.environment_variables,
-                user_secrets=body.user_secrets,
-                default_url=body.default_url,
-                lfs_auto_fetch=body.lfs_auto_fetch,
-                cloudstorage=body.cloudstorage,
-                server_options=server_options,
-                namespace=body.namespace,
-                project=body.project,
-                branch=body.branch,
-                commit_sha=body.commit_sha,
-                notebook=body.notebook,
-                gl_project=gl_project,
-                gl_project_path=gl_project_path,
-                project_id=None,
-                launcher_id=None,
-                repositories=None,
-                internal_gitlab_user=internal_gitlab_user,
+            server, status_code = await core.launch_notebook_old(
+                self.nb_config,
+                user,
+                internal_gitlab_user,
+                body,
             )
             return json(NotebookResponse().dump(server), status_code)
 
