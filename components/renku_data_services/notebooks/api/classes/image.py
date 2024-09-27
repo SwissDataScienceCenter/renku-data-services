@@ -4,7 +4,7 @@ import base64
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Any, Optional, Self, cast
 
 import requests
@@ -101,7 +101,7 @@ class ImageRepoDockerAPI:
             return None
         return cast(dict[str, Any], res.json())
 
-    def image_workdir(self, image: "Image") -> Optional[Path]:
+    def image_workdir(self, image: "Image") -> Optional[PurePosixPath]:
         """Query the docker API to get the workdir of an image."""
         config = self.get_image_config(image)
         if config is None:
@@ -112,7 +112,7 @@ class ImageRepoDockerAPI:
         workdir = nested_config.get("WorkingDir", "/")
         if workdir == "":
             workdir = "/"
-        return Path(workdir)
+        return PurePosixPath(workdir)
 
     def with_oauth2_token(self, oauth2_token: str) -> "ImageRepoDockerAPI":
         """Return a docker API instance with the token as authentication."""
