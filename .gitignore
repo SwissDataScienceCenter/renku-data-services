@@ -79,3 +79,11 @@ docker-compose.override.yml
 # nix
 result
 *.qcow2
+
+# tests
+.k3d-config.yaml
+
+# Misc
+*.pem
+*.gz
+*.tgz
