@@ -30,13 +30,13 @@ files = [
 
 [[package]]
 name = "alembic"
-version = "1.13.2"
+version = "1.13.3"
 description = "A database migration tool for SQLAlchemy."
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "alembic-1.13.2-py3-none-any.whl", hash = "sha256:6b8733129a6224a9a711e17c99b08462dbf7cc9670ba8f2e2ae9af860ceb1953"},
-    {file = "alembic-1.13.2.tar.gz", hash = "sha256:1ff0ae32975f4fd96028c39ed9bb3c867fe3af956bd7bb37343b54c9fe7445ef"},
+    {file = "alembic-1.13.3-py3-none-any.whl", hash = "sha256:908e905976d15235fae59c9ac42c4c5b75cfcefe3d27c0fbf7ae15a37715d80e"},
+    {file = "alembic-1.13.3.tar.gz", hash = "sha256:203503117415561e203aa14541740643a611f641517f0209fcae63e9fa09f1a2"},
 ]
 
 [package.dependencies]
@@ -162,13 +162,13 @@ cryptography = "*"
 
 [[package]]
 name = "authzed"
-version = "0.18.3"
+version = "0.19.0"
 description = "Client library for SpiceDB."
 optional = false
 python-versions = "<4.0,>=3.8"
 files = [
-    {file = "authzed-0.18.3-py3-none-any.whl", hash = "sha256:367baa6f00dac68daad814f7db82464576530a11806ac4b17978d8c0e89511b7"},
-    {file = "authzed-0.18.3.tar.gz", hash = "sha256:a06a930c78fdbe61f5caf4415739a9941d23068527fcf91011edc1ae0188a4f5"},
+    {file = "authzed-0.19.0-py3-none-any.whl", hash = "sha256:baf56b6ba52d19fef72def6feb5fbff31e48a449398bec8d4343014badaff55d"},
+    {file = "authzed-0.19.0.tar.gz", hash = "sha256:9332ccbeb56dfc6f054243090a9475a310cb7201f9a67019d901b10f33bc0fd6"},
 ]
 
 [package.dependencies]
@@ -549,13 +549,13 @@ dev = ["black", "coveralls", "mypy", "pre-commit", "pylint", "pytest (>=5)", "py
 
 [[package]]
 name = "dataclasses-avroschema"
-version = "0.63.0"
+version = "0.63.2"
 description = "Generate Avro Schemas from Python classes. Serialize/Deserialize python instances with avro schemas"
 optional = false
 python-versions = "<4.0,>=3.8"
 files = [
-    {file = "dataclasses_avroschema-0.63.0-py3-none-any.whl", hash = "sha256:81847f11f1dbaf6be940796a63c6d9c64885472d279d1811b2a35bb553220d29"},
-    {file = "dataclasses_avroschema-0.63.0.tar.gz", hash = "sha256:f20ca5e7a1cbdbe1b1cd2e775744f2835bbf46009d8f2f2d72acc481721e0125"},
+    {file = "dataclasses_avroschema-0.63.2-py3-none-any.whl", hash = "sha256:03ffa7fe2d9ac6d7424766b4fae1cd64d7596224d87be2b83dd44d1ab6f9ac5c"},
+    {file = "dataclasses_avroschema-0.63.2.tar.gz", hash = "sha256:6e5f25c9db874a071874f05d6d46d2afd5c7417630fde2f8153cea25667e1296"},
 ]
 
 [package.dependencies]
@@ -692,17 +692,17 @@ python-dateutil = ">=2.4"
 
 [[package]]
 name = "fakeredis"
-version = "2.24.1"
+version = "2.25.0"
 description = "Python implementation of redis API, can be used for testing purposes."
 optional = false
 python-versions = "<4.0,>=3.7"
 files = [
-    {file = "fakeredis-2.24.1-py3-none-any.whl", hash = "sha256:09d3049a29910f80c0ef5789c31bef3dbb9727bd43a67ee8598217f4efd12f35"},
-    {file = "fakeredis-2.24.1.tar.gz", hash = "sha256:4a52ab0edad53543ac5e3a41d761f91012613ed583344da54ae6473e05b0f6d0"},
+    {file = "fakeredis-2.25.0-py3-none-any.whl", hash = "sha256:70271d98ec96324eda6c2c9fdb74f858d0c3e929d15ed4972c8da75f219665be"},
+    {file = "fakeredis-2.25.0.tar.gz", hash = "sha256:d1f972b8d7ac14d3e93ab3673d4a628d7836a7abb9cf2d3c10fb0b08258f3b85"},
 ]
 
 [package.dependencies]
-redis = ">=4"
+redis = {version = ">=4.3", markers = "python_full_version > \"3.8.0\""}
 sortedcontainers = ">=2,<3"
 
 [package.extras]
@@ -1825,13 +1825,13 @@ six = ">=1.5"
 
 [[package]]
 name = "python-gitlab"
-version = "4.11.1"
+version = "4.12.0"
 description = "A python wrapper for the GitLab API"
 optional = false
 python-versions = ">=3.8.0"
 files = [
-    {file = "python_gitlab-4.11.1-py3-none-any.whl", hash = "sha256:f15fe4f4cbaa58c04e422ad30a2d4fc7976294dfdf1f90f81ab927e5b2238f33"},
-    {file = "python_gitlab-4.11.1.tar.gz", hash = "sha256:7afa2f9c30618bc3daee95d2186a06e1cf18ca2fa97890eb55fd8ddc4e339812"},
+    {file = "python_gitlab-4.12.0-py3-none-any.whl", hash = "sha256:bb82f877d4af48dc94f1fdc3f83abdc2fcb811bf3b523c03b90a618519dff80c"},
+    {file = "python_gitlab-4.12.0.tar.gz", hash = "sha256:d65c08ba787156e01f7359429b201a83395bde3f2ea01f51115996be0e346d8e"},
 ]
 
 [package.dependencies]
@@ -1930,18 +1930,18 @@ files = [
 
 [[package]]
 name = "redis"
-version = "5.0.8"
+version = "5.1.0"
 description = "Python client for Redis database and key-value store"
 optional = false
-python-versions = ">=3.7"
+python-versions = ">=3.8"
 files = [
-    {file = "redis-5.0.8-py3-none-any.whl", hash = "sha256:56134ee08ea909106090934adc36f65c9bcbbaecea5b21ba704ba6fb561f8eb4"},
-    {file = "redis-5.0.8.tar.gz", hash = "sha256:0c5b10d387568dfe0698c6fad6615750c24170e548ca2deac10c649d463e9870"},
+    {file = "redis-5.1.0-py3-none-any.whl", hash = "sha256:fd4fccba0d7f6aa48c58a78d76ddb4afc698f5da4a2c1d03d916e4fd7ab88cdd"},
+    {file = "redis-5.1.0.tar.gz", hash = "sha256:b756df1e4a3858fcc0ef861f3fc53623a96c41e2b1f5304e09e0fe758d333d40"},
 ]
 
 [package.extras]
-hiredis = ["hiredis (>1.0.0)"]
-ocsp = ["cryptography (>=36.0.1)", "pyopenssl (==20.0.1)", "requests (>=2.26.0)"]
+hiredis = ["hiredis (>=3.0.0)"]
+ocsp = ["cryptography (>=36.0.1)", "pyopenssl (==23.2.1)", "requests (>=2.31.0)"]
 
 [[package]]
 name = "requests"
@@ -2651,4 +2651,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "a30121364668554c09657a0659da85a871d7da09c87c76e4026d51b2659dce2b"
+content-hash = "97c7852b2049f870eef975e787aad855bdf21b25bfd503d7a021222c4c3c2e20"
