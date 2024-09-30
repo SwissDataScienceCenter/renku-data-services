@@ -48,7 +48,7 @@ from renku_data_services.notebooks.api.schemas.servers_get import (
     ServersGetResponse,
 )
 from renku_data_services.notebooks.api.schemas.servers_patch import PatchServerStatusEnum
-from renku_data_services.notebooks.config import _NotebooksConfig
+from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.notebooks.crs import (
     AmaltheaSessionSpec,
     AmaltheaSessionV1Alpha1,
@@ -93,7 +93,7 @@ class NotebooksBP(CustomBlueprint):
     """Handlers for manipulating notebooks."""
 
     authenticator: Authenticator
-    nb_config: _NotebooksConfig
+    nb_config: NotebooksConfig
     git_repo: GitRepositoriesRepository
     internal_gitlab_authenticator: base_models.Authenticator
     rp_repo: ResourcePoolRepository
@@ -273,7 +273,7 @@ class NotebooksBP(CustomBlueprint):
 
     @staticmethod
     async def launch_notebook_helper(
-        nb_config: _NotebooksConfig,
+        nb_config: NotebooksConfig,
         server_name: str,
         server_class: type[UserServer],
         user: AnonymousAPIUser | AuthenticatedAPIUser,
@@ -781,7 +781,7 @@ class NotebooksNewBP(CustomBlueprint):
 
     authenticator: base_models.Authenticator
     internal_gitlab_authenticator: base_models.Authenticator
-    nb_config: _NotebooksConfig
+    nb_config: NotebooksConfig
     project_repo: ProjectRepository
     session_repo: SessionRepository
     rp_repo: ResourcePoolRepository
@@ -883,19 +883,21 @@ class NotebooksNewBP(CustomBlueprint):
                         ),
                     )
                 )
-            git_providers = await self.nb_config.git_provider_helper.get_providers(user)
+            git_providers = await self.nb_config.git_provider_helper.get_providers(user=user)
             git_clone = await init_containers.git_clone_container_v2(
-                user,
-                self.nb_config,
-                repositories,
-                git_providers,
-                launcher.environment.mount_directory,
-                launcher.environment.working_directory,
+                user=user,
+                config=self.nb_config,
+                repositories=repositories,
+                git_providers=git_providers,
+                workspace_mount_path=launcher.environment.mount_directory,
+                work_dir=launcher.environment.working_directory,
             )
             if git_clone is not None:
                 session_init_containers.append(InitContainer.model_validate(git_clone))
             extra_containers: list[ExtraContainer] = []
-            git_proxy_container = await git_proxy.main_container(user, self.nb_config, repositories, git_providers)
+            git_proxy_container = await git_proxy.main_container(
+                user=user, config=self.nb_config, repositories=repositories, git_providers=git_providers
+            )
             if git_proxy_container is not None:
                 extra_containers.append(
                     ExtraContainer.model_validate(self.nb_config.k8s_v2_client.sanitize(git_proxy_container))

@@ -4,11 +4,11 @@ from typing import Any, cast
 
 from kubernetes import client
 
-from renku_data_services.notebooks.config import _NotebooksConfig
+from renku_data_services.notebooks.config import NotebooksConfig
 
 
 def get_certificates_volume_mounts(
-    config: _NotebooksConfig,
+    config: NotebooksConfig,
     etc_certs: bool = True,
     custom_certs: bool = True,
     read_only_etc_certs: bool = False,

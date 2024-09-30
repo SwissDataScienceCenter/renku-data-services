@@ -10,7 +10,7 @@ from marshmallow import EXCLUDE, Schema, ValidationError, fields, validates_sche
 
 from renku_data_services.base_models import APIUser
 from renku_data_services.notebooks.api.classes.cloud_storage import ICloudStorageRequest
-from renku_data_services.notebooks.config import _NotebooksConfig
+from renku_data_services.notebooks.config import NotebooksConfig
 
 _sanitize_for_serialization = client.ApiClient().sanitize_for_serialization
 
@@ -48,7 +48,7 @@ class RCloneStorage(ICloudStorageRequest):
         readonly: bool,
         mount_folder: str,
         name: Optional[str],
-        config: _NotebooksConfig,
+        config: NotebooksConfig,
     ) -> None:
         """Creates a cloud storage instance without validating the configuration."""
         self.config = config
@@ -66,7 +66,7 @@ class RCloneStorage(ICloudStorageRequest):
         internal_gitlab_user: APIUser,
         project_id: int,
         work_dir: PurePosixPath,
-        config: _NotebooksConfig,
+        config: NotebooksConfig,
     ) -> Self:
         """Create storage object from request."""
         name = None

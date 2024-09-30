@@ -11,7 +11,7 @@ from kubernetes import client
 from renku_data_services.base_models.core import AnonymousAPIUser, AuthenticatedAPIUser
 from renku_data_services.notebooks.api.amalthea_patches.utils import get_certificates_volume_mounts
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
-from renku_data_services.notebooks.config import _NotebooksConfig
+from renku_data_services.notebooks.config import NotebooksConfig
 
 if TYPE_CHECKING:
     # NOTE: If these are directly imported then you get circular imports.
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 async def git_clone_container_v2(
     user: AuthenticatedAPIUser | AnonymousAPIUser,
-    config: _NotebooksConfig,
+    config: NotebooksConfig,
     repositories: list[Repository],
     git_providers: list[GitProvider],
     workspace_mount_path: PurePosixPath,
@@ -39,7 +39,6 @@ async def git_clone_container_v2(
         read_only_etc_certs=True,
     )
 
-    user_is_anonymous = isinstance(user, AnonymousAPIUser)
     prefix = "GIT_CLONE_"
     env = [
         {"name": f"{prefix}WORKSPACE_MOUNT_PATH", "value": workspace_mount_path.as_posix()},
@@ -59,7 +58,7 @@ async def git_clone_container_v2(
             "name": f"{prefix}USER__RENKU_TOKEN",
             "value": str(user.access_token),
         },
-        {"name": f"{prefix}IS_GIT_PROXY_ENABLED", "value": "0" if user_is_anonymous else "1"},
+        {"name": f"{prefix}IS_GIT_PROXY_ENABLED", "value": "0" if user.is_anonymous else "1"},
         {
             "name": f"{prefix}SENTRY__ENABLED",
             "value": str(config.sessions.git_clone.sentry.enabled).lower(),
@@ -111,7 +110,7 @@ async def git_clone_container_v2(
         )
 
     # Set up git providers
-    required_provider_ids: set[str] = set(r.provider for r in repositories if r.provider)
+    required_provider_ids: set[str] = {r.provider for r in repositories if r.provider}
     required_git_providers = [p for p in git_providers if p.id in required_provider_ids]
     for idx, provider in enumerate(required_git_providers):
         obj_env = f"{prefix}GIT_PROVIDERS_{idx}_"
@@ -163,7 +162,6 @@ async def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
         read_only_etc_certs=True,
     )
 
-    user_is_anonymous = not server.user.is_authenticated
     prefix = "GIT_CLONE_"
     env = [
         {
@@ -186,7 +184,7 @@ async def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
             "name": f"{prefix}USER__RENKU_TOKEN",
             "value": str(server.user.access_token),
         },
-        {"name": f"{prefix}IS_GIT_PROXY_ENABLED", "value": "0" if user_is_anonymous else "1"},
+        {"name": f"{prefix}IS_GIT_PROXY_ENABLED", "value": "0" if server.user.is_anonymous else "1"},
         {
             "name": f"{prefix}SENTRY__ENABLED",
             "value": str(server.config.sessions.git_clone.sentry.enabled).lower(),
@@ -295,7 +293,7 @@ async def git_clone(server: "UserServer") -> list[dict[str, Any]]:
     ]
 
 
-def certificates_container(config: _NotebooksConfig) -> tuple[client.V1Container, list[client.V1Volume]]:
+def certificates_container(config: NotebooksConfig) -> tuple[client.V1Container, list[client.V1Volume]]:
     """The specification for the container that setups self signed CAs."""
     init_container = client.V1Container(
         name="init-certificates",
@@ -328,7 +326,7 @@ def certificates_container(config: _NotebooksConfig) -> tuple[client.V1Container
     return (init_container, [volume_etc_certs, volume_custom_certs])
 
 
-def certificates(config: _NotebooksConfig) -> list[dict[str, Any]]:
+def certificates(config: NotebooksConfig) -> list[dict[str, Any]]:
     """Add a container that initializes custom certificate authorities for a session."""
     container, vols = certificates_container(config)
     api_client = client.ApiClient()
