@@ -555,7 +555,7 @@ class Authz:
                     result, DataConnectorToProjectLink
                 ):
                     user = _extract_user_from_args(*func_args, **func_kwargs)
-                    authz_change = await db_repo.authz._add_data_connector_to_project_link(user, result)
+                    authz_change = await db_repo.authz._remove_data_connector_to_project_link(user, result)
                 case _:
                     resource_id: str | ULID | None = "unknown"
                     if isinstance(result, (Project, Namespace, Group, DataConnector)):
