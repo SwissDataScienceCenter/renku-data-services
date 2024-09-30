@@ -51,7 +51,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data connectors
+        - data_connectors
     post:
       summary: Create a new data connector
       requestBody:
@@ -70,7 +70,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data connectors
+        - data_connectors
   /data_connectors/{data_connector_id}:
     parameters:
       - in: path
@@ -97,7 +97,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data connectors
+        - data_connectors
     patch:
       summary: Update specific fields of an existing data connector
       parameters:
@@ -124,7 +124,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data connectors
+        - data_connectors
     delete:
       summary: Remove a data connector
       responses:
@@ -133,7 +133,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data connectors
+        - data_connectors
   /namespaces/{namespace}/data_connectors/{slug}:
     parameters:
       - in: path
@@ -164,7 +164,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data connectors
+        - data_connectors
   /data_connectors/{data_connector_id}/project_links:
     parameters:
       - in: path
@@ -185,7 +185,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data connectors
+        - data_connectors
     post:
       summary: Create a new link from a data connector to a project
       requestBody:
@@ -204,7 +204,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data connectors
+        - data_connectors
   /data_connectors/{data_connector_id}/project_links/{link_id}:
     parameters:
       - in: path
@@ -227,7 +227,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data connectors
+        - data_connectors
   /data_connectors/{data_connector_id}/secrets:
     parameters:
       - in: path
@@ -254,7 +254,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data connectors
+        - data_connectors
     post:
       summary: Save secrets for a data connector
       requestBody:
@@ -273,7 +273,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data connectors
+        - data_connectors
     delete:
       summary: Remove all saved secrets for a data connector
       responses:
@@ -282,7 +282,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data connectors
+        - data_connectors
 components:
   schemas:
     DataConnectorsList:

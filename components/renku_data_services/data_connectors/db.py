@@ -120,8 +120,7 @@ class DataConnectorRepository:
         )
         if not ns:
             raise errors.MissingResourceError(
-                message=f"The data connector cannot be created because the namespace {
-                    data_connector.namespace} does not exist."
+                message=f"The data connector cannot be created because the namespace {data_connector.namespace} does not exist."  # noqa E501
             )
         if not ns.group_id and not ns.user_id:
             raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
@@ -215,10 +214,7 @@ class DataConnectorRepository:
 
         current_etag = data_connector.dump().etag
         if current_etag != etag:
-            raise errors.ConflictError(
-                message=f"Current ETag is {
-                                       current_etag}, not {etag}."
-            )
+            raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
 
         # TODO: handle slug update
         if patch.name is not None:
@@ -318,8 +314,7 @@ class DataConnectorProjectLinkRepository:
         authorized = await self.authz.has_permission(user, ResourceType.data_connector, data_connector_id, Scope.READ)
         if not authorized:
             raise errors.MissingResourceError(
-                message=f"Data connector with id '{
-                    data_connector_id}' does not exist or you do not have access to it."
+                message=f"Data connector with id '{data_connector_id}' does not exist or you do not have access to it."
             )
 
         project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
@@ -341,8 +336,7 @@ class DataConnectorProjectLinkRepository:
         authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
         if not authorized:
             raise errors.MissingResourceError(
-                message=f"Project with id '{
-                    project_id}' does not exist or you do not have access to it."
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
 
         data_connector_ids = await self.authz.resources_with_permission(
@@ -438,16 +432,6 @@ class DataConnectorProjectLinkRepository:
         ).one_or_none()
         if link_orm is None:
             return None
-
-        authorized_from = await self.authz.has_permission(
-            user, ResourceType.data_connector, data_connector_id, Scope.DELETE
-        )
-        authorized_to = await self.authz.has_permission(user, ResourceType.project, link_orm.project_id, Scope.WRITE)
-        authorized = authorized_from or authorized_to
-        if not authorized:
-            raise errors.MissingResourceError(
-                message=f"Data connector to project link '{link_id}' does not exist or you do not have access to it."
-            )
 
         link = link_orm.dump()
         await session.delete(link_orm)
