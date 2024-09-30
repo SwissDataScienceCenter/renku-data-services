@@ -18,7 +18,7 @@ from renku_data_services.base_api.auth import (
 )
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.etag import if_match_required
-from renku_data_services.base_api.misc import validate_body_root_model, validate_query
+from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.errors import errors
 from renku_data_services.project import apispec
@@ -259,11 +259,9 @@ class ProjectsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @validate_path_project_id
-        @validate_body_root_model(json=apispec.ProjectMemberListPatchRequest)
-        async def _update_members(
-            _: Request, user: base_models.APIUser, project_id: str, body: apispec.ProjectMemberListPatchRequest
-        ) -> HTTPResponse:
-            members = [Member(Role(i.role.value), i.id, project_id) for i in body.root]
+        async def _update_members(request: Request, user: base_models.APIUser, project_id: str) -> HTTPResponse:
+            body_dump = apispec.ProjectMemberListPatchRequest.model_validate(request.json)
+            members = [Member(Role(i.role.value), i.id, project_id) for i in body_dump.root]
             await self.project_member_repo.update_members(user, ULID.from_str(project_id), members)
             return HTTPResponse(status=200)
 

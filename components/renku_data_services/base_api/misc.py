@@ -108,7 +108,6 @@ def validate_body_root_model(
     """Decorator for sanic json payload validation when the model is derived from RootModel.
 
     Should be removed once sanic fixes this error in their validation code.
-    Issue link: https://github.com/sanic-org/sanic-ext/issues/198
     """
 
     def decorator(

@@ -121,6 +121,13 @@ class DataConnectorToProjectLinkORM(BaseORM):
     """A link from a data connector to a project in Renku 2.0."""
 
     __tablename__ = "data_connector_to_project_links"
+    __table_args__ = (
+        UniqueConstraint(
+            "data_connector_id",
+            "project_id",
+            name="_unique_data_connector_id_project_id_uc",
+        ),
+    )
 
     id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
     """ID of this data connector to project link."""
@@ -148,14 +155,6 @@ class DataConnectorToProjectLinkORM(BaseORM):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
-    )
-
-    __table_args__ = (
-        UniqueConstraint(
-            "data_connector_id",
-            "project_id",
-            name="_unique_data_connector_id_project_id_uc",
-        ),
     )
 
     def dump(self) -> models.DataConnectorToProjectLink:
@@ -188,3 +187,12 @@ class DataConnectorSecretORM(BaseORM):
 
     secret_id: Mapped[ULID] = mapped_column("secret_id", ForeignKey(SecretORM.id, ondelete="CASCADE"))
     secret: Mapped[SecretORM] = relationship(init=False, repr=False, lazy="selectin")
+
+    def dump(self) -> models.DataConnectorSecret:
+        """Create a data connector secret model from the DataConnectorSecretORM."""
+        return models.DataConnectorSecret(
+            name=self.name,
+            user_id=self.user_id,
+            data_connector_id=self.data_connector_id,
+            secret_id=self.secret_id,
+        )

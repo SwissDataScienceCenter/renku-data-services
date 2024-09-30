@@ -111,7 +111,9 @@ async def test_resource_pool_update_classes(
         old_classes = [asdict(cls) for cls in list(inserted_rp.classes)]
         new_classes_dicts = [{**cls, **data.draw(rc_update_reqs_dict)} for cls in old_classes]
         new_classes_models = [models.ResourceClass.from_dict(cls) for cls in new_classes_dicts]
-        new_classes_models = sorted(new_classes_models, key=lambda x: (x.gpu, x.cpu, x.memory, x.max_storage, x.name))
+        new_classes_models = sorted(
+            new_classes_models, key=lambda x: (x.default, x.cpu, x.memory, x.default_storage, x.name)
+        )
 
         updated_rp = await pool_repo.update_resource_pool(
             id=inserted_rp.id, classes=new_classes_dicts, api_user=admin_user

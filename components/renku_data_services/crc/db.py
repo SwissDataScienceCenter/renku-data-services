@@ -191,7 +191,7 @@ class ResourcePoolRepository(_Base):
         max_storage: int = 0,
         gpu: int = 0,
     ) -> list[models.ResourcePool]:
-        """Get resource pools from database with indication of which resource class matches the specified criteria."""
+        """Get resource pools from database with indication of which resource class matches the specified crtieria."""
         async with self.session_maker() as session:
             criteria = models.ResourceClass(
                 name="criteria",
@@ -205,17 +205,18 @@ class ResourcePoolRepository(_Base):
             )
             stmt = (
                 select(schemas.ResourcePoolORM)
-                .distinct()
-                .options(selectinload(schemas.ResourcePoolORM.classes))
+                .join(schemas.ResourcePoolORM.classes)
                 .order_by(
                     schemas.ResourcePoolORM.id,
                     schemas.ResourcePoolORM.name,
+                    schemas.ResourceClassORM.id,
+                    schemas.ResourceClassORM.name,
                 )
             )
             # NOTE: The line below ensures that the right users can access the right resources, do not remove.
             stmt = _resource_pool_access_control(api_user, stmt)
             res = await session.execute(stmt)
-            return [i.dump(self.quotas_repo.get_quota(i.quota), criteria) for i in res.scalars().all()]
+            return [i.dump(self.quotas_repo.get_quota(i.quota), criteria) for i in res.unique().scalars().all()]
 
     @_only_admins
     async def insert_resource_pool(
