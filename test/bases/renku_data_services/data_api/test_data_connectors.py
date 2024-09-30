@@ -948,6 +948,13 @@ async def test_delete_data_connector_project_link(
     assert response.json is not None
     assert len(response.json) == 0
 
+    # Check that calling delete again returns a 204
+    _, response = await sanic_client.delete(
+        f"/api/data/data_connectors/{data_connector_id}/project_links/{link["id"]}", headers=user_headers
+    )
+
+    assert response.status_code == 204, response.text
+
 
 @pytest.mark.asyncio
 async def test_delete_data_connector_after_linking(
