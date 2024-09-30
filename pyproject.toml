@@ -32,6 +32,7 @@ packages = [
   { include = "renku_data_services/repositories", from = "components" },
   { include = "renku_data_services/notebooks", from = "components" },
   { include = "renku_data_services/platform", from = "components" },
+  { include = "renku_data_services/data_connectors", from = "components" },
 ]
 
 [tool.poetry.dependencies]
@@ -191,6 +192,7 @@ disallow_untyped_defs = true
 module = [
   "renku_data_services.crc.apispec",
   "renku_data_services.connected_services.apispec",
+  "renku_data_services.data_connectors.apispec",
   "renku_data_services.storage.apispec",
   "renku_data_services.project.apispec",
   "renku_data_services.repositories.apispec",

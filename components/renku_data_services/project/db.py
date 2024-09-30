@@ -168,10 +168,9 @@ class ProjectRepository:
             creation_date=datetime.now(UTC).replace(microsecond=0),
             keywords=project.keywords,
         )
-        project_slug = ns_schemas.EntitySlugORM(slug, project_id=project_orm.id, namespace_id=ns.id)
+        project_slug = ns_schemas.EntitySlugORM.create_project_slug(slug, project_id=project_orm.id, namespace_id=ns.id)
 
         session.add(project_orm)
-        await session.flush()
         session.add(project_slug)
         await session.flush()
         await session.refresh(project_orm)

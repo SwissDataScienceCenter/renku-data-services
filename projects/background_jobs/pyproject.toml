@@ -32,6 +32,7 @@ packages = [
   { include = "renku_data_services/repositories", from = "../../components" },
   { include = "renku_data_services/session", from = "../../components" },
   { include = "renku_data_services/platform", from = "../../components" },
+  { include = "renku_data_services/data_connectors", from = "../../components" },
   { include = "renku_data_services/migrations", from = "../../components" },
 ]
 
