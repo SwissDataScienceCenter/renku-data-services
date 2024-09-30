@@ -8,6 +8,7 @@ from pathlib import PurePosixPath
 from ulid import ULID
 
 from renku_data_services import errors
+from renku_data_services.base_models.core import Reset
 
 
 class EnvironmentKind(StrEnum):
@@ -70,6 +71,23 @@ class Environment(BaseEnvironment):
     created_by: str
 
 
+@dataclass(kw_only=True, frozen=True, eq=True)
+class EnvironmentUpdate:
+    """Model for the update of some or all parts of an environment."""
+
+    name: str | None = None
+    description: str | None = None
+    container_image: str | None = None
+    default_url: str | None = None
+    port: int | None = None
+    working_directory: PurePosixPath | None = None
+    mount_directory: PurePosixPath | None = None
+    uid: int | None = None
+    gid: int | None = None
+    args: list[str] | None | Reset = None
+    command: list[str] | None | Reset = None
+
+
 @dataclass(frozen=True, eq=True, kw_only=True)
 class BaseSessionLauncher:
     """Session launcher model."""
@@ -97,3 +115,15 @@ class SessionLauncher(BaseSessionLauncher):
     creation_date: datetime
     created_by: str
     environment: Environment
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLauncherUpdate:
+    """Model for the update of a session launcher."""
+
+    name: str | None = None
+    description: str | None = None
+    # NOTE: When unsaved environment is used it means a brand new environment should be created for the
+    # launcher with the update of the launcher.
+    environment: str | EnvironmentUpdate | UnsavedEnvironment | None = None
+    resource_class_id: int | None | Reset = None

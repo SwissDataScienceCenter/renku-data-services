@@ -212,3 +212,17 @@ class Authenticator(Protocol[AnyAPIUser]):
     async def authenticate(self, access_token: str, request: Request) -> AnyAPIUser:
         """Validates the user credentials (i.e. we can say that the user is a valid Renku user)."""
         ...
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class Null:
+    """Parent class for distinguishing between None values."""
+
+    value: None = field(default=None, init=False, repr=False)
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class Reset(Null):
+    """Used to indicate a None value that has been deliberately set by the user or caller."""
+
+    ...
