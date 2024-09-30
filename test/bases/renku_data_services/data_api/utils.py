@@ -1,6 +1,13 @@
 import json
+import os
+import subprocess
+from contextlib import AbstractContextManager
 from typing import Any
 
+import yaml
+from kubernetes import client as k8s_client
+from kubernetes import config as k8s_config
+from kubernetes import watch
 from sanic import Request
 from sanic_testing.testing import SanicASGITestClient, TestingResponse
 
@@ -32,3 +39,123 @@ def merge_headers(*headers: dict[str, str]) -> dict[str, str]:
     for h in headers:
         all_headers.update(**h)
     return all_headers
+
+
+class K3DCluster(AbstractContextManager):
+    """Context manager that will create and tear down a k3s cluster"""
+
+    def __init__(
+        self,
+        cluster_name: str,
+        k3s_image="latest",
+        kubeconfig=".k3d-config.yaml",
+        extra_images=[],
+    ):
+        self.cluster_name = cluster_name
+        self.k3s_image = k3s_image
+        self.extra_images = extra_images
+        self.kubeconfig = kubeconfig
+        self.env = os.environ.copy()
+        self.env["KUBECONFIG"] = self.kubeconfig
+
+    def __enter__(self):
+        """create kind cluster"""
+
+        create_cluster = [
+            "k3d",
+            "cluster",
+            "create",
+            self.cluster_name,
+            "--agents",
+            "1",
+            "--image",
+            self.k3s_image,
+            "--no-lb",
+            "--verbose",
+            "--wait",
+            "--k3s-arg",
+            "--disable=traefik@server:0",
+            "--k3s-arg",
+            "--disable=metrics-server@server:0",
+        ]
+
+        try:
+            subprocess.run(create_cluster, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=self.env, check=True)
+        except subprocess.SubprocessError as err:
+            if err.output is not None:
+                print(err.output.decode())
+            else:
+                print(err)
+            raise
+
+        extra_commands = []
+
+        for extra_image in self.extra_images:
+            upload_image = [
+                "k3d",
+                "image",
+                "import",
+                extra_image,
+                "-c",
+                self.cluster_name,
+            ]
+
+            extra_commands.append(upload_image)
+
+        for command in extra_commands:
+            try:
+                subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=self.env, check=True)
+            except subprocess.SubprocessError as err:
+                if err.output is not None:
+                    print(err.output.decode())
+                else:
+                    print(err)
+                self._delete_cluster()
+                raise
+
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """delete kind cluster"""
+
+        self._delete_cluster()
+        return False
+
+    def _delete_cluster(self):
+        """delete kind cluster"""
+
+        delete_cluster = ["k3d", "cluster", "delete", self.cluster_name]
+        subprocess.run(delete_cluster, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=self.env, check=True)
+
+    def config_yaml(self):
+        with open(self.kubeconfig) as f:
+            return f.read()
+
+
+def setup_amalthea(install_name: str, app_name: str, version: str, cluster: K3DCluster) -> None:
+    k8s_config.load_kube_config_from_dict(yaml.safe_load(cluster.config_yaml()))
+
+    core_api = k8s_client.CoreV1Api()
+
+    helm_cmds = [
+        ["helm", "repo", "add", "renku", "https://swissdatasciencecenter.github.io/helm-charts"],
+        ["helm", "repo", "update"],
+        ["helm", "upgrade", "--install", install_name, f"renku/{app_name}", "--version", version],
+    ]
+
+    for cmd in helm_cmds:
+        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=cluster.env, check=True)
+
+    watcher = watch.Watch()
+
+    for event in watcher.stream(
+        core_api.list_namespaced_pod,
+        label_selector=f"app.kubernetes.io/name={app_name}",
+        namespace="default",
+        timeout_seconds=60,
+    ):
+        if event["object"].status.phase == "Running":
+            watcher.stop()
+            break
+    else:
+        assert False, "Timeout waiting on amalthea to run"
