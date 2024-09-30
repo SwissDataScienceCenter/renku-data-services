@@ -18,13 +18,11 @@ from renku_data_services.utils.sqlalchemy import ULIDType
 if TYPE_CHECKING:
     from renku_data_services.namespace.orm import EntitySlugORM
 
-metadata_obj = MetaData(schema="projects")  # Has to match alembic ini section name
-
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
     """Base class for all ORM classes."""
 
-    metadata = metadata_obj
+    metadata = MetaData(schema="projects")
     registry = COMMON_ORM_REGISTRY
 
 

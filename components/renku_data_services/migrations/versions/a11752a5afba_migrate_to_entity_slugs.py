@@ -1,7 +1,7 @@
 """migrate to entity slugs
 
 Revision ID: a11752a5afba
-Revises: 9058bf0a1a12
+Revises: 726d5d0e1f28
 Create Date: 2024-09-03 11:18:46.025525
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "a11752a5afba"
-down_revision = "9058bf0a1a12"
+down_revision = "726d5d0e1f28"
 branch_labels = None
 depends_on = None
 
