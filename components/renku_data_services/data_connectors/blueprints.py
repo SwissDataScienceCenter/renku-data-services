@@ -24,7 +24,7 @@ from renku_data_services.data_connectors.core import (
     validate_data_connector_patch,
     validate_unsaved_data_connector,
 )
-from renku_data_services.data_connectors.db import DataConnectorRepository
+from renku_data_services.data_connectors.db import DataConnectorProjectLinkRepository, DataConnectorRepository
 from renku_data_services.storage.rclone import RCloneValidator
 
 
@@ -33,6 +33,7 @@ class DataConnectorsBP(CustomBlueprint):
     """Handlers for manipulating data connectors."""
 
     data_connector_repo: DataConnectorRepository
+    data_connector_to_project_link_repo: DataConnectorProjectLinkRepository
     authenticator: base_models.Authenticator
 
     def get_all(self) -> BlueprintFactoryResponse:
@@ -180,12 +181,93 @@ class DataConnectorsBP(CustomBlueprint):
 
         return "/data_connectors/<data_connector_id:ulid>", ["DELETE"], _delete
 
+    def get_all_project_links(self) -> BlueprintFactoryResponse:
+        """List all links from a given data connector to projects."""
+
+        @authenticate(self.authenticator)
+        async def _get_all_project_links(
+            _: Request,
+            user: base_models.APIUser,
+            data_connector_id: ULID,
+        ) -> JSONResponse:
+            links = await self.data_connector_to_project_link_repo.get_links_from(
+                user=user, data_connector_id=data_connector_id
+            )
+            return validated_json(
+                apispec.DataConnectorToProjectLinksList,
+                [self._dump_data_connector_to_project_link(link) for link in links],
+            )
+
+        return "/data_connectors/<data_connector_id:ulid>/project_links", ["GET"], _get_all_project_links
+
+    def post_project_link(self) -> BlueprintFactoryResponse:
+        """Create a new link from a data connector to a project."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @validate(json=apispec.DataConnectorToProjectLinkPost)
+        async def _post_project_link(
+            _: Request,
+            user: base_models.APIUser,
+            data_connector_id: ULID,
+            body: apispec.DataConnectorToProjectLinkPost,
+        ) -> JSONResponse:
+            unsaved_link = models.UnsavedDataConnectorToProjectLink(
+                data_connector_id=data_connector_id,
+                project_id=ULID.from_str(body.project_id),
+            )
+            link = await self.data_connector_to_project_link_repo.insert_link(user=user, link=unsaved_link)
+            return validated_json(
+                apispec.DataConnectorToProjectLink, self._dump_data_connector_to_project_link(link), status=201
+            )
+
+        return "/data_connectors/<data_connector_id:ulid>/project_links", ["POST"], _post_project_link
+
+    def delete_project_link(self) -> BlueprintFactoryResponse:
+        """Delete a link from a data connector to a project."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _delete_project_link(
+            _: Request,
+            user: base_models.APIUser,
+            data_connector_id: ULID,
+            link_id: ULID,
+        ) -> HTTPResponse:
+            await self.data_connector_to_project_link_repo.delete_link(
+                user=user, data_connector_id=data_connector_id, link_id=link_id
+            )
+            return HTTPResponse(status=204)
+
+        return (
+            "/data_connectors/<data_connector_id:ulid>/project_links/<link_id:ulid>",
+            ["DELETE"],
+            _delete_project_link,
+        )
+
+    def get_all_data_connectors_links_to_project(self) -> BlueprintFactoryResponse:
+        """List all links from data connectors to a given project."""
+
+        @authenticate(self.authenticator)
+        async def _get_all_data_connectors_links_to_project(
+            _: Request,
+            user: base_models.APIUser,
+            project_id: ULID,
+        ) -> JSONResponse:
+            links = await self.data_connector_to_project_link_repo.get_links_to(user=user, project_id=project_id)
+            return validated_json(
+                apispec.DataConnectorToProjectLinksList,
+                [self._dump_data_connector_to_project_link(link) for link in links],
+            )
+
+        return "/projects/<project_id:ulid>/data_connector_links", ["GET"], _get_all_data_connectors_links_to_project
+
     @staticmethod
     def _dump_data_connector(data_connector: models.DataConnector, validator: RCloneValidator) -> dict[str, Any]:
         """Dumps a data connector for API responses."""
         storage = dump_storage_with_sensitive_fields(data_connector.storage, validator=validator)
         return dict(
-            id=data_connector.id,
+            id=str(data_connector.id),
             name=data_connector.name,
             namespace=data_connector.namespace.slug,
             slug=data_connector.slug,
@@ -197,4 +279,15 @@ class DataConnectorsBP(CustomBlueprint):
             description=data_connector.description,
             etag=data_connector.etag,
             keywords=data_connector.keywords or [],
+        )
+
+    @staticmethod
+    def _dump_data_connector_to_project_link(link: models.DataConnectorToProjectLink) -> dict[str, Any]:
+        """Dumps a link from a data connector to a project for API responses."""
+        return dict(
+            id=str(link.id),
+            data_connector_id=str(link.data_connector_id),
+            project_id=str(link.project_id),
+            creation_date=link.creation_date,
+            created_by=link.created_by,
         )

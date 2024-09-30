@@ -32,7 +32,7 @@ from renku_data_services import base_models
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.authz.models import Change, Member, MembershipChange, Role, Scope, Visibility
 from renku_data_services.base_models.core import InternalServiceAdmin
-from renku_data_services.data_connectors.models import DataConnector, DataConnectorUpdate
+from renku_data_services.data_connectors.models import DataConnector, DataConnectorToProjectLink, DataConnectorUpdate
 from renku_data_services.errors import errors
 from renku_data_services.namespace.models import Group, GroupUpdate, Namespace, NamespaceKind, NamespaceUpdate
 from renku_data_services.project.models import Project, ProjectUpdate
@@ -59,6 +59,7 @@ _AuthzChangeFuncResult = TypeVar(
     | list[UserInfo]
     | DataConnector
     | DataConnectorUpdate
+    | DataConnectorToProjectLink
     | None,
 )
 _T = TypeVar("_T")
@@ -97,6 +98,7 @@ class _Relation(StrEnum):
     project_namespace: str = "project_namespace"
     data_connector_platform: str = "data_connector_platform"
     data_connector_namespace: str = "data_connector_namespace"
+    linked_to: str = "linked_to"
 
     @classmethod
     def from_role(cls, role: Role) -> "_Relation":
@@ -140,6 +142,8 @@ class AuthzOperation(StrEnum):
     update: str = "update"
     update_or_insert: str = "update_or_insert"
     insert_many: str = "insert_many"
+    create_link: str = "create_link"
+    delete_link: str = "delete_link"
 
 
 class _AuthzConverter:
@@ -570,6 +574,19 @@ class Authz:
                     if result.old.namespace.id != result.new.namespace.id:
                         user = _extract_user_from_args(*func_args, **func_kwargs)
                         authz_change.extend(await db_repo.authz._update_data_connector_namespace(user, result.new))
+                case AuthzOperation.create_link, ResourceType.data_connector if isinstance(
+                    result, DataConnectorToProjectLink
+                ):
+                    user = _extract_user_from_args(*func_args, **func_kwargs)
+                    authz_change = await db_repo.authz._add_data_connector_to_project_link(user, result)
+                case AuthzOperation.delete_link, ResourceType.data_connector if result is None:
+                    # NOTE: This means that the link does not exist in the first place so nothing was deleted
+                    pass
+                case AuthzOperation.delete_link, ResourceType.data_connector if isinstance(
+                    result, DataConnectorToProjectLink
+                ):
+                    user = _extract_user_from_args(*func_args, **func_kwargs)
+                    authz_change = await db_repo.authz._remove_data_connector_to_project_link(user, result)
                 case _:
                     resource_id: str | ULID | None = "unknown"
                     if isinstance(result, (Project, Namespace, Group, DataConnector)):
@@ -695,6 +712,17 @@ class Authz:
             ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
         )
         rels: list[Relationship] = []
+        async for response in responses:
+            rels.append(response.relationship)
+        # Project is also a subject for "linked_to" relations
+        rel_filter = RelationshipFilter(
+            optional_subject_filter=SubjectFilter(
+                subject_type=ResourceType.project.value, optional_subject_id=str(project.id)
+            )
+        )
+        responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
+            ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
+        )
         async for response in responses:
             rels.append(response.relationship)
         apply = WriteRelationshipsRequest(
@@ -1648,3 +1676,82 @@ class Authz:
             ]
         )
         return _AuthzChange(apply=apply_change, undo=undo_change)
+
+    async def _add_data_connector_to_project_link(
+        self, user: base_models.APIUser, link: DataConnectorToProjectLink
+    ) -> _AuthzChange:
+        """Links a data connector to a project."""
+        # NOTE: we manually check for permissions here since it is not trivially expressed through decorators
+        allowed_from = await self.has_permission(
+            user, ResourceType.data_connector, link.data_connector_id, Scope.ADD_LINK
+        )
+        if not allowed_from:
+            raise errors.MissingResourceError(
+                message=f"The user with ID {user.id} cannot perform operation {Scope.ADD_LINK} "
+                f"on {ResourceType.data_connector.value} "
+                f"with ID {link.data_connector_id} or the resource does not exist."
+            )
+        allowed_to = await self.has_permission(user, ResourceType.project, link.project_id, Scope.WRITE)
+        if not allowed_to:
+            raise errors.MissingResourceError(
+                message=f"The user with ID {user.id} cannot perform operation {Scope.WRITE} "
+                f"on {ResourceType.project.value} "
+                f"with ID {link.project_id} or the resource does not exist."
+            )
+
+        data_connector_res = _AuthzConverter.data_connector(link.data_connector_id)
+        project_subject = SubjectReference(object=_AuthzConverter.project(link.project_id))
+        relationship = Relationship(
+            resource=data_connector_res,
+            relation=_Relation.linked_to.value,
+            subject=project_subject,
+        )
+        apply = WriteRelationshipsRequest(
+            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=relationship)]
+        )
+        undo = WriteRelationshipsRequest(
+            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=relationship)]
+        )
+        change = _AuthzChange(
+            apply=apply,
+            undo=undo,
+        )
+        return change
+
+    async def _remove_data_connector_to_project_link(
+        self, user: base_models.APIUser, link: DataConnectorToProjectLink
+    ) -> _AuthzChange:
+        """Remove the relationships associated with the link from a data connector to a project."""
+        # NOTE: we manually check for permissions here since it is not trivially expressed through decorators
+        allowed_from = await self.has_permission(
+            user, ResourceType.data_connector, link.data_connector_id, Scope.DELETE
+        )
+        allowed_to, zed_token = await self._has_permission(user, ResourceType.project, link.project_id, Scope.WRITE)
+        allowed = allowed_from or allowed_to
+        if not allowed:
+            raise errors.MissingResourceError(
+                message=f"The user with ID {user.id} cannot perform operation {AuthzOperation.delete_link}"
+                f"on the data connector to project link with ID {link.id} or the resource does not exist."
+            )
+        consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
+        rel_filter = RelationshipFilter(
+            resource_type=ResourceType.data_connector.value,
+            optional_resource_id=str(link.data_connector_id),
+            optional_relation=_Relation.linked_to.value,
+            optional_subject_filter=SubjectFilter(
+                subject_type=ResourceType.project.value, optional_subject_id=str(link.project_id)
+            ),
+        )
+        responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
+            ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
+        )
+        rels: list[Relationship] = []
+        async for response in responses:
+            rels.append(response.relationship)
+        apply = WriteRelationshipsRequest(
+            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=i) for i in rels]
+        )
+        undo = WriteRelationshipsRequest(
+            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=i) for i in rels]
+        )
+        return _AuthzChange(apply=apply, undo=undo)

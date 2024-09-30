@@ -120,8 +120,7 @@ class DataConnectorRepository:
         )
         if not ns:
             raise errors.MissingResourceError(
-                message=f"The data connector cannot be created because the namespace {
-                    data_connector.namespace} does not exist."
+                message=f"The data connector cannot be created because the namespace {data_connector.namespace} does not exist."  # noqa E501
             )
         if not ns.group_id and not ns.user_id:
             raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
@@ -232,7 +231,7 @@ class DataConnectorRepository:
                 select(ns_schemas.NamespaceORM).where(ns_schemas.NamespaceORM.slug == patch.namespace.lower())
             )
             if not ns:
-                raise errors.MissingResourceError(message=f"Rhe namespace with slug {patch.namespace} does not exist.")
+                raise errors.MissingResourceError(message=f"The namespace with slug {patch.namespace} does not exist.")
             if not ns.group_id and not ns.user_id:
                 raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
             resource_type, resource_id = (
@@ -295,6 +294,148 @@ class DataConnectorRepository:
         data_connector = data_connector_orm.dump()
         await session.delete(data_connector_orm)
         return data_connector
+
+
+class DataConnectorProjectLinkRepository:
+    """Repository for links from data connectors to projects."""
+
+    def __init__(
+        self,
+        session_maker: Callable[..., AsyncSession],
+        authz: Authz,
+    ) -> None:
+        self.session_maker = session_maker
+        self.authz = authz
+
+    async def get_links_from(
+        self, user: base_models.APIUser, data_connector_id: ULID
+    ) -> list[models.DataConnectorToProjectLink]:
+        """Get links from a given data connector."""
+        authorized = await self.authz.has_permission(user, ResourceType.data_connector, data_connector_id, Scope.READ)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Data connector with id '{data_connector_id}' does not exist or you do not have access to it."
+            )
+
+        project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
+
+        async with self.session_maker() as session:
+            stmt = (
+                select(schemas.DataConnectorToProjectLinkORM)
+                .where(schemas.DataConnectorToProjectLinkORM.data_connector_id == data_connector_id)
+                .where(schemas.DataConnectorToProjectLinkORM.project_id.in_(project_ids))
+            )
+            result = await session.scalars(stmt)
+            links_orm = result.all()
+            return [link.dump() for link in links_orm]
+
+    async def get_links_to(
+        self, user: base_models.APIUser, project_id: ULID
+    ) -> list[models.DataConnectorToProjectLink]:
+        """Get links to a given project."""
+        authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
+
+        data_connector_ids = await self.authz.resources_with_permission(
+            user, user.id, ResourceType.data_connector, Scope.READ
+        )
+
+        async with self.session_maker() as session:
+            stmt = (
+                select(schemas.DataConnectorToProjectLinkORM)
+                .where(schemas.DataConnectorToProjectLinkORM.project_id == project_id)
+                .where(schemas.DataConnectorToProjectLinkORM.data_connector_id.in_(data_connector_ids))
+            )
+            result = await session.scalars(stmt)
+            links_orm = result.all()
+            return [link.dump() for link in links_orm]
+
+    @with_db_transaction
+    @Authz.authz_change(AuthzOperation.create_link, ResourceType.data_connector)
+    async def insert_link(
+        self,
+        user: base_models.APIUser,
+        link: models.UnsavedDataConnectorToProjectLink,
+        *,
+        session: AsyncSession | None = None,
+    ) -> models.DataConnectorToProjectLink:
+        """Insert a new link from a data connector to a project."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required.")
+
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        data_connector = (
+            await session.scalars(
+                select(schemas.DataConnectorORM).where(schemas.DataConnectorORM.id == link.data_connector_id)
+            )
+        ).one_or_none()
+        if data_connector is None:
+            raise errors.MissingResourceError(
+                message=f"Data connector with id '{link.data_connector_id}' does not exist or you do not have access to it."  # noqa E501
+            )
+
+        project = (
+            await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == link.project_id))
+        ).one_or_none()
+        if project is None:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{link.project_id}' does not exist or you do not have access to it."
+            )
+
+        existing_link = await session.scalar(
+            select(schemas.DataConnectorToProjectLinkORM)
+            .where(schemas.DataConnectorToProjectLinkORM.data_connector_id == link.data_connector_id)
+            .where(schemas.DataConnectorToProjectLinkORM.project_id == link.project_id)
+        )
+        if existing_link is not None:
+            raise errors.ConflictError(
+                message=f"A link from data connector {link.data_connector_id} to project {link.project_id} already exists."  # noqa E501
+            )
+
+        link_orm = schemas.DataConnectorToProjectLinkORM(
+            data_connector_id=link.data_connector_id,
+            project_id=link.project_id,
+            created_by_id=user.id,
+        )
+
+        session.add(link_orm)
+        await session.flush()
+        await session.refresh(link_orm)
+
+        return link_orm.dump()
+
+    @with_db_transaction
+    @Authz.authz_change(AuthzOperation.delete_link, ResourceType.data_connector)
+    async def delete_link(
+        self,
+        user: base_models.APIUser,
+        data_connector_id: ULID,
+        link_id: ULID,
+        *,
+        session: AsyncSession | None = None,
+    ) -> models.DataConnectorToProjectLink | None:
+        """Delete a link from a data connector to a project."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required.")
+
+        link_orm = (
+            await session.scalars(
+                select(schemas.DataConnectorToProjectLinkORM)
+                .where(schemas.DataConnectorToProjectLinkORM.id == link_id)
+                .where(schemas.DataConnectorToProjectLinkORM.data_connector_id == data_connector_id)
+            )
+        ).one_or_none()
+        if link_orm is None:
+            return None
+
+        link = link_orm.dump()
+        await session.delete(link_orm)
+        return link
 
 
 _T = TypeVar("_T")
