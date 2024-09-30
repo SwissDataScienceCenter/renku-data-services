@@ -10,7 +10,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
-from renku_data_services.base_api.misc import validate_db_ids, validate_query
+from renku_data_services.base_api.misc import validate_body_root_model, validate_db_ids, validate_query
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.crc import apispec, models
 from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
@@ -161,9 +161,11 @@ class ResourcePoolUsersBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         @validate_db_ids
-        async def _post(request: Request, user: base_models.APIUser, resource_pool_id: int) -> HTTPResponse:
-            users = apispec.PoolUsersWithId.model_validate(request.json)  # validation
-            return await self._put_post(api_user=user, resource_pool_id=resource_pool_id, body=users, post=True)
+        @validate_body_root_model(json=apispec.PoolUsersWithId)
+        async def _post(
+            _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.PoolUsersWithId
+        ) -> HTTPResponse:
+            return await self._put_post(api_user=user, resource_pool_id=resource_pool_id, body=body, post=True)
 
         return "/resource_pools/<resource_pool_id>/users", ["POST"], _post
 
@@ -173,9 +175,11 @@ class ResourcePoolUsersBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         @validate_db_ids
-        async def _put(request: Request, user: base_models.APIUser, resource_pool_id: int) -> HTTPResponse:
-            users = apispec.PoolUsersWithId.model_validate(request.json)  # validation
-            return await self._put_post(api_user=user, resource_pool_id=resource_pool_id, body=users, post=False)
+        @validate_body_root_model(json=apispec.PoolUsersWithId)
+        async def _put(
+            _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.PoolUsersWithId
+        ) -> HTTPResponse:
+            return await self._put_post(api_user=user, resource_pool_id=resource_pool_id, body=body, post=False)
 
         return "/resource_pools/<resource_pool_id>/users", ["PUT"], _put
 
@@ -528,9 +532,9 @@ class UserResourcePoolsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        async def _post(request: Request, user: base_models.APIUser, user_id: str) -> HTTPResponse:
-            ids = apispec.IntegerIds.model_validate(request.json)  # validation
-            return await self._post_put(user_id=user_id, post=True, resource_pool_ids=ids, api_user=user)
+        @validate_body_root_model(json=apispec.IntegerIds)
+        async def _post(_: Request, user: base_models.APIUser, user_id: str, body: apispec.IntegerIds) -> HTTPResponse:
+            return await self._post_put(user_id=user_id, post=True, resource_pool_ids=body, api_user=user)
 
         return "/users/<user_id>/resource_pools", ["POST"], _post
 
@@ -539,9 +543,9 @@ class UserResourcePoolsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        async def _put(request: Request, user: base_models.APIUser, user_id: str) -> HTTPResponse:
-            ids = apispec.IntegerIds.model_validate(request.json)  # validation
-            return await self._post_put(user_id=user_id, post=False, resource_pool_ids=ids, api_user=user)
+        @validate_body_root_model(json=apispec.IntegerIds)
+        async def _put(_: Request, user: base_models.APIUser, user_id: str, body: apispec.IntegerIds) -> HTTPResponse:
+            return await self._post_put(user_id=user_id, post=False, resource_pool_ids=body, api_user=user)
 
         return "/users/<user_id>/resource_pools", ["PUT"], _put
 
