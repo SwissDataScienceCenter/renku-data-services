@@ -46,7 +46,7 @@ class ProjectsBP(CustomBlueprint):
             request: Request, user: base_models.APIUser, pagination: PaginationRequest, query: apispec.ProjectGetQuery
         ) -> tuple[list[dict[str, Any]], int]:
             projects, total_num = await self.project_repo.get_projects(
-                user=user, pagination=pagination, namespace=query.namespace
+                user=user, pagination=pagination, namespace=query.namespace, direct_member=query.direct_member
             )
             return [
                 dict(

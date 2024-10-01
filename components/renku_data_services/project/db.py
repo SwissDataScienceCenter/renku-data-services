@@ -49,10 +49,18 @@ class ProjectRepository:
         self.authz = authz
 
     async def get_projects(
-        self, user: base_models.APIUser, pagination: PaginationRequest, namespace: str | None = None
+        self,
+        user: base_models.APIUser,
+        pagination: PaginationRequest,
+        namespace: str | None = None,
+        direct_member: bool = False,
     ) -> tuple[list[models.Project], int]:
         """Get all projects from the database."""
-        project_ids = await self.authz.resource_ids_for_user_membership(user, ResourceType.project)
+        project_ids = []
+        if direct_member:
+            project_ids = await self.authz.resources_with_direct_membership(user, ResourceType.project)
+        else:
+            project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
 
         async with self.session_maker() as session:
             stmt = select(schemas.ProjectORM)

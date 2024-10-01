@@ -358,17 +358,15 @@ class Authz:
                 ids.append(response.resource_object_id)
         return ids
 
-    async def resource_ids_for_user_membership(
+    async def resources_with_direct_membership(
         self, user: base_models.APIUser, resource_type: ResourceType
     ) -> list[str]:
-        """Return all resource IDs where the user is a member."""
-        sub = SubjectReference(
-            object=(
-                _AuthzConverter.to_object(ResourceType.user, user.id) if user.id else _AuthzConverter.anonymous_user()
-            )
-        )
-
+        """Get all the resource IDs (for a specific resource kind) that a specific user is a direct member of."""
         resource_ids: list[str] = []
+        if user.id is None:
+            return resource_ids
+
+        sub = SubjectReference(object=(_AuthzConverter.to_object(ResourceType.user, user.id)))
 
         rel_filter = RelationshipFilter(
             resource_type=resource_type.value,

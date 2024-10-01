@@ -511,6 +511,10 @@ components:
             description: A namespace, used as a filter.
             type: string
             default: ""
+          direct_member:
+            description: A flag to filter projects where the user is a direct member.
+            type: boolean
+            default: false
     PaginationRequest:
       type: object
       additionalProperties: false

@@ -91,15 +91,15 @@ async def test_group_pagination(
     res2_json = res2.json
     assert len(res1_json) == 12
     assert len(res2_json) == 3
-    assert res1_json[0]["name"] == "group0"
-    assert res1_json[-1]["name"] == "group11"
-    assert res2_json[0]["name"] == "group12"
-    assert res2_json[-1]["name"] == "group14"
+    assert res1_json[0]["name"] == "group14"
+    assert res1_json[-1]["name"] == "group3"
+    assert res2_json[0]["name"] == "group2"
+    assert res2_json[-1]["name"] == "group0"
     _, res3 = await sanic_client.get("/api/data/groups", headers=admin_headers, params={"per_page": 20, "page": 1})
     res3_json = res3.json
     assert len(res3_json) == 15
-    assert res3_json[0]["name"] == "group0"
-    assert res3_json[-1]["name"] == "group14"
+    assert res3_json[0]["name"] == "group14"
+    assert res3_json[-1]["name"] == "group0"
 
 
 @pytest.mark.asyncio
