@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Any, cast
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse, urlunparse
 
 from kubernetes.utils import parse_quantity
 from pydantic import BaseModel, Field, field_validator
@@ -170,12 +170,8 @@ class AmaltheaSessionV1Alpha1(_ASModel):
                 "because it is missing the spec.session.resources field"
             )
         url = "None"
-        if self.status.url is None or self.status.url == "" or self.status.url.lower() == "None":
-            if self.spec is not None and self.spec.ingress is not None:
-                scheme = "https" if self.spec.ingress.tlsSecret is not None else "http"
-                url = urljoin(f"{scheme}://{self.spec.ingress.host}", self.spec.session.urlPath)
-        else:
-            url = self.status.url
+        if self.base_url is not None:
+            url = self.base_url
         ready_containers = 0
         total_containers = 0
         if self.status.initContainerCounts is not None:
@@ -215,3 +211,19 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             launcher_id=str(self.launcher_id),
             resource_class_id=self.resource_class_id,
         )
+
+    @property
+    def base_url(self) -> str | None:
+        """Get the URL of the session, excluding the default URL from the session launcher."""
+        if self.status.url and len(self.status.url) > 0:
+            return self.status.url
+        if self.spec is None or self.spec.ingress is None:
+            return None
+        scheme = "https" if self.spec and self.spec.ingress and self.spec.ingress.tlsSecret else "http"
+        host = self.spec.ingress.host
+        path = self.spec.session.urlPath if self.spec.session.urlPath else "/"
+        params = None
+        query = None
+        fragment = None
+        url = urlunparse((scheme, host, path, params, query, fragment))
+        return url

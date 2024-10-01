@@ -23,7 +23,7 @@ async def test_unique_migration_head() -> None:
     heads = script.get_revisions(script.get_heads())
     heads = [h.revision for h in heads]
 
-    assert len(heads) == 1
+    assert len(heads) == 1, f"Found more than one revision heads {heads}"
 
 
 @pytest.mark.asyncio
