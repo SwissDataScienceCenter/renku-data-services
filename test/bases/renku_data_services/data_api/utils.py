@@ -1,14 +1,12 @@
 import json
-from base64 import b64decode
-from typing import Any
-
-from dataclasses_avroschema import AvroModel
 import os
 import subprocess
+from base64 import b64decode
 from contextlib import AbstractContextManager
 from typing import Any
 
 import yaml
+from dataclasses_avroschema import AvroModel
 from kubernetes import client as k8s_client
 from kubernetes import config as k8s_config
 from kubernetes import watch
@@ -81,6 +79,8 @@ def dataclass_to_str(object) -> str:
     """Convert a dataclass to str to make them hashable."""
     data = object.asdict()
     return json.dumps(data, sort_keys=True, default=str)
+
+
 class K3DCluster(AbstractContextManager):
     """Context manager that will create and tear down a k3s cluster"""
 
