@@ -2,10 +2,10 @@
 
 from typing import Any
 
-from renku_data_services.notebooks.config import _NotebooksConfig
+from renku_data_services.notebooks.config import NotebooksConfig
 
 
-def main(config: _NotebooksConfig) -> list[dict[str, Any]]:
+def main(config: NotebooksConfig) -> list[dict[str, Any]]:
     """Adds the required configuration to the session statefulset for SSH access."""
     if not config.sessions.ssh.enabled:
         return []
