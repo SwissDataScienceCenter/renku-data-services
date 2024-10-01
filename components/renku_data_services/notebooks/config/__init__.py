@@ -94,7 +94,9 @@ class GitProviderHelperProto(Protocol):
 
 
 @dataclass
-class _NotebooksConfig:
+class NotebooksConfig:
+    """The notebooks configuration."""
+
     server_options: _ServerOptionsConfig
     sessions: _SessionConfig
     amalthea: _AmaltheaConfig
@@ -122,6 +124,7 @@ class _NotebooksConfig:
 
     @classmethod
     def from_env(cls, db_config: DBConfig) -> Self:
+        """Create a configuration object from environment variables."""
         dummy_stores = _parse_str_as_bool(os.environ.get("DUMMY_STORES", False))
         sessions_config: _SessionConfig
         git_config: _GitConfig

@@ -52,7 +52,7 @@ from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.namespace.db import GroupRepository
-from renku_data_services.notebooks.config import _NotebooksConfig
+from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.platform.db import PlatformRepository
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
@@ -145,7 +145,7 @@ class Config:
     kc_api: IKeycloakAPI
     message_queue: IMessageQueue
     gitlab_url: str | None
-    nb_config: _NotebooksConfig
+    nb_config: NotebooksConfig
 
     secrets_service_public_key: rsa.RSAPublicKey
     """The public key of the secrets service, used to encrypt user secrets that only it can decrypt."""
@@ -497,7 +497,7 @@ class Config:
         sentry = SentryConfig.from_env(prefix)
         trusted_proxies = TrustedProxiesConfig.from_env(prefix)
         message_queue = RedisQueue(redis)
-        nb_config = _NotebooksConfig.from_env(db)
+        nb_config = NotebooksConfig.from_env(db)
 
         return cls(
             version=version,
