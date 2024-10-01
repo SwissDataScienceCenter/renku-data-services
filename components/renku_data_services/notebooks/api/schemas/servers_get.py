@@ -11,7 +11,7 @@ from marshmallow import EXCLUDE, Schema, fields, pre_load, validate
 from renku_data_services.notebooks.api.classes.server_manifest import UserServerManifest
 from renku_data_services.notebooks.api.schemas.cloud_storage import LaunchNotebookResponseCloudStorage
 from renku_data_services.notebooks.api.schemas.custom_fields import ByteSizeField, CpuField, GpuField, LowercaseString
-from renku_data_services.notebooks.config import _NotebooksConfig
+from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.notebooks.config.static import _ServersGetEndpointAnnotations
 
 
@@ -134,7 +134,7 @@ class LaunchNotebookResponseWithoutStorage(Schema):
     image = fields.Str()
 
     @staticmethod
-    def format_user_pod_data(server: UserServerManifest, config: _NotebooksConfig) -> dict[str, Any]:
+    def format_user_pod_data(server: UserServerManifest, config: NotebooksConfig) -> dict[str, Any]:
         """Convert and format a server manifest object into what the API requires."""
 
         def get_failed_container_exit_code(container_status: dict[str, Any]) -> int | str:
