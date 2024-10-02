@@ -236,7 +236,7 @@ class DataConnectorRepository:
                 select(ns_schemas.NamespaceORM).where(ns_schemas.NamespaceORM.slug == patch.namespace.lower())
             )
             if not ns:
-                raise errors.MissingResourceError(message=f"Rhe namespace with slug {patch.namespace} does not exist.")
+                raise errors.MissingResourceError(message=f"The namespace with slug {patch.namespace} does not exist.")
             if not ns.group_id and not ns.user_id:
                 raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
             resource_type, resource_id = (
@@ -437,16 +437,6 @@ class DataConnectorProjectLinkRepository:
         ).one_or_none()
         if link_orm is None:
             return None
-
-        authorized_from = await self.authz.has_permission(
-            user, ResourceType.data_connector, data_connector_id, Scope.DELETE
-        )
-        authorized_to = await self.authz.has_permission(user, ResourceType.project, link_orm.project_id, Scope.WRITE)
-        authorized = authorized_from or authorized_to
-        if not authorized:
-            raise errors.MissingResourceError(
-                message=f"Data connector to project link '{link_id}' does not exist or you do not have access to it."
-            )
 
         link = link_orm.dump()
         await session.delete(link_orm)
