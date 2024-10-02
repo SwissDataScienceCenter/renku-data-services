@@ -25,7 +25,7 @@ from renku_data_services.notebooks.api.classes.k8s_client import JupyterServerV1
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.api.schemas.secrets import K8sUserSecrets
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
-from renku_data_services.notebooks.config import _NotebooksConfig
+from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.notebooks.crs import JupyterServerV1Alpha1
 from renku_data_services.notebooks.errors.programming import DuplicateEnvironmentVariableError
 from renku_data_services.notebooks.errors.user import MissingResourceError
@@ -46,7 +46,7 @@ class UserServer(ABC):
         k8s_client: K8sClient,
         workspace_mount_path: PurePosixPath,
         work_dir: PurePosixPath,
-        config: _NotebooksConfig,
+        config: NotebooksConfig,
         internal_gitlab_user: APIUser,
         using_default_image: bool = False,
         is_image_private: bool = False,
@@ -380,7 +380,7 @@ class Renku1UserServer(UserServer):
         k8s_client: K8sClient,
         workspace_mount_path: PurePosixPath,
         work_dir: PurePosixPath,
-        config: _NotebooksConfig,
+        config: NotebooksConfig,
         gitlab_project: Project | None,
         internal_gitlab_user: APIUser,
         using_default_image: bool = False,
@@ -506,7 +506,7 @@ class Renku2UserServer(UserServer):
         workspace_mount_path: PurePosixPath,
         work_dir: PurePosixPath,
         repositories: list[Repository],
-        config: _NotebooksConfig,
+        config: NotebooksConfig,
         internal_gitlab_user: APIUser,
         using_default_image: bool = False,
         is_image_private: bool = False,

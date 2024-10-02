@@ -49,7 +49,7 @@ from renku_data_services.notebooks.api.schemas.servers_get import (
     ServersGetResponse,
 )
 from renku_data_services.notebooks.api.schemas.servers_patch import PatchServerStatusEnum
-from renku_data_services.notebooks.config import _NotebooksConfig
+from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.notebooks.crs import (
     AmaltheaSessionSpec,
     AmaltheaSessionV1Alpha1,
@@ -93,7 +93,7 @@ class NotebooksBP(CustomBlueprint):
     """Handlers for manipulating notebooks."""
 
     authenticator: Authenticator
-    nb_config: _NotebooksConfig
+    nb_config: NotebooksConfig
     git_repo: GitRepositoriesRepository
     internal_gitlab_authenticator: base_models.Authenticator
     rp_repo: ResourcePoolRepository
@@ -273,7 +273,7 @@ class NotebooksBP(CustomBlueprint):
 
     @staticmethod
     async def launch_notebook_helper(
-        nb_config: _NotebooksConfig,
+        nb_config: NotebooksConfig,
         server_name: str,
         server_class: type[UserServer],
         user: AnonymousAPIUser | AuthenticatedAPIUser,
@@ -781,7 +781,7 @@ class NotebooksNewBP(CustomBlueprint):
 
     authenticator: base_models.Authenticator
     internal_gitlab_authenticator: base_models.Authenticator
-    nb_config: _NotebooksConfig
+    nb_config: NotebooksConfig
     project_repo: ProjectRepository
     session_repo: SessionRepository
     rp_repo: ResourcePoolRepository
@@ -812,13 +812,11 @@ class NotebooksNewBP(CustomBlueprint):
             image = environment.container_image
             default_resource_class = await self.rp_repo.get_default_resource_class()
             if default_resource_class.id is None:
-                raise errors.ProgrammingError(message="The default reosurce class has to have an ID", quiet=True)
+                raise errors.ProgrammingError(message="The default resource class has to have an ID", quiet=True)
             resource_class_id = body.resource_class_id or default_resource_class.id
-            parsed_server_options = await self.nb_config.crc_validator.validate_class_storage(
-                user, resource_class_id, body.disk_storage
-            )
+            await self.nb_config.crc_validator.validate_class_storage(user, resource_class_id, body.disk_storage)
             work_dir = environment.working_directory
-            user_secrets: K8sUserSecrets | None = None
+            # user_secrets: K8sUserSecrets | None = None
             # if body.user_secrets:
             #     user_secrets = K8sUserSecrets(
             #         name=server_name,
@@ -869,33 +867,13 @@ class NotebooksNewBP(CustomBlueprint):
                         quiet=True,
                     )
                 cloud_storage[csr_id] = csr
-            # repositories = [Repository(i.url, branch=i.branch, commit_sha=i.commit_sha) for i in body.repositories]
             repositories = [Repository(url=i) for i in project.repositories]
             secrets_to_create: list[V1Secret] = []
-            server = Renku2UserServer(
-                user=user,
-                image=image,
-                project_id=str(launcher.project_id),
-                launcher_id=body.launcher_id,
-                server_name=server_name,
-                server_options=parsed_server_options,
-                environment_variables={},
-                user_secrets=user_secrets,
-                cloudstorage=[i for i in cloud_storage.values()],
-                k8s_client=self.nb_config.k8s_v2_client,
-                workspace_mount_path=work_dir,
-                work_dir=work_dir,
-                repositories=repositories,
-                config=self.nb_config,
-                using_default_image=self.nb_config.sessions.default_image == image,
-                is_image_private=False,
-                internal_gitlab_user=internal_gitlab_user,
-            )
-            # Generate the cloud storage secrets
+            # Generate the cloud starge secrets
             data_sources: list[DataSource] = []
             for ics, cs in enumerate(cloud_storage.values()):
                 secret_name = f"{server_name}-ds-{ics}"
-                secrets_to_create.append(cs.secret(secret_name, server.k8s_client.preferred_namespace))
+                secrets_to_create.append(cs.secret(secret_name, self.nb_config.k8s_client.preferred_namespace))
                 data_sources.append(
                     DataSource(mountPath=cs.mount_folder, secretRef=SecretRefWhole(name=secret_name, adopt=True))
                 )
@@ -914,17 +892,28 @@ class NotebooksNewBP(CustomBlueprint):
                         ),
                     )
                 )
-            git_clone = await init_containers.git_clone_container_v2(server)
+            git_providers = await self.nb_config.git_provider_helper.get_providers(user=user)
+            git_clone = await init_containers.git_clone_container_v2(
+                user=user,
+                config=self.nb_config,
+                repositories=repositories,
+                git_providers=git_providers,
+                workspace_mount_path=launcher.environment.mount_directory,
+                work_dir=launcher.environment.working_directory,
+            )
             if git_clone is not None:
                 session_init_containers.append(InitContainer.model_validate(git_clone))
             extra_containers: list[ExtraContainer] = []
-            git_proxy_container = await git_proxy.main_container(server)
+            git_proxy_container = await git_proxy.main_container(
+                user=user, config=self.nb_config, repositories=repositories, git_providers=git_providers
+            )
             if git_proxy_container is not None:
                 extra_containers.append(
                     ExtraContainer.model_validate(self.nb_config.k8s_v2_client.sanitize(git_proxy_container))
                 )
 
-            parsed_server_url = urlparse(server.server_url)
+            base_server_url = self.nb_config.sessions.ingress.base_url(server_name)
+            base_server_path = self.nb_config.sessions.ingress.base_path(server_name)
             annotations: dict[str, str] = {
                 "renku.io/project_id": str(launcher.project_id),
                 "renku.io/launcher_id": body.launcher_id,
@@ -937,7 +926,7 @@ class NotebooksNewBP(CustomBlueprint):
                     hibernated=False,
                     session=Session(
                         image=image,
-                        urlPath=parsed_server_url.path,
+                        urlPath=base_server_path,
                         port=environment.port,
                         storage=Storage(
                             className=self.nb_config.sessions.storage.pvs_storage_class,
@@ -953,8 +942,8 @@ class NotebooksNewBP(CustomBlueprint):
                         args=environment.args,
                         shmSize="1G",
                         env=[
-                            SessionEnvItem(name="RENKU_BASE_URL_PATH", value=parsed_server_url.path),
-                            SessionEnvItem(name="RENKU_BASE_URL", value=server.server_url),
+                            SessionEnvItem(name="RENKU_BASE_URL_PATH", value=base_server_path),
+                            SessionEnvItem(name="RENKU_BASE_URL", value=base_server_url),
                         ],
                     ),
                     ingress=Ingress(
@@ -990,7 +979,7 @@ class NotebooksNewBP(CustomBlueprint):
                     dataSources=data_sources,
                 ),
             )
-            parsed_proxy_url = urlparse(urljoin(server.server_url + "/", "oauth2"))
+            parsed_proxy_url = urlparse(urljoin(base_server_url + "/", "oauth2"))
             secret_data = {}
             if isinstance(user, AuthenticatedAPIUser):
                 secret_data["auth"] = dumps(
@@ -1000,8 +989,8 @@ class NotebooksNewBP(CustomBlueprint):
                         "oidc_issuer_url": self.nb_config.sessions.oidc.issuer_url,
                         "session_cookie_minimal": True,
                         "skip_provider_button": True,
-                        "redirect_url": urljoin(server.server_url + "/", "oauth2/callback"),
-                        "cookie_path": parsed_server_url.path,
+                        "redirect_url": urljoin(base_server_url + "/", "oauth2/callback"),
+                        "cookie_path": base_server_path,
                         "proxy_prefix": parsed_proxy_url.path,
                         "authenticated_emails_file": "/authorized_emails/authorized_emails",
                         "client_secret": self.nb_config.sessions.oidc.client_secret,
