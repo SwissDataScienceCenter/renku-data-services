@@ -65,8 +65,7 @@ class DataConnectorRepository:
         data_connector_id: ULID,
     ) -> models.DataConnector:
         """Get one data connector from the database."""
-        not_found_msg = f"Data connector with id '{
-            data_connector_id}' does not exist or you do not have access to it."
+        not_found_msg = f"Data connector with id '{data_connector_id}' does not exist or you do not have access to it."
 
         authorized = await self.authz.has_permission(user, ResourceType.data_connector, data_connector_id, Scope.READ)
         if not authorized:
@@ -85,8 +84,9 @@ class DataConnectorRepository:
         self, user: base_models.APIUser, namespace: str, slug: str
     ) -> models.DataConnector:
         """Get one data connector from the database by slug."""
-        not_found_msg = f"Data connector with identifier '{
-                namespace}/{slug}' does not exist or you do not have access to it."
+        not_found_msg = (
+            f"Data connector with identifier '{namespace}/{slug}' does not exist or you do not have access to it."
+        )
 
         async with self.session_maker() as session:
             stmt = select(schemas.DataConnectorORM)
@@ -125,8 +125,7 @@ class DataConnectorRepository:
         )
         if not ns:
             raise errors.MissingResourceError(
-                message=f"The data connector cannot be created because the namespace {
-                    data_connector.namespace} does not exist."
+                message=f"The data connector cannot be created because the namespace {data_connector.namespace} does not exist."  # noqa E501
             )
         if not ns.group_id and not ns.user_id:
             raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
@@ -220,10 +219,7 @@ class DataConnectorRepository:
 
         current_etag = data_connector.dump().etag
         if current_etag != etag:
-            raise errors.ConflictError(
-                message=f"Current ETag is {
-                                       current_etag}, not {etag}."
-            )
+            raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
 
         # TODO: handle slug update
         if patch.name is not None:
@@ -240,10 +236,7 @@ class DataConnectorRepository:
                 select(ns_schemas.NamespaceORM).where(ns_schemas.NamespaceORM.slug == patch.namespace.lower())
             )
             if not ns:
-                raise errors.MissingResourceError(
-                    message=f"Rhe namespace with slug {
-                                                  patch.namespace} does not exist."
-                )
+                raise errors.MissingResourceError(message=f"Rhe namespace with slug {patch.namespace} does not exist.")
             if not ns.group_id and not ns.user_id:
                 raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
             resource_type, resource_id = (
@@ -326,8 +319,7 @@ class DataConnectorProjectLinkRepository:
         authorized = await self.authz.has_permission(user, ResourceType.data_connector, data_connector_id, Scope.READ)
         if not authorized:
             raise errors.MissingResourceError(
-                message=f"Data connector with id '{
-                    data_connector_id}' does not exist or you do not have access to it."
+                message=f"Data connector with id '{data_connector_id}' does not exist or you do not have access to it."
             )
 
         project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
@@ -349,8 +341,7 @@ class DataConnectorProjectLinkRepository:
         authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
         if not authorized:
             raise errors.MissingResourceError(
-                message=f"Project with id '{
-                    project_id}' does not exist or you do not have access to it."
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
 
         data_connector_ids = await self.authz.resources_with_permission(
