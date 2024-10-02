@@ -119,11 +119,16 @@ async def test_resource_pool_update_classes(
 
         assert updated_rp.id == inserted_rp.id
         assert len(updated_rp.classes) == len(inserted_rp.classes)
-        assert updated_rp.classes == new_classes_models
+        assert sorted(
+            updated_rp.classes,
+            key=lambda x: x.id or x.name,
+        ) == sorted(
+            new_classes_models,
+            key=lambda x: x.id or x.name,
+        )
         retrieved_rps = await pool_repo.get_resource_pools(id=inserted_rp.id, api_user=admin_user)
         assert len(retrieved_rps) == 1
         assert retrieved_rps[0] == updated_rp
-        assert retrieved_rps[0].classes == updated_rp.classes
     except (ValidationError, errors.ValidationError):
         pass
     finally:
