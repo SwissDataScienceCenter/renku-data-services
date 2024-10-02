@@ -212,18 +212,17 @@ class ResourcePool:
         if not isinstance(other, ResourcePool):
             return False
 
-        if self.id != other.id:
-            return False
-        if self.name != other.name:
-            return False
-        if self.default != other.default or self.public != other.public:
-            return False
-        if self.idle_threshold != other.idle_threshold or self.hibernation_threshold != other.hibernation_threshold:
-            return False
-
-        this_classes = sorted(self.classes, key=lambda x: (x.default, x.cpu, x.memory, x.default_storage, x.name))
-        other_classes = sorted(other.classes, key=lambda x: (x.default, x.cpu, x.memory, x.default_storage, x.name))
-        return this_classes == other_classes
+        return (
+            self.id == other.id
+            and self.name == other.name
+            and self.default == other.default
+            and self.public == other.public
+            and self.idle_threshold == other.idle_threshold
+            and self.hibernation_threshold == other.hibernation_threshold
+            and self.quota == other.quota
+            and sorted(self.classes, key=lambda x: x.id or x.name)
+            == sorted(other.classes, key=lambda x: x.id or x.name)
+        )
 
     def set_quota(self, val: Quota) -> "ResourcePool":
         """Set the quota for a resource pool."""
