@@ -38,6 +38,8 @@ components/renku_data_services/notebooks/apispec.py: components/renku_data_servi
 	poetry run datamodel-codegen --input components/renku_data_services/notebooks/api.spec.yaml --output components/renku_data_services/notebooks/apispec.py --base-class renku_data_services.notebooks.apispec_base.BaseAPISpec $(codegen_params)
 components/renku_data_services/platform/apispec.py: components/renku_data_services/platform/api.spec.yaml
 	poetry run datamodel-codegen --input components/renku_data_services/platform/api.spec.yaml --output components/renku_data_services/platform/apispec.py --base-class renku_data_services.platform.apispec_base.BaseAPISpec $(codegen_params)
+components/renku_data_services/data_connectors/apispec.py: components/renku_data_services/data_connectors/api.spec.yaml
+	poetry run datamodel-codegen --input components/renku_data_services/data_connectors/api.spec.yaml --output components/renku_data_services/data_connectors/apispec.py --base-class renku_data_services.data_connectors.apispec_base.BaseAPISpec $(codegen_params)
 
 ##@ Apispec
 
@@ -51,7 +53,8 @@ components/renku_data_services/secrets/apispec.py \
 components/renku_data_services/connected_services/apispec.py \
 components/renku_data_services/repositories/apispec.py \
 components/renku_data_services/notebooks/apispec.py \
-components/renku_data_services/platform/apispec.py  ## Generate pydantic classes from apispec yaml files
+components/renku_data_services/platform/apispec.py \
+components/renku_data_services/data_connectors/apispec.py  ## Generate pydantic classes from apispec yaml files
 	@echo "generated classes based on ApiSpec"
 
 ##@ Avro schemas
