@@ -44,7 +44,11 @@ from renku_data_services.data_api.server_options import (
     ServerOptionsDefaults,
     generate_default_resource_pool,
 )
-from renku_data_services.data_connectors.db import DataConnectorProjectLinkRepository, DataConnectorRepository
+from renku_data_services.data_connectors.db import (
+    DataConnectorProjectLinkRepository,
+    DataConnectorRepository,
+    DataConnectorSecretRepository,
+)
 from renku_data_services.db_config import DBConfig
 from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
@@ -180,6 +184,7 @@ class Config:
     _data_connector_to_project_link_repo: DataConnectorProjectLinkRepository | None = field(
         default=None, repr=False, init=False
     )
+    _data_connector_secret_repo: DataConnectorSecretRepository | None = field(default=None, repr=False, init=False)
 
     def __post_init__(self) -> None:
         spec_file = Path(renku_data_services.crc.__file__).resolve().parent / "api.spec.yaml"
@@ -416,8 +421,6 @@ class Config:
             self._data_connector_repo = DataConnectorRepository(
                 session_maker=self.db.async_session_maker,
                 authz=self.authz,
-                user_repo=self.kc_user_repo,
-                secret_service_public_key=self.secrets_service_public_key,
             )
         return self._data_connector_repo
 
@@ -429,6 +432,18 @@ class Config:
                 session_maker=self.db.async_session_maker, authz=self.authz
             )
         return self._data_connector_to_project_link_repo
+
+    @property
+    def data_connector_secret_repo(self) -> DataConnectorSecretRepository:
+        """The DB adapter for data connector secrets."""
+        if not self._data_connector_secret_repo:
+            self._data_connector_secret_repo = DataConnectorSecretRepository(
+                session_maker=self.db.async_session_maker,
+                data_connector_repo=self.data_connector_repo,
+                user_repo=self.kc_user_repo,
+                secret_service_public_key=self.secrets_service_public_key,
+            )
+        return self._data_connector_secret_repo
 
     @classmethod
     def from_env(cls, prefix: str = "") -> "Config":
