@@ -561,12 +561,6 @@ class DataConnectorSecretRepository:
                 .where(schemas.DataConnectorSecretORM.data_connector_id == data_connector_id)
             )
             await session.execute(stmt)
-            stmt = (
-                delete(schemas.DataConnectorSecretORM)
-                .where(schemas.DataConnectorSecretORM.user_id == user.id)
-                .where(schemas.DataConnectorSecretORM.data_connector_id == data_connector_id)
-            )
-            await session.execute(stmt)
 
 
 _T = TypeVar("_T")
