@@ -505,7 +505,7 @@ components:
       type: object
       properties:
         name:
-          $ref: "#/components/schemas/DataConnectorName"
+          $ref: "#/components/schemas/DataConnectorSecretFieldName"
         secret_id:
           $ref: "#/components/schemas/Ulid"
       required:
@@ -520,12 +520,18 @@ components:
       description: Information about a credential to save for a data connector
       properties:
         name:
-          $ref: "#/components/schemas/DataConnectorName"
+          $ref: "#/components/schemas/DataConnectorSecretFieldName"
         value:
           $ref: "#/components/schemas/SecretValueNullable"
       required:
         - name
         - value
+    DataConnectorSecretFieldName:
+      description: Name of the credential field
+      type: string
+      minLength: 1
+      maxLength: 99
+      example: "secret_key"
     SecretValueNullable:
       description: Secret value that can be any text
       type: string
