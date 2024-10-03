@@ -9,17 +9,23 @@ servers:
   - url: /api/data
   - url: /ui-server/api/data
 paths:
-  /search/reprovision:
+  /message_queue/reprovision:
     post:
       summary: Start a new reprovisioning
       description: Only a single reprovisioning is active at any time
       responses:
         "201":
           description: The reprovisioning is/will be started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reprovisioning"
+        "409":
+          description: A reprovisioning is already started
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - search
+        - message_queue
     get:
       summary: Return status of reprovisioning
       responses:
@@ -38,7 +44,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - search
+        - message_queue
     delete:
       summary: Stop an active reprovisioning
       responses:
@@ -47,28 +53,37 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - search
+        - message_queue
 
 components:
   schemas:
-    ReprovisioningStatus:
-      description: Status of a reprovisioning
+    Reprovisioning:
+      description: A reprovisioning
       type: object
       properties:
-        active:
-          type: boolean
-          description: Whether a reprovisioning is in progress or not
+        id:
+          $ref: "#/components/schemas/Ulid"
         start_date:
-          description: The date and time the resource was created (in UTC and ISO-8601 format)
+          description: The date and time the reprovisioning was started (in UTC and ISO-8601 format)
           type: string
           format: date-time
           example: "2023-11-01T17:32:28Z"
       required:
-        - active
+        - id
+        - start_date
       example:
-        - active: true
+        - id: 01BX5ZZK2KAC4AV9WEV3EMM0S0
           start_date: "2023-11-01T17:32:28Z"
-        - active: false
+    ReprovisioningStatus:
+      description: Status of a reprovisioning
+      allOf:
+      - $ref: "#/components/schemas/Reprovisioning"
+    Ulid:
+      description: ULID identifier
+      type: string
+      minLength: 26
+      maxLength: 26
+      pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$" # This is case-insensitive
     ErrorResponse:
       type: object
       properties:

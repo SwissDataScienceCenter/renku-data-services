@@ -78,7 +78,7 @@ class EventRepository:
             stmt = delete(schemas.EventORM).where(schemas.EventORM.id == id)
             await session.execute(stmt)
 
-    async def clear(self) -> None:
+    async def delete_all_events(self) -> None:
         """Delete all events. This is only used when testing reprovisioning."""
         async with self.session_maker() as session, session.begin():
             await session.execute(delete(schemas.EventORM))

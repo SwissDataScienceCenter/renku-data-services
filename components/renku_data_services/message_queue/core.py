@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 
+from sanic.log import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.authz.authz import Authz, ResourceType
@@ -31,39 +32,55 @@ async def reprovision(
     project_repo: ProjectRepository,
     authz: Authz,
 ) -> None:
-    """Create and send various data service events required for reprovisioning the search index."""
-    async with session_maker() as session, session.begin():
-        start_event = make_event(
-            message_type="reprovisioning.started", payload=v2.ReprovisioningStarted(id=str(reprovisioning.id))
-        )
-        await event_repo.store_event(session, start_event)
+    """Create and send various data service events required for reprovisioning the message queue."""
+    logger.info(f"Starting reprovisioning with ID {reprovisioning.id}")
 
-        all_users = await user_repo.get_users(requested_by=requested_by)
-        for user in all_users:
-            user_event = EventConverter.to_events(user, event_type=v2.UserAdded)
-            await event_repo.store_event(session, user_event[0])
+    try:
+        async with session_maker() as session, session.begin():
+            start_event = make_event(
+                message_type="reprovisioning.started", payload=v2.ReprovisioningStarted(id=str(reprovisioning.id))
+            )
+            await event_repo.store_event(session, start_event)
 
-        all_groups = await group_repo.get_all_groups(requested_by=requested_by)
-        for group in all_groups:
-            group_event = EventConverter.to_events(group, event_type=v2.GroupAdded)
-            await event_repo.store_event(session, group_event[0])
+            logger.info("Reprovisioning users")
+            all_users = await user_repo.get_users(requested_by=requested_by)
+            for user in all_users:
+                user_event = EventConverter.to_events(user, event_type=v2.UserAdded)
+                await event_repo.store_event(session, user_event[0])
 
-        all_groups_members = await authz.get_all_members(ResourceType.group)
-        for group_member in all_groups_members:
-            group_member_event = make_group_member_added_event(member=group_member)
-            await event_repo.store_event(session, group_member_event)
+            logger.info("Reprovisioning groups")
+            all_groups = group_repo.get_all_groups(requested_by=requested_by)
+            async for group in all_groups:
+                group_event = EventConverter.to_events(group, event_type=v2.GroupAdded)
+                await event_repo.store_event(session, group_event[0])
 
-        all_projects = await project_repo.get_all_projects(requested_by=requested_by)
-        for project in all_projects:
-            project_event = EventConverter.to_events(project, event_type=v2.ProjectCreated)
-            await event_repo.store_event(session, project_event[0])
+            logger.info("Reprovisioning group members")
+            all_groups_members = authz.get_all_members(ResourceType.group)
+            async for group_member in all_groups_members:
+                group_member_event = make_group_member_added_event(member=group_member)
+                await event_repo.store_event(session, group_member_event)
 
-        all_projects_members = await authz.get_all_members(ResourceType.project)
-        for project_member in all_projects_members:
-            project_member_event = make_project_member_added_event(member=project_member)
-            await event_repo.store_event(session, project_member_event)
+            logger.info("Reprovisioning projects")
+            all_projects = project_repo.get_all_projects(requested_by=requested_by)
+            async for project in all_projects:
+                project_event = EventConverter.to_events(project, event_type=v2.ProjectCreated)
+                await event_repo.store_event(session, project_event[0])
 
-        start_event = make_event(message_type="reprovisioning.finished", payload=v2.ReprovisioningFinished(id="42"))
-        await event_repo.store_event(session, start_event)
+            logger.info("Reprovisioning project members")
+            all_projects_members = authz.get_all_members(ResourceType.project)
+            async for project_member in all_projects_members:
+                project_member_event = make_project_member_added_event(member=project_member)
+                await event_repo.store_event(session, project_member_event)
 
-    await reprovisioning_repo.stop()
+            finish_event = make_event(
+                message_type="reprovisioning.finished", payload=v2.ReprovisioningFinished(id=str(reprovisioning.id))
+            )
+            await event_repo.store_event(session, finish_event)
+
+            logger.info(f"Trying to commit reprovisioning with ID {reprovisioning.id}")
+    except Exception as e:
+        logger.exception(f"An error occurred during reprovisioning with ID {reprovisioning.id}: {e}")
+    else:
+        logger.info(f"Reprovisioning with ID {reprovisioning.id} is successfully finished")
+    finally:
+        await reprovisioning_repo.stop()

@@ -36,7 +36,7 @@ class SearchBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        async def _post(request: Request, user: base_models.APIUser) -> HTTPResponse:
+        async def _post(request: Request, user: base_models.APIUser) -> HTTPResponse | JSONResponse:
             reprovisioning = await self.reprovisioning_repo.start()
 
             request.app.add_task(
@@ -54,19 +54,21 @@ class SearchBP(CustomBlueprint):
                 name=f"reprovisioning-{reprovisioning.id}",
             )
 
-            return HTTPResponse(status=201)
+            return json({"id": str(reprovisioning.id), "start_date": reprovisioning.start_date.isoformat()}, 201)
 
-        return "/search/reprovision", ["POST"], _post
+        return "/message_queue/reprovision", ["POST"], _post
 
     def get_status(self) -> BlueprintFactoryResponse:
         """Get reprovisioning status."""
 
         @authenticate(self.authenticator)
         async def _get_status(_: Request, __: base_models.APIUser) -> JSONResponse | HTTPResponse:
-            active_reprovisioning = await self.reprovisioning_repo.get_active_reprovisioning()
-            return json({"active": bool(active_reprovisioning)}, 200)
+            reprovisioning = await self.reprovisioning_repo.get_active_reprovisioning()
+            if not reprovisioning:
+                return HTTPResponse(status=404)
+            return json({"id": str(reprovisioning.id), "start_date": reprovisioning.start_date.isoformat()})
 
-        return "/search/reprovision", ["GET"], _get_status
+        return "/message_queue/reprovision", ["GET"], _get_status
 
     def delete(self) -> BlueprintFactoryResponse:
         """Stop reprovisioning (if any)."""
@@ -77,4 +79,4 @@ class SearchBP(CustomBlueprint):
             await self.reprovisioning_repo.stop()
             return HTTPResponse(status=204)
 
-        return "/search/reprovision", ["DELETE"], _delete
+        return "/message_queue/reprovision", ["DELETE"], _delete
