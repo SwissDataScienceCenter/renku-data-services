@@ -144,6 +144,10 @@ class ResourcePoolORM(BaseORM):
         default_factory=list,
         cascade="save-update, merge, delete",
         lazy="selectin",
+        order_by=(
+            "[ResourceClassORM.gpu,ResourceClassORM.cpu,ResourceClassORM.memory,ResourceClassORM.max_storage,"
+            "ResourceClassORM.name,ResourceClassORM.id]"
+        ),
     )
     idle_threshold: Mapped[Optional[int]] = mapped_column(default=None)
     hibernation_threshold: Mapped[Optional[int]] = mapped_column(default=None)

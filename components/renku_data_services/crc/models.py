@@ -207,9 +207,21 @@ class ResourcePool:
         if len(default_classes) != 1:
             raise ValidationError(message="One default class is required in each resource pool.")
 
-        # We need to sort classes to make '__eq__' reliable
-        object.__setattr__(
-            self, "classes", sorted(self.classes, key=lambda x: (x.default, x.cpu, x.memory, x.default_storage, x.name))
+    def __eq__(self, other: Any) -> bool:
+        """Check two resource pools for equality."""
+        if not isinstance(other, ResourcePool):
+            return False
+
+        return (
+            self.id == other.id
+            and self.name == other.name
+            and self.default == other.default
+            and self.public == other.public
+            and self.idle_threshold == other.idle_threshold
+            and self.hibernation_threshold == other.hibernation_threshold
+            and self.quota == other.quota
+            and sorted(self.classes, key=lambda x: x.id or x.name)
+            == sorted(other.classes, key=lambda x: x.id or x.name)
         )
 
     def set_quota(self, val: Quota) -> "ResourcePool":
