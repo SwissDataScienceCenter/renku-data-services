@@ -1,7 +1,7 @@
 """Projects authorization adapter."""
 
 import asyncio
-from collections.abc import AsyncIterable, Awaitable, Callable
+from collections.abc import AsyncGenerator, AsyncIterable, Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import wraps
@@ -410,6 +410,15 @@ class Authz:
                 ids.append(response.subject.subject_object_id)
         return ids
 
+    async def get_all_members(
+        self, resource_type: ResourceType, *, zed_token: ZedToken | None = None
+    ) -> AsyncGenerator[Member, None]:
+        """Get all users that are members of a specific resource."""
+        members = self._get_members_helper(resource_type, resource_id=None, zed_token=zed_token)
+        async for member in members:
+            if member.user_id and member.user_id != "*":
+                yield member
+
     @_is_allowed(Scope.READ)
     async def members(
         self,
@@ -420,41 +429,63 @@ class Authz:
         *,
         zed_token: ZedToken | None = None,
     ) -> list[Member]:
+        """Get all users that are members of a specific resource type, if role is None then all roles are retrieved."""
+        members = self._get_members_helper(resource_type, str(resource_id), role, zed_token=zed_token)
+        return [m async for m in members]
+
+    async def _get_members_helper(
+        self,
+        resource_type: ResourceType,
+        resource_id: str | None,
+        role: Role | None = None,
+        *,
+        zed_token: ZedToken | None = None,
+    ) -> AsyncGenerator[Member, None]:
         """Get all users that are members of a resource, if role is None then all roles are retrieved."""
-        resource_id_str = str(resource_id)
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
         sub_filter = SubjectFilter(subject_type=ResourceType.user.value)
-        rel_filter = RelationshipFilter(
-            resource_type=resource_type,
-            optional_resource_id=resource_id_str,
-            optional_subject_filter=sub_filter,
-        )
-        if role:
-            relation = _Relation.from_role(role)
+        if resource_id is None:
+            rel_filter = RelationshipFilter(resource_type=resource_type, optional_subject_filter=sub_filter)
+        else:
             rel_filter = RelationshipFilter(
                 resource_type=resource_type,
-                optional_resource_id=resource_id_str,
-                optional_relation=relation,
+                optional_resource_id=resource_id,
                 optional_subject_filter=sub_filter,
             )
+        if role:
+            relation = _Relation.from_role(role)
+            if resource_id is None:
+                rel_filter = RelationshipFilter(
+                    resource_type=resource_type,
+                    optional_relation=relation,
+                    optional_subject_filter=sub_filter,
+                )
+            else:
+                rel_filter = RelationshipFilter(
+                    resource_type=resource_type,
+                    optional_resource_id=resource_id,
+                    optional_relation=relation,
+                    optional_subject_filter=sub_filter,
+                )
         responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
             ReadRelationshipsRequest(
                 consistency=consistency,
                 relationship_filter=rel_filter,
             )
         )
-        members: list[Member] = []
+
         async for response in responses:
             # Skip "public_viewer" relationships
             if response.relationship.relation == _Relation.public_viewer.value:
                 continue
             member_role = _Relation(response.relationship.relation).to_role()
-            members.append(
-                Member(
-                    user_id=response.relationship.subject.object.object_id, role=member_role, resource_id=resource_id
-                )
+            member = Member(
+                user_id=response.relationship.subject.object.object_id,
+                role=member_role,
+                resource_id=response.relationship.resource.object_id,
             )
-        return members
+
+            yield member
 
     @staticmethod
     def authz_change(

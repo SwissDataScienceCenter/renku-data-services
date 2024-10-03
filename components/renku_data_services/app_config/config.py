@@ -48,7 +48,7 @@ from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.message_queue.config import RedisConfig
-from renku_data_services.message_queue.db import EventRepository
+from renku_data_services.message_queue.db import EventRepository, ReprovisioningRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.namespace.db import GroupRepository
@@ -166,6 +166,7 @@ class Config:
     _project_repo: ProjectRepository | None = field(default=None, repr=False, init=False)
     _group_repo: GroupRepository | None = field(default=None, repr=False, init=False)
     _event_repo: EventRepository | None = field(default=None, repr=False, init=False)
+    _reprovisioning_repo: ReprovisioningRepository | None = field(default=None, repr=False, init=False)
     _session_repo: SessionRepository | None = field(default=None, repr=False, init=False)
     _user_preferences_repo: UserPreferencesRepository | None = field(default=None, repr=False, init=False)
     _kc_user_repo: KcUserRepo | None = field(default=None, repr=False, init=False)
@@ -176,6 +177,7 @@ class Config:
     _platform_repo: PlatformRepository | None = field(default=None, repr=False, init=False)
 
     def __post_init__(self) -> None:
+        # NOTE: Read spec files required for Swagger
         spec_file = Path(renku_data_services.crc.__file__).resolve().parent / "api.spec.yaml"
         with open(spec_file) as f:
             crc_spec = safe_load(f)
@@ -212,6 +214,10 @@ class Config:
         with open(spec_file) as f:
             platform = safe_load(f)
 
+        spec_file = Path(renku_data_services.message_queue.__file__).resolve().parent / "api.spec.yaml"
+        with open(spec_file) as f:
+            search = safe_load(f)
+
         self.spec = merge_api_specs(
             crc_spec,
             storage_spec,
@@ -222,6 +228,7 @@ class Config:
             connected_services,
             repositories,
             platform,
+            search,
         )
 
         if self.default_resource_pool_file is not None:
@@ -286,6 +293,13 @@ class Config:
                 session_maker=self.db.async_session_maker, message_queue=self.message_queue
             )
         return self._event_repo
+
+    @property
+    def reprovisioning_repo(self) -> ReprovisioningRepository:
+        """The DB adapter for reprovisioning."""
+        if not self._reprovisioning_repo:
+            self._reprovisioning_repo = ReprovisioningRepository(session_maker=self.db.async_session_maker)
+        return self._reprovisioning_repo
 
     @property
     def project_repo(self) -> ProjectRepository:

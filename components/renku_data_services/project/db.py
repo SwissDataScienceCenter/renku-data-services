@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import functools
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any, Concatenate, ParamSpec, TypeVar
 
@@ -81,6 +81,16 @@ class ProjectRepository:
             projects_orm = results[0].all()
             total_elements = results[1] or 0
             return [p.dump() for p in projects_orm], total_elements
+
+    async def get_all_projects(self, requested_by: base_models.APIUser) -> AsyncGenerator[models.Project, None]:
+        """Get all projects from the database when reprovisioning."""
+        if not requested_by.is_admin:
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session:
+            projects = await session.stream_scalars(select(schemas.ProjectORM))
+            async for project in projects:
+                yield project.dump()
 
     async def get_project(self, user: base_models.APIUser, project_id: ULID) -> models.Project:
         """Get one project from the database."""

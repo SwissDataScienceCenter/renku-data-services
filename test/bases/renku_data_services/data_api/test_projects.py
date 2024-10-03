@@ -16,22 +16,6 @@ from test.bases.renku_data_services.data_api.utils import merge_headers
 
 
 @pytest.fixture
-def create_project(sanic_client, user_headers, admin_headers, regular_user, admin_user, bootstrap_admins):
-    async def create_project_helper(name: str, admin: bool = False, **payload) -> dict[str, Any]:
-        headers = admin_headers if admin else user_headers
-        user = admin_user if admin else regular_user
-        payload = payload.copy()
-        payload.update({"name": name, "namespace": f"{user.first_name}.{user.last_name}"})
-
-        _, response = await sanic_client.post("/api/data/projects", headers=headers, json=payload)
-
-        assert response.status_code == 201, response.text
-        return response.json
-
-    return create_project_helper
-
-
-@pytest.fixture
 def get_project(sanic_client, user_headers, admin_headers):
     async def get_project_helper(project_id: str, admin: bool = False) -> dict[str, Any]:
         headers = admin_headers if admin else user_headers
