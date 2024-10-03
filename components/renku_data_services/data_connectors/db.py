@@ -481,7 +481,7 @@ class DataConnectorSecretRepository:
             return [secret.dump() for secret in secrets]
 
     async def patch_data_connector_secrets(
-        self, user: base_models.APIUser, data_connector_id: ULID, secrets: list[models.DataConnectorSecretPatch]
+        self, user: base_models.APIUser, data_connector_id: ULID, secrets: list[models.DataConnectorSecretUpdate]
     ) -> list[models.DataConnectorSecret]:
         """Create, update or remove data connector secrets."""
         if user.id is None:
