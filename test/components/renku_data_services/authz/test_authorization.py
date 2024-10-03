@@ -76,7 +76,7 @@ async def test_adding_deleting_project(app_config: Config, bootstrap_admins, pub
     assert not await authz.has_permission(anon_user, ResourceType.project, project_id, Scope.DELETE)
     assert not await authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.WRITE)
     assert not await authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.DELETE)
-    authz_changes = await authz._remove_project(project_owner, project)
+    authz_changes = await authz._remove_entity(project_owner, project)
     await authz.client.WriteRelationships(authz_changes.apply)
     assert not await authz.has_permission(admin_user, ResourceType.project, project_id, Scope.READ)
     assert not await authz.has_permission(admin_user, ResourceType.project, project_id, Scope.WRITE)
@@ -291,7 +291,7 @@ async def test_listing_projects_with_access(app_config: Config, bootstrap_admins
         == 0
     )
     # Test project deletion
-    changes = await authz._remove_project(project_owner, private_project1)
+    changes = await authz._remove_entity(project_owner, private_project1)
     await authz.client.WriteRelationships(changes.apply)
     assert private_project_id1_str not in set(
         await authz.resources_with_permission(admin_user, project_owner.id, ResourceType.project, Scope.READ)
