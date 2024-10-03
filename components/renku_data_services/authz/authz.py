@@ -366,13 +366,9 @@ class Authz:
         if user.id is None:
             return resource_ids
 
-        sub = SubjectReference(object=(_AuthzConverter.to_object(ResourceType.user, user.id)))
-
         rel_filter = RelationshipFilter(
             resource_type=resource_type.value,
-            optional_subject_filter=SubjectFilter(
-                subject_type=ResourceType.user.value, optional_subject_id=sub.object.object_id
-            ),
+            optional_subject_filter=SubjectFilter(subject_type=ResourceType.user.value, optional_subject_id=user.id),
         )
 
         responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(

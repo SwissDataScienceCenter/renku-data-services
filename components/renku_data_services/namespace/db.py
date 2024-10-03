@@ -85,9 +85,7 @@ class GroupRepository:
             if direct_member:
                 stmt = stmt.where(schemas.GroupORM.id.in_(group_ids))
             stmt = stmt.limit(pagination.per_page).offset(pagination.offset)
-            stmt = stmt.order_by(
-                schemas.GroupORM.creation_date.desc(), schemas.GroupORM.id.desc(), schemas.GroupORM.name
-            )
+            stmt = stmt.order_by(schemas.GroupORM.id.desc())
             result = await session.execute(stmt)
             groups_orm = result.scalars().all()
 

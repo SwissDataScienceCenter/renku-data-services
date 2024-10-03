@@ -530,9 +530,6 @@ components:
       allOf:
       - $ref: "#/components/schemas/PaginationRequest"
       - properties:
-          minimum_role:
-            description: A minimum role to filter results by.
-            $ref: "#/components/schemas/GroupRole"
           direct_member:
             description: A flag to filter groups where the user is a direct member.
             type: boolean

@@ -580,6 +580,59 @@ async def test_get_projects_with_namespace_filter(create_project, sanic_client, 
 
 
 @pytest.mark.asyncio
+async def test_get_projects_with_direct_membership(sanic_client, user_headers, member_1_headers, member_1_user) -> None:
+    # Create a group
+    namespace = "my-group"
+    payload = {
+        "name": "Group",
+        "slug": namespace,
+    }
+    _, response = await sanic_client.post("/api/data/groups", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    # Create some projects in the group
+    payload = {
+        "name": "Project 1",
+        "namespace": namespace,
+    }
+    _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    project_1 = response.json
+    payload = {
+        "name": "Project 2",
+        "namespace": namespace,
+    }
+    _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    project_2 = response.json
+    # Add member_1 to the group
+    roles = [{"id": member_1_user.id, "role": "editor"}]
+    _, response = await sanic_client.patch(f"/api/data/groups/{namespace}/members", headers=user_headers, json=roles)
+    assert response.status_code == 200, response.text
+    # Add member_1 to Project 2
+    roles = [{"id": member_1_user.id, "role": "editor"}]
+    _, response = await sanic_client.patch(
+        f"/api/data/projects/{project_2["id"]}/members", headers=user_headers, json=roles
+    )
+    assert response.status_code == 200, response.text
+
+    parameters = {"direct_member": True}
+    _, response = await sanic_client.get("/api/data/projects", headers=member_1_headers, params=parameters)
+
+    assert response.status_code == 200, response.text
+    projects = response.json
+    assert len(projects) == 1
+    project_ids = {p["id"] for p in projects}
+    assert project_ids == {project_2["id"]}
+
+    # Check that both projects can be seen without the filter
+    _, response = await sanic_client.get("/api/data/projects", headers=member_1_headers)
+    projects = response.json
+    assert len(projects) == 2
+    project_ids = {p["id"] for p in projects}
+    assert project_ids == {project_1["id"], project_2["id"]}
+
+
+@pytest.mark.asyncio
 async def test_unauthorized_user_cannot_create_delete_or_modify_projects(
     create_project, sanic_client, unauthorized_headers
 ) -> None:
