@@ -39,26 +39,26 @@ sanic = { extras = ["ext"], version = "^24.6.0" }
 pydantic = "^2.9.2"
 datamodel-code-generator = "^0.24.2"
 sqlalchemy = { extras = ["asyncio"], version = "^2.0.35" }
-alembic = "^1.13.2"
+alembic = "^1.13.3"
 asyncpg = "^0.29.0"
 pyjwt = { extras = ["crypto"], version = "^2.9.0" }
 tenacity = "^9.0.0"
 httpx = "<0.28"
 kubernetes = "^31.0.0"
 python-ulid = "^2.7.0"
-python-gitlab = "^4.11.1"
-psycopg = { version = "^3.2.2", extras = ["binary"] }
+python-gitlab = "^4.12.2"
+psycopg = { version = "^3.2.3", extras = ["binary"] }
 urllib3 = "^2.2.3"
 deepmerge = "^2.0"
 authlib = "^1.3.2"
-redis = "^5.0.8"
-dataclasses-avroschema = "^0.63.0"
+redis = "^5.1.0"
+dataclasses-avroschema = "^0.63.2"
 undictify = "^0.11.3"
 types-redis = "^4.6.0.20240903"
 prometheus-sanic = "^3.0.0"
-sentry-sdk = { version = "^2.14.0", extras = ["sanic"] }
+sentry-sdk = { version = "^2.15.0", extras = ["sanic"] }
 cryptography = "^43.0.1"
-authzed = "^0.18.3"
+authzed = "^0.19.0"
 # see https://github.com/sanic-org/sanic/issues/2828 for setuptools dependency, remove when not needed anymore
 setuptools = { version = "^75.1.0" }
 aiofile = "^3.8.8"
@@ -66,7 +66,7 @@ aiofile = "^3.8.8"
 [tool.poetry.group.dev.dependencies]
 pyavro-gen = "^0.3.3"
 avro-preprocessor = "^0.3.0"
-fakeredis = "^2.24.1"
+fakeredis = "^2.25.1"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
