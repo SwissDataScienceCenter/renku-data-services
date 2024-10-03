@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from renku_data_services import base_models
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.base_api.auth import APIUser, only_authenticated
+from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.errors import errors
 from renku_data_services.message_queue import events
 from renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
@@ -124,27 +125,31 @@ class UserRepo:
 
             return [user.dump() for user in users if user.namespace is not None]
 
-    async def remove_user(self, user_id: str) -> str | None:
+    async def remove_user(self, requested_by: APIUser, user_id: str) -> UserInfo | None:
         """Remove a user."""
         logger.info(f"remove_user: Trying to remove user with ID {user_id}")
-        return await self._remove_user(user_id=user_id)
+        return await self._remove_user(requested_by=requested_by, user_id=user_id)
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.delete, ResourceType.user)
     @dispatch_message(avro_schema_v2.UserRemoved)
-    async def _remove_user(self, user_id: str, *, session: AsyncSession | None = None) -> str | None:
+    async def _remove_user(
+        self, requested_by: APIUser, user_id: str, *, session: AsyncSession | None = None
+    ) -> UserInfo | None:
         """Remove a user from the database."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
         logger.info(f"Trying to remove user with ID {user_id}")
-        stmt = delete(UserORM).where(UserORM.keycloak_id == user_id).returning(UserORM)
-        user = await session.scalar(stmt)
-        if not user:
+        result = await session.scalars(select(UserORM).where(UserORM.keycloak_id == user_id))
+        user_orm = result.one_or_none()
+        if user_orm is None:
             logger.info(f"User with ID {user_id} was not found.")
             return None
+        user_info = user_orm.dump()
+        await session.execute(delete(UserORM).where(UserORM.keycloak_id == user_id))
         logger.info(f"User with ID {user_id} was removed from the database.")
         logger.info(f"User namespace with ID {user_id} was removed from the authorization database.")
-        return user_id
+        return user_info
 
     @only_authenticated
     async def get_or_create_user_secret_key(self, requested_by: APIUser) -> str:
@@ -313,7 +318,9 @@ class UsersSync:
                 latest_update_timestamp = update.timestamp_utc
             for deletion in parsed_deletions:
                 logger.info(f"Processing deletion event {deletion}")
-                await self.user_repo.remove_user(user_id=deletion.user_id)
+                await self.user_repo.remove_user(
+                    requested_by=InternalServiceAdmin(id=ServiceAdminId.migrations), user_id=deletion.user_id
+                )
                 latest_delete_timestamp = deletion.timestamp_utc
             # Update the latest processed event timestamp
             current_sync_latest_utc_timestamp = latest_update_timestamp

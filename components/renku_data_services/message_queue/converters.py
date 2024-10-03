@@ -113,8 +113,8 @@ class _UserEventConverter:
                     )
                 ]
             case v2.UserRemoved:
-                user_id = cast(str, user)
-                return [_make_event("user.removed", v2.UserRemoved(id=user_id))]
+                user = cast(user_models.UserInfo, user)
+                return [_make_event("user.removed", v2.UserRemoved(id=user.id))]
             case events.UpdateOrInsertUser:
                 user = cast(user_models.UserInfoUpdate, user)
                 if user.old is None:
@@ -331,7 +331,7 @@ class EventConverter:
                 user_with_namespace = cast(user_models.UserInfo, input)
                 return _UserEventConverter.to_events(user_with_namespace, event_type)
             case v2.UserRemoved:
-                user_info = cast(str, input)
+                user_info = cast(user_models.UserInfo, input)
                 return _UserEventConverter.to_events(user_info, event_type)
             case events.UpdateOrInsertUser:
                 user_with_namespace_update = cast(user_models.UserInfoUpdate, input)
