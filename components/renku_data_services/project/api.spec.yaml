@@ -456,14 +456,14 @@ components:
         $ref: "#/components/schemas/ProjectMemberResponse"
       minItems: 0
     ProjectMemberResponse:
-      description: A member with full info (email, name, ...) and the access level to the project
+      description: A member with full info (namespace, name, ...) and the access level to the project
       type: object
       additionalProperties: false
       properties:
         id:
           $ref: "#/components/schemas/UserId"
-        email:
-          $ref: "#/components/schemas/UserEmail"
+        namespace:
+          $ref: "#/components/schemas/Slug"
         first_name:
           $ref: "#/components/schemas/UserFirstLastName"
         last_name:
@@ -491,11 +491,6 @@ components:
       example: John
       minLength: 1
       maxLength: 256
-    UserEmail:
-      type: string
-      format: email
-      description: User email
-      example: some-user@gmail.com
     ETag:
       type: string
       description: Entity Tag

@@ -12,7 +12,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
-from renku_data_services.base_api.misc import validate_query
+from renku_data_services.base_api.misc import validate_body_root_model, validate_query
 from renku_data_services.storage import apispec, models
 from renku_data_services.storage.db import StorageRepository, StorageV2Repository
 from renku_data_services.storage.rclone import RCloneValidator
@@ -83,7 +83,7 @@ class StorageBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _post(request: Request, user: base_models.APIUser, validator: RCloneValidator) -> JSONResponse:
-            storage: models.CloudStorage
+            storage: models.UnsavedCloudStorage
             if not isinstance(request.json, dict):
                 body_type = type(request.json)
                 raise errors.ValidationError(
@@ -91,7 +91,7 @@ class StorageBP(CustomBlueprint):
                 )
             if "storage_url" in request.json:
                 url_body = apispec.CloudStorageUrl(**request.json)
-                storage = models.CloudStorage.from_url(
+                storage = models.UnsavedCloudStorage.from_url(
                     storage_url=url_body.storage_url,
                     project_id=url_body.project_id.root,
                     name=url_body.name,
@@ -100,7 +100,7 @@ class StorageBP(CustomBlueprint):
                 )
             else:
                 body = apispec.CloudStorage(**request.json)
-                storage = models.CloudStorage.from_dict(body.model_dump())
+                storage = models.UnsavedCloudStorage.from_dict(body.model_dump())
 
             validator.validate(storage.configuration.model_dump())
 
@@ -125,7 +125,7 @@ class StorageBP(CustomBlueprint):
                 raise errors.ValidationError(message="The request body is not a valid JSON object.")
             if "storage_url" in request.json:
                 url_body = apispec.CloudStorageUrl(**request.json)
-                new_storage = models.CloudStorage.from_url(
+                new_storage = models.UnsavedCloudStorage.from_url(
                     storage_url=url_body.storage_url,
                     project_id=url_body.project_id.root,
                     name=url_body.name,
@@ -134,11 +134,10 @@ class StorageBP(CustomBlueprint):
                 )
             else:
                 body = apispec.CloudStorage(**request.json)
-                new_storage = models.CloudStorage.from_dict(body.model_dump())
+                new_storage = models.UnsavedCloudStorage.from_dict(body.model_dump())
 
             validator.validate(new_storage.configuration.model_dump())
             body_dict = new_storage.model_dump()
-            del body_dict["storage_id"]
             res = await self.storage_repo.update_storage(storage_id=storage_id, user=user, **body_dict)
             return json(dump_storage_with_sensitive_fields(res, validator))
 
@@ -233,7 +232,7 @@ class StoragesV2BP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _post(request: Request, user: base_models.APIUser, validator: RCloneValidator) -> JSONResponse:
-            storage: models.CloudStorage
+            storage: models.UnsavedCloudStorage
             if not isinstance(request.json, dict):
                 body_type = type(request.json)
                 raise errors.ValidationError(
@@ -241,7 +240,7 @@ class StoragesV2BP(CustomBlueprint):
                 )
             if "storage_url" in request.json:
                 url_body = apispec.CloudStorageUrl(**request.json)
-                storage = models.CloudStorage.from_url(
+                storage = models.UnsavedCloudStorage.from_url(
                     storage_url=url_body.storage_url,
                     project_id=url_body.project_id.root,
                     name=url_body.name,
@@ -250,7 +249,7 @@ class StoragesV2BP(CustomBlueprint):
                 )
             else:
                 body = apispec.CloudStorage(**request.json)
-                storage = models.CloudStorage.from_dict(body.model_dump())
+                storage = models.UnsavedCloudStorage.from_dict(body.model_dump())
 
             validator.validate(storage.configuration.model_dump())
 
@@ -303,9 +302,10 @@ class StoragesV2BP(CustomBlueprint):
         """Create/update secrets for a cloud storage."""
 
         @authenticate(self.authenticator)
-        async def _upsert_secrets(request: Request, user: base_models.APIUser, storage_id: ULID) -> JSONResponse:
-            # TODO: use @validate once sanic supports validating json lists
-            body = apispec.CloudStorageSecretPostList.model_validate(request.json)
+        @validate_body_root_model(json=apispec.CloudStorageSecretPostList)
+        async def _upsert_secrets(
+            _: Request, user: base_models.APIUser, storage_id: ULID, body: apispec.CloudStorageSecretPostList
+        ) -> JSONResponse:
             secrets = [models.CloudStorageSecretUpsert.model_validate(s.model_dump()) for s in body.root]
             result = await self.storage_v2_repo.upsert_storage_secrets(
                 storage_id=storage_id, user=user, secrets=secrets

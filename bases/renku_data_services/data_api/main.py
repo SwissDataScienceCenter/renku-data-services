@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any
 
 import sentry_sdk
 import uvloop
-from prometheus_sanic import monitor
 from sanic import Sanic
 from sanic.log import logger
 from sanic.worker.loader import AppLoader
@@ -17,6 +16,7 @@ from sentry_sdk.integrations.sanic import SanicIntegration, _context_enter, _con
 from renku_data_services.app_config import Config
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.data_api.app import register_all_handlers
+from renku_data_services.data_api.prometheus import collect_system_metrics, setup_app_metrics, setup_prometheus
 from renku_data_services.errors.errors import (
     ForbiddenError,
     MissingResourceError,
@@ -31,11 +31,14 @@ if TYPE_CHECKING:
     import sentry_sdk._types
 
 
-async def _send_messages() -> None:
+async def _send_messages(app: Sanic) -> None:
     config = Config.from_env()
     while True:
         try:
             await config.event_repo.send_pending_events()
+            # we need to collect metrics for this background process separately from the task we add to the
+            # server processes
+            await collect_system_metrics(app, "send_events_worker")
             await asyncio.sleep(1)
         except (asyncio.CancelledError, KeyboardInterrupt) as e:
             logger.warning(f"Exiting: {e}")
@@ -45,14 +48,15 @@ async def _send_messages() -> None:
             raise
 
 
-def send_pending_events() -> None:
+def send_pending_events(app_name: str) -> None:
     """Send pending messages in case sending in a handler failed."""
-    _ = Sanic("send_events")  # we need a dummy app for logging to work.
+    app = Sanic(app_name)
+    setup_app_metrics(app)
 
     logger.info("running events sending loop.")
 
     asyncio.set_event_loop(uvloop.new_event_loop())
-    asyncio.run(_send_messages())
+    asyncio.run(_send_messages(app))
 
 
 def create_app() -> Sanic:
@@ -104,9 +108,7 @@ def create_app() -> Sanic:
     logger.info(f"REAL_IP_HEADER = {app.config.REAL_IP_HEADER}")
 
     app = register_all_handlers(app, config)
-
-    # Setup prometheus
-    monitor(app, endpoint_type="url", multiprocess_mode="all", is_middleware=True).expose_endpoint()
+    setup_prometheus(app)
 
     if environ.get("CORS_ALLOW_ALL_ORIGINS", "false").lower() == "true":
         from sanic_ext import Extend
@@ -134,7 +136,7 @@ def create_app() -> Sanic:
     async def ready(app: Sanic) -> None:
         """Application ready event handler."""
         logger.info("starting events background job.")
-        app.manager.manage("SendEvents", send_pending_events, {}, transient=True)
+        app.manager.manage("SendEvents", send_pending_events, {"app_name": config.app_name}, transient=True)
 
     return app
 

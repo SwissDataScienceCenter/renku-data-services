@@ -16,7 +16,7 @@ from renku_data_services.base_models.validation import validated_json
 from renku_data_services.errors import errors
 from renku_data_services.secrets.core import encrypt_user_secret
 from renku_data_services.secrets.db import UserSecretsRepo
-from renku_data_services.secrets.models import Secret, SecretKind
+from renku_data_services.secrets.models import SecretKind, UnsavedSecret
 from renku_data_services.users import apispec, models
 from renku_data_services.users.db import UserPreferencesRepository, UserRepo
 
@@ -39,11 +39,11 @@ class KCUsersBP(CustomBlueprint):
                 apispec.UsersWithId,
                 [
                     dict(
-                        id=user.user.id,
+                        id=user.id,
                         username=user.namespace.slug,
-                        email=user.user.email,
-                        first_name=user.user.first_name,
-                        last_name=user.user.last_name,
+                        email=user.email,
+                        first_name=user.first_name,
+                        last_name=user.last_name,
                     )
                     for user in users
                 ],
@@ -65,11 +65,11 @@ class KCUsersBP(CustomBlueprint):
             return validated_json(
                 apispec.UserWithId,
                 dict(
-                    id=user_info.user.id,
+                    id=user_info.id,
                     username=user_info.namespace.slug,
-                    email=user_info.user.email,
-                    first_name=user_info.user.first_name,
-                    last_name=user_info.user.last_name,
+                    email=user_info.email,
+                    first_name=user_info.first_name,
+                    last_name=user_info.last_name,
                 ),
             )
 
@@ -99,11 +99,11 @@ class KCUsersBP(CustomBlueprint):
             return validated_json(
                 apispec.UserWithId,
                 dict(
-                    id=user_info.user.id,
+                    id=user_info.id,
                     username=user_info.namespace.slug,
-                    email=user_info.user.email,
-                    first_name=user_info.user.first_name,
-                    last_name=user_info.user.last_name,
+                    email=user_info.email,
+                    first_name=user_info.first_name,
+                    last_name=user_info.last_name,
                 ),
             )
 
@@ -179,7 +179,7 @@ class UserSecretsBP(CustomBlueprint):
                 secret_service_public_key=self.secret_service_public_key,
                 secret_value=body.value,
             )
-            secret = Secret(
+            secret = UnsavedSecret(
                 name=body.name,
                 encrypted_value=encrypted_value,
                 encrypted_key=encrypted_key,

@@ -17,14 +17,14 @@ from sqlalchemy.orm import joinedload
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
-from renku_data_services.authz.models import Member, MembershipChange, Role, Scope
+from renku_data_services.authz.models import Member, MembershipChange, Role, Scope, UnsavedMember
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.message_queue import events
 from renku_data_services.message_queue.avro_models.io.renku.events.v2 import GroupAdded, GroupRemoved, GroupUpdated
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import dispatch_message
-from renku_data_services.namespace import apispec, models
+from renku_data_services.namespace import models
 from renku_data_services.namespace import orm as schemas
 from renku_data_services.users import models as user_models
 from renku_data_services.users import orm as user_schemas
@@ -49,25 +49,27 @@ class GroupRepository:
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.insert_many, ResourceType.user_namespace)
     @dispatch_message(events.InsertUserNamespace)
-    async def generate_user_namespaces(
-        self, *, session: AsyncSession | None = None
-    ) -> list[user_models.UserWithNamespace]:
+    async def generate_user_namespaces(self, *, session: AsyncSession | None = None) -> list[user_models.UserInfo]:
         """Generate user namespaces if the user table has data and the namespaces table is empty."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
         # NOTE: lock to make sure another instance of the data service cannot insert/update but can read
-        output: list[user_models.UserWithNamespace] = []
+        output: list[user_models.UserInfo] = []
         await session.execute(text("LOCK TABLE common.namespaces IN EXCLUSIVE MODE"))
         at_least_one_namespace = (await session.execute(select(schemas.NamespaceORM).limit(1))).one_or_none()
         if at_least_one_namespace:
             logger.info("Found at least one user namespace, skipping creation")
-            return output
+            return []
         logger.info("Found zero user namespaces, will try to create them from users table")
         res = await session.scalars(select(user_schemas.UserORM))
         for user in res:
-            ns = await self._insert_user_namespace(session, user, retry_enumerate=10, retry_random=True)
+            slug = base_models.Slug.from_user(user.email, user.first_name, user.last_name, user.keycloak_id)
+            ns = await self._insert_user_namespace(
+                session, user.keycloak_id, slug.value, retry_enumerate=10, retry_random=True
+            )
             logger.info(f"Creating user namespace {ns}")
-            output.append(user_models.UserWithNamespace(user.dump(), ns))
+            user.namespace = ns
+            output.append(user.dump())
         logger.info(f"Created {len(output)} user namespaces")
         return output
 
@@ -136,13 +138,18 @@ class GroupRepository:
         members_dict = {i.user_id: i for i in members}
         stmt = select(user_schemas.UserORM).where(user_schemas.UserORM.keycloak_id.in_(members_dict.keys()))
         result = await session.scalars(stmt)
+
+        namespaces_stmt = select(schemas.NamespaceORM).where(schemas.NamespaceORM.user_id.in_(members_dict.keys()))
+        namespaces_result = await session.scalars(namespaces_stmt)
+        namespaces_dict = {ns.user_id: ns for ns in namespaces_result}
+
         return [
             models.GroupMemberDetails(
                 id=member.keycloak_id,
                 role=members_dict[member.keycloak_id].role,
-                email=member.email,
                 first_name=member.first_name,
                 last_name=member.last_name,
+                namespace=namespaces_dict[member.keycloak_id].slug,
             )
             for member in result
         ]
@@ -192,21 +199,23 @@ class GroupRepository:
         self,
         user: base_models.APIUser,
         slug: str,
-        payload: apispec.GroupMemberPatchRequestList,
+        members: list[UnsavedMember],
         *,
         session: AsyncSession | None = None,
     ) -> list[MembershipChange]:
         """Update group members."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
-        group, existing_members = await self._get_group(session, user, slug, load_members=True)
+        group, _ = await self._get_group(session, user, slug, load_members=True)
         if group.namespace.slug != slug.lower():
             raise errors.UpdatingWithStaleContentError(
                 message=f"You cannot update group members by using an old group slug {slug}.",
                 detail=f"The latest slug is {group.namespace.slug}, please use this for updates.",
             )
-        members = [Member(Role.from_group_role(member.role), member.id, group.id) for member in payload.root]
-        output = await self.authz.upsert_group_members(user, ResourceType.group, group.id, members)
+
+        output = await self.authz.upsert_group_members(
+            user, ResourceType.group, group.id, [m.with_group(group.id) for m in members]
+        )
         return output
 
     @with_db_transaction
@@ -256,7 +265,7 @@ class GroupRepository:
     async def insert_group(
         self,
         user: base_models.APIUser,
-        payload: apispec.GroupPostRequest,
+        payload: models.UnsavedGroup,
         *,
         session: AsyncSession | None = None,
     ) -> models.Group:
@@ -322,7 +331,7 @@ class GroupRepository:
                 output.append(ns_orm.dump())
             return output, group_count
 
-    async def _get_user_namespaces(self) -> AsyncGenerator[user_models.UserWithNamespace, None]:
+    async def _get_user_namespaces(self) -> AsyncGenerator[user_models.UserInfo, None]:
         """Lists all user namespaces without regard for authorization or permissions, used for migrations."""
         async with self.session_maker() as session, session.begin():
             namespaces = await session.stream_scalars(
@@ -372,39 +381,37 @@ class GroupRepository:
                 raise errors.ProgrammingError(message="Found a namespace that has no user associated with it.")
             return ns.dump()
 
+    async def _create_user_namespace_slug(
+        self, session: AsyncSession, user_slug: str, retry_enumerate: int = 0, retry_random: bool = False
+    ) -> str:
+        """Create a valid namespace slug for a user."""
+        nss = await session.scalars(
+            select(schemas.NamespaceORM.slug).where(schemas.NamespaceORM.slug.startswith(user_slug))
+        )
+        nslist = nss.all()
+        if user_slug not in nslist:
+            return user_slug
+        if retry_enumerate:
+            for inc in range(1, retry_enumerate + 1):
+                slug = f"{user_slug}-{inc}"
+                if slug not in nslist:
+                    return slug
+        if retry_random:
+            suffix = "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(8)])  # nosec B311
+            slug = f"{user_slug}-{suffix}"
+            if slug not in nslist:
+                return slug
+
+        raise errors.ValidationError(message=f"Cannot create generate a unique namespace slug for the user {user_slug}")
+
     async def _insert_user_namespace(
-        self, session: AsyncSession, user: schemas.UserORM, retry_enumerate: int = 0, retry_random: bool = False
-    ) -> models.Namespace:
+        self, session: AsyncSession, user_id: str, user_slug: str, retry_enumerate: int = 0, retry_random: bool = False
+    ) -> schemas.NamespaceORM:
         """Insert a new namespace for the user and optionally retry different variations to avoid collisions."""
-        original_slug = user.to_slug()
-        for inc in range(0, retry_enumerate + 1):
-            # NOTE: on iteration 0 we try with the optimal slug value derived from the user data without any suffix.
-            suffix = ""
-            if inc > 0:
-                suffix = f"-{inc}"
-            slug = base_models.Slug.from_name(original_slug.value.lower() + suffix)
-            ns = schemas.NamespaceORM(slug.value, user_id=user.keycloak_id)
-            try:
-                async with session.begin_nested():
-                    session.add(ns)
-                    await session.flush()
-            except IntegrityError:
-                if retry_enumerate == 0:
-                    raise errors.ValidationError(message=f"The user namespace slug {slug.value} already exists")
-                continue
-            else:
-                await session.refresh(ns)
-                return ns.dump()
-        if not retry_random:
-            raise errors.ValidationError(
-                message=f"Cannot create generate a unique namespace slug for the user with ID {user.keycloak_id}"
-            )
-        # NOTE: At this point the attempts to generate unique ID have ended and the only option is
-        # to add a small random suffix to avoid uniqueness constraints problems
-        suffix = "-" + "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(8)])  # nosec: B311
-        slug = base_models.Slug.from_name(original_slug.value.lower() + suffix)
-        ns = schemas.NamespaceORM(slug.value, user_id=user.keycloak_id)
+        namespace = await self._create_user_namespace_slug(session, user_slug, retry_enumerate, retry_random)
+        slug = base_models.Slug.from_name(namespace)
+        ns = schemas.NamespaceORM(slug.value, user_id=user_id)
         session.add(ns)
         await session.flush()
         await session.refresh(ns)
-        return ns.dump()
+        return ns

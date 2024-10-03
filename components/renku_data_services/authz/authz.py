@@ -35,7 +35,7 @@ from renku_data_services.base_models.core import InternalServiceAdmin
 from renku_data_services.errors import errors
 from renku_data_services.namespace.models import Group, GroupUpdate, Namespace, NamespaceKind, NamespaceUpdate
 from renku_data_services.project.models import Project, ProjectUpdate
-from renku_data_services.users.models import UserWithNamespace, UserWithNamespaceUpdate
+from renku_data_services.users.models import UserInfo, UserInfoUpdate
 
 _P = ParamSpec("_P")
 
@@ -51,7 +51,7 @@ class WithAuthz(Protocol):
 
 _AuthzChangeFuncResult = TypeVar(
     "_AuthzChangeFuncResult",
-    bound=Project | ProjectUpdate | Group | UserWithNamespaceUpdate | list[UserWithNamespace] | None,
+    bound=Project | ProjectUpdate | Group | UserInfoUpdate | list[UserInfo] | None,
 )
 _T = TypeVar("_T")
 _WithAuthz = TypeVar("_WithAuthz", bound=WithAuthz)
@@ -493,14 +493,14 @@ class Authz:
                 case AuthzOperation.delete, ResourceType.group if result is None:
                     # NOTE: This means that the group does not exist in the first place so nothing was deleted
                     pass
-                case AuthzOperation.update_or_insert, ResourceType.user if isinstance(result, UserWithNamespaceUpdate):
+                case AuthzOperation.update_or_insert, ResourceType.user if isinstance(result, UserInfoUpdate):
                     if result.old is None:
                         authz_change = db_repo.authz._add_user_namespace(result.new.namespace)
                 case AuthzOperation.insert_many, ResourceType.user_namespace if isinstance(result, list):
                     for res in result:
-                        if not isinstance(res, UserWithNamespace):
+                        if not isinstance(res, UserInfo):
                             raise errors.ProgrammingError(
-                                message="Expected list of UserWithNamespace when generating authorization "
+                                message="Expected list of UserInfo when generating authorization "
                                 f"database updates for inserting namespaces but found {type(res)}"
                             )
                         authz_change.extend(db_repo.authz._add_user_namespace(res.namespace))

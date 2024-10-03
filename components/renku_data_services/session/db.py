@@ -263,7 +263,7 @@ class SessionRepository:
             authorized = await self.project_authz.has_permission(
                 user,
                 ResourceType.project,
-                str(launcher.project_id),
+                launcher.project_id,
                 Scope.WRITE,
             )
             if not authorized:

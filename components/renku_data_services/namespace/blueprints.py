@@ -7,14 +7,14 @@ from sanic.response import JSONResponse
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
-from renku_data_services.authz.models import Role
+from renku_data_services.authz.models import Role, UnsavedMember
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
-from renku_data_services.base_api.misc import validate_query
+from renku_data_services.base_api.misc import validate_body_root_model, validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
 from renku_data_services.errors import errors
-from renku_data_services.namespace import apispec
+from renku_data_services.namespace import apispec, models
 from renku_data_services.namespace.db import GroupRepository
 
 
@@ -49,7 +49,8 @@ class GroupsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.GroupPostRequest)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.GroupPostRequest) -> JSONResponse:
-            result = await self.group_repo.insert_group(user=user, payload=body)
+            new_group = models.UnsavedGroup(**body.model_dump())
+            result = await self.group_repo.insert_group(user=user, payload=new_group)
             return validated_json(apispec.GroupResponse, result, 201)
 
         return "/groups", ["POST"], _post
@@ -101,10 +102,10 @@ class GroupsBP(CustomBlueprint):
                 [
                     dict(
                         id=m.id,
-                        email=m.email,
                         first_name=m.first_name,
                         last_name=m.last_name,
                         role=apispec.GroupRole(m.role.value),
+                        namespace=m.namespace,
                     )
                     for m in members
                 ],
@@ -117,14 +118,15 @@ class GroupsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _update_members(request: Request, user: base_models.APIUser, slug: str) -> JSONResponse:
-            # TODO: sanic validation does not support validating top-level json lists, switch this to @validate
-            # once sanic-org/sanic-ext/issues/198 is fixed
-            body_validated = apispec.GroupMemberPatchRequestList.model_validate(request.json)
+        @validate_body_root_model(json=apispec.GroupMemberPatchRequestList)
+        async def _update_members(
+            _: Request, user: base_models.APIUser, slug: str, body: apispec.GroupMemberPatchRequestList
+        ) -> JSONResponse:
+            members = [UnsavedMember(Role.from_group_role(member.role), member.id) for member in body.root]
             res = await self.group_repo.update_group_members(
                 user=user,
                 slug=slug,
-                payload=body_validated,
+                members=members,
             )
             return validated_json(
                 apispec.GroupMemberPatchRequestList,

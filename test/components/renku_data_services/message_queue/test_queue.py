@@ -4,6 +4,7 @@ import pytest
 
 from renku_data_services.authz.models import Visibility
 from renku_data_services.message_queue.avro_models.io.renku.events.v2.project_removed import ProjectRemoved
+from renku_data_services.message_queue.converters import QUEUE_NAME
 from renku_data_services.message_queue.redis_queue import dispatch_message
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.namespace.models import Namespace, NamespaceKind
@@ -42,21 +43,21 @@ async def test_queue_send(app_config, monkeypatch) -> None:
     fakerepo = FakeRepo()
     await fakerepo.fake_db_method(some_arg="test")
 
-    events = await app_config.redis.redis_connection.xrange("project.removed")
+    events = await app_config.redis.redis_connection.xrange(QUEUE_NAME)
     assert len(events) == 0
     pending_events = await app_config.event_repo._get_pending_events()
     assert len(pending_events) == 1
 
     await app_config.event_repo.send_pending_events()
 
-    events = await app_config.redis.redis_connection.xrange("project.removed")
+    events = await app_config.redis.redis_connection.xrange(QUEUE_NAME)
     assert len(events) == 1
     pending_events = await app_config.event_repo._get_pending_events()
     assert len(pending_events) == 0
 
     await app_config.event_repo.send_pending_events()
 
-    events = await app_config.redis.redis_connection.xrange("project.removed")
+    events = await app_config.redis.redis_connection.xrange(QUEUE_NAME)
     assert len(events) == 1
     pending_events = await app_config.event_repo._get_pending_events()
     assert len(pending_events) == 0

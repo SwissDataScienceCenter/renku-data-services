@@ -53,11 +53,21 @@ class Scope(Enum):
 
 
 @dataclass
-class Member:
+class UnsavedMember:
     """A class to hold a user and her role."""
 
     role: Role
     user_id: str
+
+    def with_group(self, group_id: ULID) -> "Member":
+        """Turn to member with group."""
+        return Member(role=self.role, user_id=self.user_id, resource_id=group_id)
+
+
+@dataclass
+class Member(UnsavedMember):
+    """Member stored in the database."""
+
     resource_id: str | ULID
 
 

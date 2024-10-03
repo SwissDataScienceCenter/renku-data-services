@@ -360,7 +360,10 @@ components:
       maxLength: 256
     UserEmail:
       type: string
-      format: email
+      # We can get invalid emails when people log in via Github or other services
+      # It seems that in some cases Keycloak does not verify emails and this will then fail
+      # See: https://github.com/SwissDataScienceCenter/renku-data-services/issues/367
+      # format: email
       description: User email
       example: some-user@gmail.com
     SecretsList:
