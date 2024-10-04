@@ -15,16 +15,21 @@ from renku_data_services.base_api.auth import (
 )
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.etag import extract_if_none_match, if_match_required
-from renku_data_services.base_api.misc import validate_query
+from renku_data_services.base_api.misc import validate_body_root_model, validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors.core import (
     dump_storage_with_sensitive_fields,
     validate_data_connector_patch,
+    validate_data_connector_secrets_patch,
     validate_unsaved_data_connector,
 )
-from renku_data_services.data_connectors.db import DataConnectorProjectLinkRepository, DataConnectorRepository
+from renku_data_services.data_connectors.db import (
+    DataConnectorProjectLinkRepository,
+    DataConnectorRepository,
+    DataConnectorSecretRepository,
+)
 from renku_data_services.storage.rclone import RCloneValidator
 
 
@@ -34,6 +39,7 @@ class DataConnectorsBP(CustomBlueprint):
 
     data_connector_repo: DataConnectorRepository
     data_connector_to_project_link_repo: DataConnectorProjectLinkRepository
+    data_connector_secret_repo: DataConnectorSecretRepository
     authenticator: base_models.Authenticator
 
     def get_all(self) -> BlueprintFactoryResponse:
@@ -262,6 +268,64 @@ class DataConnectorsBP(CustomBlueprint):
 
         return "/projects/<project_id:ulid>/data_connector_links", ["GET"], _get_all_data_connectors_links_to_project
 
+    def get_secrets(self) -> BlueprintFactoryResponse:
+        """List all saved secrets for a data connector."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _get_secrets(
+            _: Request,
+            user: base_models.APIUser,
+            data_connector_id: ULID,
+        ) -> JSONResponse:
+            secrets = await self.data_connector_secret_repo.get_data_connector_secrets(
+                user=user, data_connector_id=data_connector_id
+            )
+            return validated_json(
+                apispec.DataConnectorSecretsList, [self._dump_data_connector_secret(secret) for secret in secrets]
+            )
+
+        return "/data_connectors/<data_connector_id:ulid>/secrets", ["GET"], _get_secrets
+
+    def patch_secrets(self) -> BlueprintFactoryResponse:
+        """Create, update or delete saved secrets for a data connector."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @validate_body_root_model(json=apispec.DataConnectorSecretPatchList)
+        async def _patch_secrets(
+            _: Request,
+            user: base_models.APIUser,
+            data_connector_id: ULID,
+            body: apispec.DataConnectorSecretPatchList,
+        ) -> JSONResponse:
+            unsaved_secrets = validate_data_connector_secrets_patch(put=body)
+            secrets = await self.data_connector_secret_repo.patch_data_connector_secrets(
+                user=user, data_connector_id=data_connector_id, secrets=unsaved_secrets
+            )
+            return validated_json(
+                apispec.DataConnectorSecretsList, [self._dump_data_connector_secret(secret) for secret in secrets]
+            )
+
+        return "/data_connectors/<data_connector_id:ulid>/secrets", ["PATCH"], _patch_secrets
+
+    def delete_secrets(self) -> BlueprintFactoryResponse:
+        """Delete all saved secrets for a data connector."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _delete_secrets(
+            _: Request,
+            user: base_models.APIUser,
+            data_connector_id: ULID,
+        ) -> HTTPResponse:
+            await self.data_connector_secret_repo.delete_data_connector_secrets(
+                user=user, data_connector_id=data_connector_id
+            )
+            return HTTPResponse(status=204)
+
+        return "/data_connectors/<data_connector_id:ulid>/secrets", ["DELETE"], _delete_secrets
+
     @staticmethod
     def _dump_data_connector(data_connector: models.DataConnector, validator: RCloneValidator) -> dict[str, Any]:
         """Dumps a data connector for API responses."""
@@ -290,4 +354,12 @@ class DataConnectorsBP(CustomBlueprint):
             project_id=str(link.project_id),
             creation_date=link.creation_date,
             created_by=link.created_by,
+        )
+
+    @staticmethod
+    def _dump_data_connector_secret(secret: models.DataConnectorSecret) -> dict[str, Any]:
+        """Dumps a data connector secret for API responses."""
+        return dict(
+            name=secret.name,
+            secret_id=str(secret.secret_id),
         )

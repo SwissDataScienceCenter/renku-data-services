@@ -1017,3 +1017,169 @@ async def test_delete_project_after_linking(
     assert response.status_code == 200, response.text
     assert response.json is not None
     assert len(response.json) == 0
+
+
+@pytest.mark.asyncio
+async def test_patch_data_connector_secrets(
+    sanic_client: SanicASGITestClient, create_data_connector, user_headers
+) -> None:
+    data_connector = await create_data_connector("My data connector")
+    data_connector_id = data_connector["id"]
+
+    payload = [
+        {"name": "access_key_id", "value": "access key id value"},
+        {"name": "secret_access_key", "value": "secret access key value"},
+    ]
+    _, response = await sanic_client.patch(
+        f"/api/data/data_connectors/{data_connector_id}/secrets", headers=user_headers, json=payload
+    )
+
+    assert response.status_code == 200, response.json
+    assert response.json is not None
+    secrets = response.json
+    assert len(secrets) == 2
+    assert {s["name"] for s in secrets} == {"access_key_id", "secret_access_key"}
+
+    # Check that the secrets are returned from a GET request
+    _, response = await sanic_client.get(f"/api/data/data_connectors/{data_connector_id}/secrets", headers=user_headers)
+    assert response.status_code == 200, response.json
+    assert response.json is not None
+    secrets = response.json
+    assert len(secrets) == 2
+    assert {s["name"] for s in secrets} == {"access_key_id", "secret_access_key"}
+
+
+@pytest.mark.asyncio
+async def test_patch_data_connector_secrets_update_secrets(
+    sanic_client: SanicASGITestClient, create_data_connector, user_headers
+) -> None:
+    data_connector = await create_data_connector("My data connector")
+    data_connector_id = data_connector["id"]
+    payload = [
+        {"name": "access_key_id", "value": "access key id value"},
+        {"name": "secret_access_key", "value": "secret access key value"},
+    ]
+    _, response = await sanic_client.patch(
+        f"/api/data/data_connectors/{data_connector_id}/secrets", headers=user_headers, json=payload
+    )
+    assert response.status_code == 200, response.json
+    assert response.json is not None
+    secrets = response.json
+    assert len(secrets) == 2
+    assert {s["name"] for s in secrets} == {"access_key_id", "secret_access_key"}
+    secret_ids = {s["secret_id"] for s in secrets}
+
+    payload = [
+        {"name": "access_key_id", "value": "new access key id value"},
+        {"name": "secret_access_key", "value": "new secret access key value"},
+    ]
+    _, response = await sanic_client.patch(
+        f"/api/data/data_connectors/{data_connector_id}/secrets", headers=user_headers, json=payload
+    )
+
+    assert response.status_code == 200, response.json
+    assert response.json is not None
+    secrets = response.json
+    assert len(secrets) == 2
+    assert {s["name"] for s in secrets} == {"access_key_id", "secret_access_key"}
+    assert {s["secret_id"] for s in secrets} == secret_ids
+
+    # Check that the secrets are returned from a GET request
+    _, response = await sanic_client.get(f"/api/data/data_connectors/{data_connector_id}/secrets", headers=user_headers)
+    assert response.status_code == 200, response.json
+    assert response.json is not None
+    secrets = response.json
+    assert len(secrets) == 2
+    assert {s["name"] for s in secrets} == {"access_key_id", "secret_access_key"}
+    assert {s["secret_id"] for s in secrets} == secret_ids
+
+
+@pytest.mark.asyncio
+async def test_patch_data_connector_secrets_add_and_remove_secrets(
+    sanic_client: SanicASGITestClient, create_data_connector, user_headers
+) -> None:
+    data_connector = await create_data_connector("My data connector")
+    data_connector_id = data_connector["id"]
+    payload = [
+        {"name": "access_key_id", "value": "access key id value"},
+        {"name": "secret_access_key", "value": "secret access key value"},
+    ]
+    _, response = await sanic_client.patch(
+        f"/api/data/data_connectors/{data_connector_id}/secrets", headers=user_headers, json=payload
+    )
+    assert response.status_code == 200, response.json
+    assert response.json is not None
+    secrets = response.json
+    assert len(secrets) == 2
+    assert {s["name"] for s in secrets} == {"access_key_id", "secret_access_key"}
+    access_key_id_secret_id = next(filter(lambda s: s["name"] == "access_key_id", secrets), None)
+
+    payload = [
+        {"name": "access_key_id", "value": "new access key id value"},
+        {"name": "secret_access_key", "value": None},
+        {"name": "password", "value": "password"},
+    ]
+    _, response = await sanic_client.patch(
+        f"/api/data/data_connectors/{data_connector_id}/secrets", headers=user_headers, json=payload
+    )
+
+    assert response.status_code == 200, response.json
+    assert response.json is not None
+    secrets = response.json
+    assert len(secrets) == 2
+    assert {s["name"] for s in secrets} == {"access_key_id", "password"}
+    new_access_key_id_secret_id = next(filter(lambda s: s["name"] == "access_key_id", secrets), None)
+    assert new_access_key_id_secret_id == access_key_id_secret_id
+
+    # Check that the secrets are returned from a GET request
+    _, response = await sanic_client.get(f"/api/data/data_connectors/{data_connector_id}/secrets", headers=user_headers)
+    assert response.status_code == 200, response.json
+    assert response.json is not None
+    secrets = response.json
+    assert len(secrets) == 2
+    assert {s["name"] for s in secrets} == {"access_key_id", "password"}
+
+    # Check the associated secrets
+    _, response = await sanic_client.get("/api/data/user/secrets", params={"kind": "storage"}, headers=user_headers)
+
+    assert response.status_code == 200
+    assert response.json is not None
+    assert len(response.json) == 2
+    assert {s["name"] for s in secrets} == {"access_key_id", "password"}
+
+
+@pytest.mark.asyncio
+async def test_delete_data_connector_secrets(
+    sanic_client: SanicASGITestClient, create_data_connector, user_headers
+) -> None:
+    data_connector = await create_data_connector("My data connector")
+    data_connector_id = data_connector["id"]
+    payload = [
+        {"name": "access_key_id", "value": "access key id value"},
+        {"name": "secret_access_key", "value": "secret access key value"},
+    ]
+    _, response = await sanic_client.patch(
+        f"/api/data/data_connectors/{data_connector_id}/secrets", headers=user_headers, json=payload
+    )
+    assert response.status_code == 200, response.json
+    assert response.json is not None
+    secrets = response.json
+    assert len(secrets) == 2
+    assert {s["name"] for s in secrets} == {"access_key_id", "secret_access_key"}
+
+    _, response = await sanic_client.delete(
+        f"/api/data/data_connectors/{data_connector_id}/secrets", headers=user_headers
+    )
+
+    assert response.status_code == 204, response.json
+
+    # Check that the secrets list is empty from the GET request
+    _, response = await sanic_client.get(f"/api/data/data_connectors/{data_connector_id}/secrets", headers=user_headers)
+    assert response.status_code == 200, response.json
+    assert response.json == [], response.json
+
+    # Check that the associated secrets are deleted
+    _, response = await sanic_client.get("/api/data/user/secrets", params={"kind": "storage"}, headers=user_headers)
+
+    assert response.status_code == 200
+    assert response.json == [], response.json

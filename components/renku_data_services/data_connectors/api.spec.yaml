@@ -244,7 +244,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/CloudStorageSecretGetList"
+                $ref: "#/components/schemas/DataConnectorSecretsList"
         "404":
           description: Storage was not found
           content:
@@ -255,21 +255,22 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - data_connectors
-    post:
+    patch:
       summary: Save secrets for a data connector
+      description: New secrets will be added and existing secrets will have their value updated. Using `null` as a value will remove the corresponding secret.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CloudStorageSecretPostList"
+              $ref: "#/components/schemas/DataConnectorSecretPatchList"
       responses:
         "201":
           description: The secrets for cloud storage were saved
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/CloudStorageSecretGetList"
+                $ref: "#/components/schemas/DataConnectorSecretsList"
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -306,10 +307,6 @@ components:
           $ref: "#/components/schemas/Slug"
         storage:
           $ref: "#/components/schemas/CloudStorageCore"
-        secrets:
-          type: array
-          items:
-            $ref: "#/components/schemas/CloudStorageSecretGet"
         creation_date:
           $ref: "#/components/schemas/CreationDate"
         created_by:
@@ -498,67 +495,49 @@ components:
           $ref: "#/components/schemas/Ulid"
       required:
         - project_id
-    CloudStorageSecretPost:
-      type: object
-      description: Data for storing secret for a storage field
-      properties:
-        name:
-          type: string
-          description: Name of the field to store credential for
-          minLength: 1
-          maxLength: 99
-        value:
-          $ref: "#/components/schemas/SecretValue"
-      required:
-        - name
-        - value
-    CloudStorageSecretPostList:
-      description: List of storage secrets that are saved
+    DataConnectorSecretsList:
+      description: A list of data connectors
       type: array
       items:
-        $ref: "#/components/schemas/CloudStorageSecretPost"
-    CloudStorageSecretGetList:
-      description: List of storage secrets that are saved
-      type: array
-      items:
-        $ref: "#/components/schemas/CloudStorageSecretGet"
-    CloudStorageSecretGet:
+        $ref: "#/components/schemas/DataConnectorSecret"
+    DataConnectorSecret:
+      description: Information about a credential saved for a data connector
       type: object
-      description: Data for saved storage secrets
       properties:
         name:
-          type: string
-          description: Name of the field to store credential for
-          minLength: 1
-          maxLength: 99
+          $ref: "#/components/schemas/DataConnectorSecretFieldName"
         secret_id:
           $ref: "#/components/schemas/Ulid"
       required:
         - name
         - secret_id
-    SecretValue:
+    DataConnectorSecretPatchList:
+      description: List of secrets to be saved for a data connector
+      type: array
+      items:
+        $ref: "#/components/schemas/DataConnectorSecretPatch"
+    DataConnectorSecretPatch:
+      description: Information about a credential to save for a data connector
+      properties:
+        name:
+          $ref: "#/components/schemas/DataConnectorSecretFieldName"
+        value:
+          $ref: "#/components/schemas/SecretValueNullable"
+      required:
+        - name
+        - value
+    DataConnectorSecretFieldName:
+      description: Name of the credential field
+      type: string
+      minLength: 1
+      maxLength: 99
+      example: "secret_key"
+    SecretValueNullable:
       description: Secret value that can be any text
       type: string
       minLength: 1
       maxLength: 5000
-    RCloneEntry:
-      type: object
-      description: Schema for a storage type in rclone, like S3 or Azure Blob Storage. Contains fields for that storage type.
-      properties:
-        name:
-          type: string
-          description: Human readable name of the provider
-        description:
-          type: string
-          description: description of the provider
-        prefix:
-          type: string
-          description: Machine readable name of the provider
-        options:
-          description: Fields/properties used for this storage.
-          type: array
-          items:
-            $ref: "#/components/schemas/RCloneOption"
+      nullable: true
     RCloneOption:
       type: object
       description: Single field on an RClone storage, like "remote" or "access_key_id"
