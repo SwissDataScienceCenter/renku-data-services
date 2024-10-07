@@ -166,8 +166,7 @@ class NamespaceOldORM(BaseORM):
             )
 
         name = (
-            f"{self.latest_slug.user.first_name} {
-                self.latest_slug.user.last_name}"
+            f"{self.latest_slug.user.first_name} {self.latest_slug.user.last_name}"
             if self.latest_slug.user.first_name and self.latest_slug.user.last_name
             else self.latest_slug.user.first_name or self.latest_slug.user.last_name
         )
