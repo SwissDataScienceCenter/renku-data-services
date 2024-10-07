@@ -19,7 +19,7 @@ paths:
           style: form
           explode: true
           schema:
-            $ref: "#/components/schemas/PaginationRequest"
+            $ref: "#/components/schemas/GroupsGetQuery"
       responses:
         "200":
           description: List of groups
@@ -525,6 +525,15 @@ components:
           minimum_role:
             description: A minimum role to filter results by.
             $ref: "#/components/schemas/GroupRole"
+    GroupsGetQuery:
+      description: Query params for namespace get request
+      allOf:
+      - $ref: "#/components/schemas/PaginationRequest"
+      - properties:
+          direct_member:
+            description: A flag to filter groups where the user is a direct member.
+            type: boolean
+            default: false
     PaginationRequest:
       type: object
       additionalProperties: false
