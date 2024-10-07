@@ -123,7 +123,7 @@ def validate_data_connector_patch(
 
 def validate_data_connector_secrets_patch(
     put: apispec.DataConnectorSecretPatchList,
-) -> list[models.DataConnectorSecretPatch]:
+) -> list[models.DataConnectorSecretUpdate]:
     """Validate the update to a data connector's secrets."""
     seen_names: set[str] = set()
     for secret in put.root:
@@ -132,7 +132,7 @@ def validate_data_connector_secrets_patch(
         seen_names.add(secret.name)
 
     return [
-        models.DataConnectorSecretPatch(
+        models.DataConnectorSecretUpdate(
             name=secret.name,
             value=secret.value,
         )

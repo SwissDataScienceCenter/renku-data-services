@@ -203,6 +203,7 @@ module = [
   "renku_data_services.namespace.apispec",
   "renku_data_services.notebooks.apispec",
   "renku_data_services.platform.apispec",
+  "renku_data_services.message_queue.apispec",
 ]
 ignore_errors = true
 

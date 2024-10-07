@@ -13,6 +13,7 @@ from components.renku_data_services.utils.middleware import validate_null_byte
 from renku_data_services.app_config.config import Config
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.authz.authz import _AuthzConverter
+from renku_data_services.base_models import Slug
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.namespace.models import Namespace, NamespaceKind
@@ -82,6 +83,12 @@ def member_2_user() -> UserInfo:
             created_by="member-2",
         ),
     )
+
+
+@pytest.fixture
+def project_members(member_1_user: UserInfo, member_2_user: UserInfo) -> list[dict[str, str]]:
+    """List of a project's members."""
+    return [{"id": member_1_user.id, "role": "viewer"}, {"id": member_2_user.id, "role": "owner"}]
 
 
 @pytest.fixture
@@ -223,6 +230,33 @@ def create_project(sanic_client, user_headers, admin_headers, regular_user, admi
         return project
 
     return create_project_helper
+
+
+@pytest.fixture
+def create_group(sanic_client, user_headers, admin_headers):
+    async def create_group_helper(
+        name: str, admin: bool = False, members: list[dict[str, str]] = None, **payload
+    ) -> dict[str, Any]:
+        headers = admin_headers if admin else user_headers
+        group_payload = {"slug": Slug.from_name(name).value}
+        group_payload.update(payload)
+        group_payload.update({"name": name})
+
+        _, response = await sanic_client.post("/api/data/groups", headers=headers, json=group_payload)
+
+        assert response.status_code == 201, response.text
+        group = response.json
+
+        if members:
+            _, response = await sanic_client.patch(
+                f"/api/data/groups/{group['slug']}/members", headers=headers, json=members
+            )
+
+            assert response.status_code == 200, response.text
+
+        return group
+
+    return create_group_helper
 
 
 @pytest.fixture

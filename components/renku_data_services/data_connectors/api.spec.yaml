@@ -51,7 +51,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data connectors
+        - data_connectors
     post:
       summary: Create a new data connector
       requestBody:
@@ -70,7 +70,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data connectors
+        - data_connectors
   /data_connectors/{data_connector_id}:
     parameters:
       - in: path
@@ -97,7 +97,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data connectors
+        - data_connectors
     patch:
       summary: Update specific fields of an existing data connector
       parameters:
@@ -124,7 +124,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data connectors
+        - data_connectors
     delete:
       summary: Remove a data connector
       responses:
@@ -133,7 +133,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data connectors
+        - data_connectors
   /namespaces/{namespace}/data_connectors/{slug}:
     parameters:
       - in: path
@@ -164,7 +164,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data connectors
+        - data_connectors
   /data_connectors/{data_connector_id}/project_links:
     parameters:
       - in: path
@@ -185,7 +185,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data connectors
+        - data_connectors
     post:
       summary: Create a new link from a data connector to a project
       requestBody:
@@ -204,7 +204,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data connectors
+        - data_connectors
   /data_connectors/{data_connector_id}/project_links/{link_id}:
     parameters:
       - in: path
@@ -227,7 +227,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data connectors
+        - data_connectors
   /data_connectors/{data_connector_id}/secrets:
     parameters:
       - in: path
@@ -254,7 +254,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data connectors
+        - data_connectors
     patch:
       summary: Save secrets for a data connector
       description: New secrets will be added and existing secrets will have their value updated. Using `null` as a value will remove the corresponding secret.
@@ -274,7 +274,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data connectors
+        - data_connectors
     delete:
       summary: Remove all saved secrets for a data connector
       responses:
@@ -283,7 +283,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - data connectors
+        - data_connectors
 components:
   schemas:
     DataConnectorsList:
@@ -307,10 +307,6 @@ components:
           $ref: "#/components/schemas/Slug"
         storage:
           $ref: "#/components/schemas/CloudStorageCore"
-        secrets:
-          type: array
-          items:
-            $ref: "#/components/schemas/DataConnectorSecret"
         creation_date:
           $ref: "#/components/schemas/CreationDate"
         created_by:
@@ -509,7 +505,7 @@ components:
       type: object
       properties:
         name:
-          $ref: "#/components/schemas/DataConnectorName"
+          $ref: "#/components/schemas/DataConnectorSecretFieldName"
         secret_id:
           $ref: "#/components/schemas/Ulid"
       required:
@@ -524,12 +520,18 @@ components:
       description: Information about a credential to save for a data connector
       properties:
         name:
-          $ref: "#/components/schemas/DataConnectorName"
+          $ref: "#/components/schemas/DataConnectorSecretFieldName"
         value:
           $ref: "#/components/schemas/SecretValueNullable"
       required:
         - name
         - value
+    DataConnectorSecretFieldName:
+      description: Name of the credential field
+      type: string
+      minLength: 1
+      maxLength: 99
+      example: "secret_key"
     SecretValueNullable:
       description: Secret value that can be any text
       type: string

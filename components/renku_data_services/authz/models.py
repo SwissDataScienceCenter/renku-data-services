@@ -89,7 +89,7 @@ class MembershipChange:
 
 
 class Visibility(Enum):
-    """The visisibilty of a resource."""
+    """The visibility of a resource."""
 
     PUBLIC: str = "public"
     PRIVATE: str = "private"

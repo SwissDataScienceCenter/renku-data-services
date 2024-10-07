@@ -38,8 +38,8 @@ class DataConnectorsBP(CustomBlueprint):
     """Handlers for manipulating data connectors."""
 
     data_connector_repo: DataConnectorRepository
-    data_connector_secret_repo: DataConnectorSecretRepository
     data_connector_to_project_link_repo: DataConnectorProjectLinkRepository
+    data_connector_secret_repo: DataConnectorSecretRepository
     authenticator: base_models.Authenticator
 
     def get_all(self) -> BlueprintFactoryResponse:

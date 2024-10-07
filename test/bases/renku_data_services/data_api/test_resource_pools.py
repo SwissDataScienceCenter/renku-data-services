@@ -148,6 +148,86 @@ async def test_resource_class_filtering(
 
 
 @pytest.mark.asyncio
+async def test_resource_class_ordering(
+    sanic_client: SanicASGITestClient, admin_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
+) -> None:
+    new_classes = [
+        {
+            "name": "resource class 5",
+            "cpu": 0.1,
+            "memory": 1,
+            "gpu": 1,
+            "max_storage": 1,
+            "default": False,
+            "default_storage": 1,
+            "node_affinities": [],
+            "tolerations": [],
+        },
+        {
+            "name": "resource class 4",
+            "cpu": 9.0,
+            "memory": 1,
+            "gpu": 0,
+            "max_storage": 1,
+            "default": False,
+            "default_storage": 1,
+            "node_affinities": [],
+            "tolerations": [],
+        },
+        {
+            "name": "resource class 3",
+            "cpu": 0.1,
+            "memory": 100,
+            "gpu": 0,
+            "max_storage": 1,
+            "default": False,
+            "default_storage": 1,
+            "node_affinities": [],
+            "tolerations": [],
+        },
+        {
+            "name": "resource class 2",
+            "cpu": 0.1,
+            "memory": 1,
+            "gpu": 0,
+            "max_storage": 100,
+            "default": False,
+            "default_storage": 1,
+            "node_affinities": [],
+            "tolerations": [],
+        },
+        {
+            "name": "resource class 1",
+            "cpu": 0.1,
+            "memory": 1,
+            "gpu": 0,
+            "max_storage": 10,
+            "default": True,
+            "default_storage": 1,
+            "node_affinities": [],
+            "tolerations": [],
+        },
+    ]
+    payload = valid_resource_pool_payload
+    payload["quota"] = {"cpu": 100, "memory": 100, "gpu": 100}
+    payload["classes"] = new_classes
+    _, res = await create_rp(payload, sanic_client)
+    assert res.status_code == 201
+    _, res = await sanic_client.get(
+        "/api/data/resource_pools",
+        params={"cpu": 1, "gpu": 1},
+        headers=admin_headers,
+    )
+    assert res.status_code == 200
+    assert len(res.json) == 1
+    rp_filtered = res.json[0]
+
+    new_classes_names = [c["name"] for c in new_classes]
+    returned_names = [c["name"] for c in rp_filtered["classes"]]
+    assert new_classes_names[::-1] == returned_names  # classes should show up in reverse order
+
+
+@pytest.mark.asyncio
 async def test_get_single_pool_quota(
     sanic_client: SanicASGITestClient, valid_resource_pool_payload: dict[str, Any], admin_headers: dict[str, str]
 ) -> None:

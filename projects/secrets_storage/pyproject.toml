@@ -67,6 +67,7 @@ aiofile = "^3.8.8"
 [tool.poetry.group.dev.dependencies]
 pyavro-gen = "^0.3.3"
 avro-preprocessor = "^0.3.0"
+fakeredis = "^2.24.1"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

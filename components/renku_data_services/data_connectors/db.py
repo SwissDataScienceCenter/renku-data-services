@@ -65,8 +65,7 @@ class DataConnectorRepository:
         data_connector_id: ULID,
     ) -> models.DataConnector:
         """Get one data connector from the database."""
-        not_found_msg = f"Data connector with id '{
-            data_connector_id}' does not exist or you do not have access to it."
+        not_found_msg = f"Data connector with id '{data_connector_id}' does not exist or you do not have access to it."
 
         authorized = await self.authz.has_permission(user, ResourceType.data_connector, data_connector_id, Scope.READ)
         if not authorized:
@@ -85,8 +84,9 @@ class DataConnectorRepository:
         self, user: base_models.APIUser, namespace: str, slug: str
     ) -> models.DataConnector:
         """Get one data connector from the database by slug."""
-        not_found_msg = f"Data connector with identifier '{
-                namespace}/{slug}' does not exist or you do not have access to it."
+        not_found_msg = (
+            f"Data connector with identifier '{namespace}/{slug}' does not exist or you do not have access to it."
+        )
 
         async with self.session_maker() as session:
             stmt = select(schemas.DataConnectorORM)
@@ -125,8 +125,7 @@ class DataConnectorRepository:
         )
         if not ns:
             raise errors.MissingResourceError(
-                message=f"The data connector cannot be created because the namespace {
-                    data_connector.namespace} does not exist."
+                message=f"The data connector cannot be created because the namespace {data_connector.namespace} does not exist."  # noqa E501
             )
         if not ns.group_id and not ns.user_id:
             raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
@@ -220,10 +219,7 @@ class DataConnectorRepository:
 
         current_etag = data_connector.dump().etag
         if current_etag != etag:
-            raise errors.ConflictError(
-                message=f"Current ETag is {
-                                       current_etag}, not {etag}."
-            )
+            raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
 
         # TODO: handle slug update
         if patch.name is not None:
@@ -240,10 +236,7 @@ class DataConnectorRepository:
                 select(ns_schemas.NamespaceORM).where(ns_schemas.NamespaceORM.slug == patch.namespace.lower())
             )
             if not ns:
-                raise errors.MissingResourceError(
-                    message=f"Rhe namespace with slug {
-                                                  patch.namespace} does not exist."
-                )
+                raise errors.MissingResourceError(message=f"The namespace with slug {patch.namespace} does not exist.")
             if not ns.group_id and not ns.user_id:
                 raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
             resource_type, resource_id = (
@@ -308,132 +301,6 @@ class DataConnectorRepository:
         return data_connector
 
 
-class DataConnectorSecretRepository:
-    """Repository for data connector secrets."""
-
-    def __init__(
-        self,
-        session_maker: Callable[..., AsyncSession],
-        data_connector_repo: DataConnectorRepository,
-        user_repo: UserRepo,
-        secret_service_public_key: rsa.RSAPublicKey,
-    ) -> None:
-        self.session_maker = session_maker
-        self.data_connector_repo = data_connector_repo
-        self.user_repo = user_repo
-        self.secret_service_public_key = secret_service_public_key
-
-    async def get_data_connector_secrets(
-        self,
-        user: base_models.APIUser,
-        data_connector_id: ULID,
-    ) -> list[models.DataConnectorSecret]:
-        """Get data connectors secrets from the database."""
-        if user.id is None:
-            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
-
-        async with self.session_maker() as session:
-            stmt = (
-                select(schemas.DataConnectorSecretORM)
-                .where(schemas.DataConnectorSecretORM.user_id == user.id)
-                .where(schemas.DataConnectorSecretORM.data_connector_id == data_connector_id)
-                .where(schemas.DataConnectorSecretORM.secret_id == secrets_schemas.SecretORM.id)
-                .where(secrets_schemas.SecretORM.user_id == user.id)
-            )
-            results = await session.scalars(stmt)
-            secrets = results.all()
-
-            return [secret.dump() for secret in secrets]
-
-    async def patch_data_connector_secrets(
-        self, user: base_models.APIUser, data_connector_id: ULID, secrets: list[models.DataConnectorSecretPatch]
-    ) -> list[models.DataConnectorSecret]:
-        """Create, update or remove data connector secrets."""
-        if user.id is None:
-            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
-
-        # NOTE: check that the user can access the data connector
-        await self.data_connector_repo.get_data_connector(user=user, data_connector_id=data_connector_id)
-
-        secrets_as_dict = {s.name: s.value for s in secrets}
-
-        async with self.session_maker() as session, session.begin():
-            stmt = (
-                select(schemas.DataConnectorSecretORM)
-                .where(schemas.DataConnectorSecretORM.user_id == user.id)
-                .where(schemas.DataConnectorSecretORM.data_connector_id == data_connector_id)
-                .where(schemas.DataConnectorSecretORM.secret_id == secrets_schemas.SecretORM.id)
-                .where(secrets_schemas.SecretORM.user_id == user.id)
-            )
-            result = await session.scalars(stmt)
-            existing_secrets = result.all()
-            existing_secrets_as_dict = {s.name: s for s in existing_secrets}
-
-            all_secrets = []
-
-            for name, value in secrets_as_dict.items():
-                if value is None:
-                    # Remove the secret
-                    data_connector_secret_orm = existing_secrets_as_dict.get(name)
-                    if data_connector_secret_orm is None:
-                        continue
-                    await session.delete(data_connector_secret_orm.secret)
-                    del existing_secrets_as_dict[name]
-                    continue
-
-                encrypted_value, encrypted_key = await encrypt_user_secret(
-                    user_repo=self.user_repo,
-                    requested_by=user,
-                    secret_service_public_key=self.secret_service_public_key,
-                    secret_value=value,
-                )
-
-                if data_connector_secret_orm := existing_secrets_as_dict.get(name):
-                    data_connector_secret_orm.secret.update(
-                        encrypted_value=encrypted_value, encrypted_key=encrypted_key
-                    )
-                else:
-                    secret_orm = secrets_schemas.SecretORM(
-                        name=f"{data_connector_id}-{name}",
-                        user_id=user.id,
-                        encrypted_value=encrypted_value,
-                        encrypted_key=encrypted_key,
-                        kind=SecretKind.storage,
-                    )
-                    data_connector_secret_orm = schemas.DataConnectorSecretORM(
-                        name=name,
-                        user_id=user.id,
-                        data_connector_id=data_connector_id,
-                        secret_id=secret_orm.id,
-                    )
-                    session.add(secret_orm)
-                    session.add(data_connector_secret_orm)
-
-                all_secrets.append(data_connector_secret_orm.dump())
-
-            return all_secrets
-
-    async def delete_data_connector_secrets(self, user: base_models.APIUser, data_connector_id: ULID) -> None:
-        """Delete data connector secrets."""
-        if user.id is None:
-            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
-
-        async with self.session_maker() as session, session.begin():
-            stmt = (
-                delete(secrets_schemas.SecretORM)
-                .where(secrets_schemas.SecretORM.user_id == user.id)
-                .where(secrets_schemas.SecretORM.id == schemas.DataConnectorSecretORM.secret_id)
-                .where(schemas.DataConnectorSecretORM.data_connector_id == data_connector_id)
-            )
-            await session.execute(stmt)
-            stmt = (
-                delete(schemas.DataConnectorSecretORM)
-                .where(schemas.DataConnectorSecretORM.user_id == user.id)
-                .where(schemas.DataConnectorSecretORM.data_connector_id == data_connector_id)
-            )
-            await session.execute(stmt)
-
-
 class DataConnectorProjectLinkRepository:
     """Repository for links from data connectors to projects."""
 
@@ -452,8 +319,7 @@ class DataConnectorProjectLinkRepository:
         authorized = await self.authz.has_permission(user, ResourceType.data_connector, data_connector_id, Scope.READ)
         if not authorized:
             raise errors.MissingResourceError(
-                message=f"Data connector with id '{
-                    data_connector_id}' does not exist or you do not have access to it."
+                message=f"Data connector with id '{data_connector_id}' does not exist or you do not have access to it."
             )
 
         project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
@@ -475,8 +341,7 @@ class DataConnectorProjectLinkRepository:
         authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
         if not authorized:
             raise errors.MissingResourceError(
-                message=f"Project with id '{
-                    project_id}' does not exist or you do not have access to it."
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
 
         data_connector_ids = await self.authz.resources_with_permission(
@@ -573,19 +438,129 @@ class DataConnectorProjectLinkRepository:
         if link_orm is None:
             return None
 
-        authorized_from = await self.authz.has_permission(
-            user, ResourceType.data_connector, data_connector_id, Scope.DELETE
-        )
-        authorized_to = await self.authz.has_permission(user, ResourceType.project, link_orm.project_id, Scope.WRITE)
-        authorized = authorized_from or authorized_to
-        if not authorized:
-            raise errors.MissingResourceError(
-                message=f"Data connector to project link '{link_id}' does not exist or you do not have access to it."
-            )
-
         link = link_orm.dump()
         await session.delete(link_orm)
         return link
+
+
+class DataConnectorSecretRepository:
+    """Repository for data connector secrets."""
+
+    def __init__(
+        self,
+        session_maker: Callable[..., AsyncSession],
+        data_connector_repo: DataConnectorRepository,
+        user_repo: UserRepo,
+        secret_service_public_key: rsa.RSAPublicKey,
+    ) -> None:
+        self.session_maker = session_maker
+        self.data_connector_repo = data_connector_repo
+        self.user_repo = user_repo
+        self.secret_service_public_key = secret_service_public_key
+
+    async def get_data_connector_secrets(
+        self,
+        user: base_models.APIUser,
+        data_connector_id: ULID,
+    ) -> list[models.DataConnectorSecret]:
+        """Get data connectors secrets from the database."""
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session:
+            stmt = (
+                select(schemas.DataConnectorSecretORM)
+                .where(schemas.DataConnectorSecretORM.user_id == user.id)
+                .where(schemas.DataConnectorSecretORM.data_connector_id == data_connector_id)
+                .where(schemas.DataConnectorSecretORM.secret_id == secrets_schemas.SecretORM.id)
+                .where(secrets_schemas.SecretORM.user_id == user.id)
+            )
+            results = await session.scalars(stmt)
+            secrets = results.all()
+
+            return [secret.dump() for secret in secrets]
+
+    async def patch_data_connector_secrets(
+        self, user: base_models.APIUser, data_connector_id: ULID, secrets: list[models.DataConnectorSecretUpdate]
+    ) -> list[models.DataConnectorSecret]:
+        """Create, update or remove data connector secrets."""
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        # NOTE: check that the user can access the data connector
+        await self.data_connector_repo.get_data_connector(user=user, data_connector_id=data_connector_id)
+
+        secrets_as_dict = {s.name: s.value for s in secrets}
+
+        async with self.session_maker() as session, session.begin():
+            stmt = (
+                select(schemas.DataConnectorSecretORM)
+                .where(schemas.DataConnectorSecretORM.user_id == user.id)
+                .where(schemas.DataConnectorSecretORM.data_connector_id == data_connector_id)
+                .where(schemas.DataConnectorSecretORM.secret_id == secrets_schemas.SecretORM.id)
+                .where(secrets_schemas.SecretORM.user_id == user.id)
+            )
+            result = await session.scalars(stmt)
+            existing_secrets = result.all()
+            existing_secrets_as_dict = {s.name: s for s in existing_secrets}
+
+            all_secrets = []
+
+            for name, value in secrets_as_dict.items():
+                if value is None:
+                    # Remove the secret
+                    data_connector_secret_orm = existing_secrets_as_dict.get(name)
+                    if data_connector_secret_orm is None:
+                        continue
+                    await session.delete(data_connector_secret_orm.secret)
+                    del existing_secrets_as_dict[name]
+                    continue
+
+                encrypted_value, encrypted_key = await encrypt_user_secret(
+                    user_repo=self.user_repo,
+                    requested_by=user,
+                    secret_service_public_key=self.secret_service_public_key,
+                    secret_value=value,
+                )
+
+                if data_connector_secret_orm := existing_secrets_as_dict.get(name):
+                    data_connector_secret_orm.secret.update(
+                        encrypted_value=encrypted_value, encrypted_key=encrypted_key
+                    )
+                else:
+                    secret_orm = secrets_schemas.SecretORM(
+                        name=f"{data_connector_id}-{name}",
+                        user_id=user.id,
+                        encrypted_value=encrypted_value,
+                        encrypted_key=encrypted_key,
+                        kind=SecretKind.storage,
+                    )
+                    data_connector_secret_orm = schemas.DataConnectorSecretORM(
+                        name=name,
+                        user_id=user.id,
+                        data_connector_id=data_connector_id,
+                        secret_id=secret_orm.id,
+                    )
+                    session.add(secret_orm)
+                    session.add(data_connector_secret_orm)
+
+                all_secrets.append(data_connector_secret_orm.dump())
+
+            return all_secrets
+
+    async def delete_data_connector_secrets(self, user: base_models.APIUser, data_connector_id: ULID) -> None:
+        """Delete data connector secrets."""
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session, session.begin():
+            stmt = (
+                delete(secrets_schemas.SecretORM)
+                .where(secrets_schemas.SecretORM.user_id == user.id)
+                .where(secrets_schemas.SecretORM.id == schemas.DataConnectorSecretORM.secret_id)
+                .where(schemas.DataConnectorSecretORM.data_connector_id == data_connector_id)
+            )
+            await session.execute(stmt)
 
 
 _T = TypeVar("_T")

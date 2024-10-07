@@ -1,7 +1,7 @@
 """Projects authorization adapter."""
 
 import asyncio
-from collections.abc import AsyncIterable, Awaitable, Callable
+from collections.abc import AsyncGenerator, AsyncIterable, Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import wraps
@@ -381,6 +381,31 @@ class Authz:
                 ids.append(response.resource_object_id)
         return ids
 
+    async def resources_with_direct_membership(
+        self, user: base_models.APIUser, resource_type: ResourceType
+    ) -> list[str]:
+        """Get all the resource IDs (for a specific resource kind) that a specific user is a direct member of."""
+        resource_ids: list[str] = []
+        if user.id is None:
+            return resource_ids
+
+        rel_filter = RelationshipFilter(
+            resource_type=resource_type.value,
+            optional_subject_filter=SubjectFilter(subject_type=ResourceType.user.value, optional_subject_id=user.id),
+        )
+
+        responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
+            ReadRelationshipsRequest(
+                consistency=Consistency(fully_consistent=True),
+                relationship_filter=rel_filter,
+            )
+        )
+
+        async for response in responses:
+            resource_ids.append(response.relationship.resource.object_id)
+
+        return resource_ids
+
     @_is_allowed(Scope.READ)  # The scope on the resource that allows the user to perform this check in the first place
     async def users_with_permission(
         self,
@@ -408,6 +433,15 @@ class Authz:
                 ids.append(response.subject.subject_object_id)
         return ids
 
+    async def get_all_members(
+        self, resource_type: ResourceType, *, zed_token: ZedToken | None = None
+    ) -> AsyncGenerator[Member, None]:
+        """Get all users that are members of a specific resource."""
+        members = self._get_members_helper(resource_type, resource_id=None, zed_token=zed_token)
+        async for member in members:
+            if member.user_id and member.user_id != "*":
+                yield member
+
     @_is_allowed(Scope.READ)
     async def members(
         self,
@@ -418,41 +452,63 @@ class Authz:
         *,
         zed_token: ZedToken | None = None,
     ) -> list[Member]:
+        """Get all users that are members of a specific resource type, if role is None then all roles are retrieved."""
+        members = self._get_members_helper(resource_type, str(resource_id), role, zed_token=zed_token)
+        return [m async for m in members]
+
+    async def _get_members_helper(
+        self,
+        resource_type: ResourceType,
+        resource_id: str | None,
+        role: Role | None = None,
+        *,
+        zed_token: ZedToken | None = None,
+    ) -> AsyncGenerator[Member, None]:
         """Get all users that are members of a resource, if role is None then all roles are retrieved."""
-        resource_id_str = str(resource_id)
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
         sub_filter = SubjectFilter(subject_type=ResourceType.user.value)
-        rel_filter = RelationshipFilter(
-            resource_type=resource_type,
-            optional_resource_id=resource_id_str,
-            optional_subject_filter=sub_filter,
-        )
-        if role:
-            relation = _Relation.from_role(role)
+        if resource_id is None:
+            rel_filter = RelationshipFilter(resource_type=resource_type, optional_subject_filter=sub_filter)
+        else:
             rel_filter = RelationshipFilter(
                 resource_type=resource_type,
-                optional_resource_id=resource_id_str,
-                optional_relation=relation,
+                optional_resource_id=resource_id,
                 optional_subject_filter=sub_filter,
             )
+        if role:
+            relation = _Relation.from_role(role)
+            if resource_id is None:
+                rel_filter = RelationshipFilter(
+                    resource_type=resource_type,
+                    optional_relation=relation,
+                    optional_subject_filter=sub_filter,
+                )
+            else:
+                rel_filter = RelationshipFilter(
+                    resource_type=resource_type,
+                    optional_resource_id=resource_id,
+                    optional_relation=relation,
+                    optional_subject_filter=sub_filter,
+                )
         responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
             ReadRelationshipsRequest(
                 consistency=consistency,
                 relationship_filter=rel_filter,
             )
         )
-        members: list[Member] = []
+
         async for response in responses:
             # Skip "public_viewer" relationships
             if response.relationship.relation == _Relation.public_viewer.value:
                 continue
             member_role = _Relation(response.relationship.relation).to_role()
-            members.append(
-                Member(
-                    user_id=response.relationship.subject.object.object_id, role=member_role, resource_id=resource_id
-                )
+            member = Member(
+                user_id=response.relationship.subject.object.object_id,
+                role=member_role,
+                resource_id=response.relationship.resource.object_id,
             )
-        return members
+
+            yield member
 
     @staticmethod
     def authz_change(
@@ -555,7 +611,7 @@ class Authz:
                     result, DataConnectorToProjectLink
                 ):
                     user = _extract_user_from_args(*func_args, **func_kwargs)
-                    authz_change = await db_repo.authz._add_data_connector_to_project_link(user, result)
+                    authz_change = await db_repo.authz._remove_data_connector_to_project_link(user, result)
                 case _:
                     resource_id: str | ULID | None = "unknown"
                     if isinstance(result, (Project, Namespace, Group, DataConnector)):
@@ -681,6 +737,17 @@ class Authz:
             ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
         )
         rels: list[Relationship] = []
+        async for response in responses:
+            rels.append(response.relationship)
+        # Project is also a subject for "linked_to" relations
+        rel_filter = RelationshipFilter(
+            optional_subject_filter=SubjectFilter(
+                subject_type=ResourceType.project.value, optional_subject_id=str(project.id)
+            )
+        )
+        responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
+            ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
+        )
         async for response in responses:
             rels.append(response.relationship)
         apply = WriteRelationshipsRequest(
