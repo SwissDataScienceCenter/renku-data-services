@@ -2,7 +2,7 @@
 
 import glob
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
@@ -88,3 +88,11 @@ class Event:
             "payload": _serialize_binary(payload),
         }
         return cls(queue, message)
+
+
+@dataclass
+class Reprovisioning:
+    """A reprovisioning."""
+
+    id: ULID
+    start_date: datetime = field(default_factory=lambda: datetime.now(UTC).replace(microsecond=0))
