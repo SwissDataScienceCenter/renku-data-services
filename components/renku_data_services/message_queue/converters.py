@@ -131,7 +131,7 @@ class _UserEventConverter:
                 ]
             case v2.UserRemoved:
                 user = cast(user_models.UserInfo, user)
-                return [_make_event("user.removed", v2.UserRemoved(id=user.id))]
+                return [make_event("user.removed", v2.UserRemoved(id=user.id))]
             case events.UpdateOrInsertUser:
                 user = cast(user_models.UserInfoUpdate, user)
                 if user.old is None:
