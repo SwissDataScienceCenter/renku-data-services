@@ -285,6 +285,7 @@ async def migrate_storages_v2_to_data_connectors(config: SyncConfig) -> None:
                 requested_by=api_user, storage=storage
             )
             logger.info(f"Migrated {storage.name} to {data_connector.namespace.slug}/{data_connector.slug}.")
+            logger.info(f"Deleted storage_v2: {storage.storage_id}")
         except Exception as err:
             logger.error(f"Failed to migrate {storage.name}.")
             logger.error(err)
