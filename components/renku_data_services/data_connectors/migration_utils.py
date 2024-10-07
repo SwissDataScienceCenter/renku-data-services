@@ -79,6 +79,9 @@ class DataConnectorMigrationTool:
         )
         await self.data_connector_project_link_repo.insert_link(user=data_connector_owner, link=unsaved_link)
 
+        # Remove the storage_v2 from the database
+        # TODO
+
         return data_connector
 
     async def _find_owner(
