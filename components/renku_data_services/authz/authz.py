@@ -358,6 +358,31 @@ class Authz:
                 ids.append(response.resource_object_id)
         return ids
 
+    async def resources_with_direct_membership(
+        self, user: base_models.APIUser, resource_type: ResourceType
+    ) -> list[str]:
+        """Get all the resource IDs (for a specific resource kind) that a specific user is a direct member of."""
+        resource_ids: list[str] = []
+        if user.id is None:
+            return resource_ids
+
+        rel_filter = RelationshipFilter(
+            resource_type=resource_type.value,
+            optional_subject_filter=SubjectFilter(subject_type=ResourceType.user.value, optional_subject_id=user.id),
+        )
+
+        responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
+            ReadRelationshipsRequest(
+                consistency=Consistency(fully_consistent=True),
+                relationship_filter=rel_filter,
+            )
+        )
+
+        async for response in responses:
+            resource_ids.append(response.relationship.resource.object_id)
+
+        return resource_ids
+
     @_is_allowed(Scope.READ)  # The scope on the resource that allows the user to perform this check in the first place
     async def users_with_permission(
         self,
