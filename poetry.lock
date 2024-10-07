@@ -1572,23 +1572,6 @@ httpx = ">=0.23.1"
 wsproto = "*"
 
 [[package]]
-name = "httpx-ws"
-version = "0.6.0"
-description = "WebSockets support for HTTPX"
-optional = false
-python-versions = ">=3.8"
-files = [
-    {file = "httpx_ws-0.6.0-py3-none-any.whl", hash = "sha256:437cfca94519a4e6ae06eb5573192df6c0da85c22b1a19cc1ea0b02b05a51d25"},
-    {file = "httpx_ws-0.6.0.tar.gz", hash = "sha256:60218f531fb474a2143af38568f4b7d94ba356780973443365c8e2c87882bb8c"},
-]
-
-[package.dependencies]
-anyio = ">=4"
-httpcore = ">=1.0.4"
-httpx = ">=0.23.1"
-wsproto = "*"
-
-[[package]]
 name = "hypothesis"
 version = "6.111.1"
 description = "A library for property-based testing"
@@ -4344,4 +4327,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "12103e2f3cbc0bb9c42e293d5d0f21ad3317da4e376d4c51d1b410b199557aed"
+content-hash = "73b315314d678136ca901df937abaf4ad42aeb6d09886058a1a00fe6b8c53808"

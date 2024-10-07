@@ -3,7 +3,7 @@
 from datetime import datetime
 from pathlib import PurePosixPath
 
-from sqlalchemy import JSON, DateTime, MetaData, String
+from sqlalchemy import JSON, DateTime, MetaData, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
@@ -38,9 +38,6 @@ class EnvironmentORM(BaseORM):
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
     """Id of the user who created the session environment."""
 
-    creation_date: Mapped[datetime] = mapped_column("creation_date", DateTime(timezone=True))
-    """Creation date and time."""
-
     description: Mapped[str | None] = mapped_column("description", String(500))
     """Human-readable description of the session environment."""
 
@@ -58,6 +55,11 @@ class EnvironmentORM(BaseORM):
     environment_kind: Mapped[models.EnvironmentKind] = mapped_column("environment_kind")
     args: Mapped[list[str] | None] = mapped_column("args", JSONVariant, nullable=True)
     command: Mapped[list[str] | None] = mapped_column("command", JSONVariant, nullable=True)
+
+    creation_date: Mapped[datetime] = mapped_column(
+        "creation_date", DateTime(timezone=True), default=func.now(), nullable=False
+    )
+    """Creation date and time."""
 
     def dump(self) -> models.Environment:
         """Create a session environment model from the EnvironmentORM."""
@@ -94,14 +96,16 @@ class SessionLauncherORM(BaseORM):
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
     """Id of the user who created the session launcher."""
 
-    creation_date: Mapped[datetime] = mapped_column("creation_date", DateTime(timezone=True))
-    """Creation date and time."""
-
     description: Mapped[str | None] = mapped_column("description", String(500))
     """Human-readable description of the session launcher."""
 
     project: Mapped[ProjectORM] = relationship(init=False)
     environment: Mapped[EnvironmentORM] = relationship(init=False, lazy="joined")
+
+    creation_date: Mapped[datetime] = mapped_column(
+        "creation_date", DateTime(timezone=True), default=func.now(), nullable=False
+    )
+    """Creation date and time."""
 
     project_id: Mapped[ULID] = mapped_column(
         "project_id", ForeignKey(ProjectORM.id, ondelete="CASCADE"), default=None, index=True
@@ -130,7 +134,7 @@ class SessionLauncherORM(BaseORM):
             created_by_id=launcher.created_by.id,
             creation_date=launcher.creation_date,
             description=launcher.description,
-            project_id=ULID.from_str(launcher.project_id),
+            project_id=launcher.project_id,
             environment_id=launcher.environment.id,
             resource_class_id=launcher.resource_class_id,
         )
