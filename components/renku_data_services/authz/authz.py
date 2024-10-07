@@ -639,7 +639,7 @@ class Authz:
                 case AuthzOperation.update_or_insert, ResourceType.user if isinstance(result, UserInfoUpdate):
                     if result.old is None:
                         authz_change = db_repo.authz._add_user_namespace(result.new.namespace)
-                case AuthzOperation.delete, ResourceType.user if isinstance(result, UserInfo):
+                case AuthzOperation.delete, ResourceType.user if isinstance(result, DeletedUser):
                     user = _extract_user_from_args(*func_args, **func_kwargs)
                     authz_change = await db_repo.authz._remove_user_namespace(result.id)
                     authz_change.extend(await db_repo.authz._remove_user(user, result))
@@ -1622,7 +1622,7 @@ class Authz:
     async def _remove_user(
         self,
         requested_by: base_models.APIUser,
-        user_to_delete: UserInfo,
+        user_to_delete: DeletedUser,
     ) -> _AuthzChange:
         """Remove a user from the authorization database."""
         # Compute permission by hand for user deletion
