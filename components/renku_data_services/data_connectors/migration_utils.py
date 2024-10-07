@@ -80,7 +80,7 @@ class DataConnectorMigrationTool:
         await self.data_connector_project_link_repo.insert_link(user=data_connector_owner, link=unsaved_link)
 
         # Remove the storage_v2 from the database
-        # TODO
+        await self._delete_storage_v2(requested_by=requested_by, storage_id=storage.storage_id)
 
         return data_connector
 
@@ -182,6 +182,23 @@ class DataConnectorMigrationTool:
             result = await session.scalars(stmt)
             storages = result.all()
             return [storage.dump() for storage in storages]
+
+    async def _delete_storage_v2(self, requested_by: base_models.APIUser, storage_id: ULID) -> ULID | None:
+        """Delete a storage_v2 from the database."""
+        if requested_by.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+        if not requested_by.is_admin:
+            raise errors.ForbiddenError(message="Only admins can perform this operation.")
+
+        async with self.session_maker() as session, session.begin():
+            result = await session.scalars(
+                select(storage_schemas.CloudStorageORM).where(storage_schemas.CloudStorageORM.storage_id == storage_id)
+            )
+            storage = result.one_or_none()
+            if storage is None:
+                return None
+            await session.delete(storage)
+            return storage_id
 
     async def _get_all_project_ids(self, requested_by: base_models.APIUser) -> list[ULID]:
         """Get all Renku 2.0 projects."""
