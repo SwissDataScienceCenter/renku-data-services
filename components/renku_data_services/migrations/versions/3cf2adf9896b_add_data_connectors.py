@@ -142,7 +142,7 @@ def downgrade() -> None:
     )
     op.drop_table("data_connector_secrets", schema="storage")
     op.drop_constraint("either_project_id_or_data_connector_id_is_set", "entity_slugs", schema="common", type_="check")
-    op.execute("""DELETE FROM common.entity_slugs WHERE entity_slugs.data_connector_id IS NOT NULL""")
+    op.execute("DELETE FROM common.entity_slugs WHERE entity_slugs.data_connector_id IS NOT NULL")
     op.drop_constraint("entity_slugs_data_connector_id_fk", "entity_slugs", schema="common", type_="foreignkey")
     op.drop_index(op.f("ix_common_entity_slugs_data_connector_id"), table_name="entity_slugs", schema="common")
     op.alter_column("entity_slugs", "project_id", existing_type=sa.String(length=26), nullable=False, schema="common")
