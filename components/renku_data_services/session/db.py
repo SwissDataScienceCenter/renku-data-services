@@ -46,7 +46,7 @@ class SessionRepository:
         async with self.session_maker() as session:
             res = await session.scalars(
                 select(schemas.EnvironmentORM)
-                .where(schemas.EnvironmentORM.id == str(environment_id))
+                .where(schemas.EnvironmentORM.id == environment_id)
                 .where(schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.GLOBAL.value)
             )
             environment = res.one_or_none()
@@ -166,7 +166,7 @@ class SessionRepository:
         async with self.session_maker() as session, session.begin():
             res = await session.scalars(
                 select(schemas.EnvironmentORM)
-                .where(schemas.EnvironmentORM.id == str(environment_id))
+                .where(schemas.EnvironmentORM.id == environment_id)
                 .where(schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.GLOBAL.value)
             )
             environment = res.one_or_none()
@@ -191,11 +191,9 @@ class SessionRepository:
             launcher = res.all()
             return [item.dump() for item in launcher]
 
-    async def get_project_launchers(self, user: base_models.APIUser, project_id: str) -> list[models.SessionLauncher]:
+    async def get_project_launchers(self, user: base_models.APIUser, project_id: ULID) -> list[models.SessionLauncher]:
         """Get all session launchers in a project from the database."""
-        authorized = await self.project_authz.has_permission(
-            user, ResourceType.project, ULID.from_str(project_id), Scope.READ
-        )
+        authorized = await self.project_authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
         if not authorized:
             raise errors.MissingResourceError(
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
@@ -392,6 +390,8 @@ class SessionRepository:
                 return launcher.dump()
 
             await self.__update_launcher_environment(user, launcher, session, patch.environment)
+            await session.flush()
+            await session.refresh(launcher)
             return launcher.dump()
 
     async def __update_launcher_environment(

@@ -74,7 +74,7 @@ class UnsavedMember:
 class Member(UnsavedMember):
     """Member stored in the database."""
 
-    resource_id: str | ULID
+    resource_id: ULID
 
 
 class Change(Enum):

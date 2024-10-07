@@ -50,6 +50,7 @@ class EnvironmentsBP(CustomBlueprint):
         """Create a new session environment."""
 
         @authenticate(self.authenticator)
+        @only_authenticated
         @validate(json=apispec.EnvironmentPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.EnvironmentPost) -> JSONResponse:
             new_environment = validate_unsaved_environment(body)
@@ -62,6 +63,7 @@ class EnvironmentsBP(CustomBlueprint):
         """Partially update a specific session environment."""
 
         @authenticate(self.authenticator)
+        @only_authenticated
         @validate(json=apispec.EnvironmentPatch)
         async def _patch(
             _: Request, user: base_models.APIUser, environment_id: ULID, body: apispec.EnvironmentPatch
@@ -78,6 +80,7 @@ class EnvironmentsBP(CustomBlueprint):
         """Delete a specific session environment."""
 
         @authenticate(self.authenticator)
+        @only_authenticated
         async def _delete(_: Request, user: base_models.APIUser, environment_id: ULID) -> HTTPResponse:
             await self.session_repo.delete_environment(user=user, environment_id=environment_id)
             return HTTPResponse(status=204)
@@ -116,6 +119,7 @@ class SessionLaunchersBP(CustomBlueprint):
         """Create a new session launcher."""
 
         @authenticate(self.authenticator)
+        @only_authenticated
         @validate(json=apispec.SessionLauncherPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.SessionLauncherPost) -> JSONResponse:
             new_launcher = validate_unsaved_session_launcher(body)
@@ -128,6 +132,7 @@ class SessionLaunchersBP(CustomBlueprint):
         """Partially update a specific session launcher."""
 
         @authenticate(self.authenticator)
+        @only_authenticated
         @validate(json=apispec.SessionLauncherPatch)
         async def _patch(
             _: Request, user: base_models.APIUser, launcher_id: ULID, body: apispec.SessionLauncherPatch
@@ -146,6 +151,7 @@ class SessionLaunchersBP(CustomBlueprint):
         """Delete a specific session launcher."""
 
         @authenticate(self.authenticator)
+        @only_authenticated
         async def _delete(_: Request, user: base_models.APIUser, launcher_id: ULID) -> HTTPResponse:
             await self.session_repo.delete_launcher(user=user, launcher_id=launcher_id)
             return HTTPResponse(status=204)
@@ -156,9 +162,8 @@ class SessionLaunchersBP(CustomBlueprint):
         """Get all launchers belonging to a project."""
 
         @authenticate(self.authenticator)
-        @validate_path_project_id
-        async def _get_launcher(_: Request, user: base_models.APIUser, project_id: str) -> JSONResponse:
+        async def _get_launcher(_: Request, user: base_models.APIUser, project_id: ULID) -> JSONResponse:
             launchers = await self.session_repo.get_project_launchers(user=user, project_id=project_id)
             return validated_json(apispec.SessionLaunchersList, launchers)
 
-        return "/projects/<project_id>/session_launchers", ["GET"], _get_launcher
+        return "/projects/<project_id:ulid>/session_launchers", ["GET"], _get_launcher
