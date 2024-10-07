@@ -30,7 +30,9 @@ class ImageRepoDockerAPI:
     hostname: str
     oauth2_token: Optional[str] = field(default=None, repr=False)
     # NOTE: We need to follow redirects so that we can authenticate with the image repositories properly.
-    client: httpx.AsyncClient = httpx.AsyncClient(timeout=10, follow_redirects=True)
+    # NOTE: If we do not use default_factory to create the client here requests will fail beause it can happen
+    # that the client gets created in the wrong asyncio loop.
+    client: httpx.AsyncClient = field(default_factory=lambda: httpx.AsyncClient(timeout=10, follow_redirects=True))
 
     async def _get_docker_token(self, image: "Image") -> Optional[str]:
         """Get an authorization token from the docker v2 API.
