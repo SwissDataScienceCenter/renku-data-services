@@ -77,7 +77,7 @@ class ProjectRepositoryORM(BaseORM):
 
     id: Mapped[int] = mapped_column("id", Integer, primary_key=True, default=None, init=False)
     url: Mapped[str] = mapped_column("url", String(2000))
-    project_id: Mapped[Optional[str]] = mapped_column(
+    project_id: Mapped[Optional[ULID]] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"), default=None, index=True
     )
     project: Mapped[Optional[ProjectORM]] = relationship(back_populates="repositories", default=None, repr=False)

@@ -16,7 +16,7 @@ paths:
         name: storage_id
         required: true
         schema:
-          $ref: "#/components/schemas/UlidId"
+          $ref: "#/components/schemas/Ulid"
         description: the id of the storage
     get:
       summary: get cloud storage details
@@ -73,7 +73,7 @@ paths:
             additionalProperties: false
             properties:
               project_id:
-                  $ref: "#/components/schemas/UlidId"
+                  $ref: "#/components/schemas/Ulid"
             required:
               - project_id
       responses:
@@ -122,7 +122,7 @@ paths:
         name: storage_id
         required: true
         schema:
-          $ref: "#/components/schemas/UlidId"
+          $ref: "#/components/schemas/Ulid"
         description: The id of the storage
     get:
       summary: Get all saved secrets for a cloud storage
@@ -177,7 +177,7 @@ paths:
         name: storage_id
         required: true
         schema:
-          $ref: "#/components/schemas/UlidId"
+          $ref: "#/components/schemas/Ulid"
         description: the id of the storage
     get:
       summary: get cloud storage details
@@ -317,7 +317,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/RCloneConfig"
+              $ref: "#/components/schemas/RCloneConfigValidate"
       responses:
         "204":
           description: The configuration is valid
@@ -386,12 +386,22 @@ components:
         project_id:
           oneOf:
             - $ref: "#/components/schemas/GitlabProjectId"
-            - $ref: "#/components/schemas/UlidId"
+            - $ref: "#/components/schemas/Ulid"
       required:
         - project_id
       example:
         project_id: 123456
     RCloneConfig:
+      type: object
+      description: Dictionary of rclone key:value pairs (based on schema from '/storage_schema')
+      additionalProperties:
+        oneOf:
+        - type: integer
+        - type: string
+          nullable: true
+        - type: boolean
+        - type: object
+    RCloneConfigValidate: #this is the same as RCloneConfig but duplicated so a class gets generated
       type: object
       description: Dictionary of rclone key:value pairs (based on schema from '/storage_schema')
       additionalProperties:
@@ -458,7 +468,7 @@ components:
         project_id:
           oneOf:
             - $ref: "#/components/schemas/GitlabProjectId"
-            - $ref: "#/components/schemas/UlidId"
+            - $ref: "#/components/schemas/Ulid"
         storage_type:
           $ref: "#/components/schemas/StorageType"
         name:
@@ -482,7 +492,7 @@ components:
             - storage_id
           properties:
             storage_id:
-              $ref: "#/components/schemas/UlidId"
+              $ref: "#/components/schemas/Ulid"
     CloudStorageGet:
       type: object
       description: Get response for a cloud storage. Contains storage and information about fields that are required if the storage is private.
@@ -539,7 +549,7 @@ components:
           minLength: 1
           maxLength: 99
         secret_id:
-          $ref: "#/components/schemas/UlidId"
+          $ref: "#/components/schemas/Ulid"
       required:
         - name
         - secret_id
@@ -630,12 +640,12 @@ components:
           type: string
           description: data type of option value. RClone has more options but they map to the ones listed here.
           enum: ["int", "bool", "string", "Time"]
-    UlidId:
-      description: ULID identifier of an object
+    Ulid:
+      description: ULID identifier
       type: string
       minLength: 26
       maxLength: 26
-      pattern: "^[A-Z0-9]+$"
+      pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"  # This is case-insensitive
     GitlabProjectId:
       description: Project id of a gitlab project (only int project id allowed, encoded as string for future-proofing)
       type: string

@@ -497,10 +497,12 @@ async def test_storage_patch_unauthorized(storage_test_client, valid_storage_pay
 async def test_storage_obscure(storage_test_client) -> None:
     storage_test_client, _ = storage_test_client
     body = {
-        "type": "seafile",
-        "provider": "Other",
-        "user": "abcdefg",
-        "pass": "123456",
+        "configuration": {
+            "type": "seafile",
+            "provider": "Other",
+            "user": "abcdefg",
+            "pass": "123456",
+        }
     }
     _, res = await storage_test_client.post("/api/data/storage_schema/obscure", data=json.dumps(body))
     assert res.status_code == 200
