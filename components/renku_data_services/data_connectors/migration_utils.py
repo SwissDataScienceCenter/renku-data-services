@@ -170,10 +170,11 @@ class DataConnectorMigrationTool:
             raise errors.ForbiddenError(message="Only admins can perform this operation.")
 
         all_project_ids = await self._get_all_project_ids(requested_by=requested_by)
+        all_project_ids_str = [str(pid) for pid in all_project_ids]
 
         async with self.session_maker() as session:
             stmt = select(storage_schemas.CloudStorageORM).where(
-                storage_schemas.CloudStorageORM.project_id.in_(all_project_ids)
+                storage_schemas.CloudStorageORM.project_id.in_(all_project_ids_str)
             )
             result = await session.scalars(stmt)
             storages = result.all()
