@@ -237,7 +237,7 @@ class GroupRepository:
     @dispatch_message(GroupRemoved)
     async def delete_group(
         self, user: base_models.APIUser, slug: str, *, session: AsyncSession | None = None
-    ) -> models.Group | None:
+    ) -> models.DeletedGroup | None:
         """Delete a specific group."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
@@ -257,7 +257,7 @@ class GroupRepository:
         # trigger and procedure that does the cleanup when a slug is removed.
         stmt = delete(schemas.GroupORM).where(schemas.GroupORM.id == group.id)
         await session.execute(stmt)
-        return group.dump()
+        return models.DeletedGroup(id=group.id)
 
     @with_db_transaction
     @dispatch_message(events.GroupMembershipChanged)

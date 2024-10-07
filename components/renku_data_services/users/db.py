@@ -24,6 +24,7 @@ from renku_data_services.namespace.orm import NamespaceORM
 from renku_data_services.users.config import UserPreferencesConfig
 from renku_data_services.users.kc_api import IKeycloakAPI
 from renku_data_services.users.models import (
+    DeletedUser,
     KeycloakAdminEvent,
     PinnedProjects,
     UserInfo,
@@ -228,7 +229,7 @@ class UsersSync:
 
     @with_db_transaction
     @dispatch_message(avro_schema_v2.UserRemoved)
-    async def _remove_user(self, user_id: str, *, session: AsyncSession | None = None) -> str | None:
+    async def _remove_user(self, user_id: str, *, session: AsyncSession | None = None) -> DeletedUser | None:
         """Remove a user from the database."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
@@ -241,7 +242,7 @@ class UsersSync:
             return None
         logger.info(f"User with ID {user_id} was removed from the database.")
         logger.info(f"User namespace with ID {user_id} was removed from the authorization database.")
-        return user_id
+        return DeletedUser(id=user_id)
 
     async def users_sync(self, kc_api: IKeycloakAPI) -> None:
         """Sync all users from Keycloak into the users database."""

@@ -33,8 +33,15 @@ from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.authz.models import Change, Member, MembershipChange, Role, Scope, Visibility
 from renku_data_services.base_models.core import InternalServiceAdmin
 from renku_data_services.errors import errors
-from renku_data_services.namespace.models import Group, GroupUpdate, Namespace, NamespaceKind, NamespaceUpdate
-from renku_data_services.project.models import Project, ProjectUpdate
+from renku_data_services.namespace.models import (
+    DeletedGroup,
+    Group,
+    GroupUpdate,
+    Namespace,
+    NamespaceKind,
+    NamespaceUpdate,
+)
+from renku_data_services.project.models import DeletedProject, Project, ProjectUpdate
 from renku_data_services.users.models import UserInfo, UserInfoUpdate
 
 _P = ParamSpec("_P")
@@ -51,7 +58,7 @@ class WithAuthz(Protocol):
 
 _AuthzChangeFuncResult = TypeVar(
     "_AuthzChangeFuncResult",
-    bound=Project | ProjectUpdate | Group | UserInfoUpdate | list[UserInfo] | None,
+    bound=Project | ProjectUpdate | DeletedProject | Group | DeletedGroup | UserInfoUpdate | list[UserInfo] | None,
 )
 _T = TypeVar("_T")
 _WithAuthz = TypeVar("_WithAuthz", bound=WithAuthz)
@@ -527,7 +534,7 @@ class Authz:
             match operation, resource:
                 case AuthzOperation.create, ResourceType.project if isinstance(result, Project):
                     authz_change = db_repo.authz._add_project(result)
-                case AuthzOperation.delete, ResourceType.project if isinstance(result, Project):
+                case AuthzOperation.delete, ResourceType.project if isinstance(result, DeletedProject):
                     user = _extract_user_from_args(*func_args, **func_kwargs)
                     authz_change = await db_repo.authz._remove_project(user, result)
                 case AuthzOperation.delete, ResourceType.project if result is None:
@@ -543,7 +550,7 @@ class Authz:
                         authz_change.extend(await db_repo.authz._update_project_namespace(user, result.new))
                 case AuthzOperation.create, ResourceType.group if isinstance(result, Group):
                     authz_change = db_repo.authz._add_group(result)
-                case AuthzOperation.delete, ResourceType.group if isinstance(result, Group):
+                case AuthzOperation.delete, ResourceType.group if isinstance(result, DeletedGroup):
                     user = _extract_user_from_args(*func_args, **func_kwargs)
                     authz_change = await db_repo.authz._remove_group(user, result)
                 case AuthzOperation.delete, ResourceType.group if result is None:
@@ -676,11 +683,13 @@ class Authz:
 
     @_is_allowed_on_resource(Scope.DELETE, ResourceType.project)
     async def _remove_project(
-        self, user: base_models.APIUser, project: Project, *, zed_token: ZedToken | None = None
+        self, user: base_models.APIUser, deleted_project: DeletedProject, *, zed_token: ZedToken | None = None
     ) -> _AuthzChange:
         """Remove the relationships associated with the project."""
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
-        rel_filter = RelationshipFilter(resource_type=ResourceType.project.value, optional_resource_id=str(project.id))
+        rel_filter = RelationshipFilter(
+            resource_type=ResourceType.project.value, optional_resource_id=str(deleted_project.id)
+        )
         responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
             ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
         )
@@ -1144,7 +1153,7 @@ class Authz:
 
     @_is_allowed_on_resource(Scope.DELETE, ResourceType.group)
     async def _remove_group(
-        self, user: base_models.APIUser, group: Group, *, zed_token: ZedToken | None = None
+        self, user: base_models.APIUser, group: DeletedGroup, *, zed_token: ZedToken | None = None
     ) -> _AuthzChange:
         """Remove the group from the authorization database."""
         if not group.id:
