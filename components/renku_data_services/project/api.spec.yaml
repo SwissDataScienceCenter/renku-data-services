@@ -143,7 +143,7 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - projects
-  /projects/{namespace}/{slug}:
+  /namespaces/{namespace}/projects/{slug}:
     get:
       summary: Get a project by namespace and project slug
       parameters:
