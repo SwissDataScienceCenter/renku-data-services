@@ -233,38 +233,6 @@ class EntitySlugORM(BaseORM):
         )
 
 
-class EntitySlugORM_COPY(BaseORM):
-    """Entity slugs."""
-
-    __tablename__ = "entity_slugs_copy"
-    __table_args__ = (
-        Index("entity_slugs_copy_unique_slugs", "namespace_id", "slug", unique=True),
-        # CheckConstraint(
-        #     "CAST (project_id IS NOT NULL AS int) + CAST (data_connector_id IS NOT NULL AS int) BETWEEN 0 AND 1",
-        #     name="either_project_id_or_data_connector_id_is_set",
-        # ),
-    )
-
-    id: Mapped[int] = mapped_column(primary_key=True, init=False)
-    slug: Mapped[str] = mapped_column(String(99), index=True, nullable=False)
-    project_id: Mapped[ULID | None] = mapped_column(
-        ForeignKey(ProjectORM.id, ondelete="CASCADE", name="entity_slugs_project_id_fk_copy"), index=True, nullable=True
-    )
-    project: Mapped[ProjectORM | None] = relationship(lazy="joined", init=False, repr=False, back_populates="slug")
-    data_connector_id: Mapped[ULID | None] = mapped_column(
-        ForeignKey(DataConnectorORM.id, ondelete="CASCADE", name="entity_slugs_data_connector_id_fk_copy"),
-        index=True,
-        nullable=True,
-    )
-    data_connector: Mapped[DataConnectorORM | None] = relationship(
-        lazy="joined", init=False, repr=False, back_populates="slug"
-    )
-    namespace_id: Mapped[ULID] = mapped_column(
-        ForeignKey(NamespaceORM.id, ondelete="CASCADE", name="entity_slugs_namespace_id_fk_copy"), index=True
-    )
-    namespace: Mapped[NamespaceORM] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
-
-
 class EntitySlugOldORM(BaseORM):
     """Entity slugs history."""
 
