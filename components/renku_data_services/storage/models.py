@@ -252,4 +252,4 @@ class CloudStorageSecretUpsert(BaseModel):
     """Insert/update storage secret data."""
 
     name: str = Field()
-    value: str = Field()
+    value: str | None = Field()
