@@ -260,6 +260,13 @@ class UserInfo(UnsavedUserInfo):
     namespace: Namespace
 
 
+@dataclass
+class DeletedUser:
+    """A user that was deleted from the database."""
+
+    id: str
+
+
 class UserInfoUpdate(NamedTuple):
     """Used to convey information about an update of a user or their namespace."""
 

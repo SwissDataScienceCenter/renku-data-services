@@ -392,7 +392,7 @@ class ResourcePoolRepository(_Base):
             return new_rp_model
 
     @_only_admins
-    async def delete_resource_pool(self, api_user: base_models.APIUser, id: int) -> Optional[models.ResourcePool]:
+    async def delete_resource_pool(self, api_user: base_models.APIUser, id: int) -> None:
         """Delete a resource pool from the database."""
         async with self.session_maker() as session, session.begin():
             stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == id)
@@ -402,11 +402,8 @@ class ResourcePoolRepository(_Base):
                 if rp.default:
                     raise errors.ValidationError(message="The default resource pool cannot be deleted.")
                 await session.delete(rp)
-                quota = None
                 if rp.quota:
-                    quota = self.quotas_repo.get_quota(rp.quota)
                     self.quotas_repo.delete_quota(rp.quota)
-                return rp.dump(quota)
             return None
 
     @_only_admins

@@ -25,6 +25,7 @@ from renku_data_services.namespace.orm import NamespaceORM
 from renku_data_services.users.config import UserPreferencesConfig
 from renku_data_services.users.kc_api import IKeycloakAPI
 from renku_data_services.users.models import (
+    DeletedUser,
     KeycloakAdminEvent,
     PinnedProjects,
     UserInfo,
@@ -125,7 +126,7 @@ class UserRepo:
 
             return [user.dump() for user in users if user.namespace is not None]
 
-    async def remove_user(self, requested_by: APIUser, user_id: str) -> UserInfo | None:
+    async def remove_user(self, requested_by: APIUser, user_id: str) -> DeletedUser | None:
         """Remove a user."""
         logger.info(f"remove_user: Trying to remove user with ID {user_id}")
         return await self._remove_user(requested_by=requested_by, user_id=user_id)
@@ -135,7 +136,7 @@ class UserRepo:
     @dispatch_message(avro_schema_v2.UserRemoved)
     async def _remove_user(
         self, requested_by: APIUser, user_id: str, *, session: AsyncSession | None = None
-    ) -> UserInfo | None:
+    ) -> DeletedUser | None:
         """Remove a user from the database."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
@@ -145,11 +146,10 @@ class UserRepo:
         if user_orm is None:
             logger.info(f"User with ID {user_id} was not found.")
             return None
-        user_info = user_orm.dump()
         await session.execute(delete(UserORM).where(UserORM.keycloak_id == user_id))
         logger.info(f"User with ID {user_id} was removed from the database.")
         logger.info(f"User namespace with ID {user_id} was removed from the authorization database.")
-        return user_info
+        return DeletedUser(id=user_id)
 
     @only_authenticated
     async def get_or_create_user_secret_key(self, requested_by: APIUser) -> str:
