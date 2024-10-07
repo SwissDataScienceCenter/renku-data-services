@@ -9,8 +9,10 @@ from typing import Any, Optional
 from sqlalchemy import JSON, DateTime, MetaData, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
+from ulid import ULID
 
-from renku_data_services.message_queue.models import Event
+from renku_data_services.message_queue.models import Event, Reprovisioning
+from renku_data_services.utils.sqlalchemy import ULIDType
 
 JSONVariant = JSON().with_variant(JSONB(), "postgresql")
 
@@ -71,3 +73,20 @@ class EventORM(BaseORM):
             return None
         else:
             return message_type
+
+
+class ReprovisioningORM(BaseORM):
+    """Reprovisioning table.
+
+    This table is used to make sure that only one instance of reprovisioning is run at any given time.
+    It gets updated with the reprovisioning progress.
+    """
+
+    __tablename__ = "reprovisioning"
+
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    start_date: Mapped[datetime] = mapped_column("start_date", DateTime(timezone=True), nullable=False)
+
+    def dump(self) -> Reprovisioning:
+        """Create a Reprovisioning from the ORM object."""
+        return Reprovisioning(id=self.id, start_date=self.start_date)
