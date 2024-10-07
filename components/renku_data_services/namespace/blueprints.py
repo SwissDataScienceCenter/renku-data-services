@@ -29,12 +29,14 @@ class GroupsBP(CustomBlueprint):
         """List all groups."""
 
         @authenticate(self.authenticator)
-        @validate_query(query=apispec.PaginationRequest)
+        @validate_query(query=apispec.GroupsGetQuery)
         @paginate
         async def _get_all(
-            _: Request, user: base_models.APIUser, pagination: PaginationRequest, query: apispec.PaginationRequest
+            _: Request, user: base_models.APIUser, pagination: PaginationRequest, query: apispec.GroupsGetQuery
         ) -> tuple[list[dict], int]:
-            groups, rec_count = await self.group_repo.get_groups(user=user, pagination=pagination)
+            groups, rec_count = await self.group_repo.get_groups(
+                user=user, pagination=pagination, direct_member=query.direct_member
+            )
             return (
                 validate_and_dump(apispec.GroupResponseList, groups),
                 rec_count,

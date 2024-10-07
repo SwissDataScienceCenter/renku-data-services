@@ -304,6 +304,8 @@ components:
           $ref: "#/components/schemas/CreationDate"
         created_by:
           $ref: "#/components/schemas/UserId"
+        updated_at:
+          $ref: "#/components/schemas/UpdatedAt"
         repositories:
           $ref: "#/components/schemas/RepositoriesList"
         visibility:
@@ -403,6 +405,11 @@ components:
       example: "a-slug-example"
     CreationDate:
       description: The date and time the resource was created (in UTC and ISO-8601 format)
+      type: string
+      format: date-time
+      example: "2023-11-01T17:32:28Z"
+    UpdatedAt:
+      description: The date and time the resource was updated (in UTC and ISO-8601 format)
       type: string
       format: date-time
       example: "2023-11-01T17:32:28Z"
@@ -551,6 +558,10 @@ components:
             description: A namespace, used as a filter.
             type: string
             default: ""
+          direct_member:
+            description: A flag to filter projects where the user is a direct member.
+            type: boolean
+            default: false
     PaginationRequest:
       type: object
       additionalProperties: false

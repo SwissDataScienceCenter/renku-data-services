@@ -74,14 +74,18 @@ class GroupRepository:
         return output
 
     async def get_groups(
-        self,
-        user: base_models.APIUser,
-        pagination: PaginationRequest,
+        self, user: base_models.APIUser, pagination: PaginationRequest, direct_member: bool = False
     ) -> tuple[list[models.Group], int]:
         """Get all groups from the database."""
+        if direct_member:
+            group_ids = await self.authz.resources_with_direct_membership(user, ResourceType.group)
+
         async with self.session_maker() as session, session.begin():
-            stmt = select(schemas.GroupORM).limit(pagination.per_page).offset(pagination.offset)
-            stmt = stmt.order_by(schemas.GroupORM.creation_date.asc(), schemas.GroupORM.id.asc(), schemas.GroupORM.name)
+            stmt = select(schemas.GroupORM)
+            if direct_member:
+                stmt = stmt.where(schemas.GroupORM.id.in_(group_ids))
+            stmt = stmt.limit(pagination.per_page).offset(pagination.offset)
+            stmt = stmt.order_by(schemas.GroupORM.id.desc())
             result = await session.execute(stmt)
             groups_orm = result.scalars().all()
 
