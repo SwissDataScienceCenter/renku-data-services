@@ -211,7 +211,6 @@ class ProjectRepository:
         session: AsyncSession | None = None,
     ) -> models.ProjectUpdate:
         """Update a project entry."""
-        project_id_str: str = str(project_id)
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
         result = await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
@@ -242,7 +241,7 @@ class ProjectRepository:
 
         if "repositories" in payload:
             payload["repositories"] = [
-                schemas.ProjectRepositoryORM(url=r, project_id=project_id_str, project=project)
+                schemas.ProjectRepositoryORM(url=r, project_id=project_id, project=project)
                 for r in payload["repositories"]
             ]
             # Trigger update for ``updated_at`` column
