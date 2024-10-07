@@ -757,13 +757,14 @@ class NotebooksBP(CustomBlueprint):
         """Return the availability of the docker image."""
 
         @authenticate_2(self.authenticator, self.internal_gitlab_authenticator)
+        @validate(query=apispec.NotebooksImagesGetParametersQuery)
         async def _check_docker_image(
-            request: Request, user: AnonymousAPIUser | AuthenticatedAPIUser, internal_gitlab_user: APIUser
+            request: Request,
+            user: AnonymousAPIUser | AuthenticatedAPIUser,
+            internal_gitlab_user: APIUser,
+            query: apispec.NotebooksImagesGetParametersQuery,
         ) -> HTTPResponse:
-            image_url = request.get_args().get("image_url")
-            if not isinstance(image_url, str):
-                raise ValueError("required string of image url")
-            parsed_image = Image.from_path(image_url)
+            parsed_image = Image.from_path(query.image_url)
             image_repo = parsed_image.repo_api()
             if parsed_image.hostname == self.nb_config.git.registry and internal_gitlab_user.access_token:
                 image_repo = image_repo.with_oauth2_token(internal_gitlab_user.access_token)
@@ -1130,13 +1131,14 @@ class NotebooksNewBP(CustomBlueprint):
         """Return the availability of the docker image."""
 
         @authenticate_2(self.authenticator, self.internal_gitlab_authenticator)
+        @validate(query=apispec.SessionsImagesGetParametersQuery)
         async def _check_docker_image(
-            request: Request, user: AnonymousAPIUser | AuthenticatedAPIUser, internal_gitlab_user: APIUser
+            request: Request,
+            user: AnonymousAPIUser | AuthenticatedAPIUser,
+            internal_gitlab_user: APIUser,
+            query: apispec.SessionsImagesGetParametersQuery,
         ) -> HTTPResponse:
-            image_url = request.get_args().get("image_url")
-            if not isinstance(image_url, str):
-                raise ValueError("required string of image url")
-            parsed_image = Image.from_path(image_url)
+            parsed_image = Image.from_path(query.image_url)
             image_repo = parsed_image.repo_api()
             if parsed_image.hostname == self.nb_config.git.registry and internal_gitlab_user.access_token:
                 image_repo = image_repo.with_oauth2_token(internal_gitlab_user.access_token)

@@ -30,7 +30,7 @@ class ImageRepoDockerAPI:
     hostname: str
     oauth2_token: Optional[str] = field(default=None, repr=False)
     # NOTE: We need to follow redirects so that we can authenticate with the image repositories properly.
-    # NOTE: If we do not use default_factory to create the client here requests will fail beause it can happen
+    # NOTE: If we do not use default_factory to create the client here requests will fail because it can happen
     # that the client gets created in the wrong asyncio loop.
     client: httpx.AsyncClient = field(default_factory=lambda: httpx.AsyncClient(timeout=10, follow_redirects=True))
 
@@ -65,7 +65,7 @@ class ImageRepoDockerAPI:
         """Query the docker API to get the manifest of an image."""
         if image.hostname != self.hostname:
             raise errors.ValidationError(
-                message=f"The image hostname {image.hostname} does not match " f"the image repository {self.hostname}"
+                message=f"The image hostname {image.hostname} does not match the image repository {self.hostname}"
             )
         token = await self._get_docker_token(image)
         image_digest_url = f"https://{image.hostname}/v2/{image.name}/manifests/{image.tag}"
