@@ -221,7 +221,6 @@ class ProjectRepository:
         session: AsyncSession | None = None,
     ) -> models.ProjectUpdate:
         """Update a project entry."""
-        project_id_str: str = str(project_id)
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
         result = await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
