@@ -11,6 +11,12 @@ from pydantic import ConfigDict, Field, RootModel
 from renku_data_services.storage.apispec_base import BaseAPISpec
 
 
+class RCloneConfigValidate(
+    RootModel[Optional[Dict[str, Union[int, Optional[str], bool, Dict[str, Any]]]]]
+):
+    root: Optional[Dict[str, Union[int, Optional[str], bool, Dict[str, Any]]]] = None
+
+
 class Example(BaseAPISpec):
     value: Optional[str] = Field(
         None, description="a potential value for the option (think enum)"
@@ -70,13 +76,13 @@ class RCloneOption(BaseAPISpec):
     )
 
 
-class UlidId(RootModel[str]):
+class Ulid(RootModel[str]):
     root: str = Field(
         ...,
-        description="ULID identifier of an object",
+        description="ULID identifier",
         max_length=26,
         min_length=26,
-        pattern="^[A-Z0-9]+$",
+        pattern="^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
     )
 
 
@@ -131,7 +137,7 @@ class StorageSchemaObscurePostRequest(BaseAPISpec):
 
 
 class ProjectId(BaseAPISpec):
-    project_id: Union[GitlabProjectId, UlidId]
+    project_id: Union[GitlabProjectId, Ulid]
 
 
 class CloudStorageUrl(ProjectId):
@@ -174,7 +180,7 @@ class CloudStorage(ProjectId):
 
 
 class CloudStoragePatch(BaseAPISpec):
-    project_id: Optional[Union[GitlabProjectId, UlidId]] = None
+    project_id: Optional[Union[GitlabProjectId, Ulid]] = None
     storage_type: Optional[str] = Field(
         None,
         description="same as rclone prefix/ rclone config type. Ignored in requests, but returned in responses for convenience.",
@@ -206,10 +212,10 @@ class CloudStoragePatch(BaseAPISpec):
 class CloudStorageWithId(CloudStorage):
     storage_id: str = Field(
         ...,
-        description="ULID identifier of an object",
+        description="ULID identifier",
         max_length=26,
         min_length=26,
-        pattern="^[A-Z0-9]+$",
+        pattern="^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
     )
 
 

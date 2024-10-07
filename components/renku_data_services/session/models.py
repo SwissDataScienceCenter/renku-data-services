@@ -74,7 +74,6 @@ class Environment(BaseEnvironment):
 class BaseSessionLauncher:
     """Session launcher model."""
 
-    id: ULID | None
     project_id: ULID
     name: str
     description: str | None
@@ -86,7 +85,6 @@ class BaseSessionLauncher:
 class UnsavedSessionLauncher(BaseSessionLauncher):
     """Session launcher model that has not been persisted in the DB."""
 
-    id: ULID | None = None
     environment: str | UnsavedEnvironment
     """When a string is passed for the environment it should be the ID of an existing environment."""
 
