@@ -188,6 +188,16 @@ class BaseStorageRepository(_Base):
             stored_secrets = []
 
             for name, value in secret_names_values.items():
+                if value is None:
+                    # delete the secret
+                    storage_secret_orm = existing_secrets.get(name)
+                    if storage_secret_orm is None:
+                        continue
+                    await session.delete(storage_secret_orm)
+                    await session.delete(storage_secret_orm.secret)
+                    del existing_secrets[name]
+                    continue
+
                 encrypted_value, encrypted_key = await encrypt_user_secret(
                     user_repo=self.user_repo,
                     requested_by=user,
