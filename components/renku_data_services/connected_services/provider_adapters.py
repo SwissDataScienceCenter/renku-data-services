@@ -101,6 +101,10 @@ class GitHubAdapter(ProviderAdapter):
         """Validates and returns the connected account response from the Resource Server."""
         return external_models.GitHubConnectedAccount.model_validate(response.json()).to_connected_account()
 
+    def api_validate_app_installations_response(self, response: Response) -> models.AppInstallationList:
+        """Validates and returns the app installations response from the Resource Server."""
+        return external_models.GitHubAppInstallationList.model_validate(response.json()).to_app_installation_list()
+
 
 _adapter_map: dict[ProviderKind, type[ProviderAdapter]] = {
     ProviderKind.gitlab: GitLabAdapter,
