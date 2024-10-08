@@ -31,10 +31,7 @@ class SyncConfig:
     group_repo: GroupRepository
     event_repo: EventRepository
     project_repo: ProjectRepository
-
-    # NEW
     data_connector_migration_tool: DataConnectorMigrationTool
-
     session_maker: Callable[..., AsyncSession]
 
     @classmethod
