@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, nullcontext
-from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +13,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
+from renku_data_services.base_models.core import RESET
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.session import models
 from renku_data_services.session import orm as schemas
@@ -101,53 +101,59 @@ class SessionRepository:
             await session.refresh(env)
             return env.dump()
 
-    async def __update_environment(
+    def __update_environment(
         self,
-        user: base_models.APIUser,
-        session: AsyncSession,
-        environment_id: ULID,
-        kind: models.EnvironmentKind,
-        **kwargs: dict,
-    ) -> models.Environment:
-        res = await session.scalars(
-            select(schemas.EnvironmentORM)
-            .where(schemas.EnvironmentORM.id == str(environment_id))
-            .where(schemas.EnvironmentORM.environment_kind == kind.value)
-        )
-        environment = res.one_or_none()
-        if environment is None:
-            raise errors.MissingResourceError(message=f"Session environment with id '{environment_id}' does not exist.")
-
-        for key, value in kwargs.items():
-            # NOTE: Only some fields can be edited
-            if key in [
-                "name",
-                "description",
-                "container_image",
-                "default_url",
-                "port",
-                "working_directory",
-                "mount_directory",
-                "uid",
-                "gid",
-                "args",
-                "command",
-            ]:
-                setattr(environment, key, value)
-
-        return environment.dump()
+        environment: schemas.EnvironmentORM,
+        update: models.EnvironmentUpdate,
+    ) -> None:
+        # NOTE: this is more verbose than a loop and setattr but this way we get mypy type checks
+        if update.name is not None:
+            environment.name = update.name
+        if update.description is not None:
+            environment.description = update.description
+        if update.container_image is not None:
+            environment.container_image = update.container_image
+        if update.default_url is not None:
+            environment.default_url = update.default_url
+        if update.port is not None:
+            environment.port = update.port
+        if update.working_directory is not None:
+            environment.working_directory = update.working_directory
+        if update.mount_directory is not None:
+            environment.mount_directory = update.mount_directory
+        if update.uid is not None:
+            environment.uid = update.uid
+        if update.gid is not None:
+            environment.gid = update.gid
+        if update.args is RESET:
+            environment.args = None
+        elif isinstance(update.args, list):
+            environment.args = update.args
+        if update.command is RESET:
+            environment.command = None
+        elif isinstance(update.command, list):
+            environment.command = update.command
 
     async def update_environment(
-        self, user: base_models.APIUser, environment_id: ULID, **kwargs: dict
+        self, user: base_models.APIUser, environment_id: ULID, update: models.EnvironmentUpdate
     ) -> models.Environment:
         """Update a global session environment entry."""
         if not user.is_admin:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session, session.begin():
-            return await self.__update_environment(
-                user, session, environment_id, models.EnvironmentKind.GLOBAL, **kwargs
+            res = await session.scalars(
+                select(schemas.EnvironmentORM)
+                .where(schemas.EnvironmentORM.id == str(environment_id))
+                .where(schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.GLOBAL)
             )
+            environment = res.one_or_none()
+            if environment is None:
+                raise errors.MissingResourceError(
+                    message=f"Session environment with id '{environment_id}' does not exist."
+                )
+            self.__update_environment(environment, update)
+            return environment.dump()
 
     async def delete_environment(self, user: base_models.APIUser, environment_id: ULID) -> None:
         """Delete a global session environment entry."""
@@ -297,9 +303,8 @@ class SessionRepository:
         self,
         user: base_models.APIUser,
         launcher_id: ULID,
-        new_custom_environment: models.UnsavedEnvironment | None,
+        update: models.SessionLauncherUpdate,
         session: AsyncSession | None = None,
-        **kwargs: Any,
     ) -> models.SessionLauncher:
         """Update a session launcher entry."""
         if not user.is_authenticated or user.id is None:
@@ -333,8 +338,8 @@ class SessionRepository:
             if not authorized:
                 raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
-            resource_class_id = kwargs.get("resource_class_id")
-            if resource_class_id is not None:
+            resource_class_id = update.resource_class_id
+            if isinstance(resource_class_id, int):
                 res = await session.scalars(
                     select(schemas.ResourceClassORM).where(schemas.ResourceClassORM.id == resource_class_id)
                 )
@@ -351,19 +356,20 @@ class SessionRepository:
                         message=f"You do not have access to resource class with id '{resource_class_id}'."
                     )
 
-            for key, value in kwargs.items():
-                # NOTE: Only some fields can be updated.
-                if key in [
-                    "name",
-                    "description",
-                    "resource_class_id",
-                ]:
-                    setattr(launcher, key, value)
+            # NOTE: Only some fields can be updated.
+            if update.name is not None:
+                launcher.name = update.name
+            if update.description is not None:
+                launcher.description = update.description
+            if isinstance(update.resource_class_id, int):
+                launcher.resource_class_id = update.resource_class_id
+            elif update.resource_class_id is RESET:
+                launcher.resource_class_id = None
 
-            env_payload = kwargs.get("environment", {})
-            await self.__update_launcher_environment(user, launcher, session, new_custom_environment, **env_payload)
-            await session.flush()
-            await session.refresh(launcher)
+            if update.environment is None:
+                return launcher.dump()
+
+            await self.__update_launcher_environment(user, launcher, session, update.environment)
             return launcher.dump()
 
     async def __update_launcher_environment(
@@ -371,12 +377,11 @@ class SessionRepository:
         user: base_models.APIUser,
         launcher: schemas.SessionLauncherORM,
         session: AsyncSession,
-        new_custom_environment: models.UnsavedEnvironment | None,
-        **kwargs: Any,
+        update: models.EnvironmentUpdate | models.UnsavedEnvironment | str,
     ) -> None:
         current_env_kind = launcher.environment.environment_kind
-        match new_custom_environment, current_env_kind, kwargs:
-            case None, _, {"id": env_id, **nothing_else} if len(nothing_else) == 0:
+        match update, current_env_kind:
+            case str() as env_id, _:
                 # The environment in the launcher is set via ID, the new ID has to refer
                 # to an environment that is GLOBAL.
                 old_environment = launcher.environment
@@ -403,33 +408,16 @@ class SessionRepository:
                     # We remove the custom environment to avoid accumulating custom environments that are not associated
                     # with any launchers.
                     await session.delete(old_environment)
-            case None, models.EnvironmentKind.CUSTOM, {**rest} if (
-                rest.get("environment_kind") is None
-                or rest.get("environment_kind") == models.EnvironmentKind.CUSTOM.value
-            ):
+            case models.EnvironmentUpdate(), models.EnvironmentKind.CUSTOM:
                 # Custom environment being updated
-                for key, val in rest.items():
-                    # NOTE: Only some fields can be updated.
-                    if key in [
-                        "name",
-                        "description",
-                        "container_image",
-                        "default_url",
-                        "port",
-                        "working_directory",
-                        "mount_directory",
-                        "uid",
-                        "gid",
-                        "args",
-                        "command",
-                    ]:
-                        setattr(launcher.environment, key, val)
-            case models.UnsavedEnvironment(), models.EnvironmentKind.GLOBAL, {**nothing_else} if (
-                len(nothing_else) == 0 and new_custom_environment.environment_kind == models.EnvironmentKind.CUSTOM
+                self.__update_environment(launcher.environment, update)
+            case models.UnsavedEnvironment() as new_custom_environment, models.EnvironmentKind.GLOBAL if (
+                new_custom_environment.environment_kind == models.EnvironmentKind.CUSTOM
             ):
                 # Global environment replaced by a custom one
                 new_env = await self.__insert_environment(user, session, new_custom_environment)
                 launcher.environment = new_env
+                await session.flush()
             case _:
                 raise errors.ValidationError(
                     message="Encountered an invalid payload for updating a launcher environment", quiet=True

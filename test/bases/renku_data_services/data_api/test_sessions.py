@@ -3,6 +3,7 @@
 import os
 import shutil
 from asyncio import AbstractEventLoop
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -18,8 +19,8 @@ from .utils import K3DCluster, setup_amalthea
 os.environ["KUBECONFIG"] = ".k3d-config.yaml"
 
 
-@pytest.fixture(scope="module", autouse=True)
-def cluster() -> K3DCluster:
+@pytest.fixture(scope="module")
+def cluster() -> Iterator[K3DCluster]:
     if shutil.which("k3d") is None:
         pytest.skip("Requires k3d for cluster creation")
 
@@ -172,10 +173,14 @@ async def test_patch_session_environment(
     env = await create_session_environment("Environment 1")
     environment_id = env["id"]
 
+    command = ["python", "test.py"]
+    args = ["arg1", "arg2"]
     payload = {
         "name": "New name",
         "description": "New description.",
         "container_image": "new_image:new_tag",
+        "command": command,
+        "args": args,
     }
 
     _, res = await sanic_client.patch(f"/api/data/environments/{environment_id}", headers=admin_headers, json=payload)
@@ -185,6 +190,14 @@ async def test_patch_session_environment(
     assert res.json.get("name") == "New name"
     assert res.json.get("description") == "New description."
     assert res.json.get("container_image") == "new_image:new_tag"
+    assert res.json.get("args") == args
+    assert res.json.get("command") == command
+
+    # Test that patching with None will reset the command and args
+    payload = {"args": None, "command": None}
+    _, res = await sanic_client.patch(f"/api/data/environments/{environment_id}", headers=admin_headers, json=payload)
+    assert res.json.get("args") is None
+    assert res.json.get("command") is None
 
 
 @pytest.mark.asyncio
@@ -515,13 +528,25 @@ async def test_patch_session_launcher_environment(
 
     # Should be able to patch some fields of the custom environment
     patch_payload = {
-        "environment": {"container_image": "nginx:latest"},
+        "environment": {"container_image": "nginx:latest", "args": ["a", "b", "c"]},
     }
     _, res = await sanic_client.patch(
         f"/api/data/session_launchers/{launcher_id}", headers=user_headers, json=patch_payload
     )
     assert res.status_code == 200, res.text
     assert res.json["environment"]["container_image"] == "nginx:latest"
+    assert res.json["environment"]["args"] == ["a", "b", "c"]
+
+    # Should be able to reset args by patching in None, pathcing a null field should do nothing
+    patch_payload = {
+        "environment": {"args": None, "command": None},
+    }
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher_id}", headers=user_headers, json=patch_payload
+    )
+    assert res.status_code == 200, res.text
+    assert res.json["environment"].get("args") is None
+    assert res.json["environment"].get("command") is None
 
 
 @pytest.fixture
@@ -540,6 +565,7 @@ async def test_starting_session_anonymous(
     admin_headers,
     launch_session,
     anonymous_user_headers,
+    cluster,
 ) -> None:
     _, res = await sanic_client.post(
         "/api/data/resource_pools",

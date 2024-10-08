@@ -12,7 +12,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models.validation import validated_json
-from renku_data_services.session import apispec, models
+from renku_data_services.session import apispec, converters, models
 from renku_data_services.session.db import SessionRepository
 
 
@@ -76,9 +76,11 @@ class EnvironmentsBP(CustomBlueprint):
         async def _patch(
             _: Request, user: base_models.APIUser, environment_id: ULID, body: apispec.EnvironmentPatch
         ) -> JSONResponse:
-            body_dict = body.model_dump(exclude_none=True)
+            update = converters.environment_update_from_patch(body)
             environment = await self.session_repo.update_environment(
-                user=user, environment_id=environment_id, **body_dict
+                user=user,
+                environment_id=environment_id,
+                update=update,
             )
             return validated_json(apispec.Environment, environment)
 
@@ -169,34 +171,14 @@ class SessionLaunchersBP(CustomBlueprint):
         async def _patch(
             _: Request, user: base_models.APIUser, launcher_id: ULID, body: apispec.SessionLauncherPatch
         ) -> JSONResponse:
-            body_dict = body.model_dump(exclude_none=True, mode="json")
             async with self.session_repo.session_maker() as session, session.begin():
                 current_launcher = await self.session_repo.get_launcher(user, launcher_id)
-                new_env: models.UnsavedEnvironment | None = None
-                if (
-                    isinstance(body.environment, apispec.EnvironmentPatchInLauncher)
-                    and current_launcher.environment.environment_kind == models.EnvironmentKind.GLOBAL
-                    and body.environment.environment_kind == apispec.EnvironmentKind.CUSTOM
-                ):
-                    # This means that the global environment is being swapped for a custom one,
-                    # so we have to create a brand new environment, but we have to validate here.
-                    validated_env = apispec.EnvironmentPostInLauncher.model_validate(body_dict.pop("environment"))
-                    new_env = models.UnsavedEnvironment(
-                        name=validated_env.name,
-                        description=validated_env.description,
-                        container_image=validated_env.container_image,
-                        default_url=validated_env.default_url,
-                        port=validated_env.port,
-                        working_directory=PurePosixPath(validated_env.working_directory),
-                        mount_directory=PurePosixPath(validated_env.mount_directory),
-                        uid=validated_env.uid,
-                        gid=validated_env.gid,
-                        environment_kind=models.EnvironmentKind(validated_env.environment_kind.value),
-                        args=validated_env.args,
-                        command=validated_env.command,
-                    )
+                update = converters.launcher_update_from_patch(body, current_launcher)
                 launcher = await self.session_repo.update_launcher(
-                    user=user, launcher_id=launcher_id, new_custom_environment=new_env, session=session, **body_dict
+                    user=user,
+                    launcher_id=launcher_id,
+                    session=session,
+                    update=update,
                 )
             return validated_json(apispec.SessionLauncher, launcher)
 

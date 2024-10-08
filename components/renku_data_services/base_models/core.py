@@ -5,7 +5,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, StrEnum
-from typing import ClassVar, Optional, Protocol, Self, TypeVar
+from typing import ClassVar, NewType, Optional, Protocol, Self, TypeVar
 
 from sanic import Request
 
@@ -212,3 +212,12 @@ class Authenticator(Protocol[AnyAPIUser]):
     async def authenticate(self, access_token: str, request: Request) -> AnyAPIUser:
         """Validates the user credentials (i.e. we can say that the user is a valid Renku user)."""
         ...
+
+
+ResetType = NewType("ResetType", object)
+"""This type represents that a value that may be None should be reset back to None or null.
+This type should have only one instance, defined in the same file as this type.
+"""
+
+RESET: ResetType = ResetType(object())
+"""The single instance of the ResetType, can be compared to similar to None, i.e. `if value is RESET`"""
