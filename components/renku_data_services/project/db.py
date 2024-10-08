@@ -287,7 +287,7 @@ class ProjectRepository:
     @dispatch_message(avro_schema_v2.ProjectRemoved)
     async def delete_project(
         self, user: base_models.APIUser, project_id: ULID, *, session: AsyncSession | None = None
-    ) -> models.Project | None:
+    ) -> models.DeletedProject | None:
         """Delete a project."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
@@ -309,7 +309,7 @@ class ProjectRepository:
             delete(storage_schemas.CloudStorageORM).where(storage_schemas.CloudStorageORM.project_id == str(project_id))
         )
 
-        return project.dump()
+        return models.DeletedProject(id=project.id)
 
 
 _P = ParamSpec("_P")
