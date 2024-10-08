@@ -79,3 +79,5 @@ docker-compose.override.yml
 # nix
 result
 *.qcow2
+
+.k3d-config.yaml
