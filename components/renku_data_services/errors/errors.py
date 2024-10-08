@@ -46,6 +46,13 @@ class UnauthorizedError(BaseError):
 
 
 @dataclass
+class InvalidTokenError(UnauthorizedError):
+    """The supplied jwt is invalid."""
+
+    message: str = "The supplied credentials (jwt) are not valid."
+
+
+@dataclass
 class ForbiddenError(BaseError):
     """Raised when the provided credentials do not grant permission for the current operation."""
 
