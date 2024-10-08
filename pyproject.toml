@@ -156,7 +156,7 @@ ignore = [
 "components/renku_data_services/notebooks/crs.py" = ["F401"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["renku_data_services"]
+known-first-party = ["renku_data_services", "test"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
