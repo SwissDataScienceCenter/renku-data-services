@@ -8,7 +8,7 @@ from pathlib import PurePosixPath
 from ulid import ULID
 
 from renku_data_services import errors
-from renku_data_services.base_models.core import Reset
+from renku_data_services.base_models.core import ResetType
 
 
 class EnvironmentKind(StrEnum):
@@ -84,8 +84,8 @@ class EnvironmentUpdate:
     mount_directory: PurePosixPath | None = None
     uid: int | None = None
     gid: int | None = None
-    args: list[str] | None | Reset = None
-    command: list[str] | None | Reset = None
+    args: list[str] | None | ResetType = None
+    command: list[str] | None | ResetType = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -126,4 +126,4 @@ class SessionLauncherUpdate:
     # NOTE: When unsaved environment is used it means a brand new environment should be created for the
     # launcher with the update of the launcher.
     environment: str | EnvironmentUpdate | UnsavedEnvironment | None = None
-    resource_class_id: int | None | Reset = None
+    resource_class_id: int | None | ResetType = None

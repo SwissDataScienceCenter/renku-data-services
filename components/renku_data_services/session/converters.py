@@ -2,7 +2,7 @@
 
 from pathlib import PurePosixPath
 
-from renku_data_services.base_models.core import Reset
+from renku_data_services.base_models.core import RESET, ResetType
 from renku_data_services.session import apispec, models
 
 
@@ -17,8 +17,8 @@ def environment_update_from_patch(data: apispec.EnvironmentPatch) -> models.Envi
         mount_directory = PurePosixPath(data.mount_directory)
     # NOTE: If the args or command are present in the data_dict and they are None they were passed in by the user.
     # The None specifically passed by the user indicates that the value should be removed from the DB.
-    args = Reset() if "args" in data_dict and data_dict["args"] is None else data.args
-    command = Reset() if "command" in data_dict and data_dict["command"] is None else data.command
+    args = RESET if "args" in data_dict and data_dict["args"] is None else data.args
+    command = RESET if "command" in data_dict and data_dict["command"] is None else data.command
     return models.EnvironmentUpdate(
         name=data.name,
         description=data.description,
@@ -68,11 +68,11 @@ def launcher_update_from_patch(
         environment = environment_update_from_patch(data.environment)
     elif isinstance(data.environment, apispec.EnvironmentIdOnlyPatch):
         environment = data.environment.id
-    resource_class_id: int | None | Reset = None
+    resource_class_id: int | None | ResetType = None
     if "resource_class_id" in data_dict and data_dict["resource_class_id"] is None:
         # NOTE: This means that the resource class set in the DB should be removed so that the
         # default resource class currently set in the CRC will be used.
-        resource_class_id = Reset()
+        resource_class_id = RESET
     else:
         resource_class_id = data_dict.get("resource_class_id")
     return models.SessionLauncherUpdate(

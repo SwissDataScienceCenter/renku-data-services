@@ -5,7 +5,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, StrEnum
-from typing import ClassVar, Optional, Protocol, Self, TypeVar
+from typing import ClassVar, NewType, Optional, Protocol, Self, TypeVar
 
 from sanic import Request
 
@@ -214,15 +214,10 @@ class Authenticator(Protocol[AnyAPIUser]):
         ...
 
 
-@dataclass(frozen=True, eq=True, kw_only=True)
-class Null:
-    """Parent class for distinguishing between None values."""
+ResetType = NewType("ResetType", object)
+"""This type represents that a value that may be None should be reset back to None or null.
+This type should have only one instance, defined in the same file as this type.
+"""
 
-    value: None = field(default=None, init=False, repr=False)
-
-
-@dataclass(frozen=True, eq=True, kw_only=True)
-class Reset(Null):
-    """Used to indicate a None value that has been deliberately set by the user or caller."""
-
-    ...
+RESET: ResetType = ResetType(object())
+"""The single instance of the ResetType, can be compared to similar to None, i.e. `if value is RESET`"""

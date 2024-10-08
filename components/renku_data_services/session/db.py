@@ -13,7 +13,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
-from renku_data_services.base_models.core import Reset
+from renku_data_services.base_models.core import RESET
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.session import models
 from renku_data_services.session import orm as schemas
@@ -125,11 +125,11 @@ class SessionRepository:
             environment.uid = update.uid
         if update.gid is not None:
             environment.gid = update.gid
-        if isinstance(update.args, Reset):
+        if update.args is RESET:
             environment.args = None
         elif isinstance(update.args, list):
             environment.args = update.args
-        if isinstance(update.command, Reset):
+        if update.command is RESET:
             environment.command = None
         elif isinstance(update.command, list):
             environment.command = update.command
@@ -363,7 +363,7 @@ class SessionRepository:
                 launcher.description = update.description
             if isinstance(update.resource_class_id, int):
                 launcher.resource_class_id = update.resource_class_id
-            elif isinstance(update.resource_class_id, Reset):
+            elif update.resource_class_id is RESET:
                 launcher.resource_class_id = None
 
             if update.environment is None:
