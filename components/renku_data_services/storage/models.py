@@ -70,8 +70,6 @@ class UnsavedCloudStorage(BaseModel):
     target_path: str = Field(min_length=1)
     """Path inside the target repository to mount/clone data to."""
 
-    secrets: list["CloudStorageSecret"] = Field(default_factory=list)
-
     @classmethod
     def from_dict(cls, data: dict) -> "UnsavedCloudStorage":
         """Create the model from a plain dictionary."""
@@ -230,26 +228,3 @@ class CloudStorage(UnsavedCloudStorage):
     """Cloudstorage saved in the database."""
 
     storage_id: ULID = Field(default=None)
-
-
-class CloudStorageSecret(BaseModel):
-    """Cloud storage secret model."""
-
-    user_id: str = Field()
-    storage_id: ULID = Field()
-    name: str = Field(min_length=1, max_length=99)
-    secret_id: ULID = Field()
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "CloudStorageSecret":
-        """Create the model from a plain dictionary."""
-        return cls(
-            user_id=data["user_id"], storage_id=data["storage_id"], name=data["name"], secret_id=data["secret_id"]
-        )
-
-
-class CloudStorageSecretUpsert(BaseModel):
-    """Insert/update storage secret data."""
-
-    name: str = Field()
-    value: str | None = Field()

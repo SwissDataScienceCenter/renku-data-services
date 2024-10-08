@@ -1,27 +1,29 @@
 """SQLAlchemy's schemas for the projects database."""
 
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import DateTime, Index, Integer, MetaData, String, func
+from sqlalchemy import DateTime, Integer, MetaData, String, func
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
 from ulid import ULID
 
 from renku_data_services.authz import models as authz_models
-from renku_data_services.namespace.orm import NamespaceORM
+from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
 from renku_data_services.project import models
 from renku_data_services.project.apispec import Visibility
 from renku_data_services.utils.sqlalchemy import ULIDType
 
-metadata_obj = MetaData(schema="projects")  # Has to match alembic ini section name
+if TYPE_CHECKING:
+    from renku_data_services.namespace.orm import EntitySlugORM
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
     """Base class for all ORM classes."""
 
-    metadata = metadata_obj
+    metadata = MetaData(schema="projects")
+    registry = COMMON_ORM_REGISTRY
 
 
 class ProjectORM(BaseORM):
@@ -36,7 +38,9 @@ class ProjectORM(BaseORM):
     keywords: Mapped[Optional[list[str]]] = mapped_column("keywords", ARRAY(String(99)), nullable=True)
     # NOTE: The project slugs table has a foreign key from the projects table, but there is a stored procedure
     # triggered by the deletion of slugs to remove the project used by the slug. See migration 89aa4573cfa9.
-    slug: Mapped["ProjectSlug"] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
+    slug: Mapped["EntitySlugORM"] = relationship(
+        lazy="joined", init=False, repr=False, viewonly=True, back_populates="project"
+    )
     repositories: Mapped[list["ProjectRepositoryORM"]] = relationship(
         back_populates="project",
         default_factory=list,
@@ -81,39 +85,3 @@ class ProjectRepositoryORM(BaseORM):
         ForeignKey("projects.id", ondelete="CASCADE"), default=None, index=True
     )
     project: Mapped[Optional[ProjectORM]] = relationship(back_populates="repositories", default=None, repr=False)
-
-
-class ProjectSlug(BaseORM):
-    """Project and namespace slugs."""
-
-    __tablename__ = "project_slugs"
-    __table_args__ = (Index("project_slugs_unique_slugs", "namespace_id", "slug", unique=True),)
-
-    id: Mapped[int] = mapped_column(primary_key=True, init=False)
-    slug: Mapped[str] = mapped_column(String(99), index=True, nullable=False)
-    project_id: Mapped[ULID] = mapped_column(
-        ForeignKey(ProjectORM.id, ondelete="CASCADE", name="project_slugs_project_id_fk"), index=True
-    )
-    namespace_id: Mapped[ULID] = mapped_column(
-        ForeignKey(NamespaceORM.id, ondelete="CASCADE", name="project_slugs_namespace_id_fk"), index=True
-    )
-    namespace: Mapped[NamespaceORM] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
-
-
-class ProjectSlugOld(BaseORM):
-    """Project slugs history."""
-
-    __tablename__ = "project_slugs_old"
-
-    id: Mapped[int] = mapped_column(primary_key=True, init=False)
-    slug: Mapped[str] = mapped_column(String(99), index=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, index=True, init=False, server_default=func.now()
-    )
-    latest_slug_id: Mapped[int] = mapped_column(
-        ForeignKey(ProjectSlug.id, ondelete="CASCADE"),
-        nullable=False,
-        init=False,
-        index=True,
-    )
-    latest_slug: Mapped[ProjectSlug] = relationship(lazy="joined", repr=False, viewonly=True)
