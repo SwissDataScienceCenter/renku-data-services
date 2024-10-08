@@ -3,7 +3,7 @@
 import asyncio
 import os
 import shutil
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -13,14 +13,12 @@ from kr8s.asyncio.objects import Pod
 from sanic_testing.testing import SanicASGITestClient
 
 from renku_data_services.notebooks.api.classes.k8s_client import JupyterServerV1Alpha1Kr8s
-
-from .utils import K3DCluster, setup_amalthea
-
-os.environ["KUBECONFIG"] = ".k3d-config.yaml"
+from test.bases.renku_data_services.data_api.utils import K3DCluster, setup_amalthea
 
 
 @pytest.fixture(scope="module", autouse=True)
-def cluster() -> K3DCluster:
+def cluster() -> Iterator[K3DCluster]:
+    os.environ["KUBECONFIG"] = ".k3d-config.yaml"
     if shutil.which("k3d") is None:
         pytest.skip("Requires k3d for cluster creation")
 

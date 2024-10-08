@@ -315,7 +315,7 @@ class NotebooksBP(CustomBlueprint):
             # A specific image was requested
             parsed_image = Image.from_path(image)
             image_repo = parsed_image.repo_api()
-            image_exists_publicly = image_repo.image_exists(parsed_image)
+            image_exists_publicly = await image_repo.image_exists(parsed_image)
             image_exists_privately = False
             if (
                 not image_exists_publicly
@@ -323,7 +323,7 @@ class NotebooksBP(CustomBlueprint):
                 and internal_gitlab_user.access_token
             ):
                 image_repo = image_repo.with_oauth2_token(internal_gitlab_user.access_token)
-                image_exists_privately = image_repo.image_exists(parsed_image)
+                image_exists_privately = await image_repo.image_exists(parsed_image)
             if not image_exists_privately and not image_exists_publicly:
                 using_default_image = True
                 image = nb_config.sessions.default_image
@@ -349,7 +349,7 @@ class NotebooksBP(CustomBlueprint):
             image_repo = parsed_image.repo_api()
             if is_image_private and internal_gitlab_user.access_token:
                 image_repo = image_repo.with_oauth2_token(internal_gitlab_user.access_token)
-            if not image_repo.image_exists(parsed_image):
+            if not await image_repo.image_exists(parsed_image):
                 raise errors.MissingResourceError(
                     message=(
                         f"Cannot start the session because the following the image {image} does not "
@@ -413,7 +413,7 @@ class NotebooksBP(CustomBlueprint):
         if lfs_auto_fetch is not None:
             parsed_server_options.lfs_auto_fetch = lfs_auto_fetch
 
-        image_work_dir = image_repo.image_workdir(parsed_image) or PurePosixPath("/")
+        image_work_dir = await image_repo.image_workdir(parsed_image) or PurePosixPath("/")
         mount_path = image_work_dir / "work"
 
         server_work_dir = mount_path / gl_project_path
@@ -757,17 +757,18 @@ class NotebooksBP(CustomBlueprint):
         """Return the availability of the docker image."""
 
         @authenticate_2(self.authenticator, self.internal_gitlab_authenticator)
+        @validate(query=apispec.NotebooksImagesGetParametersQuery)
         async def _check_docker_image(
-            request: Request, user: AnonymousAPIUser | AuthenticatedAPIUser, internal_gitlab_user: APIUser
+            request: Request,
+            user: AnonymousAPIUser | AuthenticatedAPIUser,
+            internal_gitlab_user: APIUser,
+            query: apispec.NotebooksImagesGetParametersQuery,
         ) -> HTTPResponse:
-            image_url = request.get_args().get("image_url")
-            if not isinstance(image_url, str):
-                raise ValueError("required string of image url")
-            parsed_image = Image.from_path(image_url)
+            parsed_image = Image.from_path(query.image_url)
             image_repo = parsed_image.repo_api()
             if parsed_image.hostname == self.nb_config.git.registry and internal_gitlab_user.access_token:
                 image_repo = image_repo.with_oauth2_token(internal_gitlab_user.access_token)
-            if image_repo.image_exists(parsed_image):
+            if await image_repo.image_exists(parsed_image):
                 return HTTPResponse(status=200)
             else:
                 return HTTPResponse(status=404)
@@ -1125,3 +1126,25 @@ class NotebooksNewBP(CustomBlueprint):
             return json(apispec.SessionLogsResponse.model_validate(logs).model_dump(exclude_none=True))
 
         return "/sessions/<session_id>/logs", ["GET"], _handler
+
+    def check_docker_image(self) -> BlueprintFactoryResponse:
+        """Return the availability of the docker image."""
+
+        @authenticate_2(self.authenticator, self.internal_gitlab_authenticator)
+        @validate(query=apispec.SessionsImagesGetParametersQuery)
+        async def _check_docker_image(
+            request: Request,
+            user: AnonymousAPIUser | AuthenticatedAPIUser,
+            internal_gitlab_user: APIUser,
+            query: apispec.SessionsImagesGetParametersQuery,
+        ) -> HTTPResponse:
+            parsed_image = Image.from_path(query.image_url)
+            image_repo = parsed_image.repo_api()
+            if parsed_image.hostname == self.nb_config.git.registry and internal_gitlab_user.access_token:
+                image_repo = image_repo.with_oauth2_token(internal_gitlab_user.access_token)
+            if await image_repo.image_exists(parsed_image):
+                return HTTPResponse(status=200)
+            else:
+                return HTTPResponse(status=404)
+
+        return "/sessions/images", ["GET"], _check_docker_image

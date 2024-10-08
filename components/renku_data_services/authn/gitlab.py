@@ -46,13 +46,14 @@ class GitlabAuthenticator:
     async def _get_gitlab_api_user(self, access_token: str, headers: Header) -> base_models.APIUser:
         """Get and validate a Gitlab API User."""
         client = gitlab.Gitlab(self.gitlab_url, oauth_token=access_token)
-        try:
+        with suppress(gitlab.GitlabAuthenticationError):
             client.auth()  # needed for the user property to be set
-        except gitlab.GitlabAuthenticationError:
-            raise errors.UnauthorizedError(message="User not authorized with Gitlab")
+        if client.user is None:
+            # The user is not authenticated with Gitlab so we send out an empty APIUser
+            # Anonymous Renku users will not be able to authenticate with Gitlab
+            return base_models.APIUser()
+
         user = client.user
-        if user is None:
-            raise errors.UnauthorizedError(message="User not authorized with Gitlab")
 
         if user.state != "active":
             raise errors.ForbiddenError(message="User isn't active in Gitlab")

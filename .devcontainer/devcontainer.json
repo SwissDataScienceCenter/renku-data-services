@@ -34,7 +34,7 @@
 		"ghcr.io/devcontainers-contrib/features/poetry",
 		"ghcr.io/devcontainers-contrib/features/bash-command"
 	],
-	"postCreateCommand": "poetry install --with dev",
+	"postCreateCommand": "poetry install --with dev && mkdir -p /home/vscode/.config/k9s",
 	"customizations": {
 		"vscode": {
 			"extensions": [
