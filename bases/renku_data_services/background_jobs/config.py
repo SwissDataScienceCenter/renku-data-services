@@ -73,8 +73,6 @@ class SyncConfig:
             group_repo=group_repo,
             authz=Authz(authz_config),
         )
-
-        # NEW
         data_connector_repo = DataConnectorRepository(
             session_maker=session_maker,
             authz=Authz(authz_config),
@@ -90,7 +88,6 @@ class SyncConfig:
             project_repo=project_repo,
             authz=Authz(authz_config),
         )
-
         syncer = UsersSync(
             session_maker,
             message_queue=message_queue,

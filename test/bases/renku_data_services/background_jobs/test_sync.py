@@ -86,8 +86,6 @@ def get_app_configs(db_config: DBConfig, authz_config: AuthzConfig):
             group_repo=group_repo,
             authz=Authz(authz_config),
         )
-
-        # NEW
         data_connector_repo = DataConnectorRepository(
             session_maker=db_config.async_session_maker,
             authz=Authz(authz_config),
@@ -103,7 +101,6 @@ def get_app_configs(db_config: DBConfig, authz_config: AuthzConfig):
             project_repo=project_repo,
             authz=Authz(authz_config),
         )
-
         config = SyncConfig(
             syncer=users_sync,
             kc_api=kc_api,

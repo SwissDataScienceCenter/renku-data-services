@@ -274,6 +274,7 @@ async def migrate_storages_v2_to_data_connectors(config: SyncConfig) -> None:
     storages_v2 = await config.data_connector_migration_tool.get_storages_v2(requested_by=api_user)
 
     if not storages_v2:
+        logger.info("Nothing to do.")
         return
 
     logger.info(f"Migrating {len(storages_v2)} cloud storage v2 items to data connectors.")
