@@ -147,7 +147,7 @@ class SessionRepository:
             res = await session.scalars(
                 select(schemas.EnvironmentORM)
                 .where(schemas.EnvironmentORM.id == str(environment_id))
-                .where(schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.GLOBAL.value)
+                .where(schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.GLOBAL)
             )
             environment = res.one_or_none()
             if environment is None:
