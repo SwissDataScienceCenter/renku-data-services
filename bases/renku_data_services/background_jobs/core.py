@@ -279,7 +279,6 @@ async def migrate_storages_v2_to_data_connectors(config: SyncConfig) -> None:
 
     logger.info(f"Migrating {len(storages_v2)} cloud storage v2 items to data connectors.")
     failed_storages: list[str] = []
-    first_error: Exception | None = None
     for storage in storages_v2:
         try:
             data_connector = await config.data_connector_migration_tool.migrate_storage_v2(
@@ -291,11 +290,7 @@ async def migrate_storages_v2_to_data_connectors(config: SyncConfig) -> None:
             logger.error(f"Failed to migrate {storage.name}.")
             logger.error(err)
             failed_storages.append(str(storage.storage_id))
-            if first_error is None:
-                first_error = err
 
     logger.info(f"Migrated {len(storages_v2)-len(failed_storages)}/{len(storages_v2)} data connectors.")
     if failed_storages:
         logger.error(f"Migration failed for storages: {failed_storages}.")
-    if first_error is not None:
-        raise first_error
