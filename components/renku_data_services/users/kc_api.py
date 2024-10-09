@@ -105,9 +105,9 @@ class KeycloakAPI:
             first += self.result_per_request_limit
 
     def get_users(self) -> Iterable[dict[str, Any]]:
-        """Get all users from Keycloak."""
+        """Get all enabled users from Keycloak."""
         path = f"/admin/realms/{self.realm}/users"
-        yield from self._paginated_requests_iter(path)
+        yield from filter(lambda user: user.get("enabled", False), self._paginated_requests_iter(path))
 
     def get_user_events(
         self, start_date: date, end_date: date | None = None, event_types: list[KeycloakEvent] | None = None

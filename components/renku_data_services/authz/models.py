@@ -50,6 +50,7 @@ class Scope(Enum):
     DELETE: str = "delete"
     CHANGE_MEMBERSHIP: str = "change_membership"
     READ_CHILDREN: str = "read_children"
+    IS_ADMIN: str = "is_admin"
 
 
 @dataclass

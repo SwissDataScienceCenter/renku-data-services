@@ -92,6 +92,21 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - users
+    delete:
+      summary: Delete a specific user by their Keycloak ID
+      parameters:
+        - in: path
+          name: user_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: The user was successfully deleted or did not exist
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - users
   /user/secrets:
     get:
       summary: List all secrets for a user (keys only)

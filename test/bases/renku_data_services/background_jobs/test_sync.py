@@ -67,18 +67,27 @@ def get_app_configs(db_config: DBConfig, authz_config: AuthzConfig):
             group_authz=Authz(authz_config),
             message_queue=message_queue,
         )
-        users_sync = UsersSync(
-            db_config.async_session_maker,
-            message_queue=message_queue,
-            event_repo=event_repo,
-            group_repo=group_repo,
-            authz=Authz(authz_config),
-        )
         project_repo = ProjectRepository(
             session_maker=db_config.async_session_maker,
             message_queue=message_queue,
             event_repo=event_repo,
             group_repo=group_repo,
+            authz=Authz(authz_config),
+        )
+        user_repo = UserRepo(
+            db_config.async_session_maker,
+            message_queue=message_queue,
+            event_repo=event_repo,
+            group_repo=group_repo,
+            encryption_key=secrets.token_bytes(32),
+            authz=Authz(authz_config),
+        )
+        users_sync = UsersSync(
+            db_config.async_session_maker,
+            message_queue=message_queue,
+            event_repo=event_repo,
+            group_repo=group_repo,
+            user_repo=user_repo,
             authz=Authz(authz_config),
         )
         config = SyncConfig(
@@ -89,14 +98,6 @@ def get_app_configs(db_config: DBConfig, authz_config: AuthzConfig):
             event_repo=event_repo,
             session_maker=db_config.async_session_maker,
             project_repo=project_repo,
-        )
-        user_repo = UserRepo(
-            db_config.async_session_maker,
-            message_queue=message_queue,
-            event_repo=event_repo,
-            group_repo=group_repo,
-            encryption_key=secrets.token_bytes(32),
-            authz=Authz(authz_config),
         )
         run_migrations_for_app("common")
         return config, user_repo
