@@ -264,3 +264,33 @@ async def migrate_user_namespaces_make_all_public(config: SyncConfig) -> None:
         )
         await authz.client.WriteRelationships(authz_change)
         logger.info(f"Made user namespace {ns_id} public")
+
+
+async def migrate_storages_v2_to_data_connectors(config: SyncConfig) -> None:
+    """Move storages_v2 to data_connectors."""
+    logger = logging.getLogger("background_jobs").getChild(migrate_storages_v2_to_data_connectors.__name__)
+
+    api_user = InternalServiceAdmin(id=ServiceAdminId.migrations)
+    storages_v2 = await config.data_connector_migration_tool.get_storages_v2(requested_by=api_user)
+
+    if not storages_v2:
+        logger.info("Nothing to do.")
+        return
+
+    logger.info(f"Migrating {len(storages_v2)} cloud storage v2 items to data connectors.")
+    failed_storages: list[str] = []
+    for storage in storages_v2:
+        try:
+            data_connector = await config.data_connector_migration_tool.migrate_storage_v2(
+                requested_by=api_user, storage=storage
+            )
+            logger.info(f"Migrated {storage.name} to {data_connector.namespace.slug}/{data_connector.slug}.")
+            logger.info(f"Deleted storage_v2: {storage.storage_id}")
+        except Exception as err:
+            logger.error(f"Failed to migrate {storage.name}.")
+            logger.error(err)
+            failed_storages.append(str(storage.storage_id))
+
+    logger.info(f"Migrated {len(storages_v2)-len(failed_storages)}/{len(storages_v2)} data connectors.")
+    if failed_storages:
+        logger.error(f"Migration failed for storages: {failed_storages}.")
