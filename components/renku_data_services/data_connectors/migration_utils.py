@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 from ulid import ULID
 
 from renku_data_services import base_models, errors
@@ -208,7 +209,6 @@ class DataConnectorMigrationTool:
             raise errors.ForbiddenError(message="Only admins can perform this operation.")
 
         async with self.session_maker() as session:
-            stmt = select(projects_schemas.ProjectORM)
+            stmt = select(projects_schemas.ProjectORM).options(load_only(projects_schemas.ProjectORM.id))
             result = await session.scalars(stmt)
-            projects = result.all()
-            return [project.dump().id for project in projects]
+            return [project.id for project in result]
