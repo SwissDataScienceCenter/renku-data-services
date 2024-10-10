@@ -101,6 +101,12 @@ class ErrorResponse(BaseAPISpec):
     error: Error
 
 
+class ProjectsProjectIdGetParametersQuery(BaseAPISpec):
+    with_documentation: Optional[bool] = Field(
+        None, description="Projects with or without possibly extensive documentation?"
+    )
+
+
 class ProjectMemberPatchRequest(BaseAPISpec):
     model_config = ConfigDict(
         extra="forbid",
@@ -284,6 +290,13 @@ class ProjectPost(BaseAPISpec):
         example=["project", "keywords"],
         min_length=0,
     )
+    documentation: Optional[str] = Field(
+        None,
+        description="Renku project documentation",
+        example="My Renku Project Documentation :)",
+        max_length=5000,
+        min_length=1,
+    )
 
 
 class ProjectPatch(BaseAPISpec):
@@ -323,6 +336,13 @@ class ProjectPatch(BaseAPISpec):
         description="Project keywords",
         example=["project", "keywords"],
         min_length=0,
+    )
+    documentation: Optional[str] = Field(
+        None,
+        description="Renku project documentation",
+        example="My Renku Project Documentation :)",
+        max_length=5000,
+        min_length=1,
     )
 
 

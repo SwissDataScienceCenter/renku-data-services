@@ -79,6 +79,11 @@ paths:
           required: true
           schema:
             $ref: "#/components/schemas/Ulid"
+        - in: query
+          name: with_documentation
+          required: false
+          schema:
+            $ref: "#/components/schemas/WithDocumentation"
       responses:
         "200":
           description: The project
@@ -383,6 +388,8 @@ components:
           $ref: "#/components/schemas/Description"
         keywords:
           $ref: "#/components/schemas/KeywordsList"
+        documentation:
+          $ref: "#/components/schemas/ProjectDocumentation"
       required:
         - "name"
         - "namespace"
@@ -403,12 +410,17 @@ components:
           $ref: "#/components/schemas/Description"
         keywords:
           $ref: "#/components/schemas/KeywordsList"
+        documentation:
+          $ref: "#/components/schemas/ProjectDocumentation"
     Ulid:
       description: ULID identifier
       type: string
       minLength: 26
       maxLength: 26
       pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$" # This is case-insensitive
+    WithDocumentation:
+      description: Projects with or without possibly extensive documentation?
+      type: boolean
     ProjectName:
       description: Renku project name
       type: string
@@ -457,6 +469,12 @@ components:
       description: A description for the resource
       type: string
       maxLength: 500
+    Keyword:
+      description: A single keyword
+      type: string
+      minLength: 1
+      maxLength: 99
+      pattern: '^[A-Za-z0-9\s\-_.]*$'
     KeywordsList:
       description: Project keywords
       type: array
@@ -466,12 +484,12 @@ components:
       example:
         - "project"
         - "keywords"
-    Keyword:
-      description: A single keyword
+    ProjectDocumentation:
+      description: Renku project documentation
       type: string
       minLength: 1
-      maxLength: 99
-      pattern: '^[A-Za-z0-9\s\-_.]*$'
+      maxLength: 5000
+      example: "My Renku Project Documentation :)"
     RepositoriesList:
       description: A list of repositories
       type: array

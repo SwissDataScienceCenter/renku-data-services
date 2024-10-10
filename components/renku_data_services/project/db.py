@@ -9,6 +9,7 @@ from typing import Concatenate, ParamSpec, TypeVar
 
 from sqlalchemy import Select, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import undefer
 from sqlalchemy.sql.functions import coalesce
 from ulid import ULID
 
@@ -93,7 +94,9 @@ class ProjectRepository:
             async for project in projects:
                 yield project.dump()
 
-    async def get_project(self, user: base_models.APIUser, project_id: ULID) -> models.Project:
+    async def get_project(
+        self, user: base_models.APIUser, project_id: ULID, with_documentation: bool = False
+    ) -> models.Project:
         """Get one project from the database."""
         authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
         if not authorized:
@@ -103,13 +106,15 @@ class ProjectRepository:
 
         async with self.session_maker() as session:
             stmt = select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id)
+            if with_documentation:
+                stmt = stmt.options(undefer(schemas.ProjectORM.documentation))
             result = await session.execute(stmt)
             project_orm = result.scalars().first()
 
             if project_orm is None:
                 raise errors.MissingResourceError(message=f"Project with id '{project_id}' does not exist.")
 
-            return project_orm.dump()
+            return project_orm.dump(with_documentation=with_documentation)
 
     async def get_project_by_namespace_slug(
         self, user: base_models.APIUser, namespace: str, slug: str
@@ -198,6 +203,7 @@ class ProjectRepository:
             repositories=repositories,
             creation_date=datetime.now(UTC).replace(microsecond=0),
             keywords=project.keywords,
+            documentation=project.documentation,
         )
         project_slug = ns_schemas.EntitySlugORM.create_project_slug(slug, project_id=project_orm.id, namespace_id=ns.id)
 

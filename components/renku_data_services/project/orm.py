@@ -36,6 +36,7 @@ class ProjectORM(BaseORM):
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
     description: Mapped[str | None] = mapped_column("description", String(500))
     keywords: Mapped[Optional[list[str]]] = mapped_column("keywords", ARRAY(String(99)), nullable=True)
+    documentation: Mapped[str | None] = mapped_column("documentation", String(), nullable=True, deferred=True)
     # NOTE: The project slugs table has a foreign key from the projects table, but there is a stored procedure
     # triggered by the deletion of slugs to remove the project used by the slug. See migration 89aa4573cfa9.
     slug: Mapped["EntitySlugORM"] = relationship(
@@ -55,7 +56,7 @@ class ProjectORM(BaseORM):
         "updated_at", DateTime(timezone=True), default=None, server_default=func.now(), onupdate=func.now()
     )
 
-    def dump(self) -> models.Project:
+    def dump(self, with_documentation: bool = False) -> models.Project:
         """Create a project model from the ProjectORM."""
         return models.Project(
             id=self.id,
@@ -71,6 +72,7 @@ class ProjectORM(BaseORM):
             repositories=[models.Repository(r.url) for r in self.repositories],
             description=self.description,
             keywords=self.keywords,
+            documentation=self.documentation if with_documentation else None,
         )
 
 
