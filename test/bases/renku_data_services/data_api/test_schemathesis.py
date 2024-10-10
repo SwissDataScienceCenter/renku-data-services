@@ -73,6 +73,12 @@ ALLOWED_SLOW_ENDPOINTS = [
     ("/oauth2/providers", "POST"),
 ]
 
+# TODO: RE-enable schemathesis when CI setup for notebooks / sessions is ready
+EXCLUDE_PATH_PREFIXES = [
+    "/sessions",
+    "/notebooks",
+]
+
 
 @pytest.mark.schemathesis
 @pytest.mark.asyncio
@@ -84,6 +90,9 @@ async def test_api_schemathesis(
     admin_headers: dict,
     requests_statistics: list[timedelta],
 ) -> None:
+    for exclude_prefix in EXCLUDE_PATH_PREFIXES:
+        if case.path.startswith(exclude_prefix):
+            return
     req_kwargs = case.as_requests_kwargs(headers=admin_headers)
     _, res = await sanic_client.request(**req_kwargs)
     res.request.uri = str(res.url)
