@@ -36,6 +36,25 @@ class ProjectsBP(CustomBlueprint):
     user_repo: UserRepo
     authenticator: base_models.Authenticator
 
+    def _project2dict(self, project: project_models.Project, with_documentation: bool = False) -> dict[str, Any]:
+        result = dict(
+            id=str(project.id),
+            name=project.name,
+            namespace=project.namespace.slug,
+            slug=project.slug,
+            creation_date=project.creation_date.isoformat(),
+            created_by=project.created_by,
+            updated_at=project.updated_at.isoformat() if project.updated_at else None,
+            repositories=project.repositories,
+            visibility=project.visibility.value,
+            description=project.description,
+            etag=project.etag,
+            keywords=project.keywords or [],
+        )
+        if with_documentation:
+            result = dict(result, documentation=project.documentation)
+        return result
+
     def get_all(self) -> BlueprintFactoryResponse:
         """List all projects."""
 
@@ -48,23 +67,7 @@ class ProjectsBP(CustomBlueprint):
             projects, total_num = await self.project_repo.get_projects(
                 user=user, pagination=pagination, namespace=query.namespace, direct_member=query.direct_member
             )
-            return [
-                dict(
-                    id=str(p.id),
-                    name=p.name,
-                    namespace=p.namespace.slug,
-                    slug=p.slug,
-                    creation_date=p.creation_date.isoformat(),
-                    created_by=p.created_by,
-                    updated_at=p.updated_at.isoformat() if p.updated_at else None,
-                    repositories=p.repositories,
-                    visibility=p.visibility.value,
-                    description=p.description,
-                    etag=p.etag,
-                    keywords=p.keywords or [],
-                )
-                for p in projects
-            ], total_num
+            return [self._project2dict(project) for project in projects], total_num
 
         return "/projects", ["GET"], _get_all
 
@@ -85,24 +88,10 @@ class ProjectsBP(CustomBlueprint):
                 created_by=user.id,  # type: ignore[arg-type]
                 visibility=Visibility(body.visibility.value),
                 keywords=keywords,
+                documentation=body.documentation,
             )
-            result = await self.project_repo.insert_project(user, project)
-            return json(
-                dict(
-                    id=str(result.id),
-                    name=result.name,
-                    namespace=result.namespace.slug,
-                    slug=result.slug,
-                    creation_date=result.creation_date.isoformat(),
-                    created_by=result.created_by,
-                    repositories=result.repositories,
-                    visibility=result.visibility.value,
-                    description=result.description,
-                    etag=result.etag,
-                    keywords=result.keywords or [],
-                ),
-                201,
-            )
+            project = await self.project_repo.insert_project(user, project)
+            return json(self._project2dict(project), 201)
 
         return "/projects", ["POST"], _post
 
@@ -112,29 +101,17 @@ class ProjectsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @validate_path_project_id
         async def _get_one(request: Request, user: base_models.APIUser, project_id: str) -> JSONResponse | HTTPResponse:
-            project = await self.project_repo.get_project(user=user, project_id=ULID.from_str(project_id))
+            with_documentation = bool(request.args.get("with_documentation", False))
+            project = await self.project_repo.get_project(
+                user=user, project_id=ULID.from_str(project_id), with_documentation=with_documentation
+            )
 
             etag = request.headers.get("If-None-Match")
             if project.etag is not None and project.etag == etag:
                 return HTTPResponse(status=304)
 
             headers = {"ETag": project.etag} if project.etag is not None else None
-            return json(
-                dict(
-                    id=str(project.id),
-                    name=project.name,
-                    namespace=project.namespace.slug,
-                    slug=project.slug,
-                    creation_date=project.creation_date.isoformat(),
-                    created_by=project.created_by,
-                    repositories=project.repositories,
-                    visibility=project.visibility.value,
-                    description=project.description,
-                    etag=project.etag,
-                    keywords=project.keywords or [],
-                ),
-                headers=headers,
-            )
+            return json(self._project2dict(project, with_documentation=with_documentation), headers=headers)
 
         return "/projects/<project_id>", ["GET"], _get_one
 
@@ -152,22 +129,7 @@ class ProjectsBP(CustomBlueprint):
                 return HTTPResponse(status=304)
 
             headers = {"ETag": project.etag} if project.etag is not None else None
-            return json(
-                dict(
-                    id=str(project.id),
-                    name=project.name,
-                    namespace=project.namespace.slug,
-                    slug=project.slug,
-                    creation_date=project.creation_date.isoformat(),
-                    created_by=project.created_by,
-                    repositories=project.repositories,
-                    visibility=project.visibility.value,
-                    description=project.description,
-                    etag=project.etag,
-                    keywords=project.keywords or [],
-                ),
-                headers=headers,
-            )
+            return json(self._project2dict(project), headers=headers)
 
         return "/projects/<namespace>/<slug:renku_slug>", ["GET"], _get_one_by_namespace_slug
 
@@ -206,22 +168,7 @@ class ProjectsBP(CustomBlueprint):
                 )
 
             updated_project = project_update.new
-            return json(
-                dict(
-                    id=str(updated_project.id),
-                    name=updated_project.name,
-                    namespace=updated_project.namespace.slug,
-                    slug=updated_project.slug,
-                    creation_date=updated_project.creation_date.isoformat(),
-                    created_by=updated_project.created_by,
-                    repositories=updated_project.repositories,
-                    visibility=updated_project.visibility.value,
-                    description=updated_project.description,
-                    etag=updated_project.etag,
-                    keywords=updated_project.keywords or [],
-                ),
-                200,
-            )
+            return json(self._project2dict(updated_project), 200)
 
         return "/projects/<project_id>", ["PATCH"], _patch
 
