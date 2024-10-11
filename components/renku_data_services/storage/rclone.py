@@ -75,7 +75,7 @@ class RCloneValidator:
             if storage["Prefix"] == "webdav":
                 for option in storage["Options"]:
                     if option["Name"] == "user":
-                        option["Sensitive"] = False
+                        option["Sensitive"] = True
                     if option["Name"] == "pass":
                         option["Sensitive"] = True
 
