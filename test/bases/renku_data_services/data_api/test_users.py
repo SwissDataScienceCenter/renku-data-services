@@ -205,3 +205,70 @@ async def test_logged_in_user_check_adds_user_if_missing(sanic_client, users, ad
         for iuser in res.json
     ]
     assert user in users_response
+
+
+@pytest.mark.asyncio
+async def test_delete_user(sanic_client, admin_headers) -> None:
+    # Create a user
+    user_id = str(uuid4())
+    user = dict(
+        id=user_id,
+        first_name="Peter",
+        last_name="Parker",
+        email="peter@spiderman.com",
+    )
+    access_token = {
+        "id": user_id,
+        "is_admin": False,
+        "first_name": user["first_name"],
+        "last_name": user["last_name"],
+        "email": user["email"],
+        "name": f"{user["first_name"]} {user["last_name"]}",
+    }
+    # Just by hitting the users endpoint with valid credentials the user will be added to the database
+    _, res = await sanic_client.get(
+        f"/api/data/users/{user_id}",
+        headers={"Authorization": f"bearer {json.dumps(access_token)}"},
+    )
+
+    # Check that the user just added via acccess token is returned in the list when the admin lists all users
+    _, res = await sanic_client.get(
+        "/api/data/users",
+        headers=admin_headers,
+    )
+    assert res.status_code == 200
+    users_response = [
+        dict(
+            id=iuser["id"],
+            first_name=iuser.get("first_name"),
+            last_name=iuser.get("last_name"),
+            email=iuser.get("email"),
+        )
+        for iuser in res.json
+    ]
+    assert user in users_response
+
+    # Delete a user
+    _, res = await sanic_client.delete(
+        f"/api/data/users/{user_id}",
+        headers=admin_headers,
+    )
+
+    assert res.status_code == 204, res.text
+
+    # Check that the user just added via acccess token is now not returned in the list when the admin lists all users
+    _, res = await sanic_client.get(
+        "/api/data/users",
+        headers=admin_headers,
+    )
+    assert res.status_code == 200
+    users_response = [
+        dict(
+            id=iuser["id"],
+            first_name=iuser.get("first_name"),
+            last_name=iuser.get("last_name"),
+            email=iuser.get("email"),
+        )
+        for iuser in res.json
+    ]
+    assert user not in users_response

@@ -57,6 +57,7 @@ _AuthzChangeFuncResult = TypeVar(
     | Group
     | UserInfoUpdate
     | list[UserInfo]
+    | UserInfo
     | DataConnector
     | DataConnectorUpdate
     | DataConnectorToProjectLink
@@ -204,6 +205,8 @@ class _AuthzConverter:
                 return _AuthzConverter.group(rid)
             case (ResourceType.data_connector, dcid) if isinstance(dcid, ULID):
                 return _AuthzConverter.data_connector(dcid)
+            case (ResourceType.platform, _):
+                return _AuthzConverter.platform()
         raise errors.ProgrammingError(
             message=f"Unexpected or unknown resource type when checking permissions {resource_type}"
         )
@@ -575,6 +578,13 @@ class Authz:
                 case AuthzOperation.update_or_insert, ResourceType.user if isinstance(result, UserInfoUpdate):
                     if result.old is None:
                         authz_change = db_repo.authz._add_user_namespace(result.new.namespace)
+                case AuthzOperation.delete, ResourceType.user if isinstance(result, UserInfo):
+                    user = _extract_user_from_args(*func_args, **func_kwargs)
+                    authz_change = await db_repo.authz._remove_user_namespace(result.id)
+                    authz_change.extend(await db_repo.authz._remove_user(user, result))
+                case AuthzOperation.delete, ResourceType.user if result is None:
+                    # NOTE: This means that the user does not exist in the first place so nothing was deleted
+                    pass
                 case AuthzOperation.insert_many, ResourceType.user_namespace if isinstance(result, list):
                     for res in result:
                         if not isinstance(res, UserInfo):
@@ -1536,6 +1546,38 @@ class Authz:
             ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
         )
         rels: list[Relationship] = []
+        async for response in responses:
+            rels.append(response.relationship)
+        apply = WriteRelationshipsRequest(
+            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=i) for i in rels]
+        )
+        undo = WriteRelationshipsRequest(
+            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=i) for i in rels]
+        )
+        return _AuthzChange(apply=apply, undo=undo)
+
+    async def _remove_user(
+        self,
+        requested_by: base_models.APIUser,
+        user_to_delete: UserInfo,
+    ) -> _AuthzChange:
+        """Remove a user from the authorization database."""
+        # Compute permission by hand for user deletion
+        # NOTE that for user deletion, the permission is "is_admin" on the platform
+        has_permission, zed_token = await self._has_permission(requested_by, ResourceType.platform, "*", Scope.IS_ADMIN)
+        if not has_permission:
+            raise errors.MissingResourceError(
+                message=f"The user with ID {requested_by.id} cannot perform operation {Scope.DELETE} "
+                f"on {ResourceType.user} with ID {user_to_delete.id} or the resource does not exist."
+            )
+        consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
+        rels: list[Relationship] = []
+        rel_filter = RelationshipFilter(
+            optional_subject_filter=SubjectFilter(subject_type=ResourceType.user, optional_subject_id=user_to_delete.id)
+        )
+        responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
+            ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
+        )
         async for response in responses:
             rels.append(response.relationship)
         apply = WriteRelationshipsRequest(
