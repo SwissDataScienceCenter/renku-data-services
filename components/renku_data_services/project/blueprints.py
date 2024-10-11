@@ -17,9 +17,10 @@ from renku_data_services.base_api.auth import (
     validate_path_user_id,
 )
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
-from renku_data_services.base_api.etag import if_match_required
+from renku_data_services.base_api.etag import extract_if_none_match, if_match_required
 from renku_data_services.base_api.misc import validate_body_root_model, validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
+from renku_data_services.base_models.validation import validated_json
 from renku_data_services.errors import errors
 from renku_data_services.project import apispec
 from renku_data_services.project import models as project_models
@@ -111,10 +112,12 @@ class ProjectsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @validate_path_project_id
-        async def _get_one(request: Request, user: base_models.APIUser, project_id: str) -> JSONResponse | HTTPResponse:
+        @extract_if_none_match
+        async def _get_one(
+            _: Request, user: base_models.APIUser, project_id: str, etag: str | None
+        ) -> JSONResponse | HTTPResponse:
             project = await self.project_repo.get_project(user=user, project_id=ULID.from_str(project_id))
 
-            etag = request.headers.get("If-None-Match")
             if project.etag is not None and project.etag == etag:
                 return HTTPResponse(status=304)
 
@@ -142,12 +145,12 @@ class ProjectsBP(CustomBlueprint):
         """Get a specific project by namespace/slug."""
 
         @authenticate(self.authenticator)
+        @extract_if_none_match
         async def _get_one_by_namespace_slug(
-            request: Request, user: base_models.APIUser, namespace: str, slug: str
+            _: Request, user: base_models.APIUser, namespace: str, slug: str, etag: str | None
         ) -> JSONResponse | HTTPResponse:
             project = await self.project_repo.get_project_by_namespace_slug(user=user, namespace=namespace, slug=slug)
 
-            etag = request.headers.get("If-None-Match")
             if project.etag is not None and project.etag == etag:
                 return HTTPResponse(status=304)
 
@@ -239,7 +242,10 @@ class ProjectsBP(CustomBlueprint):
                 user_id = member.user_id
                 user_info = await self.user_repo.get_user(id=user_id)
                 if not user_info:
-                    raise errors.MissingResourceError(message=f"The user with ID {user_id} cannot be found.")
+                    raise errors.MissingResourceError(
+                        message=f"The user with ID {
+                                                      user_id} cannot be found."
+                    )
                 namespace_info = user_info.namespace
 
                 user_with_id = apispec.ProjectMemberResponse(
@@ -283,3 +289,23 @@ class ProjectsBP(CustomBlueprint):
             return HTTPResponse(status=204)
 
         return "/projects/<project_id>/members/<member_id>", ["DELETE"], _delete_member
+
+    def get_permissions(self) -> BlueprintFactoryResponse:
+        """Get the permissions of the current user on the project."""
+
+        @authenticate(self.authenticator)
+        @validate_path_project_id
+        async def _get_permissions(
+            _: Request, user: base_models.APIUser, project_id: str
+        ) -> JSONResponse | HTTPResponse:
+            await self.project_repo.get_project(user=user, project_id=ULID.from_str(project_id))
+
+            return validated_json(
+                apispec.ProjectPermissions,
+                dict(
+                    write=False,
+                    admin=False,
+                ),
+            )
+
+        return "/projects/<project_id>/permissions", ["GET"], _get_permissions
