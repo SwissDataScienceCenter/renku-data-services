@@ -56,3 +56,11 @@ class ProjectUpdate:
 
     old: Project
     new: Project
+
+
+@dataclass
+class ProjectPermissions:
+    """The permissions of a user on a given project."""
+
+    write: bool
+    admin: bool

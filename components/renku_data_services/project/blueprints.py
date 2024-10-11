@@ -298,14 +298,9 @@ class ProjectsBP(CustomBlueprint):
         async def _get_permissions(
             _: Request, user: base_models.APIUser, project_id: str
         ) -> JSONResponse | HTTPResponse:
-            await self.project_repo.get_project(user=user, project_id=ULID.from_str(project_id))
-
-            return validated_json(
-                apispec.ProjectPermissions,
-                dict(
-                    write=False,
-                    admin=False,
-                ),
+            permissions = await self.project_repo.get_project_permissions(
+                user=user, project_id=ULID.from_str(project_id)
             )
+            return validated_json(apispec.ProjectPermissions, permissions)
 
         return "/projects/<project_id>/permissions", ["GET"], _get_permissions
