@@ -3,15 +3,11 @@
 import base64
 import os
 from dataclasses import dataclass
-from datetime import UTC, datetime
-from math import floor
-from pathlib import PurePosixPath
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
 from kubernetes.client import V1ObjectMeta, V1Secret
 from sanic import Request, empty, exceptions, json
-from sanic.log import logger
 from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
 from toml import dumps
@@ -27,17 +23,14 @@ from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec, core
 from renku_data_services.notebooks.api.amalthea_patches import git_proxy, init_containers
 from renku_data_services.notebooks.api.classes.repository import Repository
-from renku_data_services.notebooks.api.classes.server import Renku2UserServer
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_data_services.notebooks.api.schemas.config_server_options import ServerOptionsEndpointResponse
 from renku_data_services.notebooks.api.schemas.logs import ServerLogs
-from renku_data_services.notebooks.api.schemas.secrets import K8sUserSecrets
 from renku_data_services.notebooks.api.schemas.servers_get import (
     NotebookResponse,
     ServersGetResponse,
 )
 from renku_data_services.notebooks.config import NotebooksConfig
-
 from renku_data_services.notebooks.crs import (
     AmaltheaSessionSpec,
     AmaltheaSessionV1Alpha1,
@@ -63,7 +56,6 @@ from renku_data_services.notebooks.crs import (
     TlsSecret,
 )
 from renku_data_services.notebooks.errors.intermittent import AnonymousUserPatchError
-
 from renku_data_services.notebooks.util.kubernetes_ import (
     renku_2_make_server_name,
 )
@@ -111,7 +103,6 @@ class NotebooksBP(CustomBlueprint):
         async def _user_server(
             request: Request, user: AnonymousAPIUser | AuthenticatedAPIUser, server_name: str
         ) -> JSONResponse:
-
             server = await core.user_server(self.nb_config, user, server_name)
             return json(NotebookResponse().dump(server))
 
@@ -233,7 +224,7 @@ class NotebooksBP(CustomBlueprint):
             if not isinstance(image_url, str):
                 raise ValueError("required string of image url")
 
-            status = 200 if core.docker_image_exists(self.nb_config, image_url, internal_gitlab_user) else 404
+            status = 200 if await core.docker_image_exists(self.nb_config, image_url, internal_gitlab_user) else 404
             return HTTPResponse(status=status)
 
         return "/notebooks/images", ["GET"], _check_docker_image
@@ -601,13 +592,11 @@ class NotebooksNewBP(CustomBlueprint):
             internal_gitlab_user: APIUser,
             query: apispec.SessionsImagesGetParametersQuery,
         ) -> HTTPResponse:
-            parsed_image = Image.from_path(query.image_url)
-            image_repo = parsed_image.repo_api()
-            if parsed_image.hostname == self.nb_config.git.registry and internal_gitlab_user.access_token:
-                image_repo = image_repo.with_oauth2_token(internal_gitlab_user.access_token)
-            if await image_repo.image_exists(parsed_image):
-                return HTTPResponse(status=200)
-            else:
-                return HTTPResponse(status=404)
+            image_url = request.get_args().get("image_url")
+            if not isinstance(image_url, str):
+                raise ValueError("required string of image url")
+
+            status = 200 if await core.docker_image_exists(self.nb_config, image_url, internal_gitlab_user) else 404
+            return HTTPResponse(status=status)
 
         return "/sessions/images", ["GET"], _check_docker_image

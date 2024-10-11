@@ -553,12 +553,12 @@ components:
       required:
         - name
         - secret_id
-    SecretValueNullable: 
-      description: Secret value that can be any text 
-      type: string 
-      minLength: 1 
-      maxLength: 5000 
-      nullable: true 
+    SecretValueNullable:
+      description: Secret value that can be any text
+      type: string
+      minLength: 1
+      maxLength: 5000
+      nullable: true
     RCloneSchema:
       description: List of RClone schemas for different storage types
       type: array

@@ -2,7 +2,6 @@
 
 import asyncio
 import os
-
 from collections.abc import AsyncIterator
 from unittest.mock import MagicMock
 from uuid import uuid4

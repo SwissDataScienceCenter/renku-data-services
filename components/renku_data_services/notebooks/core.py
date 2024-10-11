@@ -3,7 +3,7 @@
 import json as json_lib
 from datetime import UTC, datetime
 from math import floor
-from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Any
 
 import requests
@@ -245,9 +245,7 @@ async def patch_server(
     return UserServerManifest(new_server, config.sessions.default_image)
 
 
-async def stop_server(
-    config: NotebooksConfig, user: AnonymousAPIUser | AuthenticatedAPIUser, server_name: str
-) -> None:
+async def stop_server(config: NotebooksConfig, user: AnonymousAPIUser | AuthenticatedAPIUser, server_name: str) -> None:
     """Stops / deletes the requested server."""
 
     await config.k8s_client.delete_server(server_name, safe_username=user.id)
@@ -276,7 +274,7 @@ async def server_logs(
     )
 
 
-def docker_image_exists(config: NotebooksConfig, image_url: str, internal_gitlab_user: APIUser) -> bool:
+async def docker_image_exists(config: NotebooksConfig, image_url: str, internal_gitlab_user: APIUser) -> bool:
     """Returns whether the passed docker image url exists.
 
     If the user is logged in the internal GitLab (Renku V1), set the
@@ -287,7 +285,7 @@ def docker_image_exists(config: NotebooksConfig, image_url: str, internal_gitlab
     image_repo = parsed_image.repo_api()
     if parsed_image.hostname == config.git.registry and internal_gitlab_user.access_token:
         image_repo = image_repo.with_oauth2_token(internal_gitlab_user.access_token)
-    return image_repo.image_exists(parsed_image)
+    return await image_repo.image_exists(parsed_image)
 
 
 async def launch_notebook_helper(
@@ -340,7 +338,7 @@ async def launch_notebook_helper(
             and internal_gitlab_user.access_token
         ):
             image_repo = image_repo.with_oauth2_token(internal_gitlab_user.access_token)
-            image_exists_privately = image_repo.image_exists(parsed_image)
+            image_exists_privately = await image_repo.image_exists(parsed_image)
         if not image_exists_privately and not image_exists_publicly:
             using_default_image = True
             image = nb_config.sessions.default_image
@@ -427,7 +425,7 @@ async def launch_notebook_helper(
     if lfs_auto_fetch is not None:
         parsed_server_options.lfs_auto_fetch = lfs_auto_fetch
 
-    image_work_dir = image_repo.image_workdir(parsed_image) or Path("/")
+    image_work_dir = await image_repo.image_workdir(parsed_image) or PurePosixPath("/")
     mount_path = image_work_dir / "work"
 
     server_work_dir = mount_path / gl_project_path
@@ -442,7 +440,7 @@ async def launch_notebook_helper(
                         cstorage.model_dump(),
                         user=user,
                         project_id=gl_project_id,
-                        work_dir=server_work_dir.absolute(),
+                        work_dir=server_work_dir,
                         config=nb_config,
                         internal_gitlab_user=internal_gitlab_user,
                     )
@@ -544,7 +542,7 @@ async def launch_notebook_helper(
 
 
 async def launch_notebook(
-    config: _NotebooksConfig,
+    config: NotebooksConfig,
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     internal_gitlab_user: APIUser,
     launch_request: apispec.LaunchNotebookRequest,
@@ -583,7 +581,7 @@ async def launch_notebook(
 
 
 async def launch_notebook_old(
-    config: _NotebooksConfig,
+    config: NotebooksConfig,
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     internal_gitlab_user: APIUser,
     launch_request: apispec.LaunchNotebookRequestOld,
