@@ -39,6 +39,8 @@ class EventRepository:
 
         We lock rows that get sent and keep sending until there are no more events.
         """
+        n_total_events = 0
+
         while True:
             async with self.session_maker() as session, session.begin():
                 stmt = (
@@ -55,6 +57,8 @@ class EventRepository:
                 if new_events_count == 0:
                     break
 
+                n_total_events += new_events_count
+
                 for event in events_orm:
                     try:
                         await self.message_queue.send_message(event.dump())
@@ -63,7 +67,7 @@ class EventRepository:
                     except Exception as e:
                         logger.warning(f"couldn't send event {event.payload} on queue {event.queue}: {e}")
 
-                logger.info(f"sent {new_events_count} events")
+        logger.info(f"sent {n_total_events} events")
 
     async def store_event(self, session: AsyncSession | Session, event: Event) -> int:
         """Store an event."""

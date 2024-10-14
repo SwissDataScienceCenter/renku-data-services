@@ -1,4 +1,4 @@
-"""create search revision table
+"""create reprovisioning table
 
 Revision ID: 726d5d0e1f28
 Revises: 9058bf0a1a12

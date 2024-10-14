@@ -21,7 +21,7 @@ def make_event(message_type: str, payload: AvroModel) -> Event:
     return Event.create(QUEUE_NAME, message_type, payload)
 
 
-def make_project_member_added_event(member: authz_models.Member) -> Event:
+def _make_project_member_added_event(member: authz_models.Member) -> Event:
     """Create a ProjectMemberAdded event."""
     payload = v2.ProjectMemberAdded(
         projectId=str(member.resource_id), userId=member.user_id, role=_convert_member_role(member.role)
@@ -29,7 +29,7 @@ def make_project_member_added_event(member: authz_models.Member) -> Event:
     return make_event("projectAuth.added", payload)
 
 
-def make_group_member_added_event(member: authz_models.Member) -> Event:
+def _make_group_member_added_event(member: authz_models.Member) -> Event:
     """Create a GroupMemberAdded event."""
     payload = v2.GroupMemberAdded(
         groupId=str(member.resource_id), userId=member.user_id, role=_convert_member_role(member.role)
@@ -208,7 +208,7 @@ class _ProjectAuthzEventConverter:
                     )
                 case authz_models.Change.ADD:
                     output.append(
-                        make_project_member_added_event(change.member),
+                        _make_project_member_added_event(change.member),
                     )
                 case _:
                     raise errors.EventError(
@@ -216,6 +216,20 @@ class _ProjectAuthzEventConverter:
                         f"unknown change {change.change}"
                     )
         return output
+
+    @staticmethod
+    def to_events_from_event_type(
+        member: authz_models.Member, event_type: type[AvroModel] | type[events.AmbiguousEvent]
+    ) -> list[Event]:
+        match event_type:
+            case v2.ProjectMemberAdded:
+                return [
+                    _make_project_member_added_event(member),
+                ]
+            case _:
+                raise errors.EventError(
+                    message=f"Trying to convert a project member to an unknown event type {event_type}"
+                )
 
 
 class _GroupAuthzEventConverter:
@@ -248,14 +262,7 @@ class _GroupAuthzEventConverter:
                     )
                 case authz_models.Change.ADD:
                     output.append(
-                        make_event(
-                            "memberGroup.added",
-                            v2.GroupMemberAdded(
-                                groupId=resource_id,
-                                userId=change.member.user_id,
-                                role=_convert_member_role(change.member.role),
-                            ),
-                        )
+                        _make_group_member_added_event(change.member),
                     )
                 case _:
                     raise errors.EventError(
@@ -263,6 +270,20 @@ class _GroupAuthzEventConverter:
                         f"unknown change {change.change}"
                     )
         return output
+
+    @staticmethod
+    def to_events_from_event_type(
+        member: authz_models.Member, event_type: type[AvroModel] | type[events.AmbiguousEvent]
+    ) -> list[Event]:
+        match event_type:
+            case v2.GroupMemberAdded:
+                return [
+                    _make_group_member_added_event(member),
+                ]
+            case _:
+                raise errors.EventError(
+                    message=f"Trying to convert a group member to an unknown event type {event_type}"
+                )
 
 
 class _GroupEventConverter:
@@ -331,12 +352,18 @@ class EventConverter:
             case events.ProjectMembershipChanged:
                 project_authz = cast(list[authz_models.MembershipChange], input)
                 return _ProjectAuthzEventConverter.to_events(project_authz)
+            case v2.ProjectMemberAdded:
+                project_member = cast(authz_models.Member, input)
+                return _ProjectAuthzEventConverter.to_events_from_event_type(project_member, event_type)
             case v2.GroupAdded | v2.GroupUpdated | v2.GroupRemoved:
                 group = cast(group_models.Group, input)
                 return _GroupEventConverter.to_events(group, event_type)
             case events.GroupMembershipChanged:
                 group_authz = cast(list[authz_models.MembershipChange], input)
                 return _GroupAuthzEventConverter.to_events(group_authz)
+            case v2.GroupMemberAdded:
+                group_member = cast(authz_models.Member, input)
+                return _GroupAuthzEventConverter.to_events_from_event_type(group_member, event_type)
             case v2.UserAdded:
                 user_with_namespace = cast(user_models.UserInfo, input)
                 return _UserEventConverter.to_events(user_with_namespace, event_type)
