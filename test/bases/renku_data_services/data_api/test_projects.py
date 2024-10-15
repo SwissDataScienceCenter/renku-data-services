@@ -832,3 +832,30 @@ async def test_cannot_change_role_for_last_project_owner(
     )
 
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["viewer", "editor", "owner"])
+async def test_get_project_permissions(sanic_client, create_project, user_headers, regular_user, role) -> None:
+    project = await create_project("Project 1", admin=True, members=[{"id": regular_user.id, "role": role}])
+    project_id = project["id"]
+
+    expected_permissions = dict(
+        write=False,
+        delete=False,
+        change_membership=False,
+    )
+    if role == "editor" or role == "owner":
+        expected_permissions["write"] = True
+    if role == "owner":
+        expected_permissions["delete"] = True
+        expected_permissions["change_membership"] = True
+
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/permissions", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    permissions = response.json
+    assert permissions.get("write") == expected_permissions["write"]
+    assert permissions.get("delete") == expected_permissions["delete"]
+    assert permissions.get("change_membership") == expected_permissions["change_membership"]

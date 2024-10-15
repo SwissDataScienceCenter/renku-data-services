@@ -166,10 +166,7 @@ class ProjectsBP(CustomBlueprint):
                 user_id = member.user_id
                 user_info = await self.user_repo.get_user(id=user_id)
                 if not user_info:
-                    raise errors.MissingResourceError(
-                        message=f"The user with ID {
-                                                      user_id} cannot be found."
-                    )
+                    raise errors.MissingResourceError(message=f"The user with ID {user_id} cannot be found.")
                 namespace_info = user_info.namespace
 
                 user_with_id = apispec.ProjectMemberResponse(
