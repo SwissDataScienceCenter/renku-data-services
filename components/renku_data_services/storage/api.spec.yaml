@@ -515,7 +515,7 @@ components:
           minLength: 1
           maxLength: 99
         value:
-          $ref: "#/components/schemas/SecretValue"
+          $ref: "#/components/schemas/SecretValueNullable"
       required:
         - name
         - value
@@ -543,11 +543,12 @@ components:
       required:
         - name
         - secret_id
-    SecretValue:
-      description: Secret value that can be any text
-      type: string
-      minLength: 1
-      maxLength: 5000
+    SecretValueNullable: 
+      description: Secret value that can be any text 
+      type: string 
+      minLength: 1 
+      maxLength: 5000 
+      nullable: true 
     RCloneSchema:
       description: List of RClone schemas for different storage types
       type: array

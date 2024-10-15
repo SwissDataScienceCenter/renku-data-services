@@ -16,22 +16,6 @@ from test.bases.renku_data_services.data_api.utils import merge_headers
 
 
 @pytest.fixture
-def create_project(sanic_client, user_headers, admin_headers, regular_user, admin_user, bootstrap_admins):
-    async def create_project_helper(name: str, admin: bool = False, **payload) -> dict[str, Any]:
-        headers = admin_headers if admin else user_headers
-        user = admin_user if admin else regular_user
-        payload = payload.copy()
-        payload.update({"name": name, "namespace": f"{user.first_name}.{user.last_name}"})
-
-        _, response = await sanic_client.post("/api/data/projects", headers=headers, json=payload)
-
-        assert response.status_code == 201, response.text
-        return response.json
-
-    return create_project_helper
-
-
-@pytest.fixture
 def get_project(sanic_client, user_headers, admin_headers):
     async def get_project_helper(project_id: str, admin: bool = False) -> dict[str, Any]:
         headers = admin_headers if admin else user_headers
@@ -577,6 +561,59 @@ async def test_get_projects_with_namespace_filter(create_project, sanic_client, 
     assert response.status_code == 200, response.text
     projects = response.json
     assert {p["name"] for p in projects} == {"Project 4"}
+
+
+@pytest.mark.asyncio
+async def test_get_projects_with_direct_membership(sanic_client, user_headers, member_1_headers, member_1_user) -> None:
+    # Create a group
+    namespace = "my-group"
+    payload = {
+        "name": "Group",
+        "slug": namespace,
+    }
+    _, response = await sanic_client.post("/api/data/groups", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    # Create some projects in the group
+    payload = {
+        "name": "Project 1",
+        "namespace": namespace,
+    }
+    _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    project_1 = response.json
+    payload = {
+        "name": "Project 2",
+        "namespace": namespace,
+    }
+    _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    project_2 = response.json
+    # Add member_1 to the group
+    roles = [{"id": member_1_user.id, "role": "editor"}]
+    _, response = await sanic_client.patch(f"/api/data/groups/{namespace}/members", headers=user_headers, json=roles)
+    assert response.status_code == 200, response.text
+    # Add member_1 to Project 2
+    roles = [{"id": member_1_user.id, "role": "editor"}]
+    _, response = await sanic_client.patch(
+        f"/api/data/projects/{project_2["id"]}/members", headers=user_headers, json=roles
+    )
+    assert response.status_code == 200, response.text
+
+    parameters = {"direct_member": True}
+    _, response = await sanic_client.get("/api/data/projects", headers=member_1_headers, params=parameters)
+
+    assert response.status_code == 200, response.text
+    projects = response.json
+    assert len(projects) == 1
+    project_ids = {p["id"] for p in projects}
+    assert project_ids == {project_2["id"]}
+
+    # Check that both projects can be seen without the filter
+    _, response = await sanic_client.get("/api/data/projects", headers=member_1_headers)
+    projects = response.json
+    assert len(projects) == 2
+    project_ids = {p["id"] for p in projects}
+    assert project_ids == {project_1["id"], project_2["id"]}
 
 
 @pytest.mark.asyncio

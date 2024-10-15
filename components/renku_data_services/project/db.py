@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import functools
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any, Concatenate, ParamSpec, TypeVar
 
 from sqlalchemy import Select, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.functions import coalesce
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
@@ -48,18 +49,29 @@ class ProjectRepository:
         self.authz = authz
 
     async def get_projects(
-        self, user: base_models.APIUser, pagination: PaginationRequest, namespace: str | None = None
+        self,
+        user: base_models.APIUser,
+        pagination: PaginationRequest,
+        namespace: str | None = None,
+        direct_member: bool = False,
     ) -> tuple[list[models.Project], int]:
         """Get all projects from the database."""
-        project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
+        project_ids = []
+        if direct_member:
+            project_ids = await self.authz.resources_with_direct_membership(user, ResourceType.project)
+        else:
+            project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
 
         async with self.session_maker() as session:
             stmt = select(schemas.ProjectORM)
             stmt = stmt.where(schemas.ProjectORM.id.in_(project_ids))
             if namespace:
                 stmt = _filter_by_namespace_slug(stmt, namespace)
+
+            stmt = stmt.order_by(coalesce(schemas.ProjectORM.updated_at, schemas.ProjectORM.creation_date).desc())
+
             stmt = stmt.limit(pagination.per_page).offset(pagination.offset)
-            stmt = stmt.order_by(schemas.ProjectORM.creation_date.desc())
+
             stmt_count = (
                 select(func.count()).select_from(schemas.ProjectORM).where(schemas.ProjectORM.id.in_(project_ids))
             )
@@ -69,6 +81,16 @@ class ProjectRepository:
             projects_orm = results[0].all()
             total_elements = results[1] or 0
             return [p.dump() for p in projects_orm], total_elements
+
+    async def get_all_projects(self, requested_by: base_models.APIUser) -> AsyncGenerator[models.Project, None]:
+        """Get all projects from the database when reprovisioning."""
+        if not requested_by.is_admin:
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session:
+            projects = await session.stream_scalars(select(schemas.ProjectORM))
+            async for project in projects:
+                yield project.dump()
 
     async def get_project(self, user: base_models.APIUser, project_id: ULID) -> models.Project:
         """Get one project from the database."""

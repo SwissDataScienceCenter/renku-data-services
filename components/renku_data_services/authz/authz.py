@@ -1,7 +1,7 @@
 """Projects authorization adapter."""
 
 import asyncio
-from collections.abc import AsyncIterable, Awaitable, Callable
+from collections.abc import AsyncGenerator, AsyncIterable, Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import wraps
@@ -51,7 +51,7 @@ class WithAuthz(Protocol):
 
 _AuthzChangeFuncResult = TypeVar(
     "_AuthzChangeFuncResult",
-    bound=Project | ProjectUpdate | Group | UserInfoUpdate | list[UserInfo] | None,
+    bound=Project | ProjectUpdate | Group | UserInfoUpdate | list[UserInfo] | UserInfo | None,
 )
 _T = TypeVar("_T")
 _WithAuthz = TypeVar("_WithAuthz", bound=WithAuthz)
@@ -183,6 +183,8 @@ class _AuthzConverter:
                 return _AuthzConverter.user_namespace(rid)
             case (ResourceType.group, rid) if isinstance(rid, ULID):
                 return _AuthzConverter.group(rid)
+            case (ResourceType.platform, _):
+                return _AuthzConverter.platform()
         raise errors.ProgrammingError(
             message=f"Unexpected or unknown resource type when checking permissions {resource_type}"
         )
@@ -358,6 +360,31 @@ class Authz:
                 ids.append(response.resource_object_id)
         return ids
 
+    async def resources_with_direct_membership(
+        self, user: base_models.APIUser, resource_type: ResourceType
+    ) -> list[str]:
+        """Get all the resource IDs (for a specific resource kind) that a specific user is a direct member of."""
+        resource_ids: list[str] = []
+        if user.id is None:
+            return resource_ids
+
+        rel_filter = RelationshipFilter(
+            resource_type=resource_type.value,
+            optional_subject_filter=SubjectFilter(subject_type=ResourceType.user.value, optional_subject_id=user.id),
+        )
+
+        responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
+            ReadRelationshipsRequest(
+                consistency=Consistency(fully_consistent=True),
+                relationship_filter=rel_filter,
+            )
+        )
+
+        async for response in responses:
+            resource_ids.append(response.relationship.resource.object_id)
+
+        return resource_ids
+
     @_is_allowed(Scope.READ)  # The scope on the resource that allows the user to perform this check in the first place
     async def users_with_permission(
         self,
@@ -385,6 +412,15 @@ class Authz:
                 ids.append(response.subject.subject_object_id)
         return ids
 
+    async def get_all_members(
+        self, resource_type: ResourceType, *, zed_token: ZedToken | None = None
+    ) -> AsyncGenerator[Member, None]:
+        """Get all users that are members of a specific resource."""
+        members = self._get_members_helper(resource_type, resource_id=None, zed_token=zed_token)
+        async for member in members:
+            if member.user_id and member.user_id != "*":
+                yield member
+
     @_is_allowed(Scope.READ)
     async def members(
         self,
@@ -395,41 +431,63 @@ class Authz:
         *,
         zed_token: ZedToken | None = None,
     ) -> list[Member]:
+        """Get all users that are members of a specific resource type, if role is None then all roles are retrieved."""
+        members = self._get_members_helper(resource_type, str(resource_id), role, zed_token=zed_token)
+        return [m async for m in members]
+
+    async def _get_members_helper(
+        self,
+        resource_type: ResourceType,
+        resource_id: str | None,
+        role: Role | None = None,
+        *,
+        zed_token: ZedToken | None = None,
+    ) -> AsyncGenerator[Member, None]:
         """Get all users that are members of a resource, if role is None then all roles are retrieved."""
-        resource_id_str = str(resource_id)
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
         sub_filter = SubjectFilter(subject_type=ResourceType.user.value)
-        rel_filter = RelationshipFilter(
-            resource_type=resource_type,
-            optional_resource_id=resource_id_str,
-            optional_subject_filter=sub_filter,
-        )
-        if role:
-            relation = _Relation.from_role(role)
+        if resource_id is None:
+            rel_filter = RelationshipFilter(resource_type=resource_type, optional_subject_filter=sub_filter)
+        else:
             rel_filter = RelationshipFilter(
                 resource_type=resource_type,
-                optional_resource_id=resource_id_str,
-                optional_relation=relation,
+                optional_resource_id=resource_id,
                 optional_subject_filter=sub_filter,
             )
+        if role:
+            relation = _Relation.from_role(role)
+            if resource_id is None:
+                rel_filter = RelationshipFilter(
+                    resource_type=resource_type,
+                    optional_relation=relation,
+                    optional_subject_filter=sub_filter,
+                )
+            else:
+                rel_filter = RelationshipFilter(
+                    resource_type=resource_type,
+                    optional_resource_id=resource_id,
+                    optional_relation=relation,
+                    optional_subject_filter=sub_filter,
+                )
         responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
             ReadRelationshipsRequest(
                 consistency=consistency,
                 relationship_filter=rel_filter,
             )
         )
-        members: list[Member] = []
+
         async for response in responses:
             # Skip "public_viewer" relationships
             if response.relationship.relation == _Relation.public_viewer.value:
                 continue
             member_role = _Relation(response.relationship.relation).to_role()
-            members.append(
-                Member(
-                    user_id=response.relationship.subject.object.object_id, role=member_role, resource_id=resource_id
-                )
+            member = Member(
+                user_id=response.relationship.subject.object.object_id,
+                role=member_role,
+                resource_id=response.relationship.resource.object_id,
             )
-        return members
+
+            yield member
 
     @staticmethod
     def authz_change(
@@ -496,6 +554,13 @@ class Authz:
                 case AuthzOperation.update_or_insert, ResourceType.user if isinstance(result, UserInfoUpdate):
                     if result.old is None:
                         authz_change = db_repo.authz._add_user_namespace(result.new.namespace)
+                case AuthzOperation.delete, ResourceType.user if isinstance(result, UserInfo):
+                    user = _extract_user_from_args(*func_args, **func_kwargs)
+                    authz_change = await db_repo.authz._remove_user_namespace(result.id)
+                    authz_change.extend(await db_repo.authz._remove_user(user, result))
+                case AuthzOperation.delete, ResourceType.user if result is None:
+                    # NOTE: This means that the user does not exist in the first place so nothing was deleted
+                    pass
                 case AuthzOperation.insert_many, ResourceType.user_namespace if isinstance(result, list):
                     for res in result:
                         if not isinstance(res, UserInfo):
@@ -1349,6 +1414,38 @@ class Authz:
             ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
         )
         rels: list[Relationship] = []
+        async for response in responses:
+            rels.append(response.relationship)
+        apply = WriteRelationshipsRequest(
+            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=i) for i in rels]
+        )
+        undo = WriteRelationshipsRequest(
+            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=i) for i in rels]
+        )
+        return _AuthzChange(apply=apply, undo=undo)
+
+    async def _remove_user(
+        self,
+        requested_by: base_models.APIUser,
+        user_to_delete: UserInfo,
+    ) -> _AuthzChange:
+        """Remove a user from the authorization database."""
+        # Compute permission by hand for user deletion
+        # NOTE that for user deletion, the permission is "is_admin" on the platform
+        has_permission, zed_token = await self._has_permission(requested_by, ResourceType.platform, "*", Scope.IS_ADMIN)
+        if not has_permission:
+            raise errors.MissingResourceError(
+                message=f"The user with ID {requested_by.id} cannot perform operation {Scope.DELETE} "
+                f"on {ResourceType.user} with ID {user_to_delete.id} or the resource does not exist."
+            )
+        consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
+        rels: list[Relationship] = []
+        rel_filter = RelationshipFilter(
+            optional_subject_filter=SubjectFilter(subject_type=ResourceType.user, optional_subject_id=user_to_delete.id)
+        )
+        responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
+            ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
+        )
         async for response in responses:
             rels.append(response.relationship)
         apply = WriteRelationshipsRequest(

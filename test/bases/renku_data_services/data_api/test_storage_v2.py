@@ -2,14 +2,6 @@ from typing import Any, Optional
 
 import pytest
 
-from renku_data_services.users.models import UserInfo
-
-
-@pytest.fixture
-def project_members(member_1_user: UserInfo, member_2_user: UserInfo) -> list[dict[str, str]]:
-    """List of a project's members."""
-    return [{"id": member_1_user.id, "role": "viewer"}, {"id": member_2_user.id, "role": "owner"}]
-
 
 @pytest.fixture
 def project_owner_member_headers(member_2_headers: dict[str, str]) -> dict[str, str]:
