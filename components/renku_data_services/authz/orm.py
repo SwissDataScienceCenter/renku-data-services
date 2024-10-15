@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from sqlalchemy import MetaData, String
+from sqlalchemy import Identity, Integer, MetaData, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 
 
@@ -19,4 +19,4 @@ class ProjectUserAuthz(BaseORM):
     project_id: Mapped[str] = mapped_column("project_id", String(26), index=True)
     role: Mapped[int] = mapped_column(index=True)
     user_id: Mapped[Optional[str]] = mapped_column("user_id", String(36), index=True, default=None)
-    id: Mapped[int] = mapped_column(primary_key=True, default=None, init=False)
+    id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, default=None, init=False)
