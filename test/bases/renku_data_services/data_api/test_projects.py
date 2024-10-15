@@ -869,3 +869,43 @@ async def test_get_project_permissions_unauthorized(sanic_client, create_project
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}/permissions", headers=user_headers)
 
     assert response.status_code == 404, response.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["viewer", "editor", "owner"])
+async def test_get_project_permissions_cascading_from_group(
+    sanic_client, admin_headers, user_headers, regular_user, role
+) -> None:
+    _, response = await sanic_client.post(
+        "/api/data/groups", headers=admin_headers, json={"name": "My Group", "slug": "my-group"}
+    )
+    assert response.status_code == 201, response.text
+    patch = [{"id": regular_user.id, "role": role}]
+    _, response = await sanic_client.patch("/api/data/groups/my-group/members", headers=admin_headers, json=patch)
+    assert response.status_code == 200, response.text
+    _, response = await sanic_client.post(
+        "/api/data/projects", headers=admin_headers, json={"name": "My project", "namespace": "my-group"}
+    )
+    assert response.status_code == 201, response.text
+    project = response.json
+    project_id = project["id"]
+
+    expected_permissions = dict(
+        write=False,
+        delete=False,
+        change_membership=False,
+    )
+    if role == "editor" or role == "owner":
+        expected_permissions["write"] = True
+    if role == "owner":
+        expected_permissions["delete"] = True
+        expected_permissions["change_membership"] = True
+
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/permissions", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    permissions = response.json
+    assert permissions.get("write") == expected_permissions["write"]
+    assert permissions.get("delete") == expected_permissions["delete"]
+    assert permissions.get("change_membership") == expected_permissions["change_membership"]
