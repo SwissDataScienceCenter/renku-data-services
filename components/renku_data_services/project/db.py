@@ -332,24 +332,6 @@ class ProjectRepository:
                     permissions.change_membership = True
         return permissions
 
-    # async def get_project_permissions(self, user: base_models.APIUser, project_id: ULID) -> models.ProjectPermissions:
-    #     """Get the permissions of the user on a given project."""
-    #     # Get the project first, it will check if the user can view it.
-    #     await self.get_project(user=user, project_id=project_id)
-
-    #     scopes = [Scope.WRITE, Scope.DELETE]
-    #     permissions = await asyncio.gather(
-    #         *[
-    #             self.authz.has_permission(
-    #                 user=user, resource_type=ResourceType.project, resource_id=project_id, scope=scope
-    #             )
-    #             for scope in scopes
-    #         ]
-    #     )
-    #     write_permission = permissions[0]
-    #     admin_permission = permissions[1]
-    #     return models.ProjectPermissions(write=write_permission, admin=admin_permission)
-
 
 _P = ParamSpec("_P")
 _T = TypeVar("_T")

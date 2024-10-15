@@ -20,7 +20,7 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_api.etag import extract_if_none_match, if_match_required
 from renku_data_services.base_api.misc import validate_body_root_model, validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
-from renku_data_services.base_models.validation import validated_json
+from renku_data_services.base_models.validation import validate_and_dump, validated_json
 from renku_data_services.errors import errors
 from renku_data_services.project import apispec
 from renku_data_services.project import models as project_models
@@ -49,23 +49,7 @@ class ProjectsBP(CustomBlueprint):
             projects, total_num = await self.project_repo.get_projects(
                 user=user, pagination=pagination, namespace=query.namespace, direct_member=query.direct_member
             )
-            return [
-                dict(
-                    id=str(p.id),
-                    name=p.name,
-                    namespace=p.namespace.slug,
-                    slug=p.slug,
-                    creation_date=p.creation_date.isoformat(),
-                    created_by=p.created_by,
-                    updated_at=p.updated_at.isoformat() if p.updated_at else None,
-                    repositories=p.repositories,
-                    visibility=p.visibility.value,
-                    description=p.description,
-                    etag=p.etag,
-                    keywords=p.keywords or [],
-                )
-                for p in projects
-            ], total_num
+            return [validate_and_dump(apispec.Project, self._dump_project(p)) for p in projects], total_num
 
         return "/projects", ["GET"], _get_all
 
@@ -88,8 +72,7 @@ class ProjectsBP(CustomBlueprint):
                 keywords=keywords,
             )
             result = await self.project_repo.insert_project(user, project)
-            permissions = await self.project_repo.get_project_permissions(user=user, project_id=result.id)
-            return validated_json(apispec.Project, self._dump_project(result, permissions), status=201)
+            return validated_json(apispec.Project, self._dump_project(result), status=201)
 
         return "/projects", ["POST"], _post
 
@@ -108,22 +91,7 @@ class ProjectsBP(CustomBlueprint):
                 return HTTPResponse(status=304)
 
             headers = {"ETag": project.etag} if project.etag is not None else None
-            return json(
-                dict(
-                    id=str(project.id),
-                    name=project.name,
-                    namespace=project.namespace.slug,
-                    slug=project.slug,
-                    creation_date=project.creation_date.isoformat(),
-                    created_by=project.created_by,
-                    repositories=project.repositories,
-                    visibility=project.visibility.value,
-                    description=project.description,
-                    etag=project.etag,
-                    keywords=project.keywords or [],
-                ),
-                headers=headers,
-            )
+            return validated_json(apispec.Project, self._dump_project(project), headers=headers)
 
         return "/projects/<project_id>", ["GET"], _get_one
 
@@ -141,22 +109,7 @@ class ProjectsBP(CustomBlueprint):
                 return HTTPResponse(status=304)
 
             headers = {"ETag": project.etag} if project.etag is not None else None
-            return json(
-                dict(
-                    id=str(project.id),
-                    name=project.name,
-                    namespace=project.namespace.slug,
-                    slug=project.slug,
-                    creation_date=project.creation_date.isoformat(),
-                    created_by=project.created_by,
-                    repositories=project.repositories,
-                    visibility=project.visibility.value,
-                    description=project.description,
-                    etag=project.etag,
-                    keywords=project.keywords or [],
-                ),
-                headers=headers,
-            )
+            return validated_json(apispec.Project, self._dump_project(project), headers=headers)
 
         return "/projects/<namespace>/<slug:renku_slug>", ["GET"], _get_one_by_namespace_slug
 
@@ -195,22 +148,7 @@ class ProjectsBP(CustomBlueprint):
                 )
 
             updated_project = project_update.new
-            return json(
-                dict(
-                    id=str(updated_project.id),
-                    name=updated_project.name,
-                    namespace=updated_project.namespace.slug,
-                    slug=updated_project.slug,
-                    creation_date=updated_project.creation_date.isoformat(),
-                    created_by=updated_project.created_by,
-                    repositories=updated_project.repositories,
-                    visibility=updated_project.visibility.value,
-                    description=updated_project.description,
-                    etag=updated_project.etag,
-                    keywords=updated_project.keywords or [],
-                ),
-                200,
-            )
+            return validated_json(apispec.Project, self._dump_project(updated_project))
 
         return "/projects/<project_id>", ["PATCH"], _patch
 
@@ -276,10 +214,23 @@ class ProjectsBP(CustomBlueprint):
 
         return "/projects/<project_id>/members/<member_id>", ["DELETE"], _delete_member
 
+    def get_permissions(self) -> BlueprintFactoryResponse:
+        """Get the permissions of the current user on the project."""
+
+        @authenticate(self.authenticator)
+        @validate_path_project_id
+        async def _get_permissions(
+            _: Request, user: base_models.APIUser, project_id: str
+        ) -> JSONResponse | HTTPResponse:
+            permissions = await self.project_repo.get_project_permissions(
+                user=user, project_id=ULID.from_str(project_id)
+            )
+            return validated_json(apispec.ProjectPermissions, permissions)
+
+        return "/projects/<project_id>/permissions", ["GET"], _get_permissions
+
     @staticmethod
-    def _dump_project(
-        project: project_models.Project, permissions: project_models.ProjectPermissions
-    ) -> dict[str, Any]:
+    def _dump_project(project: project_models.Project) -> dict[str, Any]:
         """Dumps a project for API responses."""
         return dict(
             id=str(project.id),
@@ -294,20 +245,4 @@ class ProjectsBP(CustomBlueprint):
             description=project.description,
             etag=project.etag,
             keywords=project.keywords or [],
-            permissions=permissions,
         )
-
-    # def get_permissions(self) -> BlueprintFactoryResponse:
-    #     """Get the permissions of the current user on the project."""
-
-    #     @authenticate(self.authenticator)
-    #     @validate_path_project_id
-    #     async def _get_permissions(
-    #         _: Request, user: base_models.APIUser, project_id: str
-    #     ) -> JSONResponse | HTTPResponse:
-    #         permissions = await self.project_repo.get_project_permissions(
-    #             user=user, project_id=ULID.from_str(project_id)
-    #         )
-    #         return validated_json(apispec.ProjectPermissions, permissions)
-
-    #     return "/projects/<project_id>/permissions", ["GET"], _get_permissions
