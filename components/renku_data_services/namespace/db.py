@@ -99,7 +99,7 @@ class GroupRepository:
         if not requested_by.is_admin:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
-        async with self.session_maker() as session, session.begin():
+        async with self.session_maker() as session:
             groups = await session.stream_scalars(select(schemas.GroupORM))
             async for group in groups:
                 yield group.dump()

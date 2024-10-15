@@ -12,20 +12,19 @@ from renku_data_services.authz.authz import Authz
 from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.message_queue.core import reprovision
-from renku_data_services.message_queue.db import EventRepository, ReprovisioningRepository
+from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.users.db import UserRepo
 
 
 @dataclass(kw_only=True)
-class SearchBP(CustomBlueprint):
-    """Handlers for search."""
+class MessageQueueBP(CustomBlueprint):
+    """Handlers for message queue."""
 
     authenticator: base_models.Authenticator
     session_maker: Callable[..., AsyncSession]
     reprovisioning_repo: ReprovisioningRepository
-    event_repo: EventRepository
     user_repo: UserRepo
     group_repo: GroupRepository
     project_repo: ProjectRepository
@@ -45,7 +44,6 @@ class SearchBP(CustomBlueprint):
                     requested_by=user,
                     reprovisioning=reprovisioning,
                     reprovisioning_repo=self.reprovisioning_repo,
-                    event_repo=self.event_repo,
                     user_repo=self.user_repo,
                     group_repo=self.group_repo,
                     project_repo=self.project_repo,
