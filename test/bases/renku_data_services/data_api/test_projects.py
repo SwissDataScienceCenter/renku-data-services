@@ -859,3 +859,13 @@ async def test_get_project_permissions(sanic_client, create_project, user_header
     assert permissions.get("write") == expected_permissions["write"]
     assert permissions.get("delete") == expected_permissions["delete"]
     assert permissions.get("change_membership") == expected_permissions["change_membership"]
+
+
+@pytest.mark.asyncio
+async def test_get_project_permissions_unauthorized(sanic_client, create_project, user_headers) -> None:
+    project = await create_project("Project 1", admin=True)
+    project_id = project["id"]
+
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/permissions", headers=user_headers)
+
+    assert response.status_code == 404, response.text

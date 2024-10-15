@@ -216,9 +216,7 @@ class ProjectsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @validate_path_project_id
-        async def _get_permissions(
-            _: Request, user: base_models.APIUser, project_id: str
-        ) -> JSONResponse | HTTPResponse:
+        async def _get_permissions(_: Request, user: base_models.APIUser, project_id: str) -> JSONResponse:
             permissions = await self.project_repo.get_project_permissions(
                 user=user, project_id=ULID.from_str(project_id)
             )

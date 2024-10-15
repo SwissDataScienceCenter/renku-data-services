@@ -154,6 +154,16 @@ class GroupsBP(CustomBlueprint):
 
         return "/groups/<slug:renku_slug>/members/<user_id>", ["DELETE"], _delete_member
 
+    def get_permissions(self) -> BlueprintFactoryResponse:
+        """Get the permissions of the current user on the group."""
+
+        @authenticate(self.authenticator)
+        async def _get_permissions(_: Request, user: base_models.APIUser, slug: str) -> JSONResponse:
+            permissions = await self.group_repo.get_group_permissions(user=user, slug=slug)
+            return validated_json(apispec.GroupPermissions, permissions)
+
+        return "/groups/<slug:renku_slug>/permissions", ["GET"], _get_permissions
+
     def get_namespaces(self) -> BlueprintFactoryResponse:
         """Get all namespaces."""
 

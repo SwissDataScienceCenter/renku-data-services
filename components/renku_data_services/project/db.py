@@ -316,6 +316,9 @@ class ProjectRepository:
 
     async def get_project_permissions(self, user: base_models.APIUser, project_id: ULID) -> models.ProjectPermissions:
         """Get the permissions of the user on a given project."""
+        # Get the project first, it will check if the user can view it.
+        await self.get_project(user=user, project_id=project_id)
+
         scopes = [Scope.WRITE, Scope.DELETE, Scope.CHANGE_MEMBERSHIP]
         items = [
             CheckPermissionItem(resource_type=ResourceType.project, resource_id=project_id, scope=scope)
