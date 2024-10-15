@@ -63,4 +63,5 @@ class ProjectPermissions:
     """The permissions of a user on a given project."""
 
     write: bool
-    admin: bool
+    delete: bool
+    change_membership: bool

@@ -11,6 +11,8 @@ from authzed.api.v1 import AsyncClient
 from authzed.api.v1.core_pb2 import ObjectReference, Relationship, RelationshipUpdate, SubjectReference, ZedToken
 from authzed.api.v1.permission_service_pb2 import (
     LOOKUP_PERMISSIONSHIP_HAS_PERMISSION,
+    CheckBulkPermissionsRequest,
+    CheckBulkPermissionsRequestItem,
     CheckPermissionRequest,
     CheckPermissionResponse,
     Consistency,
@@ -30,7 +32,15 @@ from ulid import ULID
 
 from renku_data_services import base_models
 from renku_data_services.authz.config import AuthzConfig
-from renku_data_services.authz.models import Change, Member, MembershipChange, Role, Scope, Visibility
+from renku_data_services.authz.models import (
+    Change,
+    CheckPermissionItem,
+    Member,
+    MembershipChange,
+    Role,
+    Scope,
+    Visibility,
+)
 from renku_data_services.base_models.core import InternalServiceAdmin
 from renku_data_services.errors import errors
 from renku_data_services.namespace.models import Group, GroupUpdate, Namespace, NamespaceKind, NamespaceUpdate
@@ -328,6 +338,43 @@ class Authz:
         """Checks whether the provided user has a specific permission on the specific resource."""
         res, _ = await self._has_permission(user, resource_type, resource_id, scope)
         return res
+
+    async def has_permissions(
+        self, user: base_models.APIUser, items: list[CheckPermissionItem]
+    ) -> list[tuple[CheckPermissionItem, bool]]:
+        """Check whether the provided user has the requested permissions.
+
+        This is equivalent to calling has_permission() for each requested item, but done in bulk.
+        """
+        if isinstance(user, InternalServiceAdmin):
+            return [(item, True) for item in items]
+        sub = SubjectReference(
+            object=_AuthzConverter.to_object(ResourceType.user, user.id)
+            if user.id
+            else _AuthzConverter.anonymous_user()
+        )
+        request_items = [
+            CheckBulkPermissionsRequestItem(
+                resource=_AuthzConverter.to_object(item.resource_type, item.resource_id),
+                subject=sub,
+                permission=item.scope.value,
+            )
+            for item in items
+        ]
+        response = await self.client.CheckBulkPermissions(
+            CheckBulkPermissionsRequest(
+                consistency=(Consistency(fully_consistent=True)),
+                items=request_items,
+            )
+        )
+        return [
+            (
+                item,
+                pair.HasField("item")
+                and pair.item.permissionship == CheckPermissionResponse.PERMISSIONSHIP_HAS_PERMISSION,
+            )
+            for item, pair in zip(items, response.pairs)
+        ]
 
     async def resources_with_permission(
         self, requested_by: base_models.APIUser, user_id: str | None, resource_type: ResourceType, scope: Scope

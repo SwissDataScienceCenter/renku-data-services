@@ -44,7 +44,7 @@ class ProjectsBP(CustomBlueprint):
         @validate_query(query=apispec.ProjectGetQuery)
         @paginate
         async def _get_all(
-            request: Request, user: base_models.APIUser, pagination: PaginationRequest, query: apispec.ProjectGetQuery
+            _: Request, user: base_models.APIUser, pagination: PaginationRequest, query: apispec.ProjectGetQuery
         ) -> tuple[list[dict[str, Any]], int]:
             projects, total_num = await self.project_repo.get_projects(
                 user=user, pagination=pagination, namespace=query.namespace, direct_member=query.direct_member
@@ -88,22 +88,8 @@ class ProjectsBP(CustomBlueprint):
                 keywords=keywords,
             )
             result = await self.project_repo.insert_project(user, project)
-            return json(
-                dict(
-                    id=str(result.id),
-                    name=result.name,
-                    namespace=result.namespace.slug,
-                    slug=result.slug,
-                    creation_date=result.creation_date.isoformat(),
-                    created_by=result.created_by,
-                    repositories=result.repositories,
-                    visibility=result.visibility.value,
-                    description=result.description,
-                    etag=result.etag,
-                    keywords=result.keywords or [],
-                ),
-                201,
-            )
+            permissions = await self.project_repo.get_project_permissions(user=user, project_id=result.id)
+            return validated_json(apispec.Project, self._dump_project(result, permissions), status=201)
 
         return "/projects", ["POST"], _post
 
@@ -290,17 +276,38 @@ class ProjectsBP(CustomBlueprint):
 
         return "/projects/<project_id>/members/<member_id>", ["DELETE"], _delete_member
 
-    def get_permissions(self) -> BlueprintFactoryResponse:
-        """Get the permissions of the current user on the project."""
+    @staticmethod
+    def _dump_project(
+        project: project_models.Project, permissions: project_models.ProjectPermissions
+    ) -> dict[str, Any]:
+        """Dumps a project for API responses."""
+        return dict(
+            id=str(project.id),
+            name=project.name,
+            namespace=project.namespace.slug,
+            slug=project.slug,
+            creation_date=project.creation_date.isoformat(),
+            created_by=project.created_by,
+            updated_at=project.updated_at.isoformat() if project.updated_at else None,
+            repositories=project.repositories,
+            visibility=project.visibility.value,
+            description=project.description,
+            etag=project.etag,
+            keywords=project.keywords or [],
+            permissions=permissions,
+        )
 
-        @authenticate(self.authenticator)
-        @validate_path_project_id
-        async def _get_permissions(
-            _: Request, user: base_models.APIUser, project_id: str
-        ) -> JSONResponse | HTTPResponse:
-            permissions = await self.project_repo.get_project_permissions(
-                user=user, project_id=ULID.from_str(project_id)
-            )
-            return validated_json(apispec.ProjectPermissions, permissions)
+    # def get_permissions(self) -> BlueprintFactoryResponse:
+    #     """Get the permissions of the current user on the project."""
 
-        return "/projects/<project_id>/permissions", ["GET"], _get_permissions
+    #     @authenticate(self.authenticator)
+    #     @validate_path_project_id
+    #     async def _get_permissions(
+    #         _: Request, user: base_models.APIUser, project_id: str
+    #     ) -> JSONResponse | HTTPResponse:
+    #         permissions = await self.project_repo.get_project_permissions(
+    #             user=user, project_id=ULID.from_str(project_id)
+    #         )
+    #         return validated_json(apispec.ProjectPermissions, permissions)
+
+    #     return "/projects/<project_id>/permissions", ["GET"], _get_permissions

@@ -2,11 +2,15 @@
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from ulid import ULID
 
 from renku_data_services.errors import errors
 from renku_data_services.namespace.apispec import GroupRole
+
+if TYPE_CHECKING:
+    from renku_data_services.authz.authz import ResourceType
 
 
 class Role(Enum):
@@ -93,3 +97,12 @@ class Visibility(Enum):
 
     PUBLIC: str = "public"
     PRIVATE: str = "private"
+
+
+@dataclass
+class CheckPermissionItem:
+    """Represent a permission item to be checked by the authorization service."""
+
+    resource_type: "ResourceType"
+    resource_id: str | ULID
+    scope: Scope

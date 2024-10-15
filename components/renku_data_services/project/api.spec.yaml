@@ -259,32 +259,6 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - projects
-  /projects/{project_id}/permissions:
-    parameters:
-      - in: path
-        name: project_id
-        required: true
-        schema:
-          $ref: "#/components/schemas/Ulid"
-    get:
-      summary: Get the permissions of the current user on the project
-      responses:
-        "200":
-          description: The set of permissions.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ProjectPermissions"
-        "404":
-          description: The project does not exist
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        default:
-          $ref: "#/components/responses/Error"
-      tags:
-        - projects
 components:
   schemas:
     ProjectsList:
@@ -321,6 +295,8 @@ components:
           $ref: "#/components/schemas/ETag"
         keywords:
           $ref: "#/components/schemas/KeywordsList"
+        permissions:
+          $ref: "#/components/schemas/ProjectPermissions"
       required:
         - "id"
         - "name"
@@ -329,6 +305,7 @@ components:
         - "created_by"
         - "creation_date"
         - "visibility"
+        - "permissions"
       example:
         id: "01AN4Z79ZS5XN0F25N3DB94T4R"
         name: "Renku R Project"
@@ -343,6 +320,10 @@ components:
         keywords:
           - "keyword 1"
           - "keyword 2"
+        permissions:
+          write: true
+          delete: true
+          change_membership: true
     ProjectPost:
       description: Project metadata to be created in Renku
       type: object
@@ -548,8 +529,11 @@ components:
         write:
           description: The user can edit the project
           type: boolean
-        admin:
-          description: The user can delete the project and manage members
+        delete:
+          description: The user can delete the project
+          type: boolean
+        change_membership:
+          description: The user can manage project members
           type: boolean
     PaginationRequest:
       type: object
