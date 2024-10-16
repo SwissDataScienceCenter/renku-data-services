@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from sanic import Request
+from ulid import ULID
 
 import renku_data_services.base_models as base_models
 
@@ -39,10 +40,22 @@ class DummyAuthenticator:
     """
 
     token_field = "Authorization"  # nosec: B105
+    anon_id_header_key: str = "Renku-Auth-Anon-Id"
+    anon_id_cookie_name: str = "Renku-Auth-Anon-Id"
 
-    @staticmethod
-    async def authenticate(access_token: str, request: Request) -> base_models.APIUser:
+    async def authenticate(self, access_token: str, request: Request) -> base_models.APIUser:
         """Indicates whether the user has successfully logged in."""
+        access_token = request.headers.get(self.token_field) or ""
+        if not access_token or len(access_token) == 0:
+            # Try to get an anonymous user ID if the validation of keycloak credentials failed
+            anon_id = request.headers.get(self.anon_id_header_key)
+            if anon_id is None:
+                anon_id = request.cookies.get(self.anon_id_cookie_name)
+            if anon_id is None:
+                anon_id = f"anon-{str(ULID())}"
+            return base_models.AnonymousAPIUser(id=str(anon_id))
+
+        access_token = access_token.removeprefix("Bearer ").removeprefix("bearer ")
         user_props = {}
         with contextlib.suppress(Exception):
             user_props = json.loads(access_token)
@@ -64,4 +77,5 @@ class DummyAuthenticator:
             last_name=user_props.get("last_name", "Doe") if is_set else None,
             email=user_props.get("email", "john.doe@gmail.com") if is_set else None,
             full_name=user_props.get("full_name", "John Doe") if is_set else None,
+            refresh_token=request.headers.get("Renku-Auth-Refresh-Token"),
         )
