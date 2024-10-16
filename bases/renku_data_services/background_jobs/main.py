@@ -13,6 +13,7 @@ from renku_data_services.background_jobs.core import (
     migrate_groups_make_all_public,
     migrate_user_namespaces_make_all_public,
 )
+from renku_data_services.background_jobs.utils import ErrorHandler
 from renku_data_services.migrations.core import run_migrations_for_app
 
 logging.basicConfig(level=logging.INFO)
@@ -22,20 +23,35 @@ async def short_period_sync() -> None:
     """Perform synchronizations and jobs that should occur more often."""
     config = SyncConfig.from_env()
     run_migrations_for_app("common")
-    await bootstrap_user_namespaces(config)
-    await config.syncer.events_sync(config.kc_api)
-    await sync_admins_from_keycloak(config.kc_api, Authz(config.authz_config))
-    await fix_mismatched_project_namespace_ids(config)
-    await migrate_groups_make_all_public(config)
-    await migrate_user_namespaces_make_all_public(config)
+
+    error_handler = ErrorHandler()
+
+    async with error_handler:
+        await bootstrap_user_namespaces(config)
+    async with error_handler:
+        await config.syncer.events_sync(config.kc_api)
+    async with error_handler:
+        await sync_admins_from_keycloak(config.kc_api, Authz(config.authz_config))
+    async with error_handler:
+        await fix_mismatched_project_namespace_ids(config)
+    async with error_handler:
+        await migrate_groups_make_all_public(config)
+    async with error_handler:
+        await migrate_user_namespaces_make_all_public(config)
+
+    error_handler.maybe_raise()
 
 
 async def long_period_sync() -> None:
     """Perform synchronizations and jobs that can occur more rarely."""
     config = SyncConfig.from_env()
     run_migrations_for_app("common")
-    await config.syncer.users_sync(config.kc_api)
-    await sync_admins_from_keycloak(config.kc_api, Authz(config.authz_config))
+    error_handler = ErrorHandler()
+    async with error_handler:
+        await config.syncer.users_sync(config.kc_api)
+    async with error_handler:
+        await sync_admins_from_keycloak(config.kc_api, Authz(config.authz_config))
+    error_handler.maybe_raise()
 
 
 async def main() -> None:
