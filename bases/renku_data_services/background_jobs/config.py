@@ -9,6 +9,8 @@ from sqlalchemy.orm import sessionmaker
 
 from renku_data_services.authz.authz import Authz
 from renku_data_services.authz.config import AuthzConfig
+from renku_data_services.data_connectors.db import DataConnectorProjectLinkRepository, DataConnectorRepository
+from renku_data_services.data_connectors.migration_utils import DataConnectorMigrationTool
 from renku_data_services.errors import errors
 from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.message_queue.db import EventRepository
@@ -29,6 +31,7 @@ class SyncConfig:
     group_repo: GroupRepository
     event_repo: EventRepository
     project_repo: ProjectRepository
+    data_connector_migration_tool: DataConnectorMigrationTool
     session_maker: Callable[..., AsyncSession]
 
     @classmethod
@@ -67,7 +70,21 @@ class SyncConfig:
             group_repo=group_repo,
             authz=Authz(authz_config),
         )
-
+        data_connector_repo = DataConnectorRepository(
+            session_maker=session_maker,
+            authz=Authz(authz_config),
+        )
+        data_connector_project_link_repo = DataConnectorProjectLinkRepository(
+            session_maker=session_maker,
+            authz=Authz(authz_config),
+        )
+        data_connector_migration_tool = DataConnectorMigrationTool(
+            session_maker=session_maker,
+            data_connector_repo=data_connector_repo,
+            data_connector_project_link_repo=data_connector_project_link_repo,
+            project_repo=project_repo,
+            authz=Authz(authz_config),
+        )
         user_repo = UserRepo(
             session_maker=session_maker,
             message_queue=message_queue,
@@ -89,4 +106,13 @@ class SyncConfig:
         client_secret = os.environ[f"{prefix}KEYCLOAK_CLIENT_SECRET"]
         realm = os.environ.get(f"{prefix}KEYCLOAK_REALM", "Renku")
         kc_api = KeycloakAPI(keycloak_url=keycloak_url, client_id=client_id, client_secret=client_secret, realm=realm)
-        return cls(syncer, kc_api, authz_config, group_repo, event_repo, project_repo, session_maker)
+        return cls(
+            syncer,
+            kc_api,
+            authz_config,
+            group_repo,
+            event_repo,
+            project_repo,
+            data_connector_migration_tool,
+            session_maker,
+        )
