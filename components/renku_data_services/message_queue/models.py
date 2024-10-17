@@ -8,8 +8,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Self, TypeVar
 
-from dataclasses_avroschema.schema_generator import AvroModel
-from dataclasses_avroschema.utils import standardize_custom_type
+from dataclasses_avroschema import AvroModel
 from fastavro import parse_schema, schemaless_reader, schemaless_writer
 from ulid import ULID
 
@@ -33,7 +32,7 @@ def _serialize_binary(obj: AvroModel) -> bytes:
     """Serialize a message with avro, making sure to use the original schema."""
     schema = parse_schema(schema=json.loads(getattr(obj, "_schema", obj.avro_schema())), named_schemas=_schemas)
     fo = BytesIO()
-    schemaless_writer(fo, schema, obj.asdict(standardize_factory=standardize_custom_type))
+    schemaless_writer(fo, schema, obj.asdict())
     return fo.getvalue()
 
 

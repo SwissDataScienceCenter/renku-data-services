@@ -66,7 +66,7 @@ class GitlabAPI:
         }
 
         async def _query_gitlab_graphql(body: dict[str, Any], header: dict[str, Any]) -> dict[str, Any]:
-            async with httpx.AsyncClient(verify=get_ssl_context()) as client:
+            async with httpx.AsyncClient(verify=get_ssl_context(), timeout=5) as client:
                 resp = await client.post(self.gitlab_graphql_url, json=body, headers=header, timeout=10)
             if resp.status_code != 200:
                 raise errors.BaseError(message=f"Error querying Gitlab api {self.gitlab_graphql_url}: {resp.text}")

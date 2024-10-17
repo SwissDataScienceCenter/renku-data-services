@@ -328,9 +328,9 @@ class ResourcePoolRepository(_Base):
             if len(kwargs) == 0:
                 return rp.dump(quota)
 
-            if kwargs.get("idle_threshold", None) == 0:
+            if kwargs.get("idle_threshold") == 0:
                 kwargs["idle_threshold"] = None
-            if kwargs.get("hibernation_threshold", None) == 0:
+            if kwargs.get("hibernation_threshold") == 0:
                 kwargs["hibernation_threshold"] = None
             # NOTE: The .update method on the model validates the update to the resource pool
             old_rp_model = rp.dump(quota)
@@ -801,6 +801,6 @@ class UserRepository(_Base):
                 raise errors.ValidationError(
                     message=f"Only the following fields {allowed_updates} " "can be updated for a resource pool user.."
                 )
-            if (no_default_access := kwargs.get("no_default_access", None)) is not None:
+            if (no_default_access := kwargs.get("no_default_access")) is not None:
                 user.no_default_access = no_default_access
             return user.dump()
