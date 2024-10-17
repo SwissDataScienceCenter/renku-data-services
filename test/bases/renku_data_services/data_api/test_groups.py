@@ -505,3 +505,58 @@ async def test_get_groups_with_direct_membership(sanic_client, user_headers, mem
     assert len(groups) == 2
     group_ids = {g["id"] for g in groups}
     assert group_ids == {group_1["id"], group_2["id"]}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["viewer", "editor", "owner"])
+async def test_get_group_permissions(sanic_client, admin_headers, user_headers, regular_user, role) -> None:
+    namespace = "my-group"
+    payload = {
+        "name": "Group",
+        "slug": namespace,
+    }
+    _, response = await sanic_client.post("/api/data/groups", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+    roles = [{"id": regular_user.id, "role": role}]
+    _, response = await sanic_client.patch(f"/api/data/groups/{namespace}/members", headers=admin_headers, json=roles)
+    assert response.status_code == 200, response.text
+
+    expected_permissions = dict(
+        write=False,
+        delete=False,
+        change_membership=False,
+    )
+    if role == "editor" or role == "owner":
+        expected_permissions["write"] = True
+    if role == "owner":
+        expected_permissions["delete"] = True
+        expected_permissions["change_membership"] = True
+
+    _, response = await sanic_client.get(f"/api/data/groups/{namespace}/permissions", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    permissions = response.json
+    assert permissions.get("write") == expected_permissions["write"]
+    assert permissions.get("delete") == expected_permissions["delete"]
+    assert permissions.get("change_membership") == expected_permissions["change_membership"]
+
+
+@pytest.mark.asyncio
+async def test_get_project_permissions_unauthorized(sanic_client, admin_headers, user_headers) -> None:
+    namespace = "my-group"
+    payload = {
+        "name": "Group",
+        "slug": namespace,
+    }
+    _, response = await sanic_client.post("/api/data/groups", headers=admin_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    _, response = await sanic_client.get(f"/api/data/groups/{namespace}/permissions", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    permissions = response.json
+    assert permissions.get("write") is False
+    assert permissions.get("delete") is False
+    assert permissions.get("change_membership") is False

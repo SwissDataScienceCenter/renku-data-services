@@ -17,7 +17,7 @@ from sqlalchemy.orm import joinedload
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
-from renku_data_services.authz.models import Member, MembershipChange, Role, Scope, UnsavedMember
+from renku_data_services.authz.models import CheckPermissionItem, Member, MembershipChange, Role, Scope, UnsavedMember
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.message_queue import events
 from renku_data_services.message_queue.avro_models.io.renku.events.v2 import GroupAdded, GroupRemoved, GroupUpdated
@@ -310,6 +310,28 @@ class GroupRepository:
         # NOTE: This is needed to populate the relationship fields in the group after inserting the ID above
         await session.refresh(group)
         return group.dump()
+
+    async def get_group_permissions(self, user: base_models.APIUser, slug: str) -> models.GroupPermissions:
+        """Get the permissions of the user on a given group."""
+        group = await self.get_group(user=user, slug=slug)
+
+        scopes = [Scope.WRITE, Scope.DELETE, Scope.CHANGE_MEMBERSHIP]
+        items = [
+            CheckPermissionItem(resource_type=ResourceType.group, resource_id=group.id, scope=scope) for scope in scopes
+        ]
+        responses = await self.authz.has_permissions(user=user, items=items)
+        permissions = models.GroupPermissions(write=False, delete=False, change_membership=False)
+        for item, has_permission in responses:
+            if not has_permission:
+                continue
+            match item.scope:
+                case Scope.WRITE:
+                    permissions.write = True
+                case Scope.DELETE:
+                    permissions.delete = True
+                case Scope.CHANGE_MEMBERSHIP:
+                    permissions.change_membership = True
+        return permissions
 
     async def get_namespaces(
         self, user: base_models.APIUser, pagination: PaginationRequest, minimum_role: Role | None = None

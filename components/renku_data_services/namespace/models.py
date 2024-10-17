@@ -82,3 +82,12 @@ class NamespaceUpdate:
 
     old: Namespace
     new: Namespace
+
+
+@dataclass
+class GroupPermissions:
+    """The permissions of a user on a given group."""
+
+    write: bool
+    delete: bool
+    change_membership: bool

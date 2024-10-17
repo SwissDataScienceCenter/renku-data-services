@@ -15,7 +15,7 @@ from ulid import ULID
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
-from renku_data_services.authz.models import Member, MembershipChange, Scope
+from renku_data_services.authz.models import CheckPermissionItem, Member, MembershipChange, Scope
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.message_queue import events
 from renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
@@ -313,6 +313,30 @@ class ProjectRepository:
         )
 
         return project.dump()
+
+    async def get_project_permissions(self, user: base_models.APIUser, project_id: ULID) -> models.ProjectPermissions:
+        """Get the permissions of the user on a given project."""
+        # Get the project first, it will check if the user can view it.
+        await self.get_project(user=user, project_id=project_id)
+
+        scopes = [Scope.WRITE, Scope.DELETE, Scope.CHANGE_MEMBERSHIP]
+        items = [
+            CheckPermissionItem(resource_type=ResourceType.project, resource_id=project_id, scope=scope)
+            for scope in scopes
+        ]
+        responses = await self.authz.has_permissions(user=user, items=items)
+        permissions = models.ProjectPermissions(write=False, delete=False, change_membership=False)
+        for item, has_permission in responses:
+            if not has_permission:
+                continue
+            match item.scope:
+                case Scope.WRITE:
+                    permissions.write = True
+                case Scope.DELETE:
+                    permissions.delete = True
+                case Scope.CHANGE_MEMBERSHIP:
+                    permissions.change_membership = True
+        return permissions
 
 
 _P = ParamSpec("_P")

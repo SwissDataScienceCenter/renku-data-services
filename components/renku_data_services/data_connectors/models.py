@@ -134,3 +134,12 @@ class DataConnectorSecretUpdate:
 
     name: str
     value: str | None
+
+
+@dataclass
+class DataConnectorPermissions:
+    """The permissions of a user on a given data connector."""
+
+    write: bool
+    delete: bool
+    change_membership: bool

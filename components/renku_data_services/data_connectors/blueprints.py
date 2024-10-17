@@ -187,6 +187,18 @@ class DataConnectorsBP(CustomBlueprint):
 
         return "/data_connectors/<data_connector_id:ulid>", ["DELETE"], _delete
 
+    def get_permissions(self) -> BlueprintFactoryResponse:
+        """Get the permissions of the current user on the data connector."""
+
+        @authenticate(self.authenticator)
+        async def _get_permissions(_: Request, user: base_models.APIUser, data_connector_id: ULID) -> JSONResponse:
+            permissions = await self.data_connector_repo.get_data_connector_permissions(
+                user=user, data_connector_id=data_connector_id
+            )
+            return validated_json(apispec.DataConnectorPermissions, permissions)
+
+        return "/data_connectors/<data_connector_id:ulid>/permissions", ["GET"], _get_permissions
+
     def get_all_project_links(self) -> BlueprintFactoryResponse:
         """List all links from a given data connector to projects."""
 
