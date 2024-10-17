@@ -25,6 +25,7 @@ def upgrade() -> None:
     last_id = connection.scalars(last_id_stmt).one_or_none()
     if last_id is None or last_id <= 0:
         return
+    op.execute(sa.text("LOCK TABLE common.user_preferences IN EXCLUSIVE MODE"))
     op.execute(sa.text(f"ALTER SEQUENCE users.user_preferences_id_seq RESTART WITH {last_id + 1}"))
 
     # ### end Alembic commands ###
