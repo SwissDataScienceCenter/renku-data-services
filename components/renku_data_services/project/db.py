@@ -274,8 +274,7 @@ class ProjectRepository:
             project.visibility = visibility_orm
         if patch.repositories is not None:
             project.repositories = [
-                schemas.ProjectRepositoryORM(url=r, project_id=project_id_str, project=project)
-                for r in patch.repositories
+                schemas.ProjectRepositoryORM(url=r, project_id=project.id, project=project) for r in patch.repositories
             ]
             # Trigger update for ``updated_at`` column
             await session.execute(update(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id).values())

@@ -1,9 +1,6 @@
 """Tests for sessions blueprints."""
 
-import os
-import shutil
 from asyncio import AbstractEventLoop
-from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -13,19 +10,6 @@ from sanic_testing.testing import SanicASGITestClient, TestingResponse
 from renku_data_services.app_config.config import Config
 from renku_data_services.crc.apispec import ResourcePool
 from renku_data_services.users.models import UserInfo
-from test.bases.renku_data_services.data_api.utils import K3DCluster, setup_amalthea
-
-
-@pytest.fixture(scope="module")
-def cluster() -> Iterator[K3DCluster]:
-    os.environ["KUBECONFIG"] = ".k3d-config.yaml"
-    if shutil.which("k3d") is None:
-        pytest.skip("Requires k3d for cluster creation")
-
-    with K3DCluster("renku-test-session") as cluster:
-        setup_amalthea("amalthea-se", "amalthea-sessions", "0.0.10-new-operator-chart", cluster)
-
-        yield cluster
 
 
 @pytest.fixture
