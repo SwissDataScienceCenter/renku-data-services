@@ -1,7 +1,5 @@
 """Tests for sessions blueprints."""
 
-import os
-import shutil
 from asyncio import AbstractEventLoop
 from typing import Any
 

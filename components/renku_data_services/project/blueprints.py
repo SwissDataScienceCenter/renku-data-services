@@ -13,6 +13,7 @@ from renku_data_services.authz.models import Member, Role, Visibility
 from renku_data_services.base_api.auth import (
     authenticate,
     only_authenticated,
+    validate_path_project_id,
     validate_path_user_id,
 )
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint

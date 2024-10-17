@@ -23,7 +23,6 @@ from renku_data_services.notebooks.errors.intermittent import (
     PatchServerError,
 )
 from renku_data_services.notebooks.errors.programming import ProgrammingError
-from renku_data_services.notebooks.errors.user import MissingResourceError
 from renku_data_services.notebooks.util.kubernetes_ import find_env_var
 from renku_data_services.notebooks.util.retries import (
     retry_with_exponential_backoff_async,
@@ -474,8 +473,8 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
         """Patch a server."""
         server = await self.get_server(server_name, safe_username)
         if not server:
-            raise MissingResourceError(
-                f"Cannot find server {server_name} for user " f"{safe_username} in order to patch it."
+            raise errors.MissingResourceError(
+                message=f"Cannot find server {server_name} for user {safe_username} in order to patch it."
             )
         return await self.renku_ns_client.patch_server(server_name=server_name, patch=patch)
 
@@ -490,8 +489,8 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
         """Delete the server."""
         server = await self.get_server(server_name, safe_username)
         if not server:
-            raise MissingResourceError(
-                f"Cannot find server {server_name} for user " f"{safe_username} in order to delete it."
+            raise errors.MissingResourceError(
+                message=f"Cannot find server {server_name} for user {safe_username} in order to delete it."
             )
         return await self.renku_ns_client.delete_server(server_name)
 
