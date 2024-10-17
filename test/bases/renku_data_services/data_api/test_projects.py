@@ -5,6 +5,7 @@ from base64 import b64decode
 from typing import Any
 
 import pytest
+from sqlalchemy import select
 from ulid import ULID
 
 from components.renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
@@ -909,3 +910,62 @@ async def test_get_project_permissions_cascading_from_group(
     assert permissions.get("write") == expected_permissions["write"]
     assert permissions.get("delete") == expected_permissions["delete"]
     assert permissions.get("change_membership") == expected_permissions["change_membership"]
+
+
+@pytest.mark.asyncio
+async def test_project_slug_case(
+    app_config: Config,
+    create_project,
+    create_group,
+    sanic_client,
+    user_headers,
+) -> None:
+    from renku_data_services.project.orm import ProjectORM
+
+    group = await create_group("group1")
+    project = await create_project("Project 1", namespace=group["slug"], slug="project-1")
+    project_id = project["id"]
+    # Cannot create projects with upper case slug
+    payload = {
+        "name": "Normal project",
+        "namespace": group["slug"],
+    }
+    _, res = await sanic_client.post("/api/data/projects", json=payload, headers=user_headers)
+    assert res.status_code == 201
+    payload["slug"] = "SlugWithUppercase"
+    _, res = await sanic_client.post("/api/data/projects", json=payload, headers=user_headers)
+    assert res.status_code == 422
+    # Cannot patch project with upper case slug
+    payload = {"slug": "sOmEsLuG"}
+    if_match_headers = {"If-Match": "*"}
+    _, res = await sanic_client.patch(
+        f"/api/data/projects/{project_id}", json=payload, headers={**if_match_headers, **user_headers}
+    )
+    assert res.status_code == 422
+    # Change the slug of the project to be upper case in the DB
+    uppercase_slug = "NEW_project_SLUG"
+    async with app_config.db.async_session_maker() as session, session.begin():
+        stmt = select(ProjectORM).where(ProjectORM.id == project_id)
+        proj_orm = await session.scalar(stmt)
+        assert proj_orm is not None
+        proj_orm.slug.slug = uppercase_slug
+    # You should still be able to do everything to this project now
+    # Get the project
+    _, res = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
+    assert res.status_code == 200
+    assert res.json.get("slug") == uppercase_slug
+    etag = res.headers["ETag"]
+    # Get it by the namespace
+    _, res = await sanic_client.get(f"/api/data/projects/{group['slug']}/{uppercase_slug}", headers=user_headers)
+    assert res.status_code == 200
+    assert res.json.get("slug") == uppercase_slug
+    # Patch the project
+    new_name = "new-name"
+    _, res = await sanic_client.patch(
+        f"/api/data/projects/{project_id}",
+        json={"name": new_name},
+        headers={"If-Match": etag, **user_headers},
+    )
+    assert res.status_code == 200
+    assert res.json["slug"] == uppercase_slug
+    assert res.json["name"] == new_name
