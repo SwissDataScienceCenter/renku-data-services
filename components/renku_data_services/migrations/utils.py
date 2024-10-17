@@ -7,6 +7,8 @@ from collections.abc import Coroutine, Sequence
 from typing import Any, Literal, TypeVar
 
 from alembic import context
+from renku_data_services import db_config
+from renku_data_services.errors import errors
 from sqlalchemy import Connection, MetaData, NullPool, create_engine
 from sqlalchemy.schema import CreateSchema, SchemaItem
 from sqlalchemy.sql import text
@@ -108,6 +110,10 @@ def run_migrations_offline(target_metadata: Sequence[MetaData], sync_sqlalchemy_
         )
         conn.execute(CreateSchema("common", if_not_exists=True))
         for m in target_metadata:
+            if not m.schema:
+                raise errors.ConfigurationError(
+                    message=f"Cannot run migrations because the schema name for tables {m.tables.values()} is missing"
+                )
             conn.execute(CreateSchema(m.schema, if_not_exists=True))
             combine_version_tables(conn, m.schema)
 
@@ -135,6 +141,10 @@ def run_migrations_online(target_metadata: Sequence[MetaData], sync_sqlalchemy_u
         )
         conn.execute(CreateSchema("common", if_not_exists=True))
         for m in target_metadata:
+            if not m.schema:
+                raise errors.ConfigurationError(
+                    message=f"Cannot run migrations because the schema name for tables {m.tables.values()} is missing"
+                )
             conn.execute(CreateSchema(m.schema, if_not_exists=True))
             combine_version_tables(conn, m.schema)
 
