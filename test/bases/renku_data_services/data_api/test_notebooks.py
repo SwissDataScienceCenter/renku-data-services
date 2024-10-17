@@ -2,8 +2,7 @@
 
 import asyncio
 import os
-import shutil
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -13,19 +12,10 @@ from kr8s.asyncio.objects import Pod
 from sanic_testing.testing import SanicASGITestClient
 
 from renku_data_services.notebooks.api.classes.k8s_client import JupyterServerV1Alpha1Kr8s
-from test.bases.renku_data_services.data_api.utils import K3DCluster, setup_amalthea
 
+from .utils import ClusterRequired, setup_amalthea
 
-@pytest.fixture(scope="module", autouse=True)
-def cluster() -> Iterator[K3DCluster]:
-    os.environ["KUBECONFIG"] = ".k3d-config.yaml"
-    if shutil.which("k3d") is None:
-        pytest.skip("Requires k3d for cluster creation")
-
-    with K3DCluster("renku-test-notebooks") as cluster:
-        setup_amalthea("amalthea-js", "amalthea", "0.12.2", cluster)
-
-        yield cluster
+os.environ["KUBECONFIG"] = ".k3d-config.yaml"
 
 
 @pytest.fixture
@@ -122,105 +112,6 @@ def authenticated_user_headers(user_headers):
     return dict({"Renku-Auth-Refresh-Token": "test-refresh-token"}, **user_headers)
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("image,expected_status_code", [("python:3.12", 200), ("shouldnotexist:0.42", 404)])
-async def test_check_docker_image(sanic_client: SanicASGITestClient, user_headers, image, expected_status_code):
-    """Validate that the images endpoint answers correctly.
-
-    Needs the responses package in case docker queries must be mocked
-    """
-
-    _, res = await sanic_client.get(f"/api/data/notebooks/images/?image_url={image}", headers=user_headers)
-
-    assert res.status_code == expected_status_code, res.text
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "server_name_fixture,expected_status_code", [("unknown_server_name", 404), ("server_name", 200)]
-)
-async def test_log_retrieval(
-    sanic_client: SanicASGITestClient,
-    request,
-    server_name_fixture,
-    expected_status_code,
-    jupyter_server,
-    authenticated_user_headers,
-):
-    """Validate that the logs endpoint answers correctly"""
-
-    server_name = request.getfixturevalue(server_name_fixture)
-
-    _, res = await sanic_client.get(f"/api/data/notebooks/logs/{server_name}", headers=authenticated_user_headers)
-
-    assert res.status_code == expected_status_code, res.text
-
-
-@pytest.mark.asyncio
-async def test_server_options(sanic_client: SanicASGITestClient, user_headers):
-    _, res = await sanic_client.get("/api/data/notebooks/server_options", headers=user_headers)
-
-    assert res.status_code == 200, res.text
-    assert res.json == {
-        "cloudstorage": {"enabled": False},
-        "defaultUrl": {
-            "default": "/lab",
-            "displayName": "Default Environment",
-            "options": ["/lab"],
-            "order": 1,
-            "type": "enum",
-        },
-        "lfs_auto_fetch": {
-            "default": False,
-            "displayName": "Automatically fetch LFS data",
-            "order": 6,
-            "type": "boolean",
-        },
-    }
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "server_name_fixture,expected_status_code", [("unknown_server_name", 204), ("server_name", 204)]
-)
-async def test_stop_server(
-    sanic_client: SanicASGITestClient,
-    request,
-    server_name_fixture,
-    expected_status_code,
-    practice_jupyter_server,
-    authenticated_user_headers,
-):
-    server_name = request.getfixturevalue(server_name_fixture)
-
-    _, res = await sanic_client.delete(f"/api/data/notebooks/servers/{server_name}", headers=authenticated_user_headers)
-
-    assert res.status_code == expected_status_code, res.text
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "server_name_fixture,expected_status_code, patch",
-    [("unknown_server_name", 404, {}), ("server_name", 200, {"state": "hibernated"})],
-)
-async def test_patch_server(
-    sanic_client: SanicASGITestClient,
-    request,
-    server_name_fixture,
-    expected_status_code,
-    patch,
-    practice_jupyter_server,
-    authenticated_user_headers,
-):
-    server_name = request.getfixturevalue(server_name_fixture)
-
-    _, res = await sanic_client.patch(
-        f"/api/data/notebooks/servers/{server_name}", json=patch, headers=authenticated_user_headers
-    )
-
-    assert res.status_code == expected_status_code, res.text
-
-
 class AttributeDictionary(dict):
     """Enables accessing dictionary keys as attributes"""
 
@@ -285,40 +176,201 @@ def fake_gitlab(mocker, fake_gitlab_projects):
 
 
 @pytest.mark.asyncio
-async def test_old_start_server(sanic_client: SanicASGITestClient, authenticated_user_headers, fake_gitlab):
-    data = {
-        "branch": "main",
-        "commit_sha": "ee4b1c9fedc99abe5892ee95320bbd8471c5985b",
-        "namespace": "test-namespace",
-        "project": "my-test",
-        "image": "alpine:3",
+async def test_version(sanic_client: SanicASGITestClient, user_headers):
+    _, res = await sanic_client.get("/api/data/notebooks/version", headers=user_headers)
+
+    assert res.status_code == 200, res.text
+
+    assert res.json == {
+        "name": "renku-notebooks",
+        "versions": [
+            {
+                "data": {
+                    "anonymousSessionsEnabled": False,
+                    "cloudstorageClass": "csi-rclone",
+                    "cloudstorageEnabled": False,
+                    "defaultCullingThresholds": {
+                        "anonymous": {
+                            "hibernation": 1,
+                            "idle": 86400,
+                        },
+                        "registered": {
+                            "hibernation": 86400,
+                            "idle": 86400,
+                        },
+                    },
+                    "sshEnabled": False,
+                },
+                "version": "0.0.0",
+            },
+        ],
     }
-
-    _, res = await sanic_client.post("/api/data/notebooks/old/servers/", json=data, headers=authenticated_user_headers)
-
-    assert res.status_code == 201, res.text
-
-    server_name = res.json["name"]
-    _, res = await sanic_client.delete(f"/api/data/notebooks/servers/{server_name}", headers=authenticated_user_headers)
-
-    assert res.status_code == 204, res.text
 
 
 @pytest.mark.asyncio
-async def test_start_server(sanic_client: SanicASGITestClient, authenticated_user_headers, fake_gitlab):
-    data = {
-        "branch": "main",
-        "commit_sha": "ee4b1c9fedc99abe5892ee95320bbd8471c5985b",
-        "project_id": "test-namespace/my-test",
-        "launcher_id": "test_launcher",
-        "image": "alpine:3",
+async def test_server_options(sanic_client: SanicASGITestClient, user_headers):
+    _, res = await sanic_client.get("/api/data/notebooks/server_options", headers=user_headers)
+
+    assert res.status_code == 200, res.text
+    assert res.json == {
+        "cloudstorage": {"enabled": False},
+        "defaultUrl": {
+            "default": "/lab",
+            "displayName": "Default Environment",
+            "options": ["/lab"],
+            "order": 1,
+            "type": "enum",
+        },
+        "lfs_auto_fetch": {
+            "default": False,
+            "displayName": "Automatically fetch LFS data",
+            "order": 6,
+            "type": "boolean",
+        },
     }
 
-    _, res = await sanic_client.post("/api/data/notebooks/servers/", json=data, headers=authenticated_user_headers)
 
-    assert res.status_code == 201, res.text
+@pytest.mark.asyncio
+@pytest.mark.parametrize("image,expected_status_code", [("python:3.12", 200), ("shouldnotexist:0.42", 404)])
+async def test_check_docker_image(sanic_client: SanicASGITestClient, user_headers, image, expected_status_code):
+    """Validate that the images endpoint answers correctly.
 
-    server_name = res.json["name"]
-    _, res = await sanic_client.delete(f"/api/data/notebooks/servers/{server_name}", headers=authenticated_user_headers)
+    Needs the responses package in case docker queries must be mocked
+    """
 
-    assert res.status_code == 204, res.text
+    _, res = await sanic_client.get(f"/api/data/notebooks/images/?image_url={image}", headers=user_headers)
+
+    assert res.status_code == expected_status_code, res.text
+
+
+class TestNotebooks(ClusterRequired):
+    @pytest.fixture(scope="class", autouse=True)
+    def amalthea(self, cluster) -> None:
+        if cluster is not None:
+            setup_amalthea("amalthea-js", "amalthea", "0.12.2", cluster)
+
+    @pytest.mark.asyncio
+    async def test_user_server_list(
+        self,
+        sanic_client: SanicASGITestClient,
+        request,
+        server_name,
+        jupyter_server,
+        authenticated_user_headers,
+    ):
+        """Validate that the user server list endpoint answers correctly"""
+
+        _, res = await sanic_client.get("/api/data/notebooks/servers", headers=authenticated_user_headers)
+
+        assert res.status_code == 200, res.text
+        assert "servers" in res.json
+        assert len(res.json["servers"]) == 1
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "server_name_fixture,expected_status_code", [("unknown_server_name", 404), ("server_name", 200)]
+    )
+    async def test_log_retrieval(
+        self,
+        sanic_client: SanicASGITestClient,
+        request,
+        server_name_fixture,
+        expected_status_code,
+        jupyter_server,
+        authenticated_user_headers,
+    ):
+        """Validate that the logs endpoint answers correctly"""
+
+        server_name = request.getfixturevalue(server_name_fixture)
+
+        _, res = await sanic_client.get(f"/api/data/notebooks/logs/{server_name}", headers=authenticated_user_headers)
+
+        assert res.status_code == expected_status_code, res.text
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "server_name_fixture,expected_status_code", [("unknown_server_name", 404), ("server_name", 204)]
+    )
+    async def test_stop_server(
+        self,
+        sanic_client: SanicASGITestClient,
+        request,
+        server_name_fixture,
+        expected_status_code,
+        practice_jupyter_server,
+        authenticated_user_headers,
+    ):
+        server_name = request.getfixturevalue(server_name_fixture)
+
+        _, res = await sanic_client.delete(
+            f"/api/data/notebooks/servers/{server_name}", headers=authenticated_user_headers
+        )
+
+        assert res.status_code == expected_status_code, res.text
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "server_name_fixture,expected_status_code, patch",
+        [("unknown_server_name", 404, {}), ("server_name", 200, {"state": "hibernated"})],
+    )
+    async def test_patch_server(
+        self,
+        sanic_client: SanicASGITestClient,
+        request,
+        server_name_fixture,
+        expected_status_code,
+        patch,
+        practice_jupyter_server,
+        authenticated_user_headers,
+    ):
+        server_name = request.getfixturevalue(server_name_fixture)
+
+        _, res = await sanic_client.patch(
+            f"/api/data/notebooks/servers/{server_name}", json=patch, headers=authenticated_user_headers
+        )
+
+        assert res.status_code == expected_status_code, res.text
+
+    @pytest.mark.asyncio
+    async def test_old_start_server(self, sanic_client: SanicASGITestClient, authenticated_user_headers, fake_gitlab):
+        data = {
+            "branch": "main",
+            "commit_sha": "ee4b1c9fedc99abe5892ee95320bbd8471c5985b",
+            "namespace": "test-namespace",
+            "project": "my-test",
+            "image": "alpine:3",
+        }
+
+        _, res = await sanic_client.post(
+            "/api/data/notebooks/old/servers/", json=data, headers=authenticated_user_headers
+        )
+
+        assert res.status_code == 201, res.text
+
+        server_name = res.json["name"]
+        _, res = await sanic_client.delete(
+            f"/api/data/notebooks/servers/{server_name}", headers=authenticated_user_headers
+        )
+
+        assert res.status_code == 204, res.text
+
+    @pytest.mark.asyncio
+    async def test_start_server(self, sanic_client: SanicASGITestClient, authenticated_user_headers, fake_gitlab):
+        data = {
+            "branch": "main",
+            "commit_sha": "ee4b1c9fedc99abe5892ee95320bbd8471c5985b",
+            "project_id": "test-namespace/my-test",
+            "launcher_id": "test_launcher",
+            "image": "alpine:3",
+        }
+
+        _, res = await sanic_client.post("/api/data/notebooks/servers/", json=data, headers=authenticated_user_headers)
+
+        assert res.status_code == 201, res.text
+
+        server_name = res.json["name"]
+        _, res = await sanic_client.delete(
+            f"/api/data/notebooks/servers/{server_name}", headers=authenticated_user_headers
+        )
+
+        assert res.status_code == 204, res.text

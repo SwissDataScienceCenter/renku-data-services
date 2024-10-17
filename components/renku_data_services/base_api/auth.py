@@ -71,6 +71,30 @@ def authenticate_2(
     return decorator
 
 
+def validate_path_project_id(
+    f: Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]],
+) -> Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]]:
+    """Decorator for a Sanic handler that validates the project_id path parameter."""
+    _path_project_id_regex = re.compile(r"^[A-Za-z0-9]{26}$")
+
+    @wraps(f)
+    async def decorated_function(request: Request, *args: _P.args, **kwargs: _P.kwargs) -> _T:
+        project_id = cast(str | None, kwargs.get("project_id"))
+        if not project_id:
+            raise errors.ProgrammingError(
+                message="Could not find 'project_id' in the keyword arguments for the handler in order to validate it."
+            )
+        if not _path_project_id_regex.match(project_id):
+            raise errors.ValidationError(
+                message=f"The 'project_id' path parameter {project_id} does not match the required "
+                f"regex {_path_project_id_regex}"
+            )
+
+        return await f(request, *args, **kwargs)
+
+    return decorated_function
+
+
 def validate_path_user_id(
     f: Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]],
 ) -> Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]]:
