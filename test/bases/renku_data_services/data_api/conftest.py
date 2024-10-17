@@ -328,3 +328,12 @@ async def secrets_sanic_client(secrets_storage_app_config: SecretsConfig, users:
     app = register_secrets_handlers(app, secrets_storage_app_config)
     async with SanicReusableASGITestClient(app) as client:
         yield client
+
+
+def pytest_addoption(parser):
+    parser.addoption("--disable-cluster-creation", action="store_true", default=False, help="Disable cluster creation")
+
+
+@pytest.fixture(scope="session")
+def disable_cluster_creation(request):
+    return request.config.getoption("--disable-cluster-creation")
