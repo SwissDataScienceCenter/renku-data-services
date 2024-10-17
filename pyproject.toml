@@ -32,6 +32,7 @@ packages = [
   { include = "renku_data_services/repositories", from = "components" },
   { include = "renku_data_services/notebooks", from = "components" },
   { include = "renku_data_services/platform", from = "components" },
+  { include = "renku_data_services/data_connectors", from = "components" },
 ]
 
 [tool.poetry.dependencies]
@@ -70,7 +71,7 @@ aiofiles = "^24.1.0"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.7.9"
-mypy = "~1.11"                                             # NOTE: Mypy 1.10.0 has problems with our decorators, see https://github.com/python/mypy/issues/17166
+mypy = "~1.12"                                             # NOTE: Mypy 1.10.0 has problems with our decorators, see https://github.com/python/mypy/issues/17166
 pytest = "^8.3.3"
 pytest-cov = "^5.0.0"
 pre-commit = "^3.2.2"
@@ -191,6 +192,7 @@ disallow_untyped_defs = true
 module = [
   "renku_data_services.crc.apispec",
   "renku_data_services.connected_services.apispec",
+  "renku_data_services.data_connectors.apispec",
   "renku_data_services.storage.apispec",
   "renku_data_services.project.apispec",
   "renku_data_services.repositories.apispec",

@@ -33,6 +33,44 @@ class Role(Enum):
     owner = "owner"
 
 
+class DataConnectorToProjectLink(BaseAPISpec):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    id: str = Field(
+        ...,
+        description="ULID identifier",
+        max_length=26,
+        min_length=26,
+        pattern="^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+    )
+    data_connector_id: str = Field(
+        ...,
+        description="ULID identifier",
+        max_length=26,
+        min_length=26,
+        pattern="^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+    )
+    project_id: str = Field(
+        ...,
+        description="ULID identifier",
+        max_length=26,
+        min_length=26,
+        pattern="^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+    )
+    creation_date: datetime = Field(
+        ...,
+        description="The date and time the resource was created (in UTC and ISO-8601 format)",
+        example="2023-11-01T17:32:28Z",
+    )
+    created_by: str = Field(
+        ...,
+        description="Keycloak user ID",
+        example="f74a228b-1790-4276-af5f-25c2424e9b0c",
+        pattern="^[A-Za-z0-9]{1}[A-Za-z0-9-]+$",
+    )
+
+
 class PaginationRequest(BaseAPISpec):
     model_config = ConfigDict(
         extra="forbid",
@@ -101,6 +139,12 @@ class ProjectMemberResponse(BaseAPISpec):
         min_length=1,
     )
     role: Role
+
+
+class DataConnectorToProjectLinksList(RootModel[List[DataConnectorToProjectLink]]):
+    root: List[DataConnectorToProjectLink] = Field(
+        ..., description="A list of links from a data connector to a project"
+    )
 
 
 class ProjectGetQuery(PaginationRequest):
