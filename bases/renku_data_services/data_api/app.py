@@ -15,13 +15,14 @@ from renku_data_services.crc.blueprints import (
     ResourcePoolUsersBP,
     UserResourcePoolsBP,
 )
+from renku_data_services.data_connectors.blueprints import DataConnectorsBP
 from renku_data_services.message_queue.blueprints import SearchBP
 from renku_data_services.namespace.blueprints import GroupsBP
 from renku_data_services.platform.blueprints import PlatformConfigBP
 from renku_data_services.project.blueprints import ProjectsBP
 from renku_data_services.repositories.blueprints import RepositoriesBP
 from renku_data_services.session.blueprints import EnvironmentsBP, SessionLaunchersBP
-from renku_data_services.storage.blueprints import StorageBP, StorageSchemaBP, StoragesV2BP
+from renku_data_services.storage.blueprints import StorageBP, StorageSchemaBP
 from renku_data_services.users.blueprints import KCUsersBP, UserPreferencesBP, UserSecretsBP
 
 
@@ -74,12 +75,6 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         url_prefix=url_prefix,
         storage_repo=config.storage_repo,
         authenticator=config.gitlab_authenticator,
-    )
-    storages_v2 = StoragesV2BP(
-        name="storages_v2",
-        url_prefix=url_prefix,
-        storage_v2_repo=config.storage_v2_repo,
-        authenticator=config.authenticator,
     )
     storage_schema = StorageSchemaBP(name="storage_schema", url_prefix=url_prefix)
     user_preferences = UserPreferencesBP(
@@ -153,6 +148,14 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         project_repo=config.project_repo,
         authz=config.authz,
     )
+    data_connectors = DataConnectorsBP(
+        name="data_connectors",
+        url_prefix=url_prefix,
+        data_connector_repo=config.data_connector_repo,
+        data_connector_to_project_link_repo=config.data_connector_to_project_link_repo,
+        data_connector_secret_repo=config.data_connector_secret_repo,
+        authenticator=config.authenticator,
+    )
     app.blueprint(
         [
             resource_pools.blueprint(),
@@ -163,7 +166,6 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
             user_secrets.blueprint(),
             user_resource_pools.blueprint(),
             storage.blueprint(),
-            storages_v2.blueprint(),
             storage_schema.blueprint(),
             user_preferences.blueprint(),
             misc.blueprint(),
@@ -176,6 +178,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
             repositories.blueprint(),
             platform_config.blueprint(),
             search.blueprint(),
+            data_connectors.blueprint(),
         ]
     )
 

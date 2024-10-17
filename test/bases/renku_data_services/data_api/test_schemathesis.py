@@ -39,9 +39,9 @@ async def apispec(sanic_client: SanicASGITestClient) -> BaseOpenAPISchema:
 # Same issue as for "security" for the "If-Match" header.
 # We skip header values which cannot be encoded as ascii.
 @schemathesis.hook
-def filter_headers(context: HookContext, headers: dict[str, str]) -> bool:
+def filter_headers(context: HookContext, headers: dict[str, str] | None) -> bool:
     op = context.operation
-    if op.method.upper() == "PATCH" and (op.path == "/projects/{project_id}" or op.path == "/platform/config"):
+    if headers is not None and op.method.upper() == "PATCH":
         if_match = headers.get("If-Match")
         if if_match and isinstance(if_match, str):
             try:
