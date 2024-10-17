@@ -18,7 +18,7 @@ from renku_data_services import errors
 def oidc_discovery(url: str, realm: str) -> dict[str, Any]:
     """Get OIDC configuration."""
     url = f"{url}/realms/{realm}/.well-known/openid-configuration"
-    res = httpx.get(url, verify=get_ssl_context())
+    res = httpx.get(url, verify=get_ssl_context(), timeout=5)
     if res.status_code == 200:
         return cast(dict[str, Any], res.json())
     raise errors.ConfigurationError(message=f"Cannot successfully do OIDC discovery with url {url}.")

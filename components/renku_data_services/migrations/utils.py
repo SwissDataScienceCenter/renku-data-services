@@ -7,13 +7,12 @@ from collections.abc import Coroutine, Sequence
 from typing import Any, Literal, TypeVar
 
 from alembic import context
-from renku_data_services import db_config
-from renku_data_services.errors import errors
 from sqlalchemy import Connection, MetaData, NullPool, create_engine
 from sqlalchemy.schema import CreateSchema, SchemaItem
 from sqlalchemy.sql import text
 
 from renku_data_services.db_config import DBConfig
+from renku_data_services.errors import errors
 
 
 def include_object(
