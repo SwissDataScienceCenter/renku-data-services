@@ -16,6 +16,7 @@ from ulid import ULID
 from renku_data_services.authz.authz import Authz, ResourceType, _AuthzConverter, _Relation
 from renku_data_services.authz.models import Scope
 from renku_data_services.background_jobs.config import SyncConfig
+from renku_data_services.background_jobs.utils import ErrorHandlerMonad
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.errors import errors
 from renku_data_services.message_queue.avro_models.io.renku.events import v2
@@ -266,7 +267,7 @@ async def migrate_user_namespaces_make_all_public(config: SyncConfig) -> None:
         logger.info(f"Made user namespace {ns_id} public")
 
 
-async def migrate_storages_v2_to_data_connectors(config: SyncConfig) -> None:
+async def migrate_storages_v2_to_data_connectors(config: SyncConfig) -> ErrorHandlerMonad:
     """Move storages_v2 to data_connectors."""
     logger = logging.getLogger("background_jobs").getChild(migrate_storages_v2_to_data_connectors.__name__)
 
@@ -275,11 +276,11 @@ async def migrate_storages_v2_to_data_connectors(config: SyncConfig) -> None:
 
     if not storages_v2:
         logger.info("Nothing to do.")
-        return
+        return ErrorHandlerMonad([])
 
     logger.info(f"Migrating {len(storages_v2)} cloud storage v2 items to data connectors.")
     failed_storages: list[str] = []
-    first_error: Exception | None = None
+    errors: list[BaseException] = []
     for storage in storages_v2:
         try:
             data_connector = await config.data_connector_migration_tool.migrate_storage_v2(
@@ -291,11 +292,9 @@ async def migrate_storages_v2_to_data_connectors(config: SyncConfig) -> None:
             logger.error(f"Failed to migrate {storage.name}.")
             logger.error(err)
             failed_storages.append(str(storage.storage_id))
-            if first_error is None:
-                first_error = err
+            errors.append(err)
 
     logger.info(f"Migrated {len(storages_v2)-len(failed_storages)}/{len(storages_v2)} data connectors.")
     if failed_storages:
         logger.error(f"Migration failed for storages: {failed_storages}.")
-    if first_error is not None:
-        raise first_error
+    return ErrorHandlerMonad(errors)

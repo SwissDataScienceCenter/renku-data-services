@@ -27,22 +27,18 @@ async def short_period_sync() -> None:
 
     error_handler = ErrorHandler()
 
-    async with error_handler:
-        await bootstrap_user_namespaces(config)
-    async with error_handler:
-        await config.syncer.events_sync(config.kc_api)
-    async with error_handler:
-        await sync_admins_from_keycloak(config.kc_api, Authz(config.authz_config))
-    async with error_handler:
-        await fix_mismatched_project_namespace_ids(config)
-    async with error_handler:
-        await migrate_groups_make_all_public(config)
-    async with error_handler:
-        await migrate_user_namespaces_make_all_public(config)
-    async with error_handler:
-        await migrate_storages_v2_to_data_connectors(config)
+    error_collection = await (
+        error_handler.map(bootstrap_user_namespaces(config))
+        .map(config.syncer.events_sync(config.kc_api))
+        .map(sync_admins_from_keycloak(config.kc_api, Authz(config.authz_config)))
+        .map(fix_mismatched_project_namespace_ids(config))
+        .map(migrate_groups_make_all_public(config))
+        .map(migrate_user_namespaces_make_all_public(config))
+        .flatmap(migrate_storages_v2_to_data_connectors(config))
+        .run()
+    )
 
-    error_handler.maybe_raise()
+    error_collection.maybe_raise()
 
 
 async def long_period_sync() -> None:
@@ -51,12 +47,13 @@ async def long_period_sync() -> None:
     run_migrations_for_app("common")
     error_handler = ErrorHandler()
 
-    async with error_handler:
-        await config.syncer.users_sync(config.kc_api)
-    async with error_handler:
-        await sync_admins_from_keycloak(config.kc_api, Authz(config.authz_config))
+    error_collection = (
+        await error_handler.map(config.syncer.users_sync(config.kc_api))
+        .map(sync_admins_from_keycloak(config.kc_api, Authz(config.authz_config)))
+        .run()
+    )
 
-    error_handler.maybe_raise()
+    error_collection.maybe_raise()
 
 
 async def main() -> None:
