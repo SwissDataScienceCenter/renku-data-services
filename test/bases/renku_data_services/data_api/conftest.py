@@ -216,7 +216,7 @@ def create_project(sanic_client, user_headers, admin_headers, regular_user, admi
         if "name" not in payload:
             payload.update({"name": name})
         if "namespace" not in payload:
-            payload.update({"namespace": f"{user.first_name}.{user.last_name}"}.lower())
+            payload.update({"namespace": f"{user.first_name}.{user.last_name}".lower()})
 
         _, response = await sanic_client.post("/api/data/projects", headers=headers, json=payload)
 
