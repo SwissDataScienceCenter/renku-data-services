@@ -37,6 +37,7 @@ def upgrade() -> None:
     ]
 
     for schema, table, column in tables:
+        op.execute(sa.text(f"LOCK TABLE {schema}.{table} IN EXCLUSIVE MODE"))
         full_name = sql.Identifier(schema, table)
         statement = sql.SQL("SELECT MAX(id) FROM {}").format(full_name).as_string(connection)  # type: ignore[arg-type]
         res = connection.exec_driver_sql(statement)
