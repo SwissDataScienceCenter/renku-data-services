@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Optional
 
-from sqlalchemy import JSON, DateTime, Integer, LargeBinary, MetaData, String
+from sqlalchemy import JSON, DateTime, Identity, Integer, LargeBinary, MetaData, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 
@@ -33,7 +33,7 @@ class UserORM(BaseORM):
     last_name: Mapped[Optional[str]] = mapped_column(String(256), default=None)
     email: Mapped[Optional[str]] = mapped_column(String(320), default=None, index=True)
     secret_key: Mapped[Optional[bytes]] = mapped_column(LargeBinary(), default=None, repr=False)
-    id: Mapped[int] = mapped_column(primary_key=True, init=False)
+    id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, init=False)
 
     def dump(self) -> UserInfo:
         """Create a user object from the ORM object."""
@@ -61,7 +61,7 @@ class LastKeycloakEventTimestamp(BaseORM):
     """The latest event timestamp processed from Keycloak."""
 
     __tablename__ = "last_keycloak_event_timestamp"
-    id: Mapped[int] = mapped_column(primary_key=True, init=False)
+    id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, init=False)
     timestamp_utc: Mapped[datetime] = mapped_column(DateTime(timezone=False), default_factory=datetime.utcnow)
 
 
@@ -70,7 +70,7 @@ class UserPreferencesORM(BaseORM):
 
     __tablename__ = "user_preferences"
 
-    id: Mapped[int] = mapped_column("id", Integer, primary_key=True, default=None, init=False)
+    id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
     """Id of this user preferences object."""
 
     user_id: Mapped[str] = mapped_column("user_id", String(), unique=True)
