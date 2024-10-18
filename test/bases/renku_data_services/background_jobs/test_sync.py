@@ -8,11 +8,13 @@ from typing import Any, Union
 from uuid import uuid4
 
 import pytest
-from authzed.api.v1.core_pb2 import Relationship, RelationshipUpdate, SubjectReference
-from authzed.api.v1.permission_service_pb2 import (
+from authzed.api.v1 import (
     DeleteRelationshipsRequest,
     ReadRelationshipsRequest,
+    Relationship,
     RelationshipFilter,
+    RelationshipUpdate,
+    SubjectReference,
     WriteRelationshipsRequest,
 )
 from ulid import ULID

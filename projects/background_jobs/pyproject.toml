@@ -63,6 +63,10 @@ sentry-sdk = { version = "^2.17.0", extras = ["sanic"] }
 # see https://github.com/sanic-org/sanic/issues/2828 for setuptools dependency, remove when not needed anymore
 setuptools = { version = "^75.2.0" }
 aiofile = "^3.9.0"
+# Not a direct dependency, it is needed by authzed. Was causing things to crash at startup beacuse of
+# google.protobuf.runtime_version.VersionError:
+# Detected incompatible Protobuf Gencode/Runtime versions when loading authzed/api/v1/core.proto: gencode 5.28.2 runtime 5.27.3.
+protobuf = "^5.28.2"
 
 [tool.poetry.group.dev.dependencies]
 pyavro-gen = "^0.3.3"
