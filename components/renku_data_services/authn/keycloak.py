@@ -26,7 +26,7 @@ class KcUserStore:
     async def get_user_by_id(self, id: str, access_token: str) -> Optional[base_models.User]:
         """Get a user by their unique id."""
         url = f"{self.keycloak_url}/admin/realms/{self.realm}/users/{id}"
-        async with httpx.AsyncClient(verify=get_ssl_context()) as client:
+        async with httpx.AsyncClient(verify=get_ssl_context(), timeout=5) as client:
             res = await client.get(url=url, headers={"Authorization": f"bearer {access_token}"})
         if res.status_code == 200 and cast(dict, res.json()).get("id") == id:
             return base_models.User(keycloak_id=id)

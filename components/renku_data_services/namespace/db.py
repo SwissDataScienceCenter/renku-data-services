@@ -108,7 +108,7 @@ class GroupRepository:
         self, session: AsyncSession, user: base_models.APIUser, slug: str, load_members: bool = False
     ) -> tuple[schemas.GroupORM, list[Member]]:
         transaction = nullcontext() if session.in_transaction() else session.begin()
-        async with transaction:  # type: ignore[attr-defined]
+        async with transaction:
             stmt = select(schemas.GroupORM).where(
                 schemas.GroupORM.namespace.has(schemas.NamespaceORM.slug == slug.lower())
             )
