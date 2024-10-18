@@ -165,6 +165,33 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - data_connectors
+  /data_connectors/{data_connector_id}/permissions:
+    parameters:
+      - in: path
+        name: data_connector_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+        description: the ID of the data connector
+    get:
+      summary: Get the permissions of the current user on the data connector
+      responses:
+        "200":
+          description: The set of permissions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataConnectorPermissions"
+        "404":
+          description: The data connector does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - data_connectors
   /data_connectors/{data_connector_id}/project_links:
     parameters:
       - in: path
@@ -686,6 +713,19 @@ components:
               description: A namespace, used as a filter.
               type: string
               default: ""
+    DataConnectorPermissions:
+      description: The set of permissions on a data connector
+      type: object
+      properties:
+        write:
+          description: The user can edit the data connector
+          type: boolean
+        delete:
+          description: The user can delete the data connector
+          type: boolean
+        change_membership:
+          description: The user can manage data connector members
+          type: boolean
     PaginationRequest:
       type: object
       additionalProperties: false
