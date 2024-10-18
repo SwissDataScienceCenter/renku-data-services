@@ -1,7 +1,7 @@
 """add google drive provider kind
 
 Revision ID: b8cbd62e85b9
-Revises: 9058bf0a1a12
+Revises: 726d5d0e1f28
 Create Date: 2024-09-02 13:56:22.080007
 
 """
@@ -10,7 +10,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "b8cbd62e85b9"
-down_revision = "9058bf0a1a12"
+down_revision = "726d5d0e1f28"
 branch_labels = None
 depends_on = None
 
