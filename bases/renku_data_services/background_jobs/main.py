@@ -14,6 +14,7 @@ from renku_data_services.background_jobs.core import (
     migrate_storages_v2_to_data_connectors,
     migrate_user_namespaces_make_all_public,
 )
+from renku_data_services.background_jobs.utils import error_handler
 from renku_data_services.migrations.core import run_migrations_for_app
 
 logging.basicConfig(level=logging.INFO)
@@ -23,21 +24,28 @@ async def short_period_sync() -> None:
     """Perform synchronizations and jobs that should occur more often."""
     config = SyncConfig.from_env()
     run_migrations_for_app("common")
-    await bootstrap_user_namespaces(config)
-    await config.syncer.events_sync(config.kc_api)
-    await sync_admins_from_keycloak(config.kc_api, Authz(config.authz_config))
-    await fix_mismatched_project_namespace_ids(config)
-    await migrate_groups_make_all_public(config)
-    await migrate_user_namespaces_make_all_public(config)
-    await migrate_storages_v2_to_data_connectors(config)
+
+    await error_handler(
+        [
+            bootstrap_user_namespaces(config),
+            config.syncer.events_sync(config.kc_api),
+            sync_admins_from_keycloak(config.kc_api, Authz(config.authz_config)),
+            fix_mismatched_project_namespace_ids(config),
+            migrate_groups_make_all_public(config),
+            migrate_user_namespaces_make_all_public(config),
+            migrate_storages_v2_to_data_connectors(config),
+        ]
+    )
 
 
 async def long_period_sync() -> None:
     """Perform synchronizations and jobs that can occur more rarely."""
     config = SyncConfig.from_env()
     run_migrations_for_app("common")
-    await config.syncer.users_sync(config.kc_api)
-    await sync_admins_from_keycloak(config.kc_api, Authz(config.authz_config))
+
+    await error_handler(
+        [config.syncer.users_sync(config.kc_api), sync_admins_from_keycloak(config.kc_api, Authz(config.authz_config))]
+    )
 
 
 async def main() -> None:
