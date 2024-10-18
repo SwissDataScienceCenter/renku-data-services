@@ -7,16 +7,19 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import cast
 
-from authzed.api.v1 import SyncClient
-from authzed.api.v1.core_pb2 import Relationship, RelationshipUpdate, SubjectReference
-from authzed.api.v1.permission_service_pb2 import (
+from authzed.api.v1 import (
     DeleteRelationshipsRequest,
     DeleteRelationshipsResponse,
+    Relationship,
     RelationshipFilter,
+    RelationshipUpdate,
     SubjectFilter,
+    SubjectReference,
+    SyncClient,
     WriteRelationshipsRequest,
+    WriteSchemaRequest,
+    WriteSchemaResponse,
 )
-from authzed.api.v1.schema_service_pb2 import WriteSchemaRequest, WriteSchemaResponse
 from ulid import ULID
 
 from renku_data_services.authz.authz import ResourceType, _AuthzConverter, _Relation
