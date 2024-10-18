@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import DateTime, Integer, MetaData, String, func
+from sqlalchemy import DateTime, Identity, Integer, MetaData, String, func
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
@@ -79,7 +79,7 @@ class ProjectRepositoryORM(BaseORM):
 
     __tablename__ = "projects_repositories"
 
-    id: Mapped[int] = mapped_column("id", Integer, primary_key=True, default=None, init=False)
+    id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
     url: Mapped[str] = mapped_column("url", String(2000))
     project_id: Mapped[Optional[str]] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"), default=None, index=True
