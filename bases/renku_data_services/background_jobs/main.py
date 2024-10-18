@@ -14,7 +14,7 @@ from renku_data_services.background_jobs.core import (
     migrate_storages_v2_to_data_connectors,
     migrate_user_namespaces_make_all_public,
 )
-from renku_data_services.background_jobs.utils import ErrorHandler
+from renku_data_services.background_jobs.utils import error_handler
 from renku_data_services.migrations.core import run_migrations_for_app
 
 logging.basicConfig(level=logging.INFO)
@@ -25,35 +25,27 @@ async def short_period_sync() -> None:
     config = SyncConfig.from_env()
     run_migrations_for_app("common")
 
-    error_handler = ErrorHandler()
-
-    error_collection = await (
-        error_handler.map(bootstrap_user_namespaces(config))
-        .map(config.syncer.events_sync(config.kc_api))
-        .map(sync_admins_from_keycloak(config.kc_api, Authz(config.authz_config)))
-        .map(fix_mismatched_project_namespace_ids(config))
-        .map(migrate_groups_make_all_public(config))
-        .map(migrate_user_namespaces_make_all_public(config))
-        .flatmap(migrate_storages_v2_to_data_connectors(config))
-        .run()
+    await error_handler(
+        [
+            bootstrap_user_namespaces(config),
+            config.syncer.events_sync(config.kc_api),
+            sync_admins_from_keycloak(config.kc_api, Authz(config.authz_config)),
+            fix_mismatched_project_namespace_ids(config),
+            migrate_groups_make_all_public(config),
+            migrate_user_namespaces_make_all_public(config),
+            migrate_storages_v2_to_data_connectors(config),
+        ]
     )
-
-    error_collection.maybe_raise()
 
 
 async def long_period_sync() -> None:
     """Perform synchronizations and jobs that can occur more rarely."""
     config = SyncConfig.from_env()
     run_migrations_for_app("common")
-    error_handler = ErrorHandler()
 
-    error_collection = (
-        await error_handler.map(config.syncer.users_sync(config.kc_api))
-        .map(sync_admins_from_keycloak(config.kc_api, Authz(config.authz_config)))
-        .run()
+    await error_handler(
+        [config.syncer.users_sync(config.kc_api), sync_admins_from_keycloak(config.kc_api, Authz(config.authz_config))]
     )
-
-    error_collection.maybe_raise()
 
 
 async def main() -> None:

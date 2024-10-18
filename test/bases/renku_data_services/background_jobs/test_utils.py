@@ -1,28 +1,26 @@
 import pytest
 
 from renku_data_services import errors
-from renku_data_services.background_jobs.utils import BackgroundJobError, ErrorHandler, ErrorHandlerMonad
+from renku_data_services.background_jobs.utils import BackgroundJobError, error_handler
 
 
 @pytest.mark.asyncio
 async def test_error_handler_without_errors():
     """Test the error handler behaves properly when there are no errors."""
-    error_handler = ErrorHandler()
+
+    x = 0
 
     async def add():
-        return 1
+        nonlocal x
+        x += 1
 
-    ec = await error_handler.map(add()).map(add()).map(add()).run()
-
-    assert len(ec.errors) == 0
-
-    ec.maybe_raise()
+    await error_handler([add(), add(), add()])
+    assert x == 3
 
 
 @pytest.mark.asyncio
 async def test_error_handler_with_errors():
     """Test the error handler properly catches errors and raises them at the end."""
-    error_handler = ErrorHandler()
 
     async def err1():
         raise errors.ValidationError()
@@ -33,13 +31,10 @@ async def test_error_handler_with_errors():
     async def err3():
         raise errors.UnauthorizedError()
 
-    ec = await error_handler.map(err1()).map(err2()).map(err3()).run()
-
-    assert len(ec.errors) == 3
-
     with pytest.raises(BackgroundJobError) as exc_info:
-        ec.maybe_raise()
+        await error_handler([err1(), err2(), err3()])
 
+    assert len(exc_info.value.errors) == 3
     exc_str = str(exc_info.value)
     assert errors.ValidationError.message in exc_str
     assert errors.UnauthorizedError.message in exc_str
@@ -53,15 +48,13 @@ async def test_error_handler_with_child_errors():
     async def err1():
         raise errors.ValidationError()
 
-    async def err2():
-        return ErrorHandlerMonad([ValueError("x is not set"), ValueError("y is not set")])
-
-    ec = await ErrorHandler().map(err1()).flatmap(err2()).run()
-
-    assert len(ec.errors) == 3
+    async def err2() -> list[BaseException]:
+        return [ValueError("x is not set"), ValueError("y is not set")]
 
     with pytest.raises(BackgroundJobError) as exc_info:
-        ec.maybe_raise()
+        await error_handler([err1(), err2()])
+
+    assert len(exc_info.value.errors) == 3
 
     exc_str = str(exc_info.value)
     assert errors.ValidationError.message in exc_str
