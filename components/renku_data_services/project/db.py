@@ -186,7 +186,6 @@ class ProjectRepository:
             raise errors.ConflictError(message=f"An entity with the slug '{ns.slug}/{slug}' already exists.")
 
         repositories = [schemas.ProjectRepositoryORM(url) for url in (project.repositories or [])]
-
         project_orm = schemas.ProjectORM(
             name=project.name,
             visibility=(
