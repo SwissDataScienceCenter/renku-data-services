@@ -46,13 +46,6 @@ class UnauthorizedError(BaseError):
 
 
 @dataclass
-class InvalidOAuth2Token(UnauthorizedError):
-    """Raised when a token for a connected service is invalid."""
-
-    message: str = "OAuth2 token for connected service invalid or expired."
-
-
-@dataclass
 class InvalidTokenError(UnauthorizedError):
     """The supplied jwt is invalid."""
 

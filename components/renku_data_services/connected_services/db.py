@@ -316,7 +316,7 @@ class ConnectedServicesRepository:
                 else:
                     response = await oauth2_client.get(request_url, headers=adapter.api_common_headers)
             except InvalidTokenError as e:
-                raise errors.InvalidOAuth2Token() from e
+                raise errors.UnauthorizedError(message="OAuth2 token for connected service invalid or expired.") from e
 
             if response.status_code > 200:
                 raise errors.UnauthorizedError(message=f"Could not get account information.{response.json()}")
