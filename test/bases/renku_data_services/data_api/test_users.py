@@ -302,3 +302,10 @@ async def test_get_self_user_as_admin(sanic_client, admin_headers, admin_user) -
     assert user_info.get("first_name") == admin_user.first_name
     assert user_info.get("last_name") == admin_user.last_name
     assert user_info.get("is_admin") is True
+
+
+@pytest.mark.asyncio
+async def test_get_self_user_unauthenticated(sanic_client) -> None:
+    _, response = await sanic_client.get("/api/data/user")
+
+    assert response.status_code == 401, response.text
