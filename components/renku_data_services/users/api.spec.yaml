@@ -19,7 +19,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/UserWithId"
+                $ref: "#/components/schemas/SelfUserInfo"
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -343,6 +343,24 @@ components:
       items:
         $ref: "#/components/schemas/UserWithId"
       uniqueItems: true
+    SelfUserInfo:
+      description: Information about the currently logged in user
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/UserWithId"
+        - properties:
+            is_admin:
+              description: Whether the user is a platform administrator or not
+              type: boolean
+              default: false
+          required:
+            - is_admin
+      example:
+        id: "some-random-keycloak-id"
+        username: "some-username"
+        first_name: "Jane"
+        last_name: "Doe"
+        is_admin: false
     UserSecretKey:
       type: object
       additionalProperties: false
