@@ -7,7 +7,6 @@ info:
   version: v1
 servers:
   - url: /api/data
-  - url: /ui-server/api/data
 paths:
   /oauth2/providers:
     get:

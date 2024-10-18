@@ -7,7 +7,6 @@ info:
   version: v1
 servers:
   - url: /api/data
-  - url: /ui-server/api/data
 paths:
   "/notebooks/images":
       get:
@@ -325,7 +324,7 @@ components:
         repositories:
           type: array
           default: []
-          items: 
+          items:
             "$ref": "#/components/schemas/LaunchNotebookRequestRepository"
         cloudstorage:
           default: []
@@ -336,7 +335,7 @@ components:
           default: 1
           type: integer
         resource_class_id:
-          default: 
+          default:
           nullable: true
           type: integer
         environment_variables:
@@ -387,7 +386,7 @@ components:
           default: {}
           type: object
         image:
-          default: 
+          default:
           nullable: true
           type: string
         lfs_auto_fetch:
@@ -396,13 +395,13 @@ components:
         namespace:
           type: string
         notebook:
-          default: 
+          default:
           nullable: true
           type: string
         project:
           type: string
         resource_class_id:
-          default: 
+          default:
           nullable: true
           type: integer
         serverOptions:
@@ -413,7 +412,7 @@ components:
         user_secrets:
           allOf:
           - "$ref": "#/components/schemas/UserSecrets"
-          default: 
+          default:
           nullable: true
       required:
       - commit_sha
@@ -508,7 +507,7 @@ components:
       properties:
         configuration:
           additionalProperties: {}
-          default: 
+          default:
           nullable: true
           type: object
         readonly:
@@ -517,7 +516,7 @@ components:
         source_path:
           type: string
         storage_id:
-          default: 
+          default:
           nullable: true
           type: string
         target_path:
