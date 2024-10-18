@@ -32,18 +32,19 @@ packages = [
   { include = "renku_data_services/repositories", from = "../../components" },
   { include = "renku_data_services/session", from = "../../components" },
   { include = "renku_data_services/platform", from = "../../components" },
+  { include = "renku_data_services/data_connectors", from = "../../components" },
   { include = "renku_data_services/migrations", from = "../../components" },
 ]
 
 [tool.poetry.dependencies]
 python = "^3.12"
 alembic = "^1.13.2"
-pydantic = {extras = ["email"], version = "^2.9.1"}
+pydantic = {extras = ["email"], version = "^2.9.2"}
 requests = "^2.32.3"
-sqlalchemy = "^2.0.34"
+sqlalchemy = "^2.0.35"
 asyncpg = "^0.29.0"
 sanic-ext = "^23.6.0"
-psycopg = { extras = ["binary"], version = "^3.2.1" }
+psycopg = { extras = ["binary"], version = "^3.2.2" }
 authlib = "^1.3.2"
 sanic = { extras = ["ext"], version = "^24.6.0" }
 redis = "^5.0.8"
@@ -53,14 +54,14 @@ tenacity = "^9.0.0"
 httpx = "<0.28"
 python-gitlab = "^4.11.1"
 pyjwt = { extras = ["crypto"], version = "^2.9.0" }
-kubernetes = "^30.1.0"
+kubernetes = "^31.0.0"
 python-ulid = "^2.7.0"
 deepmerge = "^2.0"
 authzed = "^0.18.3"
 prometheus-sanic = "^3.0.0"
 sentry-sdk = { version = "^2.14.0", extras = ["sanic"] }
 # see https://github.com/sanic-org/sanic/issues/2828 for setuptools dependency, remove when not needed anymore
-setuptools = { version = "^74.1.3" }
+setuptools = { version = "^75.1.0" }
 aiofile = "^3.8.8"
 
 [tool.poetry.group.dev.dependencies]

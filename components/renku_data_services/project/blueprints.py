@@ -18,7 +18,7 @@ from renku_data_services.base_api.auth import (
 )
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.etag import if_match_required
-from renku_data_services.base_api.misc import validate_query
+from renku_data_services.base_api.misc import validate_body_root_model, validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.errors import errors
 from renku_data_services.project import apispec
@@ -46,7 +46,7 @@ class ProjectsBP(CustomBlueprint):
             request: Request, user: base_models.APIUser, pagination: PaginationRequest, query: apispec.ProjectGetQuery
         ) -> tuple[list[dict[str, Any]], int]:
             projects, total_num = await self.project_repo.get_projects(
-                user=user, pagination=pagination, namespace=query.namespace
+                user=user, pagination=pagination, namespace=query.namespace, direct_member=query.direct_member
             )
             return [
                 dict(
@@ -56,6 +56,7 @@ class ProjectsBP(CustomBlueprint):
                     slug=p.slug,
                     creation_date=p.creation_date.isoformat(),
                     created_by=p.created_by,
+                    updated_at=p.updated_at.isoformat() if p.updated_at else None,
                     repositories=p.repositories,
                     visibility=p.visibility.value,
                     description=p.description,
@@ -259,9 +260,11 @@ class ProjectsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @validate_path_project_id
-        async def _update_members(request: Request, user: base_models.APIUser, project_id: str) -> HTTPResponse:
-            body_dump = apispec.ProjectMemberListPatchRequest.model_validate(request.json)
-            members = [Member(Role(i.role.value), i.id, project_id) for i in body_dump.root]
+        @validate_body_root_model(json=apispec.ProjectMemberListPatchRequest)
+        async def _update_members(
+            _: Request, user: base_models.APIUser, project_id: str, body: apispec.ProjectMemberListPatchRequest
+        ) -> HTTPResponse:
+            members = [Member(Role(i.role.value), i.id, project_id) for i in body.root]
             await self.project_member_repo.update_members(user, ULID.from_str(project_id), members)
             return HTTPResponse(status=200)
 

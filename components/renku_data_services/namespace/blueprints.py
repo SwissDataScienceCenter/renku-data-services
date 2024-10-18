@@ -10,7 +10,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services.authz.models import Role, UnsavedMember
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
-from renku_data_services.base_api.misc import validate_query
+from renku_data_services.base_api.misc import validate_body_root_model, validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
 from renku_data_services.errors import errors
@@ -29,12 +29,14 @@ class GroupsBP(CustomBlueprint):
         """List all groups."""
 
         @authenticate(self.authenticator)
-        @validate_query(query=apispec.PaginationRequest)
+        @validate_query(query=apispec.GroupsGetQuery)
         @paginate
         async def _get_all(
-            _: Request, user: base_models.APIUser, pagination: PaginationRequest, query: apispec.PaginationRequest
+            _: Request, user: base_models.APIUser, pagination: PaginationRequest, query: apispec.GroupsGetQuery
         ) -> tuple[list[dict], int]:
-            groups, rec_count = await self.group_repo.get_groups(user=user, pagination=pagination)
+            groups, rec_count = await self.group_repo.get_groups(
+                user=user, pagination=pagination, direct_member=query.direct_member
+            )
             return (
                 validate_and_dump(apispec.GroupResponseList, groups),
                 rec_count,
@@ -118,11 +120,11 @@ class GroupsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _update_members(request: Request, user: base_models.APIUser, slug: str) -> JSONResponse:
-            # TODO: sanic validation does not support validating top-level json lists, switch this to @validate
-            # once sanic-org/sanic-ext/issues/198 is fixed
-            body_validated = apispec.GroupMemberPatchRequestList.model_validate(request.json)
-            members = [UnsavedMember(Role.from_group_role(member.role), member.id) for member in body_validated.root]
+        @validate_body_root_model(json=apispec.GroupMemberPatchRequestList)
+        async def _update_members(
+            _: Request, user: base_models.APIUser, slug: str, body: apispec.GroupMemberPatchRequestList
+        ) -> JSONResponse:
+            members = [UnsavedMember(Role.from_group_role(member.role), member.id) for member in body.root]
             res = await self.group_repo.update_group_members(
                 user=user,
                 slug=slug,

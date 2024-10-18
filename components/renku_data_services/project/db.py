@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import functools
-from asyncio import gather
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any, Concatenate, ParamSpec, TypeVar
 
 from sqlalchemy import Select, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.functions import coalesce
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
@@ -22,6 +22,7 @@ from renku_data_services.message_queue.avro_models.io.renku.events import v2 as 
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import dispatch_message
+from renku_data_services.namespace import orm as ns_schemas
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project import apispec as project_apispec
 from renku_data_services.project import models
@@ -49,30 +50,48 @@ class ProjectRepository:
         self.authz = authz
 
     async def get_projects(
-        self, user: base_models.APIUser, pagination: PaginationRequest, namespace: str | None = None
+        self,
+        user: base_models.APIUser,
+        pagination: PaginationRequest,
+        namespace: str | None = None,
+        direct_member: bool = False,
     ) -> tuple[list[models.Project], int]:
         """Get all projects from the database."""
-        project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
+        project_ids = []
+        if direct_member:
+            project_ids = await self.authz.resources_with_direct_membership(user, ResourceType.project)
+        else:
+            project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
 
         async with self.session_maker() as session:
-            # NOTE: without awaiting the connnection below there are failures about how a connection has not
-            # been established in the DB but the query is getting executed.
-            _ = await session.connection()
             stmt = select(schemas.ProjectORM)
             stmt = stmt.where(schemas.ProjectORM.id.in_(project_ids))
             if namespace:
                 stmt = _filter_by_namespace_slug(stmt, namespace)
+
+            stmt = stmt.order_by(coalesce(schemas.ProjectORM.updated_at, schemas.ProjectORM.creation_date).desc())
+
             stmt = stmt.limit(pagination.per_page).offset(pagination.offset)
-            stmt = stmt.order_by(schemas.ProjectORM.creation_date.desc())
+
             stmt_count = (
                 select(func.count()).select_from(schemas.ProjectORM).where(schemas.ProjectORM.id.in_(project_ids))
             )
             if namespace:
                 stmt_count = _filter_by_namespace_slug(stmt_count, namespace)
-            results = await gather(session.execute(stmt), session.execute(stmt_count))
-            projects_orm = results[0].scalars().all()
-            total_elements = results[1].scalar() or 0
+            results = await session.scalars(stmt), await session.scalar(stmt_count)
+            projects_orm = results[0].all()
+            total_elements = results[1] or 0
             return [p.dump() for p in projects_orm], total_elements
+
+    async def get_all_projects(self, requested_by: base_models.APIUser) -> AsyncGenerator[models.Project, None]:
+        """Get all projects from the database when reprovisioning."""
+        if not requested_by.is_admin:
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session:
+            projects = await session.stream_scalars(select(schemas.ProjectORM))
+            async for project in projects:
+                yield project.dump()
 
     async def get_project(self, user: base_models.APIUser, project_id: ULID) -> models.Project:
         """Get one project from the database."""
@@ -99,7 +118,7 @@ class ProjectRepository:
         async with self.session_maker() as session:
             stmt = select(schemas.ProjectORM)
             stmt = _filter_by_namespace_slug(stmt, namespace)
-            stmt = stmt.where(schemas.ProjectSlug.slug == slug.lower())
+            stmt = stmt.where(ns_schemas.EntitySlugORM.slug == slug.lower())
             result = await session.execute(stmt)
             project_orm = result.scalars().first()
 
@@ -135,7 +154,7 @@ class ProjectRepository:
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
         ns = await session.scalar(
-            select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == project.namespace.lower())
+            select(ns_schemas.NamespaceORM).where(ns_schemas.NamespaceORM.slug == project.namespace.lower())
         )
         if not ns:
             raise errors.MissingResourceError(
@@ -171,10 +190,10 @@ class ProjectRepository:
             creation_date=datetime.now(UTC).replace(microsecond=0),
             keywords=project.keywords,
         )
-        project_slug = schemas.ProjectSlug(slug, project_id=project_orm.id, namespace_id=ns.id)
+        project_slug = ns_schemas.EntitySlugORM.create_project_slug(slug, project_id=project_orm.id, namespace_id=ns.id)
 
-        session.add(project_slug)
         session.add(project_orm)
+        session.add(project_slug)
         await session.flush()
         await session.refresh(project_orm)
 
@@ -241,7 +260,9 @@ class ProjectRepository:
 
         if "namespace" in payload:
             ns_slug = payload["namespace"]
-            ns = await session.scalar(select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == ns_slug.lower()))
+            ns = await session.scalar(
+                select(ns_schemas.NamespaceORM).where(ns_schemas.NamespaceORM.slug == ns_slug.lower())
+            )
             if not ns:
                 raise errors.MissingResourceError(message=f"The namespace with slug {ns_slug} does not exist")
             if not ns.group_id and not ns.user_id:
@@ -301,9 +322,9 @@ _T = TypeVar("_T")
 def _filter_by_namespace_slug(statement: Select[tuple[_T]], namespace: str) -> Select[tuple[_T]]:
     """Filters a select query on projects to a given namespace."""
     return (
-        statement.where(schemas.NamespaceORM.slug == namespace.lower())
-        .where(schemas.ProjectSlug.namespace_id == schemas.NamespaceORM.id)
-        .where(schemas.ProjectORM.id == schemas.ProjectSlug.project_id)
+        statement.where(ns_schemas.NamespaceORM.slug == namespace.lower())
+        .where(ns_schemas.EntitySlugORM.namespace_id == ns_schemas.NamespaceORM.id)
+        .where(schemas.ProjectORM.id == ns_schemas.EntitySlugORM.project_id)
     )
 
 

@@ -16,8 +16,25 @@ from renku_data_services.users import models as user_models
 QUEUE_NAME: Final[str] = "data_service.all_events"
 
 
-def _make_event(message_type: str, payload: AvroModel) -> Event:
+def make_event(message_type: str, payload: AvroModel) -> Event:
+    """Create an event."""
     return Event.create(QUEUE_NAME, message_type, payload)
+
+
+def make_project_member_added_event(member: authz_models.Member) -> Event:
+    """Create a ProjectMemberAdded event."""
+    payload = v2.ProjectMemberAdded(
+        projectId=str(member.resource_id), userId=member.user_id, role=_convert_member_role(member.role)
+    )
+    return make_event("projectAuth.added", payload)
+
+
+def make_group_member_added_event(member: authz_models.Member) -> Event:
+    """Create a GroupMemberAdded event."""
+    payload = v2.GroupMemberAdded(
+        groupId=str(member.resource_id), userId=member.user_id, role=_convert_member_role(member.role)
+    )
+    return make_event("memberGroup.added", payload)
 
 
 class _ProjectEventConverter:
@@ -45,7 +62,7 @@ class _ProjectEventConverter:
         match event_type:
             case v2.ProjectCreated:
                 return [
-                    _make_event(
+                    make_event(
                         "project.created",
                         v2.ProjectCreated(
                             id=project_id_str,
@@ -60,7 +77,7 @@ class _ProjectEventConverter:
                             keywords=project.keywords or [],
                         ),
                     ),
-                    _make_event(
+                    make_event(
                         "projectAuth.added",
                         v2.ProjectMemberAdded(
                             projectId=project_id_str,
@@ -71,7 +88,7 @@ class _ProjectEventConverter:
                 ]
             case v2.ProjectUpdated:
                 return [
-                    _make_event(
+                    make_event(
                         "project.updated",
                         v2.ProjectUpdated(
                             id=project_id_str,
@@ -86,7 +103,7 @@ class _ProjectEventConverter:
                     )
                 ]
             case v2.ProjectRemoved:
-                return [_make_event("project.removed", v2.ProjectRemoved(id=project_id_str))]
+                return [make_event("project.removed", v2.ProjectRemoved(id=project_id_str))]
             case _:
                 raise errors.EventError(message=f"Trying to convert a project to an unknown event type {event_type}")
 
@@ -101,7 +118,7 @@ class _UserEventConverter:
             case v2.UserAdded | events.InsertUserNamespace:
                 user = cast(user_models.UserInfo, user)
                 return [
-                    _make_event(
+                    make_event(
                         "user.added",
                         v2.UserAdded(
                             id=user.id,
@@ -113,13 +130,13 @@ class _UserEventConverter:
                     )
                 ]
             case v2.UserRemoved:
-                user_id = cast(str, user)
-                return [_make_event("user.removed", v2.UserRemoved(id=user_id))]
+                user = cast(user_models.UserInfo, user)
+                return [make_event("user.removed", v2.UserRemoved(id=user.id))]
             case events.UpdateOrInsertUser:
                 user = cast(user_models.UserInfoUpdate, user)
                 if user.old is None:
                     return [
-                        _make_event(
+                        make_event(
                             "user.added",
                             v2.UserAdded(
                                 id=user.new.id,
@@ -132,7 +149,7 @@ class _UserEventConverter:
                     ]
                 else:
                     return [
-                        _make_event(
+                        make_event(
                             "user.updated",
                             v2.UserUpdated(
                                 id=user.new.id,
@@ -170,7 +187,7 @@ class _ProjectAuthzEventConverter:
             match change.change:
                 case authz_models.Change.UPDATE:
                     output.append(
-                        _make_event(
+                        make_event(
                             "projectAuth.updated",
                             v2.ProjectMemberUpdated(
                                 projectId=resource_id,
@@ -181,7 +198,7 @@ class _ProjectAuthzEventConverter:
                     )
                 case authz_models.Change.REMOVE:
                     output.append(
-                        _make_event(
+                        make_event(
                             "projectAuth.removed",
                             v2.ProjectMemberRemoved(
                                 projectId=resource_id,
@@ -191,14 +208,7 @@ class _ProjectAuthzEventConverter:
                     )
                 case authz_models.Change.ADD:
                     output.append(
-                        _make_event(
-                            "projectAuth.added",
-                            v2.ProjectMemberAdded(
-                                projectId=resource_id,
-                                userId=change.member.user_id,
-                                role=_convert_member_role(change.member.role),
-                            ),
-                        )
+                        make_project_member_added_event(change.member),
                     )
                 case _:
                     raise errors.EventError(
@@ -217,7 +227,7 @@ class _GroupAuthzEventConverter:
             match change.change:
                 case authz_models.Change.UPDATE:
                     output.append(
-                        _make_event(
+                        make_event(
                             "memberGroup.updated",
                             v2.GroupMemberUpdated(
                                 groupId=resource_id,
@@ -228,7 +238,7 @@ class _GroupAuthzEventConverter:
                     )
                 case authz_models.Change.REMOVE:
                     output.append(
-                        _make_event(
+                        make_event(
                             "memberGroup.removed",
                             v2.GroupMemberRemoved(
                                 groupId=resource_id,
@@ -238,7 +248,7 @@ class _GroupAuthzEventConverter:
                     )
                 case authz_models.Change.ADD:
                     output.append(
-                        _make_event(
+                        make_event(
                             "memberGroup.added",
                             v2.GroupMemberAdded(
                                 groupId=resource_id,
@@ -266,13 +276,13 @@ class _GroupEventConverter:
         match event_type:
             case v2.GroupAdded:
                 return [
-                    _make_event(
+                    make_event(
                         "group.added",
                         v2.GroupAdded(
                             id=group_id, name=group.name, description=group.description, namespace=group.slug
                         ),
                     ),
-                    _make_event(
+                    make_event(
                         "memberGroup.added",
                         v2.GroupMemberAdded(
                             groupId=group_id,
@@ -282,10 +292,10 @@ class _GroupEventConverter:
                     ),
                 ]
             case v2.GroupRemoved:
-                return [_make_event("group.removed", v2.GroupRemoved(id=group_id))]
+                return [make_event("group.removed", v2.GroupRemoved(id=group_id))]
             case v2.GroupUpdated:
                 return [
-                    _make_event(
+                    make_event(
                         "group.updated",
                         v2.GroupUpdated(
                             id=group_id, name=group.name, description=group.description, namespace=group.slug
@@ -331,7 +341,7 @@ class EventConverter:
                 user_with_namespace = cast(user_models.UserInfo, input)
                 return _UserEventConverter.to_events(user_with_namespace, event_type)
             case v2.UserRemoved:
-                user_info = cast(str, input)
+                user_info = cast(user_models.UserInfo, input)
                 return _UserEventConverter.to_events(user_info, event_type)
             case events.UpdateOrInsertUser:
                 user_with_namespace_update = cast(user_models.UserInfoUpdate, input)

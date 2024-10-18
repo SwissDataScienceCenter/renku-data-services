@@ -91,15 +91,15 @@ async def test_group_pagination(
     res2_json = res2.json
     assert len(res1_json) == 12
     assert len(res2_json) == 3
-    assert res1_json[0]["name"] == "group0"
-    assert res1_json[-1]["name"] == "group11"
-    assert res2_json[0]["name"] == "group12"
-    assert res2_json[-1]["name"] == "group14"
+    assert res1_json[0]["name"] == "group14"
+    assert res1_json[-1]["name"] == "group3"
+    assert res2_json[0]["name"] == "group2"
+    assert res2_json[-1]["name"] == "group0"
     _, res3 = await sanic_client.get("/api/data/groups", headers=admin_headers, params={"per_page": 20, "page": 1})
     res3_json = res3.json
     assert len(res3_json) == 15
-    assert res3_json[0]["name"] == "group0"
-    assert res3_json[-1]["name"] == "group14"
+    assert res3_json[0]["name"] == "group14"
+    assert res3_json[-1]["name"] == "group0"
 
 
 @pytest.mark.asyncio
@@ -461,3 +461,47 @@ async def test_get_group_anonymously(sanic_client, user_headers) -> None:
     member_2 = members[1]
     assert member_2["id"] == "member-1"
     assert member_2["role"] == "viewer"
+
+
+@pytest.mark.asyncio
+async def test_get_groups_with_direct_membership(sanic_client, user_headers, member_1_headers, member_1_user) -> None:
+    # Create a group
+    namespace = "my-group"
+    payload = {
+        "name": "Group",
+        "slug": namespace,
+    }
+    _, response = await sanic_client.post("/api/data/groups", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    group_1 = response.json
+
+    # Create another group
+    namespace_2 = "my-second-group"
+    payload = {
+        "name": "Group 2",
+        "slug": namespace_2,
+    }
+    _, response = await sanic_client.post("/api/data/groups", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    group_2 = response.json
+
+    # Add member_1 to Group 2
+    roles = [{"id": member_1_user.id, "role": "editor"}]
+    _, response = await sanic_client.patch(f"/api/data/groups/{namespace_2}/members", headers=user_headers, json=roles)
+    assert response.status_code == 200, response.text
+
+    # Get groups where member_1 has direct membership
+    parameters = {"direct_member": True}
+    _, response = await sanic_client.get("/api/data/groups", headers=member_1_headers, params=parameters)
+    assert response.status_code == 200, response.text
+    groups = response.json
+    assert len(groups) == 1
+    group_ids = {g["id"] for g in groups}
+    assert group_ids == {group_2["id"]}
+
+    # Check that both groups can be seen without the filter
+    _, response = await sanic_client.get("/api/data/groups", headers=member_1_headers)
+    groups = response.json
+    assert len(groups) == 2
+    group_ids = {g["id"] for g in groups}
+    assert group_ids == {group_1["id"], group_2["id"]}

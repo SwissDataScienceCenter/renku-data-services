@@ -50,6 +50,8 @@ class Scope(Enum):
     DELETE: str = "delete"
     CHANGE_MEMBERSHIP: str = "change_membership"
     READ_CHILDREN: str = "read_children"
+    ADD_LINK: str = "add_link"
+    IS_ADMIN: str = "is_admin"
 
 
 @dataclass
@@ -88,7 +90,7 @@ class MembershipChange:
 
 
 class Visibility(Enum):
-    """The visisibilty of a resource."""
+    """The visibility of a resource."""
 
     PUBLIC: str = "public"
     PRIVATE: str = "private"
