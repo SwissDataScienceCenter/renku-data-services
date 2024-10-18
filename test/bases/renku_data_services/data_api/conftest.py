@@ -46,7 +46,7 @@ def regular_user() -> UserInfo:
         last_name="Doe",
         email="user.doe@gmail.com",
         namespace=Namespace(
-            id=ULID(), slug="user", kind=NamespaceKind.user, underlying_resource_id="user", created_by="user"
+            id=ULID(), slug="user.doe", kind=NamespaceKind.user, underlying_resource_id="user", created_by="user"
         ),
     )
 

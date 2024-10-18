@@ -272,3 +272,33 @@ async def test_delete_user(sanic_client, admin_headers) -> None:
         for iuser in res.json
     ]
     assert user not in users_response
+
+
+@pytest.mark.asyncio
+async def test_get_self_user(sanic_client, user_headers, regular_user) -> None:
+    _, response = await sanic_client.get("/api/data/user", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    user_info = response.json
+    assert user_info.get("id") == regular_user.id
+    assert user_info.get("username") == regular_user.namespace.slug
+    assert user_info.get("email") == regular_user.email
+    assert user_info.get("first_name") == regular_user.first_name
+    assert user_info.get("last_name") == regular_user.last_name
+    assert user_info.get("is_admin") is False
+
+
+@pytest.mark.asyncio
+async def test_get_self_user_as_admin(sanic_client, admin_headers, admin_user) -> None:
+    _, response = await sanic_client.get("/api/data/user", headers=admin_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    user_info = response.json
+    assert user_info.get("id") == admin_user.id
+    assert user_info.get("username") == admin_user.namespace.slug
+    assert user_info.get("email") == admin_user.email
+    assert user_info.get("first_name") == admin_user.first_name
+    assert user_info.get("last_name") == admin_user.last_name
+    assert user_info.get("is_admin") is True
