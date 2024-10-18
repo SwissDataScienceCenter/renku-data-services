@@ -10,7 +10,7 @@ from ulid import ULID
 
 from renku_data_services import base_models, errors
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
-from renku_data_services.authz.models import Scope
+from renku_data_services.authz.models import CheckPermissionItem, Scope
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors import orm as schemas
@@ -299,6 +299,32 @@ class DataConnectorRepository:
         data_connector = data_connector_orm.dump()
         await session.delete(data_connector_orm)
         return data_connector
+
+    async def get_data_connector_permissions(
+        self, user: base_models.APIUser, data_connector_id: ULID
+    ) -> models.DataConnectorPermissions:
+        """Get the permissions of the user on a given data connector."""
+        # Get the data connector first, it will check if the user can view it.
+        await self.get_data_connector(user=user, data_connector_id=data_connector_id)
+
+        scopes = [Scope.WRITE, Scope.DELETE, Scope.CHANGE_MEMBERSHIP]
+        items = [
+            CheckPermissionItem(resource_type=ResourceType.data_connector, resource_id=data_connector_id, scope=scope)
+            for scope in scopes
+        ]
+        responses = await self.authz.has_permissions(user=user, items=items)
+        permissions = models.DataConnectorPermissions(write=False, delete=False, change_membership=False)
+        for item, has_permission in responses:
+            if not has_permission:
+                continue
+            match item.scope:
+                case Scope.WRITE:
+                    permissions.write = True
+                case Scope.DELETE:
+                    permissions.delete = True
+                case Scope.CHANGE_MEMBERSHIP:
+                    permissions.change_membership = True
+        return permissions
 
 
 class DataConnectorProjectLinkRepository:
