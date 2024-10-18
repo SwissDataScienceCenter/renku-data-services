@@ -7,10 +7,8 @@ from enum import StrEnum
 from functools import wraps
 from typing import ClassVar, Concatenate, ParamSpec, Protocol, TypeVar, cast
 
-from authzed.api.v1 import AsyncClient
-from authzed.api.v1.core_pb2 import ObjectReference, Relationship, RelationshipUpdate, SubjectReference, ZedToken
-from authzed.api.v1.permission_service_pb2 import (
-    LOOKUP_PERMISSIONSHIP_HAS_PERMISSION,
+from authzed.api.v1 import (
+    AsyncClient,
     CheckPermissionRequest,
     CheckPermissionResponse,
     Consistency,
@@ -18,12 +16,18 @@ from authzed.api.v1.permission_service_pb2 import (
     LookupResourcesResponse,
     LookupSubjectsRequest,
     LookupSubjectsResponse,
+    ObjectReference,
     ReadRelationshipsRequest,
     ReadRelationshipsResponse,
+    Relationship,
     RelationshipFilter,
+    RelationshipUpdate,
     SubjectFilter,
+    SubjectReference,
     WriteRelationshipsRequest,
+    ZedToken,
 )
+from authzed.api.v1.permission_service_pb2 import LOOKUP_PERMISSIONSHIP_HAS_PERMISSION
 from sanic.log import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID

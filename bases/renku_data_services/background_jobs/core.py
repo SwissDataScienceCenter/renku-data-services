@@ -2,13 +2,16 @@
 
 import logging
 
-from authzed.api.v1.core_pb2 import ObjectReference, Relationship, RelationshipUpdate, SubjectReference
-from authzed.api.v1.permission_service_pb2 import (
+from authzed.api.v1 import (
     Consistency,
     LookupResourcesRequest,
+    ObjectReference,
     ReadRelationshipsRequest,
+    Relationship,
     RelationshipFilter,
+    RelationshipUpdate,
     SubjectFilter,
+    SubjectReference,
     WriteRelationshipsRequest,
 )
 from ulid import ULID
