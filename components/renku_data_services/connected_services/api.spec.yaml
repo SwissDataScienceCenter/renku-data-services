@@ -319,6 +319,9 @@ components:
       enum:
         - "gitlab"
         - "github"
+        - "drive"
+        - "onedrive"
+        - "dropbox"
       example: "gitlab"
     ClientId:
       description: |
