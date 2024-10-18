@@ -175,8 +175,18 @@ class ProjectRepository:
                 message=f"The project cannot be created because you do not have sufficient permissions with the namespace {project.namespace}"  # noqa: E501
             )
 
-        repositories = [schemas.ProjectRepositoryORM(url) for url in (project.repositories or [])]
         slug = project.slug or base_models.Slug.from_name(project.name).value
+
+        existing_slug = await session.scalar(
+            select(ns_schemas.EntitySlugORM)
+            .where(ns_schemas.EntitySlugORM.namespace_id == ns.id)
+            .where(ns_schemas.EntitySlugORM.slug == slug)
+        )
+        if existing_slug is not None:
+            raise errors.ConflictError(message=f"An entity with the slug '{ns.slug}/{slug}' already exists.")
+
+        repositories = [schemas.ProjectRepositoryORM(url) for url in (project.repositories or [])]
+
         project_orm = schemas.ProjectORM(
             name=project.name,
             visibility=(
