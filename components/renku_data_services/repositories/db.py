@@ -87,7 +87,7 @@ class GitRepositoriesRepository:
         self, repository_url: str, client: connected_services_schemas.OAuth2ClientORM, etag: str | None
     ) -> models.RepositoryProviderMatch | Literal["304"]:
         """Get the metadata about a repository without using credentials."""
-        async with HttpClient() as http:
+        async with HttpClient(timeout=5) as http:
             adapter = get_provider_adapter(client)
             request_url = adapter.get_repository_api_url(repository_url)
             headers = adapter.api_common_headers or dict()
@@ -139,7 +139,7 @@ class GitRepositoriesRepository:
         self, repository_url: str, user: base_models.APIUser, etag: str | None, internal_gitlab_url: str
     ) -> models.RepositoryProviderMatch | Literal["304"]:
         """Get the metadata about a repository from the internal GitLab instance."""
-        async with HttpClient() as http:
+        async with HttpClient(timeout=5) as http:
             adapter = get_internal_gitlab_adapter(internal_gitlab_url)
             request_url = adapter.get_repository_api_url(repository_url)
             is_anonymous = not bool(user.access_token)
