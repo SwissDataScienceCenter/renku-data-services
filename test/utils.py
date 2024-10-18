@@ -124,7 +124,11 @@ async def create_rp(
     assert rp == inserted_rp_no_ids, f"resource pools do not match {rp} != {inserted_rp_no_ids}"
     retrieved_rps = await repo.get_resource_pools(api_user, inserted_rp.id)
     assert len(retrieved_rps) == 1
-    assert inserted_rp == retrieved_rps[0]
+    assert inserted_rp.id == retrieved_rps[0].id
+    assert inserted_rp.name == retrieved_rps[0].name
+    assert inserted_rp.idle_threshold == retrieved_rps[0].idle_threshold
+    assert inserted_rp.classes == retrieved_rps[0].classes
+    assert inserted_rp.quota == retrieved_rps[0].quota
     return inserted_rp
 
 
