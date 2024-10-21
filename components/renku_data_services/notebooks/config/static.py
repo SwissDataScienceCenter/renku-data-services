@@ -88,7 +88,7 @@ class _ServersGetEndpointAnnotations:
                 annotation.get_field_name(sanitized=True): annotation.to_marshmallow_field()
                 for annotation in self.annotations
             }
-        )(uknown=INCLUDE)
+        )(unknown=INCLUDE)
 
     def sanitize_dict(self, ann_dict: dict[str, str]) -> dict[str, str]:
-        return cast(dict[str, str], self.schema().load(ann_dict))
+        return cast(dict[str, str], self.schema.load(ann_dict))
