@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from functools import wraps
 from typing import Concatenate, ParamSpec, Protocol, TypeVar
 
-from dataclasses_avroschema.schema_generator import AvroModel
+from dataclasses_avroschema import AvroModel
 from redis.asyncio.sentinel import MasterNotFoundError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,10 +31,11 @@ class WithMessageQueue(Protocol):
 _P = ParamSpec("_P")
 _T = TypeVar("_T")
 _WithMessageQueue = TypeVar("_WithMessageQueue", bound=WithMessageQueue)
+_EventType = TypeVar("_EventType", type[AvroModel], type[events.AmbiguousEvent], covariant=True)
 
 
 def dispatch_message(
-    event_type: type[AvroModel] | type[events.AmbiguousEvent],
+    event_type: _EventType,
 ) -> Callable[
     [Callable[Concatenate[_WithMessageQueue, _P], Awaitable[_T]]],
     Callable[Concatenate[_WithMessageQueue, _P], Awaitable[_T]],

@@ -15,13 +15,14 @@ from ulid import ULID
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
-from renku_data_services.authz.models import Member, MembershipChange, Scope
+from renku_data_services.authz.models import CheckPermissionItem, Member, MembershipChange, Scope
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.message_queue import events
 from renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import dispatch_message
+from renku_data_services.namespace import orm as ns_schemas
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project import apispec as project_apispec
 from renku_data_services.project import models
@@ -117,7 +118,7 @@ class ProjectRepository:
         async with self.session_maker() as session:
             stmt = select(schemas.ProjectORM)
             stmt = _filter_by_namespace_slug(stmt, namespace)
-            stmt = stmt.where(schemas.ProjectSlug.slug == slug.lower())
+            stmt = stmt.where(schemas.ProjectORM.slug.has(ns_schemas.EntitySlugORM.slug == slug))
             result = await session.execute(stmt)
             project_orm = result.scalars().first()
 
@@ -153,7 +154,7 @@ class ProjectRepository:
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
         ns = await session.scalar(
-            select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == project.namespace.lower())
+            select(ns_schemas.NamespaceORM).where(ns_schemas.NamespaceORM.slug == project.namespace.lower())
         )
         if not ns:
             raise errors.MissingResourceError(
@@ -189,10 +190,10 @@ class ProjectRepository:
             creation_date=datetime.now(UTC).replace(microsecond=0),
             keywords=project.keywords,
         )
-        project_slug = schemas.ProjectSlug(slug, project_id=project_orm.id, namespace_id=ns.id)
+        project_slug = ns_schemas.EntitySlugORM.create_project_slug(slug, project_id=project_orm.id, namespace_id=ns.id)
 
-        session.add(project_slug)
         session.add(project_orm)
+        session.add(project_slug)
         await session.flush()
         await session.refresh(project_orm)
 
@@ -259,7 +260,9 @@ class ProjectRepository:
 
         if "namespace" in payload:
             ns_slug = payload["namespace"]
-            ns = await session.scalar(select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == ns_slug.lower()))
+            ns = await session.scalar(
+                select(ns_schemas.NamespaceORM).where(ns_schemas.NamespaceORM.slug == ns_slug.lower())
+            )
             if not ns:
                 raise errors.MissingResourceError(message=f"The namespace with slug {ns_slug} does not exist")
             if not ns.group_id and not ns.user_id:
@@ -311,6 +314,30 @@ class ProjectRepository:
 
         return project.dump()
 
+    async def get_project_permissions(self, user: base_models.APIUser, project_id: ULID) -> models.ProjectPermissions:
+        """Get the permissions of the user on a given project."""
+        # Get the project first, it will check if the user can view it.
+        await self.get_project(user=user, project_id=project_id)
+
+        scopes = [Scope.WRITE, Scope.DELETE, Scope.CHANGE_MEMBERSHIP]
+        items = [
+            CheckPermissionItem(resource_type=ResourceType.project, resource_id=project_id, scope=scope)
+            for scope in scopes
+        ]
+        responses = await self.authz.has_permissions(user=user, items=items)
+        permissions = models.ProjectPermissions(write=False, delete=False, change_membership=False)
+        for item, has_permission in responses:
+            if not has_permission:
+                continue
+            match item.scope:
+                case Scope.WRITE:
+                    permissions.write = True
+                case Scope.DELETE:
+                    permissions.delete = True
+                case Scope.CHANGE_MEMBERSHIP:
+                    permissions.change_membership = True
+        return permissions
+
 
 _P = ParamSpec("_P")
 _T = TypeVar("_T")
@@ -319,9 +346,9 @@ _T = TypeVar("_T")
 def _filter_by_namespace_slug(statement: Select[tuple[_T]], namespace: str) -> Select[tuple[_T]]:
     """Filters a select query on projects to a given namespace."""
     return (
-        statement.where(schemas.NamespaceORM.slug == namespace.lower())
-        .where(schemas.ProjectSlug.namespace_id == schemas.NamespaceORM.id)
-        .where(schemas.ProjectORM.id == schemas.ProjectSlug.project_id)
+        statement.where(ns_schemas.NamespaceORM.slug == namespace.lower())
+        .where(ns_schemas.EntitySlugORM.namespace_id == ns_schemas.NamespaceORM.id)
+        .where(schemas.ProjectORM.id == ns_schemas.EntitySlugORM.project_id)
     )
 
 
