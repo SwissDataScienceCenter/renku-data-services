@@ -3,16 +3,14 @@
 import json
 from collections.abc import AsyncGenerator, Callable
 
-from dataclasses_avroschema.schema_generator import AvroModel
 from sanic.log import logger
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.base_models import APIUser
-from renku_data_services.message_queue import events
 from renku_data_services.message_queue.avro_models.io.renku.events import v2
-from renku_data_services.message_queue.converters import EventConverter, make_event
+from renku_data_services.message_queue.converters import EventConverter, EventType, make_event
 from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.message_queue.models import Event, Reprovisioning
 from renku_data_services.message_queue.orm import EventORM
@@ -34,9 +32,7 @@ async def reprovision(
     """Create and send various data service events required for reprovisioning the message queue."""
     logger.info(f"Starting reprovisioning with ID {reprovisioning.id}")
 
-    async def process_events(
-        records: AsyncGenerator, event_type: type[AvroModel] | type[events.AmbiguousEvent]
-    ) -> None:
+    async def process_events(records: AsyncGenerator, event_type: EventType) -> None:
         """Create and store an event."""
         count = 0
 

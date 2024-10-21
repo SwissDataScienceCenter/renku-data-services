@@ -1,7 +1,7 @@
 """add reprovisioning single row constraint
 
 Revision ID: cefb45b5d71e
-Revises: 726d5d0e1f28
+Revises: 46236d8d7cbe
 Create Date: 2024-10-08 15:07:47.602432
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "cefb45b5d71e"
-down_revision = "726d5d0e1f28"
+down_revision = "46236d8d7cbe"
 branch_labels = None
 depends_on = None
 

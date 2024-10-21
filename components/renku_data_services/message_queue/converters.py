@@ -14,7 +14,7 @@ from renku_data_services.project import models as project_models
 from renku_data_services.users import models as user_models
 
 QUEUE_NAME: Final[str] = "data_service.all_events"
-_EventType = TypeVar("_EventType", type[AvroModel], type[events.AmbiguousEvent], covariant=True)
+EventType = TypeVar("EventType", type[AvroModel], type[events.AmbiguousEvent], covariant=True)
 
 
 def make_event(message_type: str, payload: AvroModel) -> Event:
@@ -52,7 +52,7 @@ class _ProjectEventConverter:
                 )
 
     @staticmethod
-    def to_events(project: project_models.Project, event_type: _EventType) -> list[Event]:
+    def to_events(project: project_models.Project, event_type: EventType) -> list[Event]:
         if project.id is None:
             raise errors.EventError(
                 message=f"Cannot create an event of type {event_type} for a project which has no ID"
@@ -109,7 +109,7 @@ class _ProjectEventConverter:
 
 class _UserEventConverter:
     @staticmethod
-    def to_events(user: user_models.UserInfo | user_models.UserInfoUpdate | str, event_type: _EventType) -> list[Event]:
+    def to_events(user: user_models.UserInfo | user_models.UserInfoUpdate | str, event_type: EventType) -> list[Event]:
         match event_type:
             case v2.UserAdded | events.InsertUserNamespace:
                 user = cast(user_models.UserInfo, user)
@@ -280,7 +280,7 @@ class _GroupAuthzEventConverter:
 
 class _GroupEventConverter:
     @staticmethod
-    def to_events(group: group_models.Group, event_type: _EventType) -> list[Event]:
+    def to_events(group: group_models.Group, event_type: EventType) -> list[Event]:
         if group.id is None:
             raise errors.ProgrammingError(
                 message="Cannot send group events to the message queue for a group that does not have an ID"
@@ -328,7 +328,7 @@ class EventConverter:
     """Generates events from any type of data service models."""
 
     @staticmethod
-    def to_events(input: _T, event_type: _EventType) -> list[Event]:
+    def to_events(input: _T, event_type: EventType) -> list[Event]:
         """Generate an event for a data service model based on an event type."""
         if not input:
             return []
