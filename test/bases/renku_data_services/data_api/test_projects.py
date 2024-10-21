@@ -29,14 +29,14 @@ def get_project(sanic_client, user_headers, admin_headers):
 
 
 @pytest.mark.asyncio
-async def test_project_creation(sanic_client, user_headers, regular_user, app_config) -> None:
+async def test_project_creation(sanic_client, user_headers, regular_user: UserInfo, app_config) -> None:
     payload = {
         "name": "Renku Native Project",
         "slug": "project-slug",
         "description": "First Renku native project",
         "visibility": "public",
         "repositories": ["http://renkulab.io/repository-1", "http://renkulab.io/repository-2"],
-        "namespace": f"{regular_user.first_name}.{regular_user.last_name}",
+        "namespace": regular_user.namespace.slug,
         "keywords": ["keyword 1", "keyword.2", "keyword-3", "KEYWORD_4"],
     }
 
@@ -96,14 +96,16 @@ async def test_project_creation(sanic_client, user_headers, regular_user, app_co
     project = response.json
     assert project["name"] == "Renku Native Project"
     assert project["slug"] == "project-slug"
-    assert project["namespace"] == f"{regular_user.first_name.lower()}.{regular_user.last_name.lower()}"
+    assert project["namespace"] == regular_user.namespace.slug
 
 
 @pytest.mark.asyncio
-async def test_project_creation_with_default_values(sanic_client, user_headers, regular_user, get_project) -> None:
+async def test_project_creation_with_default_values(
+    sanic_client, user_headers, regular_user: UserInfo, get_project
+) -> None:
     payload = {
         "name": "Project with Default Values",
-        "namespace": f"{regular_user.first_name}.{regular_user.last_name}",
+        "namespace": regular_user.namespace.slug,
     }
 
     _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
@@ -139,8 +141,8 @@ async def test_create_project_with_invalid_keywords(sanic_client, user_headers, 
 
 
 @pytest.mark.asyncio
-async def test_project_creation_with_invalid_namespace(sanic_client, user_headers, member_1_user) -> None:
-    namespace = f"{member_1_user.first_name}.{member_1_user.last_name}"
+async def test_project_creation_with_invalid_namespace(sanic_client, user_headers, member_1_user: UserInfo) -> None:
+    namespace = member_1_user.namespace.slug
     _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}", headers=user_headers)
     assert response.status_code == 200, response.text
     payload = {
@@ -488,8 +490,10 @@ async def test_cannot_patch_without_if_match_header(create_project, get_project,
 
 
 @pytest.mark.asyncio
-async def test_patch_project_invalid_namespace(create_project, sanic_client, user_headers, member_1_user) -> None:
-    namespace = f"{member_1_user.first_name}.{member_1_user.last_name}"
+async def test_patch_project_invalid_namespace(
+    create_project, sanic_client, user_headers, member_1_user: UserInfo
+) -> None:
+    namespace = member_1_user.namespace.slug
     _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}", headers=user_headers)
     assert response.status_code == 200, response.text
     project = await create_project("Project 1")
