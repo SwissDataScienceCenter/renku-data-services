@@ -3,12 +3,14 @@
 import json
 from collections.abc import AsyncGenerator, Callable
 
+from dataclasses_avroschema.schema_generator import AvroModel
 from sanic.log import logger
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.base_models import APIUser
+from renku_data_services.message_queue import events
 from renku_data_services.message_queue.avro_models.io.renku.events import v2
 from renku_data_services.message_queue.converters import EventConverter, make_event
 from renku_data_services.message_queue.db import ReprovisioningRepository
@@ -32,7 +34,9 @@ async def reprovision(
     """Create and send various data service events required for reprovisioning the message queue."""
     logger.info(f"Starting reprovisioning with ID {reprovisioning.id}")
 
-    async def process_events(name: str, records: AsyncGenerator, event_type):  # type: ignore[no-untyped-def]
+    async def process_events(
+        records: AsyncGenerator, event_type: type[AvroModel] | type[events.AmbiguousEvent]
+    ) -> None:
         """Create and store an event."""
         count = 0
 
@@ -41,7 +45,7 @@ async def reprovision(
             await store_event(events[0])
             count += 1
 
-        logger.info(f"Reprovisioned {count} {name} events")
+        logger.info(f"Reprovisioned {count} {event_type.__name__} events")
 
     async def store_event(event: Event) -> None:
         """Store an event in the temporary events table."""
@@ -63,13 +67,16 @@ async def reprovision(
 
     try:
         async with session_maker() as session, session.begin():
+            # NOTE: The table should be deleted at the end of the transaction. This is just a safety-net around
+            # (possible) bugs that a reprovisioning might not get cleared.
             await session.execute(text("DROP TABLE IF EXISTS events_temp"))
+            # NOTE: The temporary table will be deleted once the transaction gets committed/aborted.
             await session.execute(
                 text(
                     """
                     CREATE TEMPORARY TABLE events_temp ON COMMIT DROP
                     AS
-                    SELECT queue, payload, timestamp_utc FROM events.events WITH NO DATA
+                    SELECT queue, payload, timestamp_utc FROM events.events WHERE FALSE WITH NO DATA
                     """
                 )
             )
@@ -81,19 +88,19 @@ async def reprovision(
 
             logger.info("Reprovisioning users")
             all_users = user_repo.get_all_users(requested_by=requested_by)
-            await process_events("users", all_users, v2.UserAdded)
+            await process_events(all_users, v2.UserAdded)
 
             all_groups = group_repo.get_all_groups(requested_by=requested_by)
-            await process_events("groups", all_groups, v2.GroupAdded)
+            await process_events(all_groups, v2.GroupAdded)
 
             all_groups_members = authz.get_all_members(ResourceType.group)
-            await process_events("group members", all_groups_members, v2.GroupMemberAdded)
+            await process_events(all_groups_members, v2.GroupMemberAdded)
 
             all_projects = project_repo.get_all_projects(requested_by=requested_by)
-            await process_events("projects", all_projects, v2.ProjectCreated)
+            await process_events(all_projects, v2.ProjectCreated)
 
             all_projects_members = authz.get_all_members(ResourceType.project)
-            await process_events("project members", all_projects_members, v2.ProjectMemberAdded)
+            await process_events(all_projects_members, v2.ProjectMemberAdded)
 
             finish_event = make_event(
                 message_type="reprovisioning.finished", payload=v2.ReprovisioningFinished(id=str(reprovisioning.id))

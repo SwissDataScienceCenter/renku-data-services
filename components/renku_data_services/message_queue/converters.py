@@ -218,9 +218,7 @@ class _ProjectAuthzEventConverter:
         return output
 
     @staticmethod
-    def to_events_from_event_type(
-        member: authz_models.Member, event_type: type[AvroModel] | type[events.AmbiguousEvent]
-    ) -> list[Event]:
+    def to_events_from_event_type(member: authz_models.Member, event_type: type[AvroModel]) -> list[Event]:
         match event_type:
             case v2.ProjectMemberAdded:
                 return [
@@ -272,9 +270,7 @@ class _GroupAuthzEventConverter:
         return output
 
     @staticmethod
-    def to_events_from_event_type(
-        member: authz_models.Member, event_type: type[AvroModel] | type[events.AmbiguousEvent]
-    ) -> list[Event]:
+    def to_events_from_event_type(member: authz_models.Member, event_type: type[AvroModel]) -> list[Event]:
         match event_type:
             case v2.GroupMemberAdded:
                 return [
