@@ -1183,3 +1183,61 @@ async def test_delete_data_connector_secrets(
 
     assert response.status_code == 200
     assert response.json == [], response.json
+
+
+@pytest.mark.asyncio
+async def test_get_project_permissions_unauthorized(
+    sanic_client, create_data_connector, admin_headers, admin_user, user_headers
+) -> None:
+    data_connector = await create_data_connector("My data connector", user=admin_user, headers=admin_headers)
+    data_connector_id = data_connector["id"]
+
+    _, response = await sanic_client.get(f"/api/data/projects/{data_connector_id}/permissions", headers=user_headers)
+
+    assert response.status_code == 404, response.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["viewer", "editor", "owner"])
+async def test_get_data_connector_permissions_cascading_from_group(
+    sanic_client: SanicASGITestClient,
+    create_data_connector,
+    admin_headers,
+    admin_user,
+    user_headers,
+    regular_user,
+    role,
+) -> None:
+    _, response = await sanic_client.post(
+        "/api/data/groups", headers=admin_headers, json={"name": "My Group", "slug": "my-group"}
+    )
+    assert response.status_code == 201, response.text
+    patch = [{"id": regular_user.id, "role": role}]
+    _, response = await sanic_client.patch("/api/data/groups/my-group/members", headers=admin_headers, json=patch)
+    assert response.status_code == 200, response.text
+    data_connector = await create_data_connector(
+        "My data connector", user=admin_user, headers=admin_headers, namespace="my-group"
+    )
+    data_connector_id = data_connector["id"]
+
+    expected_permissions = dict(
+        write=False,
+        delete=False,
+        change_membership=False,
+    )
+    if role == "editor" or role == "owner":
+        expected_permissions["write"] = True
+    if role == "owner":
+        expected_permissions["delete"] = True
+        expected_permissions["change_membership"] = True
+
+    _, response = await sanic_client.get(
+        f"/api/data/data_connectors/{data_connector_id}/permissions", headers=user_headers
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    permissions = response.json
+    assert permissions.get("write") == expected_permissions["write"]
+    assert permissions.get("delete") == expected_permissions["delete"]
+    assert permissions.get("change_membership") == expected_permissions["change_membership"]
