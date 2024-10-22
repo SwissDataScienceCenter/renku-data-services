@@ -2,6 +2,7 @@ import json
 from typing import Any
 
 import pytest
+import pytest_asyncio
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 
@@ -10,6 +11,7 @@ from renku_data_services.authn.dummy import DummyAuthenticator
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.storage.rclone import RCloneValidator
+from test.utils import SanicReusableASGITestClient
 
 _valid_storage: dict[str, Any] = {
     "project_id": "123456",
@@ -29,8 +31,8 @@ def valid_storage_payload() -> dict[str, Any]:
     return _valid_storage
 
 
-@pytest.fixture
-def storage_test_client(app_config: Config) -> SanicASGITestClient:
+@pytest_asyncio.fixture
+async def storage_test_client(app_config: Config) -> SanicASGITestClient:
     run_migrations_for_app("common")
     gitlab_auth = DummyAuthenticator()
     app_config.gitlab_authenticator = gitlab_auth
@@ -38,7 +40,8 @@ def storage_test_client(app_config: Config) -> SanicASGITestClient:
     app = register_all_handlers(app, app_config)
     validator = RCloneValidator()
     app.ext.dependency(validator)
-    return SanicASGITestClient(app), gitlab_auth
+    async with SanicReusableASGITestClient(app) as client:
+        yield client, gitlab_auth
 
 
 @pytest.mark.parametrize(

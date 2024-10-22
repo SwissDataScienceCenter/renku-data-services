@@ -23,6 +23,7 @@ from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import UserInfo
 from test.bases.renku_data_services.background_jobs.test_sync import get_kc_users
+from test.utils import SanicReusableASGITestClient
 
 
 @pytest.fixture
@@ -188,7 +189,8 @@ async def sanic_app_no_migrations(
 
 @pytest_asyncio.fixture
 async def sanic_client_no_migrations(sanic_app_no_migrations: Sanic) -> SanicASGITestClient:
-    return SanicASGITestClient(sanic_app_no_migrations)
+    async with SanicReusableASGITestClient(sanic_app_no_migrations) as client:
+        yield client
 
 
 @pytest_asyncio.fixture
@@ -202,7 +204,8 @@ async def sanic_app(sanic_app_no_migrations: Sanic, app_config: Config) -> Sanic
 
 @pytest_asyncio.fixture
 async def sanic_client(sanic_app: Sanic) -> SanicASGITestClient:
-    return SanicASGITestClient(sanic_app)
+    async with SanicReusableASGITestClient(sanic_app) as client:
+        yield client
 
 
 @pytest.fixture
@@ -312,4 +315,5 @@ def valid_resource_class_payload() -> dict[str, Any]:
 async def secrets_sanic_client(secrets_storage_app_config: SecretsConfig, users: list[UserInfo]) -> SanicASGITestClient:
     app = Sanic(secrets_storage_app_config.app_name)
     app = register_secrets_handlers(app, secrets_storage_app_config)
-    return SanicASGITestClient(app)
+    async with SanicReusableASGITestClient(app) as client:
+        yield client

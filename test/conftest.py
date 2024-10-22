@@ -36,6 +36,29 @@ def free_port() -> int:
         return port
 
 
+@pytest.fixture(scope="session")
+def authz_testing_server(free_port):
+    port = free_port
+    proc = subprocess.Popen(
+        [
+            "spicedb",
+            "serve-testing",
+            "--grpc-addr",
+            f":{port}",
+            "--readonly-grpc-enabled=false",
+            "--skip-release-check=true",
+            "--log-level=debug",
+        ]
+    )
+    yield port
+
+    try:
+        proc.terminate()
+    except Exception as err:
+        logging.error(f"Encountered error when shutting down Authzed DB for testing {err}")
+        proc.kill()
+
+
 @pytest.fixture
 def authz_config(monkeypatch, free_port) -> Iterator[AuthzConfig]:
     port = free_port
