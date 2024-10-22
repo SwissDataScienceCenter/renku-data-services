@@ -6,7 +6,7 @@ from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any, Optional
 
-from sqlalchemy import JSON, DateTime, Index, MetaData, String, text
+from sqlalchemy import JSON, DateTime, Identity, Integer, MetaData, String, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 from ulid import ULID
@@ -37,7 +37,7 @@ class EventORM(BaseORM):
 
     __tablename__ = "events"
 
-    id: Mapped[int] = mapped_column(primary_key=True, default=None, init=False)
+    id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, default=None, init=False)
     """Unique id of the event."""
 
     timestamp_utc: Mapped[datetime] = mapped_column("timestamp_utc", DateTime(timezone=False), nullable=False)
