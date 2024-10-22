@@ -1,5 +1,9 @@
+import typing
 from dataclasses import asdict
 from typing import Any
+
+from sanic import Request
+from sanic_testing.testing import ASGI_HOST, ASGI_PORT, SanicASGITestClient, TestingResponse
 
 import renku_data_services.base_models as base_models
 from renku_data_services.crc import models as rp_models
@@ -8,6 +12,69 @@ from renku_data_services.storage import models as storage_models
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users import models as user_preferences_models
 from renku_data_services.users.db import UserPreferencesRepository
+
+
+class SanicReusableASGITestClient(SanicASGITestClient):
+    """Reuasable async test client for sanic.
+
+    Sanic has 3 test clients, SanicTestClient (sync), SanicASGITestClient (async) and ReusableClient (sync).
+    The first two will drop all routes and server state before each request (!) and calculate all routes
+    again and execute server start code again (!), whereas the latter only does that once per client, but
+    isn't async. This can cost as much as 40% of test execution time.
+    This class is essentially a combination of SanicASGITestClient and ReuasbleClient.
+    """
+
+    set_up = False
+
+    async def __aenter__(self):
+        self.set_up = True
+        await self.run()
+        return self
+
+    async def __aexit__(self, *_):
+        self.set_up = False
+        await self.stop()
+
+    async def run(self):
+        self.sanic_app.router.reset()
+        self.sanic_app.signal_router.reset()
+        await self.sanic_app._startup()  # type: ignore
+        await self.sanic_app._server_event("init", "before")
+        await self.sanic_app._server_event("init", "after")
+        for route in self.sanic_app.router.routes:
+            if self._collect_request not in route.extra.request_middleware:
+                route.extra.request_middleware.appendleft(self._collect_request)
+        if self._collect_request not in self.sanic_app.request_middleware:
+            self.sanic_app.request_middleware.appendleft(
+                self._collect_request  # type: ignore
+            )
+
+    async def stop(self):
+        await self.sanic_app._server_event("shutdown", "before")
+        await self.sanic_app._server_event("shutdown", "after")
+
+    async def request(  # type: ignore
+        self, method, url, gather_request=True, *args, **kwargs
+    ) -> tuple[typing.Optional[Request], typing.Optional[TestingResponse]]:
+        if not self.set_up:
+            raise RuntimeError(
+                "Trying to call request without first entering context manager. Only use this class in a `with` block"
+            )
+
+        if not url.startswith(("http:", "https:", "ftp:", "ftps://", "//", "ws:", "wss:")):
+            url = url if url.startswith("/") else f"/{url}"
+            scheme = "ws" if method == "websocket" else "http"
+            url = f"{scheme}://{ASGI_HOST}:{ASGI_PORT}{url}"
+
+        self.gather_request = gather_request
+        # call SanicASGITestClient's parent request method
+        response = await super(SanicASGITestClient, self).request(method, url, *args, **kwargs)
+
+        response.__class__ = TestingResponse
+
+        if gather_request:
+            return self.last_request, response  # type: ignore
+        return None, response  # type: ignore
 
 
 def remove_id_from_quota(quota: rp_models.Quota) -> rp_models.Quota:
