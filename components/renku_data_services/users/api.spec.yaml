@@ -18,7 +18,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/UserWithId"
+                $ref: "#/components/schemas/SelfUserInfo"
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -342,6 +342,29 @@ components:
       items:
         $ref: "#/components/schemas/UserWithId"
       uniqueItems: true
+    SelfUserInfo:
+      description: Information about the currently logged in user
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/UserId"
+        username:
+          $ref: "#/components/schemas/Username"
+        email:
+          $ref: "#/components/schemas/UserEmail"
+        first_name:
+          $ref: "#/components/schemas/UserFirstLastName"
+        last_name:
+          $ref: "#/components/schemas/UserFirstLastName"
+        is_admin:
+          description: Whether the user is a platform administrator or not
+          type: boolean
+          default: false
+      required:
+        - id
+        - username
+        - is_admin
     UserSecretKey:
       type: object
       additionalProperties: false
