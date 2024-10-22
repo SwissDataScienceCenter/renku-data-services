@@ -3,7 +3,7 @@
 import logging
 from typing import Optional
 
-from sqlalchemy import BigInteger, Column, Integer, MetaData, String, Table
+from sqlalchemy import BigInteger, Column, Identity, Integer, MetaData, String, Table
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
 
@@ -49,7 +49,7 @@ class RPUserORM(BaseORM):
         default_factory=list,
         cascade="save-update, merge, delete",
     )
-    id: Mapped[int] = mapped_column(primary_key=True, init=False)
+    id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, init=False)
 
     @classmethod
     def load(cls, user: base_models.User) -> "RPUserORM":
@@ -76,7 +76,7 @@ class ResourceClassORM(BaseORM):
         ForeignKey("resource_pools.id", ondelete="CASCADE"), default=None, index=True
     )
     resource_pool: Mapped[Optional["ResourcePoolORM"]] = relationship(back_populates="classes", default=None)
-    id: Mapped[int] = mapped_column(primary_key=True, default=None, init=False)
+    id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, default=None, init=False)
     tolerations: Mapped[list["TolerationORM"]] = relationship(
         back_populates="resource_class",
         default_factory=list,
@@ -153,7 +153,7 @@ class ResourcePoolORM(BaseORM):
     hibernation_threshold: Mapped[Optional[int]] = mapped_column(default=None)
     default: Mapped[bool] = mapped_column(default=False, index=True)
     public: Mapped[bool] = mapped_column(default=False, index=True)
-    id: Mapped[int] = mapped_column("id", Integer, primary_key=True, default=None, init=False)
+    id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
 
     @classmethod
     def load(cls, resource_pool: models.ResourcePool) -> "ResourcePoolORM":
@@ -210,7 +210,7 @@ class TolerationORM(BaseORM):
     resource_class_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("resource_classes.id"), default=None, index=True
     )
-    id: Mapped[int] = mapped_column("id", Integer, primary_key=True, default=None, init=False)
+    id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
 
 
 class NodeAffintyORM(BaseORM):
@@ -225,7 +225,7 @@ class NodeAffintyORM(BaseORM):
         ForeignKey("resource_classes.id"), default=None, index=True
     )
     required_during_scheduling: Mapped[bool] = mapped_column(default=False)
-    id: Mapped[int] = mapped_column("id", Integer, primary_key=True, default=None, init=False)
+    id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
 
     @classmethod
     def load(cls, affinity: models.NodeAffinity) -> "NodeAffintyORM":
