@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional, Self, cast
 
-from sqlalchemy import CheckConstraint, DateTime, Index, MetaData, String, func
+from sqlalchemy import CheckConstraint, DateTime, Identity, Index, Integer, MetaData, String, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
 from ulid import ULID
@@ -193,7 +193,7 @@ class EntitySlugORM(BaseORM):
         ),
     )
 
-    id: Mapped[int] = mapped_column(primary_key=True, init=False)
+    id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, init=False)
     slug: Mapped[str] = mapped_column(String(99), index=True, nullable=False)
     project_id: Mapped[ULID | None] = mapped_column(
         ForeignKey(ProjectORM.id, ondelete="CASCADE", name="entity_slugs_project_id_fk"), index=True, nullable=True
@@ -236,7 +236,7 @@ class EntitySlugOldORM(BaseORM):
 
     __tablename__ = "entity_slugs_old"
 
-    id: Mapped[int] = mapped_column(primary_key=True, init=False)
+    id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, init=False)
     slug: Mapped[str] = mapped_column(String(99), index=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, index=True, init=False, server_default=func.now()

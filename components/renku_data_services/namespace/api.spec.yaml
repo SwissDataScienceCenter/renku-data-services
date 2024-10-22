@@ -231,6 +231,32 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - groups
+  /groups/{group_slug}/permissions:
+    parameters:
+      - in: path
+        name: group_slug
+        required: true
+        schema:
+          $ref: "#/components/schemas/Slug"
+    get:
+      summary: Get the permissions of the current user on the group
+      responses:
+        "200":
+          description: The set of permissions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupPermissions"
+        "404":
+          description: The group does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - groups
   /namespaces:
     get:
       summary: Get all namespaces
@@ -383,7 +409,8 @@ components:
       # - cannot end in .atom
       # - cannot contain any combination of two or more consecutive -._
       # - has to start with letter or number
-      pattern: '^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-zA-Z0-9][a-zA-Z0-9\-_.]*$'
+      # - cannot contain uppercase characters
+      pattern: '^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-z0-9][a-z0-9\-_.]*$'
       example: "a-slug-example"
     CreationDate:
       description: The date and time the resource was created (in UTC and ISO-8601 format)
@@ -534,6 +561,19 @@ components:
             description: A flag to filter groups where the user is a direct member.
             type: boolean
             default: false
+    GroupPermissions:
+      description: The set of permissions on a group
+      type: object
+      properties:
+        write:
+          description: The user can edit the group
+          type: boolean
+        delete:
+          description: The user can delete the group
+          type: boolean
+        change_membership:
+          description: The user can manage group members
+          type: boolean
     PaginationRequest:
       type: object
       additionalProperties: false

@@ -8,7 +8,7 @@ from test.bases.renku_data_services.data_api.utils import merge_headers
 
 
 @pytest.fixture
-def create_data_connector(sanic_client: SanicASGITestClient, regular_user, user_headers):
+def create_data_connector(sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers):
     async def create_data_connector_helper(
         name: str, user: UserInfo | None = None, headers: dict[str, str] | None = None, **payload
     ) -> dict[str, Any]:
@@ -18,7 +18,7 @@ def create_data_connector(sanic_client: SanicASGITestClient, regular_user, user_
             "name": name,
             "description": "A data connector",
             "visibility": "private",
-            "namespace": f"{user.first_name}.{user.last_name}",
+            "namespace": user.namespace.slug,
             "storage": {
                 "configuration": {
                     "type": "s3",
@@ -41,13 +41,13 @@ def create_data_connector(sanic_client: SanicASGITestClient, regular_user, user_
 
 
 @pytest.mark.asyncio
-async def test_post_data_connector(sanic_client: SanicASGITestClient, regular_user, user_headers) -> None:
+async def test_post_data_connector(sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers) -> None:
     payload = {
         "name": "My data connector",
         "slug": "my-data-connector",
         "description": "A data connector",
         "visibility": "public",
-        "namespace": f"{regular_user.first_name}.{regular_user.last_name}",
+        "namespace": regular_user.namespace.slug,
         "storage": {
             "configuration": {
                 "type": "s3",
@@ -96,13 +96,15 @@ async def test_post_data_connector(sanic_client: SanicASGITestClient, regular_us
 
 
 @pytest.mark.asyncio
-async def test_post_data_connector_with_s3_url(sanic_client: SanicASGITestClient, regular_user, user_headers) -> None:
+async def test_post_data_connector_with_s3_url(
+    sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers
+) -> None:
     payload = {
         "name": "My data connector",
         "slug": "my-data-connector",
         "description": "A data connector",
         "visibility": "public",
-        "namespace": f"{regular_user.first_name}.{regular_user.last_name}",
+        "namespace": regular_user.namespace.slug,
         "storage": {
             "storage_url": "s3://my-bucket",
             "target_path": "my/target",
@@ -132,14 +134,14 @@ async def test_post_data_connector_with_s3_url(sanic_client: SanicASGITestClient
 
 @pytest.mark.asyncio
 async def test_post_data_connector_with_azure_url(
-    sanic_client: SanicASGITestClient, regular_user, user_headers
+    sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers
 ) -> None:
     payload = {
         "name": "My data connector",
         "slug": "my-data-connector",
         "description": "A data connector",
         "visibility": "public",
-        "namespace": f"{regular_user.first_name}.{regular_user.last_name}",
+        "namespace": regular_user.namespace.slug,
         "storage": {
             "storage_url": "azure://mycontainer/myfolder",
             "target_path": "my/target",
@@ -192,9 +194,11 @@ async def test_post_data_connector_with_invalid_keywords(
 
 @pytest.mark.asyncio
 async def test_post_data_connector_with_invalid_namespace(
-    sanic_client: SanicASGITestClient, user_headers, member_1_user
+    sanic_client: SanicASGITestClient,
+    user_headers,
+    member_1_user: UserInfo,
 ) -> None:
-    namespace = f"{member_1_user.first_name}.{member_1_user.last_name}"
+    namespace = member_1_user.namespace.slug
     _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}", headers=user_headers)
     assert response.status_code == 200, response.text
 
@@ -594,9 +598,9 @@ async def test_patch_data_connector_namespace(
 
 @pytest.mark.asyncio
 async def test_patch_data_connector_with_invalid_namespace(
-    sanic_client: SanicASGITestClient, create_data_connector, user_headers, member_1_user
+    sanic_client: SanicASGITestClient, create_data_connector, user_headers, member_1_user: UserInfo
 ) -> None:
-    namespace = f"{member_1_user.first_name}.{member_1_user.last_name}"
+    namespace = member_1_user.namespace.slug
     _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}", headers=user_headers)
     assert response.status_code == 200, response.text
     data_connector = await create_data_connector("My data connector")
@@ -1183,3 +1187,61 @@ async def test_delete_data_connector_secrets(
 
     assert response.status_code == 200
     assert response.json == [], response.json
+
+
+@pytest.mark.asyncio
+async def test_get_project_permissions_unauthorized(
+    sanic_client, create_data_connector, admin_headers, admin_user, user_headers
+) -> None:
+    data_connector = await create_data_connector("My data connector", user=admin_user, headers=admin_headers)
+    data_connector_id = data_connector["id"]
+
+    _, response = await sanic_client.get(f"/api/data/projects/{data_connector_id}/permissions", headers=user_headers)
+
+    assert response.status_code == 404, response.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["viewer", "editor", "owner"])
+async def test_get_data_connector_permissions_cascading_from_group(
+    sanic_client: SanicASGITestClient,
+    create_data_connector,
+    admin_headers,
+    admin_user,
+    user_headers,
+    regular_user,
+    role,
+) -> None:
+    _, response = await sanic_client.post(
+        "/api/data/groups", headers=admin_headers, json={"name": "My Group", "slug": "my-group"}
+    )
+    assert response.status_code == 201, response.text
+    patch = [{"id": regular_user.id, "role": role}]
+    _, response = await sanic_client.patch("/api/data/groups/my-group/members", headers=admin_headers, json=patch)
+    assert response.status_code == 200, response.text
+    data_connector = await create_data_connector(
+        "My data connector", user=admin_user, headers=admin_headers, namespace="my-group"
+    )
+    data_connector_id = data_connector["id"]
+
+    expected_permissions = dict(
+        write=False,
+        delete=False,
+        change_membership=False,
+    )
+    if role == "editor" or role == "owner":
+        expected_permissions["write"] = True
+    if role == "owner":
+        expected_permissions["delete"] = True
+        expected_permissions["change_membership"] = True
+
+    _, response = await sanic_client.get(
+        f"/api/data/data_connectors/{data_connector_id}/permissions", headers=user_headers
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    permissions = response.json
+    assert permissions.get("write") == expected_permissions["write"]
+    assert permissions.get("delete") == expected_permissions["delete"]
+    assert permissions.get("change_membership") == expected_permissions["change_membership"]
