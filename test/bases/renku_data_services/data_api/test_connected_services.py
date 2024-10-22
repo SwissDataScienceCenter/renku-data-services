@@ -4,20 +4,23 @@ from typing import Any
 from urllib.parse import parse_qs, quote, urlparse
 
 import pytest
+import pytest_asyncio
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 
 from renku_data_services.app_config import Config
 from renku_data_services.connected_services.dummy_async_oauth2_client import DummyAsyncOAuth2Client
 from renku_data_services.data_api.app import register_all_handlers
+from test.utils import SanicReusableASGITestClient
 
 
-@pytest.fixture
-def oauth2_test_client(app_config: Config) -> SanicASGITestClient:
+@pytest_asyncio.fixture
+async def oauth2_test_client(app_config: Config) -> SanicASGITestClient:
     app_config.async_oauth2_client_class = DummyAsyncOAuth2Client
     app = Sanic(app_config.app_name)
     app = register_all_handlers(app, app_config)
-    return SanicASGITestClient(app)
+    async with SanicReusableASGITestClient(app) as client:
+        yield client
 
 
 @pytest.fixture

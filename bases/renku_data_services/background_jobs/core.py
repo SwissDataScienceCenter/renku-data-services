@@ -2,13 +2,16 @@
 
 import logging
 
-from authzed.api.v1.core_pb2 import ObjectReference, Relationship, RelationshipUpdate, SubjectReference
-from authzed.api.v1.permission_service_pb2 import (
+from authzed.api.v1 import (
     Consistency,
     LookupResourcesRequest,
+    ObjectReference,
     ReadRelationshipsRequest,
+    Relationship,
     RelationshipFilter,
+    RelationshipUpdate,
     SubjectFilter,
+    SubjectReference,
     WriteRelationshipsRequest,
 )
 from ulid import ULID
@@ -266,7 +269,7 @@ async def migrate_user_namespaces_make_all_public(config: SyncConfig) -> None:
         logger.info(f"Made user namespace {ns_id} public")
 
 
-async def migrate_storages_v2_to_data_connectors(config: SyncConfig) -> None:
+async def migrate_storages_v2_to_data_connectors(config: SyncConfig) -> list[BaseException]:
     """Move storages_v2 to data_connectors."""
     logger = logging.getLogger("background_jobs").getChild(migrate_storages_v2_to_data_connectors.__name__)
 
@@ -275,10 +278,11 @@ async def migrate_storages_v2_to_data_connectors(config: SyncConfig) -> None:
 
     if not storages_v2:
         logger.info("Nothing to do.")
-        return
+        return []
 
     logger.info(f"Migrating {len(storages_v2)} cloud storage v2 items to data connectors.")
     failed_storages: list[str] = []
+    errors: list[BaseException] = []
     for storage in storages_v2:
         try:
             data_connector = await config.data_connector_migration_tool.migrate_storage_v2(
@@ -290,7 +294,9 @@ async def migrate_storages_v2_to_data_connectors(config: SyncConfig) -> None:
             logger.error(f"Failed to migrate {storage.name}.")
             logger.error(err)
             failed_storages.append(str(storage.storage_id))
+            errors.append(err)
 
     logger.info(f"Migrated {len(storages_v2)-len(failed_storages)}/{len(storages_v2)} data connectors.")
     if failed_storages:
         logger.error(f"Migration failed for storages: {failed_storages}.")
+    return errors

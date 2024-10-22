@@ -7,7 +7,6 @@ info:
   version: v1
 servers:
   - url: /api/data
-  - url: /ui-server/api/data
 paths:
   /data_connectors:
     get:
@@ -155,6 +154,33 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DataConnector"
+        "404":
+          description: The data connector does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - data_connectors
+  /data_connectors/{data_connector_id}/permissions:
+    parameters:
+      - in: path
+        name: data_connector_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+        description: the ID of the data connector
+    get:
+      summary: Get the permissions of the current user on the data connector
+      responses:
+        "200":
+          description: The set of permissions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataConnectorPermissions"
         "404":
           description: The data connector does not exist
           content:
@@ -614,7 +640,8 @@ components:
       # - cannot end in .atom
       # - cannot contain any combination of two or more consecutive -._
       # - has to start with letter or number
-      pattern: '^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-zA-Z0-9][a-zA-Z0-9\-_.]*$'
+      # - cannot contain uppercase characters
+      pattern: '^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-z0-9][a-z0-9\-_.]*$'
       example: "a-slug-example"
     CreationDate:
       description: The date and time the resource was created (in UTC and ISO-8601 format)
@@ -686,6 +713,19 @@ components:
               description: A namespace, used as a filter.
               type: string
               default: ""
+    DataConnectorPermissions:
+      description: The set of permissions on a data connector
+      type: object
+      properties:
+        write:
+          description: The user can edit the data connector
+          type: boolean
+        delete:
+          description: The user can delete the data connector
+          type: boolean
+        change_membership:
+          description: The user can manage data connector members
+          type: boolean
     PaginationRequest:
       type: object
       additionalProperties: false
