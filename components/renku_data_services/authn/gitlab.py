@@ -2,10 +2,13 @@
 
 import contextlib
 import urllib.parse as parse
+from contextlib import suppress
 from dataclasses import dataclass
+from datetime import datetime
 
 import gitlab
 from sanic import Request
+from sanic.compat import Header
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
@@ -23,6 +26,7 @@ class GitlabAuthenticator:
     gitlab_url: str
 
     token_field: str = "Gitlab-Access-Token"
+    expires_at_field: str = "Gitlab-Access-Token-Expires-At"
 
     def __post_init__(self) -> None:
         """Properly set gitlab url."""
@@ -36,19 +40,20 @@ class GitlabAuthenticator:
         if self.token_field != "Authorization":  # nosec: B105
             access_token = str(request.headers.get(self.token_field))
 
-        result = await self._get_gitlab_api_user(access_token)
+        result = await self._get_gitlab_api_user(access_token, request.headers)
         return result
 
-    async def _get_gitlab_api_user(self, access_token: str) -> base_models.APIUser:
+    async def _get_gitlab_api_user(self, access_token: str, headers: Header) -> base_models.APIUser:
         """Get and validate a Gitlab API User."""
         client = gitlab.Gitlab(self.gitlab_url, oauth_token=access_token)
-        try:
+        with suppress(gitlab.GitlabAuthenticationError):
             client.auth()  # needed for the user property to be set
-        except gitlab.GitlabAuthenticationError:
-            raise errors.UnauthorizedError(message="User not authorized with Gitlab")
+        if client.user is None:
+            # The user is not authenticated with Gitlab so we send out an empty APIUser
+            # Anonymous Renku users will not be able to authenticate with Gitlab
+            return base_models.APIUser()
+
         user = client.user
-        if user is None:
-            raise errors.UnauthorizedError(message="User not authorized with Gitlab")
 
         if user.state != "active":
             raise errors.ForbiddenError(message="User isn't active in Gitlab")
@@ -69,12 +74,18 @@ class GitlabAuthenticator:
             if len(name_parts) >= 1:
                 last_name = " ".join(name_parts)
 
+        expires_at: datetime | None = None
+        expires_at_raw: str | None = headers.get(self.expires_at_field)
+        if expires_at_raw is not None and len(expires_at_raw) > 0:
+            with suppress(ValueError):
+                expires_at = datetime.fromtimestamp(float(expires_at_raw))
+
         return base_models.APIUser(
-            is_admin=False,
             id=str(user_id),
             access_token=access_token,
             first_name=first_name,
             last_name=last_name,
             email=email,
             full_name=full_name,
+            access_token_expires_at=expires_at,
         )

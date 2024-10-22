@@ -60,7 +60,7 @@ class BaseStorageRepository(_Base):
             stmt = select(schemas.CloudStorageORM)
 
             if project_id is not None:
-                stmt = stmt.where(schemas.CloudStorageORM.project_id == project_id)
+                stmt = stmt.where(schemas.CloudStorageORM.project_id == str(project_id))
             if id is not None:
                 stmt = stmt.where(schemas.CloudStorageORM.storage_id == id)
             if name is not None:
@@ -105,7 +105,9 @@ class BaseStorageRepository(_Base):
             session.add(orm)
         return orm.dump()
 
-    async def update_storage(self, storage_id: ULID, user: base_models.APIUser, **kwargs: dict) -> models.CloudStorage:
+    async def update_storage(
+        self, storage_id: ULID, user: base_models.APIUser, **kwargs: dict
+    ) -> models.CloudStorage:
         """Update a cloud storage entry."""
         async with self.session_maker() as session, session.begin():
             res = await session.execute(

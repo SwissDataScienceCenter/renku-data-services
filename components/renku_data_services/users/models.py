@@ -4,7 +4,7 @@ import json
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, NamedTuple
 
@@ -230,7 +230,7 @@ class UnsavedUserInfo:
 
         return {
             "id": self.id,
-            "createdTimestamp": int(datetime.utcnow().timestamp() * 1000),
+            "createdTimestamp": int(datetime.now(UTC).timestamp() * 1000),
             "username": self.email,
             "enabled": True,
             "emailVerified": False,
