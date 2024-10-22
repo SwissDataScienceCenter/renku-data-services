@@ -63,13 +63,14 @@ class KCUsersBP(CustomBlueprint):
             if not user_info:
                 raise errors.MissingResourceError(message=f"The user with ID {user.id} cannot be found.")
             return validated_json(
-                apispec.UserWithId,
+                apispec.SelfUserInfo,
                 dict(
                     id=user_info.id,
                     username=user_info.namespace.slug,
                     email=user_info.email,
                     first_name=user_info.first_name,
                     last_name=user_info.last_name,
+                    is_admin=user.is_admin,
                 ),
             )
 

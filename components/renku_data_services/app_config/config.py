@@ -9,6 +9,7 @@ a single connection will be reused. This allows for the configuration classes to
 instantiated multiple times without creating multiple database connections.
 """
 
+import functools
 import os
 import secrets
 from dataclasses import dataclass, field
@@ -186,7 +187,14 @@ class Config:
     )
     _data_connector_secret_repo: DataConnectorSecretRepository | None = field(default=None, repr=False, init=False)
 
-    def __post_init__(self) -> None:
+    @staticmethod
+    @functools.cache
+    def load_apispec() -> dict[str, Any]:
+        """Load apispec with caching.
+
+        Note: loading these files takes quite some time and is repeated for each test. Having
+        them cached in this method reduces that time significantly.
+        """
         # NOTE: Read spec files required for Swagger
         spec_file = Path(renku_data_services.crc.__file__).resolve().parent / "api.spec.yaml"
         with open(spec_file) as f:
@@ -232,7 +240,7 @@ class Config:
         with open(spec_file) as f:
             data_connectors = safe_load(f)
 
-        self.spec = merge_api_specs(
+        return merge_api_specs(
             crc_spec,
             storage_spec,
             users,
@@ -245,6 +253,9 @@ class Config:
             search,
             data_connectors,
         )
+
+    def __post_init__(self) -> None:
+        self.spec = self.load_apispec()
 
         if self.default_resource_pool_file is not None:
             with open(self.default_resource_pool_file) as f:
