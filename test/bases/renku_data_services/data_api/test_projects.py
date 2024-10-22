@@ -158,7 +158,7 @@ async def test_project_creation_with_invalid_namespace(sanic_client, user_header
 
 @pytest.mark.asyncio
 async def test_project_creation_with_conflicting_slug(sanic_client, user_headers, regular_user) -> None:
-    namespace = f"{regular_user.first_name}.{regular_user.last_name}"
+    namespace = regular_user.namespace.slug
     payload = {
         "name": "Existing project",
         "namespace": namespace,
