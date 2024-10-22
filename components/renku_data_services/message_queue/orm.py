@@ -6,7 +6,7 @@ from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any, Optional
 
-from sqlalchemy import JSON, DateTime, Identity, Integer, MetaData, String, text
+from sqlalchemy import JSON, DateTime, Identity, Index, Integer, MetaData, String, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 from ulid import ULID
