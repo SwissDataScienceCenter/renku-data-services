@@ -8,7 +8,7 @@ from test.bases.renku_data_services.data_api.utils import merge_headers
 
 
 @pytest.fixture
-def create_data_connector(sanic_client: SanicASGITestClient, regular_user, user_headers):
+def create_data_connector(sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers):
     async def create_data_connector_helper(
         name: str, user: UserInfo | None = None, headers: dict[str, str] | None = None, **payload
     ) -> dict[str, Any]:
@@ -18,7 +18,7 @@ def create_data_connector(sanic_client: SanicASGITestClient, regular_user, user_
             "name": name,
             "description": "A data connector",
             "visibility": "private",
-            "namespace": f"{user.first_name}.{user.last_name}",
+            "namespace": user.namespace.slug,
             "storage": {
                 "configuration": {
                     "type": "s3",
@@ -41,13 +41,13 @@ def create_data_connector(sanic_client: SanicASGITestClient, regular_user, user_
 
 
 @pytest.mark.asyncio
-async def test_post_data_connector(sanic_client: SanicASGITestClient, regular_user, user_headers) -> None:
+async def test_post_data_connector(sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers) -> None:
     payload = {
         "name": "My data connector",
         "slug": "my-data-connector",
         "description": "A data connector",
         "visibility": "public",
-        "namespace": f"{regular_user.first_name}.{regular_user.last_name}",
+        "namespace": regular_user.namespace.slug,
         "storage": {
             "configuration": {
                 "type": "s3",
@@ -96,13 +96,15 @@ async def test_post_data_connector(sanic_client: SanicASGITestClient, regular_us
 
 
 @pytest.mark.asyncio
-async def test_post_data_connector_with_s3_url(sanic_client: SanicASGITestClient, regular_user, user_headers) -> None:
+async def test_post_data_connector_with_s3_url(
+    sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers
+) -> None:
     payload = {
         "name": "My data connector",
         "slug": "my-data-connector",
         "description": "A data connector",
         "visibility": "public",
-        "namespace": f"{regular_user.first_name}.{regular_user.last_name}",
+        "namespace": regular_user.namespace.slug,
         "storage": {
             "storage_url": "s3://my-bucket",
             "target_path": "my/target",
@@ -132,14 +134,14 @@ async def test_post_data_connector_with_s3_url(sanic_client: SanicASGITestClient
 
 @pytest.mark.asyncio
 async def test_post_data_connector_with_azure_url(
-    sanic_client: SanicASGITestClient, regular_user, user_headers
+    sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers
 ) -> None:
     payload = {
         "name": "My data connector",
         "slug": "my-data-connector",
         "description": "A data connector",
         "visibility": "public",
-        "namespace": f"{regular_user.first_name}.{regular_user.last_name}",
+        "namespace": regular_user.namespace.slug,
         "storage": {
             "storage_url": "azure://mycontainer/myfolder",
             "target_path": "my/target",
@@ -192,9 +194,11 @@ async def test_post_data_connector_with_invalid_keywords(
 
 @pytest.mark.asyncio
 async def test_post_data_connector_with_invalid_namespace(
-    sanic_client: SanicASGITestClient, user_headers, member_1_user
+    sanic_client: SanicASGITestClient,
+    user_headers,
+    member_1_user: UserInfo,
 ) -> None:
-    namespace = f"{member_1_user.first_name}.{member_1_user.last_name}"
+    namespace = member_1_user.namespace.slug
     _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}", headers=user_headers)
     assert response.status_code == 200, response.text
 
@@ -594,9 +598,9 @@ async def test_patch_data_connector_namespace(
 
 @pytest.mark.asyncio
 async def test_patch_data_connector_with_invalid_namespace(
-    sanic_client: SanicASGITestClient, create_data_connector, user_headers, member_1_user
+    sanic_client: SanicASGITestClient, create_data_connector, user_headers, member_1_user: UserInfo
 ) -> None:
-    namespace = f"{member_1_user.first_name}.{member_1_user.last_name}"
+    namespace = member_1_user.namespace.slug
     _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}", headers=user_headers)
     assert response.status_code == 200, response.text
     data_connector = await create_data_connector("My data connector")

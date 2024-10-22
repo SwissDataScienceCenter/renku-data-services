@@ -118,7 +118,7 @@ class ProjectRepository:
         async with self.session_maker() as session:
             stmt = select(schemas.ProjectORM)
             stmt = _filter_by_namespace_slug(stmt, namespace)
-            stmt = stmt.where(ns_schemas.EntitySlugORM.slug == slug.lower())
+            stmt = stmt.where(schemas.ProjectORM.slug.has(ns_schemas.EntitySlugORM.slug == slug))
             result = await session.execute(stmt)
             project_orm = result.scalars().first()
 

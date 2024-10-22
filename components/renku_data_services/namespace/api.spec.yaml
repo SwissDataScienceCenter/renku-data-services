@@ -409,7 +409,8 @@ components:
       # - cannot end in .atom
       # - cannot contain any combination of two or more consecutive -._
       # - has to start with letter or number
-      pattern: '^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-zA-Z0-9][a-zA-Z0-9\-_.]*$'
+      # - cannot contain uppercase characters
+      pattern: '^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-z0-9][a-z0-9\-_.]*$'
       example: "a-slug-example"
     CreationDate:
       description: The date and time the resource was created (in UTC and ISO-8601 format)

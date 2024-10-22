@@ -5,6 +5,7 @@ from base64 import b64decode
 from typing import Any
 
 import pytest
+from sqlalchemy import select
 from ulid import ULID
 
 from components.renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
@@ -28,14 +29,14 @@ def get_project(sanic_client, user_headers, admin_headers):
 
 
 @pytest.mark.asyncio
-async def test_project_creation(sanic_client, user_headers, regular_user, app_config) -> None:
+async def test_project_creation(sanic_client, user_headers, regular_user: UserInfo, app_config) -> None:
     payload = {
         "name": "Renku Native Project",
         "slug": "project-slug",
         "description": "First Renku native project",
         "visibility": "public",
         "repositories": ["http://renkulab.io/repository-1", "http://renkulab.io/repository-2"],
-        "namespace": f"{regular_user.first_name}.{regular_user.last_name}",
+        "namespace": regular_user.namespace.slug,
         "keywords": ["keyword 1", "keyword.2", "keyword-3", "KEYWORD_4"],
     }
 
@@ -95,14 +96,16 @@ async def test_project_creation(sanic_client, user_headers, regular_user, app_co
     project = response.json
     assert project["name"] == "Renku Native Project"
     assert project["slug"] == "project-slug"
-    assert project["namespace"] == f"{regular_user.first_name.lower()}.{regular_user.last_name.lower()}"
+    assert project["namespace"] == regular_user.namespace.slug
 
 
 @pytest.mark.asyncio
-async def test_project_creation_with_default_values(sanic_client, user_headers, regular_user, get_project) -> None:
+async def test_project_creation_with_default_values(
+    sanic_client, user_headers, regular_user: UserInfo, get_project
+) -> None:
     payload = {
         "name": "Project with Default Values",
-        "namespace": f"{regular_user.first_name}.{regular_user.last_name}",
+        "namespace": regular_user.namespace.slug,
     }
 
     _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
@@ -138,8 +141,8 @@ async def test_create_project_with_invalid_keywords(sanic_client, user_headers, 
 
 
 @pytest.mark.asyncio
-async def test_project_creation_with_invalid_namespace(sanic_client, user_headers, member_1_user) -> None:
-    namespace = f"{member_1_user.first_name}.{member_1_user.last_name}"
+async def test_project_creation_with_invalid_namespace(sanic_client, user_headers, member_1_user: UserInfo) -> None:
+    namespace = member_1_user.namespace.slug
     _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}", headers=user_headers)
     assert response.status_code == 200, response.text
     payload = {
@@ -487,8 +490,10 @@ async def test_cannot_patch_without_if_match_header(create_project, get_project,
 
 
 @pytest.mark.asyncio
-async def test_patch_project_invalid_namespace(create_project, sanic_client, user_headers, member_1_user) -> None:
-    namespace = f"{member_1_user.first_name}.{member_1_user.last_name}"
+async def test_patch_project_invalid_namespace(
+    create_project, sanic_client, user_headers, member_1_user: UserInfo
+) -> None:
+    namespace = member_1_user.namespace.slug
     _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}", headers=user_headers)
     assert response.status_code == 200, response.text
     project = await create_project("Project 1")
@@ -909,3 +914,62 @@ async def test_get_project_permissions_cascading_from_group(
     assert permissions.get("write") == expected_permissions["write"]
     assert permissions.get("delete") == expected_permissions["delete"]
     assert permissions.get("change_membership") == expected_permissions["change_membership"]
+
+
+@pytest.mark.asyncio
+async def test_project_slug_case(
+    app_config: Config,
+    create_project,
+    create_group,
+    sanic_client,
+    user_headers,
+) -> None:
+    from renku_data_services.project.orm import ProjectORM
+
+    group = await create_group("group1")
+    project = await create_project("Project 1", namespace=group["slug"], slug="project-1")
+    project_id = project["id"]
+    # Cannot create projects with upper case slug
+    payload = {
+        "name": "Normal project",
+        "namespace": group["slug"],
+    }
+    _, res = await sanic_client.post("/api/data/projects", json=payload, headers=user_headers)
+    assert res.status_code == 201
+    payload["slug"] = "SlugWithUppercase"
+    _, res = await sanic_client.post("/api/data/projects", json=payload, headers=user_headers)
+    assert res.status_code == 422
+    # Cannot patch project with upper case slug
+    payload = {"slug": "sOmEsLuG"}
+    if_match_headers = {"If-Match": "*"}
+    _, res = await sanic_client.patch(
+        f"/api/data/projects/{project_id}", json=payload, headers={**if_match_headers, **user_headers}
+    )
+    assert res.status_code == 422
+    # Change the slug of the project to be upper case in the DB
+    uppercase_slug = "NEW_project_SLUG"
+    async with app_config.db.async_session_maker() as session, session.begin():
+        stmt = select(ProjectORM).where(ProjectORM.id == project_id)
+        proj_orm = await session.scalar(stmt)
+        assert proj_orm is not None
+        proj_orm.slug.slug = uppercase_slug
+    # You should still be able to do everything to this project now
+    # Get the project
+    _, res = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
+    assert res.status_code == 200
+    assert res.json.get("slug") == uppercase_slug
+    etag = res.headers["ETag"]
+    # Get it by the namespace
+    _, res = await sanic_client.get(f"/api/data/projects/{group['slug']}/{uppercase_slug}", headers=user_headers)
+    assert res.status_code == 200
+    assert res.json.get("slug") == uppercase_slug
+    # Patch the project
+    new_name = "new-name"
+    _, res = await sanic_client.patch(
+        f"/api/data/projects/{project_id}",
+        json={"name": new_name},
+        headers={"If-Match": etag, **user_headers},
+    )
+    assert res.status_code == 200
+    assert res.json["slug"] == uppercase_slug
+    assert res.json["name"] == new_name
