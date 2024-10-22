@@ -350,7 +350,7 @@ class ServerCache(Generic[_SessionType]):
 
     def __init__(self, url: str, server_type: type[_SessionType]):
         self.url = url
-        self.client = httpx.AsyncClient()
+        self.client = httpx.AsyncClient(timeout=10)
         self.server_type: type[_SessionType] = server_type
         self.url_path_name = "servers"
         if server_type == AmaltheaSessionV1Alpha1:
