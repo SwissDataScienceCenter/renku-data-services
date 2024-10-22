@@ -10,9 +10,16 @@ from schemathesis.hooks import HookContext
 from schemathesis.specs.openapi.schemas import BaseOpenAPISchema
 
 
+class _RequestsStatistics(list):
+    """Subclass of list to avoid polluting schemathesis logs with data points."""
+
+    def __repr__(self):
+        return f"RequestsStatistics(len={len(self)})"
+
+
 @pytest.fixture(scope="session")
 def requests_statistics():
-    stats = []
+    stats = _RequestsStatistics()
     yield stats
 
     if len(stats) < 2:
