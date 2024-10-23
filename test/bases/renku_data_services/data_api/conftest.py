@@ -160,8 +160,8 @@ def unauthorized_headers() -> dict[str, str]:
     return {"Authorization": "Bearer {}"}
 
 
-@pytest.fixture
-def bootstrap_admins(app_config: Config, db_instance, authz_instance, event_loop, admin_user: UserInfo) -> None:
+@pytest_asyncio.fixture
+async def bootstrap_admins(app_config: Config, db_instance, authz_instance, event_loop, admin_user: UserInfo) -> None:
     authz = app_config.authz
     rels: list[RelationshipUpdate] = []
     sub = SubjectReference(object=_AuthzConverter.user(admin_user.id))
@@ -171,7 +171,7 @@ def bootstrap_admins(app_config: Config, db_instance, authz_instance, event_loop
             relationship=Relationship(resource=_AuthzConverter.platform(), relation="admin", subject=sub),
         )
     )
-    authz.client.WriteRelationships(WriteRelationshipsRequest(updates=rels))
+    await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=rels))
 
 
 @pytest_asyncio.fixture(scope="session")

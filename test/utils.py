@@ -284,8 +284,13 @@ class SanicReusableASGITestClient(SanicASGITestClient):
             )
 
     async def stop(self):
-        await self.sanic_app._server_event("shutdown", "before")
-        await self.sanic_app._server_event("shutdown", "after")
+        try:
+            await self.sanic_app._server_event("shutdown", "before")
+            await self.sanic_app._server_event("shutdown", "after")
+        except:
+            # NOTE: there are some race conditions in sanic when stopping that can cause errors. We ignore errors
+            # here as otherwise failures in teardown can cause other session scoped fixtures to fail
+            pass
 
     async def request(  # type: ignore
         self, method, url, gather_request=True, *args, **kwargs
