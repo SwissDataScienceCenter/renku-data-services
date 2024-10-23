@@ -26,7 +26,7 @@ from test.bases.renku_data_services.background_jobs.test_sync import get_kc_user
 from test.utils import SanicReusableASGITestClient
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def admin_user() -> UserInfo:
     return UserInfo(
         id="admin",
@@ -39,7 +39,7 @@ def admin_user() -> UserInfo:
     )
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def regular_user() -> UserInfo:
     return UserInfo(
         id="user",
@@ -52,7 +52,7 @@ def regular_user() -> UserInfo:
     )
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def member_1_user() -> UserInfo:
     return UserInfo(
         id="member-1",
@@ -69,7 +69,7 @@ def member_1_user() -> UserInfo:
     )
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def member_2_user() -> UserInfo:
     return UserInfo(
         id="member-2",
@@ -86,13 +86,13 @@ def member_2_user() -> UserInfo:
     )
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def project_members(member_1_user: UserInfo, member_2_user: UserInfo) -> list[dict[str, str]]:
     """List of a project's members."""
     return [{"id": member_1_user.id, "role": "viewer"}, {"id": member_2_user.id, "role": "owner"}]
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def users(admin_user, regular_user, member_1_user, member_2_user) -> list[UserInfo]:
     return [
         admin_user,
@@ -161,7 +161,7 @@ def unauthorized_headers() -> dict[str, str]:
 
 
 @pytest.fixture
-def bootstrap_admins(app_config: Config, admin_user: UserInfo) -> None:
+def bootstrap_admins(app_config: Config, db_instance, authz_instance, event_loop, admin_user: UserInfo) -> None:
     authz = app_config.authz
     rels: list[RelationshipUpdate] = []
     sub = SubjectReference(object=_AuthzConverter.user(admin_user.id))
@@ -174,10 +174,8 @@ def bootstrap_admins(app_config: Config, admin_user: UserInfo) -> None:
     authz.client.WriteRelationships(WriteRelationshipsRequest(updates=rels))
 
 
-@pytest_asyncio.fixture
-async def sanic_app_no_migrations(
-    app_config: Config, users: list[UserInfo], bootstrap_admins, admin_user: UserInfo
-) -> Sanic:
+@pytest_asyncio.fixture(scope="session")
+async def sanic_app_no_migrations(app_config: Config, users: list[UserInfo], admin_user: UserInfo) -> Sanic:
     app_config.kc_api = DummyKeycloakAPI(users=get_kc_users(users), user_roles={admin_user.id: ["renku-admin"]})
     app = Sanic(app_config.app_name)
     app = register_all_handlers(app, app_config)
@@ -187,25 +185,21 @@ async def sanic_app_no_migrations(
     return app
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="session")
 async def sanic_client_no_migrations(sanic_app_no_migrations: Sanic) -> SanicASGITestClient:
     async with SanicReusableASGITestClient(sanic_app_no_migrations) as client:
         yield client
 
 
 @pytest_asyncio.fixture
-async def sanic_app(sanic_app_no_migrations: Sanic, app_config: Config) -> Sanic:
+async def sanic_client(
+    sanic_client_no_migrations: SanicASGITestClient, app_config, bootstrap_admins, db_instance, authz_instance
+) -> SanicASGITestClient:
     run_migrations_for_app("common")
     await app_config.kc_user_repo.initialize(app_config.kc_api)
     await sync_admins_from_keycloak(app_config.kc_api, app_config.authz)
     await app_config.group_repo.generate_user_namespaces()
-    return sanic_app_no_migrations
-
-
-@pytest_asyncio.fixture
-async def sanic_client(sanic_app: Sanic) -> SanicASGITestClient:
-    async with SanicReusableASGITestClient(sanic_app) as client:
-        yield client
+    return sanic_client_no_migrations
 
 
 @pytest.fixture

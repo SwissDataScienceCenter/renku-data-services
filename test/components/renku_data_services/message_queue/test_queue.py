@@ -13,7 +13,7 @@ from renku_data_services.utils.core import with_db_transaction
 
 
 @pytest.mark.asyncio
-async def test_queue_send(app_config, monkeypatch) -> None:
+async def test_queue_send(app_config, db_instance, authz_instance) -> None:
     """Test that sending messages works."""
     run_migrations_for_app("common")
 

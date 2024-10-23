@@ -19,7 +19,6 @@ def config_dummy_fixture(monkeypatch):
     # all things once at the beginning of hte tests. So we reset it here so that it does not affect
     # subsequent tests.
     DBConfig.dispose_connection()
-    DBConfig._async_engine = None
 
 
 def test_config_dummy(config_dummy_fixture: conf.Config) -> None:
@@ -74,7 +73,6 @@ def config_no_dummy_fixture(monkeypatch, secrets_key_pair, tmp_path):
     # all things once at the beginning of hte tests. So we reset it here so that it does not affect
     # subsequent tests.
     DBConfig.dispose_connection()
-    DBConfig._async_engine = None
 
 
 @pytest.mark.skip(reason="Re-enable when the k8s cluster for CI is fully setup")  # TODO: address in followup PR

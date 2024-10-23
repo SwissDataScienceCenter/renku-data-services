@@ -24,7 +24,7 @@ regular_user2 = APIUser(is_admin=False, id="user2-id", access_token="some-token2
 
 
 @pytest_asyncio.fixture
-async def bootstrap_admins(app_config: Config) -> None:
+async def bootstrap_admins(app_config: Config, db_instance, authz_instance, event_loop) -> None:
     run_migrations_for_app("common")
     authz = app_config.authz
     admins = [admin_user]

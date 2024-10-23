@@ -28,7 +28,12 @@ async def test_unique_migration_head() -> None:
 
 @pytest.mark.asyncio
 async def test_upgrade_downgrade_cycle(
-    app_config: Config, sanic_client_no_migrations: SanicASGITestClient, admin_headers: dict, admin_user: UserInfo
+    app_config: Config,
+    sanic_client_no_migrations: SanicASGITestClient,
+    db_instance,
+    authz_instance,
+    admin_headers: dict,
+    admin_user: UserInfo,
 ) -> None:
     # Migrate to head and create a project
     run_migrations_for_app("common", "head")
@@ -49,7 +54,7 @@ async def test_upgrade_downgrade_cycle(
     # NOTE: The engine has to be disposed otherwise it caches the postgres types (i.e. enums)
     # from previous migrations and then trying to create a project below fails with the message
     # cache postgres lookup failed for type XXXX.
-    await app_config.db._async_engine.dispose()
+    await app_config.db.current._async_engine.dispose()
     await app_config.kc_user_repo.initialize(app_config.kc_api)
     await app_config.group_repo.generate_user_namespaces()
     _, res = await sanic_client_no_migrations.post("/api/data/projects", headers=admin_headers, json=payload)
