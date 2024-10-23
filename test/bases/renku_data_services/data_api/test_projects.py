@@ -157,6 +157,27 @@ async def test_project_creation_with_invalid_namespace(sanic_client, user_header
 
 
 @pytest.mark.asyncio
+async def test_project_creation_with_conflicting_slug(sanic_client, user_headers, regular_user) -> None:
+    namespace = regular_user.namespace.slug
+    payload = {
+        "name": "Existing project",
+        "namespace": namespace,
+        "slug": "my-project",
+    }
+    _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    payload = {
+        "name": "Conflicting project",
+        "namespace": namespace,
+        "slug": "my-project",
+    }
+    _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
+
+    assert response.status_code == 409, response.text
+
+
+@pytest.mark.asyncio
 async def test_get_a_project(create_project, get_project) -> None:
     # Create some projects
     await create_project("Project 1")
