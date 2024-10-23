@@ -259,10 +259,10 @@ class SessionLogsResponse(RootModel[Optional[Dict[str, str]]]):
 
 
 class SessionCloudStoragePost(BaseAPISpec):
-    configuration: Dict[str, Any]
-    readonly: bool = True
-    source_path: str
-    target_path: str
+    configuration: Optional[Dict[str, Any]] = None
+    readonly: Optional[bool] = None
+    source_path: Optional[str] = None
+    target_path: Optional[str] = None
     storage_id: str = Field(
         ...,
         description="ULID identifier",

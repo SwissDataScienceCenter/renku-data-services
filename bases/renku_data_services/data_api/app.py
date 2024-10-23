@@ -151,6 +151,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         rp_repo=config.rp_repo,
         data_connector_repo=config.data_connector_repo,
         data_connector_project_link_repo=config.data_connector_to_project_link_repo,
+        data_connector_secret_repo=config.data_connector_secret_repo,
         internal_gitlab_authenticator=config.gitlab_authenticator,
     )
     platform_config = PlatformConfigBP(

@@ -1,10 +1,10 @@
 """Adapters for data connectors database classes."""
 
-from collections.abc import Callable
-from typing import TypeVar
+from collections.abc import AsyncIterator, Callable
+from typing import TypeVar, cast
 
 from cryptography.hazmat.primitives.asymmetric import rsa
-from sqlalchemy import Select, delete, func, select
+from sqlalchemy import Select, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
@@ -477,11 +477,74 @@ class DataConnectorSecretRepository:
         data_connector_repo: DataConnectorRepository,
         user_repo: UserRepo,
         secret_service_public_key: rsa.RSAPublicKey,
+        authz: Authz,
     ) -> None:
         self.session_maker = session_maker
         self.data_connector_repo = data_connector_repo
         self.user_repo = user_repo
         self.secret_service_public_key = secret_service_public_key
+        self.authz = authz
+
+    async def get_data_connectors_with_secrets(
+        self,
+        user: base_models.APIUser,
+        project_id: ULID,
+    ) -> AsyncIterator[models.DataConnectorWithSecrets]:
+        """Get all data connectors and their secrets for a project."""
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        can_read_project = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
+        if not can_read_project:
+            raise errors.MissingResourceError(
+                message=f"The project ID with {project_id} does not exist or you dont have permission to access it"
+            )
+
+        async with self.session_maker() as session:
+            stmt = (
+                select(schemas.DataConnectorORM, schemas.DataConnectorSecretORM)
+                .select_from(schemas.DataConnectorORM)  # NOTE: Makes sure the FROM statement is as expected
+                .join(
+                    target=schemas.DataConnectorToProjectLinkORM,
+                    onclause=schemas.DataConnectorORM.id == schemas.DataConnectorToProjectLinkORM.data_connector_id,
+                )
+                .join(
+                    target=schemas.DataConnectorSecretORM,
+                    onclause=schemas.DataConnectorORM.id == schemas.DataConnectorSecretORM.data_connector_id,
+                    isouter=True,  # NOTE: enables us to select data connectors with and without secrets
+                )
+                .where(schemas.DataConnectorToProjectLinkORM.project_id == project_id)
+                .where(
+                    or_(
+                        schemas.DataConnectorSecretORM.user_id == user.id,
+                        # NOTE: the user_id field on a connector secret is non-nullable, but
+                        # since we are doing an outer join this allows us to include data connectors
+                        # without secrets.
+                        schemas.DataConnectorSecretORM.user_id.is_(None),
+                    )
+                )
+                # NOTE: The order is important for the processing of the data below
+                .order_by(schemas.DataConnectorORM.id)
+                .order_by(schemas.DataConnectorSecretORM.secret_id)
+            )
+            results = await session.stream(stmt)
+            dc_current: models.DataConnector | None = None
+            dc_secrets: list[models.DataConnectorSecret] = []
+            async for res in results:
+                # NOTE: sqlalchemy does not set the types right for outer joins
+                dc, sec = cast(tuple[schemas.DataConnectorORM, schemas.DataConnectorSecretORM | None], res.t)
+                if dc_current is not None and dc.id != dc_current.id:
+                    yield models.DataConnectorWithSecrets(dc_current, dc_secrets)
+                if dc_current is None or dc.id != dc_current.id:
+                    dc_current = dc.dump()
+                    dc_secrets = [sec.dump()] if sec else []
+                    continue
+                if sec:
+                    dc_secrets.append(sec.dump())
+            if dc_current is None:
+                # There are no data connectors at all returned from the DB
+                return
+            yield models.DataConnectorWithSecrets(dc_current, dc_secrets)
 
     async def get_data_connector_secrets(
         self,
