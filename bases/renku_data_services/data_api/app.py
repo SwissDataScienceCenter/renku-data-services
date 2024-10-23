@@ -16,7 +16,7 @@ from renku_data_services.crc.blueprints import (
     UserResourcePoolsBP,
 )
 from renku_data_services.data_connectors.blueprints import DataConnectorsBP
-from renku_data_services.message_queue.blueprints import SearchBP
+from renku_data_services.message_queue.blueprints import MessageQueueBP
 from renku_data_services.namespace.blueprints import GroupsBP
 from renku_data_services.platform.blueprints import PlatformConfigBP
 from renku_data_services.project.blueprints import ProjectsBP
@@ -136,13 +136,12 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         platform_repo=config.platform_repo,
         authenticator=config.authenticator,
     )
-    search = SearchBP(
+    message_queue = MessageQueueBP(
         name="search",
         url_prefix=url_prefix,
         authenticator=config.authenticator,
         session_maker=config.db.async_session_maker,
         reprovisioning_repo=config.reprovisioning_repo,
-        event_repo=config.event_repo,
         user_repo=config.kc_user_repo,
         group_repo=config.group_repo,
         project_repo=config.project_repo,
@@ -177,7 +176,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
             oauth2_connections.blueprint(),
             repositories.blueprint(),
             platform_config.blueprint(),
-            search.blueprint(),
+            message_queue.blueprint(),
             data_connectors.blueprint(),
         ]
     )
