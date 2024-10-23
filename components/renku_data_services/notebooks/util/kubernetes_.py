@@ -62,9 +62,9 @@ def renku_2_make_server_name(safe_username: str, project_id: str, launcher_id: s
     # Must be no more than 63 characters because the name is used to create a k8s Service and Services
     # have more restrictions for their names beacuse their names have to make a valid hostname.
     # NOTE: We use server name as a label value, so, server name must be less than 63 characters.
-    # !NOTE: For now we limit the server name to a max of 42 characters.
-    # NOTE: This is 12 + 9 + 21 = 42 characters
-    return f"{prefix[:12]}-renku-2-{server_hash[:21]}"
+    # !NOTE: For now we limit the server name to a max of 25 characters.
+    # NOTE: This is 12 + 1 + 12 = 25 characters
+    return f"{prefix[:12]}-{server_hash[:12]}"
 
 
 def find_env_var(container: V1Container, env_name: str) -> tuple[int, str] | None:

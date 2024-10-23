@@ -1,7 +1,7 @@
 .PHONY: schemas tests test_setup main_tests schemathesis_tests collect_coverage style_checks pre_commit_checks run download_avro check_avro avro_models update_avro k3d_cluster install_amaltheas all
 
-AMALTHEA_JS_VERSION ?= 0.12.2
-AMALTHEA_SESSIONS_VERSION ?= 0.0.10-new-operator-chart
+AMALTHEA_JS_VERSION ?= 0.13.0
+AMALTHEA_SESSIONS_VERSION ?= 0.13.0
 codegen_params = --input-file-type openapi --output-model-type pydantic_v2.BaseModel --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --set-default-enum-member --openapi-scopes schemas paths parameters --set-default-enum-member --use-one-literal-as-default --use-default
 
 define test_apispec_up_to_date
@@ -166,5 +166,5 @@ install_amaltheas:  ## Installs both version of amalthea in the. NOTE: It uses t
 
 # TODO: Add the version variables from the top of the file here when the charts are fully published
 amalthea_schema:  ## Updates generates pydantic classes from CRDs
-	curl https://raw.githubusercontent.com/SwissDataScienceCenter/amalthea/feat-add-cloud-storage/config/crd/bases/amalthea.dev_amaltheasessions.yaml | yq '.spec.versions[0].schema.openAPIV3Schema' | poetry run datamodel-codegen --input-file-type jsonschema --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/notebooks/cr_amalthea_session.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.notebooks.cr_base.BaseCRD --allow-extra-fields --use-default-kwarg
+	curl https://raw.githubusercontent.com/SwissDataScienceCenter/amalthea/main/config/crd/bases/amalthea.dev_amaltheasessions.yaml | yq '.spec.versions[0].schema.openAPIV3Schema' | poetry run datamodel-codegen --input-file-type jsonschema --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/notebooks/cr_amalthea_session.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.notebooks.cr_base.BaseCRD --allow-extra-fields --use-default-kwarg
 	curl https://raw.githubusercontent.com/SwissDataScienceCenter/amalthea/main/controller/crds/jupyter_server.yaml | yq '.spec.versions[0].schema.openAPIV3Schema' | poetry run datamodel-codegen --input-file-type jsonschema --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/notebooks/cr_jupyter_server.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.notebooks.cr_base.BaseCRD --allow-extra-fields --use-default-kwarg

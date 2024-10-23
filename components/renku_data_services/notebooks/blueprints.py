@@ -40,6 +40,7 @@ from renku_data_services.notebooks.api.schemas.servers_get import (
 )
 from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.notebooks.crs import (
+    Affinity,
     AmaltheaSessionSpec,
     AmaltheaSessionV1Alpha1,
     Authentication,
@@ -62,6 +63,7 @@ from renku_data_services.notebooks.crs import (
     State,
     Storage,
     TlsSecret,
+    Toleration,
 )
 from renku_data_services.notebooks.errors.intermittent import AnonymousUserPatchError
 from renku_data_services.notebooks.util.kubernetes_ import (
@@ -319,18 +321,19 @@ class NotebooksNewBP(CustomBlueprint):
                     )
                 if csr.target_path is not None and not PurePosixPath(csr.target_path).is_absolute():
                     csr.target_path = (work_dir / csr.target_path).as_posix()
-                if csr_id in dcs_secrets and csr.configuration is not None:
-                    raise errors.ValidationError(
-                        message=f"Overriding the storage configuration for storage with ID {csr_id} "
-                        "is not allowed because the storage has an associated saved secret.",
-                    )
+                # TODO: The UI always does this check if it is acceptable/safe
+                # if csr_id in dcs_secrets and csr.configuration is not None:
+                #     raise errors.ValidationError(
+                #         message=f"Overriding the storage configuration for storage with ID {csr_id} "
+                #         "is not allowed because the storage has an associated saved secret.",
+                #     )
                 dcs[csr_id] = dcs[csr_id].with_override(csr)
             repositories = [Repository(url=i) for i in project.repositories]
             secrets_to_create: list[V1Secret] = []
             # Generate the cloud starge secrets
             data_sources: list[DataSource] = []
             for cs_id, cs in dcs.items():
-                secret_name = f"{server_name}-ds-{cs_id}"
+                secret_name = f"{server_name}-ds-{cs_id.lower()}"
                 secrets_to_create.append(cs.secret(secret_name, self.nb_config.k8s_client.preferred_namespace))
                 data_sources.append(
                     DataSource(mountPath=cs.mount_folder, secretRef=SecretRefWhole(name=secret_name, adopt=True))
@@ -435,6 +438,12 @@ class NotebooksNewBP(CustomBlueprint):
                         else [],
                     ),
                     dataSources=data_sources,
+                    tolerations=[
+                        Toleration.model_validate(toleration) for toleration in self.nb_config.sessions.tolerations
+                    ],
+                    affinity=Affinity.model_validate(self.nb_config.sessions.affinity)
+                    if len(self.nb_config.sessions.affinity.keys()) > 0
+                    else None,
                 ),
             )
             parsed_proxy_url = urlparse(urljoin(base_server_url + "/", "oauth2"))
@@ -485,7 +494,7 @@ class NotebooksNewBP(CustomBlueprint):
                 headers = {"Authorization": f"bearer {user.access_token}"}
                 for s_id, secrets in dcs_secrets.items():
                     request_data = {
-                        "name": f"{server_name}-ds-{s_id}-secrets",
+                        "name": f"{server_name}-ds-{s_id.lower()}-secrets",
                         "namespace": self.nb_config.k8s_v2_client.preferred_namespace,
                         "secret_ids": [str(secret.secret_id) for secret in secrets],
                         "owner_references": [owner_reference],
