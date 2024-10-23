@@ -62,3 +62,4 @@ class DBConfig:
 
         if DBConfig._async_engine:
             asyncio.get_event_loop().run_until_complete(DBConfig._async_engine.dispose())
+            DBConfig._async_engine = None

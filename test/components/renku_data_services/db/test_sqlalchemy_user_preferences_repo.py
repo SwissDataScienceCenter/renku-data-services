@@ -16,7 +16,7 @@ from test.utils import create_user_preferences
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_user_preferences_insert_get(
-    project_slug: str, app_config: Config, loggedin_user: base_models.APIUser
+    project_slug: str, app_config: Config, db_instance, authz_instance, loggedin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     user_preferences_repo = app_config.user_preferences_repo
@@ -30,7 +30,7 @@ async def test_user_preferences_insert_get(
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None, max_examples=25)
 @pytest.mark.asyncio
 async def test_user_preferences_add_pinned_project(
-    project_slugs: list[str], app_config: Config, loggedin_user: base_models.APIUser
+    project_slugs: list[str], app_config: Config, db_instance, authz_instance, loggedin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     target(len(project_slugs))
@@ -53,7 +53,7 @@ async def test_user_preferences_add_pinned_project(
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None, max_examples=25)
 @pytest.mark.asyncio
 async def test_user_preferences_add_pinned_project_existing(
-    project_slugs: list[str], app_config: Config, loggedin_user: base_models.APIUser
+    project_slugs: list[str], app_config: Config, db_instance, authz_instance, loggedin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     target(len(project_slugs))
@@ -77,7 +77,7 @@ async def test_user_preferences_add_pinned_project_existing(
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None, max_examples=25)
 @pytest.mark.asyncio
 async def test_user_preferences_delete_pinned_project(
-    project_slugs: list[str], app_config: Config, loggedin_user: base_models.APIUser
+    project_slugs: list[str], app_config: Config, db_instance, authz_instance, loggedin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     target(len(project_slugs))
@@ -102,7 +102,7 @@ async def test_user_preferences_delete_pinned_project(
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None, max_examples=25)
 @pytest.mark.asyncio
 async def test_user_preferences_add_pinned_project_respects_maximum(
-    project_slugs: list[str], app_config: Config, loggedin_user: base_models.APIUser
+    project_slugs: list[str], app_config: Config, db_instance, authz_instance, loggedin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     target(len(project_slugs))
