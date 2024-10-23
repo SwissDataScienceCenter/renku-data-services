@@ -13,7 +13,6 @@ from renku_data_services.authz.models import Member, Role, Visibility
 from renku_data_services.base_api.auth import (
     authenticate,
     only_authenticated,
-    validate_path_project_id,
     validate_path_user_id,
 )
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
@@ -81,12 +80,11 @@ class ProjectsBP(CustomBlueprint):
         """Get a specific project."""
 
         @authenticate(self.authenticator)
-        @validate_path_project_id
         @extract_if_none_match
         async def _get_one(
-            _: Request, user: base_models.APIUser, project_id: str, etag: str | None
+            _: Request, user: base_models.APIUser, project_id: ULID, etag: str | None
         ) -> JSONResponse | HTTPResponse:
-            project = await self.project_repo.get_project(user=user, project_id=ULID.from_str(project_id))
+            project = await self.project_repo.get_project(user=user, project_id=project_id)
 
             if project.etag is not None and project.etag == etag:
                 return HTTPResponse(status=304)
@@ -205,20 +203,17 @@ class ProjectsBP(CustomBlueprint):
             await self.project_member_repo.delete_members(user, project_id, [member_id])
             return HTTPResponse(status=204)
 
-        return "/projects/<project_id>/members/<member_id>", ["DELETE"], _delete_member
+        return "/projects/<project_id:ulid>/members/<member_id>", ["DELETE"], _delete_member
 
     def get_permissions(self) -> BlueprintFactoryResponse:
         """Get the permissions of the current user on the project."""
 
         @authenticate(self.authenticator)
-        @validate_path_project_id
-        async def _get_permissions(_: Request, user: base_models.APIUser, project_id: str) -> JSONResponse:
-            permissions = await self.project_repo.get_project_permissions(
-                user=user, project_id=ULID.from_str(project_id)
-            )
+        async def _get_permissions(_: Request, user: base_models.APIUser, project_id: ULID) -> JSONResponse:
+            permissions = await self.project_repo.get_project_permissions(user=user, project_id=project_id)
             return validated_json(apispec.ProjectPermissions, permissions)
 
-        return "/projects/<project_id>/permissions", ["GET"], _get_permissions
+        return "/projects/<project_id:ulid>/permissions", ["GET"], _get_permissions
 
     @staticmethod
     def _dump_project(project: project_models.Project) -> dict[str, Any]:
