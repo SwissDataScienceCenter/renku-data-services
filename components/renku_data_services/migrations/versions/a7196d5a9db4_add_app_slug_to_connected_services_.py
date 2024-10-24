@@ -1,7 +1,7 @@
 """add app_slug to connected services client
 
 Revision ID: a7196d5a9db4
-Revises: 9058bf0a1a12
+Revises: cefb45b5d71e
 Create Date: 2024-08-21 08:40:09.933371
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "a7196d5a9db4"
-down_revision = "9058bf0a1a12"
+down_revision = "cefb45b5d71e"
 branch_labels = None
 depends_on = None
 
