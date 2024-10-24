@@ -13,6 +13,7 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+import uvloop
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from hypothesis import settings
@@ -30,6 +31,10 @@ settings.register_profile("ci", deadline=400, max_examples=5)
 settings.register_profile("dev", deadline=200, max_examples=5)
 
 settings.load_profile(os.getenv("HYPOTHESIS_PROFILE", "dev"))
+
+# there are some cases where sanic inadvertently sets the loop policy to uvloop
+# This can cause issues if the main loop isn't an uvloop loop, so we force the use of uvloop
+asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 
 @pytest.fixture(scope="session")
