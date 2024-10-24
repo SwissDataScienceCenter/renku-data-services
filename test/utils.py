@@ -266,7 +266,6 @@ class SanicReusableASGITestClient(SanicASGITestClient):
         return self
 
     async def __aexit__(self, *_):
-        self.set_up = False
         await self.stop()
 
     async def run(self):
@@ -284,6 +283,7 @@ class SanicReusableASGITestClient(SanicASGITestClient):
             )
 
     async def stop(self):
+        self.set_up = False
         try:
             await self.sanic_app._server_event("shutdown", "before")
             await self.sanic_app._server_event("shutdown", "after")
