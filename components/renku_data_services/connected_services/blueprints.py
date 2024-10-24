@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import unquote, urlparse, urlunparse
 
 from sanic import HTTPResponse, Request, json, redirect
 from sanic.log import logger
@@ -43,6 +43,7 @@ class OAuth2ClientsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _get_one(_: Request, user: base_models.APIUser, provider_id: str) -> JSONResponse:
+            provider_id = unquote(provider_id)
             client = await self.connected_services_repo.get_oauth2_client(provider_id=provider_id, user=user)
             return validated_json(apispec.Provider, client)
 
@@ -69,6 +70,7 @@ class OAuth2ClientsBP(CustomBlueprint):
         async def _patch(
             _: Request, user: base_models.APIUser, provider_id: str, body: apispec.ProviderPatch
         ) -> JSONResponse:
+            provider_id = unquote(provider_id)
             body_dict = body.model_dump(exclude_none=True)
             client = await self.connected_services_repo.update_oauth2_client(
                 user=user, provider_id=provider_id, **body_dict
@@ -83,6 +85,7 @@ class OAuth2ClientsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         async def _delete(_: Request, user: base_models.APIUser, provider_id: str) -> HTTPResponse:
+            provider_id = unquote(provider_id)
             await self.connected_services_repo.delete_oauth2_client(user=user, provider_id=provider_id)
             return HTTPResponse(status=204)
 
@@ -97,6 +100,7 @@ class OAuth2ClientsBP(CustomBlueprint):
         async def _authorize(
             request: Request, user: base_models.APIUser, provider_id: str, query: AuthorizeParams
         ) -> HTTPResponse:
+            provider_id = unquote(provider_id)
             callback_url = self._get_callback_url(request)
             url = await self.connected_services_repo.authorize_client(
                 provider_id=provider_id, user=user, callback_url=callback_url, next_url=query.next_url

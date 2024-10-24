@@ -77,11 +77,12 @@ class ConnectedServicesRepository:
         if not user.is_admin:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
+        provider_id = base_models.Slug.from_name(new_client.id).value
         encrypted_client_secret = (
             encrypt_string(self.encryption_key, user.id, new_client.client_secret) if new_client.client_secret else None
         )
         client = schemas.OAuth2ClientORM(
-            id=new_client.id,
+            id=provider_id,
             kind=new_client.kind,
             app_slug=new_client.app_slug or "",
             client_id=new_client.client_id,
