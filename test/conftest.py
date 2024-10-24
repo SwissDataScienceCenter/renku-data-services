@@ -6,12 +6,13 @@ import os
 import secrets
 import socket
 import subprocess
-from collections.abc import Generator, Iterator
+from collections.abc import AsyncGenerator, Generator, Iterator
 from multiprocessing import Lock
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
+import pytest_asyncio
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from hypothesis import settings
@@ -108,8 +109,8 @@ def authz_config(monkeypatch, free_port) -> Iterator[AuthzConfig]:
         proc.kill()
 
 
-@pytest.fixture
-def db_config(monkeypatch, worker_id, authz_config) -> Iterator[DBConfig]:
+@pytest_asyncio.fixture
+async def db_config(monkeypatch, worker_id, authz_config) -> AsyncGenerator[DBConfig, None]:
     db_name = str(ULID()).lower() + "_" + worker_id
     user = os.getenv("DB_USER", "renku")
     host = os.getenv("DB_HOST", "127.0.0.1")
@@ -128,11 +129,11 @@ def db_config(monkeypatch, worker_id, authz_config) -> Iterator[DBConfig]:
         template_dbname="renku_template",
     ):
         yield DBConfig.from_env()
-        DBConfig.dispose_connection()
+        await DBConfig.dispose_connection()
 
 
-@pytest.fixture
-def db_instance(monkeysession, worker_id, app_config, event_loop) -> Iterator[DBConfig]:
+@pytest_asyncio.fixture
+async def db_instance(monkeysession, worker_id, app_config, event_loop) -> AsyncGenerator[DBConfig, None]:
     db_name = str(ULID()).lower() + "_" + worker_id
     user = os.getenv("DB_USER", "renku")
     host = os.getenv("DB_HOST", "127.0.0.1")
@@ -152,7 +153,7 @@ def db_instance(monkeysession, worker_id, app_config, event_loop) -> Iterator[DB
         db = DBConfig.from_env()
         app_config.db.push(db)
         yield db
-        app_config.db.pop()
+        await app_config.db.pop()
 
 
 @pytest.fixture

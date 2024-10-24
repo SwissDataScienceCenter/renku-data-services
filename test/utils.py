@@ -95,9 +95,9 @@ class DBConfigStack:
     def push(self, config: DBConfig) -> None:
         self.stack.append(config)
 
-    def pop(self) -> DBConfig:
+    async def pop(self) -> DBConfig:
         config = self.stack.pop()
-        DBConfig.dispose_connection()
+        await DBConfig.dispose_connection()
         return config
 
 
@@ -287,7 +287,7 @@ class SanicReusableASGITestClient(SanicASGITestClient):
         try:
             await self.sanic_app._server_event("shutdown", "before")
             await self.sanic_app._server_event("shutdown", "after")
-        except:
+        except:  # noqa: E722
             # NOTE: there are some race conditions in sanic when stopping that can cause errors. We ignore errors
             # here as otherwise failures in teardown can cause other session scoped fixtures to fail
             pass

@@ -1,7 +1,7 @@
 import secrets
 from unittest.mock import MagicMock
 
-import pytest
+import pytest_asyncio
 
 import renku_data_services.app_config.config as conf
 from renku_data_services.authn.dummy import DummyAuthenticator
@@ -10,15 +10,15 @@ from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClie
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 
 
-@pytest.fixture
-def config_dummy_fixture(monkeypatch):
+@pytest_asyncio.fixture
+async def config_dummy_fixture(monkeypatch):
     monkeypatch.setenv("DUMMY_STORES", "true")
     monkeypatch.setenv("VERSION", "9.9.9")
     yield conf.Config.from_env()
     # NOTE: _async_engine is a class variable and it persist across tests because pytest loads
     # all things once at the beginning of hte tests. So we reset it here so that it does not affect
     # subsequent tests.
-    DBConfig.dispose_connection()
+    await DBConfig.dispose_connection()
 
 
 def test_config_dummy(config_dummy_fixture: conf.Config) -> None:
@@ -34,8 +34,8 @@ def test_config_dummy(config_dummy_fixture: conf.Config) -> None:
     assert config.version == "9.9.9"
 
 
-@pytest.fixture
-def config_no_dummy_fixture(monkeypatch, secrets_key_pair, tmp_path):
+@pytest_asyncio.fixture
+async def config_no_dummy_fixture(monkeypatch, secrets_key_pair, tmp_path):
     encryption_key_path = tmp_path / "encryption-key"
     encryption_key_path.write_bytes(secrets.token_bytes(32))
 
@@ -72,7 +72,7 @@ def config_no_dummy_fixture(monkeypatch, secrets_key_pair, tmp_path):
     # NOTE: _async_engine is a class variable and it persist across tests because pytest loads
     # all things once at the beginning of hte tests. So we reset it here so that it does not affect
     # subsequent tests.
-    DBConfig.dispose_connection()
+    await DBConfig.dispose_connection()
 
 
 @pytest.mark.skip(reason="Re-enable when the k8s cluster for CI is fully setup")  # TODO: address in followup PR

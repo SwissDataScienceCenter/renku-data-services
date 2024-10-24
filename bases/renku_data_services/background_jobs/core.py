@@ -111,7 +111,7 @@ async def fix_mismatched_project_namespace_ids(config: SyncConfig) -> None:
             project = await config.project_repo.get_project(api_user, project_id)
         except errors.MissingResourceError:
             logging.info(f"Couldn't find project {project_id}, deleting relation")
-            authz.client.WriteRelationships(
+            await authz.client.WriteRelationships(
                 WriteRelationshipsRequest(
                     updates=[
                         RelationshipUpdate(
@@ -132,7 +132,7 @@ async def fix_mismatched_project_namespace_ids(config: SyncConfig) -> None:
                 f"The project namespace ID in Authzed {authzed_group_id} "
                 f"does not match the expected group ID {correct_group_id}, correcting it..."
             )
-            authz.client.WriteRelationships(
+            await authz.client.WriteRelationships(
                 WriteRelationshipsRequest(
                     updates=[
                         RelationshipUpdate(
