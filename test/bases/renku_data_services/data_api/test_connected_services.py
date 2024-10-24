@@ -145,6 +145,50 @@ async def test_post_oauth2_provider(sanic_client: SanicASGITestClient, admin_hea
 
 
 @pytest.mark.asyncio
+async def test_post_oauth2_provider_removes_spaces_in_id(sanic_client: SanicASGITestClient, admin_headers) -> None:
+    payload = {
+        "id": "some provider",
+        "kind": "gitlab",
+        "client_id": "some-client-id",
+        "client_secret": "some-client-secret",
+        "display_name": "Some external service",
+        "scope": "api",
+        "url": "https://example.org",
+        "use_pkce": False,
+    }
+
+    _, res = await sanic_client.post("/api/data/oauth2/providers", headers=admin_headers, json=payload)
+
+    assert res.status_code == 201, res.text
+    assert res.json is not None
+    assert res.json.get("id") == "some-provider"
+    assert res.json.get("kind") == "gitlab"
+    assert res.json.get("client_id") == "some-client-id"
+    assert res.json.get("client_secret") == "redacted"
+    assert res.json.get("display_name") == "Some external service"
+    assert res.json.get("scope") == "api"
+    assert res.json.get("url") == "https://example.org"
+
+
+@pytest.mark.asyncio
+async def test_post_oauth2_provider_something(sanic_client: SanicASGITestClient, admin_headers) -> None:
+    payload = {
+        "id": "__$%#$@#$__",
+        "kind": "gitlab",
+        "client_id": "some-client-id",
+        "client_secret": "some-client-secret",
+        "display_name": "Some external service",
+        "scope": "api",
+        "url": "https://example.org",
+        "use_pkce": False,
+    }
+
+    _, res = await sanic_client.post("/api/data/oauth2/providers", headers=admin_headers, json=payload)
+
+    assert res.status_code == 422, res.text
+
+
+@pytest.mark.asyncio
 async def test_post_oauth2_provider_unauthorized(sanic_client: SanicASGITestClient, user_headers) -> None:
     payload = {
         "id": "some-provider",
