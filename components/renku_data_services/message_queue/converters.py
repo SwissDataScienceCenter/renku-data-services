@@ -52,7 +52,9 @@ class _ProjectEventConverter:
                 )
 
     @staticmethod
-    def to_events(project: project_models.Project, event_type: EventType) -> list[Event]:
+    def to_events(
+        project: project_models.Project | project_models.DeletedProject, event_type: EventType
+    ) -> list[Event]:
         if project.id is None:
             raise errors.EventError(
                 message=f"Cannot create an event of type {event_type} for a project which has no ID"
@@ -60,6 +62,7 @@ class _ProjectEventConverter:
         project_id_str = str(project.id)
         match event_type:
             case v2.ProjectCreated:
+                project = cast(project_models.Project, project)
                 return [
                     make_event(
                         "project.created",
@@ -86,6 +89,7 @@ class _ProjectEventConverter:
                     ),
                 ]
             case v2.ProjectUpdated:
+                project = cast(project_models.Project, project)
                 return [
                     make_event(
                         "project.updated",
@@ -109,7 +113,9 @@ class _ProjectEventConverter:
 
 class _UserEventConverter:
     @staticmethod
-    def to_events(user: user_models.UserInfo | user_models.UserInfoUpdate | str, event_type: EventType) -> list[Event]:
+    def to_events(
+        user: user_models.UserInfo | user_models.UserInfoUpdate | user_models.DeletedUser, event_type: EventType
+    ) -> list[Event]:
         match event_type:
             case v2.UserAdded | events.InsertUserNamespace:
                 user = cast(user_models.UserInfo, user)
@@ -126,8 +132,8 @@ class _UserEventConverter:
                     )
                 ]
             case v2.UserRemoved:
-                user = cast(user_models.UserInfo, user)
-                return [make_event("user.removed", v2.UserRemoved(id=user.id))]
+                deleted_user = cast(user_models.DeletedUser, user)
+                return [make_event("user.removed", v2.UserRemoved(id=deleted_user.id))]
             case events.UpdateOrInsertUser:
                 user = cast(user_models.UserInfoUpdate, user)
                 if user.old is None:
@@ -280,7 +286,7 @@ class _GroupAuthzEventConverter:
 
 class _GroupEventConverter:
     @staticmethod
-    def to_events(group: group_models.Group, event_type: EventType) -> list[Event]:
+    def to_events(group: group_models.Group | group_models.DeletedGroup, event_type: EventType) -> list[Event]:
         if group.id is None:
             raise errors.ProgrammingError(
                 message="Cannot send group events to the message queue for a group that does not have an ID"
@@ -288,6 +294,7 @@ class _GroupEventConverter:
         group_id = str(group.id)
         match event_type:
             case v2.GroupAdded:
+                group = cast(group_models.Group, group)
                 return [
                     make_event(
                         "group.added",
@@ -304,9 +311,8 @@ class _GroupEventConverter:
                         ),
                     ),
                 ]
-            case v2.GroupRemoved:
-                return [make_event("group.removed", v2.GroupRemoved(id=group_id))]
             case v2.GroupUpdated:
+                group = cast(group_models.Group, group)
                 return [
                     make_event(
                         "group.updated",
@@ -315,6 +321,8 @@ class _GroupEventConverter:
                         ),
                     )
                 ]
+            case v2.GroupRemoved:
+                return [make_event("group.removed", v2.GroupRemoved(id=group_id))]
             case _:
                 raise errors.ProgrammingError(
                     message=f"Received an unknown event type {event_type} when generating group events"
@@ -334,22 +342,28 @@ class EventConverter:
             return []
 
         match event_type:
-            case v2.ProjectCreated | v2.ProjectRemoved:
+            case v2.ProjectCreated:
                 project = cast(project_models.Project, input)
                 return _ProjectEventConverter.to_events(project, event_type)
             case v2.ProjectUpdated:
                 project_update = cast(project_models.ProjectUpdate, input)
                 project = project_update.new
                 return _ProjectEventConverter.to_events(project, event_type)
+            case v2.ProjectRemoved:
+                deleted_project = cast(project_models.DeletedProject, input)
+                return _ProjectEventConverter.to_events(deleted_project, event_type)
             case events.ProjectMembershipChanged:
                 project_authz = cast(list[authz_models.MembershipChange], input)
                 return _ProjectAuthzEventConverter.to_events(project_authz)
             case v2.ProjectMemberAdded:
                 project_member = cast(authz_models.Member, input)
                 return _ProjectAuthzEventConverter.to_events_from_event_type(project_member, event_type)
-            case v2.GroupAdded | v2.GroupUpdated | v2.GroupRemoved:
+            case v2.GroupAdded | v2.GroupUpdated:
                 group = cast(group_models.Group, input)
                 return _GroupEventConverter.to_events(group, event_type)
+            case v2.GroupRemoved:
+                deleted_group = cast(group_models.DeletedGroup, input)
+                return _GroupEventConverter.to_events(deleted_group, event_type)
             case events.GroupMembershipChanged:
                 group_authz = cast(list[authz_models.MembershipChange], input)
                 return _GroupAuthzEventConverter.to_events(group_authz)
@@ -360,8 +374,8 @@ class EventConverter:
                 user_with_namespace = cast(user_models.UserInfo, input)
                 return _UserEventConverter.to_events(user_with_namespace, event_type)
             case v2.UserRemoved:
-                user_info = cast(user_models.UserInfo, input)
-                return _UserEventConverter.to_events(user_info, event_type)
+                deleted_user = cast(user_models.DeletedUser, input)
+                return _UserEventConverter.to_events(deleted_user, event_type)
             case events.UpdateOrInsertUser:
                 user_with_namespace_update = cast(user_models.UserInfoUpdate, input)
                 return _UserEventConverter.to_events(user_with_namespace_update, event_type)
