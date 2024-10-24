@@ -143,3 +143,11 @@ class DataConnectorPermissions:
     write: bool
     delete: bool
     change_membership: bool
+
+
+@dataclass
+class DataConnectorWithSecrets:
+    """A data connector with its secrets."""
+
+    data_connector: DataConnector
+    secrets: list[DataConnectorSecret] = field(default_factory=list)

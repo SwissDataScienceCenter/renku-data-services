@@ -3,7 +3,7 @@
 from configparser import ConfigParser
 from io import StringIO
 from pathlib import PurePosixPath
-from typing import Any, Final, Optional, Self
+from typing import Any, Final, Optional, Protocol, Self
 
 from kubernetes import client
 from marshmallow import EXCLUDE, Schema, ValidationError, fields, validates_schema
@@ -34,6 +34,15 @@ class RCloneStorageRequest(Schema):
         """Validate a storage request."""
         if data.get("storage_id") and (data.get("source_path") or data.get("target_path")):
             raise ValidationError("'storage_id' cannot be used together with 'source_path' or 'target_path'")
+
+
+class RCloneStorageRequestOverride(Protocol):
+    """A small dataclass for handling overrides to the data connector requests."""
+
+    source_path: str | None = None
+    target_path: str | None = None
+    configuration: dict[str, Any] | None = None
+    readonly: bool | None = None
 
 
 class RCloneStorage(ICloudStorageRequest):
@@ -220,6 +229,17 @@ class RCloneStorage(ICloudStorageRequest):
         stringio = StringIO()
         parser.write(stringio)
         return stringio.getvalue()
+
+    def with_override(self, override: RCloneStorageRequestOverride) -> "RCloneStorage":
+        """Override certain fields on the storage."""
+        return RCloneStorage(
+            source_path=override.source_path if override.source_path else self.source_path,
+            mount_folder=override.target_path if override.target_path else self.mount_folder,
+            readonly=override.readonly if override.readonly is not None else self.readonly,
+            configuration=override.configuration if override.configuration else self.configuration,
+            name=self.name,
+            config=self.config,
+        )
 
 
 class LaunchNotebookResponseCloudStorage(RCloneStorageRequest):

@@ -1016,7 +1016,6 @@ components:
           additionalProperties: true
         readonly:
           type: boolean
-          default: true
         source_path:
           type: string
         target_path:
@@ -1026,9 +1025,6 @@ components:
             - "$ref": "#/components/schemas/Ulid"
             - description: The storage ID is used to know which storage config from the DB should be overriden
       required:
-        - configuration
-        - source_path
-        - target_path
         - storage_id
     ServerName:
       type: string
