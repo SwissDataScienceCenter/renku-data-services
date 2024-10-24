@@ -137,6 +137,7 @@ async def test_post_oauth2_provider(sanic_client: SanicASGITestClient, admin_hea
     assert res.json is not None
     assert res.json.get("id") == "some-provider"
     assert res.json.get("kind") == "gitlab"
+    assert res.json.get("app_slug") == ""
     assert res.json.get("client_id") == "some-client-id"
     assert res.json.get("client_secret") == "redacted"
     assert res.json.get("display_name") == "Some external service"
@@ -211,6 +212,7 @@ async def test_patch_oauth2_provider(sanic_client: SanicASGITestClient, admin_he
     provider_id = provider["id"]
 
     payload = {
+        "app_slug": "my-new-example",
         "display_name": "New display name",
         "scope": "read write",
         "url": "https://my-new-example.org",
@@ -220,6 +222,7 @@ async def test_patch_oauth2_provider(sanic_client: SanicASGITestClient, admin_he
 
     assert res.status_code == 200, res.text
     assert res.json is not None
+    assert res.json.get("app_slug") == "my-new-example"
     assert res.json.get("display_name") == "New display name"
     assert res.json.get("scope") == "read write"
     assert res.json.get("url") == "https://my-new-example.org"
@@ -368,3 +371,52 @@ async def test_get_account(oauth2_test_client: SanicASGITestClient, user_headers
     account = res.json
     assert account.get("username") == "USERNAME"
     assert account.get("web_url") == "https://example.org/USERNAME"
+
+
+@pytest.mark.asyncio
+async def test_get_installations_gitlab(
+    oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_connection
+):
+    connection = await create_oauth2_connection("provider_1")
+    connection_id = connection["id"]
+
+    _, res = await oauth2_test_client.get(
+        f"/api/data/oauth2/connections/{connection_id}/installations", headers=user_headers
+    )
+
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    installations_list = res.json
+    assert installations_list == []
+    assert res.headers is not None
+    assert res.headers.get("page") == "1"
+    assert res.headers.get("per-page") == "20"
+    assert res.headers.get("total") == "0"
+    assert res.headers.get("total-pages") == "0"  # NOTE: this looks like a bug in pagination?
+
+
+@pytest.mark.asyncio
+async def test_get_installations_github(
+    oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_connection
+):
+    connection = await create_oauth2_connection("provider_1", kind="github")
+    connection_id = connection["id"]
+
+    _, res = await oauth2_test_client.get(
+        f"/api/data/oauth2/connections/{connection_id}/installations", headers=user_headers
+    )
+
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    installations_list = res.json
+    assert len(installations_list) == 1
+    installation = installations_list[0]
+    assert isinstance(installation.get("id"), int)
+    assert installation.get("id") > 0
+    assert installation.get("account_login") == "USERNAME"
+    assert installation.get("repository_selection") == "all"
+    assert res.headers is not None
+    assert res.headers.get("page") == "1"
+    assert res.headers.get("per-page") == "20"
+    assert res.headers.get("total") == "1"
+    assert res.headers.get("total-pages") == "1"
