@@ -161,7 +161,9 @@ def unauthorized_headers() -> dict[str, str]:
 
 
 @pytest_asyncio.fixture
-async def bootstrap_admins(app_config: Config, db_instance, authz_instance, event_loop, admin_user: UserInfo) -> None:
+async def bootstrap_admins(
+    sanic_client_with_migrations, app_config: Config, db_instance, authz_instance, event_loop, admin_user: UserInfo
+) -> None:
     authz = app_config.authz
     rels: list[RelationshipUpdate] = []
     sub = SubjectReference(object=_AuthzConverter.user(admin_user.id))
@@ -192,14 +194,21 @@ async def sanic_client_no_migrations(sanic_app_no_migrations: Sanic) -> SanicASG
 
 
 @pytest_asyncio.fixture
-async def sanic_client(
-    sanic_client_no_migrations: SanicASGITestClient, app_config, bootstrap_admins, db_instance, authz_instance
+async def sanic_client_with_migrations(
+    sanic_client_no_migrations: SanicASGITestClient, app_config, db_instance, authz_instance
 ) -> SanicASGITestClient:
     run_migrations_for_app("common")
+    return sanic_client_no_migrations
+
+
+@pytest_asyncio.fixture
+async def sanic_client(
+    sanic_client_with_migrations: SanicASGITestClient, app_config, db_instance, authz_instance, bootstrap_admins
+) -> SanicASGITestClient:
     await app_config.kc_user_repo.initialize(app_config.kc_api)
     await sync_admins_from_keycloak(app_config.kc_api, app_config.authz)
     await app_config.group_repo.generate_user_namespaces()
-    return sanic_client_no_migrations
+    return sanic_client_with_migrations
 
 
 @pytest.fixture
