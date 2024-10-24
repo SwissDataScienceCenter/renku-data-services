@@ -17,6 +17,7 @@ from test.utils import SanicReusableASGITestClient
 @pytest_asyncio.fixture
 async def oauth2_test_client(app_config: Config) -> SanicASGITestClient:
     app_config.async_oauth2_client_class = DummyAsyncOAuth2Client
+    app_config.connected_services_repo.async_oauth2_client_class = DummyAsyncOAuth2Client
     app = Sanic(app_config.app_name)
     app = register_all_handlers(app, app_config)
     async with SanicReusableASGITestClient(app) as client:
