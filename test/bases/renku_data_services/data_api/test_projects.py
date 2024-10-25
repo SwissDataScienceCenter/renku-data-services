@@ -552,26 +552,6 @@ async def test_patch_description_as_editor_and_keep_namespace(
 
     assert response.status_code == 200, response.text
 
-    # expected_permissions = dict(
-    #     write=False,
-    #     delete=False,
-    #     change_membership=False,
-    # )
-    # if role == "editor" or role == "owner":
-    #     expected_permissions["write"] = True
-    # if role == "owner":
-    #     expected_permissions["delete"] = True
-    #     expected_permissions["change_membership"] = True
-
-    # _, response = await sanic_client.get(f"/api/data/projects/{project_id}/permissions", headers=user_headers)
-
-    # assert response.status_code == 200, response.text
-    # assert response.json is not None
-    # permissions = response.json
-    # assert permissions.get("write") == expected_permissions["write"]
-    # assert permissions.get("delete") == expected_permissions["delete"]
-    # assert permissions.get("change_membership") == expected_permissions["change_membership"]
-
 
 @pytest.mark.asyncio
 async def test_get_all_projects_for_specific_user(
