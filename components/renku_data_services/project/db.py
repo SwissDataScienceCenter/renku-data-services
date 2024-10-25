@@ -5,6 +5,7 @@ from __future__ import annotations
 import functools
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import UTC, datetime
+from enum import Enum
 from typing import Any, Concatenate, ParamSpec, TypeVar
 
 from sqlalchemy import Select, delete, func, select, update
@@ -234,6 +235,8 @@ class ProjectRepository:
         new_visibility = payload.get("visibility")
         if isinstance(new_visibility, str):
             new_visibility = models.Visibility(new_visibility)
+        elif isinstance(new_visibility, Enum):
+            new_visibility = models.Visibility(new_visibility.value)
         if "visibility" in payload and new_visibility != old_project.visibility:
             # NOTE: changing the visibility requires the user to be owner which means they should have DELETE permission
             required_scope = Scope.DELETE
