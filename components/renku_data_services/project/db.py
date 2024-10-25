@@ -215,7 +215,6 @@ class ProjectRepository:
         self,
         user: base_models.APIUser,
         project_id: ULID,
-        # payload: dict[str, Any],
         patch: models.ProjectPatch,
         etag: str | None = None,
         *,
