@@ -46,7 +46,12 @@ from renku_data_services.authz.models import (
     Visibility,
 )
 from renku_data_services.base_models.core import InternalServiceAdmin
-from renku_data_services.data_connectors.models import DataConnector, DataConnectorToProjectLink, DataConnectorUpdate
+from renku_data_services.data_connectors.models import (
+    DataConnector,
+    DataConnectorToProjectLink,
+    DataConnectorUpdate,
+    DeletedDataConnector,
+)
 from renku_data_services.errors import errors
 from renku_data_services.namespace.models import (
     DeletedGroup,
@@ -84,6 +89,7 @@ _AuthzChangeFuncResult = TypeVar(
     | DeletedUser
     | DataConnector
     | DataConnectorUpdate
+    | DeletedDataConnector
     | DataConnectorToProjectLink
     | None,
 )
@@ -263,7 +269,16 @@ def _is_allowed_on_resource(
                     message="The authorization decorator needs to have at least one positional argument after 'user'"
                 )
             potential_resource = args[0]
-            resource: Project | DeletedProject | Group | DeletedGroup | Namespace | DataConnector | None = None
+            resource: (
+                Project
+                | DeletedProject
+                | Group
+                | DeletedGroup
+                | Namespace
+                | DataConnector
+                | DeletedDataConnector
+                | None
+            ) = None
             match resource_type:
                 case ResourceType.project if isinstance(potential_resource, (Project, DeletedProject)):
                     resource = potential_resource
@@ -271,7 +286,9 @@ def _is_allowed_on_resource(
                     resource = potential_resource
                 case ResourceType.user_namespace if isinstance(potential_resource, Namespace):
                     resource = potential_resource
-                case ResourceType.data_connector if isinstance(potential_resource, DataConnector):
+                case ResourceType.data_connector if isinstance(
+                    potential_resource, (DataConnector, DeletedDataConnector)
+                ):
                     resource = potential_resource
                 case _:
                     raise errors.ProgrammingError(
@@ -659,7 +676,7 @@ class Authz:
                 case AuthzOperation.delete, ResourceType.data_connector if result is None:
                     # NOTE: This means that the data connector does not exist in the first place so nothing was deleted
                     pass
-                case AuthzOperation.delete, ResourceType.data_connector if isinstance(result, DataConnector):
+                case AuthzOperation.delete, ResourceType.data_connector if isinstance(result, DeletedDataConnector):
                     user = _extract_user_from_args(*func_args, **func_kwargs)
                     authz_change = await db_repo.authz._remove_data_connector(user, result)
                 case AuthzOperation.update, ResourceType.data_connector if isinstance(result, DataConnectorUpdate):
@@ -1598,7 +1615,7 @@ class Authz:
 
     @_is_allowed_on_resource(Scope.DELETE, ResourceType.data_connector)
     async def _remove_data_connector(
-        self, user: base_models.APIUser, data_connector: DataConnector, *, zed_token: ZedToken | None = None
+        self, user: base_models.APIUser, data_connector: DeletedDataConnector, *, zed_token: ZedToken | None = None
     ) -> _AuthzChange:
         """Remove the relationships associated with the data connector."""
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
