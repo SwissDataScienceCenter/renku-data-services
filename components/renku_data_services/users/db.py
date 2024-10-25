@@ -1,7 +1,7 @@
 """Database adapters and helpers for users."""
 
 import secrets
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, cast
@@ -124,6 +124,16 @@ class UserRepo:
                     raise errors.ProgrammingError(message=f"Cannot find a user namespace for user {id}.")
 
             return [user.dump() for user in users if user.namespace is not None]
+
+    async def get_all_users(self, requested_by: base_models.APIUser) -> AsyncGenerator[UserInfo, None]:
+        """Get all users when reprovisioning."""
+        if not requested_by.is_admin:
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session:
+            users = await session.stream_scalars(select(UserORM))
+            async for user in users:
+                yield user.dump()
 
     async def remove_user(self, requested_by: APIUser, user_id: str) -> UserInfo | None:
         """Remove a user."""

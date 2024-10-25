@@ -5,6 +5,7 @@ from __future__ import annotations
 import functools
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import UTC, datetime
+from enum import Enum
 from typing import Any, Concatenate, ParamSpec, TypeVar
 
 from sqlalchemy import Select, delete, func, select, update
@@ -175,8 +176,17 @@ class ProjectRepository:
                 message=f"The project cannot be created because you do not have sufficient permissions with the namespace {project.namespace}"  # noqa: E501
             )
 
-        repositories = [schemas.ProjectRepositoryORM(url) for url in (project.repositories or [])]
         slug = project.slug or base_models.Slug.from_name(project.name).value
+
+        existing_slug = await session.scalar(
+            select(ns_schemas.EntitySlugORM)
+            .where(ns_schemas.EntitySlugORM.namespace_id == ns.id)
+            .where(ns_schemas.EntitySlugORM.slug == slug)
+        )
+        if existing_slug is not None:
+            raise errors.ConflictError(message=f"An entity with the slug '{ns.slug}/{slug}' already exists.")
+
+        repositories = [schemas.ProjectRepositoryORM(url) for url in (project.repositories or [])]
         project_orm = schemas.ProjectORM(
             name=project.name,
             visibility=(
@@ -225,10 +235,12 @@ class ProjectRepository:
         new_visibility = payload.get("visibility")
         if isinstance(new_visibility, str):
             new_visibility = models.Visibility(new_visibility)
+        elif isinstance(new_visibility, Enum):
+            new_visibility = models.Visibility(new_visibility.value)
         if "visibility" in payload and new_visibility != old_project.visibility:
             # NOTE: changing the visibility requires the user to be owner which means they should have DELETE permission
             required_scope = Scope.DELETE
-        if "namespace" in payload and payload["namespace"] != old_project.namespace:
+        if "namespace" in payload and payload["namespace"] != old_project.namespace.slug:
             # NOTE: changing the namespace requires the user to be owner which means they should have DELETE permission
             required_scope = Scope.DELETE
         authorized = await self.authz.has_permission(user, ResourceType.project, project_id, required_scope)
@@ -258,7 +270,7 @@ class ProjectRepository:
             if key not in ["slug", "id", "created_by", "creation_date", "namespace"]:
                 setattr(project, key, value)
 
-        if "namespace" in payload:
+        if "namespace" in payload and payload["namespace"] != old_project.namespace.slug:
             ns_slug = payload["namespace"]
             ns = await session.scalar(
                 select(ns_schemas.NamespaceORM).where(ns_schemas.NamespaceORM.slug == ns_slug.lower())
@@ -273,7 +285,7 @@ class ProjectRepository:
             has_permission = await self.authz.has_permission(user, resource_type, resource_id, Scope.WRITE)
             if not has_permission:
                 raise errors.ForbiddenError(
-                    message=f"The project cannot be created because you do not have sufficient permissions with the namespace {ns_slug}"  # noqa: E501
+                    message=f"The project cannot be moved because you do not have sufficient permissions with the namespace {ns_slug}"  # noqa: E501
                 )
             project.slug.namespace_id = ns.id
 

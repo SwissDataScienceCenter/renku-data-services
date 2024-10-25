@@ -13,8 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from ulid import ULID
 
-import renku_data_services.base_models as base_models
-from renku_data_services import errors
+from renku_data_services import base_models, errors
 from renku_data_services.connected_services import apispec, models
 from renku_data_services.connected_services import orm as schemas
 from renku_data_services.connected_services.apispec import ConnectionStatus
@@ -75,11 +74,12 @@ class ConnectedServicesRepository:
         if not user.is_admin:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
+        provider_id = base_models.Slug.from_name(new_client.id).value
         encrypted_client_secret = (
             encrypt_string(self.encryption_key, user.id, new_client.client_secret) if new_client.client_secret else None
         )
         client = schemas.OAuth2ClientORM(
-            id=new_client.id,
+            id=provider_id,
             kind=new_client.kind,
             client_id=new_client.client_id,
             client_secret=encrypted_client_secret,
