@@ -183,6 +183,7 @@ filterwarnings = [
 postgresql_host = "localhost"
 postgresql_user = "renku"
 postgresql_password = "renku"
+asyncio_mode = "auto"
 
 [tool.mypy]
 python_version = "3.12"

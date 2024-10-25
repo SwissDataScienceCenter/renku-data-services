@@ -15,7 +15,7 @@ from renku_data_services.migrations.core import run_migrations_for_app
 from test.utils import SanicReusableASGITestClient
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture(scope="module")
 async def oauth2_test_client_setup(app_config: Config) -> SanicASGITestClient:
     app_config.async_oauth2_client_class = DummyAsyncOAuth2Client
     app_config.connected_services_repo.async_oauth2_client_class = DummyAsyncOAuth2Client

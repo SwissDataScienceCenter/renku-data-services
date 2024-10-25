@@ -37,23 +37,30 @@ settings.load_profile(os.getenv("HYPOTHESIS_PROFILE", "dev"))
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def event_loop():
-    policy = asyncio.get_event_loop_policy()
-    loop = policy.new_event_loop()
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        policy = asyncio.get_event_loop_policy()
+        loop = policy.new_event_loop()
     yield loop
     print("closing event loop")
-    loop.close()
+    # loop.close()
 
 
-@pytest.fixture(scope="session")
+def pytest_sessionfinish(session, exitstatus):
+    asyncio.get_event_loop().close()
+
+
+@pytest.fixture(scope="module")
 def monkeysession():
     mpatch = pytest.MonkeyPatch()
     yield mpatch
     mpatch.undo()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def free_port() -> int:
     lock = Lock()
     with lock, socket.socket() as s:
@@ -62,7 +69,7 @@ def free_port() -> int:
         return port
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def authz_setup(monkeysession, free_port) -> Iterator[None]:
     port = free_port
     proc = subprocess.Popen(
@@ -169,7 +176,7 @@ def authz_instance(app_config, monkeypatch) -> Iterator[None]:
     app_config.authz_config.pop()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def secrets_key_pair(monkeysession, tmpdir_factory) -> None:
     """Create a public/private key pair to be used for secrets service tests."""
     tmp_path = tmpdir_factory.mktemp("secrets_key")
@@ -197,7 +204,7 @@ def secrets_key_pair(monkeysession, tmpdir_factory) -> None:
     monkeysession.setenv("SECRETS_SERVICE_PRIVATE_KEY_PATH", priv_key_path.as_posix())
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def app_config(authz_setup, monkeysession, worker_id, secrets_key_pair) -> Generator[DataConfig, None, None]:
     monkeysession.setenv("MAX_PINNED_PROJECTS", "5")
     monkeysession.setenv("NB_SERVER_OPTIONS__DEFAULTS_PATH", "server_defaults.json")

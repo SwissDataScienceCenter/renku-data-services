@@ -26,7 +26,7 @@ from test.bases.renku_data_services.background_jobs.test_sync import get_kc_user
 from test.utils import SanicReusableASGITestClient
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def admin_user() -> UserInfo:
     return UserInfo(
         id="admin",
@@ -39,7 +39,7 @@ def admin_user() -> UserInfo:
     )
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def regular_user() -> UserInfo:
     return UserInfo(
         id="user",
@@ -52,7 +52,7 @@ def regular_user() -> UserInfo:
     )
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def member_1_user() -> UserInfo:
     return UserInfo(
         id="member-1",
@@ -69,7 +69,7 @@ def member_1_user() -> UserInfo:
     )
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def member_2_user() -> UserInfo:
     return UserInfo(
         id="member-2",
@@ -86,13 +86,13 @@ def member_2_user() -> UserInfo:
     )
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def project_members(member_1_user: UserInfo, member_2_user: UserInfo) -> list[dict[str, str]]:
     """List of a project's members."""
     return [{"id": member_1_user.id, "role": "viewer"}, {"id": member_2_user.id, "role": "owner"}]
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def users(admin_user, regular_user, member_1_user, member_2_user) -> list[UserInfo]:
     return [
         admin_user,
@@ -176,7 +176,7 @@ async def bootstrap_admins(
     await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=rels))
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture(scope="module")
 async def sanic_app_no_migrations(app_config: Config, users: list[UserInfo], admin_user: UserInfo) -> Sanic:
     app_config.kc_api = DummyKeycloakAPI(users=get_kc_users(users), user_roles={admin_user.id: ["renku-admin"]})
     app = Sanic(app_config.app_name)
@@ -187,7 +187,7 @@ async def sanic_app_no_migrations(app_config: Config, users: list[UserInfo], adm
     return app
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture(scope="module")
 async def sanic_client_no_migrations(sanic_app_no_migrations: Sanic) -> SanicASGITestClient:
     async with SanicReusableASGITestClient(sanic_app_no_migrations) as client:
         yield client

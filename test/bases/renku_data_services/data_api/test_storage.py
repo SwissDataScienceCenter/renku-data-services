@@ -31,7 +31,7 @@ def valid_storage_payload() -> dict[str, Any]:
     return _valid_storage
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture(scope="module")
 async def storage_test_client_setup(app_config: Config) -> SanicASGITestClient:
     gitlab_auth = DummyAuthenticator()
     app_config.gitlab_authenticator = gitlab_auth
