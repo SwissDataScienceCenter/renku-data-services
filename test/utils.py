@@ -261,7 +261,6 @@ class SanicReusableASGITestClient(SanicASGITestClient):
     set_up = False
 
     async def __aenter__(self):
-        self.set_up = True
         await self.run()
         return self
 
@@ -281,6 +280,7 @@ class SanicReusableASGITestClient(SanicASGITestClient):
             self.sanic_app.request_middleware.appendleft(
                 self._collect_request  # type: ignore
             )
+        self.set_up = True
 
     async def stop(self):
         self.set_up = False
@@ -306,6 +306,10 @@ class SanicReusableASGITestClient(SanicASGITestClient):
             url = f"{scheme}://{ASGI_HOST}:{ASGI_PORT}{url}"
 
         self.gather_request = gather_request
+        if self.sanic_app.router.find_route is None:
+            # sometimes routes get deleted during test execution for an unknown reason. restarting the server fixes this
+            await self.stop()
+            await self.run()
         # call SanicASGITestClient's parent request method
         response = await super(SanicASGITestClient, self).request(method, url, *args, **kwargs)
 

@@ -58,7 +58,7 @@ from renku_data_services.users.orm import UserORM
 
 
 @pytest.fixture
-def get_app_configs(db_config: DBConfig, authz_config: AuthzConfig):
+def get_app_configs(db_instance: DBConfig, authz_instance: AuthzConfig):
     def _get_app_configs(
         kc_api: DummyKeycloakAPI, total_user_sync: bool = False
     ) -> tuple[
@@ -67,60 +67,60 @@ def get_app_configs(db_config: DBConfig, authz_config: AuthzConfig):
     ]:
         redis = RedisConfig.fake()
         message_queue = RedisQueue(redis)
-        event_repo = EventRepository(db_config.async_session_maker, message_queue=message_queue)
+        event_repo = EventRepository(db_instance.async_session_maker, message_queue=message_queue)
         group_repo = GroupRepository(
-            session_maker=db_config.async_session_maker,
+            session_maker=db_instance.async_session_maker,
             event_repo=event_repo,
-            group_authz=Authz(authz_config),
+            group_authz=Authz(authz_instance),
             message_queue=message_queue,
         )
         project_repo = ProjectRepository(
-            session_maker=db_config.async_session_maker,
+            session_maker=db_instance.async_session_maker,
             message_queue=message_queue,
             event_repo=event_repo,
             group_repo=group_repo,
-            authz=Authz(authz_config),
+            authz=Authz(authz_instance),
         )
         data_connector_repo = DataConnectorRepository(
-            session_maker=db_config.async_session_maker,
-            authz=Authz(authz_config),
+            session_maker=db_instance.async_session_maker,
+            authz=Authz(authz_instance),
         )
         data_connector_project_link_repo = DataConnectorProjectLinkRepository(
-            session_maker=db_config.async_session_maker,
-            authz=Authz(authz_config),
+            session_maker=db_instance.async_session_maker,
+            authz=Authz(authz_instance),
         )
         data_connector_migration_tool = DataConnectorMigrationTool(
-            session_maker=db_config.async_session_maker,
+            session_maker=db_instance.async_session_maker,
             data_connector_repo=data_connector_repo,
             data_connector_project_link_repo=data_connector_project_link_repo,
             project_repo=project_repo,
-            authz=Authz(authz_config),
+            authz=Authz(authz_instance),
         )
         user_repo = UserRepo(
-            db_config.async_session_maker,
+            db_instance.async_session_maker,
             message_queue=message_queue,
             event_repo=event_repo,
             group_repo=group_repo,
             encryption_key=secrets.token_bytes(32),
-            authz=Authz(authz_config),
+            authz=Authz(authz_instance),
         )
         users_sync = UsersSync(
-            db_config.async_session_maker,
+            db_instance.async_session_maker,
             message_queue=message_queue,
             event_repo=event_repo,
             group_repo=group_repo,
             user_repo=user_repo,
-            authz=Authz(authz_config),
+            authz=Authz(authz_instance),
         )
         config = SyncConfig(
             syncer=users_sync,
             kc_api=kc_api,
-            authz_config=authz_config,
+            authz_config=authz_instance,
             group_repo=group_repo,
             event_repo=event_repo,
             project_repo=project_repo,
             data_connector_migration_tool=data_connector_migration_tool,
-            session_maker=db_config.async_session_maker,
+            session_maker=db_instance.async_session_maker,
         )
         run_migrations_for_app("common")
         return config, user_repo

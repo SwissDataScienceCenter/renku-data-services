@@ -17,8 +17,8 @@ class _RequestsStatistics(list):
         return f"RequestsStatistics(len={len(self)})"
 
 
-@pytest.fixture(scope="session")
-def requests_statistics():
+@pytest_asyncio.fixture(scope="session")
+async def requests_statistics():
     stats = _RequestsStatistics()
     yield stats
 

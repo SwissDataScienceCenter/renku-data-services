@@ -1,4 +1,5 @@
 import json
+from collections.abc import AsyncGenerator
 from copy import deepcopy
 from typing import Any
 
@@ -26,8 +27,8 @@ from test.bases.renku_data_services.background_jobs.test_sync import get_kc_user
 from test.utils import SanicReusableASGITestClient
 
 
-@pytest.fixture(scope="module")
-def admin_user() -> UserInfo:
+@pytest_asyncio.fixture(scope="session")
+async def admin_user() -> UserInfo:
     return UserInfo(
         id="admin",
         first_name="Admin",
@@ -39,8 +40,8 @@ def admin_user() -> UserInfo:
     )
 
 
-@pytest.fixture(scope="module")
-def regular_user() -> UserInfo:
+@pytest_asyncio.fixture(scope="session")
+async def regular_user() -> UserInfo:
     return UserInfo(
         id="user",
         first_name="User",
@@ -52,8 +53,8 @@ def regular_user() -> UserInfo:
     )
 
 
-@pytest.fixture(scope="module")
-def member_1_user() -> UserInfo:
+@pytest_asyncio.fixture(scope="session")
+async def member_1_user() -> UserInfo:
     return UserInfo(
         id="member-1",
         first_name="Member-1",
@@ -69,8 +70,8 @@ def member_1_user() -> UserInfo:
     )
 
 
-@pytest.fixture(scope="module")
-def member_2_user() -> UserInfo:
+@pytest_asyncio.fixture(scope="session")
+async def member_2_user() -> UserInfo:
     return UserInfo(
         id="member-2",
         first_name="Member-2",
@@ -86,14 +87,14 @@ def member_2_user() -> UserInfo:
     )
 
 
-@pytest.fixture(scope="module")
-def project_members(member_1_user: UserInfo, member_2_user: UserInfo) -> list[dict[str, str]]:
+@pytest_asyncio.fixture(scope="session")
+async def project_members(member_1_user: UserInfo, member_2_user: UserInfo) -> list[dict[str, str]]:
     """List of a project's members."""
     return [{"id": member_1_user.id, "role": "viewer"}, {"id": member_2_user.id, "role": "owner"}]
 
 
-@pytest.fixture(scope="module")
-def users(admin_user, regular_user, member_1_user, member_2_user) -> list[UserInfo]:
+@pytest_asyncio.fixture(scope="session")
+async def users(admin_user, regular_user, member_1_user, member_2_user) -> list[UserInfo]:
     return [
         admin_user,
         regular_user,
@@ -102,8 +103,8 @@ def users(admin_user, regular_user, member_1_user, member_2_user) -> list[UserIn
     ]
 
 
-@pytest.fixture
-def admin_headers(admin_user: UserInfo) -> dict[str, str]:
+@pytest_asyncio.fixture
+async def admin_headers(admin_user: UserInfo) -> dict[str, str]:
     """Authentication headers for an admin user."""
     access_token = json.dumps(
         {
@@ -119,8 +120,8 @@ def admin_headers(admin_user: UserInfo) -> dict[str, str]:
     return {"Authorization": f"Bearer {access_token}"}
 
 
-@pytest.fixture
-def user_headers(regular_user: UserInfo) -> dict[str, str]:
+@pytest_asyncio.fixture
+async def user_headers(regular_user: UserInfo) -> dict[str, str]:
     """Authentication headers for a normal user."""
     access_token = json.dumps(
         {
@@ -136,8 +137,8 @@ def user_headers(regular_user: UserInfo) -> dict[str, str]:
     return {"Authorization": f"Bearer {access_token}"}
 
 
-@pytest.fixture
-def member_1_headers(member_1_user: UserInfo) -> dict[str, str]:
+@pytest_asyncio.fixture
+async def member_1_headers(member_1_user: UserInfo) -> dict[str, str]:
     """Authentication headers for a normal user."""
     access_token = json.dumps(
         {"is_admin": False, "id": member_1_user.id, "name": f"{member_1_user.first_name} {member_1_user.last_name}"}
@@ -145,8 +146,8 @@ def member_1_headers(member_1_user: UserInfo) -> dict[str, str]:
     return {"Authorization": f"Bearer {access_token}"}
 
 
-@pytest.fixture
-def member_2_headers(member_2_user: UserInfo) -> dict[str, str]:
+@pytest_asyncio.fixture
+async def member_2_headers(member_2_user: UserInfo) -> dict[str, str]:
     """Authentication headers for a normal user."""
     access_token = json.dumps(
         {"is_admin": False, "id": member_2_user.id, "name": f"{member_2_user.first_name} {member_2_user.last_name}"}
@@ -154,8 +155,8 @@ def member_2_headers(member_2_user: UserInfo) -> dict[str, str]:
     return {"Authorization": f"Bearer {access_token}"}
 
 
-@pytest.fixture
-def unauthorized_headers() -> dict[str, str]:
+@pytest_asyncio.fixture
+async def unauthorized_headers() -> dict[str, str]:
     """Authentication headers for an anonymous user (did not log in)."""
     return {"Authorization": "Bearer {}"}
 
@@ -176,7 +177,7 @@ async def bootstrap_admins(
     await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=rels))
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="session")
 async def sanic_app_no_migrations(app_config: Config, users: list[UserInfo], admin_user: UserInfo) -> Sanic:
     app_config.kc_api = DummyKeycloakAPI(users=get_kc_users(users), user_roles={admin_user.id: ["renku-admin"]})
     app = Sanic(app_config.app_name)
@@ -187,8 +188,8 @@ async def sanic_app_no_migrations(app_config: Config, users: list[UserInfo], adm
     return app
 
 
-@pytest_asyncio.fixture(scope="module")
-async def sanic_client_no_migrations(sanic_app_no_migrations: Sanic) -> SanicASGITestClient:
+@pytest_asyncio.fixture(scope="session")
+async def sanic_client_no_migrations(sanic_app_no_migrations: Sanic) -> AsyncGenerator[SanicASGITestClient, None]:
     async with SanicReusableASGITestClient(sanic_app_no_migrations) as client:
         yield client
 
@@ -211,8 +212,8 @@ async def sanic_client(
     return sanic_client_with_migrations
 
 
-@pytest.fixture
-def create_project(sanic_client, user_headers, admin_headers, regular_user, admin_user):
+@pytest_asyncio.fixture
+async def create_project(sanic_client, user_headers, admin_headers, regular_user, admin_user):
     async def create_project_helper(
         name: str, admin: bool = False, members: list[dict[str, str]] = None, **payload
     ) -> dict[str, Any]:
@@ -241,8 +242,8 @@ def create_project(sanic_client, user_headers, admin_headers, regular_user, admi
     return create_project_helper
 
 
-@pytest.fixture
-def create_project_copy(sanic_client, user_headers, admin_headers, regular_user, admin_user):
+@pytest_asyncio.fixture
+async def create_project_copy(sanic_client, user_headers, admin_headers, regular_user, admin_user):
     async def create_project_copy_helper(
         id: str, namespace: str, name: str, *, user: UserInfo | None = None, **payload
     ) -> dict[str, Any]:
@@ -260,8 +261,8 @@ def create_project_copy(sanic_client, user_headers, admin_headers, regular_user,
     return create_project_copy_helper
 
 
-@pytest.fixture
-def create_group(sanic_client, user_headers, admin_headers):
+@pytest_asyncio.fixture
+async def create_group(sanic_client, user_headers, admin_headers):
     async def create_group_helper(
         name: str, admin: bool = False, members: list[dict[str, str]] = None, **payload
     ) -> dict[str, Any]:
@@ -287,8 +288,8 @@ def create_group(sanic_client, user_headers, admin_headers):
     return create_group_helper
 
 
-@pytest.fixture
-def create_session_environment(sanic_client: SanicASGITestClient, admin_headers):
+@pytest_asyncio.fixture
+async def create_session_environment(sanic_client: SanicASGITestClient, admin_headers):
     async def create_session_environment_helper(name: str, **payload) -> dict[str, Any]:
         payload = payload.copy()
         payload.update({"name": name})
@@ -304,8 +305,8 @@ def create_session_environment(sanic_client: SanicASGITestClient, admin_headers)
     return create_session_environment_helper
 
 
-@pytest.fixture
-def create_session_launcher(sanic_client: SanicASGITestClient, user_headers):
+@pytest_asyncio.fixture
+async def create_session_launcher(sanic_client: SanicASGITestClient, user_headers):
     async def create_session_launcher_helper(name: str, project_id: str, **payload) -> dict[str, Any]:
         payload = payload.copy()
         payload.update({"name": name, "project_id": project_id})
@@ -326,8 +327,8 @@ def create_session_launcher(sanic_client: SanicASGITestClient, user_headers):
     return create_session_launcher_helper
 
 
-@pytest.fixture
-def create_data_connector(sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers):
+@pytest_asyncio.fixture
+async def create_data_connector(sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers):
     async def create_data_connector_helper(
         name: str, user: UserInfo | None = None, headers: dict[str, str] | None = None, **payload
     ) -> dict[str, Any]:
@@ -359,8 +360,8 @@ def create_data_connector(sanic_client: SanicASGITestClient, regular_user: UserI
     return create_data_connector_helper
 
 
-@pytest.fixture
-def create_data_connector_and_link_project(
+@pytest_asyncio.fixture
+async def create_data_connector_and_link_project(
     sanic_client, regular_user, user_headers, admin_user, admin_headers, create_data_connector
 ):
     async def create_data_connector_and_link_project_helper(
@@ -385,8 +386,8 @@ def create_data_connector_and_link_project(
     return create_data_connector_and_link_project_helper
 
 
-@pytest.fixture
-def create_resource_pool(sanic_client, user_headers, admin_headers):
+@pytest_asyncio.fixture
+async def create_resource_pool(sanic_client, user_headers, admin_headers):
     async def create_resource_pool_helper(admin: bool = False, **payload) -> dict[str, Any]:
         headers = admin_headers if admin else user_headers
         payload = payload.copy()
@@ -432,18 +433,20 @@ _valid_resource_pool_payload: dict[str, Any] = {
 }
 
 
-@pytest.fixture
-def valid_resource_pool_payload() -> dict[str, Any]:
+@pytest_asyncio.fixture
+async def valid_resource_pool_payload() -> dict[str, Any]:
     return deepcopy(_valid_resource_pool_payload)
 
 
-@pytest.fixture
-def valid_resource_class_payload() -> dict[str, Any]:
+@pytest_asyncio.fixture
+async def valid_resource_class_payload() -> dict[str, Any]:
     return deepcopy(_valid_resource_pool_payload["classes"][0])
 
 
 @pytest_asyncio.fixture
-async def secrets_sanic_client(secrets_storage_app_config: SecretsConfig, users: list[UserInfo]) -> SanicASGITestClient:
+async def secrets_sanic_client(
+    secrets_storage_app_config: SecretsConfig, users: list[UserInfo]
+) -> AsyncGenerator[SanicASGITestClient, None]:
     app = Sanic(secrets_storage_app_config.app_name)
     app = register_secrets_handlers(app, secrets_storage_app_config)
     async with SanicReusableASGITestClient(app) as client:

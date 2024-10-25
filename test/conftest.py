@@ -6,7 +6,7 @@ import os
 import secrets
 import socket
 import subprocess
-from collections.abc import AsyncGenerator, Generator, Iterator
+from collections.abc import AsyncGenerator, Iterator
 from multiprocessing import Lock
 from pathlib import Path
 from uuid import uuid4
@@ -37,7 +37,7 @@ settings.load_profile(os.getenv("HYPOTHESIS_PROFILE", "dev"))
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def event_loop():
     try:
         loop = asyncio.get_running_loop()
@@ -46,22 +46,18 @@ def event_loop():
         loop = policy.new_event_loop()
     yield loop
     print("closing event loop")
-    # loop.close()
+    loop.close()
 
 
-def pytest_sessionfinish(session, exitstatus):
-    asyncio.get_event_loop().close()
-
-
-@pytest.fixture(scope="module")
-def monkeysession():
+@pytest_asyncio.fixture(scope="session")
+async def monkeysession():
     mpatch = pytest.MonkeyPatch()
     yield mpatch
     mpatch.undo()
 
 
-@pytest.fixture(scope="module")
-def free_port() -> int:
+@pytest_asyncio.fixture(scope="session")
+async def free_port() -> int:
     lock = Lock()
     with lock, socket.socket() as s:
         s.bind(("", 0))
@@ -69,8 +65,8 @@ def free_port() -> int:
         return port
 
 
-@pytest.fixture(scope="module")
-def authz_setup(monkeysession, free_port) -> Iterator[None]:
+@pytest_asyncio.fixture(scope="session")
+async def authz_setup(monkeysession, free_port) -> AsyncGenerator[None, None]:
     port = free_port
     proc = subprocess.Popen(
         [
@@ -95,34 +91,8 @@ def authz_setup(monkeysession, free_port) -> Iterator[None]:
         proc.kill()
 
 
-@pytest.fixture
-def authz_config(monkeypatch, free_port) -> Iterator[AuthzConfig]:
-    port = free_port
-    proc = subprocess.Popen(
-        [
-            "spicedb",
-            "serve-testing",
-            "--grpc-addr",
-            f":{port}",
-            "--readonly-grpc-enabled=false",
-            "--skip-release-check=true",
-            "--log-level=debug",
-        ]
-    )
-    monkeypatch.setenv("AUTHZ_DB_HOST", "127.0.0.1")
-    # NOTE: In our devcontainer setup 50051 and 50052 is taken by the running authzed instance
-    monkeypatch.setenv("AUTHZ_DB_GRPC_PORT", f"{port}")
-    monkeypatch.setenv("AUTHZ_DB_KEY", "renku")
-    yield AuthzConfig.from_env()
-    try:
-        proc.terminate()
-    except Exception as err:
-        logging.error(f"Encountered error when shutting down Authzed DB for testing {err}")
-        proc.kill()
-
-
 @pytest_asyncio.fixture
-async def db_config(monkeypatch, worker_id, authz_config) -> AsyncGenerator[DBConfig, None]:
+async def db_config(monkeypatch, worker_id, authz_setup) -> AsyncGenerator[DBConfig, None]:
     db_name = str(ULID()).lower() + "_" + worker_id
     user = os.getenv("DB_USER", "renku")
     host = os.getenv("DB_HOST", "127.0.0.1")
@@ -168,16 +138,16 @@ async def db_instance(monkeysession, worker_id, app_config, event_loop) -> Async
         await app_config.db.pop()
 
 
-@pytest.fixture
-def authz_instance(app_config, monkeypatch) -> Iterator[None]:
+@pytest_asyncio.fixture
+async def authz_instance(app_config, monkeypatch) -> Iterator[AuthzConfig]:
     monkeypatch.setenv("AUTHZ_DB_KEY", f"renku-{uuid4().hex}")
     app_config.authz_config.push(AuthzConfig.from_env())
-    yield
+    yield app_config.authz_config
     app_config.authz_config.pop()
 
 
-@pytest.fixture(scope="module")
-def secrets_key_pair(monkeysession, tmpdir_factory) -> None:
+@pytest_asyncio.fixture(scope="session")
+async def secrets_key_pair(monkeysession, tmpdir_factory) -> None:
     """Create a public/private key pair to be used for secrets service tests."""
     tmp_path = tmpdir_factory.mktemp("secrets_key")
 
@@ -204,8 +174,8 @@ def secrets_key_pair(monkeysession, tmpdir_factory) -> None:
     monkeysession.setenv("SECRETS_SERVICE_PRIVATE_KEY_PATH", priv_key_path.as_posix())
 
 
-@pytest.fixture(scope="module")
-def app_config(authz_setup, monkeysession, worker_id, secrets_key_pair) -> Generator[DataConfig, None, None]:
+@pytest_asyncio.fixture(scope="session")
+async def app_config(authz_setup, monkeysession, worker_id, secrets_key_pair) -> AsyncGenerator[DataConfig, None]:
     monkeysession.setenv("MAX_PINNED_PROJECTS", "5")
     monkeysession.setenv("NB_SERVER_OPTIONS__DEFAULTS_PATH", "server_defaults.json")
     monkeysession.setenv("NB_SERVER_OPTIONS__UI_CHOICES_PATH", "server_options.json")
@@ -216,8 +186,10 @@ def app_config(authz_setup, monkeysession, worker_id, secrets_key_pair) -> Gener
     yield config
 
 
-@pytest.fixture
-def secrets_storage_app_config(db_config: DBConfig, secrets_key_pair, monkeypatch, tmp_path) -> Iterator[DataConfig]:
+@pytest_asyncio.fixture
+async def secrets_storage_app_config(
+    db_config: DBConfig, secrets_key_pair, monkeypatch, tmp_path
+) -> AsyncGenerator[DataConfig, None]:
     encryption_key_path = tmp_path / "encryption-key"
     encryption_key_path.write_bytes(secrets.token_bytes(32))
 
@@ -230,8 +202,8 @@ def secrets_storage_app_config(db_config: DBConfig, secrets_key_pair, monkeypatc
     yield config
 
 
-@pytest.fixture
-def admin_user() -> base_models.APIUser:
+@pytest_asyncio.fixture
+async def admin_user() -> base_models.APIUser:
     return base_models.APIUser(
         is_admin=True,
         id="some-random-id-123456",
@@ -243,8 +215,8 @@ def admin_user() -> base_models.APIUser:
     )  # nosec B106
 
 
-@pytest.fixture
-def loggedin_user() -> base_models.APIUser:
+@pytest_asyncio.fixture
+async def loggedin_user() -> base_models.APIUser:
     return base_models.APIUser(is_admin=False, id="some-random-id-123456", access_token="some-access-token")  # nosec B106
 
 
