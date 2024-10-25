@@ -112,7 +112,7 @@ def remove_id_from_user(user: base_models.User) -> base_models.User:
     return base_models.User(**kwargs)
 
 
-def _sort_rp_classes(classes: list[rp_models.ResourceClass]) -> list[rp_models.ResourceClass]:
+def sort_rp_classes(classes: list[rp_models.ResourceClass]) -> list[rp_models.ResourceClass]:
     return sorted(classes, key=lambda c: (c.gpu, c.cpu, c.memory, c.max_storage, c.name))
 
 
@@ -131,7 +131,7 @@ async def create_rp(
     assert inserted_rp.id == retrieved_rps[0].id
     assert inserted_rp.name == retrieved_rps[0].name
     assert inserted_rp.idle_threshold == retrieved_rps[0].idle_threshold
-    assert _sort_rp_classes(inserted_rp.classes) == _sort_rp_classes(retrieved_rps[0].classes)
+    assert sort_rp_classes(inserted_rp.classes) == sort_rp_classes(retrieved_rps[0].classes)
     assert inserted_rp.quota == retrieved_rps[0].quota
     return inserted_rp
 

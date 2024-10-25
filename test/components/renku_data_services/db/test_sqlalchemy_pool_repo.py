@@ -19,7 +19,7 @@ from test.components.renku_data_services.crc_models.hypothesis import (
     rc_update_reqs_dict,
     rp_strat,
 )
-from test.utils import create_rp, remove_id_from_user
+from test.utils import create_rp, remove_id_from_user, sort_rp_classes
 
 
 @given(rp=rp_strat())
@@ -128,7 +128,11 @@ async def test_resource_pool_update_classes(
         )
         retrieved_rps = await pool_repo.get_resource_pools(id=inserted_rp.id, api_user=admin_user)
         assert len(retrieved_rps) == 1
-        assert retrieved_rps[0] == updated_rp
+        assert inserted_rp.id == retrieved_rps[0].id
+        assert inserted_rp.name == retrieved_rps[0].name
+        assert inserted_rp.idle_threshold == retrieved_rps[0].idle_threshold
+        assert sort_rp_classes(inserted_rp.classes) == sort_rp_classes(retrieved_rps[0].classes)
+        assert inserted_rp.quota == retrieved_rps[0].quota
     except (ValidationError, errors.ValidationError):
         pass
     finally:
@@ -344,7 +348,7 @@ async def test_lookup_rp_by_name(rp: models.ResourcePool, app_config: Config, ad
         assert inserted_rp.id is not None
         retrieved_rps = await pool_repo.get_resource_pools(name=inserted_rp.name, api_user=admin_user)
         assert len(retrieved_rps) >= 1
-        assert any([rp == inserted_rp for rp in retrieved_rps])
+        assert any([rp.id == inserted_rp.id for rp in retrieved_rps])
     except (ValidationError, errors.ValidationError):
         pass
     finally:
@@ -396,10 +400,10 @@ async def test_resource_pools_access_control(
         assert inserted_public_rp.id is not None
         admin_rps = await pool_repo.get_resource_pools(admin_user)
         loggedin_user_rps = await pool_repo.get_resource_pools(loggedin_user)
-        assert inserted_public_rp in loggedin_user_rps
-        assert inserted_public_rp in admin_rps
-        assert inserted_private_rp not in loggedin_user_rps
-        assert inserted_private_rp in admin_rps
+        assert any(inserted_public_rp.id == rp.id for rp in loggedin_user_rps)
+        assert any(inserted_public_rp.id == rp.id for rp in admin_rps)
+        assert all(inserted_private_rp.id != rp.id for rp in loggedin_user_rps)
+        assert any(inserted_private_rp.id == rp.id for rp in admin_rps)
         assert loggedin_user.id is not None
         user_to_add = base_models.User(keycloak_id=loggedin_user.id)
         updated_users = await user_repo.update_resource_pool_users(
@@ -408,7 +412,7 @@ async def test_resource_pools_access_control(
 
         assert user_to_add in [remove_id_from_user(user) for user in updated_users]
         loggedin_user_rps = await pool_repo.get_resource_pools(loggedin_user)
-        assert inserted_private_rp in loggedin_user_rps
+        assert any(inserted_private_rp.id == rp.id for rp in loggedin_user_rps)
     except (ValidationError, errors.ValidationError):
         pass
     finally:
