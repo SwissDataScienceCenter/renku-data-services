@@ -1,7 +1,7 @@
 """Adapters for data connectors database classes."""
 
 from collections.abc import AsyncIterator, Callable
-from typing import TypeVar, cast
+from typing import TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
 from sqlalchemy import Select, delete, func, or_, select
@@ -502,49 +502,27 @@ class DataConnectorSecretRepository:
 
         async with self.session_maker() as session:
             stmt = (
-                select(schemas.DataConnectorORM, schemas.DataConnectorSecretORM)
-                .select_from(schemas.DataConnectorORM)  # NOTE: Makes sure the FROM statement is as expected
-                .join(
-                    target=schemas.DataConnectorToProjectLinkORM,
-                    onclause=schemas.DataConnectorORM.id == schemas.DataConnectorToProjectLinkORM.data_connector_id,
-                )
-                .join(
-                    target=schemas.DataConnectorSecretORM,
-                    onclause=schemas.DataConnectorORM.id == schemas.DataConnectorSecretORM.data_connector_id,
-                    isouter=True,  # NOTE: enables us to select data connectors with and without secrets
-                )
-                .where(schemas.DataConnectorToProjectLinkORM.project_id == project_id)
+                select(schemas.DataConnectorORM)
                 .where(
-                    or_(
-                        schemas.DataConnectorSecretORM.user_id == user.id,
-                        # NOTE: the user_id field on a connector secret is non-nullable, but
-                        # since we are doing an outer join this allows us to include data connectors
-                        # without secrets.
-                        schemas.DataConnectorSecretORM.user_id.is_(None),
+                    schemas.DataConnectorORM.project_links.any(
+                        schemas.DataConnectorToProjectLinkORM.project_id == project_id
                     )
                 )
-                # NOTE: The order is important for the processing of the data below
-                .order_by(schemas.DataConnectorORM.id)
-                .order_by(schemas.DataConnectorSecretORM.secret_id)
+                .where(
+                    or_(
+                        # Data connectors with secrets for the specific user
+                        schemas.DataConnectorORM.secrets.any(
+                            schemas.DataConnectorSecretORM.user_id == user.id,
+                        ),
+                        # Data connectors without any secrets
+                        # See: https://docs.sqlalchemy.org/en/20/orm/queryguide/select.html#exists-forms-has-any
+                        ~schemas.DataConnectorORM.secrets.any(),
+                    )
+                )
             )
-            results = await session.stream(stmt)
-            dc_current: models.DataConnector | None = None
-            dc_secrets: list[models.DataConnectorSecret] = []
-            async for res in results:
-                # NOTE: sqlalchemy does not set the types right for outer joins
-                dc, sec = cast(tuple[schemas.DataConnectorORM, schemas.DataConnectorSecretORM | None], res.t)
-                if dc_current is not None and dc.id != dc_current.id:
-                    yield models.DataConnectorWithSecrets(dc_current, dc_secrets)
-                if dc_current is None or dc.id != dc_current.id:
-                    dc_current = dc.dump()
-                    dc_secrets = [sec.dump()] if sec else []
-                    continue
-                if sec:
-                    dc_secrets.append(sec.dump())
-            if dc_current is None:
-                # There are no data connectors at all returned from the DB
-                return
-            yield models.DataConnectorWithSecrets(dc_current, dc_secrets)
+            results = await session.stream_scalars(stmt)
+            async for dc in results:
+                yield models.DataConnectorWithSecrets(dc.dump(), [secret.dump() for secret in dc.secrets])
 
     async def get_data_connector_secrets(
         self,

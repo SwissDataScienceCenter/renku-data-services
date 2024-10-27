@@ -85,6 +85,8 @@ class DataConnectorORM(BaseORM):
         onupdate=func.now(),
         nullable=False,
     )
+    secrets: Mapped[list["DataConnectorSecretORM"]] = relationship(init=False, viewonly=True, lazy="selectin")
+    project_links: Mapped[list["DataConnectorToProjectLinkORM"]] = relationship(init=False, viewonly=True)
 
     def dump(self) -> models.DataConnector:
         """Create a data connector model from the DataConnectorORM."""
