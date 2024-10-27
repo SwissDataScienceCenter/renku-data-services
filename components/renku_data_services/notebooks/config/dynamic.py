@@ -405,13 +405,13 @@ class _SessionConfig:
             storage=_SessionStorageConfig.from_env(),
             containers=_SessionContainers.from_env(),
             ssh=_SessionSshConfig.from_env(),
-            default_image=os.environ.get("", "renku/singleuser:latest"),
-            enforce_cpu_limits=CPUEnforcement(os.environ.get("", "off")),
+            default_image=os.environ.get("NB_SESSIONS__DEFAULT_IMAGE", "renku/singleuser:latest"),
+            enforce_cpu_limits=CPUEnforcement(os.environ.get("NB_SESSIONS__ENFORCE_CPU_LIMITS", "off")),
             termination_warning_duration_seconds=_parse_value_as_int(os.environ.get("", 12 * 60 * 60)),
             image_default_workdir="/home/jovyan",
-            node_selector=yaml.safe_load(StringIO(os.environ.get("", "{}"))),
-            affinity=yaml.safe_load(StringIO(os.environ.get("", "{}"))),
-            tolerations=yaml.safe_load(StringIO(os.environ.get("", "[]"))),
+            node_selector=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__NODE_SELECTOR", "{}"))),
+            affinity=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__AFFINITY", "{}"))),
+            tolerations=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__TOLERATIONS", "[]"))),
         )
 
     @classmethod

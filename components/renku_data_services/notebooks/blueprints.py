@@ -21,6 +21,7 @@ from renku_data_services.base_api.auth import authenticate, authenticate_2
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser, Authenticator
 from renku_data_services.crc.db import ResourcePoolRepository
+from renku_data_services.crc.models import GpuKind
 from renku_data_services.data_connectors.db import (
     DataConnectorProjectLinkRepository,
     DataConnectorRepository,
@@ -68,6 +69,11 @@ from renku_data_services.notebooks.crs import (
 from renku_data_services.notebooks.errors.intermittent import AnonymousUserPatchError
 from renku_data_services.notebooks.util.kubernetes_ import (
     renku_2_make_server_name,
+)
+from renku_data_services.notebooks.utils import (
+    merge_node_affinities,
+    node_affinity_from_resource_class,
+    tolerations_from_resource_class,
 )
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
@@ -282,6 +288,7 @@ class NotebooksNewBP(CustomBlueprint):
                 raise errors.ProgrammingError(message="The default resource class has to have an ID", quiet=True)
             resource_class_id = body.resource_class_id or default_resource_class.id
             await self.nb_config.crc_validator.validate_class_storage(user, resource_class_id, body.disk_storage)
+            resource_class = await self.rp_repo.get_resource_class(user, resource_class_id)
             work_dir = environment.working_directory
             # TODO: Wait for pitch on users secrets to implement this
             # user_secrets: K8sUserSecrets | None = None
@@ -336,7 +343,11 @@ class NotebooksNewBP(CustomBlueprint):
                 secret_name = f"{server_name}-ds-{cs_id.lower()}"
                 secrets_to_create.append(cs.secret(secret_name, self.nb_config.k8s_client.preferred_namespace))
                 data_sources.append(
-                    DataSource(mountPath=cs.mount_folder, secretRef=SecretRefWhole(name=secret_name, adopt=True))
+                    DataSource(
+                        mountPath=cs.mount_folder,
+                        secretRef=SecretRefWhole(name=secret_name, adopt=True),
+                        accessMode="ReadOnlyMany" if cs.readonly else "ReadWriteOnce",
+                    )
                 )
             cert_init, cert_vols = init_containers.certificates_container(self.nb_config)
             session_init_containers = [InitContainer.model_validate(self.nb_config.k8s_v2_client.sanitize(cert_init))]
@@ -380,6 +391,22 @@ class NotebooksNewBP(CustomBlueprint):
                 "renku.io/launcher_id": body.launcher_id,
                 "renku.io/resource_class_id": str(body.resource_class_id or default_resource_class.id),
             }
+            requests: dict[str, str | int] = {
+                "cpu": str(round(resource_class.cpu * 1000)) + "m",
+                "memory": resource_class.memory,
+            }
+            if resource_class.gpu > 0:
+                gpu_name = GpuKind.NVIDIA.value + "/gpu"
+                requests[gpu_name] = resource_class.gpu
+            tolerations = [
+                Toleration.model_validate(toleration) for toleration in self.nb_config.sessions.tolerations
+            ] + tolerations_from_resource_class(resource_class)
+            affinity = Affinity.model_validate(self.nb_config.sessions.affinity)
+            rc_node_affinity = node_affinity_from_resource_class(resource_class)
+            if affinity.nodeAffinity:
+                affinity.nodeAffinity = merge_node_affinities(affinity.nodeAffinity, rc_node_affinity)
+            else:
+                affinity.nodeAffinity = rc_node_affinity
             manifest = AmaltheaSessionV1Alpha1(
                 metadata=Metadata(name=server_name, annotations=annotations),
                 spec=AmaltheaSessionSpec(
@@ -397,7 +424,7 @@ class NotebooksNewBP(CustomBlueprint):
                         workingDir=environment.working_directory.as_posix(),
                         runAsUser=environment.uid,
                         runAsGroup=environment.gid,
-                        resources=Resources(claims=None, requests=None, limits=None),
+                        resources=Resources(requests=requests),
                         extraVolumeMounts=[],
                         command=environment.command,
                         args=environment.args,
@@ -438,12 +465,8 @@ class NotebooksNewBP(CustomBlueprint):
                         else [],
                     ),
                     dataSources=data_sources,
-                    tolerations=[
-                        Toleration.model_validate(toleration) for toleration in self.nb_config.sessions.tolerations
-                    ],
-                    affinity=Affinity.model_validate(self.nb_config.sessions.affinity)
-                    if len(self.nb_config.sessions.affinity.keys()) > 0
-                    else None,
+                    tolerations=tolerations,
+                    affinity=affinity,
                 ),
             )
             parsed_proxy_url = urlparse(urljoin(base_server_url + "/", "oauth2"))
