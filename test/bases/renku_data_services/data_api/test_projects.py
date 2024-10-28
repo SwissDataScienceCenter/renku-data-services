@@ -157,6 +157,27 @@ async def test_project_creation_with_invalid_namespace(sanic_client, user_header
 
 
 @pytest.mark.asyncio
+async def test_project_creation_with_conflicting_slug(sanic_client, user_headers, regular_user) -> None:
+    namespace = regular_user.namespace.slug
+    payload = {
+        "name": "Existing project",
+        "namespace": namespace,
+        "slug": "my-project",
+    }
+    _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    payload = {
+        "name": "Conflicting project",
+        "namespace": namespace,
+        "slug": "my-project",
+    }
+    _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
+
+    assert response.status_code == 409, response.text
+
+
+@pytest.mark.asyncio
 async def test_get_a_project(create_project, get_project) -> None:
     # Create some projects
     await create_project("Project 1")
@@ -508,6 +529,33 @@ async def test_patch_project_invalid_namespace(
 
     assert response.status_code == 403, response.text
     assert "you do not have sufficient permissions" in response.json["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_patch_description_as_editor_and_keep_namespace_and_visibility(
+    sanic_client,
+    create_project,
+    user_headers,
+    regular_user,
+) -> None:
+    project = await create_project("Project 1", admin=True, members=[{"id": regular_user.id, "role": "editor"}])
+    project_id = project["id"]
+
+    headers = merge_headers(user_headers, {"If-Match": project["etag"]})
+    patch = {
+        # Test that we do not require DELETE permission when sending the current namepace
+        "namespace": project["namespace"],
+        # Test that we do not require DELETE permission when sending the current visibility
+        "visibility": project["visibility"],
+        "description": "Updated description",
+    }
+    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=headers, json=patch)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("namespace") == project["namespace"]
+    assert response.json.get("visibility") == project["visibility"]
+    assert response.json.get("description") == "Updated description"
 
 
 @pytest.mark.asyncio

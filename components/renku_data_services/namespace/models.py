@@ -29,6 +29,13 @@ class Group(UnsavedGroup):
 
 
 @dataclass
+class DeletedGroup:
+    """A group that was deleted from the DB."""
+
+    id: ULID
+
+
+@dataclass
 class GroupMember:
     """Group member."""
 
@@ -66,6 +73,15 @@ class Namespace:
     underlying_resource_id: ULID | str  # The user or group ID depending on the Namespace kind
     latest_slug: str | None = None
     name: str | None = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class GroupPatch:
+    """Model for changes requested on a group."""
+
+    slug: str | None
+    name: str | None
+    description: str | None
 
 
 @dataclass

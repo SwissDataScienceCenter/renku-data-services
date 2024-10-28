@@ -99,7 +99,7 @@ class GroupRepository:
         if not requested_by.is_admin:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
-        async with self.session_maker() as session, session.begin():
+        async with self.session_maker() as session:
             groups = await session.stream_scalars(select(schemas.GroupORM))
             async for group in groups:
                 yield group.dump()
@@ -171,40 +171,41 @@ class GroupRepository:
     @with_db_transaction
     @dispatch_message(GroupUpdated)
     async def update_group(
-        self, user: base_models.APIUser, slug: str, payload: dict[str, str], *, session: AsyncSession | None = None
+        self, user: base_models.APIUser, slug: str, patch: models.GroupPatch, *, session: AsyncSession | None = None
     ) -> models.Group:
         """Update a group in the DB."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
         group, _ = await self._get_group(session, user, slug)
-        if user.id != group.created_by and not user.is_admin:
-            raise errors.ForbiddenError(message="Only the owner and admins can modify groups")
         if group.namespace.slug != slug.lower():
             raise errors.UpdatingWithStaleContentError(
                 message=f"You cannot update a group by using its old slug {slug}.",
                 detail=f"The latest slug is {group.namespace.slug}, please use this for updates.",
             )
-        for k, v in payload.items():
-            match k:
-                case "slug":
-                    new_slug_str = v.lower()
-                    if group.namespace.slug == new_slug_str:
-                        # The slug has not changed at all.
-                        # NOTE that the continue will work only because of the enclosing loop over the payload
-                        continue
-                    new_slug_already_taken = await session.scalar(
-                        select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == new_slug_str)
-                    )
-                    if new_slug_already_taken:
-                        raise errors.ValidationError(
-                            message=f"The slug {v} is already in use, please try a different one"
-                        )
-                    session.add(schemas.NamespaceOldORM(slug=group.namespace.slug, latest_slug_id=group.namespace.id))
-                    group.namespace.slug = new_slug_str
-                case "description":
-                    group.description = v
-                case "name":
-                    group.name = v
+
+        authorized = await self.authz.has_permission(user, ResourceType.group, group.id, Scope.DELETE)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Group with slug '{slug}' does not exist or you do not have access to it."
+            )
+
+        new_slug_str = patch.slug.lower() if patch.slug is not None else None
+        if new_slug_str is not None and new_slug_str != group.namespace.slug:
+            # Only update if the slug has changed.
+            new_slug_already_taken = await session.scalar(
+                select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == new_slug_str)
+            )
+            if new_slug_already_taken:
+                raise errors.ValidationError(
+                    message=f"The slug {new_slug_str} is already in use, please try a different one"
+                )
+            session.add(schemas.NamespaceOldORM(slug=group.namespace.slug, latest_slug_id=group.namespace.id))
+            group.namespace.slug = new_slug_str
+        if patch.name is not None:
+            group.name = patch.name
+        if patch.description is not None:
+            group.description = patch.description if patch.description else None
+
         return group.dump()
 
     @with_db_transaction
@@ -237,7 +238,7 @@ class GroupRepository:
     @dispatch_message(GroupRemoved)
     async def delete_group(
         self, user: base_models.APIUser, slug: str, *, session: AsyncSession | None = None
-    ) -> models.Group | None:
+    ) -> models.DeletedGroup | None:
         """Delete a specific group."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
@@ -257,7 +258,7 @@ class GroupRepository:
         # trigger and procedure that does the cleanup when a slug is removed.
         stmt = delete(schemas.GroupORM).where(schemas.GroupORM.id == group.id)
         await session.execute(stmt)
-        return group.dump()
+        return models.DeletedGroup(id=group.id)
 
     @with_db_transaction
     @dispatch_message(events.GroupMembershipChanged)
