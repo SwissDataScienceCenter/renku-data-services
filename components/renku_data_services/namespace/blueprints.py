@@ -15,7 +15,7 @@ from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
 from renku_data_services.errors import errors
 from renku_data_services.namespace import apispec, models
-from renku_data_services.namespace.core import validate_project_patch
+from renku_data_services.namespace.core import validate_group_patch
 from renku_data_services.namespace.db import GroupRepository
 
 
@@ -88,7 +88,7 @@ class GroupsBP(CustomBlueprint):
         async def _patch(
             _: Request, user: base_models.APIUser, slug: str, body: apispec.GroupPatchRequest
         ) -> JSONResponse:
-            group_patch = validate_project_patch(body)
+            group_patch = validate_group_patch(body)
             res = await self.group_repo.update_group(user=user, slug=slug, patch=group_patch)
             return validated_json(apispec.GroupResponse, res)
 
