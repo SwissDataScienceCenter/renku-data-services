@@ -62,6 +62,13 @@ class UnsavedDataConnector(BaseDataConnector):
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
+class DeletedDataConnector:
+    """A dataconnector that has been deleted."""
+
+    id: ULID
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
 class CloudStorageCorePatch:
     """Model for changes requested on a remote storage configuration."""
 
