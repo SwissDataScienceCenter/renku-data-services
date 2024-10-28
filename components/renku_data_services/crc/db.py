@@ -12,9 +12,9 @@ from dataclasses import dataclass, field
 from functools import wraps
 from typing import Any, Concatenate, Optional, ParamSpec, TypeVar, cast
 
-from sqlalchemy import NullPool, create_engine, delete, select
+from sqlalchemy import NullPool, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import Session, selectinload, sessionmaker
+from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select, and_, not_, or_
 from sqlalchemy.sql.expression import false, true
 
@@ -152,7 +152,6 @@ class ResourcePoolRepository(_Base):
         engine = create_async_engine(async_connection_url, poolclass=NullPool)
         session_maker = async_sessionmaker(
             engine,
-            class_=Session,
             expire_on_commit=True,
         )
         async with session_maker() as session, session.begin():
