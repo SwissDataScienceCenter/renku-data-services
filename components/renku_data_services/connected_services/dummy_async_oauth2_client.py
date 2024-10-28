@@ -26,6 +26,9 @@ class DummyAsyncOAuth2Client(AsyncOAuth2Client):  # type: ignore[misc]
         if parsed.path == "/api/v4/projects/username%2Fmy_repo":
             return self._get_repository_response()
 
+        if parsed.path == "/user/installations":
+            return self._get_installations_response()
+
         return Response(500, json=dict())
 
     @staticmethod
@@ -46,5 +49,23 @@ class DummyAsyncOAuth2Client(AsyncOAuth2Client):  # type: ignore[misc]
                 group_access=None,
             ),
             visibility="private",
+        )
+        return Response(200, json=repository)
+
+    @staticmethod
+    def _get_installations_response() -> Response:
+        repository = dict(
+            total_count=1,
+            installations=[
+                dict(
+                    id=12345,
+                    account=dict(
+                        login="USERNAME",
+                        html_url="https://example.org/USERNAME",
+                    ),
+                    repository_selection="all",
+                    suspended_at=None,
+                )
+            ],
         )
         return Response(200, json=repository)

@@ -186,11 +186,60 @@ paths:
             type: string
       responses:
         "200":
-          description: The connection.
+          description: The retrieved account information.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ConnectedAccount"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - oauth2
+  /oauth2/connections/{connection_id}/installations:
+    get:
+      summary: Get the installations for this OAuth2 connection for the currently authenticated user if their account is connected
+      description: This endpoint is specific to GitHub applications.
+      parameters:
+        - in: path
+          name: connection_id
+          required: true
+          schema:
+            type: string
+        - in: query
+          description: Query parameters
+          name: params
+          style: form
+          explode: true
+          schema:
+            $ref: "#/components/schemas/PaginationRequest"
+      responses:
+        "200":
+          description: The list of available GitHub installations.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppInstallationList"
+          headers:
+            page:
+              description: The index of the current page (starting at 1).
+              required: true
+              schema:
+                type: integer
+            per-page:
+              description: The number of items per page.
+              required: true
+              schema:
+                type: integer
+            total:
+              description: The total number of items.
+              required: true
+              schema:
+                type: integer
+            total-pages:
+              description: The total number of pages.
+              required: true
+              schema:
+                type: integer
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -209,6 +258,8 @@ components:
           $ref: "#/components/schemas/ProviderId"
         kind:
           $ref: "#/components/schemas/ProviderKind"
+        app_slug:
+          $ref: "#/components/schemas/ApplicationSlug"
         client_id:
           $ref: "#/components/schemas/ClientId"
         client_secret:
@@ -224,6 +275,7 @@ components:
       required:
         - id
         - kind
+        - app_slug
         - client_id
         - display_name
         - scope
@@ -237,6 +289,8 @@ components:
           $ref: "#/components/schemas/ProviderId"
         kind:
           $ref: "#/components/schemas/ProviderKind"
+        app_slug:
+          $ref: "#/components/schemas/ApplicationSlug"
         client_id:
           $ref: "#/components/schemas/ClientId"
         client_secret:
@@ -262,6 +316,8 @@ components:
       properties:
         kind:
           $ref: "#/components/schemas/ProviderKind"
+        app_slug:
+          $ref: "#/components/schemas/ApplicationSlug"
         client_id:
           $ref: "#/components/schemas/ClientId"
         client_secret:
@@ -303,6 +359,33 @@ components:
       required:
         - username
         - web_url
+    AppInstallationList:
+      type: array
+      items:
+        $ref: "#/components/schemas/AppInstallation"
+    AppInstallation:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: integer
+        account_login:
+          type: string
+        account_web_url:
+          type: string
+        repository_selection:
+          type: string
+          enum:
+            - all
+            - selected
+        suspended_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - account_login
+        - account_web_url
+        - repository_selection
     Ulid:
       description: ULID identifier
       type: string
@@ -322,6 +405,13 @@ components:
         - "onedrive"
         - "dropbox"
       example: "gitlab"
+    ApplicationSlug:
+      description: |
+        URL-friendly name of the application. This field only applies to
+        GitHub Applications. The slug is provided by GitHub when
+        setting up a GitHub App.
+      type: string
+      example: "my-application"
     ClientId:
       description: |
         Client ID or Application ID value. This is provided by
@@ -363,6 +453,21 @@ components:
       description: A URL which can be opened in a browser, i.e. a web page.
       type: string
       example: "https://example.org"
+    PaginationRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        page:
+          description: Result's page number starting from 1
+          type: integer
+          minimum: 1
+          default: 1
+        per_page:
+          description: The number of results per page
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
     ErrorResponse:
       type: object
       properties:
