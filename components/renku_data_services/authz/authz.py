@@ -46,11 +46,23 @@ from renku_data_services.authz.models import (
     Visibility,
 )
 from renku_data_services.base_models.core import InternalServiceAdmin
-from renku_data_services.data_connectors.models import DataConnector, DataConnectorToProjectLink, DataConnectorUpdate
+from renku_data_services.data_connectors.models import (
+    DataConnector,
+    DataConnectorToProjectLink,
+    DataConnectorUpdate,
+    DeletedDataConnector,
+)
 from renku_data_services.errors import errors
-from renku_data_services.namespace.models import Group, GroupUpdate, Namespace, NamespaceKind, NamespaceUpdate
-from renku_data_services.project.models import Project, ProjectUpdate
-from renku_data_services.users.models import UserInfo, UserInfoUpdate
+from renku_data_services.namespace.models import (
+    DeletedGroup,
+    Group,
+    GroupUpdate,
+    Namespace,
+    NamespaceKind,
+    NamespaceUpdate,
+)
+from renku_data_services.project.models import DeletedProject, Project, ProjectUpdate
+from renku_data_services.users.models import DeletedUser, UserInfo, UserInfoUpdate
 
 _P = ParamSpec("_P")
 
@@ -68,12 +80,16 @@ _AuthzChangeFuncResult = TypeVar(
     "_AuthzChangeFuncResult",
     bound=Project
     | ProjectUpdate
+    | DeletedProject
     | Group
+    | DeletedGroup
     | UserInfoUpdate
     | list[UserInfo]
     | UserInfo
+    | DeletedUser
     | DataConnector
     | DataConnectorUpdate
+    | DeletedDataConnector
     | DataConnectorToProjectLink
     | None,
 )
@@ -253,15 +269,26 @@ def _is_allowed_on_resource(
                     message="The authorization decorator needs to have at least one positional argument after 'user'"
                 )
             potential_resource = args[0]
-            resource: Project | Group | Namespace | DataConnector | None = None
+            resource: (
+                Project
+                | DeletedProject
+                | Group
+                | DeletedGroup
+                | Namespace
+                | DataConnector
+                | DeletedDataConnector
+                | None
+            ) = None
             match resource_type:
-                case ResourceType.project if isinstance(potential_resource, Project):
+                case ResourceType.project if isinstance(potential_resource, (Project, DeletedProject)):
                     resource = potential_resource
-                case ResourceType.group if isinstance(potential_resource, Group):
+                case ResourceType.group if isinstance(potential_resource, (Group, DeletedGroup)):
                     resource = potential_resource
                 case ResourceType.user_namespace if isinstance(potential_resource, Namespace):
                     resource = potential_resource
-                case ResourceType.data_connector if isinstance(potential_resource, DataConnector):
+                case ResourceType.data_connector if isinstance(
+                    potential_resource, (DataConnector, DeletedDataConnector)
+                ):
                     resource = potential_resource
                 case _:
                     raise errors.ProgrammingError(
@@ -604,7 +631,7 @@ class Authz:
             match operation, resource:
                 case AuthzOperation.create, ResourceType.project if isinstance(result, Project):
                     authz_change = db_repo.authz._add_project(result)
-                case AuthzOperation.delete, ResourceType.project if isinstance(result, Project):
+                case AuthzOperation.delete, ResourceType.project if isinstance(result, DeletedProject):
                     user = _extract_user_from_args(*func_args, **func_kwargs)
                     authz_change = await db_repo.authz._remove_project(user, result)
                 case AuthzOperation.delete, ResourceType.project if result is None:
@@ -620,7 +647,7 @@ class Authz:
                         authz_change.extend(await db_repo.authz._update_project_namespace(user, result.new))
                 case AuthzOperation.create, ResourceType.group if isinstance(result, Group):
                     authz_change = db_repo.authz._add_group(result)
-                case AuthzOperation.delete, ResourceType.group if isinstance(result, Group):
+                case AuthzOperation.delete, ResourceType.group if isinstance(result, DeletedGroup):
                     user = _extract_user_from_args(*func_args, **func_kwargs)
                     authz_change = await db_repo.authz._remove_group(user, result)
                 case AuthzOperation.delete, ResourceType.group if result is None:
@@ -629,7 +656,7 @@ class Authz:
                 case AuthzOperation.update_or_insert, ResourceType.user if isinstance(result, UserInfoUpdate):
                     if result.old is None:
                         authz_change = db_repo.authz._add_user_namespace(result.new.namespace)
-                case AuthzOperation.delete, ResourceType.user if isinstance(result, UserInfo):
+                case AuthzOperation.delete, ResourceType.user if isinstance(result, DeletedUser):
                     user = _extract_user_from_args(*func_args, **func_kwargs)
                     authz_change = await db_repo.authz._remove_user_namespace(result.id)
                     authz_change.extend(await db_repo.authz._remove_user(user, result))
@@ -649,7 +676,7 @@ class Authz:
                 case AuthzOperation.delete, ResourceType.data_connector if result is None:
                     # NOTE: This means that the data connector does not exist in the first place so nothing was deleted
                     pass
-                case AuthzOperation.delete, ResourceType.data_connector if isinstance(result, DataConnector):
+                case AuthzOperation.delete, ResourceType.data_connector if isinstance(result, DeletedDataConnector):
                     user = _extract_user_from_args(*func_args, **func_kwargs)
                     authz_change = await db_repo.authz._remove_data_connector(user, result)
                 case AuthzOperation.update, ResourceType.data_connector if isinstance(result, DataConnectorUpdate):
@@ -789,11 +816,13 @@ class Authz:
 
     @_is_allowed_on_resource(Scope.DELETE, ResourceType.project)
     async def _remove_project(
-        self, user: base_models.APIUser, project: Project, *, zed_token: ZedToken | None = None
+        self, user: base_models.APIUser, deleted_project: DeletedProject, *, zed_token: ZedToken | None = None
     ) -> _AuthzChange:
         """Remove the relationships associated with the project."""
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
-        rel_filter = RelationshipFilter(resource_type=ResourceType.project.value, optional_resource_id=str(project.id))
+        rel_filter = RelationshipFilter(
+            resource_type=ResourceType.project.value, optional_resource_id=str(deleted_project.id)
+        )
         responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
             ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
         )
@@ -803,7 +832,7 @@ class Authz:
         # Project is also a subject for "linked_to" relations
         rel_filter = RelationshipFilter(
             optional_subject_filter=SubjectFilter(
-                subject_type=ResourceType.project.value, optional_subject_id=str(project.id)
+                subject_type=ResourceType.project.value, optional_subject_id=str(deleted_project.id)
             )
         )
         responses: AsyncIterable[ReadRelationshipsResponse] = self.client.ReadRelationships(
@@ -1268,7 +1297,7 @@ class Authz:
 
     @_is_allowed_on_resource(Scope.DELETE, ResourceType.group)
     async def _remove_group(
-        self, user: base_models.APIUser, group: Group, *, zed_token: ZedToken | None = None
+        self, user: base_models.APIUser, group: DeletedGroup, *, zed_token: ZedToken | None = None
     ) -> _AuthzChange:
         """Remove the group from the authorization database."""
         if not group.id:
@@ -1586,7 +1615,7 @@ class Authz:
 
     @_is_allowed_on_resource(Scope.DELETE, ResourceType.data_connector)
     async def _remove_data_connector(
-        self, user: base_models.APIUser, data_connector: DataConnector, *, zed_token: ZedToken | None = None
+        self, user: base_models.APIUser, data_connector: DeletedDataConnector, *, zed_token: ZedToken | None = None
     ) -> _AuthzChange:
         """Remove the relationships associated with the data connector."""
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
@@ -1610,7 +1639,7 @@ class Authz:
     async def _remove_user(
         self,
         requested_by: base_models.APIUser,
-        user_to_delete: UserInfo,
+        user_to_delete: DeletedUser,
     ) -> _AuthzChange:
         """Remove a user from the authorization database."""
         # Compute permission by hand for user deletion
