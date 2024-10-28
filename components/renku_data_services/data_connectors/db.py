@@ -279,7 +279,7 @@ class DataConnectorRepository:
         data_connector_id: ULID,
         *,
         session: AsyncSession | None = None,
-    ) -> models.DataConnector | None:
+    ) -> models.DeletedDataConnector | None:
         """Delete a data connector."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required.")
@@ -296,9 +296,8 @@ class DataConnectorRepository:
         if data_connector_orm is None:
             return None
 
-        data_connector = data_connector_orm.dump()
         await session.delete(data_connector_orm)
-        return data_connector
+        return models.DeletedDataConnector(id=data_connector_id)
 
     async def get_data_connector_permissions(
         self, user: base_models.APIUser, data_connector_id: ULID

@@ -532,6 +532,33 @@ async def test_patch_project_invalid_namespace(
 
 
 @pytest.mark.asyncio
+async def test_patch_description_as_editor_and_keep_namespace_and_visibility(
+    sanic_client,
+    create_project,
+    user_headers,
+    regular_user,
+) -> None:
+    project = await create_project("Project 1", admin=True, members=[{"id": regular_user.id, "role": "editor"}])
+    project_id = project["id"]
+
+    headers = merge_headers(user_headers, {"If-Match": project["etag"]})
+    patch = {
+        # Test that we do not require DELETE permission when sending the current namepace
+        "namespace": project["namespace"],
+        # Test that we do not require DELETE permission when sending the current visibility
+        "visibility": project["visibility"],
+        "description": "Updated description",
+    }
+    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=headers, json=patch)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("namespace") == project["namespace"]
+    assert response.json.get("visibility") == project["visibility"]
+    assert response.json.get("description") == "Updated description"
+
+
+@pytest.mark.asyncio
 async def test_get_all_projects_for_specific_user(
     create_project, sanic_client, user_headers, admin_headers, unauthorized_headers
 ) -> None:

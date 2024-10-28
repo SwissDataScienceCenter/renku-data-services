@@ -5,7 +5,7 @@ from __future__ import annotations
 import functools
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import UTC, datetime
-from typing import Any, Concatenate, ParamSpec, TypeVar
+from typing import Concatenate, ParamSpec, TypeVar
 
 from sqlalchemy import Select, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -215,7 +215,7 @@ class ProjectRepository:
         self,
         user: base_models.APIUser,
         project_id: ULID,
-        payload: dict[str, Any],
+        patch: models.ProjectPatch,
         etag: str | None = None,
         *,
         session: AsyncSession | None = None,
@@ -231,13 +231,10 @@ class ProjectRepository:
         old_project = project.dump()
 
         required_scope = Scope.WRITE
-        new_visibility = payload.get("visibility")
-        if isinstance(new_visibility, str):
-            new_visibility = models.Visibility(new_visibility)
-        if "visibility" in payload and new_visibility != old_project.visibility:
+        if patch.visibility is not None and patch.visibility != old_project.visibility:
             # NOTE: changing the visibility requires the user to be owner which means they should have DELETE permission
             required_scope = Scope.DELETE
-        if "namespace" in payload and payload["namespace"] != old_project.namespace:
+        if patch.namespace is not None and patch.namespace != old_project.namespace.slug:
             # NOTE: changing the namespace requires the user to be owner which means they should have DELETE permission
             required_scope = Scope.DELETE
         authorized = await self.authz.has_permission(user, ResourceType.project, project_id, required_scope)
@@ -250,30 +247,14 @@ class ProjectRepository:
         if etag is not None and current_etag != etag:
             raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
 
-        if "repositories" in payload:
-            payload["repositories"] = [
-                schemas.ProjectRepositoryORM(url=r, project_id=project_id_str, project=project)
-                for r in payload["repositories"]
-            ]
-            # Trigger update for ``updated_at`` column
-            await session.execute(update(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id).values())
-
-        if "keywords" in payload and not payload["keywords"]:
-            payload["keywords"] = None
-
-        for key, value in payload.items():
-            # NOTE: ``slug``, ``id``, ``created_by``, and ``creation_date`` cannot be edited or cannot
-            # be edited by setting a property on the ORM object instance.
-            if key not in ["slug", "id", "created_by", "creation_date", "namespace"]:
-                setattr(project, key, value)
-
-        if "namespace" in payload:
-            ns_slug = payload["namespace"]
+        if patch.name is not None:
+            project.name = patch.name
+        if patch.namespace is not None and patch.namespace != old_project.namespace.slug:
             ns = await session.scalar(
-                select(ns_schemas.NamespaceORM).where(ns_schemas.NamespaceORM.slug == ns_slug.lower())
+                select(ns_schemas.NamespaceORM).where(ns_schemas.NamespaceORM.slug == patch.namespace.lower())
             )
             if not ns:
-                raise errors.MissingResourceError(message=f"The namespace with slug {ns_slug} does not exist")
+                raise errors.MissingResourceError(message=f"The namespace with slug {patch.namespace} does not exist")
             if not ns.group_id and not ns.user_id:
                 raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
             resource_type, resource_id = (
@@ -282,9 +263,27 @@ class ProjectRepository:
             has_permission = await self.authz.has_permission(user, resource_type, resource_id, Scope.WRITE)
             if not has_permission:
                 raise errors.ForbiddenError(
-                    message=f"The project cannot be created because you do not have sufficient permissions with the namespace {ns_slug}"  # noqa: E501
+                    message=f"The project cannot be moved because you do not have sufficient permissions with the namespace {patch.namespace}"  # noqa: E501
                 )
             project.slug.namespace_id = ns.id
+        if patch.visibility is not None:
+            visibility_orm = (
+                project_apispec.Visibility(patch.visibility)
+                if isinstance(patch.visibility, str)
+                else project_apispec.Visibility(patch.visibility.value)
+            )
+            project.visibility = visibility_orm
+        if patch.repositories is not None:
+            project.repositories = [
+                schemas.ProjectRepositoryORM(url=r, project_id=project_id_str, project=project)
+                for r in patch.repositories
+            ]
+            # Trigger update for ``updated_at`` column
+            await session.execute(update(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id).values())
+        if patch.description is not None:
+            project.description = patch.description if patch.description else None
+        if patch.keywords is not None:
+            project.keywords = patch.keywords if patch.keywords else None
 
         await session.flush()
         await session.refresh(project)
@@ -299,7 +298,7 @@ class ProjectRepository:
     @dispatch_message(avro_schema_v2.ProjectRemoved)
     async def delete_project(
         self, user: base_models.APIUser, project_id: ULID, *, session: AsyncSession | None = None
-    ) -> models.Project | None:
+    ) -> models.DeletedProject | None:
         """Delete a project."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
@@ -321,7 +320,7 @@ class ProjectRepository:
             delete(storage_schemas.CloudStorageORM).where(storage_schemas.CloudStorageORM.project_id == str(project_id))
         )
 
-        return project.dump()
+        return models.DeletedProject(id=project.id)
 
     async def get_project_permissions(self, user: base_models.APIUser, project_id: ULID) -> models.ProjectPermissions:
         """Get the permissions of the user on a given project."""
