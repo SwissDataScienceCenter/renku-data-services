@@ -29,6 +29,13 @@ class Group(UnsavedGroup):
 
 
 @dataclass
+class DeletedGroup:
+    """A group that was deleted from the DB."""
+
+    id: ULID
+
+
+@dataclass
 class GroupMember:
     """Group member."""
 

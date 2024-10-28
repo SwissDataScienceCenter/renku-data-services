@@ -63,6 +63,13 @@ class ProjectPatch:
 
 
 @dataclass
+class DeletedProject:
+    """Indicates that a project was deleted."""
+
+    id: ULID
+
+
+@dataclass
 class ProjectUpdate:
     """Indicates that a project has been updated and retains the old and new values."""
 
