@@ -3,7 +3,7 @@
 from base64 import b64decode, b64encode
 from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
-from typing import Any, cast
+from typing import Any
 from urllib.parse import urljoin
 
 from authlib.integrations.httpx_client import AsyncOAuth2Client
@@ -104,7 +104,10 @@ class ConnectedServicesRepository:
             return client.dump(user_is_admin=user.is_admin)
 
     async def update_oauth2_client(
-        self, user: base_models.APIUser, provider_id: str, **kwargs: dict
+        self,
+        user: base_models.APIUser,
+        provider_id: str,
+        patch: models.OAuth2ClientPatch,
     ) -> models.OAuth2Client:
         """Update an OAuth2 Client entry."""
         if not user.is_admin:
@@ -118,17 +121,22 @@ class ConnectedServicesRepository:
             if client is None:
                 raise errors.MissingResourceError(message=f"OAuth2 Client with id '{provider_id}' does not exist.")
 
-            client_secret = cast(str | None, kwargs.get("client_secret"))
-            if client_secret:
-                client.client_secret = encrypt_string(
-                    self.encryption_key, client.created_by_id, cast(str, kwargs["client_secret"])
-                )
-            elif client_secret == "":  # nosec B105
+            if patch.kind is not None:
+                client.kind = patch.kind
+            if patch.client_id is not None:
+                client.client_id = patch.client_id
+            if patch.client_secret:
+                client.client_secret = encrypt_string(self.encryption_key, client.created_by_id, patch.client_secret)
+            elif patch.client_secret == "":  # nosec B105
                 client.client_secret = None
-
-            for key, value in kwargs.items():
-                if key in ["kind", "client_id", "display_name", "scope", "url", "use_pkce"]:
-                    setattr(client, key, value)
+            if patch.display_name is not None:
+                client.display_name = patch.display_name
+            if patch.scope is not None:
+                client.scope = patch.scope
+            if patch.url is not None:
+                client.url = patch.url
+            if patch.use_pkce is not None:
+                client.use_pkce = patch.use_pkce
 
             await session.flush()
             await session.refresh(client)

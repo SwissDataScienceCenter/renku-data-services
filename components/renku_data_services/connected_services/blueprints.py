@@ -16,6 +16,7 @@ from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.connected_services import apispec
 from renku_data_services.connected_services.apispec_base import AuthorizeParams, CallbackParams
+from renku_data_services.connected_services.core import validate_oauth2_client_patch
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 
 
@@ -69,9 +70,9 @@ class OAuth2ClientsBP(CustomBlueprint):
             _: Request, user: base_models.APIUser, provider_id: str, body: apispec.ProviderPatch
         ) -> JSONResponse:
             provider_id = unquote(provider_id)
-            body_dict = body.model_dump(exclude_none=True)
+            client_patch = validate_oauth2_client_patch(body)
             client = await self.connected_services_repo.update_oauth2_client(
-                user=user, provider_id=provider_id, **body_dict
+                user=user, provider_id=provider_id, patch=client_patch
             )
             return validated_json(apispec.Provider, client)
 
