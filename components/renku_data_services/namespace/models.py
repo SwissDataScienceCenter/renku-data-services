@@ -75,6 +75,15 @@ class Namespace:
     name: str | None = None
 
 
+@dataclass(frozen=True, eq=True, kw_only=True)
+class GroupPatch:
+    """Model for changes requested on a group."""
+
+    slug: str | None
+    name: str | None
+    description: str | None
+
+
 @dataclass
 class GroupUpdate:
     """Information about the update of a group."""
