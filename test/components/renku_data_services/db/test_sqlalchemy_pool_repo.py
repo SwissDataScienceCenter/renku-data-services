@@ -111,7 +111,7 @@ async def test_resource_pool_update_classes(
         old_classes = [asdict(cls) for cls in list(inserted_rp.classes)]
         new_classes_dicts = [{**cls, **data.draw(rc_update_reqs_dict)} for cls in old_classes]
         new_classes_models = [models.ResourceClass.from_dict(cls) for cls in new_classes_dicts]
-        new_classes_models = sorted(new_classes_models, key=lambda x: (x.gpu, x.cpu, x.memory, x.max_storage, x.name))
+        new_classes_models = sort_rp_classes(new_classes_models)
 
         updated_rp = await pool_repo.update_resource_pool(
             id=inserted_rp.id, classes=new_classes_dicts, api_user=admin_user
@@ -119,20 +119,19 @@ async def test_resource_pool_update_classes(
 
         assert updated_rp.id == inserted_rp.id
         assert len(updated_rp.classes) == len(inserted_rp.classes)
-        assert sorted(
+        assert sort_rp_classes(
             updated_rp.classes,
-            key=lambda x: x.id or x.name,
-        ) == sorted(
+        ) == sort_rp_classes(
             new_classes_models,
-            key=lambda x: x.id or x.name,
         )
         retrieved_rps = await pool_repo.get_resource_pools(id=inserted_rp.id, api_user=admin_user)
         assert len(retrieved_rps) == 1
-        assert inserted_rp.id == retrieved_rps[0].id
-        assert inserted_rp.name == retrieved_rps[0].name
-        assert inserted_rp.idle_threshold == retrieved_rps[0].idle_threshold
-        assert sort_rp_classes(inserted_rp.classes) == sort_rp_classes(retrieved_rps[0].classes)
-        assert inserted_rp.quota == retrieved_rps[0].quota
+        retrieved_rp = retrieved_rps[0]
+        assert updated_rp.id == retrieved_rp.id
+        assert updated_rp.name == retrieved_rp.name
+        assert updated_rp.idle_threshold == retrieved_rp.idle_threshold
+        assert sort_rp_classes(updated_rp.classes) == sort_rp_classes(retrieved_rp.classes)
+        assert updated_rp.quota == retrieved_rp.quota
     except (ValidationError, errors.ValidationError):
         pass
     finally:
