@@ -13,7 +13,7 @@ from functools import wraps
 from typing import Any, Concatenate, Optional, ParamSpec, TypeVar, cast
 
 from sqlalchemy import NullPool, create_engine, delete, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 from sqlalchemy.sql import Select, and_, not_, or_
 from sqlalchemy.sql.expression import false, true
@@ -147,17 +147,17 @@ def _only_admins(f: Callable[Concatenate[Any, _P], Awaitable[_T]]) -> Callable[C
 class ResourcePoolRepository(_Base):
     """The adapter used for accessing resource pools with SQLAlchemy."""
 
-    def initialize(self, sync_connection_url: str, rp: models.ResourcePool) -> None:
+    async def initialize(self, async_connection_url: str, rp: models.ResourcePool) -> None:
         """Add the default resource pool if it does not already exist."""
-        engine = create_engine(sync_connection_url, poolclass=NullPool)
-        session_maker = sessionmaker(
+        engine = create_async_engine(async_connection_url, poolclass=NullPool)
+        session_maker = async_sessionmaker(
             engine,
             class_=Session,
             expire_on_commit=True,
         )
-        with session_maker() as session, session.begin():
+        async with session_maker() as session, session.begin():
             stmt = select(schemas.ResourcePoolORM.default == true())
-            res = session.execute(stmt)
+            res = await session.execute(stmt)
             default_rp = res.scalars().first()
             if default_rp is None:
                 orm = schemas.ResourcePoolORM.load(rp)
