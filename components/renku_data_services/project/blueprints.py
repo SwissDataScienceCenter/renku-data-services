@@ -24,6 +24,7 @@ from renku_data_services.base_models.validation import validate_and_dump, valida
 from renku_data_services.errors import errors
 from renku_data_services.project import apispec
 from renku_data_services.project import models as project_models
+from renku_data_services.project.core import validate_project_patch
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
 from renku_data_services.users.db import UserRepo
 
@@ -136,11 +137,11 @@ class ProjectsBP(CustomBlueprint):
         async def _patch(
             _: Request, user: base_models.APIUser, project_id: str, body: apispec.ProjectPatch, etag: str
         ) -> JSONResponse:
-            body_dict = body.model_dump(exclude_none=True)
-
+            project_patch = validate_project_patch(body)
             project_update = await self.project_repo.update_project(
-                user=user, project_id=ULID.from_str(project_id), etag=etag, payload=body_dict
+                user=user, project_id=ULID.from_str(project_id), etag=etag, patch=project_patch
             )
+
             if not isinstance(project_update, project_models.ProjectUpdate):
                 raise errors.ProgrammingError(
                     message="Expected the result of a project update to be ProjectUpdate but instead "

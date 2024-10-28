@@ -552,6 +552,10 @@ async def test_patch_description_as_editor_and_keep_namespace_and_visibility(
     _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=headers, json=patch)
 
     assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("namespace") == project["namespace"]
+    assert response.json.get("visibility") == project["visibility"]
+    assert response.json.get("description") == "Updated description"
 
 
 @pytest.mark.asyncio

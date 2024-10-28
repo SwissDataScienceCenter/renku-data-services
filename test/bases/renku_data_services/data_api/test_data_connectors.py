@@ -619,6 +619,46 @@ async def test_patch_data_connector_with_invalid_namespace(
 
 
 @pytest.mark.asyncio
+async def test_patch_data_connector_as_editor(
+    sanic_client: SanicASGITestClient,
+    create_data_connector,
+    admin_headers,
+    admin_user,
+    user_headers,
+    regular_user,
+) -> None:
+    _, response = await sanic_client.post(
+        "/api/data/groups", headers=admin_headers, json={"name": "My Group", "slug": "my-group"}
+    )
+    assert response.status_code == 201, response.text
+    patch = [{"id": regular_user.id, "role": "editor"}]
+    _, response = await sanic_client.patch("/api/data/groups/my-group/members", headers=admin_headers, json=patch)
+    assert response.status_code == 200, response.text
+    data_connector = await create_data_connector(
+        "My data connector", user=admin_user, headers=admin_headers, namespace="my-group"
+    )
+    data_connector_id = data_connector["id"]
+
+    headers = merge_headers(user_headers, {"If-Match": data_connector["etag"]})
+    patch = {
+        # Test that we do not require DELETE permission when sending the current namepace
+        "namespace": data_connector["namespace"],
+        # Test that we do not require DELETE permission when sending the current visibility
+        "visibility": data_connector["visibility"],
+        "description": "A new description",
+    }
+    _, response = await sanic_client.patch(
+        f"/api/data/data_connectors/{data_connector_id}", headers=headers, json=patch
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("namespace") == data_connector["namespace"]
+    assert response.json.get("visibility") == data_connector["visibility"]
+    assert response.json.get("description") == "A new description"
+
+
+@pytest.mark.asyncio
 async def test_delete_data_connector(sanic_client: SanicASGITestClient, create_data_connector, user_headers) -> None:
     await create_data_connector("Data connector 1")
     data_connector = await create_data_connector("Data connector 2")

@@ -50,6 +50,18 @@ class UnsavedProject(BaseProject):
     namespace: str
 
 
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectPatch:
+    """Model for changes requested on a project."""
+
+    name: str | None
+    namespace: str | None
+    visibility: Visibility | None
+    repositories: list[Repository] | None
+    description: str | None
+    keywords: list[str] | None
+
+
 @dataclass
 class DeletedProject:
     """Indicates that a project was deleted."""
