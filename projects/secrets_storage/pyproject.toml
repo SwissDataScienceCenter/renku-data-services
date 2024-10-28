@@ -52,8 +52,8 @@ psycopg = { version = "^3.2.3", extras = ["binary"] }
 urllib3 = "^2.2.3"
 deepmerge = "^2.0"
 authlib = "^1.3.2"
-redis = "^5.1.1"
-dataclasses-avroschema = "^0.63.7"
+redis = "^5.2.0"
+dataclasses-avroschema = "^0.64.2"
 undictify = "^0.11.3"
 types-redis = "^4.6.0.20241004"
 prometheus-sanic = "^3.0.0"
@@ -66,12 +66,12 @@ aiofile = "^3.9.0"
 # Not a direct dependency, it is needed by authzed. Was causing things to crash at startup beacuse of
 # google.protobuf.runtime_version.VersionError:
 # Detected incompatible Protobuf Gencode/Runtime versions when loading authzed/api/v1/core.proto: gencode 5.28.2 runtime 5.27.3.
-protobuf = "^5.28.2"
+protobuf = "^5.28.3"
 
 [tool.poetry.group.dev.dependencies]
 pyavro-gen = "^0.3.3"
 avro-preprocessor = "^0.3.0"
-fakeredis = "^2.25.1"
+fakeredis = "^2.26.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
