@@ -312,7 +312,8 @@ class NotebooksNewBP(CustomBlueprint):
                     config=self.nb_config,
                     name=dc.data_connector.name,
                 )
-                dcs_secrets[str(dc.data_connector.id)] = dc.secrets
+                if len(dc.secrets) > 0:
+                    dcs_secrets[str(dc.data_connector.id)] = dc.secrets
             # NOTE: Check the cloud storage in the request body and if any match
             # then overwrite the projects cloud storages
             # NOTE: Cloud storages in the session launch request body that are not from the DB will cause a 404 error
@@ -515,15 +516,30 @@ class NotebooksNewBP(CustomBlueprint):
                 }
                 secrets_url = self.nb_config.user_secrets.secrets_storage_service_url + "/api/secrets/kubernetes"
                 headers = {"Authorization": f"bearer {user.access_token}"}
-                for s_id, secrets in dcs_secrets.items():
-                    request_data = {
-                        "name": f"{server_name}-ds-{s_id.lower()}-secrets",
-                        "namespace": self.nb_config.k8s_v2_client.preferred_namespace,
-                        "secret_ids": [str(secret.secret_id) for secret in secrets],
-                        "owner_references": [owner_reference],
-                    }
-                    async with httpx.AsyncClient(timeout=10) as client:
-                        await client.post(secrets_url, headers=headers, json=request_data)
+                try:
+                    for s_id, secrets in dcs_secrets.items():
+                        if len(secrets) == 0:
+                            continue
+                        request_data = {
+                            "name": f"{server_name}-ds-{s_id.lower()}-secrets",
+                            "namespace": self.nb_config.k8s_v2_client.preferred_namespace,
+                            "secret_ids": [str(secret.secret_id) for secret in secrets],
+                            "owner_references": [owner_reference],
+                            "key_mapping": {str(secret.secret_id): secret.name for secret in secrets},
+                        }
+                        async with httpx.AsyncClient(timeout=10) as client:
+                            await client.post(secrets_url, headers=headers, json=request_data)
+                            res = await client.post(secrets_url, headers=headers, json=request_data)
+                            if res.status_code >= 300 or res.status_code < 200:
+                                raise errors.ProgrammingError(
+                                    message=f"The secret for data connector with {s_id} could not be "
+                                    f"successfully created, the status code was {res.status_code}."
+                                    "Please contact a Renku administrator.",
+                                    detail=res.text,
+                                )
+                except Exception:
+                    await self.nb_config.k8s_v2_client.delete_server(server_name, user.id)
+                    raise
 
             return json(manifest.as_apispec().model_dump(mode="json", exclude_none=True), 201)
 

@@ -11,21 +11,6 @@ from renku_data_services.app_config.config import Config
 from renku_data_services.crc.apispec import ResourcePool
 from renku_data_services.users.models import UserInfo
 
-from .utils import K3DCluster, setup_amalthea
-
-os.environ["KUBECONFIG"] = ".k3d-config.yaml"
-
-
-@pytest.fixture(scope="module", autouse=True)
-def cluster() -> K3DCluster:
-    if shutil.which("k3d") is None:
-        pytest.skip("Requires k3d for cluster creation")
-
-    with K3DCluster("renku-test-session") as cluster:
-        setup_amalthea("amalthea-se", "amalthea-sessions", "0.0.10-new-operator-chart", cluster)
-
-        yield cluster
-
 
 @pytest.fixture
 def create_session_environment(sanic_client: SanicASGITestClient, admin_headers):

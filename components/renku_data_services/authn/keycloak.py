@@ -98,7 +98,7 @@ class KeycloakAuthenticator(Authenticator):
             user = base_models.AuthenticatedAPIUser(
                 is_admin=is_admin,
                 id=id,
-                access_token=access_token,
+                access_token=token,
                 full_name=parsed.get("name"),
                 first_name=parsed.get("given_name"),
                 last_name=parsed.get("family_name"),
