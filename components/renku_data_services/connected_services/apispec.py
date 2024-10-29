@@ -31,6 +31,9 @@ class AppInstallation(BaseAPISpec):
 class ProviderKind(Enum):
     gitlab = "gitlab"
     github = "github"
+    drive = "drive"
+    onedrive = "onedrive"
+    dropbox = "dropbox"
 
 
 class ConnectionStatus(Enum):
