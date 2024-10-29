@@ -128,6 +128,8 @@ class ConnectedServicesRepository:
 
             if patch.kind is not None:
                 client.kind = patch.kind
+            if patch.app_slug is not None:
+                client.app_slug = patch.app_slug
             if patch.client_id is not None:
                 client.client_id = patch.client_id
             if patch.client_secret:

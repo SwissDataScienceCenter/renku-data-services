@@ -32,6 +32,7 @@ class OAuth2ClientPatch:
     """Model for changes requested on a OAuth2 Client."""
 
     kind: ProviderKind | None
+    app_slug: str | None
     client_id: str | None
     client_secret: str | None
     display_name: str | None

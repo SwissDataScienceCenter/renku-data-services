@@ -7,6 +7,7 @@ def validate_oauth2_client_patch(patch: apispec.ProviderPatch) -> models.OAuth2C
     """Validate the update to a OAuth2 Client."""
     return models.OAuth2ClientPatch(
         kind=patch.kind,
+        app_slug=patch.app_slug,
         client_id=patch.client_id,
         client_secret=patch.client_secret,
         display_name=patch.display_name,
