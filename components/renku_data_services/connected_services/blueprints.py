@@ -1,6 +1,7 @@
 """Connected services blueprint."""
 
 from dataclasses import dataclass
+from typing import Any
 from urllib.parse import unquote, urlparse, urlunparse
 
 from sanic import HTTPResponse, Request, json, redirect
@@ -13,7 +14,8 @@ import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_admins, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_query
-from renku_data_services.base_models.validation import validated_json
+from renku_data_services.base_api.pagination import PaginationRequest, paginate
+from renku_data_services.base_models.validation import validate_and_dump, validated_json
 from renku_data_services.connected_services import apispec
 from renku_data_services.connected_services.apispec_base import AuthorizeParams, CallbackParams
 from renku_data_services.connected_services.core import validate_oauth2_client_patch
@@ -187,3 +189,26 @@ class OAuth2ConnectionsBP(CustomBlueprint):
             return json(token.dump_for_api())
 
         return "/oauth2/connections/<connection_id:ulid>/token", ["GET"], _get_token
+
+    def get_installations(self) -> BlueprintFactoryResponse:
+        """Get the installations for a specific OAuth2 connection."""
+
+        @authenticate(self.authenticator)
+        @validate_query(query=apispec.PaginationRequest)
+        @paginate
+        async def _get_installations(
+            _: Request,
+            user: base_models.APIUser,
+            connection_id: ULID,
+            pagination: PaginationRequest,
+            query: apispec.PaginationRequest,
+        ) -> tuple[list[dict[str, Any]], int]:
+            installations_list = await self.connected_services_repo.get_oauth2_app_installations(
+                connection_id=connection_id,
+                user=user,
+                pagination=pagination,
+            )
+            body = validate_and_dump(apispec.AppInstallationList, installations_list.installations)
+            return body, installations_list.total_count
+
+        return "/oauth2/connections/<connection_id:ulid>/installations", ["GET"], _get_installations

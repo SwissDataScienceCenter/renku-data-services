@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 from urllib.parse import urljoin
 
+from authlib.integrations.base_client import InvalidTokenError
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from sanic.log import logger
 from sqlalchemy import select
@@ -13,11 +14,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from ulid import ULID
 
-from renku_data_services import base_models, errors
+import renku_data_services.base_models as base_models
+from renku_data_services import errors
+from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.connected_services import apispec, models
 from renku_data_services.connected_services import orm as schemas
-from renku_data_services.connected_services.apispec import ConnectionStatus
+from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind
 from renku_data_services.connected_services.provider_adapters import (
+    GitHubAdapter,
     ProviderAdapter,
     get_provider_adapter,
 )
@@ -81,6 +85,7 @@ class ConnectedServicesRepository:
         client = schemas.OAuth2ClientORM(
             id=provider_id,
             kind=new_client.kind,
+            app_slug=new_client.app_slug or "",
             client_id=new_client.client_id,
             client_secret=encrypted_client_secret,
             display_name=new_client.display_name,
@@ -193,7 +198,7 @@ class ConnectedServicesRepository:
                 url: str
                 state: str
                 url, state = oauth2_client.create_authorization_url(
-                    adapter.authorization_url, code_verifier=code_verifier
+                    adapter.authorization_url, code_verifier=code_verifier, **adapter.authorization_url_extra_params
                 )
 
                 result_conn = await session.scalars(
@@ -316,11 +321,17 @@ class ConnectedServicesRepository:
     ) -> models.ConnectedAccount:
         """Get the account information from a OAuth2 connection."""
         async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (oauth2_client, _, adapter):
-            request_url = urljoin(adapter.api_url, "user")
-            response = await oauth2_client.get(request_url, headers=adapter.api_common_headers)
+            request_url = urljoin(adapter.api_url, adapter.user_info_endpoint)
+            try:
+                if adapter.user_info_method == "POST":
+                    response = await oauth2_client.post(request_url, headers=adapter.api_common_headers)
+                else:
+                    response = await oauth2_client.get(request_url, headers=adapter.api_common_headers)
+            except InvalidTokenError as e:
+                raise errors.UnauthorizedError(message="OAuth2 token for connected service invalid or expired.") from e
 
             if response.status_code > 200:
-                raise errors.UnauthorizedError(message="Could not get account information.")
+                raise errors.UnauthorizedError(message=f"Could not get account information.{response.json()}")
 
             account = adapter.api_validate_account_response(response)
             return account
@@ -333,6 +344,28 @@ class ConnectedServicesRepository:
             await oauth2_client.ensure_active_token(oauth2_client.token)
             token_model = models.OAuth2TokenSet.from_dict(oauth2_client.token)
             return token_model
+
+    async def get_oauth2_app_installations(
+        self, connection_id: ULID, user: base_models.APIUser, pagination: PaginationRequest
+    ) -> models.AppInstallationList:
+        """Get the installations from a OAuth2 connection."""
+        async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (
+            oauth2_client,
+            connection,
+            adapter,
+        ):
+            # NOTE: App installations are only available from GitHub
+            if connection.client.kind == ProviderKind.github and isinstance(adapter, GitHubAdapter):
+                request_url = urljoin(adapter.api_url, "user/installations")
+                params = dict(page=pagination.page, per_page=pagination.per_page)
+                response = await oauth2_client.get(request_url, params=params, headers=adapter.api_common_headers)
+
+                if response.status_code > 200:
+                    raise errors.UnauthorizedError(message="Could not get installation information.")
+
+                return adapter.api_validate_app_installations_response(response)
+
+            return models.AppInstallationList(total_count=0, installations=[])
 
     @asynccontextmanager
     async def get_async_oauth2_client(

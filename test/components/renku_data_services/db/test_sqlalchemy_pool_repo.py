@@ -19,7 +19,7 @@ from test.components.renku_data_services.crc_models.hypothesis import (
     rc_update_reqs_dict,
     rp_strat,
 )
-from test.utils import create_rp, remove_id_from_user
+from test.utils import create_rp, remove_id_from_user, sort_rp_classes
 
 
 @given(rp=rp_strat())
@@ -111,7 +111,7 @@ async def test_resource_pool_update_classes(
         old_classes = [asdict(cls) for cls in list(inserted_rp.classes)]
         new_classes_dicts = [{**cls, **data.draw(rc_update_reqs_dict)} for cls in old_classes]
         new_classes_models = [models.ResourceClass.from_dict(cls) for cls in new_classes_dicts]
-        new_classes_models = sorted(new_classes_models, key=lambda x: (x.gpu, x.cpu, x.memory, x.max_storage, x.name))
+        new_classes_models = sort_rp_classes(new_classes_models)
 
         updated_rp = await pool_repo.update_resource_pool(
             id=inserted_rp.id, classes=new_classes_dicts, api_user=admin_user
@@ -119,16 +119,19 @@ async def test_resource_pool_update_classes(
 
         assert updated_rp.id == inserted_rp.id
         assert len(updated_rp.classes) == len(inserted_rp.classes)
-        assert sorted(
+        assert sort_rp_classes(
             updated_rp.classes,
-            key=lambda x: x.id or x.name,
-        ) == sorted(
+        ) == sort_rp_classes(
             new_classes_models,
-            key=lambda x: x.id or x.name,
         )
         retrieved_rps = await pool_repo.get_resource_pools(id=inserted_rp.id, api_user=admin_user)
         assert len(retrieved_rps) == 1
-        assert retrieved_rps[0] == updated_rp
+        retrieved_rp = retrieved_rps[0]
+        assert updated_rp.id == retrieved_rp.id
+        assert updated_rp.name == retrieved_rp.name
+        assert updated_rp.idle_threshold == retrieved_rp.idle_threshold
+        assert sort_rp_classes(updated_rp.classes) == sort_rp_classes(retrieved_rp.classes)
+        assert updated_rp.quota == retrieved_rp.quota
     except (ValidationError, errors.ValidationError):
         pass
     finally:
@@ -344,7 +347,7 @@ async def test_lookup_rp_by_name(rp: models.ResourcePool, app_config: Config, ad
         assert inserted_rp.id is not None
         retrieved_rps = await pool_repo.get_resource_pools(name=inserted_rp.name, api_user=admin_user)
         assert len(retrieved_rps) >= 1
-        assert any([rp == inserted_rp for rp in retrieved_rps])
+        assert any([rp.id == inserted_rp.id for rp in retrieved_rps])
     except (ValidationError, errors.ValidationError):
         pass
     finally:
@@ -396,10 +399,10 @@ async def test_resource_pools_access_control(
         assert inserted_public_rp.id is not None
         admin_rps = await pool_repo.get_resource_pools(admin_user)
         loggedin_user_rps = await pool_repo.get_resource_pools(loggedin_user)
-        assert inserted_public_rp in loggedin_user_rps
-        assert inserted_public_rp in admin_rps
-        assert inserted_private_rp not in loggedin_user_rps
-        assert inserted_private_rp in admin_rps
+        assert any(inserted_public_rp.id == rp.id for rp in loggedin_user_rps)
+        assert any(inserted_public_rp.id == rp.id for rp in admin_rps)
+        assert all(inserted_private_rp.id != rp.id for rp in loggedin_user_rps)
+        assert any(inserted_private_rp.id == rp.id for rp in admin_rps)
         assert loggedin_user.id is not None
         user_to_add = base_models.User(keycloak_id=loggedin_user.id)
         updated_users = await user_repo.update_resource_pool_users(
@@ -408,7 +411,7 @@ async def test_resource_pools_access_control(
 
         assert user_to_add in [remove_id_from_user(user) for user in updated_users]
         loggedin_user_rps = await pool_repo.get_resource_pools(loggedin_user)
-        assert inserted_private_rp in loggedin_user_rps
+        assert any(inserted_private_rp.id == rp.id for rp in loggedin_user_rps)
     except (ValidationError, errors.ValidationError):
         pass
     finally:

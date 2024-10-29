@@ -3,7 +3,7 @@
 from renku_data_services.namespace import apispec, models
 
 
-def validate_project_patch(patch: apispec.GroupPatchRequest) -> models.GroupPatch:
+def validate_group_patch(patch: apispec.GroupPatchRequest) -> models.GroupPatch:
     """Validate the update to a group."""
     return models.GroupPatch(
         slug=patch.slug,
