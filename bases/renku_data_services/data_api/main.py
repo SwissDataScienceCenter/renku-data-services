@@ -123,9 +123,6 @@ def create_app() -> Sanic:
         logger.info("running migrations")
         run_migrations_for_app("common")
         await config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
-        await config.kc_user_repo.initialize(config.kc_api)
-        await sync_admins_from_keycloak(config.kc_api, config.authz)
-        await config.group_repo.generate_user_namespaces()
 
     @app.before_server_start
     async def setup_rclone_validator(app: Sanic) -> None:
