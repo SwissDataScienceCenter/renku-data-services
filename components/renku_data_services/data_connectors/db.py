@@ -500,11 +500,16 @@ class DataConnectorSecretRepository:
                 message=f"The project ID with {project_id} does not exist or you dont have permission to access it"
             )
 
+        data_connector_ids = await self.authz.resources_with_permission(
+            user, user.id, ResourceType.data_connector, Scope.READ
+        )
+
         async with self.session_maker() as session:
             stmt = select(schemas.DataConnectorORM).where(
                 schemas.DataConnectorORM.project_links.any(
                     schemas.DataConnectorToProjectLinkORM.project_id == project_id
-                )
+                ),
+                schemas.DataConnectorORM.id.in_(data_connector_ids),
             )
             results = await session.stream_scalars(stmt)
             async for dc in results:
