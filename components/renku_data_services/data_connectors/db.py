@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator, Callable
 from typing import TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
-from sqlalchemy import Select, delete, func, or_, select
+from sqlalchemy import Select, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
@@ -504,20 +504,12 @@ class DataConnectorSecretRepository:
             stmt = select(schemas.DataConnectorORM).where(
                 schemas.DataConnectorORM.project_links.any(
                     schemas.DataConnectorToProjectLinkORM.project_id == project_id
-                ),
-                or_(
-                    # Data connectors with secrets for the specific user
-                    schemas.DataConnectorORM.secrets.any(
-                        schemas.DataConnectorSecretORM.user_id == user.id,
-                    ),
-                    # Data connectors without any secrets
-                    # See: https://docs.sqlalchemy.org/en/20/orm/queryguide/select.html#exists-forms-has-any
-                    ~schemas.DataConnectorORM.secrets.any(),
-                ),
+                )
             )
             results = await session.stream_scalars(stmt)
             async for dc in results:
-                yield models.DataConnectorWithSecrets(dc.dump(), [secret.dump() for secret in dc.secrets])
+                secrets = await self.get_data_connector_secrets(user, dc.id)
+                yield models.DataConnectorWithSecrets(dc.dump(), secrets)
 
     async def get_data_connector_secrets(
         self,
