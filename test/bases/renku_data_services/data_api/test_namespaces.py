@@ -2,7 +2,7 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_list_namespaces(sanic_client, user_headers) -> None:
+async def test_list_namespaces(sanic_client, user_headers, regular_user) -> None:
     payload = {
         "name": "Group1",
         "slug": "group-1",
@@ -16,8 +16,12 @@ async def test_list_namespaces(sanic_client, user_headers) -> None:
     assert len(res_json) == 2
     user_ns = res_json[0]
     assert user_ns["slug"] == "user.doe"
+    assert user_ns.get("creation_date") is None
+    assert user_ns["created_by"] == regular_user.id
     group_ns = res_json[1]
     assert group_ns["slug"] == "group-1"
+    assert group_ns.get("creation_date") is not None
+    assert group_ns["created_by"] == regular_user.id
 
 
 @pytest.mark.asyncio

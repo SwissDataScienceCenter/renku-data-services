@@ -188,7 +188,7 @@ class GroupsBP(CustomBlueprint):
                         name=ns.name,
                         slug=ns.latest_slug if ns.latest_slug else ns.slug,
                         created_by=ns.created_by,
-                        creation_date=None,  # NOTE: we do not save creation date in the DB
+                        creation_date=ns.creation_date,
                         namespace_kind=apispec.NamespaceKind(ns.kind.value),
                     )
                     for ns in nss

@@ -70,6 +70,7 @@ class Namespace:
     slug: str
     kind: NamespaceKind
     created_by: str
+    creation_date: datetime | None
     underlying_resource_id: ULID | str  # The user or group ID depending on the Namespace kind
     latest_slug: str | None = None
     name: str | None = None
