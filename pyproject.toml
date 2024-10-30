@@ -104,7 +104,7 @@ line-length = 120
 target-version = "py311"
 output-format = "full"
 include = ["*.py", "*.pyi"]
-exclude = ["*/avro_models/*"]
+exclude = ["*/avro_models/*", ".devcontainer/"]
 
 [tool.ruff.format]
 exclude = ["apispec.py"]
