@@ -58,8 +58,8 @@ class StorageValidator:
         # TODO: remove project_id once authz on the data service works properly
         request_url = self.storage_url + f"/storage/{storage_id}?project_id={project_id}"
         logger.info(f"getting storage info by id: {request_url}")
-        async with httpx.AsyncClient() as client:
-            res = await client.get(request_url, headers=headers, timeout=10)
+        async with httpx.AsyncClient(timeout=10) as client:
+            res = await client.get(request_url, headers=headers)
         if res.status_code == 404:
             raise MissingResourceError(message=f"Couldn't find cloud storage with id {storage_id}")
         if res.status_code == 401:
@@ -79,8 +79,8 @@ class StorageValidator:
 
     async def validate_storage_configuration(self, configuration: dict[str, Any], source_path: str) -> None:
         """Validate the cloud storage configuration."""
-        async with httpx.AsyncClient() as client:
-            res = await client.post(self.storage_url + "/storage_schema/validate", json=configuration, timeout=10)
+        async with httpx.AsyncClient(timeout=10) as client:
+            res = await client.post(self.storage_url + "/storage_schema/validate", json=configuration)
         if res.status_code == 422:
             raise InvalidCloudStorageConfiguration(
                 message=f"The provided cloud storage configuration isn't valid: {res.json()}",
@@ -92,8 +92,8 @@ class StorageValidator:
 
     async def obscure_password_fields_for_storage(self, configuration: dict[str, Any]) -> dict[str, Any]:
         """Obscures password fields for use with rclone."""
-        async with httpx.AsyncClient() as client:
-            res = await client.post(self.storage_url + "/storage_schema/obscure", json=configuration, timeout=10)
+        async with httpx.AsyncClient(timeout=10) as client:
+            res = await client.post(self.storage_url + "/storage_schema/obscure", json=configuration)
 
         if res.status_code != 200:
             raise InvalidCloudStorageConfiguration(
@@ -300,8 +300,8 @@ class GitProviderHelper:
             return []
         request_url = f"{self.service_url}/oauth2/connections"
         headers = {"Authorization": f"bearer {user.access_token}"}
-        async with httpx.AsyncClient() as client:
-            res = await client.get(request_url, headers=headers, timeout=10)
+        async with httpx.AsyncClient(timeout=10) as client:
+            res = await client.get(request_url, headers=headers)
         if res.status_code != 200:
             raise IntermittentError(message="The data service sent an unexpected response, please try again later")
         connections = res.json()
@@ -311,8 +311,8 @@ class GitProviderHelper:
     async def get_oauth2_provider(self, provider_id: str) -> OAuth2Provider:
         """Get a specific provider."""
         request_url = f"{self.service_url}/oauth2/providers/{provider_id}"
-        async with httpx.AsyncClient() as client:
-            res = await client.get(request_url, timeout=10)
+        async with httpx.AsyncClient(timeout=10) as client:
+            res = await client.get(request_url)
         if res.status_code != 200:
             raise IntermittentError(message="The data service sent an unexpected response, please try again later")
         provider = res.json()
