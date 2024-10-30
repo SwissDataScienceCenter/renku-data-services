@@ -276,7 +276,7 @@ class NotebooksNewBP(CustomBlueprint):
             launcher = await self.session_repo.get_launcher(user, ULID.from_str(body.launcher_id))
             project = await self.project_repo.get_project(user=user, project_id=launcher.project_id)
             server_name = renku_2_make_server_name(
-                safe_username=user.id, project_id=str(launcher.project_id), launcher_id=body.launcher_id
+                user=user, project_id=str(launcher.project_id), launcher_id=body.launcher_id
             )
             existing_session = await self.nb_config.k8s_v2_client.get_server(server_name, user.id)
             if existing_session is not None and existing_session.spec is not None:
@@ -329,12 +329,6 @@ class NotebooksNewBP(CustomBlueprint):
                     )
                 if csr.target_path is not None and not PurePosixPath(csr.target_path).is_absolute():
                     csr.target_path = (work_dir / csr.target_path).as_posix()
-                # TODO: The UI always does this check if it is acceptable/safe
-                # if csr_id in dcs_secrets and csr.configuration is not None:
-                #     raise errors.ValidationError(
-                #         message=f"Overriding the storage configuration for storage with ID {csr_id} "
-                #         "is not allowed because the storage has an associated saved secret.",
-                #     )
                 dcs[csr_id] = dcs[csr_id].with_override(csr)
             repositories = [Repository(url=i) for i in project.repositories]
             secrets_to_create: list[V1Secret] = []
