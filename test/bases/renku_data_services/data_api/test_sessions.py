@@ -519,7 +519,7 @@ async def test_patch_session_launcher_environment(
     assert res.json["environment"]["container_image"] == "nginx:latest"
     assert res.json["environment"]["args"] == ["a", "b", "c"]
 
-    # Should be able to reset args by patching in None, pathcing a null field should do nothing
+    # Should be able to reset args by patching in None, patching a null field should do nothing
     patch_payload = {
         "environment": {"args": None, "command": None},
     }
