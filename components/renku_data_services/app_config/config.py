@@ -459,6 +459,7 @@ class Config:
                 data_connector_repo=self.data_connector_repo,
                 user_repo=self.kc_user_repo,
                 secret_service_public_key=self.secrets_service_public_key,
+                authz=self.authz,
             )
         return self._data_connector_secret_repo
 

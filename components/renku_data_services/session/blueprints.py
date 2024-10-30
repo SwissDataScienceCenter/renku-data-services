@@ -8,7 +8,7 @@ from sanic_ext import validate
 from ulid import ULID
 
 from renku_data_services import base_models
-from renku_data_services.base_api.auth import authenticate, validate_path_project_id
+from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.session import apispec
