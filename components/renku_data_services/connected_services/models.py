@@ -28,6 +28,20 @@ class OAuth2Client:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
+class OAuth2ClientPatch:
+    """Model for changes requested on a OAuth2 Client."""
+
+    kind: ProviderKind | None
+    app_slug: str | None
+    client_id: str | None
+    client_secret: str | None
+    display_name: str | None
+    scope: str | None
+    url: str | None
+    use_pkce: bool | None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
 class OAuth2Connection:
     """OAuth2 connection model."""
 
