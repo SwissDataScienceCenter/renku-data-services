@@ -1008,7 +1008,9 @@ async def test_project_slug_case(
     assert res.json.get("slug") == uppercase_slug
     etag = res.headers["ETag"]
     # Get it by the namespace
-    _, res = await sanic_client.get(f"/api/data/projects/{group['slug']}/{uppercase_slug}", headers=user_headers)
+    _, res = await sanic_client.get(
+        f"/api/data/namespaces/{group['slug']}/projects/{uppercase_slug}", headers=user_headers
+    )
     assert res.status_code == 200
     assert res.json.get("slug") == uppercase_slug
     # Patch the project

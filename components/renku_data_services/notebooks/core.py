@@ -550,7 +550,7 @@ async def launch_notebook(
     """Starts a server."""
 
     server_name = renku_2_make_server_name(
-        safe_username=user.id, project_id=launch_request.project_id, launcher_id=launch_request.launcher_id
+        user=user, project_id=launch_request.project_id, launcher_id=launch_request.launcher_id
     )
     return await launch_notebook_helper(
         nb_config=config,

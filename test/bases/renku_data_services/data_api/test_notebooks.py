@@ -3,11 +3,13 @@
 import asyncio
 import os
 from collections.abc import AsyncIterator
+from contextlib import suppress
 from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from kr8s import NotFoundError
 from kr8s.asyncio.objects import Pod
 from sanic_testing.testing import SanicASGITestClient
 
@@ -77,7 +79,10 @@ async def jupyter_server(renku_image: str, server_name: str, pod_name: str) -> A
     await pod.refresh()
     await pod.wait("condition=Ready")
     yield server
-    await server.delete("Foreground")
+    # NOTE: This is used also in tests that check if the server was properly stopped
+    # in this case the server will already gone when we try to delete it in the cleanup here.
+    with suppress(NotFoundError):
+        await server.delete("Foreground")
 
 
 @pytest_asyncio.fixture()
