@@ -2,16 +2,16 @@
 
 from datetime import UTC, datetime
 from typing import Any, cast
-from urllib.parse import urljoin, urlparse, urlunparse
+from urllib.parse import urlunparse
 
 from kubernetes.utils import parse_duration, parse_quantity
 from pydantic import BaseModel, Field, field_validator
-from sanic.log import logger
 from ulid import ULID
 
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec
 from renku_data_services.notebooks.cr_amalthea_session import (
+    Affinity,
     Authentication,
     CodeRepository,
     Culling,
@@ -21,12 +21,19 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     ExtraVolumeMount,
     Ingress,
     InitContainer,
+    MatchExpression,
+    NodeAffinity,
+    NodeSelectorTerm,
+    Preference,
+    PreferredDuringSchedulingIgnoredDuringExecutionItem,
+    RequiredDuringSchedulingIgnoredDuringExecution,
     SecretRef,
     Session,
     State,
     Status,
     Storage,
     TlsSecret,
+    Toleration,
 )
 from renku_data_services.notebooks.cr_amalthea_session import EnvItem2 as SessionEnvItem
 from renku_data_services.notebooks.cr_amalthea_session import Item4 as SecretAsVolumeItem

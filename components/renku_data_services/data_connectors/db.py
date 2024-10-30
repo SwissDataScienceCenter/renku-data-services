@@ -1,6 +1,6 @@
 """Adapters for data connectors database classes."""
 
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from typing import TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -477,11 +477,44 @@ class DataConnectorSecretRepository:
         data_connector_repo: DataConnectorRepository,
         user_repo: UserRepo,
         secret_service_public_key: rsa.RSAPublicKey,
+        authz: Authz,
     ) -> None:
         self.session_maker = session_maker
         self.data_connector_repo = data_connector_repo
         self.user_repo = user_repo
         self.secret_service_public_key = secret_service_public_key
+        self.authz = authz
+
+    async def get_data_connectors_with_secrets(
+        self,
+        user: base_models.APIUser,
+        project_id: ULID,
+    ) -> AsyncIterator[models.DataConnectorWithSecrets]:
+        """Get all data connectors and their secrets for a project."""
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        can_read_project = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
+        if not can_read_project:
+            raise errors.MissingResourceError(
+                message=f"The project ID with {project_id} does not exist or you dont have permission to access it"
+            )
+
+        data_connector_ids = await self.authz.resources_with_permission(
+            user, user.id, ResourceType.data_connector, Scope.READ
+        )
+
+        async with self.session_maker() as session:
+            stmt = select(schemas.DataConnectorORM).where(
+                schemas.DataConnectorORM.project_links.any(
+                    schemas.DataConnectorToProjectLinkORM.project_id == project_id
+                ),
+                schemas.DataConnectorORM.id.in_(data_connector_ids),
+            )
+            results = await session.stream_scalars(stmt)
+            async for dc in results:
+                secrets = await self.get_data_connector_secrets(user, dc.id)
+                yield models.DataConnectorWithSecrets(dc.dump(), secrets)
 
     async def get_data_connector_secrets(
         self,
