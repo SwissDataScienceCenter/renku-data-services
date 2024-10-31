@@ -26,6 +26,11 @@ from renku_data_services.message_queue.converters import EventConverter
 from renku_data_services.namespace.models import NamespaceKind
 
 
+async def generate_user_namespaces(config: SyncConfig) -> None:
+    """Generate namespaces for users if there are none."""
+    await config.group_repo.generate_user_namespaces()
+
+
 async def sync_user_namespaces(config: SyncConfig) -> None:
     """Lists all user namespaces in the database and adds them to Authzed and the event queue."""
     authz = Authz(config.authz_config)
