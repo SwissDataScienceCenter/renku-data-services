@@ -217,8 +217,6 @@ class UsersSync:
     @dispatch_message(events.UpdateOrInsertUser)
     async def update_or_insert_user(
         self,
-        #   user_id: str,
-        #   payload: dict[str, Any],
         user: UnsavedUserInfo,
         *,
         session: AsyncSession | None = None,
@@ -262,7 +260,6 @@ class UsersSync:
         session: AsyncSession,
         user_id: str,
         existing_user: UserORM | None,
-        # **kwargs: Any
         patch: UserPatch,
     ) -> UserInfoUpdate:
         """Update a user."""
