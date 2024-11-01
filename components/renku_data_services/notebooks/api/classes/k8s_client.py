@@ -83,6 +83,9 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
             try:
                 # NOTE: calling pod.logs without a container name set crashes the library
                 clogs: list[str] = [clog async for clog in pod.logs(container=container, tail_lines=max_log_lines)]
+            except httpx.ResponseNotRead:
+                # NOTE: This occurs when the container is still starting but we try to read its logs
+                continue
             except NotFoundError:
                 raise errors.MissingResourceError(message=f"The session pod {name} does not exist.")
             except ServerError as err:
