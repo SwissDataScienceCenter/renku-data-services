@@ -11,7 +11,11 @@ from renku_data_services import base_models
 from renku_data_services.base_api.auth import authenticate, validate_path_project_id
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.session import apispec
-from renku_data_services.session.core import validate_environment_patch, validate_unsaved_environment
+from renku_data_services.session.core import (
+    validate_environment_patch,
+    validate_unsaved_environment,
+    validate_unsaved_session_launcher,
+)
 from renku_data_services.session.db import SessionRepository
 
 
@@ -119,7 +123,8 @@ class SessionLaunchersBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @validate(json=apispec.SessionLauncherPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.SessionLauncherPost) -> JSONResponse:
-            launcher = await self.session_repo.insert_launcher(user=user, new_launcher=body)
+            new_launcher = validate_unsaved_session_launcher(body)
+            launcher = await self.session_repo.insert_launcher(user=user, launcher=new_launcher)
             return json(
                 apispec.SessionLauncher.model_validate(launcher).model_dump(exclude_none=True, mode="json"), 201
             )

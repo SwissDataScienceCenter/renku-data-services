@@ -46,24 +46,23 @@ class EnvironmentPatch:
     default_url: str | None = None
 
 
-@dataclass(frozen=True, eq=True, kw_only=True)
-class SessionLauncher(BaseModel):
+@dataclass(eq=True, kw_only=True)
+class UnsavedSessionLauncher(BaseModel):
+    """A session launcher that hasn't been stored in the database."""
+
     """Session launcher model."""
 
-    id: ULID | None
-    project_id: str
+    project_id: ULID
     name: str
-    creation_date: datetime
     description: str | None
     environment_kind: EnvironmentKind
     environment_id: str | None
     resource_class_id: int | None
     container_image: str | None
     default_url: str | None
-    created_by: Member
 
     @model_validator(mode="after")
-    def check_launcher_environment_kind(self) -> "SessionLauncher":
+    def check_launcher_environment_kind(self) -> "UnsavedSessionLauncher":
         """Validates the environment of a launcher."""
 
         environment_kind = self.environment_kind
@@ -77,3 +76,12 @@ class SessionLauncher(BaseModel):
             raise errors.ValidationError(message="'container_image' not set when environment_kind=container_image")
 
         return self
+
+
+@dataclass(eq=True, kw_only=True)
+class SessionLauncher(UnsavedSessionLauncher):
+    """Session launcher model."""
+
+    id: ULID
+    creation_date: datetime
+    created_by: Member

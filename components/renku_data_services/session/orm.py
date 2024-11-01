@@ -48,18 +48,6 @@ class EnvironmentORM(BaseORM):
     default_url: Mapped[str | None] = mapped_column("default_url", String(200))
     """Default URL path to open in a session."""
 
-    # @classmethod
-    # def load(cls, environment: models.Environment) -> "EnvironmentORM":
-    #     """Create EnvironmentORM from the session environment model."""
-    #     return cls(
-    #         name=environment.name,
-    #         created_by_id=environment.created_by.id,
-    #         creation_date=environment.creation_date,
-    #         description=environment.description,
-    #         container_image=environment.container_image,
-    #         default_url=environment.default_url,
-    #     )
-
     def dump(self) -> models.Environment:
         """Create a session environment model from the EnvironmentORM."""
         return models.Environment(
@@ -124,34 +112,18 @@ class SessionLauncherORM(BaseORM):
     )
     """Id of the resource class."""
 
-    @classmethod
-    def load(cls, launcher: models.SessionLauncher) -> "SessionLauncherORM":
-        """Create SessionLauncherORM from the session launcher model."""
-        return cls(
-            name=launcher.name,
-            created_by_id=launcher.created_by.id,
-            creation_date=launcher.creation_date,
-            description=launcher.description,
-            environment_kind=launcher.environment_kind,
-            container_image=launcher.container_image,
-            project_id=ULID.from_str(launcher.project_id),
-            environment_id=launcher.environment_id,
-            resource_class_id=launcher.resource_class_id,
-            default_url=launcher.default_url,
-        )
-
     def dump(self) -> models.SessionLauncher:
         """Create a session launcher model from the SessionLauncherORM."""
         return models.SessionLauncher(
             id=self.id,
-            project_id=str(self.project_id),
+            project_id=self.project_id,
             name=self.name,
             created_by=models.Member(id=self.created_by_id),
             creation_date=self.creation_date,
             description=self.description,
             environment_kind=self.environment_kind,
-            environment_id=self.environment_id if self.environment_id is not None else None,
-            resource_class_id=self.resource_class_id if self.resource_class_id is not None else None,
+            environment_id=self.environment_id,
+            resource_class_id=self.resource_class_id,
             container_image=self.container_image,
             default_url=self.default_url,
         )

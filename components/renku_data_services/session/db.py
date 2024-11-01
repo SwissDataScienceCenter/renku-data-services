@@ -15,7 +15,7 @@ from renku_data_services import errors
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.crc.db import ResourcePoolRepository
-from renku_data_services.session import apispec, models
+from renku_data_services.session import models
 from renku_data_services.session import orm as schemas
 from renku_data_services.session.apispec import EnvironmentKind
 
@@ -171,36 +171,48 @@ class SessionRepository:
             return launcher.dump()
 
     async def insert_launcher(
-        self, user: base_models.APIUser, new_launcher: apispec.SessionLauncherPost
+        self,
+        user: base_models.APIUser,
+        launcher: models.UnsavedSessionLauncher,
+        # new_launcher: apispec.SessionLauncherPost
     ) -> models.SessionLauncher:
         """Insert a new session launcher."""
         if not user.is_authenticated or user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
-        project_id = new_launcher.project_id
-        authorized = await self.project_authz.has_permission(
-            user, ResourceType.project, ULID.from_str(project_id), Scope.WRITE
-        )
+        project_id = launcher.project_id
+        authorized = await self.project_authz.has_permission(user, ResourceType.project, project_id, Scope.WRITE)
         if not authorized:
             raise errors.MissingResourceError(
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
 
-        launcher_model = models.SessionLauncher(
-            id=None,
-            name=new_launcher.name,
-            project_id=new_launcher.project_id,
-            description=new_launcher.description,
-            environment_kind=new_launcher.environment_kind,
-            environment_id=new_launcher.environment_id,
-            resource_class_id=new_launcher.resource_class_id,
-            container_image=new_launcher.container_image,
-            default_url=new_launcher.default_url,
-            created_by=models.Member(id=user.id),
+        # launcher_model = models.SessionLauncher(
+        #     id=None,
+        #     name=new_launcher.name,
+        #     project_id=new_launcher.project_id,
+        #     description=new_launcher.description,
+        #     environment_kind=new_launcher.environment_kind,
+        #     environment_id=new_launcher.environment_id,
+        #     resource_class_id=new_launcher.resource_class_id,
+        #     container_image=new_launcher.container_image,
+        #     default_url=new_launcher.default_url,
+        #     created_by=models.Member(id=user.id),
+        #     creation_date=datetime.now(UTC).replace(microsecond=0),
+        # )
+        # models.SessionLauncher.model_validate(launcher_model)
+        launcher_orm = schemas.SessionLauncherORM(
+            name=launcher.name,
+            project_id=launcher.project_id,
+            description=launcher.description if launcher.description else None,
+            environment_kind=launcher.environment_kind,
+            environment_id=launcher.environment_id,
+            resource_class_id=launcher.resource_class_id,
+            container_image=launcher.container_image if launcher.container_image else None,
+            default_url=launcher.default_url if launcher.default_url else None,
+            created_by_id=user.id,
             creation_date=datetime.now(UTC).replace(microsecond=0),
         )
-
-        models.SessionLauncher.model_validate(launcher_model)
 
         async with self.session_maker() as session, session.begin():
             res = await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
@@ -210,7 +222,7 @@ class SessionRepository:
                     message=f"Project with id '{project_id}' does not exist or you do not have access to it."
                 )
 
-            environment_id = new_launcher.environment_id
+            environment_id = launcher_orm.environment_id
             if environment_id is not None:
                 res = await session.scalars(
                     select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == environment_id)
@@ -221,7 +233,7 @@ class SessionRepository:
                         message=f"Session environment with id '{environment_id}' does not exist or you do not have access to it."  # noqa: E501
                     )
 
-            resource_class_id = new_launcher.resource_class_id
+            resource_class_id = launcher_orm.resource_class_id
             if resource_class_id is not None:
                 res = await session.scalars(
                     select(schemas.ResourceClassORM).where(schemas.ResourceClassORM.id == resource_class_id)
@@ -239,9 +251,8 @@ class SessionRepository:
                         message=f"You do not have access to resource class with id '{resource_class_id}'."
                     )
 
-            launcher = schemas.SessionLauncherORM.load(launcher_model)
-            session.add(launcher)
-            return launcher.dump()
+            session.add(launcher_orm)
+            return launcher_orm.dump()
 
     async def update_launcher(
         self, user: base_models.APIUser, launcher_id: ULID, **kwargs: Any
