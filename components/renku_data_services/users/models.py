@@ -260,6 +260,24 @@ class UserInfo(UnsavedUserInfo):
     namespace: Namespace
 
 
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UserPatch:
+    """Model for changes requested on a user."""
+
+    first_name: str | None = None
+    last_name: str | None = None
+    email: str | None = None
+
+    @classmethod
+    def from_unsaved_user_info(cls, user: UnsavedUserInfo) -> "UserPatch":
+        """Create a user patch from a UnsavedUserInfo instance."""
+        return UserPatch(
+            first_name=user.first_name,
+            last_name=user.last_name,
+            email=user.email,
+        )
+
+
 @dataclass
 class DeletedUser:
     """A user that was deleted from the database."""
