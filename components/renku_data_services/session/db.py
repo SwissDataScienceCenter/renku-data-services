@@ -237,11 +237,7 @@ class SessionRepository:
             return launcher_orm.dump()
 
     async def update_launcher(
-        self,
-        user: base_models.APIUser,
-        launcher_id: ULID,
-        # **kwargs: Any
-        patch: models.SessionLauncherPatch,
+        self, user: base_models.APIUser, launcher_id: ULID, patch: models.SessionLauncherPatch
     ) -> models.SessionLauncher:
         """Update a session launcher entry."""
         if not user.is_authenticated or user.id is None:
