@@ -7,10 +7,11 @@ from sanic.response import JSONResponse
 from sanic_ext import validate
 from ulid import ULID
 
-import renku_data_services.base_models as base_models
+from renku_data_services import base_models
 from renku_data_services.base_api.auth import authenticate, validate_path_project_id
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.session import apispec
+from renku_data_services.session.core import validate_environment_patch, validate_unsaved_environment
 from renku_data_services.session.db import SessionRepository
 
 
@@ -47,7 +48,8 @@ class EnvironmentsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @validate(json=apispec.EnvironmentPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.EnvironmentPost) -> JSONResponse:
-            environment = await self.session_repo.insert_environment(user=user, new_environment=body)
+            new_environment = validate_unsaved_environment(body)
+            environment = await self.session_repo.insert_environment(user=user, environment=new_environment)
             return json(apispec.Environment.model_validate(environment).model_dump(exclude_none=True, mode="json"), 201)
 
         return "/environments", ["POST"], _post
@@ -60,9 +62,9 @@ class EnvironmentsBP(CustomBlueprint):
         async def _patch(
             _: Request, user: base_models.APIUser, environment_id: ULID, body: apispec.EnvironmentPatch
         ) -> JSONResponse:
-            body_dict = body.model_dump(exclude_none=True)
+            environment_patch = validate_environment_patch(body)
             environment = await self.session_repo.update_environment(
-                user=user, environment_id=environment_id, **body_dict
+                user=user, environment_id=environment_id, patch=environment_patch
             )
             return json(apispec.Environment.model_validate(environment).model_dump(exclude_none=True, mode="json"))
 

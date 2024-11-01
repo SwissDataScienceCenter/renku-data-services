@@ -13,7 +13,9 @@ from renku_data_services.session.apispec import EnvironmentKind
 @dataclass(frozen=True, eq=True, kw_only=True)
 class Member:
     """Member model."""
+
     id: str
+
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedEnvironment:
@@ -24,6 +26,7 @@ class UnsavedEnvironment:
     container_image: str
     default_url: str | None
 
+
 @dataclass(frozen=True, eq=True, kw_only=True)
 class Environment(UnsavedEnvironment):
     """Session environment model."""
@@ -31,6 +34,16 @@ class Environment(UnsavedEnvironment):
     id: str
     creation_date: datetime
     created_by: Member
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class EnvironmentPatch:
+    """Model for changes requested on a session environment."""
+
+    name: str | None = None
+    description: str | None = None
+    container_image: str | None = None
+    default_url: str | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

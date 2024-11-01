@@ -51,10 +51,7 @@ class SessionRepository:
             return environment.dump()
 
     async def insert_environment(
-        self,
-        user: base_models.APIUser,
-        # new_environment: apispec.EnvironmentPost,
-        environment: models.UnsavedEnvironment
+        self, user: base_models.APIUser, environment: models.UnsavedEnvironment
     ) -> models.Environment:
         """Insert a new session environment."""
         if user.id is None:
@@ -62,25 +59,21 @@ class SessionRepository:
         if not user.is_admin:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
-        # environment_model = models.Environment(
-        #     id=None,
-        #     name=new_environment.name,
-        #     description=new_environment.description,
-        #     container_image=new_environment.container_image,
-        #     default_url=new_environment.default_url,
-        #     created_by=models.Member(id=user.id),
-        #     creation_date=datetime.now(UTC).replace(microsecond=0),
-        # )
-        # environment = schemas.EnvironmentORM.load(environment_model)
+        environment_orm = schemas.EnvironmentORM(
+            name=environment.name,
+            description=environment.description if environment.description else None,
+            container_image=environment.container_image,
+            default_url=environment.default_url if environment.default_url else None,
+            created_by_id=user.id,
+            creation_date=datetime.now(UTC).replace(microsecond=0),
+        )
 
-        # async with self.session_maker() as session, session.begin():
-        #     session.add(environment)
-        #     return environment.dump()
-
-        environment_orm = 
+        async with self.session_maker() as session, session.begin():
+            session.add(environment_orm)
+            return environment_orm.dump()
 
     async def update_environment(
-        self, user: base_models.APIUser, environment_id: ULID, **kwargs: dict
+        self, user: base_models.APIUser, environment_id: ULID, patch: models.EnvironmentPatch
     ) -> models.Environment:
         """Update a session environment entry."""
         if not user.is_admin:
@@ -96,10 +89,14 @@ class SessionRepository:
                     message=f"Session environment with id '{environment_id}' does not exist."
                 )
 
-            for key, value in kwargs.items():
-                # NOTE: Only ``name``, ``description``, ``container_image`` and ``default_url`` can be edited
-                if key in ["name", "description", "container_image", "default_url"]:
-                    setattr(environment, key, value)
+            if patch.name is not None:
+                environment.name = patch.name
+            if patch.description is not None:
+                environment.description = patch.description if patch.description else None
+            if patch.container_image is not None:
+                environment.container_image = patch.container_image
+            if patch.default_url is not None:
+                environment.default_url = patch.default_url if patch.default_url else None
 
             return environment.dump()
 
