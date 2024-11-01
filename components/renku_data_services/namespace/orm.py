@@ -3,11 +3,9 @@
 from datetime import datetime
 from typing import Optional, Self, cast
 
-from sqlalchemy import CheckConstraint, DateTime, Identity, Index, Integer, MetaData, SQLColumnExpression, String, func
-from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy import CheckConstraint, DateTime, Identity, Index, Integer, MetaData, String, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
-from sqlalchemy.sql.functions import coalesce
 from ulid import ULID
 
 from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
@@ -76,27 +74,21 @@ class NamespaceORM(BaseORM):
     )
     user: Mapped[UserORM | None] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
 
-    @hybrid_property
+    @property
     def created_by(self) -> str:
         """User that created this namespace."""
-        return self.group.created_by if self.group else self.user_id  # type: ignore[return-value]
+        if self.group is not None:
+            return self.group.created_by
+        elif self.user_id:
+            return self.user_id
+        raise errors.ProgrammingError(
+            message=f"Found a namespace {self.slug} that has no group or user associated with it."
+        )
 
-    @created_by.inplace.expression
-    @classmethod
-    def _created_by_expression(cls) -> SQLColumnExpression[str]:
-        """SQL expression used when querying for this field."""
-        return cast("SQLColumnExpression[str]", coalesce(GroupORM.created_by, cls.user_id))
-
-    @hybrid_property
+    @property
     def creation_date(self) -> datetime | None:
         """When this namespace was created."""
         return self.group.creation_date if self.group else None
-
-    @creation_date.inplace.expression
-    @classmethod
-    def _creation_date_expression(cls) -> SQLColumnExpression[datetime | None]:
-        """SQL expression used when querying for this field."""
-        return cast(SQLColumnExpression[datetime | None], GroupORM.creation_date)
 
     def dump(self) -> models.Namespace:
         """Create a namespace model from the ORM."""
