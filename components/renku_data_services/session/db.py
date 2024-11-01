@@ -53,7 +53,8 @@ class SessionRepository:
     async def insert_environment(
         self,
         user: base_models.APIUser,
-        new_environment: apispec.EnvironmentPost,
+        # new_environment: apispec.EnvironmentPost,
+        environment: models.UnsavedEnvironment
     ) -> models.Environment:
         """Insert a new session environment."""
         if user.id is None:
@@ -61,20 +62,22 @@ class SessionRepository:
         if not user.is_admin:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
-        environment_model = models.Environment(
-            id=None,
-            name=new_environment.name,
-            description=new_environment.description,
-            container_image=new_environment.container_image,
-            default_url=new_environment.default_url,
-            created_by=models.Member(id=user.id),
-            creation_date=datetime.now(UTC).replace(microsecond=0),
-        )
-        environment = schemas.EnvironmentORM.load(environment_model)
+        # environment_model = models.Environment(
+        #     id=None,
+        #     name=new_environment.name,
+        #     description=new_environment.description,
+        #     container_image=new_environment.container_image,
+        #     default_url=new_environment.default_url,
+        #     created_by=models.Member(id=user.id),
+        #     creation_date=datetime.now(UTC).replace(microsecond=0),
+        # )
+        # environment = schemas.EnvironmentORM.load(environment_model)
 
-        async with self.session_maker() as session, session.begin():
-            session.add(environment)
-            return environment.dump()
+        # async with self.session_maker() as session, session.begin():
+        #     session.add(environment)
+        #     return environment.dump()
+
+        environment_orm = 
 
     async def update_environment(
         self, user: base_models.APIUser, environment_id: ULID, **kwargs: dict

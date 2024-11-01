@@ -48,17 +48,17 @@ class EnvironmentORM(BaseORM):
     default_url: Mapped[str | None] = mapped_column("default_url", String(200))
     """Default URL path to open in a session."""
 
-    @classmethod
-    def load(cls, environment: models.Environment) -> "EnvironmentORM":
-        """Create EnvironmentORM from the session environment model."""
-        return cls(
-            name=environment.name,
-            created_by_id=environment.created_by.id,
-            creation_date=environment.creation_date,
-            description=environment.description,
-            container_image=environment.container_image,
-            default_url=environment.default_url,
-        )
+    # @classmethod
+    # def load(cls, environment: models.Environment) -> "EnvironmentORM":
+    #     """Create EnvironmentORM from the session environment model."""
+    #     return cls(
+    #         name=environment.name,
+    #         created_by_id=environment.created_by.id,
+    #         creation_date=environment.creation_date,
+    #         description=environment.description,
+    #         container_image=environment.container_image,
+    #         default_url=environment.default_url,
+    #     )
 
     def dump(self) -> models.Environment:
         """Create a session environment model from the EnvironmentORM."""

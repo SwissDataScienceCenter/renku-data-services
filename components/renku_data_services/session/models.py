@@ -1,4 +1,4 @@
-"""Models for Sessions."""
+"""Models for sessions."""
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -11,22 +11,25 @@ from renku_data_services.session.apispec import EnvironmentKind
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class Member(BaseModel):
+class Member:
     """Member model."""
-
     id: str
 
-
 @dataclass(frozen=True, eq=True, kw_only=True)
-class Environment(BaseModel):
-    """Session environment model."""
+class UnsavedEnvironment:
+    """A session environment that hasn't been stored in the database."""
 
-    id: str | None
     name: str
-    creation_date: datetime
     description: str | None
     container_image: str
     default_url: str | None
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class Environment(UnsavedEnvironment):
+    """Session environment model."""
+
+    id: str
+    creation_date: datetime
     created_by: Member
 
 
