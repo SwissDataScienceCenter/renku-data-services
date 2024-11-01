@@ -46,7 +46,6 @@ class EnvironmentPatch:
     default_url: str | None = None
 
 
-@dataclass(eq=True, kw_only=True)
 class UnsavedSessionLauncher(BaseModel):
     """A session launcher that hasn't been stored in the database."""
 
@@ -76,7 +75,6 @@ class UnsavedSessionLauncher(BaseModel):
         return self
 
 
-@dataclass(eq=True, kw_only=True)
 class SessionLauncher(UnsavedSessionLauncher):
     """Session launcher model."""
 
