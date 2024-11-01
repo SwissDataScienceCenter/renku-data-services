@@ -69,7 +69,7 @@ def create_app() -> Sanic:
         # NOTE: in single process mode where we usually run schemathesis to get coverage the db migrations
         # specified below with the main_process_start decorator do not run.
         run_migrations_for_app("common")
-        config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
+        asyncio.run(config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool))
         asyncio.run(config.kc_user_repo.initialize(config.kc_api))
         asyncio.run(sync_admins_from_keycloak(config.kc_api, config.authz))
     if config.sentry.enabled:
@@ -93,6 +93,7 @@ def create_app() -> Sanic:
                 enable_tracing=config.sentry.sample_rate > 0,
                 traces_sample_rate=config.sentry.sample_rate,
                 before_send=filter_error,
+                in_app_include=["renku_data_services"],
             )
 
         # we manually need to set the signals because sentry sanic integration doesn't work with using
@@ -122,10 +123,7 @@ def create_app() -> Sanic:
     async def do_migrations(_: Sanic) -> None:
         logger.info("running migrations")
         run_migrations_for_app("common")
-        config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
-        await config.kc_user_repo.initialize(config.kc_api)
-        await sync_admins_from_keycloak(config.kc_api, config.authz)
-        await config.group_repo.generate_user_namespaces()
+        await config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
 
     @app.before_server_start
     async def setup_rclone_validator(app: Sanic) -> None:

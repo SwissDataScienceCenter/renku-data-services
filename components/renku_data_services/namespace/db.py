@@ -363,7 +363,8 @@ class GroupRepository:
             group_count = (
                 await session.scalar(group_ns_stmt.with_only_columns(func.count(schemas.NamespaceORM.id))) or 0
             )
-            group_count += len(output)
+            if personal_ns is not None:
+                group_count += 1
             for ns_orm in group_ns:
                 output.append(ns_orm.dump())
             return output, group_count

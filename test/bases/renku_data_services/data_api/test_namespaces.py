@@ -25,6 +25,38 @@ async def test_list_namespaces(sanic_client, user_headers, regular_user) -> None
 
 
 @pytest.mark.asyncio
+async def test_list_namespaces_pagination(sanic_client, user_headers) -> None:
+    for idx in range(1, 7):
+        payload = {"name": f"Group {idx}", "slug": f"group-{idx}"}
+        _, response = await sanic_client.post("/api/data/groups", headers=user_headers, json=payload)
+        assert response.status_code == 201, response.text
+
+    _, response = await sanic_client.get("/api/data/namespaces?per_page=2", headers=user_headers)
+    assert response.status_code == 200, response.text
+    res_json = response.json
+    assert len(res_json) == 2
+    user_ns = res_json[0]
+    assert user_ns["slug"] == "user.doe"
+    group_ns = res_json[1]
+    assert group_ns["slug"] == "group-1"
+    assert response.headers.get("page") == "1"
+    assert response.headers.get("per-page") == "2"
+    assert response.headers.get("total") == "7"
+    assert response.headers.get("total-pages") == "4"
+
+    _, response = await sanic_client.get("/api/data/namespaces?per_page=2&page=4", headers=user_headers)
+    assert response.status_code == 200, response.text
+    res_json = response.json
+    assert len(res_json) == 1
+    user_ns = res_json[0]
+    assert user_ns["slug"] == "group-6"
+    assert response.headers.get("page") == "4"
+    assert response.headers.get("per-page") == "2"
+    assert response.headers.get("total") == "7"
+    assert response.headers.get("total-pages") == "4"
+
+
+@pytest.mark.asyncio
 async def test_list_namespaces_all_groups_are_public(sanic_client, user_headers, member_1_headers) -> None:
     payload = {
         "name": "Group 1",
