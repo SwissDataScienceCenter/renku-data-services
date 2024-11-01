@@ -93,6 +93,7 @@ def create_app() -> Sanic:
                 enable_tracing=config.sentry.sample_rate > 0,
                 traces_sample_rate=config.sentry.sample_rate,
                 before_send=filter_error,
+                in_app_include=["renku_data_services"],
             )
 
         # we manually need to set the signals because sentry sanic integration doesn't work with using
