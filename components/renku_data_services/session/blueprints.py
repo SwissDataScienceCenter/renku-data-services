@@ -13,6 +13,7 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.session import apispec
 from renku_data_services.session.core import (
     validate_environment_patch,
+    validate_session_launcher_patch,
     validate_unsaved_environment,
     validate_unsaved_session_launcher,
 )
@@ -139,8 +140,8 @@ class SessionLaunchersBP(CustomBlueprint):
         async def _patch(
             _: Request, user: base_models.APIUser, launcher_id: ULID, body: apispec.SessionLauncherPatch
         ) -> JSONResponse:
-            body_dict = body.model_dump(exclude_none=True)
-            launcher = await self.session_repo.update_launcher(user=user, launcher_id=launcher_id, **body_dict)
+            launcher_patch = validate_session_launcher_patch(body)
+            launcher = await self.session_repo.update_launcher(user=user, launcher_id=launcher_id, patch=launcher_patch)
             return json(apispec.SessionLauncher.model_validate(launcher).model_dump(exclude_none=True, mode="json"))
 
         return "/session_launchers/<launcher_id:ulid>", ["PATCH"], _patch

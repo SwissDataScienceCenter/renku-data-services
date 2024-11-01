@@ -50,8 +50,6 @@ class EnvironmentPatch:
 class UnsavedSessionLauncher(BaseModel):
     """A session launcher that hasn't been stored in the database."""
 
-    """Session launcher model."""
-
     project_id: ULID
     name: str
     description: str | None
@@ -85,3 +83,16 @@ class SessionLauncher(UnsavedSessionLauncher):
     id: ULID
     creation_date: datetime
     created_by: Member
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLauncherPatch:
+    """Model for changes requested on a session launcher."""
+
+    name: str | None = None
+    description: str | None = None
+    environment_kind: EnvironmentKind | None = None
+    environment_id: str | None = None
+    resource_class_id: int | None = None
+    container_image: str | None = None
+    default_url: str | None = None

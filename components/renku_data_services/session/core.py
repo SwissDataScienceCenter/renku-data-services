@@ -37,3 +37,16 @@ def validate_unsaved_session_launcher(launcher: apispec.SessionLauncherPost) -> 
         container_image=launcher.container_image,
         default_url=launcher.default_url,
     )
+
+
+def validate_session_launcher_patch(patch: apispec.SessionLauncherPatch) -> models.SessionLauncherPatch:
+    """Validate the update to a session launcher."""
+    return models.SessionLauncherPatch(
+        name=patch.name,
+        description=patch.description,
+        environment_kind=patch.environment_kind,
+        environment_id=patch.environment_id,
+        resource_class_id=patch.resource_class_id,
+        container_image=patch.container_image,
+        default_url=patch.default_url,
+    )
