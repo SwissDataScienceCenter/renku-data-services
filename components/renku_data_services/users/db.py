@@ -216,12 +216,7 @@ class UsersSync:
     @Authz.authz_change(AuthzOperation.update_or_insert, ResourceType.user)
     @dispatch_message(events.UpdateOrInsertUser)
     async def update_or_insert_user(
-        self,
-        #   user_id: str,
-        #   payload: dict[str, Any],
-        user: UnsavedUserInfo,
-        *,
-        session: AsyncSession | None = None,
+        self, user: UnsavedUserInfo, *, session: AsyncSession | None = None
     ) -> UserInfoUpdate:
         """Update a user or insert it if it does not exist."""
         if not session:
@@ -258,12 +253,7 @@ class UsersSync:
         return UserInfoUpdate(None, new_user.dump())
 
     async def _update_user(
-        self,
-        session: AsyncSession,
-        user_id: str,
-        existing_user: UserORM | None,
-        # **kwargs: Any
-        patch: UserPatch,
+        self, session: AsyncSession, user_id: str, existing_user: UserORM | None, patch: UserPatch
     ) -> UserInfoUpdate:
         """Update a user."""
         if not existing_user:
