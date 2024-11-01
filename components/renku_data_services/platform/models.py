@@ -1,4 +1,4 @@
-"""Models for Sessions."""
+"""Models for the platform configuration."""
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -26,3 +26,10 @@ class PlatformConfig:
     def etag(self) -> str:
         """Entity tag value for this project object."""
         return compute_etag_from_timestamp(self.updated_at, include_quotes=True)
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class PlatformConfigPatch:
+    """Model for changes requested on the platform configuration."""
+
+    incident_banner: str | None = None

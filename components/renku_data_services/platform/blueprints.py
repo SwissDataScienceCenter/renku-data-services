@@ -12,6 +12,7 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_api.etag import extract_if_none_match, if_match_required
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.platform import apispec
+from renku_data_services.platform.core import validate_platform_config_patch
 from renku_data_services.platform.db import PlatformRepository
 
 
@@ -54,8 +55,8 @@ class PlatformConfigBP(CustomBlueprint):
         async def _patch_singleton_configuration(
             _: Request, user: base_models.APIUser, body: apispec.PlatformConfigPatch, etag: str
         ) -> JSONResponse:
-            body_dict = body.model_dump(exclude_none=True)
-            config = await self.platform_repo.update_config(user=user, etag=etag, **body_dict)
+            platform_config_patch = validate_platform_config_patch(body)
+            config = await self.platform_repo.update_config(user=user, etag=etag, patch=platform_config_patch)
             headers = {"ETag": config.etag}
             return validated_json(
                 apispec.PlatformConfig,
