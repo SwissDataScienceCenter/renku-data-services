@@ -47,7 +47,7 @@ tenacity = "^9.0.0"
 httpx = "<0.28"
 kubernetes = "^31.0.0"
 python-ulid = "^3.0.0"
-python-gitlab = "^4.13.0"
+python-gitlab = "^5.0.0"
 psycopg = { version = "^3.2.3", extras = ["binary"] }
 urllib3 = "^2.2.3"
 deepmerge = "^2.0"
@@ -59,7 +59,7 @@ prometheus-sanic = "^3.0.0"
 sentry-sdk = {version = "^2.17.0", extras = ["sanic"]}
 authzed = "^1.0.0"
 # see https://github.com/sanic-org/sanic/issues/2828 for setuptools dependency, remove when not needed anymore
-setuptools = { version = "^75.2.0" }
+setuptools = { version = "^75.3.0" }
 aiofile = "^3.9.0"
 # Not a direct dependency, it is needed by authzed. Was causing things to crash at startup beacuse of
 # google.protobuf.runtime_version.VersionError:
@@ -68,7 +68,7 @@ protobuf = "^5.28.3"
 
 [tool.poetry.group.dev.dependencies]
 pyavro-gen = "^0.3.3"
-fakeredis = "^2.26.0"
+fakeredis = "^2.26.1"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
