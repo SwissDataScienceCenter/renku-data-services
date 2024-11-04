@@ -72,7 +72,9 @@ class NamespaceORM(BaseORM):
         nullable=True,
         index=True,
     )
-    user: Mapped[UserORM | None] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
+    user: Mapped[UserORM | None] = relationship(
+        lazy="joined", back_populates="namespace", init=False, repr=False, viewonly=True
+    )
 
     @property
     def created_by(self) -> str:
@@ -90,39 +92,45 @@ class NamespaceORM(BaseORM):
         """When this namespace was created."""
         return self.group.creation_date if self.group else None
 
+    @property
+    def underlying_resource_id(self) -> str | ULID:
+        """Return the id of the underlying resource."""
+        if self.group_id is not None:
+            return self.group_id
+        elif self.user_id is not None:
+            return self.user_id
+
+        raise errors.ProgrammingError(
+            message=f"Found a namespace {self.slug} that has no group or user associated with it."
+        )
+
+    @property
+    def name(self) -> str | None:
+        """Return the name of the underlying resource."""
+        if self.group is not None:
+            return self.group.name
+        elif self.user is not None:
+            return (
+                f"{self.user.first_name} {self.user.last_name}"
+                if self.user.first_name and self.user.last_name
+                else self.user.first_name or self.user.last_name
+            )
+        raise errors.ProgrammingError(
+            message=f"Found a namespace {self.slug} that has no group or user associated with it."
+        )
+
     def dump(self) -> models.Namespace:
         """Create a namespace model from the ORM."""
-        if self.group_id and self.group:
-            return models.Namespace(
-                id=self.id,
-                slug=self.slug,
-                kind=models.NamespaceKind.group,
-                created_by=self.created_by,
-                creation_date=self.creation_date,
-                underlying_resource_id=self.group_id,
-                latest_slug=self.slug,
-                name=self.group.name,
-            )
-
-        if not self.user or not self.user_id:
-            raise errors.ProgrammingError(
-                message=f"Found a namespace {self.slug} that has no group or user associated with it."
-            )
-
-        name = (
-            f"{self.user.first_name} {self.user.last_name}"
-            if self.user.first_name and self.user.last_name
-            else self.user.first_name or self.user.last_name
-        )
+        kind = models.NamespaceKind.group if self.group else models.NamespaceKind.user
         return models.Namespace(
             id=self.id,
             slug=self.slug,
-            kind=models.NamespaceKind.user,
-            created_by=self.user_id,
+            kind=kind,
+            created_by=self.created_by,
             creation_date=self.creation_date,
-            underlying_resource_id=self.user_id,
+            underlying_resource_id=self.underlying_resource_id,
             latest_slug=self.slug,
-            name=name,
+            name=self.name,
         )
 
     def dump_user(self) -> UserInfo:
@@ -132,6 +140,8 @@ class NamespaceORM(BaseORM):
                 message="Cannot dump ORM namespace as namespace with user if the namespace "
                 "has no associated user with it."
             )
+        # NOTE: calling `self.user.dump()` can cause sqlalchemy greenlet errors, as it tries to fetch the namespace
+        # again from the db, even though the back_populates should take care of this and not require loading.
         ns = self.dump()
         user_info = UserInfo(
             id=self.user.keycloak_id,
