@@ -388,6 +388,11 @@ class NotebooksNewBP(CustomBlueprint):
 
             base_server_url = self.nb_config.sessions.ingress.base_url(server_name)
             base_server_path = self.nb_config.sessions.ingress.base_path(server_name)
+            ui_path: str = (
+                base_server_path.rstrip("/") + "/" + environment.default_url.lstrip("/")
+                if len(environment.default_url) > 0
+                else base_server_path
+            )
             annotations: dict[str, str] = {
                 "renku.io/project_id": str(launcher.project_id),
                 "renku.io/launcher_id": body.launcher_id,
@@ -416,7 +421,7 @@ class NotebooksNewBP(CustomBlueprint):
                     hibernated=False,
                     session=Session(
                         image=image,
-                        urlPath=base_server_path,
+                        urlPath=ui_path,
                         port=environment.port,
                         storage=Storage(
                             className=self.nb_config.sessions.storage.pvs_storage_class,
@@ -443,6 +448,7 @@ class NotebooksNewBP(CustomBlueprint):
                         tlsSecret=TlsSecret(adopt=False, name=self.nb_config.sessions.ingress.tls_secret)
                         if self.nb_config.sessions.ingress.tls_secret is not None
                         else None,
+                        pathPrefix=base_server_url,
                     ),
                     extraContainers=extra_containers,
                     initContainers=session_init_containers,
