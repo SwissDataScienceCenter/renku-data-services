@@ -30,7 +30,9 @@ class PlatformRepository:
                 await session.refresh(config)
             return config.dump()
 
-    async def update_config(self, user: base_models.APIUser, etag: str, **kwargs: dict) -> models.PlatformConfig:
+    async def update_config(
+        self, user: base_models.APIUser, etag: str, patch: models.PlatformConfigPatch
+    ) -> models.PlatformConfig:
         """Update the platform configuration."""
         if user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
@@ -47,9 +49,8 @@ class PlatformRepository:
             if current_etag != etag:
                 raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
 
-            for key, value in kwargs.items():
-                if key in ["incident_banner"]:
-                    setattr(config, key, value)
+            if patch.incident_banner is not None:
+                config.incident_banner = patch.incident_banner
 
             await session.flush()
             await session.refresh(config)
