@@ -80,7 +80,7 @@ async def jupyter_server(renku_image: str, server_name: str, pod_name: str) -> A
     await pod.wait("condition=Ready")
     yield server
     # NOTE: This is used also in tests that check if the server was properly stopped
-    # in this case the server will already gone when we try to delete it in the cleanup here.
+    # in this case the server will already be gone when we try to delete it in the cleanup here.
     with suppress(NotFoundError):
         await server.delete("Foreground")
 
@@ -109,7 +109,10 @@ async def practice_jupyter_server(renku_image: str, server_name: str) -> AsyncIt
 
     await server.create()
     yield server
-    await server.delete("Foreground")
+    # NOTE: This is used also in tests that check if the server was properly stopped
+    # in this case the server will already be gone when we try to delete it in the cleanup here.
+    with suppress(NotFoundError):
+        await server.delete("Foreground")
 
 
 @pytest.fixture()

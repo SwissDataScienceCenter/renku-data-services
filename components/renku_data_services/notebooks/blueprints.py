@@ -330,7 +330,15 @@ class NotebooksNewBP(CustomBlueprint):
                 if csr.target_path is not None and not PurePosixPath(csr.target_path).is_absolute():
                     csr.target_path = (work_dir / csr.target_path).as_posix()
                 dcs[csr_id] = dcs[csr_id].with_override(csr)
-            repositories = [Repository(url=i) for i in project.repositories]
+            git_providers = await self.nb_config.git_provider_helper.get_providers(user=user)
+            repositories: list[Repository] = []
+            for repo in project.repositories:
+                found_provider_id: str | None = None
+                for provider in git_providers:
+                    if urlparse(provider.url).netloc == urlparse(repo).netloc:
+                        found_provider_id = provider.id
+                        break
+                repositories.append(Repository(url=repo, provider=found_provider_id))
             secrets_to_create: list[V1Secret] = []
             # Generate the cloud starge secrets
             data_sources: list[DataSource] = []
@@ -359,7 +367,6 @@ class NotebooksNewBP(CustomBlueprint):
                         ),
                     )
                 )
-            git_providers = await self.nb_config.git_provider_helper.get_providers(user=user)
             git_clone = await init_containers.git_clone_container_v2(
                 user=user,
                 config=self.nb_config,

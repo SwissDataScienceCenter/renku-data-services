@@ -67,7 +67,8 @@ class EventRepository:
                     except Exception as e:
                         logger.warning(f"couldn't send event {event.payload} on queue {event.queue}: {e}")
 
-        logger.info(f"sent {n_total_events} events")
+        if n_total_events > 0:
+            logger.info(f"sent {n_total_events} events to the message queue")
 
     async def store_event(self, session: AsyncSession | Session, event: Event) -> int:
         """Store an event."""
