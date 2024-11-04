@@ -239,6 +239,7 @@ class AmaltheaSessionV1Alpha1(_ASModel):
                 total_containers=total_containers,
                 will_hibernate_at=will_hibernate_at,
                 will_delete_at=will_delete_at,
+                message=self.status.error,
             ),
             url=url,
             project_id=str(self.project_id),
@@ -256,6 +257,8 @@ class AmaltheaSessionV1Alpha1(_ASModel):
         scheme = "https" if self.spec and self.spec.ingress and self.spec.ingress.tlsSecret else "http"
         host = self.spec.ingress.host
         path = self.spec.session.urlPath if self.spec.session.urlPath else "/"
+        if not path.endswith("/"):
+            path += "/"
         params = None
         query = None
         fragment = None
