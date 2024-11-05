@@ -262,14 +262,14 @@ paths:
         content:
           application/json:
             schema:
-              type: object
+              $ref: "#/components/schemas/SessionSecretSlotPost"
       responses:
         "201":
           description: The secret slot was created
           content:
             application/json:
               schema:
-                type: object
+                $ref: "#/components/schemas/SessionSecretSlot"
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -289,7 +289,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: "#/components/schemas/SessionSecretSlot"
         "404":
           description: The secret slot does not exist
           content:
@@ -588,6 +588,38 @@ components:
           oneOf:
             - $ref: "#/components/schemas/EnvironmentPatchInLauncher"
             - $ref: "#/components/schemas/EnvironmentIdOnlyPatch"
+    SessionSecretSlotList:
+      description: A list of session launcher secret slots
+      type: array
+      items:
+        $ref: "#/components/schemas/SessionSecretSlot"
+    SessionSecretSlot:
+      description: A slot for a secret in a session launcher
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        session_launcher_id:
+          $ref: "#/components/schemas/Ulid"
+        name:
+          $ref: "#/components/schemas/SecretSlotName"
+        description:
+          $ref: "#/components/schemas/Description"
+        filename:
+          $ref: "#/components/schemas/SecretSlotFileName"
+    SessionSecretSlotPost:
+      type: object
+      additionalProperties: false
+      properties:
+        session_launcher_id:
+          $ref: "#/components/schemas/Ulid"
+        name:
+          $ref: "#/components/schemas/SecretSlotName"
+        description:
+          $ref: "#/components/schemas/Description"
+        filename:
+          $ref: "#/components/schemas/SecretSlotFileName"
     Ulid:
       description: ULID identifier
       type: string
@@ -688,6 +720,18 @@ components:
         type: string
       description: The arguments that will follow the command, i.e. will overwrite the image Dockerfile CMD, equivalent to args in Kubernetes
       minLength: 1
+    SecretSlotName:
+      description: The name of a secret slot
+      type: string
+      minLength: 1
+      maxLength: 99
+      example: API Token
+    SecretSlotFileName:
+      description: The filename given to the corresponding secret in the session
+      type: string
+      minLength: 1
+      maxLength: 200
+      example: api_token
     ErrorResponse:
       type: object
       properties:
