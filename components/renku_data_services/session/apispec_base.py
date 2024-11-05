@@ -1,5 +1,7 @@
 """Base models for API specifications."""
 
+from typing import Any
+
 from pydantic import BaseModel, field_validator
 from ulid import ULID
 
@@ -12,8 +14,10 @@ class BaseAPISpec(BaseModel):
 
         from_attributes = True
 
-    @field_validator("id", mode="before", check_fields=False)
+    @field_validator("*", mode="before", check_fields=False)
     @classmethod
-    def serialize_id(cls, id: str | ULID) -> str:
-        """Custom serializer that can handle ULIDs."""
-        return str(id)
+    def serialize_ulid(cls, value: Any) -> Any:
+        """Handle ULIDs."""
+        if isinstance(value, ULID):
+            return str(value)
+        return value
