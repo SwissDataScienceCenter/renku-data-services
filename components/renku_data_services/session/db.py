@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,7 +14,7 @@ from renku_data_services import errors
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.crc.db import ResourcePoolRepository
-from renku_data_services.session import apispec, models
+from renku_data_services.session import models
 from renku_data_services.session import orm as schemas
 from renku_data_services.session.apispec import EnvironmentKind
 
@@ -51,9 +50,7 @@ class SessionRepository:
             return environment.dump()
 
     async def insert_environment(
-        self,
-        user: base_models.APIUser,
-        new_environment: apispec.EnvironmentPost,
+        self, user: base_models.APIUser, environment: models.UnsavedEnvironment
     ) -> models.Environment:
         """Insert a new session environment."""
         if user.id is None:
@@ -61,23 +58,21 @@ class SessionRepository:
         if not user.is_admin:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
-        environment_model = models.Environment(
-            id=None,
-            name=new_environment.name,
-            description=new_environment.description,
-            container_image=new_environment.container_image,
-            default_url=new_environment.default_url,
-            created_by=models.Member(id=user.id),
+        environment_orm = schemas.EnvironmentORM(
+            name=environment.name,
+            description=environment.description if environment.description else None,
+            container_image=environment.container_image,
+            default_url=environment.default_url if environment.default_url else None,
+            created_by_id=user.id,
             creation_date=datetime.now(UTC).replace(microsecond=0),
         )
-        environment = schemas.EnvironmentORM.load(environment_model)
 
         async with self.session_maker() as session, session.begin():
-            session.add(environment)
-            return environment.dump()
+            session.add(environment_orm)
+            return environment_orm.dump()
 
     async def update_environment(
-        self, user: base_models.APIUser, environment_id: ULID, **kwargs: dict
+        self, user: base_models.APIUser, environment_id: ULID, patch: models.EnvironmentPatch
     ) -> models.Environment:
         """Update a session environment entry."""
         if not user.is_admin:
@@ -93,10 +88,14 @@ class SessionRepository:
                     message=f"Session environment with id '{environment_id}' does not exist."
                 )
 
-            for key, value in kwargs.items():
-                # NOTE: Only ``name``, ``description``, ``container_image`` and ``default_url`` can be edited
-                if key in ["name", "description", "container_image", "default_url"]:
-                    setattr(environment, key, value)
+            if patch.name is not None:
+                environment.name = patch.name
+            if patch.description is not None:
+                environment.description = patch.description if patch.description else None
+            if patch.container_image is not None:
+                environment.container_image = patch.container_image
+            if patch.default_url is not None:
+                environment.default_url = patch.default_url if patch.default_url else None
 
             return environment.dump()
 
@@ -171,36 +170,31 @@ class SessionRepository:
             return launcher.dump()
 
     async def insert_launcher(
-        self, user: base_models.APIUser, new_launcher: apispec.SessionLauncherPost
+        self, user: base_models.APIUser, launcher: models.UnsavedSessionLauncher
     ) -> models.SessionLauncher:
         """Insert a new session launcher."""
         if not user.is_authenticated or user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
-        project_id = new_launcher.project_id
-        authorized = await self.project_authz.has_permission(
-            user, ResourceType.project, ULID.from_str(project_id), Scope.WRITE
-        )
+        project_id = launcher.project_id
+        authorized = await self.project_authz.has_permission(user, ResourceType.project, project_id, Scope.WRITE)
         if not authorized:
             raise errors.MissingResourceError(
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
 
-        launcher_model = models.SessionLauncher(
-            id=None,
-            name=new_launcher.name,
-            project_id=new_launcher.project_id,
-            description=new_launcher.description,
-            environment_kind=new_launcher.environment_kind,
-            environment_id=new_launcher.environment_id,
-            resource_class_id=new_launcher.resource_class_id,
-            container_image=new_launcher.container_image,
-            default_url=new_launcher.default_url,
-            created_by=models.Member(id=user.id),
+        launcher_orm = schemas.SessionLauncherORM(
+            name=launcher.name,
+            project_id=launcher.project_id,
+            description=launcher.description if launcher.description else None,
+            environment_kind=launcher.environment_kind,
+            environment_id=launcher.environment_id,
+            resource_class_id=launcher.resource_class_id,
+            container_image=launcher.container_image if launcher.container_image else None,
+            default_url=launcher.default_url if launcher.default_url else None,
+            created_by_id=user.id,
             creation_date=datetime.now(UTC).replace(microsecond=0),
         )
-
-        models.SessionLauncher.model_validate(launcher_model)
 
         async with self.session_maker() as session, session.begin():
             res = await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
@@ -210,7 +204,7 @@ class SessionRepository:
                     message=f"Project with id '{project_id}' does not exist or you do not have access to it."
                 )
 
-            environment_id = new_launcher.environment_id
+            environment_id = launcher_orm.environment_id
             if environment_id is not None:
                 res = await session.scalars(
                     select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == environment_id)
@@ -221,7 +215,7 @@ class SessionRepository:
                         message=f"Session environment with id '{environment_id}' does not exist or you do not have access to it."  # noqa: E501
                     )
 
-            resource_class_id = new_launcher.resource_class_id
+            resource_class_id = launcher_orm.resource_class_id
             if resource_class_id is not None:
                 res = await session.scalars(
                     select(schemas.ResourceClassORM).where(schemas.ResourceClassORM.id == resource_class_id)
@@ -239,12 +233,11 @@ class SessionRepository:
                         message=f"You do not have access to resource class with id '{resource_class_id}'."
                     )
 
-            launcher = schemas.SessionLauncherORM.load(launcher_model)
-            session.add(launcher)
-            return launcher.dump()
+            session.add(launcher_orm)
+            return launcher_orm.dump()
 
     async def update_launcher(
-        self, user: base_models.APIUser, launcher_id: ULID, **kwargs: Any
+        self, user: base_models.APIUser, launcher_id: ULID, patch: models.SessionLauncherPatch
     ) -> models.SessionLauncher:
         """Update a session launcher entry."""
         if not user.is_authenticated or user.id is None:
@@ -269,7 +262,7 @@ class SessionRepository:
             if not authorized:
                 raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
-            environment_id = kwargs.get("environment_id")
+            environment_id = patch.environment_id
             if environment_id is not None:
                 res = await session.scalars(
                     select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == environment_id)
@@ -280,7 +273,7 @@ class SessionRepository:
                         message=f"Session environment with id '{environment_id}' does not exist or you do not have access to it."  # noqa: E501
                     )
 
-            resource_class_id = kwargs.get("resource_class_id")
+            resource_class_id = patch.resource_class_id
             if resource_class_id is not None:
                 res = await session.scalars(
                     select(schemas.ResourceClassORM).where(schemas.ResourceClassORM.id == resource_class_id)
@@ -298,20 +291,20 @@ class SessionRepository:
                         message=f"You do not have access to resource class with id '{resource_class_id}'."
                     )
 
-            for key, value in kwargs.items():
-                # NOTE: Only ``name``, ``description``, ``environment_kind``,
-                #       ``environment_id``, ``resource_class_id``, ``container_image`` and
-                #       ``default_url`` can be edited.
-                if key in [
-                    "name",
-                    "description",
-                    "environment_kind",
-                    "environment_id",
-                    "resource_class_id",
-                    "container_image",
-                    "default_url",
-                ]:
-                    setattr(launcher, key, value)
+            if patch.name is not None:
+                launcher.name = patch.name
+            if patch.description is not None:
+                launcher.description = patch.description if patch.description else None
+            if patch.environment_kind is not None:
+                launcher.environment_kind = patch.environment_kind
+            if patch.environment_id is not None:
+                launcher.environment_id = patch.environment_id
+            if patch.resource_class_id is not None:
+                launcher.resource_class_id = patch.resource_class_id
+            if patch.container_image is not None:
+                launcher.container_image = patch.container_image if patch.container_image else None
+            if patch.default_url is not None:
+                launcher.default_url = patch.default_url if patch.default_url else None
 
             if launcher.environment_kind == EnvironmentKind.global_environment:
                 launcher.container_image = None
