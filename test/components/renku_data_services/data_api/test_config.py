@@ -1,6 +1,7 @@
 import secrets
 from unittest.mock import MagicMock
 
+import pytest
 import pytest_asyncio
 
 import renku_data_services.app_config.config as conf

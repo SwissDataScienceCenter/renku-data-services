@@ -65,7 +65,12 @@ async def test_upgrade_downgrade_cycle(
 @pytest.mark.skip
 @pytest.mark.asyncio
 async def test_migration_to_f34b87ddd954(
-    sanic_client_no_migrations: SanicASGITestClient, app_config: Config, user_headers: dict, admin_headers: dict
+    sanic_client_no_migrations: SanicASGITestClient,
+    app_config: Config,
+    db_instance,
+    authz_instance,
+    user_headers: dict,
+    admin_headers: dict,
 ) -> None:
     run_migrations_for_app("common", "d8676f0cde53")
     await app_config.kc_user_repo.initialize(app_config.kc_api)
@@ -105,7 +110,7 @@ async def test_migration_to_f34b87ddd954(
 
 
 @pytest.mark.asyncio
-async def test_migration_to_1ef98b967767(app_config: Config, admin_user: UserInfo) -> None:
+async def test_migration_to_1ef98b967767(app_config: Config, db_instance, authz_instance, admin_user: UserInfo) -> None:
     """Tests the migration of the session lauchers."""
     run_migrations_for_app("common", "b8cbd62e85b9")
     await app_config.kc_user_repo.initialize(app_config.kc_api)

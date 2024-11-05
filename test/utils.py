@@ -34,6 +34,7 @@ from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClie
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.message_queue.redis_queue import RedisQueue
+from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.storage import models as storage_models
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users import models as user_preferences_models
@@ -156,7 +157,7 @@ class TestAppConfig(Config):
     """Test class that can handle isolated dbs and authz instances."""
 
     @classmethod
-    def from_env(cls, prefix: str = "") -> "Config":
+    def from_env(cls, dummy_users: list[user_preferences_models.UnsavedUserInfo], prefix: str = "") -> "Config":
         """Create a config from environment variables."""
 
         user_store: base_models.UserStore
@@ -191,14 +192,6 @@ class TestAppConfig(Config):
         user_always_exists = os.environ.get("DUMMY_USERSTORE_USER_ALWAYS_EXISTS", "true").lower() == "true"
         user_store = DummyUserStore(user_always_exists=user_always_exists)
         gitlab_client = DummyGitlabAPI()
-        dummy_users = [
-            user_preferences_models.UnsavedUserInfo(
-                id="user1", first_name="user1", last_name="doe", email="user1@doe.com"
-            ),
-            user_preferences_models.UnsavedUserInfo(
-                id="user2", first_name="user2", last_name="doe", email="user2@doe.com"
-            ),
-        ]
         kc_api = DummyKeycloakAPI(users=[i._to_keycloak_dict() for i in dummy_users])
         redis = RedisConfig.fake()
         gitlab_url = None
@@ -209,6 +202,7 @@ class TestAppConfig(Config):
         sentry = SentryConfig.from_env(prefix)
         trusted_proxies = TrustedProxiesConfig.from_env(prefix)
         message_queue = RedisQueue(redis)
+        nb_config = NotebooksConfig.from_env(db)
 
         return cls(
             version=version,
@@ -230,6 +224,7 @@ class TestAppConfig(Config):
             secrets_service_public_key=secrets_service_public_key,
             gitlab_url=gitlab_url,
             authz_config=AuthzConfigStack.from_env(),
+            nb_config=nb_config,
         )
 
     def __post_init__(self) -> None:

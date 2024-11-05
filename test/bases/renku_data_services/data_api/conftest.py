@@ -457,6 +457,6 @@ def pytest_addoption(parser):
     parser.addoption("--disable-cluster-creation", action="store_true", default=False, help="Disable cluster creation")
 
 
-@pytest.fixture(scope="session")
+@pytest_asyncio.fixture(scope="session")
 def disable_cluster_creation(request):
     return request.config.getoption("--disable-cluster-creation")

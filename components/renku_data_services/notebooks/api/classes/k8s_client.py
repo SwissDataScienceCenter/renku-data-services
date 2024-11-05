@@ -102,7 +102,7 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
             secret = await Secret.get(name, self.namespace)
         except NotFoundError:
             return None
-        return secret
+        return cast(Secret, secret)
 
     async def create_server(self, manifest: _SessionType) -> _SessionType:
         """Create a jupyter server in the cluster."""

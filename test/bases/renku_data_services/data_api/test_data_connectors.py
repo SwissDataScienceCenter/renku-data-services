@@ -214,7 +214,7 @@ async def test_post_data_connector_with_conflicting_slug(
 @pytest.mark.parametrize("headers_and_error", [("unauthorized_headers", 401), ("member_1_headers", 403)])
 async def test_post_data_connector_without_namespace_permission(
     # NOTE: dynamically requesting async fixtures with an already running event loop causes errors in pytest.
-    # to prevent this, all used fixtures have to also be listed again, so the exist at test execution time and
+    # to prevent this, all used fixtures have to also be listed again, so they exist at test execution time and
     # are loaded from cache
     sanic_client: SanicASGITestClient,
     user_headers,
@@ -342,7 +342,7 @@ async def test_get_one_by_slug_data_connector(
 @pytest.mark.parametrize("headers_name", ["unauthorized_headers", "member_1_headers"])
 async def test_get_one_data_connector_unauthorized(
     # NOTE: dynamically requesting async fixtures with an already running event loop causes errors in pytest.
-    # to prevent this, all used fixtures have to also be listed again, so the exist at test execution time and
+    # to prevent this, all used fixtures have to also be listed again, so they exist at test execution time and
     # are loaded from cache
     sanic_client: SanicASGITestClient,
     create_data_connector,

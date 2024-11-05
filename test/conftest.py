@@ -25,6 +25,7 @@ from renku_data_services.app_config import Config as DataConfig
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.secrets.config import Config as SecretsConfig
+from renku_data_services.users import models as user_preferences_models
 from test.utils import TestAppConfig
 
 settings.register_profile("ci", deadline=400, max_examples=5)
@@ -131,6 +132,7 @@ async def db_instance(monkeysession, worker_id, app_config, event_loop) -> Async
         dbname=db_name,
         version="16.2",
         password=password,
+        template_dbname="renku_template",
     ):
         db = DBConfig.from_env()
         app_config.db.push(db)
@@ -175,12 +177,23 @@ async def secrets_key_pair(monkeysession, tmpdir_factory) -> None:
 
 
 @pytest_asyncio.fixture(scope="session")
-async def app_config(authz_setup, monkeysession, worker_id, secrets_key_pair) -> AsyncGenerator[DataConfig, None]:
+async def dummy_users():
+    return [
+        user_preferences_models.UnsavedUserInfo(id="user1", first_name="user1", last_name="doe", email="user1@doe.com"),
+        user_preferences_models.UnsavedUserInfo(id="user2", first_name="user2", last_name="doe", email="user2@doe.com"),
+    ]
+
+
+@pytest_asyncio.fixture(scope="session")
+async def app_config(
+    authz_setup, monkeysession, worker_id, secrets_key_pair, dummy_users
+) -> AsyncGenerator[DataConfig, None]:
+    monkeysession.setenv("DUMMY_STORES", "true")
     monkeysession.setenv("MAX_PINNED_PROJECTS", "5")
     monkeysession.setenv("NB_SERVER_OPTIONS__DEFAULTS_PATH", "server_defaults.json")
     monkeysession.setenv("NB_SERVER_OPTIONS__UI_CHOICES_PATH", "server_options.json")
 
-    config = TestAppConfig.from_env()
+    config = TestAppConfig.from_env(dummy_users)
     app_name = "app_" + str(ULID()).lower() + "_" + worker_id
     config.app_name = app_name
     yield config
