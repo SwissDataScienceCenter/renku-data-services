@@ -1,7 +1,6 @@
 """Session blueprint."""
 
 from dataclasses import dataclass
-from typing import Any
 
 from sanic import HTTPResponse, Request
 from sanic.response import JSONResponse
@@ -12,7 +11,7 @@ from renku_data_services import base_models
 from renku_data_services.base_api.auth import authenticate, validate_path_project_id
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models.validation import validated_json
-from renku_data_services.session import apispec, models
+from renku_data_services.session import apispec
 from renku_data_services.session.core import (
     validate_environment_patch,
     validate_session_launcher_patch,
@@ -34,7 +33,7 @@ class EnvironmentsBP(CustomBlueprint):
 
         async def _get_all(_: Request) -> JSONResponse:
             environments = await self.session_repo.get_environments()
-            return validated_json(apispec.EnvironmentList, [self._dump_environment(e) for e in environments])
+            return validated_json(apispec.EnvironmentList, environments)
 
         return "/environments", ["GET"], _get_all
 
@@ -85,18 +84,6 @@ class EnvironmentsBP(CustomBlueprint):
 
         return "/environments/<environment_id:ulid>", ["DELETE"], _delete
 
-    @staticmethod
-    def _dump_environment(environment: models.Environment) -> dict[str, Any]:
-        """Dumps a session environment for API responses."""
-        return dict(
-            id=environment.id,
-            name=environment.name,
-            creation_date=environment.creation_date,
-            description=environment.description,
-            container_image=environment.container_image,
-            default_url=environment.default_url,
-        )
-
 
 @dataclass(kw_only=True)
 class SessionLaunchersBP(CustomBlueprint):
@@ -111,7 +98,7 @@ class SessionLaunchersBP(CustomBlueprint):
         @authenticate(self.authenticator)
         async def _get_all(_: Request, user: base_models.APIUser) -> JSONResponse:
             launchers = await self.session_repo.get_launchers(user=user)
-            return validated_json(apispec.SessionLaunchersList, [self._dump_launcher(item) for item in launchers])
+            return validated_json(apispec.SessionLaunchersList, launchers)
 
         return "/session_launchers", ["GET"], _get_all
 
@@ -121,7 +108,7 @@ class SessionLaunchersBP(CustomBlueprint):
         @authenticate(self.authenticator)
         async def _get_one(_: Request, user: base_models.APIUser, launcher_id: ULID) -> JSONResponse:
             launcher = await self.session_repo.get_launcher(user=user, launcher_id=launcher_id)
-            return validated_json(apispec.SessionLauncher, self._dump_launcher(launcher))
+            return validated_json(apispec.SessionLauncher, launcher)
 
         return "/session_launchers/<launcher_id:ulid>", ["GET"], _get_one
 
@@ -133,7 +120,7 @@ class SessionLaunchersBP(CustomBlueprint):
         async def _post(_: Request, user: base_models.APIUser, body: apispec.SessionLauncherPost) -> JSONResponse:
             new_launcher = validate_unsaved_session_launcher(body)
             launcher = await self.session_repo.insert_launcher(user=user, launcher=new_launcher)
-            return validated_json(apispec.SessionLauncher, self._dump_launcher(launcher), status=201)
+            return validated_json(apispec.SessionLauncher, launcher, status=201)
 
         return "/session_launchers", ["POST"], _post
 
@@ -147,7 +134,7 @@ class SessionLaunchersBP(CustomBlueprint):
         ) -> JSONResponse:
             launcher_patch = validate_session_launcher_patch(body)
             launcher = await self.session_repo.update_launcher(user=user, launcher_id=launcher_id, patch=launcher_patch)
-            return validated_json(apispec.SessionLauncher, self._dump_launcher(launcher))
+            return validated_json(apispec.SessionLauncher, launcher)
 
         return "/session_launchers/<launcher_id:ulid>", ["PATCH"], _patch
 
@@ -168,22 +155,6 @@ class SessionLaunchersBP(CustomBlueprint):
         @validate_path_project_id
         async def _get_launcher(_: Request, user: base_models.APIUser, project_id: str) -> JSONResponse:
             launchers = await self.session_repo.get_project_launchers(user=user, project_id=project_id)
-            return validated_json(apispec.SessionLaunchersList, [self._dump_launcher(item) for item in launchers])
+            return validated_json(apispec.SessionLaunchersList, launchers)
 
         return "/projects/<project_id>/session_launchers", ["GET"], _get_launcher
-
-    @staticmethod
-    def _dump_launcher(launcher: models.SessionLauncher) -> dict[str, Any]:
-        """Dumps a session launcher for API responses."""
-        return dict(
-            id=str(launcher.id),
-            project_id=str(launcher.project_id),
-            name=launcher.name,
-            creation_date=launcher.creation_date,
-            description=launcher.description,
-            environment_kind=launcher.environment_kind,
-            environment_id=launcher.environment_id,
-            resource_class_id=launcher.resource_class_id,
-            container_image=launcher.container_image,
-            default_url=launcher.default_url,
-        )
