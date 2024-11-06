@@ -19,6 +19,8 @@ from renku_data_services.session.core import (
     validate_unsaved_session_launcher,
 )
 from renku_data_services.session.db import SessionRepository
+from renku_data_services.session import apispec, converters, models
+from renku_data_services.session.db import SessionRepository, SessionSecretRepository
 
 
 @dataclass(kw_only=True)
@@ -90,7 +92,7 @@ class EnvironmentsBP(CustomBlueprint):
 
 @dataclass(kw_only=True)
 class SessionLaunchersBP(CustomBlueprint):
-    """Handlers for manipulating session launcher."""
+    """Handlers for manipulating session launchers."""
 
     session_repo: SessionRepository
     authenticator: base_models.Authenticator
@@ -167,3 +169,42 @@ class SessionLaunchersBP(CustomBlueprint):
             return validated_json(apispec.SessionLaunchersList, launchers)
 
         return "/projects/<project_id:ulid>/session_launchers", ["GET"], _get_launcher
+
+
+@dataclass(kw_only=True)
+class SessionLauncherSecretBP(CustomBlueprint):
+    """Handlers for manipulating session launcher secrets."""
+
+    session_secret_repo: SessionSecretRepository
+    authenticator: base_models.Authenticator
+
+    def get_session_launcher_secret_slots(self) -> BlueprintFactoryResponse:
+        """Get the secret slots of a session launcher."""
+
+        @authenticate(self.authenticator)
+        async def _get_session_launcher_secret_slots(
+            _: Request, user: base_models.APIUser, launcher_id: ULID
+        ) -> JSONResponse:
+            secret_slots = await self.session_secret_repo.get_all_session_launcher_secret_slot_from_sesion_launcher(
+                user=user, session_launcher_id=launcher_id
+            )
+            return validated_json(apispec.SessionSecretSlotList, secret_slots)
+
+        return "/session_launchers/<launcher_id:ulid>/secret_slots", ["GET"], _get_session_launcher_secret_slots
+
+    def post_session_launcher_secret_slot(self) -> BlueprintFactoryResponse:
+        """Create a new secret slot on a session launcher."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @validate(json=apispec.SessionSecretSlotPost)
+        async def _post_session_launcher_secret_slot(
+            _: Request, user: base_models.APIUser, body: apispec.SessionSecretSlotPost
+        ) -> JSONResponse:
+            unsaved_secret_slot = converters.validate_unsaved_session_launcher_secret_slot(body)
+            secret_slot = await self.session_secret_repo.insert_session_launcher_secret_slot(
+                user=user, secret_slot=unsaved_secret_slot
+            )
+            return validated_json(apispec.SessionSecretSlot, secret_slot, status=201)
+
+        return "/session_launcher_secret_slots", ["POST"], _post_session_launcher_secret_slot

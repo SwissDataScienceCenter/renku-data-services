@@ -304,7 +304,7 @@ paths:
       summary: Remove all user secrets for a session launcher
       responses:
         "204":
-          description: 	The secrets were removed or did not exist in the first place or the session launcher doesn't exist
+          description: The secrets were removed or did not exist in the first place or the session launcher doesn't exist
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -663,6 +663,11 @@ components:
           $ref: "#/components/schemas/Description"
         filename:
           $ref: "#/components/schemas/SecretSlotFileName"
+      required:
+        - id
+        - session_launcher_id
+        - name
+        - filename
     SessionSecretSlotPost:
       type: object
       additionalProperties: false
@@ -675,6 +680,9 @@ components:
           $ref: "#/components/schemas/Description"
         filename:
           $ref: "#/components/schemas/SecretSlotFileName"
+      required:
+        - session_launcher_id
+        - filename
     Ulid:
       description: ULID identifier
       type: string

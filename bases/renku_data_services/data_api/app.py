@@ -22,7 +22,7 @@ from renku_data_services.notebooks.blueprints import NotebooksBP, NotebooksNewBP
 from renku_data_services.platform.blueprints import PlatformConfigBP
 from renku_data_services.project.blueprints import ProjectsBP
 from renku_data_services.repositories.blueprints import RepositoriesBP
-from renku_data_services.session.blueprints import EnvironmentsBP, SessionLaunchersBP
+from renku_data_services.session.blueprints import EnvironmentsBP, SessionLaunchersBP, SessionLauncherSecretBP
 from renku_data_services.storage.blueprints import StorageBP, StorageSchemaBP
 from renku_data_services.users.blueprints import KCUsersBP, UserPreferencesBP, UserSecretsBP
 
@@ -111,6 +111,12 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         session_repo=config.session_repo,
         authenticator=config.authenticator,
     )
+    session_launcher_secrets = SessionLauncherSecretBP(
+        name="session_launcher_secrets",
+        url_prefix=url_prefix,
+        session_secret_repo=config.session_secret_repo,
+        authenticator=config.authenticator,
+    )
     oauth2_clients = OAuth2ClientsBP(
         name="oauth2_clients",
         url_prefix=url_prefix,
@@ -196,6 +202,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
             group.blueprint(),
             session_environments.blueprint(),
             session_launchers.blueprint(),
+            session_launcher_secrets.blueprint(),
             oauth2_clients.blueprint(),
             oauth2_connections.blueprint(),
             repositories.blueprint(),

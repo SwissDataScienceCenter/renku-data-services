@@ -139,3 +139,23 @@ class SessionLauncherPatch:
     # launcher with the update of the launcher.
     environment: str | EnvironmentPatch | UnsavedEnvironment | None = None
     resource_class_id: int | None | ResetType = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedSessionLauncherSecretSlot:
+    """Secret slot model that has not been persisted."""
+
+    session_launcher_id: ULID
+    name: str | None
+    description: str | None
+    filename: str
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLauncherSecretSlot(UnsavedSessionLauncherSecretSlot):
+    """Secret slot model that has been persisted."""
+
+    id: ULID
+    created_by_id: str
+    creation_date: datetime
+    updated_at: datetime

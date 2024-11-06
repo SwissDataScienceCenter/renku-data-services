@@ -471,3 +471,91 @@ class SessionRepository:
             await session.delete(launcher)
             if launcher.environment.environment_kind == models.EnvironmentKind.CUSTOM:
                 await session.delete(launcher.environment)
+
+
+class SessionSecretRepository:
+    """Repository for session secrets."""
+
+    def __init__(
+        self, session_maker: Callable[..., AsyncSession], project_authz: Authz, session_repo: SessionRepository
+    ) -> None:
+        self.session_maker = session_maker
+        self.project_authz = project_authz
+        self.session_repo = session_repo
+
+    async def get_all_session_launcher_secret_slot_from_sesion_launcher(
+        self,
+        user: base_models.APIUser,
+        session_launcher_id: ULID,
+    ) -> list[models.SessionLauncherSecretSlot]:
+        """Get all secret slots from a session launcher."""
+        # Check that the user is allowed to access the session launcher
+        await self.session_repo.get_launcher(user=user, launcher_id=session_launcher_id)
+        async with self.session_maker() as session:
+            result = await session.scalars(
+                select(schemas.SessionLauncherSecretSlotORM).where(
+                    schemas.SessionLauncherSecretSlotORM.session_launcher_id == session_launcher_id
+                )
+            )
+            secret_slots = result.all()
+            return [s.dump() for s in secret_slots]
+
+    async def get_session_launcher_secret_slot(
+        self,
+        user: base_models.APIUser,
+        slot_id: ULID,
+    ) -> models.SessionLauncherSecretSlot:
+        """Get one secret slot from the database."""
+        async with self.session_maker() as session, session.begin():
+            result = await session.scalars(
+                select(schemas.SessionLauncherSecretSlotORM).where(schemas.SessionLauncherSecretSlotORM.id == slot_id)
+            )
+            secret_slot = result.one_or_none()
+
+            authorized = (
+                await self.project_authz.has_permission(
+                    user, ResourceType.project, secret_slot.session_launcher.project_id, Scope.READ
+                )
+                if secret_slot is not None
+                else False
+            )
+            if not authorized or secret_slot is None:
+                raise errors.MissingResourceError(
+                    message=f"Secret slot with id '{slot_id}' does not exist or you do not have access to it."
+                )
+
+            return secret_slot.dump()
+
+    async def insert_session_launcher_secret_slot(
+        self, user: base_models.APIUser, secret_slot: models.UnsavedSessionLauncherSecretSlot
+    ) -> models.SessionLauncherSecretSlot:
+        """Insert a new secret slot entry."""
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        # Check that the user is allowed to access the session launcher
+        await self.session_repo.get_launcher(user=user, launcher_id=secret_slot.session_launcher_id)
+        async with self.session_maker() as session, session.begin():
+            existing_secret_slot = await session.scalar(
+                select(schemas.SessionLauncherSecretSlotORM)
+                .where(schemas.SessionLauncherSecretSlotORM.session_launcher_id == secret_slot.session_launcher_id)
+                .where(schemas.SessionLauncherSecretSlotORM.filename == secret_slot.filename)
+            )
+            if existing_secret_slot is not None:
+                raise errors.ConflictError(
+                    message=f"A secret slot with the filename '{secret_slot.filename}' already exists."
+                )
+
+            secret_slot_orm = schemas.SessionLauncherSecretSlotORM(
+                session_launcher_id=secret_slot.session_launcher_id,
+                name=secret_slot.name or secret_slot.filename,
+                description=secret_slot.description if secret_slot.description else None,
+                filename=secret_slot.filename,
+                created_by_id=user.id,
+            )
+
+            session.add(secret_slot_orm)
+            await session.flush()
+            await session.refresh(secret_slot_orm)
+
+            return secret_slot_orm.dump()

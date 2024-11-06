@@ -64,7 +64,7 @@ from renku_data_services.platform.db import PlatformRepository
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.secrets.db import UserSecretsRepo
-from renku_data_services.session.db import SessionRepository
+from renku_data_services.session.db import SessionRepository, SessionSecretRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.config import UserPreferencesConfig
 from renku_data_services.users.db import UserPreferencesRepository
@@ -176,6 +176,7 @@ class Config:
     _event_repo: EventRepository | None = field(default=None, repr=False, init=False)
     _reprovisioning_repo: ReprovisioningRepository | None = field(default=None, repr=False, init=False)
     _session_repo: SessionRepository | None = field(default=None, repr=False, init=False)
+    _session_secret_repo: SessionSecretRepository | None = field(default=None, repr=False, init=False)
     _user_preferences_repo: UserPreferencesRepository | None = field(default=None, repr=False, init=False)
     _kc_user_repo: KcUserRepo | None = field(default=None, repr=False, init=False)
     _user_secrets_repo: UserSecretsRepo | None = field(default=None, repr=False, init=False)
@@ -366,6 +367,17 @@ class Config:
                 session_maker=self.db.async_session_maker, project_authz=self.authz, resource_pools=self.rp_repo
             )
         return self._session_repo
+
+    @property
+    def session_secret_repo(self) -> SessionSecretRepository:
+        """The DB adapter for session secrets."""
+        if not self._session_secret_repo:
+            self._session_secret_repo = SessionSecretRepository(
+                session_maker=self.db.async_session_maker,
+                project_authz=self.authz,
+                session_repo=self.session_repo,
+            )
+        return self._session_secret_repo
 
     @property
     def user_preferences_repo(self) -> UserPreferencesRepository:

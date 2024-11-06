@@ -6,7 +6,7 @@ from pathlib import PurePosixPath
 from sqlalchemy import JSON, DateTime, MetaData, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
-from sqlalchemy.schema import ForeignKey
+from sqlalchemy.schema import ForeignKey, UniqueConstraint
 from ulid import ULID
 
 from renku_data_services.crc.orm import ResourceClassORM
@@ -158,14 +158,22 @@ class SessionLauncherSecretSlotORM(BaseORM):
     """A slot for a secret in a session launcher."""
 
     __tablename__ = "launcher_secret_slots"
+    __table_args__ = (
+        UniqueConstraint(
+            "session_launcher_id",
+            "filename",
+            name="_unique_session_launcher_id_filename",
+        ),
+    )
 
     id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
     """ID of this session launcher secret slot."""
 
-    session_id: Mapped[ULID] = mapped_column(
+    session_launcher_id: Mapped[ULID] = mapped_column(
         ForeignKey(SessionLauncherORM.id, ondelete="CASCADE"), index=True, nullable=False
     )
     """ID of the session launcher."""
+    session_launcher: Mapped[SessionLauncherORM] = relationship(init=False, repr=False, lazy="selectin")
 
     name: Mapped[str] = mapped_column("name", String(99))
     """Name of the secret slot."""
@@ -190,3 +198,16 @@ class SessionLauncherSecretSlotORM(BaseORM):
         onupdate=func.now(),
         nullable=False,
     )
+
+    def dump(self) -> models.SessionLauncherSecretSlot:
+        """Create a secret slot model from the SessionLauncherSecretSlotORM."""
+        return models.SessionLauncherSecretSlot(
+            id=self.id,
+            session_launcher_id=self.session_launcher_id,
+            name=self.name,
+            description=self.description,
+            filename=self.filename,
+            created_by_id=self.created_by_id,
+            creation_date=self.creation_date,
+            updated_at=self.updated_at,
+        )
