@@ -12,6 +12,7 @@ from ulid import ULID
 from renku_data_services.crc.orm import ResourceClassORM
 from renku_data_services.project.orm import ProjectORM
 from renku_data_services.session import models
+from renku_data_services.users.orm import UserORM
 from renku_data_services.utils.sqlalchemy import PurePosixPathType, ULIDType
 
 metadata_obj = MetaData(schema="sessions")  # Has to match alembic ini section name
@@ -151,3 +152,41 @@ class SessionLauncherORM(BaseORM):
             resource_class_id=self.resource_class_id,
             environment=self.environment.dump(),
         )
+
+
+class SessionLauncherSecretSlotORM(BaseORM):
+    """A slot for a secret in a session launcher."""
+
+    __tablename__ = "launcher_secret_slots"
+
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    """ID of this session launcher secret slot."""
+
+    session_id: Mapped[ULID] = mapped_column(
+        ForeignKey(SessionLauncherORM.id, ondelete="CASCADE"), index=True, nullable=False
+    )
+    """ID of the session launcher."""
+
+    name: Mapped[str] = mapped_column("name", String(99))
+    """Name of the secret slot."""
+
+    description: Mapped[str | None] = mapped_column("description", String(500))
+    """Human-readable description of the secret slot."""
+
+    filename: Mapped[str] = mapped_column("filename", String(200))
+    """The filename given to the corresponding secret in the session."""
+
+    created_by_id: Mapped[str] = mapped_column(ForeignKey(UserORM.keycloak_id), index=True, nullable=False)
+    """User ID of the creator of the secret slot."""
+
+    creation_date: Mapped[datetime] = mapped_column(
+        "creation_date", DateTime(timezone=True), default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        "updated_at",
+        DateTime(timezone=True),
+        default=None,
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
