@@ -254,6 +254,61 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - session_launchers
+  /session_launchers/{launcher_id}/secrets:
+    parameters:
+      - in: path
+        name: launcher_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+    get:
+      summary: Get the current user's secrets of a session launcher
+      responses:
+        "200":
+          description: The list of secrets
+          content:
+            application/json:
+              schema:
+                type: object
+        "404":
+          description: The session launcher does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_launchers
+    patch:
+      summary: Save useer secrets for a session launcher
+      description: New secrets will be added and existing secrets will have their value updated. Using `null` as a value will remove the corresponding secret.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: The secret slot was created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionSecretSlot"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_launchers
+    delete:
+      summary: Remove all user secrets for a session launcher
+      responses:
+        "204":
+          description: 	The secrets were removed or did not exist in the first place or the session launcher doesn't exist
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_launchers
   /session_launcher_secret_slots:
     post:
       summary: Create a new secret slot on a session launcher
