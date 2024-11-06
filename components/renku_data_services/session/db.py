@@ -595,7 +595,7 @@ class SessionSecretRepository:
                 )
                 if existing_secret_slot is not None:
                     raise errors.ConflictError(
-                        message=f"A secret slot with the filename '{secret_slot.filename}' already exists."
+                        message=f"A secret slot with the filename '{patch.filename}' already exists."
                     )
                 secret_slot.filename = patch.filename
 
