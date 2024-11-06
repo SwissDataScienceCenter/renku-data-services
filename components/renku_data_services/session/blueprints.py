@@ -185,7 +185,7 @@ class SessionLauncherSecretBP(CustomBlueprint):
         async def _get_session_launcher_secret_slots(
             _: Request, user: base_models.APIUser, launcher_id: ULID
         ) -> JSONResponse:
-            secret_slots = await self.session_secret_repo.get_all_session_launcher_secret_slot_from_sesion_launcher(
+            secret_slots = await self.session_secret_repo.get_all_session_launcher_secret_slots_from_sesion_launcher(
                 user=user, session_launcher_id=launcher_id
             )
             return validated_json(apispec.SessionSecretSlotList, secret_slots)

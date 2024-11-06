@@ -483,7 +483,7 @@ class SessionSecretRepository:
         self.project_authz = project_authz
         self.session_repo = session_repo
 
-    async def get_all_session_launcher_secret_slot_from_sesion_launcher(
+    async def get_all_session_launcher_secret_slots_from_sesion_launcher(
         self,
         user: base_models.APIUser,
         session_launcher_id: ULID,
@@ -627,3 +627,25 @@ class SessionSecretRepository:
                 )
 
             await session.delete(secret_slot)
+
+    async def get_all_session_launcher_secrets_from_sesion_launcher(
+        self,
+        user: base_models.APIUser,
+        session_launcher_id: ULID,
+    ) -> list[models.SessionLauncherSecret]:
+        """Get all secret from a session launcher."""
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        # Check that the user is allowed to access the session launcher
+        await self.session_repo.get_launcher(user=user, launcher_id=session_launcher_id)
+        async with self.session_maker() as session:
+            result = await session.scalars(
+                select(schemas.SessionLauncherSecretORM)
+                .where(schemas.SessionLauncherSecretORM.user_id == user.id)
+                .where(schemas.SessionLauncherSecretORM.secret_slot_id == schemas.SessionLauncherSecretSlotORM.id)
+                .where(schemas.SessionLauncherSecretSlotORM.session_launcher_id == session_launcher_id)
+            )
+            secrets = result.all()
+
+            return [s.dump() for s in secrets]
