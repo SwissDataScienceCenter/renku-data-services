@@ -11,7 +11,7 @@ from renku_data_services import base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models.validation import validated_json
-from renku_data_services.session import apispec
+from renku_data_services.session import apispec, models
 from renku_data_services.session.core import (
     validate_environment_patch,
     validate_session_launcher_patch,
@@ -53,7 +53,7 @@ class EnvironmentsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.EnvironmentPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.EnvironmentPost) -> JSONResponse:
-            new_environment = validate_unsaved_environment(body)
+            new_environment = validate_unsaved_environment(body, models.EnvironmentKind.GLOBAL)
             environment = await self.session_repo.insert_environment(user=user, environment=new_environment)
             return validated_json(apispec.Environment, environment, status=201)
 
