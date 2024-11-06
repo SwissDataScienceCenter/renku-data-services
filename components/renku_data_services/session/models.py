@@ -168,3 +168,11 @@ class SessionLauncherSecretSlotPatch:
     name: str | None
     description: str | None
     filename: str | None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLauncherSecret:
+    """Session launcher secret model that has been persisted."""
+
+    secret_slot: SessionLauncherSecretSlot
+    secret_id: ULID

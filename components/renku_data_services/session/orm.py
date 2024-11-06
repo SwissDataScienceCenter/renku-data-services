@@ -11,6 +11,7 @@ from ulid import ULID
 
 from renku_data_services.crc.orm import ResourceClassORM
 from renku_data_services.project.orm import ProjectORM
+from renku_data_services.secrets.orm import SecretORM
 from renku_data_services.session import models
 from renku_data_services.users.orm import UserORM
 from renku_data_services.utils.sqlalchemy import PurePosixPathType, ULIDType
@@ -210,4 +211,39 @@ class SessionLauncherSecretSlotORM(BaseORM):
             created_by_id=self.created_by_id,
             creation_date=self.creation_date,
             updated_at=self.updated_at,
+        )
+
+
+class SessionLauncherSecretORM(BaseORM):
+    """Secrets for session launchers."""
+
+    __tablename__ = "launcher_secrets"
+    __table_args__ = (
+        UniqueConstraint(
+            "secret_slot_id",
+            "user_id",
+            name="_unique_secret_slot_id_user_id",
+        ),
+    )
+
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    """ID of this session launcher secret."""
+
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey(UserORM.keycloak_id, ondelete="CASCADE"), index=True, nullable=False
+    )
+
+    secret_slot_id: Mapped[ULID] = mapped_column(
+        "secret_slot_id", ForeignKey(SessionLauncherSecretSlotORM.id, ondelete="CASCADE")
+    )
+    secret_slot: Mapped[SessionLauncherSecretSlotORM] = relationship(init=False, repr=False, lazy="selectin")
+
+    secret_id: Mapped[ULID] = mapped_column("secret_id", ForeignKey(SecretORM.id, ondelete="CASCADE"))
+    secret: Mapped[SecretORM] = relationship(init=False, repr=False, lazy="selectin")
+
+    def dump(self) -> models.SessionLauncherSecret:
+        """Create a session launcher secret model from the SessionLauncherSecretORM."""
+        return models.SessionLauncherSecret(
+            secret_slot=self.secret_slot.dump(),
+            secret_id=self.secret_id,
         )
