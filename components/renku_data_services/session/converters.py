@@ -90,12 +90,30 @@ def validate_unsaved_session_launcher_secret_slot(
     body: apispec.SessionSecretSlotPost,
 ) -> models.UnsavedSessionLauncherSecretSlot:
     """Validate an unsaved secret slot."""
-    filename_candidate = PurePosixPath(body.filename)
-    if filename_candidate.name != body.filename:
-        raise errors.ValidationError(message=f"Filename {body.filename} is not valid.")
+    _validate_session_launcher_secret_slot_filename(body.filename)
     return models.UnsavedSessionLauncherSecretSlot(
         session_launcher_id=ULID.from_str(body.session_launcher_id),
         name=body.name,
         description=body.description,
         filename=body.filename,
     )
+
+
+def validate_session_launcher_secret_slot_patch(
+    body: apispec.SessionSecretSlotPatch,
+) -> models.SessionLauncherSecretSlotPatch:
+    """Validate the update to a secret slot."""
+    if body.filename is not None:
+        _validate_session_launcher_secret_slot_filename(body.filename)
+    return models.SessionLauncherSecretSlotPatch(
+        name=body.name,
+        description=body.description,
+        filename=body.filename,
+    )
+
+
+def _validate_session_launcher_secret_slot_filename(filename: str) -> None:
+    """Validate the filename field of a secret slot."""
+    filename_candidate = PurePosixPath(filename)
+    if filename_candidate.name != filename:
+        raise errors.ValidationError(message=f"Filename {filename} is not valid.")

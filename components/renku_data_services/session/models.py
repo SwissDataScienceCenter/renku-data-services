@@ -159,3 +159,12 @@ class SessionLauncherSecretSlot(UnsavedSessionLauncherSecretSlot):
     created_by_id: str
     creation_date: datetime
     updated_at: datetime
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLauncherSecretSlotPatch:
+    """Model for changes requested on a secret slot."""
+
+    name: str | None
+    description: str | None
+    filename: str | None

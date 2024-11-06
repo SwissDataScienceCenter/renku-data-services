@@ -559,3 +559,71 @@ class SessionSecretRepository:
             await session.refresh(secret_slot_orm)
 
             return secret_slot_orm.dump()
+
+    async def update_session_launcher_secret_slot(
+        self,
+        user: base_models.APIUser,
+        slot_id: ULID,
+        patch: models.SessionLauncherSecretSlotPatch,
+    ) -> models.SessionLauncherSecretSlot:
+        """Update a secret slot entry."""
+        not_found_msg = f"Secret slot with id '{slot_id}' does not exist or you do not have access to it."
+
+        async with self.session_maker() as session, session.begin():
+            result = await session.scalars(
+                select(schemas.SessionLauncherSecretSlotORM).where(schemas.SessionLauncherSecretSlotORM.id == slot_id)
+            )
+            secret_slot = result.one_or_none()
+            if secret_slot is None:
+                raise errors.MissingResourceError(message=not_found_msg)
+
+            authorized = await self.project_authz.has_permission(
+                user, ResourceType.project, secret_slot.session_launcher.project_id, Scope.WRITE
+            )
+            if not authorized:
+                raise errors.MissingResourceError(message=not_found_msg)
+
+            if patch.name is not None:
+                secret_slot.name = patch.name
+            if patch.description is not None:
+                secret_slot.description = patch.description if patch.description else None
+            if patch.filename is not None:
+                existing_secret_slot = await session.scalar(
+                    select(schemas.SessionLauncherSecretSlotORM)
+                    .where(schemas.SessionLauncherSecretSlotORM.session_launcher_id == secret_slot.session_launcher_id)
+                    .where(schemas.SessionLauncherSecretSlotORM.filename == patch.filename)
+                )
+                if existing_secret_slot is not None:
+                    raise errors.ConflictError(
+                        message=f"A secret slot with the filename '{secret_slot.filename}' already exists."
+                    )
+                secret_slot.filename = patch.filename
+
+            await session.flush()
+            await session.refresh(secret_slot)
+
+            return secret_slot.dump()
+
+    async def delete_session_launcher_secret_slot(
+        self,
+        user: base_models.APIUser,
+        slot_id: ULID,
+    ) -> None:
+        """Delete a secret slot."""
+        async with self.session_maker() as session, session.begin():
+            result = await session.scalars(
+                select(schemas.SessionLauncherSecretSlotORM).where(schemas.SessionLauncherSecretSlotORM.id == slot_id)
+            )
+            secret_slot = result.one_or_none()
+            if secret_slot is None:
+                return None
+
+            authorized = await self.project_authz.has_permission(
+                user, ResourceType.project, secret_slot.session_launcher.project_id, Scope.WRITE
+            )
+            if not authorized:
+                raise errors.MissingResourceError(
+                    message=f"Secret slot with id '{slot_id}' does not exist or you do not have access to it."
+                )
+
+            await session.delete(secret_slot)

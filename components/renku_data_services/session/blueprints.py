@@ -208,3 +208,45 @@ class SessionLauncherSecretBP(CustomBlueprint):
             return validated_json(apispec.SessionSecretSlot, secret_slot, status=201)
 
         return "/session_launcher_secret_slots", ["POST"], _post_session_launcher_secret_slot
+
+    def get_session_launcher_secret_slot(self) -> BlueprintFactoryResponse:
+        """Get the details of a secret slot."""
+
+        @authenticate(self.authenticator)
+        async def _get_session_launcher_secret_slot(
+            _: Request, user: base_models.APIUser, slot_id: ULID
+        ) -> JSONResponse:
+            secret_slot = await self.session_secret_repo.get_session_launcher_secret_slot(user=user, slot_id=slot_id)
+            return validated_json(apispec.SessionSecretSlot, secret_slot)
+
+        return "/session_launcher_secret_slots/<slot_id:ulid>", ["GET"], _get_session_launcher_secret_slot
+
+    def patch_session_launcher_secret_slot(self) -> BlueprintFactoryResponse:
+        """Update specific fields of an existing secret slot."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @validate(json=apispec.SessionSecretSlotPatch)
+        async def _patch_session_launcher_secret_slot(
+            _: Request, user: base_models.APIUser, slot_id: ULID, body: apispec.SessionSecretSlotPatch
+        ) -> JSONResponse:
+            secret_slot_patch = converters.validate_session_launcher_secret_slot_patch(body)
+            secret_slot = await self.session_secret_repo.update_session_launcher_secret_slot(
+                user=user, slot_id=slot_id, patch=secret_slot_patch
+            )
+            return validated_json(apispec.SessionSecretSlot, secret_slot)
+
+        return "/session_launcher_secret_slots/<slot_id:ulid>", ["PATCH"], _patch_session_launcher_secret_slot
+
+    def delete_session_launcher_secret_slot(self) -> BlueprintFactoryResponse:
+        """Remove a secret slot."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _delete_session_launcher_secret_slot(
+            _: Request, user: base_models.APIUser, slot_id: ULID
+        ) -> HTTPResponse:
+            await self.session_secret_repo.delete_session_launcher_secret_slot(user=user, slot_id=slot_id)
+            return HTTPResponse(status=204)
+
+        return "/session_launcher_secret_slots/<slot_id:ulid>", ["DELETE"], _delete_session_launcher_secret_slot

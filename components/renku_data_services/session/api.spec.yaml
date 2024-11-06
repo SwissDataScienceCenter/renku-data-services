@@ -243,7 +243,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: "#/components/schemas/SessionSecretSlotList"
         "404":
           description: The session launcher does not exist
           content:
@@ -362,7 +362,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
+              $ref: "#/components/schemas/SessionSecretSlotPatch"
       responses:
         "200":
           description: The patched secret slot
@@ -683,6 +683,16 @@ components:
       required:
         - session_launcher_id
         - filename
+    SessionSecretSlotPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/SecretSlotName"
+        description:
+          $ref: "#/components/schemas/Description"
+        filename:
+          $ref: "#/components/schemas/SecretSlotFileName"
     Ulid:
       description: ULID identifier
       type: string
