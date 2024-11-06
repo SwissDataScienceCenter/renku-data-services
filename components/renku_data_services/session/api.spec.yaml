@@ -269,7 +269,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: "#/components/schemas/SessionSecretList"
         "404":
           description: The session launcher does not exist
           content:
@@ -288,14 +288,14 @@ paths:
         content:
           application/json:
             schema:
-              type: object
+              $ref: "#/components/schemas/SessionSecretPatchList"
       responses:
         "201":
-          description: The secret slot was created
+          description: The secrets for the session launcher were saved
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SessionSecretSlot"
+                $ref: "#/components/schemas/SessionSecretList"
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -693,6 +693,53 @@ components:
           $ref: "#/components/schemas/Description"
         filename:
           $ref: "#/components/schemas/SecretSlotFileName"
+    SessionSecretList:
+      description: A list of session launcher secrets
+      type: array
+      items:
+        $ref: "#/components/schemas/SessionSecret"
+    SessionSecret:
+      description: A user's secret in a session launcher
+      type: object
+      additionalProperties: false
+      properties:
+        secret_slot:
+          $ref: "#/components/schemas/SessionSecretSlot"
+        secret_id:
+          $ref: "#/components/schemas/Ulid"
+      required:
+        - secret_slot
+        - secret_id
+    SessionSecretPatchList:
+      type: array
+      items:
+        $ref: "#/components/schemas/SessionSecretPatch"
+    SessionSecretPatch:
+      allOf:
+        - type: object
+          additionalProperties: false
+          properties:
+            secret_slot_id:
+              $ref: "#/components/schemas/Ulid"
+          required:
+            - secret_slot_id
+        - oneOf:
+            - $ref: "#/components/schemas/SessionSecretPatchExistingSecret"
+            - $ref: "#/components/schemas/SessionSecretPatchSecretValue"
+    SessionSecretPatchExistingSecret:
+      type: object
+      additionalProperties: false
+      properties:
+        secret_id:
+          $ref: "#/components/schemas/Ulid"
+      required:
+        - secret_id
+    SessionSecretPatchSecretValue:
+      type: object
+      additionalProperties: false
+      properties:
+        value:
+          $ref: "#/components/schemas/SecretValueNullable"
     Ulid:
       description: ULID identifier
       type: string
@@ -805,6 +852,13 @@ components:
       minLength: 1
       maxLength: 200
       example: api_token
+    SecretValueNullable:
+      description: Secret value that can be any text
+      type: string
+      minLength: 1
+      maxLength: 5000
+      nullable: true
+      example: My secret value
     ErrorResponse:
       type: object
       properties:
