@@ -16,6 +16,9 @@ from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import RESET
 from renku_data_services.crc.db import ResourcePoolRepository
+from renku_data_services.secrets import orm as secrets_schemas
+from renku_data_services.secrets.core import encrypt_user_secret
+from renku_data_services.secrets.models import SecretKind
 from renku_data_services.session import models
 from renku_data_services.session import orm as schemas
 
@@ -649,3 +652,98 @@ class SessionSecretRepository:
             secrets = result.all()
 
             return [s.dump() for s in secrets]
+
+    async def patch_session_launcher_secrets(
+        self,
+        user: base_models.APIUser,
+        session_launcher_id: ULID,
+        secrets: list[models.SessionSecretPatchExistingSecret | models.SessionSecretPatchSecretValue],
+    ) -> list[models.SessionLauncherSecret]:
+        """Create, update or remove session launcher secrets."""
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        # Check that the user is allowed to access the session launcher
+        await self.session_repo.get_launcher(user=user, launcher_id=session_launcher_id)
+
+        secrets_as_dict = {s.secret_slot_id: s for s in secrets}
+
+        async with self.session_maker() as session, session.begin():
+            result = await session.scalars(
+                select(schemas.SessionLauncherSecretORM)
+                .where(schemas.SessionLauncherSecretORM.user_id == user.id)
+                .where(schemas.SessionLauncherSecretORM.secret_slot_id == schemas.SessionLauncherSecretSlotORM.id)
+                .where(schemas.SessionLauncherSecretSlotORM.session_launcher_id == session_launcher_id)
+            )
+            existing_secrets = result.all()
+            existing_secrets_as_dict = {s.secret_slot_id: s for s in existing_secrets}
+
+            result_slots = await session.scalars(
+                select(schemas.SessionLauncherSecretSlotORM).where(
+                    schemas.SessionLauncherSecretSlotORM.session_launcher_id == session_launcher_id
+                )
+            )
+            secret_slots = result_slots.all()
+            secret_slots_as_dict = {s.id: s for s in secret_slots}
+
+            all_secrets = []
+
+            for slot_id, secret_update in secrets_as_dict.items():
+                secret_slot = secret_slots_as_dict.get(slot_id)
+                if secret_slot is None:
+                    raise errors.ValidationError(
+                        message=f"Secret slot with id '{slot_id}' does not exist or you do not have access to it."
+                    )
+
+                if isinstance(secret_update, models.SessionSecretPatchExistingSecret):
+                    # Update the secret_id
+                    if session_launcher_secret_orm := existing_secrets_as_dict.get(slot_id):
+                        session_launcher_secret_orm.secret_id = secret_update.secret_id
+                    else:
+                        session_launcher_secret_orm = schemas.SessionLauncherSecretORM(
+                            secret_slot_id=secret_update.secret_slot_id,
+                            secret_id=secret_update.secret_id,
+                            user_id=user.id,
+                        )
+                    session.add(session_launcher_secret_orm)
+                    all_secrets.append(session_launcher_secret_orm.dump())
+                    continue
+
+                if secret_update.value is None:
+                    # Remove the secret
+                    session_launcher_secret_orm = existing_secrets_as_dict.get(slot_id)
+                    if session_launcher_secret_orm is None:
+                        continue
+                    await session.delete(session_launcher_secret_orm)
+                    del existing_secrets_as_dict[slot_id]
+                    continue
+
+                # TODO: What should happen here?
+                encrypted_value, encrypted_key = await encrypt_user_secret(
+                    user_repo=self.user_repo,
+                    requested_by=user,
+                    secret_service_public_key=self.secret_service_public_key,
+                    secret_value=secret_update.value,
+                )
+                if session_launcher_secret_orm := existing_secrets_as_dict.get(slot_id):
+                    session_launcher_secret_orm.secret.update(
+                        encrypted_value=encrypted_value, encrypted_key=encrypted_key
+                    )
+                else:
+                    secret_orm = secrets_schemas.SecretORM(
+                        name=f"{secret_update.secret_slot_id}-{secret_slot.name}",
+                        user_id=user.id,
+                        encrypted_value=encrypted_value,
+                        encrypted_key=encrypted_key,
+                        kind=SecretKind.general,
+                    )
+                    session_launcher_secret_orm = schemas.SessionLauncherSecretORM(
+                        secret_slot_id=secret_update.secret_slot_id,
+                        secret_id=secret_orm.id,
+                        user_id=user.id,
+                    )
+                    session.add(secret_orm)
+                    session.add(session_launcher_secret_orm)
+                    all_secrets.append(session_launcher_secret_orm.dump())
+
+            return all_secrets
