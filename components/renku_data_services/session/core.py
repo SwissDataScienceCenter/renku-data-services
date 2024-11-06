@@ -8,7 +8,9 @@ from renku_data_services.base_models.core import RESET, ResetType
 from renku_data_services.session import apispec, models
 
 
-def validate_unsaved_environment(environment: apispec.EnvironmentPost) -> models.UnsavedEnvironment:
+def validate_unsaved_environment(
+    environment: apispec.EnvironmentPost, environment_kind: models.EnvironmentKind
+) -> models.UnsavedEnvironment:
     """Validate an unsaved session environment."""
     return models.UnsavedEnvironment(
         name=environment.name,
@@ -20,7 +22,7 @@ def validate_unsaved_environment(environment: apispec.EnvironmentPost) -> models
         mount_directory=PurePosixPath(environment.mount_directory),
         uid=environment.uid,
         gid=environment.gid,
-        environment_kind=models.EnvironmentKind.GLOBAL,
+        environment_kind=environment_kind,
         args=environment.args,
         command=environment.command,
     )
@@ -51,7 +53,8 @@ def validate_unsaved_session_launcher(launcher: apispec.SessionLauncherPost) -> 
         name=launcher.name,
         description=launcher.description,
         resource_class_id=launcher.resource_class_id,
-        environment=validate_unsaved_environment(launcher.environment)
+        # NOTE: When you create an environment with a launcher the environment can only be custom
+        environment=validate_unsaved_environment(launcher.environment, models.EnvironmentKind.CUSTOM)
         if isinstance(launcher.environment, apispec.EnvironmentPostInLauncher)
         else launcher.environment.id,
     )
