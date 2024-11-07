@@ -417,13 +417,16 @@ class NotebooksNewBP(CustomBlueprint):
 
             # User secrets
             user_secrets_container = init_containers.user_secrets_container(
-                user=user, k8s_secret_name=f"{server_name}-secrets", session_secrets=session_secrets
+                user=user,
+                config=self.nb_config,
+                k8s_secret_name=f"{server_name}-secrets",
+                session_secrets=session_secrets,
             )
             if user_secrets_container is not None:
-                (volumes, volume_mounts) = user_secrets_container
+                (init_container, volumes, volume_mounts) = user_secrets_container
                 extra_volumes.extend(volumes)
                 extra_volume_mounts.extend(volume_mounts)
-                # session_init_containers.append(InitContainer.model_validate(user_secrets_container))
+                session_init_containers.append(init_container)
 
             # git_providers = await self.nb_config.git_provider_helper.get_providers(user=user)
             git_clone = await init_containers.git_clone_container_v2(

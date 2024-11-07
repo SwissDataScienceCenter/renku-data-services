@@ -12,7 +12,7 @@ from renku_data_services.base_models.core import AnonymousAPIUser, Authenticated
 from renku_data_services.notebooks.api.amalthea_patches.utils import get_certificates_volume_mounts
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.config import NotebooksConfig
-from renku_data_services.notebooks.crs import EmptyDir, ExtraVolume, ExtraVolumeMount, SecretAsVolume
+from renku_data_services.notebooks.crs import EmptyDir, ExtraVolume, ExtraVolumeMount, InitContainer, SecretAsVolume
 from renku_data_services.session.models import SessionLauncherSecret
 
 if TYPE_CHECKING:
@@ -397,9 +397,10 @@ def download_image(server: "UserServer") -> list[dict[str, Any]]:
 
 def user_secrets_container(
     user: AuthenticatedAPIUser | AnonymousAPIUser,
+    config: NotebooksConfig,
     k8s_secret_name: str,
     session_secrets: list[SessionLauncherSecret],
-) -> tuple[list[ExtraVolume], list[ExtraVolumeMount]] | None:
+) -> tuple[InitContainer, list[ExtraVolume], list[ExtraVolumeMount]] | None:
     """The init container which decrypts user secrets to be mounted in the session."""
     if not session_secrets or user.is_anonymous:
         return None
@@ -412,17 +413,46 @@ def user_secrets_container(
     )
     volume_decrypted_secrets = ExtraVolume(name="user-secrets-volume", emptyDir=EmptyDir(medium="Memory"))
 
-    # NOTE: this is for testing
-    volume_k8s_secrets_mount = ExtraVolumeMount(
-        name=f"{k8s_secret_name}-volume",
-        mountPath="/encrypted_secrets",
-        readOnly=True,
-    )
     decrypted_volume_mount = ExtraVolumeMount(
         name="user-secrets-volume",
-        # TODO: Make this path configurables
+        # TODO: Make this path configurable
         mountPath="/secrets",
         readOnly=True,
     )
 
-    return [volume_k8s_secrets, volume_decrypted_secrets], [volume_k8s_secrets_mount, decrypted_volume_mount]
+    init_container = InitContainer.model_validate(
+        dict(
+            name="init-user-secrets",
+            image=config.user_secrets.image,
+            env=[
+                client.V1EnvVar(name="DATA_SERVICE_URL", value=config.data_service_url),
+                client.V1EnvVar(name="RENKU_ACCESS_TOKEN", value=user.access_token or ""),
+                client.V1EnvVar(name="ENCRYPTED_SECRETS_MOUNT_PATH", value="/encrypted"),
+                client.V1EnvVar(name="DECRYPTED_SECRETS_MOUNT_PATH", value="/decrypted"),
+            ],
+            volume_mounts=[
+                ExtraVolumeMount(
+                    name=f"{k8s_secret_name}-volume",
+                    mountPath="/encrypted",
+                    readOnly=True,
+                ),
+                ExtraVolumeMount(
+                    name="user-secrets-volume",
+                    mountPath="/decrypted",
+                    readOnly=False,
+                ),
+            ],
+            resources={
+                "requests": {
+                    "cpu": "50m",
+                    "memory": "50Mi",
+                }
+            },
+        )
+    )
+
+    return (
+        init_container,
+        [volume_k8s_secrets, volume_decrypted_secrets],
+        [decrypted_volume_mount],
+    )
