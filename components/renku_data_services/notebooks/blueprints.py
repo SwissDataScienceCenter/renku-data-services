@@ -522,7 +522,6 @@ class NotebooksNewBP(CustomBlueprint):
                             "key_mapping": {str(secret.secret_id): secret.name for secret in secrets},
                         }
                         async with httpx.AsyncClient(timeout=10) as client:
-                            await client.post(secrets_url, headers=headers, json=request_data)
                             res = await client.post(secrets_url, headers=headers, json=request_data)
                             if res.status_code >= 300 or res.status_code < 200:
                                 raise errors.ProgrammingError(
