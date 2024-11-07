@@ -11,6 +11,7 @@ from sanic import Sanic
 from sanic.log import logger
 from sanic.worker.loader import AppLoader
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
+from sentry_sdk.integrations.grpc import GRPCIntegration
 from sentry_sdk.integrations.sanic import SanicIntegration, _context_enter, _context_exit, _set_transaction
 
 from renku_data_services.app_config import Config
@@ -89,7 +90,11 @@ def create_app() -> Sanic:
             sentry_sdk.init(
                 dsn=config.sentry.dsn,
                 environment=config.sentry.environment,
-                integrations=[AsyncioIntegration(), SanicIntegration(unsampled_statuses={404, 403, 401})],
+                integrations=[
+                    AsyncioIntegration(),
+                    SanicIntegration(unsampled_statuses={404, 403, 401}),
+                    GRPCIntegration(),
+                ],
                 enable_tracing=config.sentry.sample_rate > 0,
                 traces_sample_rate=config.sentry.sample_rate,
                 before_send=filter_error,
