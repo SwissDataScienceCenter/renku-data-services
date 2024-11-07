@@ -117,13 +117,15 @@ class ProjectRepository:
             return project_orm.dump(with_documentation=with_documentation)
 
     async def get_project_by_namespace_slug(
-        self, user: base_models.APIUser, namespace: str, slug: str
+        self, user: base_models.APIUser, namespace: str, slug: str, with_documentation: bool = False
     ) -> models.Project:
         """Get one project from the database."""
         async with self.session_maker() as session:
             stmt = select(schemas.ProjectORM)
             stmt = _filter_by_namespace_slug(stmt, namespace)
             stmt = stmt.where(schemas.ProjectORM.slug.has(ns_schemas.EntitySlugORM.slug == slug))
+            if with_documentation:
+                stmt = stmt.options(undefer(schemas.ProjectORM.documentation))
             result = await session.execute(stmt)
             project_orm = result.scalars().first()
 
@@ -143,7 +145,7 @@ class ProjectRepository:
             if not authorized:
                 raise errors.MissingResourceError(message=not_found_msg)
 
-            return project_orm.dump()
+            return project_orm.dump(with_documentation=with_documentation)
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.create, ResourceType.project)

@@ -110,13 +110,20 @@ class ProjectsBP(CustomBlueprint):
         async def _get_one_by_namespace_slug(
             _: Request, user: base_models.APIUser, namespace: str, slug: str, etag: str | None
         ) -> JSONResponse | HTTPResponse:
-            project = await self.project_repo.get_project_by_namespace_slug(user=user, namespace=namespace, slug=slug)
+            with_documentation = bool(request.args.get("with_documentation", False))
+            project = await self.project_repo.get_project_by_namespace_slug(
+                user=user, namespace=namespace, slug=slug, with_documentation=with_documentation
+            )
 
             if project.etag is not None and project.etag == etag:
                 return HTTPResponse(status=304)
 
             headers = {"ETag": project.etag} if project.etag is not None else None
-            return validated_json(apispec.Project, self._dump_project(project), headers=headers)
+            return validated_json(
+                apispec.Project,
+                self._dump_project(project, with_documentation=with_documentation),
+                headers=headers,
+            )
 
         return "/namespaces/<namespace>/projects/<slug:renku_slug>", ["GET"], _get_one_by_namespace_slug
 

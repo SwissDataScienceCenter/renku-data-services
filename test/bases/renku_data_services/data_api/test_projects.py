@@ -101,7 +101,9 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
 
     # same as above, but using namespace/slug to retreive the pr
     _, response = await sanic_client.get(
-        f"/api/data/namespaces/{payload['namespace']}/projects/{payload['slug']}", headers=user_headers
+        f"/api/data/namespaces/{payload['namespace']}/projects/{payload['slug']}",
+        params={"with_documentation": True},
+        headers=user_headers,
     )
 
     assert response.status_code == 200, response.text
@@ -109,7 +111,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
     assert project["name"] == "Renku Native Project"
     assert project["slug"] == "project-slug"
     assert project["namespace"] == regular_user.namespace.slug
-
+    assert project["documentation"] == "$\\sqrt(2)$"
 
 @pytest.mark.asyncio
 async def test_project_creation_with_default_values(
