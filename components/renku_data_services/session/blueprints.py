@@ -10,6 +10,7 @@ from ulid import ULID
 from renku_data_services import base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_api.misc import validate_body_root_model
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.session import apispec, models
 from renku_data_services.session.core import (
@@ -271,7 +272,7 @@ class SessionLauncherSecretBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        @validate(json=apispec.SessionSecretPatchList)
+        @validate_body_root_model(json=apispec.SessionSecretPatchList)
         async def _patch_session_launcher_secrets(
             _: Request, user: base_models.APIUser, launcher_id: ULID, body: apispec.SessionSecretPatchList
         ) -> JSONResponse:
