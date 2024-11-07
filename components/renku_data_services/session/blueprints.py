@@ -250,3 +250,48 @@ class SessionLauncherSecretBP(CustomBlueprint):
             return HTTPResponse(status=204)
 
         return "/session_launcher_secret_slots/<slot_id:ulid>", ["DELETE"], _delete_session_launcher_secret_slot
+
+    def get_session_launcher_secrets(self) -> BlueprintFactoryResponse:
+        """Get the current user's secrets of a session launcher."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _get_session_launcher_secrets(
+            _: Request, user: base_models.APIUser, launcher_id: ULID
+        ) -> JSONResponse:
+            secrets = await self.session_secret_repo.get_all_session_launcher_secrets_from_sesion_launcher(
+                user=user, session_launcher_id=launcher_id
+            )
+            return validated_json(apispec.SessionSecretList, secrets)
+
+        return "/session_launchers/<launcher_id:ulid>/secrets", ["GET"], _get_session_launcher_secrets
+
+    def patch_session_launcher_secrets(self) -> BlueprintFactoryResponse:
+        """Save user secrets for a session launcher."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @validate(json=apispec.SessionSecretPatchList)
+        async def _patch_session_launcher_secrets(
+            _: Request, user: base_models.APIUser, launcher_id: ULID, body: apispec.SessionSecretPatchList
+        ) -> JSONResponse:
+            secrets_patch = converters.validate_session_launcher_secrets_patch(body)
+            secrets = await self.session_secret_repo.patch_session_launcher_secrets(
+                user=user, session_launcher_id=launcher_id, secrets=secrets_patch
+            )
+            return validated_json(apispec.SessionSecretPatchList, secrets)
+
+        return "/session_launchers/<launcher_id:ulid>/secrets", ["PATCH"], _patch_session_launcher_secrets
+
+    def delete_session_launcher_secrets(self) -> BlueprintFactoryResponse:
+        """Remove all user secrets for a session launcher."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _delete_session_launcher_secrets(
+            _: Request, user: base_models.APIUser, launcher_id: ULID
+        ) -> HTTPResponse:
+            await self.session_secret_repo.delete_session_launcher_secrets(user=user, session_launcher_id=launcher_id)
+            return HTTPResponse(status=204)
+
+        return "/session_launchers/<launcher_id:ulid>/secrets", ["DELETE"], _delete_session_launcher_secrets

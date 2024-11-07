@@ -1,7 +1,5 @@
 """Adapters for session database classes."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, nullcontext
 from datetime import UTC, datetime
@@ -755,3 +753,22 @@ class SessionSecretRepository:
                     all_secrets.append(session_launcher_secret_orm.dump())
 
             return all_secrets
+
+    async def delete_session_launcher_secrets(
+        self,
+        user: base_models.APIUser,
+        session_launcher_id: ULID,
+    ) -> None:
+        """Delete data session launcher secrets."""
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session, session.begin():
+            result = await session.scalars(
+                select(schemas.SessionLauncherSecretORM)
+                .where(schemas.SessionLauncherSecretORM.user_id == user.id)
+                .where(schemas.SessionLauncherSecretORM.secret_slot_id == schemas.SessionLauncherSecretSlotORM.id)
+                .where(schemas.SessionLauncherSecretSlotORM.session_launcher_id == session_launcher_id)
+            )
+            for secret in result:
+                await session.delete(secret)
