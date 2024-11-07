@@ -413,6 +413,17 @@ class NotebooksNewBP(CustomBlueprint):
                         ),
                     )
                 )
+
+            # User secrets
+            user_secrets_container = init_containers.user_secrets_container(
+                user=user, k8s_secret_name=f"{server_name}-secrets", session_secrets=session_secrets
+            )
+            if user_secrets_container is not None:
+                (extra_volume,) = user_secrets_container
+                extra_volumes.append(extra_volume)
+                # session_init_containers.append(InitContainer.model_validate(user_secrets_container))
+
+            # git_providers = await self.nb_config.git_provider_helper.get_providers(user=user)
             git_clone = await init_containers.git_clone_container_v2(
                 user=user,
                 config=self.nb_config,
@@ -590,22 +601,23 @@ class NotebooksNewBP(CustomBlueprint):
                 headers = {"Authorization": f"bearer {user.access_token}"}
                 try:
                     # User secrets
-                    request_data = {
-                        "name": f"{server_name}-secrets",
-                        "namespace": self.nb_config.k8s_v2_client.preferred_namespace,
-                        "secret_ids": [str(s.secret_id) for s in session_secrets],
-                        "owner_references": [owner_reference],
-                        "key_mapping": {str(s.secret_id): s.secret_slot.filename for s in session_secrets},
-                    }
-                    async with httpx.AsyncClient(timeout=10) as client:
-                        res = await client.post(secrets_url, headers=headers, json=request_data)
-                        if res.status_code >= 300 or res.status_code < 200:
-                            raise errors.ProgrammingError(
-                                message="The session secrets could not be successfully created, "
-                                f"the status code was {res.status_code}."
-                                "Please contact a Renku administrator.",
-                                detail=res.text,
-                            )
+                    if session_secrets:
+                        request_data = {
+                            "name": f"{server_name}-secrets",
+                            "namespace": self.nb_config.k8s_v2_client.preferred_namespace,
+                            "secret_ids": [str(s.secret_id) for s in session_secrets],
+                            "owner_references": [owner_reference],
+                            "key_mapping": {str(s.secret_id): s.secret_slot.filename for s in session_secrets},
+                        }
+                        async with httpx.AsyncClient(timeout=10) as client:
+                            res = await client.post(secrets_url, headers=headers, json=request_data)
+                            if res.status_code >= 300 or res.status_code < 200:
+                                raise errors.ProgrammingError(
+                                    message="The session secrets could not be successfully created, "
+                                    f"the status code was {res.status_code}."
+                                    "Please contact a Renku administrator.",
+                                    detail=res.text,
+                                )
                     # Data connectors secrets
                     for s_id, secrets in dcs_secrets.items():
                         if len(secrets) == 0:

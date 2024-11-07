@@ -12,6 +12,11 @@ from renku_data_services.base_models.core import AnonymousAPIUser, Authenticated
 from renku_data_services.notebooks.api.amalthea_patches.utils import get_certificates_volume_mounts
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.config import NotebooksConfig
+from renku_data_services.notebooks.crs import (
+    ExtraVolume,
+    SecretAsVolume,
+)
+from renku_data_services.session.models import SessionLauncherSecret
 
 if TYPE_CHECKING:
     # NOTE: If these are directly imported then you get circular imports.
@@ -391,3 +396,21 @@ def download_image(server: "UserServer") -> list[dict[str, Any]]:
             ],
         },
     ]
+
+
+def user_secrets_container(
+    user: AuthenticatedAPIUser | AnonymousAPIUser,
+    k8s_secret_name: str,
+    session_secrets: list[SessionLauncherSecret],
+) -> tuple[ExtraVolume] | None:
+    """The init container which decrypts user secrets to be mounted in the session."""
+    if not session_secrets or user.is_anonymous:
+        return None
+
+    extra_volume = ExtraVolume(
+        name="user-secrets-volume",
+        secret=SecretAsVolume(
+            secretName=k8s_secret_name,
+        ),
+    )
+    return (extra_volume,)
