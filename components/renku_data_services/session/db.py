@@ -750,7 +750,9 @@ class SessionSecretRepository:
                     )
                     session.add(secret_orm)
                     session.add(session_launcher_secret_orm)
-                    all_secrets.append(session_launcher_secret_orm.dump())
+                    await session.flush()
+                    await session.refresh(session_launcher_secret_orm)
+                all_secrets.append(session_launcher_secret_orm.dump())
 
             return all_secrets
 
