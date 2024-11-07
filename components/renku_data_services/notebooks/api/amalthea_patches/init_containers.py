@@ -430,7 +430,7 @@ def user_secrets_container(
                 dict(name="ENCRYPTED_SECRETS_MOUNT_PATH", value="/encrypted"),
                 dict(name="DECRYPTED_SECRETS_MOUNT_PATH", value="/decrypted"),
             ],
-            volume_mounts=[
+            volumeMounts=[
                 dict(
                     name=f"{k8s_secret_name}-volume",
                     mountPath="/encrypted",
