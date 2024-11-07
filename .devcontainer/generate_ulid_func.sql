@@ -1,5 +1,6 @@
-ALTER DATABASE renku WITH is_template TRUE;
-\c renku;
+CREATE DATABASE renku_template;
+ALTER DATABASE renku_template WITH is_template TRUE;
+\c renku_template;
 
 -- From https://github.com/geckoboard/pgulid/blob/master/pgulid.sql
 -- Taken at commit sha b265253
@@ -84,3 +85,5 @@ END
 $$
 LANGUAGE plpgsql
 VOLATILE;
+
+CREATE DATABASE renku TEMPLATE renku_template;

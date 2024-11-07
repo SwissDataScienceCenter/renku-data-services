@@ -41,7 +41,7 @@ services:
         target: /docker-entrypoint-initdb.d/generate_ulid_func.sql
     environment:
       POSTGRES_USER: renku
-      POSTGRES_DB: renku
+      POSTGRES_DB: postgres
       POSTGRES_PASSWORD: renku
     ports:
       - "8000:8000"
