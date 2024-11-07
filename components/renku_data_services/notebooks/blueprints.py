@@ -4,7 +4,7 @@ import base64
 import os
 from dataclasses import dataclass
 from pathlib import PurePosixPath
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -267,7 +267,7 @@ class NotebooksNewBP(CustomBlueprint):
         @authenticate_2(self.authenticator, self.internal_gitlab_authenticator)
         @validate(json=apispec.SessionPostRequest)
         async def _handler(
-            _: Request,
+            request: Request,
             user: AuthenticatedAPIUser | AnonymousAPIUser,
             internal_gitlab_user: APIUser,
             body: apispec.SessionPostRequest,
@@ -381,6 +381,11 @@ class NotebooksNewBP(CustomBlueprint):
 
             base_server_url = self.nb_config.sessions.ingress.base_url(server_name)
             base_server_path = self.nb_config.sessions.ingress.base_path(server_name)
+            ui_path: str = (
+                f"{base_server_path.rstrip("/")}/{environment.default_url.lstrip("/")}"
+                if len(environment.default_url) > 0
+                else base_server_path
+            )
             annotations: dict[str, str] = {
                 "renku.io/project_id": str(launcher.project_id),
                 "renku.io/launcher_id": body.launcher_id,
@@ -388,7 +393,7 @@ class NotebooksNewBP(CustomBlueprint):
             }
             requests: dict[str, str | int] = {
                 "cpu": str(round(resource_class.cpu * 1000)) + "m",
-                "memory": resource_class.memory,
+                "memory": f"{resource_class.memory}Gi",
             }
             if resource_class.gpu > 0:
                 gpu_name = GpuKind.NVIDIA.value + "/gpu"
@@ -409,7 +414,7 @@ class NotebooksNewBP(CustomBlueprint):
                     hibernated=False,
                     session=Session(
                         image=image,
-                        urlPath=base_server_path,
+                        urlPath=ui_path,
                         port=environment.port,
                         storage=Storage(
                             className=self.nb_config.sessions.storage.pvs_storage_class,
@@ -436,6 +441,7 @@ class NotebooksNewBP(CustomBlueprint):
                         tlsSecret=TlsSecret(adopt=False, name=self.nb_config.sessions.ingress.tls_secret)
                         if self.nb_config.sessions.ingress.tls_secret is not None
                         else None,
+                        pathPrefix=base_server_path,
                     ),
                     extraContainers=extra_containers,
                     initContainers=session_init_containers,
@@ -454,7 +460,14 @@ class NotebooksNewBP(CustomBlueprint):
                         else AuthenticationType.token,
                         secretRef=SecretRefKey(name=server_name, key="auth", adopt=True),
                         extraVolumeMounts=[
-                            ExtraVolumeMount(name="renku-authorized-emails", mountPath="/authorized_emails")
+                            # NOTE: Without subpath k8s keeps updating the secret and this can lead to
+                            # the oauth2proxy restarting intermittently even when the secret does not change
+                            # because the oauth2proxy watches this file and restarts on changes
+                            ExtraVolumeMount(
+                                name="renku-authorized-emails",
+                                mountPath="/authorized_emails",
+                                subPath="authorized_emails",
+                            )
                         ]
                         if isinstance(user, AuthenticatedAPIUser)
                         else [],
@@ -477,7 +490,7 @@ class NotebooksNewBP(CustomBlueprint):
                         "redirect_url": urljoin(base_server_url + "/", "oauth2/callback"),
                         "cookie_path": base_server_path,
                         "proxy_prefix": parsed_proxy_url.path,
-                        "authenticated_emails_file": "/authorized_emails/authorized_emails",
+                        "authenticated_emails_file": "/authorized_emails",
                         "client_secret": self.nb_config.sessions.oidc.client_secret,
                         "cookie_secret": base64.urlsafe_b64encode(os.urandom(32)).decode(),
                         "insecure_oidc_allow_unverified_email": self.nb_config.sessions.oidc.allow_unverified_email,
@@ -485,11 +498,23 @@ class NotebooksNewBP(CustomBlueprint):
                 )
                 secret_data["authorized_emails"] = user.email
             else:
+                # NOTE: We extract the session cookie value here in order to avoid creating a cookie.
+                # The gateway encrypts and signs cookies so the user ID injected in the request headers does not
+                # match the value of the session cookie.
+                session_id = cast(str | None, request.cookies.get(self.nb_config.session_id_cookie_name))
+                if not session_id:
+                    raise errors.UnauthorizedError(
+                        message=f"You have to have a renku session cookie at {self.nb_config.session_id_cookie_name} "
+                        "in order to launch an anonymous session."
+                    )
+                # NOTE: Amalthea looks for the token value first in the cookie and then in the authorization header
                 secret_data["auth"] = safe_dump(
                     {
-                        "token": user.id,
-                        "cookie_key": "Renku-Auth-Anon-Id",
-                        "verbose": True,
+                        "authproxy": {
+                            "token": session_id,
+                            "cookie_key": self.nb_config.session_id_cookie_name,
+                            "verbose": True,
+                        }
                     }
                 )
             secrets_to_create.append(V1Secret(metadata=V1ObjectMeta(name=server_name), string_data=secret_data))
