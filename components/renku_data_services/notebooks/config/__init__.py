@@ -121,6 +121,7 @@ class NotebooksConfig:
     session_get_endpoint_annotations: _ServersGetEndpointAnnotations = field(
         default_factory=_ServersGetEndpointAnnotations
     )
+    session_id_cookie_name: str = "_renku_session"  # NOTE: This cookie name is set and controlled by the gateway
 
     @classmethod
     def from_env(cls, db_config: DBConfig) -> Self:
