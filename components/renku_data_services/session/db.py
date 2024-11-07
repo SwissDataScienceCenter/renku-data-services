@@ -736,8 +736,9 @@ class SessionSecretRepository:
                         encrypted_value=encrypted_value, encrypted_key=encrypted_key
                     )
                 else:
+                    name = base_models.Slug.from_name(f"{secret_slot.name}-{secret_update.secret_slot_id}")
                     secret_orm = secrets_schemas.SecretORM(
-                        name=f"{secret_update.secret_slot_id}-{secret_slot.name}",
+                        name=name.value,
                         user_id=user.id,
                         encrypted_value=encrypted_value,
                         encrypted_key=encrypted_key,

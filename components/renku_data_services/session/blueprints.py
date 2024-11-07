@@ -280,7 +280,7 @@ class SessionLauncherSecretBP(CustomBlueprint):
             secrets = await self.session_secret_repo.patch_session_launcher_secrets(
                 user=user, session_launcher_id=launcher_id, secrets=secrets_patch
             )
-            return validated_json(apispec.SessionSecretPatchList, secrets)
+            return validated_json(apispec.SessionSecretList, secrets)
 
         return "/session_launchers/<launcher_id:ulid>/secrets", ["PATCH"], _patch_session_launcher_secrets
 
