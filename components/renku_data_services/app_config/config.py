@@ -376,6 +376,8 @@ class Config:
                 session_maker=self.db.async_session_maker,
                 project_authz=self.authz,
                 session_repo=self.session_repo,
+                user_repo=self.kc_user_repo,
+                secret_service_public_key=self.secrets_service_public_key,
             )
         return self._session_secret_repo
 

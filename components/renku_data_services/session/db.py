@@ -6,6 +6,7 @@ from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, nullcontext
 from datetime import UTC, datetime
 
+from cryptography.hazmat.primitives.asymmetric import rsa
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
@@ -21,6 +22,7 @@ from renku_data_services.secrets.core import encrypt_user_secret
 from renku_data_services.secrets.models import SecretKind
 from renku_data_services.session import models
 from renku_data_services.session import orm as schemas
+from renku_data_services.users.db import UserRepo
 
 
 class SessionRepository:
@@ -480,11 +482,18 @@ class SessionSecretRepository:
     """Repository for session secrets."""
 
     def __init__(
-        self, session_maker: Callable[..., AsyncSession], project_authz: Authz, session_repo: SessionRepository
+        self,
+        session_maker: Callable[..., AsyncSession],
+        project_authz: Authz,
+        session_repo: SessionRepository,
+        user_repo: UserRepo,
+        secret_service_public_key: rsa.RSAPublicKey,
     ) -> None:
         self.session_maker = session_maker
         self.project_authz = project_authz
         self.session_repo = session_repo
+        self.user_repo = user_repo
+        self.secret_service_public_key = secret_service_public_key
 
     async def get_all_session_launcher_secret_slots_from_sesion_launcher(
         self,
@@ -718,7 +727,6 @@ class SessionSecretRepository:
                     del existing_secrets_as_dict[slot_id]
                     continue
 
-                # TODO: What should happen here?
                 encrypted_value, encrypted_key = await encrypt_user_secret(
                     user_repo=self.user_repo,
                     requested_by=user,
