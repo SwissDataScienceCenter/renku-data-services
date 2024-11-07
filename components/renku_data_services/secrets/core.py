@@ -84,6 +84,17 @@ async def create_k8s_secret(
     try:
         core_client.create_namespaced_secret(namespace, secret)
     except k8s_client.ApiException as e:
+        if e.status == 409:
+            logger.info(
+                f"Found that secret {namespace}/{secret_name} already exists when trying to create it, "
+                "the existing secret will be patched"
+            )
+            sanitized_secret = k8s_client.ApiClient().sanitize_for_serialization(secret)
+            core_client.patch_namespaced_secret(
+                namespace,
+                secret_name,
+                sanitized_secret,
+            )
         # don't wrap the error, we don't want secrets accidentally leaking.
         raise errors.SecretCreationError(message=f"An error occurred creating secrets: {str(type(e))}")
 
