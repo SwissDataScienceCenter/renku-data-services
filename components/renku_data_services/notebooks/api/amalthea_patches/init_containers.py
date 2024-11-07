@@ -425,18 +425,18 @@ def user_secrets_container(
             name="init-user-secrets",
             image=config.user_secrets.image,
             env=[
-                client.V1EnvVar(name="DATA_SERVICE_URL", value=config.data_service_url),
-                client.V1EnvVar(name="RENKU_ACCESS_TOKEN", value=user.access_token or ""),
-                client.V1EnvVar(name="ENCRYPTED_SECRETS_MOUNT_PATH", value="/encrypted"),
-                client.V1EnvVar(name="DECRYPTED_SECRETS_MOUNT_PATH", value="/decrypted"),
+                dict(name="DATA_SERVICE_URL", value=config.data_service_url),
+                dict(name="RENKU_ACCESS_TOKEN", value=user.access_token or ""),
+                dict(name="ENCRYPTED_SECRETS_MOUNT_PATH", value="/encrypted"),
+                dict(name="DECRYPTED_SECRETS_MOUNT_PATH", value="/decrypted"),
             ],
             volume_mounts=[
-                ExtraVolumeMount(
+                dict(
                     name=f"{k8s_secret_name}-volume",
                     mountPath="/encrypted",
                     readOnly=True,
                 ),
-                ExtraVolumeMount(
+                dict(
                     name="user-secrets-volume",
                     mountPath="/decrypted",
                     readOnly=False,
