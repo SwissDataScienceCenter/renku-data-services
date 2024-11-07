@@ -100,36 +100,136 @@ async def test_migration_to_f34b87ddd954(
 
 
 @pytest.mark.asyncio
-async def test_migration_to_584598f3b769(app_config: Config) -> None:
-    run_migrations_for_app("common", "dcc1c1ee662f")
+async def test_migration_to_1ef98b967767(app_config: Config, admin_user: UserInfo) -> None:
+    """Tests the migration of the session lauchers."""
+    run_migrations_for_app("common", "b8cbd62e85b9")
     await app_config.kc_user_repo.initialize(app_config.kc_api)
     await app_config.group_repo.generate_user_namespaces()
-    env_id = str(ULID())
+    global_env_id = str(ULID())
+    custom_launcher_id = str(ULID())
+    global_launcher_id = str(ULID())
+    project_id = str(ULID())
     async with app_config.db.async_session_maker() as session, session.begin():
         await session.execute(
             sa.text(
                 "INSERT INTO "
-                "sessions.environments(id, name, created_by_id, creation_date, container_image, default_url) "
-                "VALUES (:id, :name, :created_by, :date, :image, :url)"
+                "projects.projects(id, name, visibility, created_by_id, creation_date) "
+                "VALUES(:id, :name, 'public', :created_by, :date)"
             ).bindparams(
-                id=env_id,
-                name="test",
-                created_by="test",
+                id=project_id,
+                name="test_project",
+                created_by=admin_user.id,
                 date=datetime.now(UTC),
-                image="test",
-                url="/test",
             )
         )
-    run_migrations_for_app("common", "584598f3b769")
+        await session.execute(
+            sa.text(
+                "INSERT INTO "
+                "sessions.environments(id, name, created_by_id, creation_date, container_image, default_url) "
+                "VALUES (:id, :name, :created_by, :date, :container_image, :default_url)"
+            ).bindparams(
+                id=global_env_id,
+                name="global env",
+                created_by=admin_user.id,
+                date=datetime.now(UTC),
+                container_image="global_env_image",
+                default_url="/global_env_url",
+            )
+        )
+        await session.execute(
+            sa.text(
+                "INSERT INTO "
+                "sessions.launchers("
+                "id, name, created_by_id, creation_date, environment_kind, environment_id, project_id"
+                ") "
+                "VALUES (:id, :name, :created_by, :date, 'global_environment', :environment_id, :project_id)"
+            ).bindparams(
+                id=global_launcher_id,
+                name="global",
+                created_by=admin_user.id,
+                date=datetime.now(UTC),
+                environment_id=global_env_id,
+                project_id=project_id,
+            )
+        )
+        await session.execute(
+            sa.text(
+                "INSERT INTO "
+                "sessions.launchers("
+                "id, name, created_by_id, creation_date, environment_kind, container_image, default_url, project_id"
+                ") "
+                "VALUES ("
+                ":id, :name, :created_by, :date, 'container_image', :container_image, :default_url, :project_id"
+                ")"
+            ).bindparams(
+                id=custom_launcher_id,
+                name="custom",
+                created_by=admin_user.id,
+                date=datetime.now(UTC),
+                container_image="custom_image",
+                default_url="/custom_env_url",
+                project_id=project_id,
+            )
+        )
+    run_migrations_for_app("common", "1ef98b967767")
     async with app_config.db.async_session_maker() as session, session.begin():
-        res = await session.execute(sa.text("SELECT * FROM sessions.environments"))
+        res = await session.execute(
+            sa.text("SELECT * FROM sessions.environments WHERE name = :name").bindparams(name="global env")
+        )
     data = res.all()
     assert len(data) == 1
-    env = data[0]._mapping
-    assert env["id"] == env_id
-    assert env["name"] == "test"
-    assert env["container_image"] == "test"
-    assert env["default_url"] == "/test"
-    assert env["port"] == 8888
-    assert env["uid"] == 1000
-    assert env["gid"] == 1000
+    global_env = data[0]._mapping
+    assert global_env["id"] == global_env_id
+    assert global_env["name"] == "global env"
+    assert global_env["container_image"] == "global_env_image"
+    assert global_env["default_url"] == "/global_env_url"
+    assert global_env["port"] == 8888
+    assert global_env["uid"] == 1000
+    assert global_env["gid"] == 1000
+    assert global_env["command"] == ["sh", "-c"]
+    assert global_env["args"] == [
+        "jupyter server --ServerApp.ip=0.0.0.0 --ServerApp.port=8888 --ServerApp.base_url=$RENKU_BASE_URL_PATH "
+        '--ServerApp.token="" --ServerApp.password="" --ServerApp.allow_remote_access=true '
+        "--ContentsManager.allow_hidden=true --ServerApp.allow_origin=*",
+    ]
+    assert global_env["environment_kind"] == "GLOBAL"
+    async with app_config.db.async_session_maker() as session, session.begin():
+        res = await session.execute(
+            sa.text("SELECT * FROM sessions.environments WHERE name != :name").bindparams(name="global env")
+        )
+    data = res.all()
+    assert len(data) == 1
+    custom_env = data[0]._mapping
+    assert custom_env["name"].startswith("Custom environment for session launcher")
+    assert custom_env["container_image"] == "custom_image"
+    assert custom_env["default_url"] == "/custom_env_url"
+    assert custom_env["port"] == 8888
+    assert custom_env["uid"] == 1000
+    assert custom_env["gid"] == 1000
+    assert custom_env["command"] == ["sh", "-c"]
+    assert custom_env["args"] == [
+        "jupyter server --ServerApp.ip=0.0.0.0 --ServerApp.port=8888 --ServerApp.base_url=$RENKU_BASE_URL_PATH "
+        '--ServerApp.token="" --ServerApp.password="" --ServerApp.allow_remote_access=true '
+        "--ContentsManager.allow_hidden=true --ServerApp.allow_origin=*",
+    ]
+    assert custom_env["environment_kind"] == "CUSTOM"
+    async with app_config.db.async_session_maker() as session, session.begin():
+        res = await session.execute(
+            sa.text("SELECT * FROM sessions.launchers WHERE id = :id").bindparams(id=custom_launcher_id)
+        )
+    data = res.all()
+    assert len(data) == 1
+    custom_launcher = data[0]._mapping
+    assert custom_launcher["name"] == "custom"
+    assert custom_launcher["project_id"] == project_id
+    assert custom_launcher["environment_id"] == custom_env["id"]
+    async with app_config.db.async_session_maker() as session, session.begin():
+        res = await session.execute(
+            sa.text("SELECT * FROM sessions.launchers WHERE id = :id").bindparams(id=global_launcher_id)
+        )
+    data = res.all()
+    assert len(data) == 1
+    global_launcher = data[0]._mapping
+    assert global_launcher["name"] == "global"
+    assert global_launcher["project_id"] == project_id
+    assert global_launcher["environment_id"] == global_env["id"]
