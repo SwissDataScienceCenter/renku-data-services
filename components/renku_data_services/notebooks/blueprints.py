@@ -409,6 +409,7 @@ class NotebooksNewBP(CustomBlueprint):
             extra_volumes = [
                 ExtraVolume.model_validate(self.nb_config.k8s_v2_client.sanitize(volume)) for volume in cert_vols
             ]
+            extra_volume_mounts: list[ExtraVolumeMount] = []
             if isinstance(user, AuthenticatedAPIUser):
                 extra_volumes.append(
                     ExtraVolume(
@@ -425,8 +426,9 @@ class NotebooksNewBP(CustomBlueprint):
                 user=user, k8s_secret_name=f"{server_name}-secrets", session_secrets=session_secrets
             )
             if user_secrets_container is not None:
-                (extra_volume,) = user_secrets_container
-                extra_volumes.append(extra_volume)
+                (volumes, volume_mounts) = user_secrets_container
+                extra_volumes.extend(volumes)
+                extra_volume_mounts.extend(volume_mounts)
                 # session_init_containers.append(InitContainer.model_validate(user_secrets_container))
 
             # git_providers = await self.nb_config.git_provider_helper.get_providers(user=user)
@@ -498,7 +500,7 @@ class NotebooksNewBP(CustomBlueprint):
                         runAsUser=environment.uid,
                         runAsGroup=environment.gid,
                         resources=Resources(requests=requests),
-                        extraVolumeMounts=[],
+                        extraVolumeMounts=extra_volume_mounts,
                         command=environment.command,
                         args=environment.args,
                         shmSize="1G",
