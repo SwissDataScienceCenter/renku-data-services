@@ -16,11 +16,12 @@ from renku_data_services.session import apispec, models
 from renku_data_services.session.core import (
     validate_environment_patch,
     validate_session_launcher_patch,
+    validate_session_launcher_secret_slot_patch,
+    validate_session_launcher_secrets_patch,
     validate_unsaved_environment,
     validate_unsaved_session_launcher,
+    validate_unsaved_session_launcher_secret_slot,
 )
-from renku_data_services.session.db import SessionRepository
-from renku_data_services.session import apispec, converters, models
 from renku_data_services.session.db import SessionRepository, SessionSecretRepository
 
 
@@ -202,7 +203,7 @@ class SessionLauncherSecretBP(CustomBlueprint):
         async def _post_session_launcher_secret_slot(
             _: Request, user: base_models.APIUser, body: apispec.SessionSecretSlotPost
         ) -> JSONResponse:
-            unsaved_secret_slot = converters.validate_unsaved_session_launcher_secret_slot(body)
+            unsaved_secret_slot = validate_unsaved_session_launcher_secret_slot(body)
             secret_slot = await self.session_secret_repo.insert_session_launcher_secret_slot(
                 user=user, secret_slot=unsaved_secret_slot
             )
@@ -231,7 +232,7 @@ class SessionLauncherSecretBP(CustomBlueprint):
         async def _patch_session_launcher_secret_slot(
             _: Request, user: base_models.APIUser, slot_id: ULID, body: apispec.SessionSecretSlotPatch
         ) -> JSONResponse:
-            secret_slot_patch = converters.validate_session_launcher_secret_slot_patch(body)
+            secret_slot_patch = validate_session_launcher_secret_slot_patch(body)
             secret_slot = await self.session_secret_repo.update_session_launcher_secret_slot(
                 user=user, slot_id=slot_id, patch=secret_slot_patch
             )
@@ -276,7 +277,7 @@ class SessionLauncherSecretBP(CustomBlueprint):
         async def _patch_session_launcher_secrets(
             _: Request, user: base_models.APIUser, launcher_id: ULID, body: apispec.SessionSecretPatchList
         ) -> JSONResponse:
-            secrets_patch = converters.validate_session_launcher_secrets_patch(body)
+            secrets_patch = validate_session_launcher_secrets_patch(body)
             secrets = await self.session_secret_repo.patch_session_launcher_secrets(
                 user=user, session_launcher_id=launcher_id, secrets=secrets_patch
             )
