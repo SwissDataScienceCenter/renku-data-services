@@ -79,6 +79,7 @@ def db_config(monkeypatch, worker_id, authz_config) -> Iterator[DBConfig]:
         dbname=db_name,
         version="16.2",
         password=password,
+        template_dbname="renku_template",
     ):
         yield DBConfig.from_env()
         DBConfig.dispose_connection()
