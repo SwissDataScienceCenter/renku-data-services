@@ -79,7 +79,7 @@ from renku_data_services.notebooks.utils import (
 )
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
-from renku_data_services.session.db import SessionRepository
+from renku_data_services.session.db import SessionRepository, SessionSecretRepository
 from renku_data_services.storage.db import StorageRepository
 
 
@@ -257,6 +257,7 @@ class NotebooksNewBP(CustomBlueprint):
     nb_config: NotebooksConfig
     project_repo: ProjectRepository
     session_repo: SessionRepository
+    session_secret_repo: SessionSecretRepository
     rp_repo: ResourcePoolRepository
     storage_repo: StorageRepository
     data_connector_repo: DataConnectorRepository
@@ -298,6 +299,33 @@ class NotebooksNewBP(CustomBlueprint):
             work_dir = environment.working_directory or image_workdir or work_dir_fallback
             storage_mount_fallback = work_dir / "work"
             # TODO: Wait for pitch on users secrets to implement this
+            # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+            secrets_to_create: list[V1Secret] = []
+            session_secrets = await self.session_secret_repo.get_all_session_launcher_secrets_from_sesion_launcher(
+                user=user, session_launcher_id=launcher.id
+            )
+            # secrets_to_create.append(
+            #     V1Secret(
+            #         metadata=V1ObjectMeta(
+            #             name=f"{server_name}-secret", namespace=self.nb_config.k8s_client.preferred_namespace
+            #         ),
+            #         string_data="",
+            #     )
+            # )
+            #     return client.V1Secret(
+            #     metadata=client.V1ObjectMeta(
+            #         name=base_name,
+            #         namespace=namespace,
+            #         annotations=annotations,
+            #         labels={"name": base_name} | (labels or {}),
+            #     ),
+            #     string_data={
+            #         "remote": self.name or base_name,
+            #         "remotePath": self.source_path,
+            #         "configData": self.config_string(self.name or base_name),
+            #     },
+            # )
+            # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
             # user_secrets: K8sUserSecrets | None = None
             # if body.user_secrets:
             #     user_secrets = K8sUserSecrets(
@@ -346,7 +374,7 @@ class NotebooksNewBP(CustomBlueprint):
                         found_provider_id = provider.id
                         break
                 repositories.append(Repository(url=repo, provider=found_provider_id))
-            secrets_to_create: list[V1Secret] = []
+            # secrets_to_create: list[V1Secret] = []
             # Generate the cloud starge secrets
             data_sources: list[DataSource] = []
             user_secret_key: str | None = None
@@ -570,6 +598,24 @@ class NotebooksNewBP(CustomBlueprint):
                 secrets_url = self.nb_config.user_secrets.secrets_storage_service_url + "/api/secrets/kubernetes"
                 headers = {"Authorization": f"bearer {user.access_token}"}
                 try:
+                    # User secrets
+                    request_data = {
+                        "name": f"{server_name}-secrets",
+                        "namespace": self.nb_config.k8s_v2_client.preferred_namespace,
+                        "secret_ids": [str(s.secret_id) for s in session_secrets],
+                        "owner_references": [owner_reference],
+                        "key_mapping": {str(s.secret_id): s.secret_slot.filename for s in session_secrets},
+                    }
+                    async with httpx.AsyncClient(timeout=10) as client:
+                        res = await client.post(secrets_url, headers=headers, json=request_data)
+                        if res.status_code >= 300 or res.status_code < 200:
+                            raise errors.ProgrammingError(
+                                message="The session secrets could not be successfully created, "
+                                f"the status code was {res.status_code}."
+                                "Please contact a Renku administrator.",
+                                detail=res.text,
+                            )
+                    # Data connectors secrets
                     for s_id, secrets in dcs_secrets.items():
                         if len(secrets) == 0:
                             continue
