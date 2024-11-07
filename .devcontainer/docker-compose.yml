@@ -36,6 +36,9 @@ services:
     restart: unless-stopped
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - type: bind
+        source: ./generate_ulid_func.sql
+        target: /docker-entrypoint-initdb.d/generate_ulid_func.sql
     environment:
       POSTGRES_USER: renku
       POSTGRES_DB: renku
