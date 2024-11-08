@@ -71,6 +71,7 @@ from renku_data_services.notebooks.util.kubernetes_ import (
     renku_2_make_server_name,
 )
 from renku_data_services.notebooks.utils import (
+    get_user_secret,
     merge_node_affinities,
     node_affinity_from_resource_class,
     tolerations_from_resource_class,
@@ -342,9 +343,26 @@ class NotebooksNewBP(CustomBlueprint):
             secrets_to_create: list[V1Secret] = []
             # Generate the cloud starge secrets
             data_sources: list[DataSource] = []
+            user_secret_key: str | None = None
+            if isinstance(user, AuthenticatedAPIUser) and len(dcs_secrets) > 0:
+                user_secret_key = await get_user_secret(self.nb_config.data_service_url, user)
             for cs_id, cs in dcs.items():
                 secret_name = f"{server_name}-ds-{cs_id.lower()}"
-                secrets_to_create.append(cs.secret(secret_name, self.nb_config.k8s_client.preferred_namespace))
+                secret_key_needed = len(dcs_secrets.get(cs_id, [])) > 0
+                if secret_key_needed and user_secret_key is None:
+                    raise errors.ProgrammingError(
+                        message=f"You have saved storage secrets for data connector {cs_id} "
+                        f"associated with your user ID {user.id} but no key to decrypt them, "
+                        "therefore we cannot mount the requested data connector. "
+                        "Please report this to the renku administrators."
+                    )
+                secrets_to_create.append(
+                    cs.secret(
+                        secret_name,
+                        self.nb_config.k8s_client.preferred_namespace,
+                        user_secret_key=user_secret_key if secret_key_needed else None,
+                    )
+                )
                 data_sources.append(
                     DataSource(
                         mountPath=cs.mount_folder,

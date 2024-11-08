@@ -8,7 +8,8 @@ from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 
-def _get_encryption_key(password: bytes, salt: bytes) -> bytes:
+def get_encryption_key(password: bytes, salt: bytes) -> bytes:
+    """Create an encryption key with the password and salt."""
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
@@ -25,13 +26,13 @@ def generate_random_encryption_key() -> bytes:
 
 def encrypt_string(password: bytes, salt: str, data: str) -> bytes:
     """Encrypt a given string."""
-    key = _get_encryption_key(password=password, salt=salt.encode())
+    key = get_encryption_key(password=password, salt=salt.encode())
     return Fernet(key).encrypt(data.encode())
 
 
 def decrypt_string(password: bytes, salt: str, data: bytes) -> str:
     """Decrypt a given string."""
-    key = _get_encryption_key(password=password, salt=salt.encode())
+    key = get_encryption_key(password=password, salt=salt.encode())
     return Fernet(key).decrypt(data).decode()
 
 
