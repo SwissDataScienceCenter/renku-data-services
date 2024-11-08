@@ -151,8 +151,16 @@ class RCloneStorage(ICloudStorageRequest):
         namespace: str,
         labels: dict[str, str] | None = None,
         annotations: dict[str, str] | None = None,
+        user_secret_key: str | None = None,
     ) -> client.V1Secret:
         """The secret containing the configuration for the rclone csi driver."""
+        string_data = {
+            "remote": self.name or base_name,
+            "remotePath": self.source_path,
+            "configData": self.config_string(self.name or base_name),
+        }
+        if user_secret_key:
+            string_data["secretKey"] = user_secret_key
         return client.V1Secret(
             metadata=client.V1ObjectMeta(
                 name=base_name,
@@ -160,11 +168,7 @@ class RCloneStorage(ICloudStorageRequest):
                 annotations=annotations,
                 labels={"name": base_name} | (labels or {}),
             ),
-            string_data={
-                "remote": self.name or base_name,
-                "remotePath": self.source_path,
-                "configData": self.config_string(self.name or base_name),
-            },
+            string_data=string_data,
         )
 
     def get_manifest_patch(
