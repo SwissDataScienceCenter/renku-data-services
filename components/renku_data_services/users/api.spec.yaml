@@ -422,16 +422,14 @@ components:
           $ref: "#/components/schemas/ModificationDate"
         kind:
           $ref: "#/components/schemas/SecretKind"
+        session_launcher_ids:
+          $ref: "#/components/schemas/UlidList"
       required:
         - "id"
         - "name"
         - "modification_date"
         - "kind"
-      example:
-        id: "01AN4Z79ZS5XN0F25N3DB94T4R"
-        name: "S3-Credentials"
-        modification_date: "2024-01-16T11:42:05Z"
-        kind: general
+        - "session_launcher_ids"
     SecretPost:
       description: Secret metadata to be created
       type: object
@@ -471,6 +469,10 @@ components:
       minLength: 26
       maxLength: 26
       pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"  # This is case-insensitive
+    UlidList:
+      type: array
+      items:
+        $ref: "#/components/schemas/Ulid"
     ModificationDate:
       description: The date and time the secret was created or modified (this is always in UTC)
       type: string
