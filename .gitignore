@@ -87,3 +87,4 @@ result
 *.pem
 *.gz
 *.tgz
+.dmypy.json
