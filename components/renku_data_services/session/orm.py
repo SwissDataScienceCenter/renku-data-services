@@ -9,19 +9,20 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_co
 from sqlalchemy.schema import ForeignKey
 from ulid import ULID
 
+from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
 from renku_data_services.crc.orm import ResourceClassORM
 from renku_data_services.project.orm import ProjectORM
 from renku_data_services.session import models
 from renku_data_services.utils.sqlalchemy import PurePosixPathType, ULIDType
 
-metadata_obj = MetaData(schema="sessions")  # Has to match alembic ini section name
 JSONVariant = JSON().with_variant(JSONB(), "postgresql")
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
     """Base class for all ORM classes."""
 
-    metadata = metadata_obj
+    metadata = MetaData(schema="sessions")
+    registry = COMMON_ORM_REGISTRY
 
 
 class EnvironmentORM(BaseORM):
@@ -152,4 +153,100 @@ class SessionLauncherORM(BaseORM):
             description=self.description,
             resource_class_id=self.resource_class_id,
             environment=self.environment.dump(),
+        )
+
+
+class SessionLauncherSecretSlotORM(BaseORM):
+    """A slot for a secret in a session launcher."""
+
+    __tablename__ = "launcher_secret_slots"
+    __table_args__ = (
+        UniqueConstraint(
+            "session_launcher_id",
+            "filename",
+            name="_unique_session_launcher_id_filename",
+        ),
+    )
+
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    """ID of this session launcher secret slot."""
+
+    session_launcher_id: Mapped[ULID] = mapped_column(
+        ForeignKey(SessionLauncherORM.id, ondelete="CASCADE"), index=True, nullable=False
+    )
+    """ID of the session launcher."""
+    session_launcher: Mapped[SessionLauncherORM] = relationship(init=False, repr=False, lazy="selectin")
+
+    name: Mapped[str] = mapped_column("name", String(99))
+    """Name of the secret slot."""
+
+    description: Mapped[str | None] = mapped_column("description", String(500))
+    """Human-readable description of the secret slot."""
+
+    filename: Mapped[str] = mapped_column("filename", String(200))
+    """The filename given to the corresponding secret in the session."""
+
+    created_by_id: Mapped[str] = mapped_column(ForeignKey(UserORM.keycloak_id), index=True, nullable=False)
+    """User ID of the creator of the secret slot."""
+
+    creation_date: Mapped[datetime] = mapped_column(
+        "creation_date", DateTime(timezone=True), default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        "updated_at",
+        DateTime(timezone=True),
+        default=None,
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    def dump(self) -> models.SessionLauncherSecretSlot:
+        """Create a secret slot model from the SessionLauncherSecretSlotORM."""
+        return models.SessionLauncherSecretSlot(
+            id=self.id,
+            session_launcher_id=self.session_launcher_id,
+            name=self.name,
+            description=self.description,
+            filename=self.filename,
+            created_by_id=self.created_by_id,
+            creation_date=self.creation_date,
+            updated_at=self.updated_at,
+        )
+
+
+class SessionLauncherSecretORM(BaseORM):
+    """Secrets for session launchers."""
+
+    __tablename__ = "launcher_secrets"
+    __table_args__ = (
+        UniqueConstraint(
+            "secret_slot_id",
+            "user_id",
+            name="_unique_secret_slot_id_user_id",
+        ),
+    )
+
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    """ID of this session launcher secret."""
+
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey(UserORM.keycloak_id, ondelete="CASCADE"), index=True, nullable=False
+    )
+
+    secret_slot_id: Mapped[ULID] = mapped_column(
+        "secret_slot_id", ForeignKey(SessionLauncherSecretSlotORM.id, ondelete="CASCADE")
+    )
+    secret_slot: Mapped[SessionLauncherSecretSlotORM] = relationship(init=False, repr=False, lazy="selectin")
+
+    secret_id: Mapped[ULID] = mapped_column("secret_id", ForeignKey(SecretORM.id, ondelete="CASCADE"))
+    secret: Mapped[SecretORM] = relationship(
+        init=False, repr=False, back_populates="session_launcher_secrets", lazy="selectin"
+    )
+
+    def dump(self) -> models.SessionLauncherSecret:
+        """Create a session launcher secret model from the SessionLauncherSecretORM."""
+        return models.SessionLauncherSecret(
+            secret_slot=self.secret_slot.dump(),
+            secret_id=self.secret_id,
         )
