@@ -185,10 +185,11 @@ async def test_migration_to_1ef98b967767(app_config: Config, admin_user: UserInf
     assert global_env["default_url"] == "/global_env_url"
     assert global_env["port"] == 8888
     assert global_env["uid"] == 1000
-    assert global_env["gid"] == 1000
+    assert global_env["gid"] == 100
     assert global_env["command"] == ["sh", "-c"]
     assert global_env["args"] == [
-        "jupyter server --ServerApp.ip=0.0.0.0 --ServerApp.port=8888 --ServerApp.base_url=$RENKU_BASE_URL_PATH "
+        "/entrypoint.sh jupyter server --ServerApp.ip=0.0.0.0 --ServerApp.port=8888 "
+        "--ServerApp.base_url=$RENKU_BASE_URL_PATH "
         '--ServerApp.token="" --ServerApp.password="" --ServerApp.allow_remote_access=true '
         "--ContentsManager.allow_hidden=true --ServerApp.allow_origin=*",
     ]
@@ -205,10 +206,11 @@ async def test_migration_to_1ef98b967767(app_config: Config, admin_user: UserInf
     assert custom_env["default_url"] == "/custom_env_url"
     assert custom_env["port"] == 8888
     assert custom_env["uid"] == 1000
-    assert custom_env["gid"] == 1000
+    assert custom_env["gid"] == 100
     assert custom_env["command"] == ["sh", "-c"]
     assert custom_env["args"] == [
-        "jupyter server --ServerApp.ip=0.0.0.0 --ServerApp.port=8888 --ServerApp.base_url=$RENKU_BASE_URL_PATH "
+        "/entrypoint.sh jupyter server --ServerApp.ip=0.0.0.0 --ServerApp.port=8888 "
+        "--ServerApp.base_url=$RENKU_BASE_URL_PATH "
         '--ServerApp.token="" --ServerApp.password="" --ServerApp.allow_remote_access=true '
         "--ContentsManager.allow_hidden=true --ServerApp.allow_origin=*",
     ]

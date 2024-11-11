@@ -20,7 +20,7 @@ default_url: str = "/lab"
 working_dir: str = "/home/jovyan/work"
 mount_dir: str = "/home/jovyan/work"
 uid: int = 1000
-gid: int = 1000
+gid: int = 100
 port: int = 8888
 
 
