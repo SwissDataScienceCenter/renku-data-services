@@ -27,13 +27,13 @@ files = [
 
 [[package]]
 name = "alembic"
-version = "1.13.3"
+version = "1.14.0"
 description = "A database migration tool for SQLAlchemy."
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "alembic-1.13.3-py3-none-any.whl", hash = "sha256:908e905976d15235fae59c9ac42c4c5b75cfcefe3d27c0fbf7ae15a37715d80e"},
-    {file = "alembic-1.13.3.tar.gz", hash = "sha256:203503117415561e203aa14541740643a611f641517f0209fcae63e9fa09f1a2"},
+    {file = "alembic-1.14.0-py3-none-any.whl", hash = "sha256:99bd884ca390466db5e27ffccff1d179ec5c05c965cfefc0607e69f9e411cb25"},
+    {file = "alembic-1.14.0.tar.gz", hash = "sha256:b00892b53b3642d0b8dbedba234dbf1924b69be83a9a769d5a624b01094e304b"},
 ]
 
 [package.dependencies]
@@ -154,13 +154,13 @@ cryptography = "*"
 
 [[package]]
 name = "authzed"
-version = "1.0.0"
+version = "1.1.0"
 description = "Client library for SpiceDB."
 optional = false
 python-versions = "<4.0,>=3.8"
 files = [
-    {file = "authzed-1.0.0-py3-none-any.whl", hash = "sha256:3c70417601c67b5d2e06929a3c8634836e1a0a9c3b24137166c09a77102a4b07"},
-    {file = "authzed-1.0.0.tar.gz", hash = "sha256:b88eb00cfb6cf41180890803b13ab51ae50b57ea924cdd99d5dad518542e7d63"},
+    {file = "authzed-1.1.0-py3-none-any.whl", hash = "sha256:1c37038655c55d054b5caf918d60d680262fda4bc2787dc83576b4424e358214"},
+    {file = "authzed-1.1.0.tar.gz", hash = "sha256:6e1300ff75af1840acdb3e0b2bc0dec31a8cf631c4ac6fc1ac674b9ea02d043a"},
 ]
 
 [package.dependencies]
@@ -472,13 +472,13 @@ dev = ["black", "coveralls", "mypy", "pre-commit", "pylint", "pytest (>=5)", "py
 
 [[package]]
 name = "dataclasses-avroschema"
-version = "0.64.2"
+version = "0.65.0"
 description = "Generate Avro Schemas from Python classes. Serialize/Deserialize python instances with avro schemas"
 optional = false
 python-versions = "<4.0,>=3.9"
 files = [
-    {file = "dataclasses_avroschema-0.64.2-py3-none-any.whl", hash = "sha256:4be3f4f97c583a6de8b1782a7aff60741fd772a821aeb58b68604d5cc4421307"},
-    {file = "dataclasses_avroschema-0.64.2.tar.gz", hash = "sha256:875f23a0ac2069e52acb84b1979c8549f3716421f683d3a69e9df960a9ef778b"},
+    {file = "dataclasses_avroschema-0.65.0-py3-none-any.whl", hash = "sha256:a209ec628eb338934af0221d54a2f684298ce7f435dfb3be3d469956c346b5ef"},
+    {file = "dataclasses_avroschema-0.65.0.tar.gz", hash = "sha256:9f8687f08e1c00fd2f3fdb6226fa2e5443c104eccd02138c36eee64ee4da2f4d"},
 ]
 
 [package.dependencies]
@@ -1955,13 +1955,13 @@ files = [
 
 [[package]]
 name = "sentry-sdk"
-version = "2.17.0"
+version = "2.18.0"
 description = "Python client for Sentry (https://sentry.io)"
 optional = false
 python-versions = ">=3.6"
 files = [
-    {file = "sentry_sdk-2.17.0-py2.py3-none-any.whl", hash = "sha256:625955884b862cc58748920f9e21efdfb8e0d4f98cca4ab0d3918576d5b606ad"},
-    {file = "sentry_sdk-2.17.0.tar.gz", hash = "sha256:dd0a05352b78ffeacced73a94e86f38b32e2eae15fff5f30ca5abb568a72eacf"},
+    {file = "sentry_sdk-2.18.0-py2.py3-none-any.whl", hash = "sha256:ee70e27d1bbe4cd52a38e1bd28a5fadb9b17bc29d91b5f2b97ae29c0a7610442"},
+    {file = "sentry_sdk-2.18.0.tar.gz", hash = "sha256:0dc21febd1ab35c648391c664df96f5f79fb0d92d7d4225cd9832e53a617cafd"},
 ]
 
 [package.dependencies]
@@ -1990,9 +1990,11 @@ httpx = ["httpx (>=0.16.0)"]
 huey = ["huey (>=2)"]
 huggingface-hub = ["huggingface-hub (>=0.22)"]
 langchain = ["langchain (>=0.0.210)"]
+launchdarkly = ["launchdarkly-server-sdk (>=9.8.0)"]
 litestar = ["litestar (>=2.0.0)"]
 loguru = ["loguru (>=0.5)"]
 openai = ["openai (>=1.0.0)", "tiktoken (>=0.3.0)"]
+openfeature = ["openfeature-sdk (>=0.7.1)"]
 opentelemetry = ["opentelemetry-distro (>=0.35b0)"]
 opentelemetry-experimental = ["opentelemetry-distro"]
 pure-eval = ["asttokens", "executing", "pure-eval"]
@@ -2464,4 +2466,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "ba1a662a7814304096f229f10764f3df33150e6e070a89d8320012de801d2410"
+content-hash = "84ec1fd46682e4bc91e4622684c1106308cb9761836f527d861a2dadb956729c"
