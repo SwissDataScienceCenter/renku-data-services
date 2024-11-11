@@ -1,23 +1,26 @@
 """Secrets ORM."""
 
 from datetime import UTC, datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, ForeignKey, LargeBinary, MetaData, String, UniqueConstraint
-from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from ulid import ULID
 
+from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
 from renku_data_services.secrets import models
 from renku_data_services.users.orm import UserORM
 from renku_data_services.utils.sqlalchemy import ULIDType
 
-metadata_obj = MetaData(schema="secrets")  # Has to match alembic ini section name
+if TYPE_CHECKING:
+    from renku_data_services.session.orm import SessionLauncherSecretORM
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
     """Base class for all ORM classes."""
 
-    metadata = metadata_obj
+    metadata = MetaData(schema="secrets")
+    registry = COMMON_ORM_REGISTRY
 
 
 class SecretORM(BaseORM):
@@ -43,6 +46,10 @@ class SecretORM(BaseORM):
         "user_id", ForeignKey(UserORM.keycloak_id, ondelete="CASCADE"), default=None, index=True, nullable=True
     )
 
+    session_launcher_secrets: Mapped[list["SessionLauncherSecretORM"]] = relationship(
+        init=False, repr=False, back_populates="secret", lazy="selectin", default_factory=list
+    )
+
     def dump(self) -> models.Secret:
         """Create a secret object from the ORM object."""
         secret = models.Secret(
@@ -51,7 +58,7 @@ class SecretORM(BaseORM):
             encrypted_value=self.encrypted_value,
             encrypted_key=self.encrypted_key,
             kind=self.kind,
-            session_launcher_ids=[],
+            session_launcher_ids=[item.id for item in self.session_launcher_secrets],
         )
         secret.modification_date = self.modification_date
         return secret
