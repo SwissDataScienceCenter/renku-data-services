@@ -1,6 +1,6 @@
 import json
 from copy import deepcopy
-from typing import Any
+from typing import Any, Tuple
 
 import pytest
 import pytest_asyncio
@@ -239,6 +239,25 @@ def create_project(sanic_client, user_headers, admin_headers, regular_user, admi
 
 
 @pytest.fixture
+def create_project_copy(sanic_client, user_headers, admin_headers, regular_user, admin_user):
+    async def create_project_copy_helper(
+        id: str, namespace: str, name: str, *, headers: dict[str, str] = None, **payload
+    ) -> dict[str, Any]:
+        headers = user_headers if headers is None else headers
+        copy_payload = {"slug": Slug.from_name(name).value}
+        copy_payload.update(payload)
+        copy_payload.update({"namespace": namespace, "name": name})
+
+        _, response = await sanic_client.post(f"/api/data/projects/{id}/copies", headers=headers, json=copy_payload)
+
+        assert response.status_code == 201, response.text
+
+        return response.json
+
+    return create_project_copy_helper
+
+
+@pytest.fixture
 def create_group(sanic_client, user_headers, admin_headers):
     async def create_group_helper(
         name: str, admin: bool = False, members: list[dict[str, str]] = None, **payload
@@ -263,6 +282,104 @@ def create_group(sanic_client, user_headers, admin_headers):
         return group
 
     return create_group_helper
+
+
+@pytest.fixture
+def create_session_environment(sanic_client: SanicASGITestClient, admin_headers):
+    async def create_session_environment_helper(name: str, **payload) -> dict[str, Any]:
+        payload = payload.copy()
+        payload.update({"name": name})
+        payload["description"] = payload.get("description") or "A session environment."
+        payload["container_image"] = payload.get("container_image") or "some_image:some_tag"
+
+        _, res = await sanic_client.post("/api/data/environments", headers=admin_headers, json=payload)
+
+        assert res.status_code == 201, res.text
+        assert res.json is not None
+        return res.json
+
+    return create_session_environment_helper
+
+
+@pytest.fixture
+def create_session_launcher(sanic_client: SanicASGITestClient, user_headers):
+    async def create_session_launcher_helper(name: str, project_id: str, **payload) -> dict[str, Any]:
+        payload = payload.copy()
+        payload.update({"name": name, "project_id": project_id})
+        payload["description"] = payload.get("description") or "A session launcher."
+        if "environment" not in payload:
+            payload["environment"] = {
+                "environment_kind": "CUSTOM",
+                "name": "Test",
+                "container_image": "some_image:some_tag",
+            }
+
+        _, res = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
+
+        assert res.status_code == 201, res.text
+        assert res.json is not None
+        return res.json
+
+    return create_session_launcher_helper
+
+
+@pytest.fixture
+def create_data_connector(sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers):
+    async def create_data_connector_helper(
+        name: str, user: UserInfo | None = None, headers: dict[str, str] | None = None, **payload
+    ) -> dict[str, Any]:
+        user = user or regular_user
+        headers = headers or user_headers
+        dc_payload = {
+            "name": name,
+            "description": "A data connector",
+            "visibility": "private",
+            "namespace": user.namespace.slug,
+            "storage": {
+                "configuration": {
+                    "type": "s3",
+                    "provider": "AWS",
+                    "region": "us-east-1",
+                },
+                "source_path": "bucket/my-folder",
+                "target_path": "my/target",
+            },
+            "keywords": ["keyword 1", "keyword.2", "keyword-3", "KEYWORD_4"],
+        }
+        dc_payload.update(payload)
+
+        _, response = await sanic_client.post("/api/data/data_connectors", headers=headers, json=dc_payload)
+
+        assert response.status_code == 201, response.text
+        return response.json
+
+    return create_data_connector_helper
+
+
+@pytest.fixture
+def create_data_connector_and_link_project(
+    sanic_client, regular_user, user_headers, admin_user, admin_headers, create_data_connector
+):
+    async def create_data_connector_and_link_project_helper(
+        name: str, project_id: str, admin: bool = False, **payload
+    ) -> Tuple[dict[str, Any], dict[str, Any]]:
+        headers = admin_headers if admin else user_headers
+        user = admin_user if admin else regular_user
+
+        data_connector = await create_data_connector(name, user=user, headers=headers, **payload)
+        data_connector_id = data_connector["id"]
+        payload = {"project_id": project_id}
+
+        _, response = await sanic_client.post(
+            f"/api/data/data_connectors/{data_connector_id}/project_links", headers=headers, json=payload
+        )
+
+        assert response.status_code == 201, response.text
+        data_connector_link = response.json
+
+        return data_connector, data_connector_link
+
+    return create_data_connector_and_link_project_helper
 
 
 @pytest.fixture

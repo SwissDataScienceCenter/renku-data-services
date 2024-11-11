@@ -20,11 +20,13 @@ from renku_data_services.base_api.etag import extract_if_none_match, if_match_re
 from renku_data_services.base_api.misc import validate_body_root_model, validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
+from renku_data_services.data_connectors.db import DataConnectorProjectLinkRepository
 from renku_data_services.errors import errors
 from renku_data_services.project import apispec
 from renku_data_services.project import models as project_models
-from renku_data_services.project.core import validate_project_patch
+from renku_data_services.project.core import copy_project, validate_project_patch
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
+from renku_data_services.session.db import SessionRepository
 from renku_data_services.users.db import UserRepo
 
 
@@ -36,6 +38,8 @@ class ProjectsBP(CustomBlueprint):
     project_member_repo: ProjectMemberRepository
     user_repo: UserRepo
     authenticator: base_models.Authenticator
+    session_repo: SessionRepository
+    data_connector_to_project_link_repo: DataConnectorProjectLinkRepository
 
     def get_all(self) -> BlueprintFactoryResponse:
         """List all projects."""
@@ -61,6 +65,7 @@ class ProjectsBP(CustomBlueprint):
         @validate(json=apispec.ProjectPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.ProjectPost) -> JSONResponse:
             keywords = [kw.root for kw in body.keywords] if body.keywords is not None else []
+            visibility = Visibility.PRIVATE if body.visibility is None else Visibility(body.visibility.value)
             project = project_models.UnsavedProject(
                 name=body.name,
                 namespace=body.namespace,
@@ -68,7 +73,7 @@ class ProjectsBP(CustomBlueprint):
                 description=body.description,
                 repositories=body.repositories or [],
                 created_by=user.id,  # type: ignore[arg-type]
-                visibility=Visibility(body.visibility.value),
+                visibility=visibility,
                 keywords=keywords,
                 documentation=body.documentation,
             )
@@ -76,6 +81,62 @@ class ProjectsBP(CustomBlueprint):
             return validated_json(apispec.Project, self._dump_project(result), status=201)
 
         return "/projects", ["POST"], _post
+
+    def copy(self) -> BlueprintFactoryResponse:
+        """Create a new project by copying it from a template project."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @validate(json=apispec.ProjectPost)
+        async def _copy(
+            _: Request, user: base_models.APIUser, project_id: str, body: apispec.ProjectPost
+        ) -> JSONResponse:
+            try:
+                template_project_id = ULID.from_str(project_id)
+            except ValueError:
+                raise errors.ValidationError(message=f"Template project ID isn't valid: {project_id}")
+
+            result, error = await copy_project(
+                project_id=template_project_id,
+                user=user,
+                name=body.name,
+                namespace=body.namespace,
+                slug=body.slug,
+                description=body.description,
+                repositories=body.repositories,
+                visibility=body.visibility.value if body.visibility is not None else None,
+                keywords=[kw.root for kw in body.keywords] if body.keywords is not None else [],
+                project_repo=self.project_repo,
+                session_repo=self.session_repo,
+                data_connector_to_project_link_repo=self.data_connector_to_project_link_repo,
+            )
+
+            # NOTE: Return a multi-status code to indicate that the project was copied but copying data connectors
+            # failed due to lack of authorization (this is the only possible failure when copying projects)
+            status = 207 if error else 201
+
+            return validated_json(apispec.Project, self._dump_project(result), status=status)
+
+        return "/projects/<project_id>/copies", ["POST"], _copy
+
+    def get_all_copies(self) -> BlueprintFactoryResponse:
+        """Get all copies of a specific project that the user has access to."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _get_all_copies(_: Request, user: base_models.APIUser, project_id: str) -> JSONResponse:
+            try:
+                template_project_id = ULID.from_str(project_id)
+            except ValueError:
+                raise errors.ValidationError(message=f"Template project ID isn't valid: {project_id}")
+
+            projects = await self.project_repo.get_all_copied_projects(user=user, project_id=template_project_id)
+
+            projects_dump = [self._dump_project(p) for p in projects]
+
+            return validated_json(apispec.ProjectsList, projects_dump)
+
+        return "/projects/<project_id>/copies", ["GET"], _get_all_copies
 
     def get_one(self) -> BlueprintFactoryResponse:
         """Get a specific project."""
@@ -255,6 +316,7 @@ class ProjectsBP(CustomBlueprint):
             description=project.description,
             etag=project.etag,
             keywords=project.keywords or [],
+            template_id=str(project.template_id) if project.template_id else None,
         )
         if with_documentation:
             result = dict(result, documentation=project.documentation)

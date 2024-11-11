@@ -185,8 +185,6 @@ paths:
       tags:
         - projects
   /projects/{project_id}/copies:
-  # /projects/{project_id}/children:
-  # /projects/{project_id}/forks:
     get:
       summary: Get list of all copied projects
       parameters:
@@ -229,6 +227,12 @@ paths:
       responses:
         "201":
           description: The project was created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "207":
+          description: The project was copied but at least one data connector cannot be copied due to lack of permission
           content:
             application/json:
               schema:

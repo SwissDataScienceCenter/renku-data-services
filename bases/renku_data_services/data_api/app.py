@@ -92,6 +92,8 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         project_member_repo=config.project_member_repo,
         authenticator=config.authenticator,
         user_repo=config.kc_user_repo,
+        session_repo=config.session_repo,
+        data_connector_to_project_link_repo=config.data_connector_to_project_link_repo,
     )
     group = GroupsBP(
         name="groups",

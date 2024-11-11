@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import DateTime, Identity, Integer, MetaData, String, func
+from sqlalchemy import DateTime, Identity, Index, Integer, MetaData, String, func
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
@@ -30,6 +30,7 @@ class ProjectORM(BaseORM):
     """A Renku native project."""
 
     __tablename__ = "projects"
+    __table_args__ = (Index("ix_projects_project_template_id", "template_id"),)
     id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
     name: Mapped[str] = mapped_column("name", String(99))
     visibility: Mapped[Visibility]
@@ -55,6 +56,7 @@ class ProjectORM(BaseORM):
     updated_at: Mapped[datetime | None] = mapped_column(
         "updated_at", DateTime(timezone=True), default=None, server_default=func.now(), onupdate=func.now()
     )
+    template_id: Mapped[Optional[ULID]] = mapped_column(ForeignKey("projects.id", ondelete="SET NULL"), default=None)
 
     def dump(self, with_documentation: bool = False) -> models.Project:
         """Create a project model from the ProjectORM."""
@@ -73,6 +75,7 @@ class ProjectORM(BaseORM):
             description=self.description,
             keywords=self.keywords,
             documentation=self.documentation if with_documentation else None,
+            template_id=self.template_id,
         )
 
 

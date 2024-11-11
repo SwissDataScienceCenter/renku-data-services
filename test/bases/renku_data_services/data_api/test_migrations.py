@@ -89,7 +89,7 @@ async def test_migration_to_f34b87ddd954(
     assert response.status_code == 200
     assert len(response.json) == 0
     # The database should have delete events for the groups
-    events_orm = await app_config.event_repo._get_pending_events()
+    events_orm = await app_config.event_repo.get_pending_events()
     group_removed_events = [
         deserialize_binary(base64.b64decode(e.payload["payload"]), v2.GroupRemoved)
         for e in events_orm
