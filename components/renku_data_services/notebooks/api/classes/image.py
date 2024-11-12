@@ -113,11 +113,12 @@ class ImageRepoDockerAPI:
                 res = await self.client.get(image_digest_url, headers=headers)
             if res.status_code != 200:
                 return None
-            if res.headers.get("Content-Type") not in [
-                ManifestTypes.docker_v2.value,
-                ManifestTypes.oci_v1_manifest.value,
-            ]:
-                return None
+
+        if res.headers.get("Content-Type") not in [
+            ManifestTypes.docker_v2.value,
+            ManifestTypes.oci_v1_manifest.value,
+        ]:
+            return None
 
         return cast(dict[str, Any], res.json())
 
