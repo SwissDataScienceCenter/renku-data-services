@@ -1,4 +1,4 @@
-"""Custom Resources for environments, mainly kpack."""
+"""Custom Resources for kpack environments."""
 
 from datetime import datetime
 from typing import Self
@@ -56,7 +56,7 @@ class PersistentVolumeReference(BaseModel):
     persistentVolumeClaimName: str
 
 
-class KpackBuilderReference(BaseModel):
+class BuilderReference(BaseModel):
     """Refernce to Kpack builder."""
 
     name: str
@@ -75,54 +75,54 @@ class DockerImageWithSecret(DockerImage):
     imagePullSecrets: list[ImagePullSecret]
 
 
-class KpackGitSource(BaseModel):
+class GitSource(BaseModel):
     """Git repository source."""
 
     url: str
     revision: str
 
 
-class KpackBlobSource(BaseModel):
+class BlobSource(BaseModel):
     """Blob/file archive source."""
 
     url: str
     stripComponents: str
 
 
-class KpackSource(BaseModel):
+class Source(BaseModel):
     """Kpack files source resource."""
 
-    git: KpackGitSource | None = None
-    blob: KpackBlobSource | None = None
+    git: GitSource | None = None
+    blob: BlobSource | None = None
 
     @model_validator(mode="after")
-    def validate(self) -> Self:
+    def validate_source(self) -> Self:
         """Validate mode data."""
         if bool(self.git) == bool(self.blob):
             raise ValueError("'git' and 'blob' are mutually exclusive and one of them must be set.")
         return self
 
 
-class KpackBuildCustomization(BaseModel):
+class BuildCustomization(BaseModel):
     """Customization of a kpack build."""
 
     env: list[EnvItem]
 
 
-class KpackImageSpec(BaseModel):
+class ImageSpec(BaseModel):
     """KPack image spec model."""
 
     tag: str
     additionalTags: list[str]
     serviceAccountName: str
-    builder: KpackBuilderReference
-    source: KpackSource
-    build: KpackBuildCustomization
+    builder: BuilderReference
+    source: Source
+    build: BuildCustomization
     successBuildHistoryLimit: int = 1
     failedBuildHistoryLimit: int = 1
 
 
-class KpackImage(BaseModel):
+class Image(BaseModel):
     """Kpack Image resource."""
 
     model_config = ConfigDict(
@@ -131,10 +131,10 @@ class KpackImage(BaseModel):
     kind: str = "Image"
     apiVersion: str = "kpack.io/v1alpha2"
     metadata: Metadata
-    spec: KpackImageSpec
+    spec: ImageSpec
 
 
-class KpackVolumeCache(BaseModel):
+class VolumeCache(BaseModel):
     """Persistent volume to serve as cache for kpack build."""
 
     volume: PersistentVolumeReference
@@ -146,27 +146,27 @@ class ImageTagReference(BaseModel):
     tag: str
 
 
-class KpackCacheImage(BaseModel):
+class CacheImage(BaseModel):
     """Image definition to use as build cache."""
 
     registry: ImageTagReference
 
 
-class KpackBuildSpec(BaseModel):
+class BuildSpec(BaseModel):
     """Spec for kpack build."""
 
     builder: DockerImageWithSecret
-    cache: KpackVolumeCache | KpackCacheImage
+    cache: VolumeCache | CacheImage
     env: list[EnvItem]
     resources: K8sResourceRequest
     runImage: DockerImage
     serviceAccountName: str
-    source: KpackSource
+    source: Source
     tags: list[str]
     activeDeadlineSeconds: int = 1800
 
 
-class KpackBuild(BaseModel):
+class Build(BaseModel):
     """KPack build resource."""
 
     model_config = ConfigDict(
@@ -175,4 +175,4 @@ class KpackBuild(BaseModel):
     kind: str = "Build"
     apiVersion: str = "kpack.io/v1alpha2"
     metadata: Metadata
-    spec: KpackBuildSpec
+    spec: BuildSpec
