@@ -55,6 +55,10 @@ class K8sCoreClient(K8sCoreClientInterface):  # pragma:nocover
         """Create a secret."""
         return self.client.create_namespaced_secret(namespace, body, **kwargs)
 
+    def patch_namespaced_secret(self, name: str, namespace: str, body: dict, **kwargs: dict) -> Any:
+        """Patch a secret."""
+        return self.client.patch_namespaced_secret(name, namespace, body, **kwargs)
+
 
 class K8sSchedulingClient(K8sSchedudlingClientInterface):  # pragma:nocover
     """Real k8s scheduling API client that exposes the required functions."""
@@ -155,6 +159,13 @@ class DummyCoreClient(K8sCoreClientInterface):
             body.kind = "Secret"
             self.secrets[body.metadata.name] = body
             return body
+
+    def patch_namespaced_secret(self, name: Any, namespace: Any, body: Any, **kwargs: Any) -> Any:
+        """Patch a secret."""
+        # NOTE: This is only needed if the create_namespaced_secret can raise a conflict 409 status code
+        # error when it tries to create a secret that already exists. But the dummy client never raises
+        # this so we don't need to implement it (for now).
+        raise NotImplementedError()
 
     def delete_namespaced_secret(self, name: Any, namespace: Any, **kwargs: Any) -> Any:
         """Delete a secret."""

@@ -67,6 +67,9 @@ authzed = "^1.1.0"
 cryptography = "^43.0.3"
 # see https://github.com/sanic-org/sanic/issues/2828 for setuptools dependency, remove when not needed anymore
 setuptools = { version = "^75.3.0" }
+kr8s = "^0.17.0"
+werkzeug = "^3.0.3"
+toml = "^0.10.2"
 aiofiles = "^24.1.0"
 # Not a direct dependency, it is needed by authzed. Was causing things to crash at startup beacuse of
 # google.protobuf.runtime_version.VersionError:
@@ -93,7 +96,9 @@ ruff = "^0.7.3"
 debugpy = "^1.8.8"
 pytest-xdist = { version = "^3.5.0", extras = ["psutil"] }
 types-requests = "^2.32.0.20241016"
+types-toml = "^0.10.8.20240310"
 types-aiofiles = "^24.1.0.20240626"
+pytest-mock = "^3.14.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -104,7 +109,12 @@ line-length = 120
 target-version = "py311"
 output-format = "full"
 include = ["*.py", "*.pyi"]
-exclude = ["*/avro_models/*", ".devcontainer/"]
+exclude = [
+  "*/avro_models/*",
+  ".devcontainer/",
+  "components/renku_data_services/notebooks/cr_amalthea_session.py",
+  "components/renku_data_services/notebooks/cr_jupyter_server.py",
+]
 
 [tool.ruff.format]
 exclude = ["apispec.py"]
@@ -143,16 +153,22 @@ ignore = [
 "test/*" = ["D"]
 "*/versions/*" = ["D", "E", "W"]
 "apispec.py" = ["D", "E", "W", "I", "UP"]
+"components/renku_data_services/notebooks/crs.py" = ["F401"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["renku_data_services"]
+known-first-party = ["renku_data_services", "test"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
 [tool.bandit]
 skips = ["B101", "B603", "B607", "B404"]
-exclude_dirs = ["test", ".devcontainer"]
+exclude_dirs = [
+  "test",
+  ".devcontainer",
+  "components/renku_data_services/notebooks/cr_jupyter_server.py",
+  "components/renku_data_services/notebooks/cr_amalthea_session.py",
+]
 
 [tool.pytest.ini_options]
 addopts = "--cov components/ --cov bases/ --cov-report=term-missing -v"
@@ -206,6 +222,8 @@ module = [
   "renku_data_services.data_api.error_handler",
   "renku_data_services.namespace.apispec",
   "renku_data_services.notebooks.apispec",
+  "renku_data_services.notebooks.cr_amalthea_session",
+  "renku_data_services.notebooks.cr_jupyter_server",
   "renku_data_services.platform.apispec",
   "renku_data_services.message_queue.apispec",
 ]
@@ -231,6 +249,7 @@ module = [
   "undictify.*",
   "urllib3.*",
   "escapism.*",
+  "kr8s.*",
 ]
 ignore_missing_imports = true
 

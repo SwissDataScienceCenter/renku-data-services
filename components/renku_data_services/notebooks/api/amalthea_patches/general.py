@@ -2,9 +2,8 @@
 
 from typing import TYPE_CHECKING, Any
 
-from renku_data_services.notebooks.api.classes.user import RegisteredUser
-
 if TYPE_CHECKING:
+    # NOTE: If these are directly imported then you get circular imports.
     from renku_data_services.notebooks.api.classes.server import UserServer
 
 
@@ -31,7 +30,7 @@ def session_tolerations(server: "UserServer") -> list[dict[str, Any]]:
                     "op": "add",
                     "path": "/statefulset/spec/template/spec/tolerations",
                     "value": default_tolerations
-                    + [i.json_match_expression() for i in server.server_options.tolerations],
+                    + [toleration.json_match_expression() for toleration in server.server_options.tolerations],
                 }
             ],
         }
@@ -159,7 +158,7 @@ def test(server: "UserServer") -> list[dict[str, Any]]:
     # does not use all containers.
     container_names = (
         server.config.sessions.containers.registered[:2]
-        if isinstance(server.user, RegisteredUser)
+        if server.user.is_authenticated
         else server.config.sessions.containers.anonymous[:1]
     )
     for container_ind, container_name in enumerate(container_names):
@@ -181,7 +180,7 @@ def test(server: "UserServer") -> list[dict[str, Any]]:
 def oidc_unverified_email(server: "UserServer") -> list[dict[str, Any]]:
     """Allow users whose email is unverified in Keycloak to still be able to access their sessions."""
     patches = []
-    if isinstance(server.user, RegisteredUser):
+    if server.user.is_authenticated:
         # modify oauth2 proxy to accept users whose email has not been verified
         # usually enabled for dev purposes
         patches.append(

@@ -4,13 +4,15 @@ import contextlib
 import json
 from typing import Any, Optional, cast
 
-from .cloud_storage.existing import ExistingCloudStorage
+from renku_data_services.errors import errors
+from renku_data_services.notebooks.api.classes.cloud_storage.existing import ExistingCloudStorage
+from renku_data_services.notebooks.crs import JupyterServerV1Alpha1
 
 
 class UserServerManifest:
     """Thin wrapper around a jupyter server manifest."""
 
-    def __init__(self, manifest: dict[str, Any], default_image: str, pvs_enabled: bool = True) -> None:
+    def __init__(self, manifest: JupyterServerV1Alpha1, default_image: str, pvs_enabled: bool = True) -> None:
         self.manifest = manifest
         self.default_image = default_image
         self.pvs_enabled = pvs_enabled
@@ -18,12 +20,14 @@ class UserServerManifest:
     @property
     def name(self) -> str:
         """The name of the server."""
-        return cast(str, self.manifest["metadata"]["name"])
+        return self.manifest.metadata.name
 
     @property
     def image(self) -> str:
         """The image the server is running."""
-        return cast(str, self.manifest["spec"]["jupyterServer"]["image"])
+        if self.manifest.spec is None:
+            raise errors.ProgrammingError(message="Unexpected manifest format")
+        return self.manifest.spec.jupyterServer.image
 
     @property
     def using_default_image(self) -> bool:
@@ -31,14 +35,16 @@ class UserServerManifest:
         return self.image == self.default_image
 
     @property
-    def server_options(self) -> dict[str, Any]:
+    def server_options(self) -> dict[str, str | int | float]:
         """Extract the server options from a manifest."""
         js = self.manifest
-        server_options = {}
+        if js.spec is None:
+            raise errors.ProgrammingError(message="Unexpected manifest format")
+        server_options: dict[str, str | int | float] = {}
         # url
-        server_options["defaultUrl"] = js["spec"]["jupyterServer"]["defaultUrl"]
+        server_options["defaultUrl"] = js.spec.jupyterServer.defaultUrl
         # disk
-        server_options["disk_request"] = js["spec"]["storage"].get("size")
+        server_options["disk_request"] = js.spec.storage.size
         # NOTE: Amalthea accepts only strings for disk request, but k8s allows bytes as number
         # so try to convert to number if possible
         with contextlib.suppress(ValueError):
@@ -50,7 +56,7 @@ class UserServerManifest:
             "cpu": "cpu_request",
             "ephemeral-storage": "ephemeral-storage",
         }
-        js_resources = js["spec"]["jupyterServer"]["resources"]["requests"]
+        js_resources = js.spec.jupyterServer.resources["requests"]
         for k8s_res_name in k8s_res_name_xref:
             if k8s_res_name in js_resources:
                 server_options[k8s_res_name_xref[k8s_res_name]] = js_resources[k8s_res_name]
@@ -60,8 +66,8 @@ class UserServerManifest:
                 server_options["ephemeral-storage"] if self.pvs_enabled else server_options["disk_request"]
             )
         # lfs auto fetch
-        for patches in js["spec"]["patches"]:
-            for patch in patches.get("patch", []):
+        for patches in js.spec.patches:
+            for patch in cast(dict, patches.patch):
                 if patch.get("path") == "/statefulset/spec/template/spec/initContainers/-":
                     for env in patch.get("value", {}).get("env", []):
                         if env.get("name") == "GIT_CLONE_LFS_AUTO_FETCH":
@@ -71,12 +77,12 @@ class UserServerManifest:
     @property
     def annotations(self) -> dict[str, str]:
         """Extract the manifest annotations."""
-        return cast(dict[str, str], self.manifest["metadata"]["annotations"])
+        return self.manifest.metadata.annotations
 
     @property
     def labels(self) -> dict[str, str]:
         """Extract the manifest labels."""
-        return cast(dict[str, str], self.manifest["metadata"]["labels"])
+        return self.manifest.metadata.labels
 
     @property
     def cloudstorage(self) -> list[ExistingCloudStorage]:
@@ -86,12 +92,12 @@ class UserServerManifest:
     @property
     def server_name(self) -> str:
         """Get the server name."""
-        return cast(str, self.manifest["metadata"]["name"])
+        return self.manifest.metadata.name
 
     @property
     def hibernation(self) -> Optional[dict[str, Any]]:
         """Return hibernation annotation."""
-        hibernation = self.manifest["metadata"]["annotations"].get("hibernation")
+        hibernation = self.manifest.metadata.annotations.get("renku.io/hibernation")
         return json.loads(hibernation) if hibernation else None
 
     @property
@@ -120,9 +126,11 @@ class UserServerManifest:
     @property
     def url(self) -> str:
         """Return the url where the user can access the session."""
-        host = self.manifest["spec"]["routing"]["host"]
-        path = self.manifest["spec"]["routing"]["path"].rstrip("/")
-        token = self.manifest["spec"]["auth"].get("token", "")
+        if self.manifest.spec is None:
+            raise errors.ProgrammingError(message="Unexpected manifest format")
+        host = self.manifest.spec.routing.host
+        path = self.manifest.spec.routing.path.rstrip("/")
+        token = self.manifest.spec.auth.token or ""
         url = f"https://{host}{path}"
         if token and len(token) > 0:
             url += f"?token={token}"

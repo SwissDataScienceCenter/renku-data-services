@@ -1,9 +1,15 @@
 """Tests for sessions blueprints."""
 
+from asyncio import AbstractEventLoop
 from typing import Any
 
 import pytest
-from sanic_testing.testing import SanicASGITestClient
+from pytest import FixtureRequest
+from sanic_testing.testing import SanicASGITestClient, TestingResponse
+
+from renku_data_services.app_config.config import Config
+from renku_data_services.crc.apispec import ResourcePool
+from renku_data_services.users.models import UserInfo
 
 
 @pytest.fixture
@@ -29,10 +35,12 @@ def create_session_launcher(sanic_client: SanicASGITestClient, user_headers):
         payload = payload.copy()
         payload.update({"name": name, "project_id": project_id})
         payload["description"] = payload.get("description") or "A session launcher."
-        payload["environment_kind"] = payload.get("environment_kind") or "container_image"
-
-        if payload["environment_kind"] == "container_image":
-            payload["container_image"] = payload.get("container_image") or "some_image:some_tag"
+        if "environment" not in payload:
+            payload["environment"] = {
+                "environment_kind": "CUSTOM",
+                "name": "Test",
+                "container_image": "some_image:some_tag",
+            }
 
         _, res = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
 
@@ -41,6 +49,33 @@ def create_session_launcher(sanic_client: SanicASGITestClient, user_headers):
         return res.json
 
     return create_session_launcher_helper
+
+
+@pytest.fixture
+def launch_session(
+    sanic_client: SanicASGITestClient,
+    user_headers: dict,
+    regular_user: UserInfo,
+    app_config: Config,
+    request: FixtureRequest,
+    event_loop: AbstractEventLoop,
+):
+    async def launch_session_helper(
+        payload: dict, headers: dict = user_headers, user: UserInfo = regular_user
+    ) -> TestingResponse:
+        _, res = await sanic_client.post("/api/data/sessions", headers=headers, json=payload)
+        assert res.status_code == 201, res.text
+        assert res.json is not None
+        assert "name" in res.json
+        session_id: str = res.json.get("name", "unknown")
+
+        def cleanup():
+            event_loop.run_until_complete(app_config.nb_config.k8s_v2_client.delete_server(session_id, user.id))
+
+        # request.addfinalizer(cleanup)
+        return res
+
+    return launch_session_helper
 
 
 @pytest.mark.asyncio
@@ -120,10 +155,14 @@ async def test_patch_session_environment(
     env = await create_session_environment("Environment 1")
     environment_id = env["id"]
 
+    command = ["python", "test.py"]
+    args = ["arg1", "arg2"]
     payload = {
         "name": "New name",
         "description": "New description.",
         "container_image": "new_image:new_tag",
+        "command": command,
+        "args": args,
     }
 
     _, res = await sanic_client.patch(f"/api/data/environments/{environment_id}", headers=admin_headers, json=payload)
@@ -133,6 +172,14 @@ async def test_patch_session_environment(
     assert res.json.get("name") == "New name"
     assert res.json.get("description") == "New description."
     assert res.json.get("container_image") == "new_image:new_tag"
+    assert res.json.get("args") == args
+    assert res.json.get("command") == command
+
+    # Test that patching with None will reset the command and args
+    payload = {"args": None, "command": None}
+    _, res = await sanic_client.patch(f"/api/data/environments/{environment_id}", headers=admin_headers, json=payload)
+    assert res.json.get("args") is None
+    assert res.json.get("command") is None
 
 
 @pytest.mark.asyncio
@@ -150,7 +197,7 @@ async def test_patch_session_environment_unauthorized(
 
     _, res = await sanic_client.patch(f"/api/data/environments/{environment_id}", headers=user_headers, json=payload)
 
-    assert res.status_code == 403, res.text
+    assert res.status_code == 401, res.text
 
 
 @pytest.mark.asyncio
@@ -217,8 +264,7 @@ async def test_get_session_launcher(
         "Some launcher",
         project_id=project["id"],
         description="Some launcher.",
-        environment_kind="global_environment",
-        environment_id=env["id"],
+        environment={"id": env["id"]},
     )
     launcher_id = launcher["id"]
 
@@ -229,9 +275,10 @@ async def test_get_session_launcher(
     assert res.json.get("name") == "Some launcher"
     assert res.json.get("project_id") == project["id"]
     assert res.json.get("description") == "Some launcher."
-    assert res.json.get("environment_kind") == "global_environment"
-    assert res.json.get("environment_id") == env["id"]
-    assert res.json.get("container_image") is None
+    environment = res.json.get("environment", {})
+    assert environment.get("environment_kind") == "GLOBAL"
+    assert environment.get("id") == env["id"]
+    assert environment.get("container_image") == env["container_image"]
     assert res.json.get("resource_class_id") is None
 
 
@@ -276,9 +323,12 @@ async def test_post_session_launcher(
         "name": "Launcher 1",
         "project_id": project["id"],
         "description": "A session launcher.",
-        "environment_kind": "container_image",
-        "container_image": "some_image:some_tag",
         "resource_class_id": resource_pool["classes"][0]["id"],
+        "environment": {
+            "container_image": "some_image:some_tag",
+            "name": "custom_name",
+            "environment_kind": "CUSTOM",
+        },
     }
 
     _, res = await sanic_client.post("/api/data/session_launchers", headers=admin_headers, json=payload)
@@ -288,9 +338,10 @@ async def test_post_session_launcher(
     assert res.json.get("name") == "Launcher 1"
     assert res.json.get("project_id") == project["id"]
     assert res.json.get("description") == "A session launcher."
-    assert res.json.get("environment_kind") == "container_image"
-    assert res.json.get("container_image") == "some_image:some_tag"
-    assert res.json.get("environment_id") is None
+    environment = res.json.get("environment", {})
+    assert environment.get("environment_kind") == "CUSTOM"
+    assert environment.get("container_image") == "some_image:some_tag"
+    assert environment.get("id") is not None
     assert res.json.get("resource_class_id") == resource_pool["classes"][0]["id"]
 
 
@@ -303,20 +354,21 @@ async def test_post_session_launcher_unauthorized(
     create_project,
     create_resource_pool,
     regular_user,
+    create_session_environment,
 ) -> None:
     project = await create_project("Some project")
     resource_pool_data = valid_resource_pool_payload
     resource_pool_data["public"] = False
 
     resource_pool = await create_resource_pool(admin=True, **resource_pool_data)
+    environment = await create_session_environment("Test environment")
 
     payload = {
         "name": "Launcher 1",
         "project_id": project["id"],
         "description": "A session launcher.",
-        "environment_kind": "container_image",
-        "container_image": "some_image:some_tag",
         "resource_class_id": resource_pool["classes"][0]["id"],
+        "environment": {"id": environment["id"]},
     }
 
     _, res = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
@@ -338,3 +390,196 @@ async def test_delete_session_launcher(
     _, res = await sanic_client.delete(f"/api/data/session_launchers/{launcher_id}", headers=user_headers)
 
     assert res.status_code == 204, res.text
+
+
+@pytest.mark.asyncio
+async def test_patch_session_launcher(
+    sanic_client: SanicASGITestClient,
+    valid_resource_pool_payload: dict[str, Any],
+    user_headers,
+    create_project,
+    create_resource_pool,
+) -> None:
+    project = await create_project("Some project 1")
+    resource_pool_data = valid_resource_pool_payload
+    resource_pool = await create_resource_pool(admin=True, **resource_pool_data)
+
+    payload = {
+        "name": "Launcher 1",
+        "project_id": project["id"],
+        "description": "A session launcher.",
+        "resource_class_id": resource_pool["classes"][0]["id"],
+        "environment": {
+            "container_image": "some_image:some_tag",
+            "name": "custom_name",
+            "environment_kind": "CUSTOM",
+        },
+    }
+
+    _, res = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
+
+    assert res.status_code == 201, res.text
+    assert res.json is not None
+    assert res.json.get("name") == "Launcher 1"
+    assert res.json.get("description") == "A session launcher."
+    environment = res.json.get("environment", {})
+    assert environment.get("environment_kind") == "CUSTOM"
+    assert environment.get("container_image") == "some_image:some_tag"
+    assert environment.get("id") is not None
+    assert res.json.get("resource_class_id") == resource_pool["classes"][0]["id"]
+
+    patch_payload = {
+        "name": "New Name",
+        "description": "An updated session launcher.",
+        "resource_class_id": resource_pool["classes"][1]["id"],
+    }
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{res.json['id']}", headers=user_headers, json=patch_payload
+    )
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    assert res.json.get("name") == patch_payload["name"]
+    assert res.json.get("description") == patch_payload["description"]
+    assert res.json.get("resource_class_id") == patch_payload["resource_class_id"]
+
+
+@pytest.mark.asyncio
+async def test_patch_session_launcher_environment(
+    sanic_client: SanicASGITestClient,
+    valid_resource_pool_payload: dict[str, Any],
+    user_headers,
+    create_project,
+    create_resource_pool,
+    create_session_environment,
+) -> None:
+    project = await create_project("Some project 1")
+    resource_pool_data = valid_resource_pool_payload
+    resource_pool = await create_resource_pool(admin=True, **resource_pool_data)
+    global_env = await create_session_environment("Some environment")
+
+    # Create a new custom environment with the launcher
+    payload = {
+        "name": "Launcher 1",
+        "project_id": project["id"],
+        "description": "A session launcher.",
+        "resource_class_id": resource_pool["classes"][0]["id"],
+        "environment": {
+            "container_image": "some_image:some_tag",
+            "name": "custom_name",
+            "environment_kind": "CUSTOM",
+        },
+    }
+    _, res = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
+    assert res.status_code == 201, res.text
+    assert res.json is not None
+    environment = res.json.get("environment", {})
+    assert environment.get("environment_kind") == "CUSTOM"
+    assert environment.get("container_image") == "some_image:some_tag"
+    assert environment.get("id") is not None
+
+    # Patch in a global environment
+    patch_payload = {
+        "environment": {"id": global_env["id"]},
+    }
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{res.json['id']}", headers=user_headers, json=patch_payload
+    )
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    launcher_id = res.json["id"]
+    global_env["environment_kind"] = "GLOBAL"
+    assert res.json["environment"] == global_env
+
+    # Trying to patch a field of the global environment should fail
+    patch_payload = {
+        "environment": {"container_image": "new_image"},
+    }
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher_id}", headers=user_headers, json=patch_payload
+    )
+    assert res.status_code == 422, res.text
+
+    # Patching in a wholly new custom environment over the global is allowed
+    patch_payload = {
+        "environment": {"container_image": "new_image", "name": "new_custom", "environment_kind": "CUSTOM"},
+    }
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher_id}", headers=user_headers, json=patch_payload
+    )
+    assert res.status_code == 200, res.text
+
+    # Should be able to patch some fields of the custom environment
+    patch_payload = {
+        "environment": {"container_image": "nginx:latest", "args": ["a", "b", "c"]},
+    }
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher_id}", headers=user_headers, json=patch_payload
+    )
+    assert res.status_code == 200, res.text
+    assert res.json["environment"]["container_image"] == "nginx:latest"
+    assert res.json["environment"]["args"] == ["a", "b", "c"]
+
+    # Should be able to reset args by patching in None, patching a null field should do nothing
+    patch_payload = {
+        "environment": {"args": None, "command": None},
+    }
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher_id}", headers=user_headers, json=patch_payload
+    )
+    assert res.status_code == 200, res.text
+    assert res.json["environment"].get("args") is None
+    assert res.json["environment"].get("command") is None
+
+
+@pytest.fixture
+def anonymous_user_headers() -> dict[str, str]:
+    return {"Renku-Auth-Anon-Id": "some-random-value-1234"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.skip(reason="Setup for testing sessions is not done yet.")  # TODO: enable in follwup PR
+async def test_starting_session_anonymous(
+    sanic_client: SanicASGITestClient,
+    create_project,
+    create_session_launcher,
+    user_headers,
+    app_config: Config,
+    admin_headers,
+    launch_session,
+    anonymous_user_headers,
+    cluster,
+) -> None:
+    _, res = await sanic_client.post(
+        "/api/data/resource_pools",
+        json=ResourcePool.model_validate(app_config.default_resource_pool, from_attributes=True).model_dump(
+            mode="json", exclude_none=True
+        ),
+        headers=admin_headers,
+    )
+    assert res.status_code == 201, res.text
+    project: dict[str, Any] = await create_project(
+        "Some project",
+        visibility="public",
+        repositories=["https://github.com/SwissDataScienceCenter/renku-data-services"],
+    )
+    launcher: dict[str, Any] = await create_session_launcher(
+        "Launcher 1",
+        project_id=project["id"],
+        environment={
+            "container_image": "renku/renkulab-py:3.10-0.23.0-amalthea-sessions-3",
+            "environment_kind": "CUSTOM",
+            "name": "test",
+            "port": 8888,
+        },
+    )
+    launcher_id = launcher["id"]
+    project_id = project["id"]
+    payload = {"project_id": project_id, "launcher_id": launcher_id}
+    session_res = await launch_session(payload, headers=anonymous_user_headers)
+    _, res = await sanic_client.get(f"/api/data/sessions/{session_res.json['name']}", headers=anonymous_user_headers)
+    assert res.status_code == 200, res.text
+    assert res.json["name"] == session_res.json["name"]
+    _, res = await sanic_client.get("/api/data/sessions", headers=anonymous_user_headers)
+    assert res.status_code == 200, res.text
+    assert len(res.json) > 0
+    assert session_res.json["name"] in [i["name"] for i in res.json]

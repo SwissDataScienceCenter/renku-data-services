@@ -145,8 +145,8 @@ async def test_listing_users_with_access(app_config: Config, public_project: boo
     project1_id = ULID()
     project1 = Project(
         id=project1_id,
-        name=project1_id,
-        slug=project1_id,
+        name=str(project1_id),
+        slug=str(project1_id),
         namespace=Namespace(
             project_owner.id,
             project_owner.id,
@@ -160,8 +160,8 @@ async def test_listing_users_with_access(app_config: Config, public_project: boo
     project2_id = ULID()
     project2 = Project(
         id=project2_id,
-        name=project2_id,
-        slug=project2_id,
+        name=str(project2_id),
+        slug=str(project2_id),
         namespace=Namespace(
             regular_user2.id,
             regular_user2.id,
@@ -190,9 +190,11 @@ async def test_listing_projects_with_access(app_config: Config, bootstrap_admins
     public_project_id = ULID()
     private_project_id1 = ULID()
     private_project_id2 = ULID()
+
     public_project_id_str = str(public_project_id)
     private_project_id1_str = str(private_project_id1)
     private_project_id2_str = str(private_project_id2)
+
     project_owner = regular_user1
     namespace = Namespace(
         project_owner.id,
@@ -205,24 +207,24 @@ async def test_listing_projects_with_access(app_config: Config, bootstrap_admins
     assert regular_user2.id
     public_project = Project(
         id=public_project_id,
-        name=public_project_id,
-        slug=public_project_id,
+        name=public_project_id_str,
+        slug=public_project_id_str,
         namespace=namespace,
         visibility=Visibility.PUBLIC,
         created_by=project_owner.id,
     )
     private_project1 = Project(
         id=private_project_id1,
-        name=private_project_id1,
-        slug=private_project_id1,
+        name=private_project_id1_str,
+        slug=private_project_id1_str,
         namespace=namespace,
         visibility=Visibility.PRIVATE,
         created_by=project_owner.id,
     )
     private_project2 = Project(
         id=private_project_id2,
-        name=private_project_id2,
-        slug=private_project_id2,
+        name=private_project_id2_str,
+        slug=private_project_id2_str,
         namespace=namespace,
         visibility=Visibility.PRIVATE,
         created_by=project_owner.id,

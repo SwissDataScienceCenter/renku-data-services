@@ -79,6 +79,7 @@ def db_config(monkeypatch, worker_id, authz_config) -> Iterator[DBConfig]:
         dbname=db_name,
         version="16.2",
         password=password,
+        template_dbname="renku_template",
     ):
         yield DBConfig.from_env()
         DBConfig.dispose_connection()
@@ -115,6 +116,8 @@ def secrets_key_pair(monkeypatch, tmp_path) -> None:
 @pytest.fixture
 def app_config(authz_config, db_config, monkeypatch, worker_id, secrets_key_pair) -> Generator[DataConfig, None, None]:
     monkeypatch.setenv("MAX_PINNED_PROJECTS", "5")
+    monkeypatch.setenv("NB_SERVER_OPTIONS__DEFAULTS_PATH", "server_defaults.json")
+    monkeypatch.setenv("NB_SERVER_OPTIONS__UI_CHOICES_PATH", "server_options.json")
 
     config = DataConfig.from_env()
     app_name = "app_" + str(ULID()).lower() + "_" + worker_id

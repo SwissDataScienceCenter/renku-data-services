@@ -2,12 +2,13 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
+from pathlib import PurePosixPath
 
-from pydantic import BaseModel, model_validator
 from ulid import ULID
 
 from renku_data_services import errors
-from renku_data_services.session.apispec import EnvironmentKind
+from renku_data_services.base_models.core import ResetType
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -17,23 +18,76 @@ class Member:
     id: str
 
 
-@dataclass(frozen=True, eq=True, kw_only=True)
+class EnvironmentKind(StrEnum):
+    """The type of environment."""
+
+    GLOBAL: str = "GLOBAL"
+    CUSTOM: str = "CUSTOM"
+
+
+@dataclass(kw_only=True, frozen=True, eq=True)
 class UnsavedEnvironment:
-    """A session environment that hasn't been stored in the database."""
+    """Session environment model that has not been saved."""
 
     name: str
-    description: str | None
+    description: str | None = None
     container_image: str
-    default_url: str | None
+    default_url: str
+    port: int = 8888
+    working_directory: PurePosixPath = PurePosixPath("/home/jovyan/work")
+    mount_directory: PurePosixPath = PurePosixPath("/home/jovyan/work")
+    uid: int = 1000
+    gid: int = 1000
+    environment_kind: EnvironmentKind
+    args: list[str] | None = None
+    command: list[str] | None = None
+
+    def __post_init__(self) -> None:
+        if not self.working_directory.is_absolute():
+            raise errors.ValidationError(message="The working directory for a session is supposed to be absolute")
+        if not self.mount_directory.is_absolute():
+            raise errors.ValidationError(message="The mount directory for a session is supposed to be absolute")
+        if self.working_directory.is_reserved():
+            raise errors.ValidationError(
+                message="The requested value for the working directory is reserved by the OS and cannot be used."
+            )
+        if self.mount_directory.is_reserved():
+            raise errors.ValidationError(
+                message="The requested value for the mount directory is reserved by the OS and cannot be used."
+            )
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class Environment(UnsavedEnvironment):
     """Session environment model."""
 
-    id: str
+    id: ULID
     creation_date: datetime
     created_by: Member
+    container_image: str
+    default_url: str
+    port: int
+    working_directory: PurePosixPath
+    mount_directory: PurePosixPath
+    uid: int
+    gid: int
+
+
+@dataclass(kw_only=True, frozen=True, eq=True)
+class EnvironmentUpdate:
+    """Model for the update of some or all parts of an environment."""
+
+    name: str | None = None
+    description: str | None = None
+    container_image: str | None = None
+    default_url: str | None = None
+    port: int | None = None
+    working_directory: PurePosixPath | None = None
+    mount_directory: PurePosixPath | None = None
+    uid: int | None = None
+    gid: int | None = None
+    args: list[str] | None | ResetType = None
+    command: list[str] | None | ResetType = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -44,43 +98,35 @@ class EnvironmentPatch:
     description: str | None = None
     container_image: str | None = None
     default_url: str | None = None
+    port: int | None = None
+    working_directory: PurePosixPath | None = None
+    mount_directory: PurePosixPath | None = None
+    uid: int | None = None
+    gid: int | None = None
+    args: list[str] | None | ResetType = None
+    command: list[str] | None | ResetType = None
 
 
-class UnsavedSessionLauncher(BaseModel):
-    """A session launcher that hasn't been stored in the database."""
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedSessionLauncher:
+    """Session launcher model that has not been persisted in the DB."""
 
     project_id: ULID
     name: str
     description: str | None
-    environment_kind: EnvironmentKind
-    environment_id: str | None
     resource_class_id: int | None
-    container_image: str | None
-    default_url: str | None
-
-    @model_validator(mode="after")
-    def check_launcher_environment_kind(self) -> "UnsavedSessionLauncher":
-        """Validates the environment of a launcher."""
-
-        environment_kind = self.environment_kind
-        environment_id = self.environment_id
-        container_image = self.container_image
-
-        if environment_kind == EnvironmentKind.global_environment and environment_id is None:
-            raise errors.ValidationError(message="'environment_id' not set when environment_kind=global_environment")
-
-        if environment_kind == EnvironmentKind.container_image and container_image is None:
-            raise errors.ValidationError(message="'container_image' not set when environment_kind=container_image")
-
-        return self
+    environment: str | UnsavedEnvironment
+    """When a string is passed for the environment it should be the ID of an existing environment."""
 
 
+@dataclass(frozen=True, eq=True, kw_only=True)
 class SessionLauncher(UnsavedSessionLauncher):
     """Session launcher model."""
 
     id: ULID
     creation_date: datetime
     created_by: Member
+    environment: Environment
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -89,8 +135,7 @@ class SessionLauncherPatch:
 
     name: str | None = None
     description: str | None = None
-    environment_kind: EnvironmentKind | None = None
-    environment_id: str | None = None
-    resource_class_id: int | None = None
-    container_image: str | None = None
-    default_url: str | None = None
+    # NOTE: When unsaved environment is used it means a brand new environment should be created for the
+    # launcher with the update of the launcher.
+    environment: str | EnvironmentPatch | UnsavedEnvironment | None = None
+    resource_class_id: int | None | ResetType = None

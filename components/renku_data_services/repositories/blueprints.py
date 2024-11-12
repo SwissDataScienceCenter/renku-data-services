@@ -3,14 +3,15 @@
 from dataclasses import dataclass
 from urllib.parse import unquote
 
-from sanic import HTTPResponse, Request, json
+from sanic import HTTPResponse, Request
 from sanic.response import JSONResponse
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
-from renku_data_services.base_api.auth import authenticate
+from renku_data_services.base_api.auth import authenticate_2
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.etag import extract_if_none_match
+from renku_data_services.base_models.validation import validated_json
 from renku_data_services.repositories import apispec
 from renku_data_services.repositories.apispec_base import RepositoryParams
 from renku_data_services.repositories.db import GitRepositoriesRepository
@@ -28,23 +29,23 @@ class RepositoriesBP(CustomBlueprint):
     def get_one_repository(self) -> BlueprintFactoryResponse:
         """Get the metadata available about a repository."""
 
-        @authenticate(self.internal_gitlab_authenticator)
-        async def _get_internal_gitlab_user(_: Request, user: base_models.APIUser) -> base_models.APIUser:
-            return user
-
-        @authenticate(self.authenticator)
+        @authenticate_2(self.authenticator, self.internal_gitlab_authenticator)
         @extract_if_none_match
         async def _get_one_repository(
-            request: Request, user: base_models.APIUser, repository_url: str, etag: str | None
+            request: Request,
+            user: base_models.APIUser,
+            internal_gitlab_user: base_models.APIUser,
+            repository_url: str,
+            etag: str | None,
         ) -> JSONResponse | HTTPResponse:
             repository_url = unquote(repository_url)
             RepositoryParams.model_validate(dict(repository_url=repository_url))
 
-            async def get_internal_gitlab_user() -> base_models.APIUser:
-                return await _get_internal_gitlab_user(request)
-
             result = await self.git_repositories_repo.get_repository(
-                repository_url=repository_url, user=user, etag=etag, get_internal_gitlab_user=get_internal_gitlab_user
+                repository_url=repository_url,
+                user=user,
+                etag=etag,
+                internal_gitlab_user=internal_gitlab_user,
             )
             if result == "304":
                 return HTTPResponse(status=304)
@@ -53,10 +54,7 @@ class RepositoriesBP(CustomBlueprint):
                 if result.repository_metadata and result.repository_metadata.etag is not None
                 else None
             )
-            return json(
-                apispec.RepositoryProviderMatch.model_validate(result).model_dump(exclude_none=True, mode="json"),
-                headers=headers,
-            )
+            return validated_json(apispec.RepositoryProviderMatch, result, headers=headers)
 
         return "/repositories/<repository_url>", ["GET"], _get_one_repository
 

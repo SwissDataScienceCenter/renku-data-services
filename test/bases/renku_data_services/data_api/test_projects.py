@@ -89,7 +89,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
 
     # same as above, but using namespace/slug to retreive the pr
     _, response = await sanic_client.get(
-        f"/api/data/projects/{payload['namespace']}/{payload['slug']}", headers=user_headers
+        f"/api/data/namespaces/{payload['namespace']}/projects/{payload['slug']}", headers=user_headers
     )
 
     assert response.status_code == 200, response.text
@@ -1008,7 +1008,9 @@ async def test_project_slug_case(
     assert res.json.get("slug") == uppercase_slug
     etag = res.headers["ETag"]
     # Get it by the namespace
-    _, res = await sanic_client.get(f"/api/data/projects/{group['slug']}/{uppercase_slug}", headers=user_headers)
+    _, res = await sanic_client.get(
+        f"/api/data/namespaces/{group['slug']}/projects/{uppercase_slug}", headers=user_headers
+    )
     assert res.status_code == 200
     assert res.json.get("slug") == uppercase_slug
     # Patch the project

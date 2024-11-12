@@ -6,10 +6,13 @@ from dataclasses import dataclass, field
 from enum import Enum
 from io import StringIO
 from typing import Any, ClassVar, Optional, Self, Union
+from urllib.parse import urlunparse
 
 import yaml
 
 from ..api.schemas.config_server_options import ServerOptionsChoices, ServerOptionsDefaults
+
+latest_version: str = "1.25.3"
 
 
 def _parse_str_as_bool(val: Union[str, bool]) -> bool:
@@ -97,11 +100,11 @@ class _GitConfig:
 
 @dataclass
 class _GitProxyConfig:
-    sentry: _SentryConfig
     renku_client_secret: str = field(repr=False)
+    sentry: _SentryConfig = field(default_factory=_SentryConfig.from_env)
     port: int = 8080
     health_port: int = 8081
-    image: str = "renku/git-https-proxy:latest"
+    image: str = f"renku/git-https-proxy:{latest_version}"
     renku_client_id: str = "renku"
 
     @classmethod
@@ -112,16 +115,16 @@ class _GitProxyConfig:
             sentry=_SentryConfig.from_env(prefix="NB_SESSIONS__GIT_PROXY__"),
             port=_parse_value_as_int(os.environ.get("NB_SESSIONS__GIT_PROXY__PORT", 8080)),
             health_port=_parse_value_as_int(os.environ.get("NB_SESSIONS__GIT_PROXY__HEALTH_PORT", 8081)),
-            image=os.environ.get("NB_SESSIONS__GIT_PROXY__IMAGE", "renku/git-https-proxy:latest"),
+            image=os.environ.get("NB_SESSIONS__GIT_PROXY__IMAGE", f"renku/git-https-proxy:{latest_version}"),
         )
 
 
 @dataclass
 class _GitRpcServerConfig:
-    sentry: _SentryConfig
+    sentry: _SentryConfig = field(default_factory=_SentryConfig.from_env)
     host: str = "0.0.0.0"  # nosec B104
     port: int = 4000
-    image: str = "renku/git-rpc-server:latest"
+    image: str = f"renku/git-rpc-server:{latest_version}"
 
     def __post_init__(self) -> None:
         self.port = _parse_value_as_int(self.port)
@@ -129,7 +132,7 @@ class _GitRpcServerConfig:
     @classmethod
     def from_env(cls) -> Self:
         return cls(
-            image=os.environ.get("NB_SESSIONS__GIT_RPC_SERVER__IMAGE", "renku/git-rpc-server:latest"),
+            image=os.environ.get("NB_SESSIONS__GIT_RPC_SERVER__IMAGE", f"renku/git-rpc-server:{latest_version}"),
             host=os.environ.get("NB_SESSIONS__GIT_RPC_SERVER__HOST", "0.0.0.0"),  # nosec B104
             port=_parse_value_as_int(os.environ.get("NB_SESSIONS__GIT_RPC_SERVER__PORT", 4000)),
             sentry=_SentryConfig.from_env(prefix="NB_SESSIONS__GIT_RPC_SERVER__"),
@@ -138,13 +141,13 @@ class _GitRpcServerConfig:
 
 @dataclass
 class _GitCloneConfig:
-    image: str = "renku/git-clone:latest"
+    image: str = f"renku/git-clone:{latest_version}"
     sentry: _SentryConfig = field(default_factory=lambda: _SentryConfig(enabled=False))
 
     @classmethod
     def from_env(cls) -> Self:
         return cls(
-            image=os.environ.get("NB_SESSIONS__GIT_CLONE__IMAGE", "renku/git-rpc-server:latest"),
+            image=os.environ.get("NB_SESSIONS__GIT_CLONE__IMAGE", f"renku/git-clone:{latest_version}"),
             sentry=_SentryConfig.from_env(prefix="NB_SESSIONS__GIT_CLONE__"),
         )
 
@@ -171,9 +174,9 @@ class _SessionOidcConfig:
     client_secret: str = field(repr=False)
     token_url: str
     auth_url: str
+    issuer_url: str
     client_id: str = "renku-jupyterserver"
     allow_unverified_email: Union[str, bool] = False
-    config_url: str = "/auth/realms/Renku/.well-known/openid-configuration"
 
     def __post_init__(self) -> None:
         self.allow_unverified_email = _parse_str_as_bool(self.allow_unverified_email)
@@ -188,9 +191,7 @@ class _SessionOidcConfig:
                 os.environ.get("NB_SESSIONS__OIDC__ALLOW_UNVERIFIED_EMAIL", False)
             ),
             client_id=os.environ.get("NB_SESSIONS__OIDC__CLIENT_ID", "renku-jupyterserver"),
-            config_url=os.environ.get(
-                "NB_SESSIONS__OIDC__CONFIG_URL", "/auth/realms/Renku/.well-known/openid-configuration"
-            ),
+            issuer_url=os.environ["NB_SESSIONS__OIDC__ISSUER_URL"],
         )
 
 
@@ -203,7 +204,7 @@ class _CustomCaCertsConfig:
     @classmethod
     def from_env(cls) -> Self:
         return cls(
-            image=os.environ.get("NB_SESSIONS__CA_CERTS__IMAGE", "renku-jupyterserver"),
+            image=os.environ.get("NB_SESSIONS__CA_CERTS__IMAGE", "renku/certificates:0.0.2"),
             path=os.environ.get("NB_SESSIONS__CA_CERTS__PATH", "/auth/realms/Renku/.well-known/openid-configuration"),
             secrets=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__CA_CERTS__SECRETS", "[]"))),
         )
@@ -227,6 +228,23 @@ class _AmaltheaConfig:
 
 
 @dataclass
+class _AmaltheaV2Config:
+    cache_url: str
+    group: str = "amalthea.dev"
+    version: str = "v1alpha1"
+    plural: str = "amaltheasessions"
+
+    @classmethod
+    def from_env(cls) -> Self:
+        return cls(
+            cache_url=os.environ["NB_AMALTHEA_V2__CACHE_URL"],
+            group=os.environ.get("NB_AMALTHEA_V2__GROUP", "amalthea.dev"),
+            version=os.environ.get("NB_AMALTHEA_V2__VERSION", "v1alpha1"),
+            plural=os.environ.get("NB_AMALTHEA_V2__PLURAL", "amaltheasessions"),
+        )
+
+
+@dataclass
 class _SessionIngress:
     host: str
     tls_secret: Optional[str] = None
@@ -239,6 +257,13 @@ class _SessionIngress:
             tls_secret=os.environ.get("NB_SESSIONS__INGRESS__TLS_SECRET", None),
             annotations=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__INGRESS__ANNOTATIONS", "{}"))),
         )
+
+    def base_path(self, server_name: str) -> str:
+        return f"/sessions/{server_name}"
+
+    def base_url(self, server_name: str) -> str:
+        scheme = "https" if self.tls_secret else "http"
+        return urlunparse((scheme, self.host, self.base_path(server_name), None, None, None))
 
 
 @dataclass
@@ -380,6 +405,34 @@ class _SessionConfig:
             storage=_SessionStorageConfig.from_env(),
             containers=_SessionContainers.from_env(),
             ssh=_SessionSshConfig.from_env(),
+            default_image=os.environ.get("NB_SESSIONS__DEFAULT_IMAGE", "renku/singleuser:latest"),
+            enforce_cpu_limits=CPUEnforcement(os.environ.get("NB_SESSIONS__ENFORCE_CPU_LIMITS", "off")),
+            termination_warning_duration_seconds=_parse_value_as_int(os.environ.get("", 12 * 60 * 60)),
+            image_default_workdir="/home/jovyan",
+            node_selector=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__NODE_SELECTOR", "{}"))),
+            affinity=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__AFFINITY", "{}"))),
+            tolerations=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__TOLERATIONS", "[]"))),
+        )
+
+    @classmethod
+    def _for_testing(cls) -> Self:
+        return cls(
+            culling=_SessionCullingConfig.from_env(),
+            git_proxy=_GitProxyConfig(renku_client_secret="not-defined"),  # nosec B106
+            git_rpc_server=_GitRpcServerConfig.from_env(),
+            git_clone=_GitCloneConfig.from_env(),
+            ingress=_SessionIngress(host="localhost"),
+            ca_certs=_CustomCaCertsConfig.from_env(),
+            oidc=_SessionOidcConfig(
+                client_id="not-defined",
+                client_secret="not-defined",  # nosec B106
+                token_url="http://not.defined",
+                auth_url="http://not.defined",
+                issuer_url="http://not.defined",
+            ),
+            storage=_SessionStorageConfig.from_env(),
+            containers=_SessionContainers.from_env(),
+            ssh=_SessionSshConfig.from_env(),
             default_image=os.environ.get("", "renku/singleuser:latest"),
             enforce_cpu_limits=CPUEnforcement(os.environ.get("", "off")),
             termination_warning_duration_seconds=_parse_value_as_int(os.environ.get("", 12 * 60 * 60)),
@@ -394,15 +447,11 @@ class _SessionConfig:
 class _K8sConfig:
     """Defines the k8s client and namespace."""
 
-    renku_namespace: str
-    sessions_namespace: Optional[str] = None
+    renku_namespace: str = "default"
 
     @classmethod
     def from_env(cls) -> Self:
-        return cls(
-            renku_namespace=os.environ["KUBERNETES_NAMESPACE"],
-            sessions_namespace=os.environ.get("SESSIONS_NAMESPACE"),
-        )
+        return cls(renku_namespace=os.environ.get("KUBERNETES_NAMESPACE", "default"))
 
 
 @dataclass
@@ -449,7 +498,7 @@ class _CloudStorage:
 
 @dataclass
 class _UserSecrets:
-    image: str = "renku/secrets_mount:latest"
+    image: str = f"renku/secrets_mount:{latest_version}"
     secrets_storage_service_url: str = "http://renku-secrets-storage"
 
     def __post_init__(self) -> None:
@@ -458,7 +507,7 @@ class _UserSecrets:
     @classmethod
     def from_env(cls) -> Self:
         return cls(
-            image=os.environ.get("NB_USER_SECRETS__IMAGE", "renku/secrets_mount:latest"),
+            image=os.environ.get("NB_USER_SECRETS__IMAGE", f"renku/secrets_mount:{latest_version}"),
             secrets_storage_service_url=os.environ.get(
                 "NB_USER_SECRETS__SECRETS_STORAGE_SERVICE_URL", "http://renku-secrets-storage"
             ),

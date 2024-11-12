@@ -42,6 +42,11 @@ class K8sCoreClientInterface(ABC):
         """Create a secret."""
         ...
 
+    @abstractmethod
+    def patch_namespaced_secret(self, name: Any, namespace: Any, body: Any, **kwargs: Any) -> Any:
+        """Patch an existing secret."""
+        ...
+
 
 class K8sSchedudlingClientInterface(ABC):
     """Defines what functionality is required for the scheduling k8s client."""

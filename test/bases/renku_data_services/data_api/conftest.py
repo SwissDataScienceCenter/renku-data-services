@@ -291,7 +291,18 @@ _valid_resource_pool_payload: dict[str, Any] = {
             "default": True,
             "node_affinities": [],
             "tolerations": [],
-        }
+        },
+        {
+            "cpu": 2.0,
+            "memory": 20,
+            "gpu": 0,
+            "name": "test-class-name",
+            "max_storage": 200,
+            "default_storage": 2,
+            "default": False,
+            "node_affinities": [],
+            "tolerations": [],
+        },
     ],
     "quota": {"cpu": 100, "memory": 100, "gpu": 0},
     "default": False,
@@ -317,3 +328,12 @@ async def secrets_sanic_client(secrets_storage_app_config: SecretsConfig, users:
     app = register_secrets_handlers(app, secrets_storage_app_config)
     async with SanicReusableASGITestClient(app) as client:
         yield client
+
+
+def pytest_addoption(parser):
+    parser.addoption("--disable-cluster-creation", action="store_true", default=False, help="Disable cluster creation")
+
+
+@pytest.fixture(scope="session")
+def disable_cluster_creation(request):
+    return request.config.getoption("--disable-cluster-creation")
