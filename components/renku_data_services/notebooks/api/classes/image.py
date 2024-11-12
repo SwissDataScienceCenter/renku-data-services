@@ -103,10 +103,16 @@ class ImageRepoDockerAPI:
 
             manifest = next(filter(platform_matches, index_parsed.get("manifests", [])), None)
             image_digest: str | None = manifest.get("digest") if manifest else None
-            if not image_digest:
+            if not manifest or not image_digest:
                 return None
             image_digest_url = f"https://{image.hostname}/v2/{image.name}/manifests/{image_digest}"
+            media_type = manifest.get("mediaType")
             headers["Accept"] = ManifestTypes.docker_v2.value
+            if media_type in [
+                ManifestTypes.docker_v2.value,
+                ManifestTypes.oci_v1_manifest.value,
+            ]:
+                headers["Accept"] = media_type
             res = await self.client.get(image_digest_url, headers=headers)
             if res.status_code != 200:
                 headers["Accept"] = ManifestTypes.oci_v1_manifest.value
