@@ -6,7 +6,7 @@
 	"workspaceFolder": "/workspace",
 	"shutdownAction": "stopCompose",
 	"features": {
-		"ghcr.io/devcontainers-contrib/features/poetry:2": {},
+		"ghcr.io/devcontainers-extra/features/poetry:2": {},
 		"ghcr.io/devcontainers-contrib/features/bash-command:1": {
 			"command": "poetry self add poetry-polylith-plugin"
 		},
@@ -31,7 +31,7 @@
 		"./k3d": {}
 	},
 	"overrideFeatureInstallOrder": [
-		"ghcr.io/devcontainers-contrib/features/poetry",
+		"ghcr.io/devcontainers-extra/features/poetry",
 		"ghcr.io/devcontainers-contrib/features/bash-command"
 	],
 	"postCreateCommand": "poetry install --with dev && mkdir -p /home/vscode/.config/k9s",

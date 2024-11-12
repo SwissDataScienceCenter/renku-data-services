@@ -9,7 +9,7 @@ from kubernetes.client import ApiClient
 from renku_data_services.errors.errors import CannotStartBuildError, DeleteBuildError
 from renku_data_services.notebooks.errors.intermittent import IntermittentError
 from renku_data_services.notebooks.util.retries import retry_with_exponential_backoff_async
-from renku_data_services.session.crs import KpackBuild, KpackImage
+from renku_data_services.session.kpack_crs import Build, Image
 
 
 class KpackImageV1Alpha2Kr8s(APIObject):
@@ -43,7 +43,7 @@ class KpackClient:
         self.namespace = namespace
         self.sanitize = ApiClient().sanitize_for_serialization
 
-    async def create_build(self, manifest: KpackBuild) -> KpackBuild:
+    async def create_build(self, manifest: Build) -> Build:
         """Create a new image build."""
         manifest.metadata.namespace = self.namespace
         build = await KpackBuildV1Alpha2Kr8s(manifest.model_dump(exclude_none=True, mode="json"))
@@ -59,33 +59,29 @@ class KpackClient:
             raise CannotStartBuildError(message=f"Cannot create the image build {build_name}")
         return build_resource
 
-    async def get_build(self, name: str) -> KpackBuild | None:
+    async def get_build(self, name: str) -> Build | None:
         """Get an image build."""
         try:
             build = await KpackBuildV1Alpha2Kr8s.get(name=name, namespace=self.namespace)
         except NotFoundError:
             return None
         except ServerError as e:
-            if e.status not in [400, 404]:
+            if not e.response or e.response.status_code not in [400, 404]:
                 logging.exception(f"Cannot get the build {name} because of {e}")
                 raise IntermittentError(f"Cannot get build {name} from the k8s API.")
             return None
-        return KpackBuild.model_validate(build.to_dict())
+        return Build.model_validate(build.to_dict())
 
-    async def list_builds(self, label_selector: str | None = None) -> list[KpackBuild]:
+    async def list_builds(self, label_selector: str | None = None) -> list[Build]:
         """Get a list of kpack builds."""
         try:
             builds = await KpackBuildV1Alpha2Kr8s.list(namespace=self.namespace, label_selector=label_selector)
         except ServerError as e:
-            if e.status not in [400, 404]:
+            if not e.response or e.response.status_code not in [400, 404]:
                 logging.exception(f"Cannot list builds because of {e}")
                 raise IntermittentError("Cannot list builds")
             return []
-        output: list[KpackBuild]
-        if isinstance(builds, APIObject):
-            output = [KpackBuild.model_validate(builds.to_dict())]
-        else:
-            output = [KpackBuild.model_validate(b.to_dict()) for b in builds]
+        output = [Build.model_validate(b.to_dict()) for b in builds]
         return output
 
     async def delete_build(self, name: str) -> None:
@@ -98,7 +94,7 @@ class KpackClient:
             raise DeleteBuildError()
         return None
 
-    async def create_image(self, manifest: KpackImage) -> KpackImage:
+    async def create_image(self, manifest: Image) -> Image:
         """Create a new image image."""
         manifest.metadata.namespace = self.namespace
         image = await KpackImageV1Alpha2Kr8s(manifest.model_dump(exclude_none=True, mode="json"))
@@ -114,33 +110,29 @@ class KpackClient:
             raise CannotStartBuildError(message=f"Cannot create the kpack image {image_name}")
         return image_resource
 
-    async def get_image(self, name: str) -> KpackImage | None:
+    async def get_image(self, name: str) -> Image | None:
         """Get an image image."""
         try:
             image = await KpackImageV1Alpha2Kr8s.get(name=name, namespace=self.namespace)
         except NotFoundError:
             return None
         except ServerError as e:
-            if e.status not in [400, 404]:
+            if not e.response or e.response.status_code not in [400, 404]:
                 logging.exception(f"Cannot get the image {name} because of {e}")
                 raise IntermittentError(f"Cannot get image {name} from the k8s API.")
             return None
-        return KpackImage.model_validate(image.to_dict())
+        return Image.model_validate(image.to_dict())
 
-    async def list_images(self, label_selector: str | None = None) -> list[KpackImage]:
+    async def list_images(self, label_selector: str | None = None) -> list[Image]:
         """Get a list of kpack images."""
         try:
             images = await KpackImageV1Alpha2Kr8s.list(namespace=self.namespace, label_selector=label_selector)
         except ServerError as e:
-            if e.status not in [400, 404]:
+            if not e.response or e.response.status_code not in [400, 404]:
                 logging.exception(f"Cannot list images because of {e}")
                 raise IntermittentError("Cannot list images")
             return []
-        output: list[KpackImage]
-        if isinstance(images, APIObject):
-            output = [KpackImage.model_validate(images.to_dict())]
-        else:
-            output = [KpackImage.model_validate(b.to_dict()) for b in images]
+        output = [Image.model_validate(b.to_dict()) for b in images]
         return output
 
     async def delete_image(self, name: str) -> None:
