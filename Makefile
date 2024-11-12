@@ -142,6 +142,7 @@ help:  ## Display this help.
 
 .PHONY: k3d_cluster
 k3d_cluster:  ## Creates a k3d cluster for testing
+	k3d node delete k3d-myregistry.localhost
 	k3d cluster delete
 	# k3d registry delete myregistry.localhost || true
 	# k3d registry create myregistry.localhost
@@ -153,6 +154,8 @@ install_amaltheas:  ## Installs both version of amalthea in the. NOTE: It uses t
 	helm repo update
 	helm upgrade --install amalthea-js renku/amalthea --version $(AMALTHEA_JS_VERSION)
 	helm upgrade --install amalthea-se renku/amalthea-sessions --version ${AMALTHEA_SESSIONS_VERSION}
+
+.PHONY: install_kpack
 install_kpack:
 	curl -L https://github.com/buildpacks-community/kpack/releases/download/v0.15.0/release-0.15.0.yaml | kubectl apply -f -
 	kubectl apply -f .devcontainer/kpack/clusterstore.yaml
