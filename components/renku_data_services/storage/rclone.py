@@ -4,6 +4,7 @@ import asyncio
 import json
 import tempfile
 from collections.abc import Generator
+from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple, Union, cast
 
@@ -54,7 +55,7 @@ class RCloneValidator:
                 provider_schema = RCloneProviderSchema.model_validate(provider_config)
                 self.providers[provider_schema.prefix] = provider_schema
             except ValidationError:
-                logger.error("Couldn't load RClone config: %s", provider_config)
+                logger.error("🚀 Couldn't load RClone config: %s", provider_config)
                 raise
 
     @staticmethod
@@ -156,6 +157,102 @@ class RCloneValidator:
                         options.append(option)
                 storage["Options"] = options
 
+    @staticmethod
+    def __find_webdav_storage(spec: list[dict[str, Any]]) -> dict[str, Any]:
+        """Find and return the WebDAV storage schema from the spec."""
+        webdav_storage = next((s for s in spec if s["Prefix"] == "webdav"), None)
+        if not webdav_storage:
+            raise errors.ValidationError(message="WebDAV storage not found in schema.")
+        return deepcopy(webdav_storage)
+
+    @staticmethod
+    def __add_webdav_based_storage(
+        spec: list[dict[str, Any]],
+        prefix: str,
+        name: str,
+        description: str,
+        url_value: str,
+        public_link_help: str,
+    ) -> None:
+        """Create a modified copy of WebDAV storage and add it to the schema."""
+        # Find WebDAV storage schema and create a modified copy
+        storage_copy = RCloneValidator.__find_webdav_storage(spec)
+        storage_copy.update({"Prefix": prefix, "Name": name, "Description": description})
+
+        # Define new custom options and append them
+        custom_options = [
+            {
+                "Name": "access_level",
+                "Help": "Choose the mode to access the data source.",
+                "Provider": "",
+                "AccessLevel": None,
+                "Default": "",
+                "Value": None,
+                "Examples": [
+                    {"Value": "Private", "Help": "Use Private to connect a folder that only you use", "Provider": ""},
+                    {
+                        "Value": "Public",
+                        "Help": "To connect a folder you share with others, both privately & publicly shared folders.",
+                        "Provider": "",
+                    },
+                ],
+                "Required": True,
+                "Type": "string",
+                "ShortOpt": "",
+                "Hide": 0,
+                "IsPassword": False,
+                "NoPrefix": False,
+                "Advanced": False,
+                "Exclusive": False,
+                "Sensitive": False,
+                "DefaultStr": "",
+                "ValueStr": "",
+            },
+            {
+                "Name": "publicLink",
+                "Help": public_link_help,
+                "Provider": "",
+                "AccessLevel": "Public",
+                "Default": "",
+                "Value": None,
+                "Examples": None,
+                "ShortOpt": "",
+                "Hide": 0,
+                "Required": True,
+                "IsPassword": False,
+                "NoPrefix": False,
+                "Advanced": False,
+                "Exclusive": False,
+                "Sensitive": False,
+                "DefaultStr": "",
+                "ValueStr": "",
+                "Type": "string",
+            },
+        ]
+        storage_copy["Options"].extend(custom_options)
+
+        # Modify existing options
+        for option in storage_copy["Options"]:
+            if option["Name"] == "url":
+                option.update({"AccessLevel": "Private", "Value": url_value})
+            elif option["Name"] == "user":
+                option.update({"Help": "", "AccessLevel": "Private"})
+            elif option["Name"] == "pass":
+                option["Examples"] = [
+                    {"Value": "", "Help": "", "AccessLevel": "Private", "Provider": ""},
+                    {"Value": "", "Help": "", "AccessLevel": "Public", "Provider": ""},
+                ]
+            elif option["Name"] in ["bearer_token", "bearer_token_command"]:
+                option["AccessLevel"] = "Private"
+
+        # Remove unwanted options
+        storage_copy["Options"] = [
+            o for o in storage_copy["Options"] if o["Name"] not in ["vendor", "nextcloud_chunk_size"]
+        ]
+
+        # Append the customized storage configuration to the spec
+        spec.append(storage_copy)
+
     def apply_patches(self, spec: list[dict[str, Any]]) -> None:
         """Apply patches to RClone schema."""
         patches = [
@@ -166,6 +263,25 @@ class RCloneValidator:
 
         for patch in patches:
             patch(spec)
+
+        # Apply patches for PolyBox and SwitchDrive to the schema.
+        self.__add_webdav_based_storage(
+            spec,
+            prefix="polybox",
+            name="PolyBox",
+            description="Polybox",
+            url_value="https://polybox.ethz.ch/remote.php/webdav/",
+            public_link_help="Shared folder link. E.g., https://polybox.ethz.ch/index.php/s/8NffJ3rFyHaVjgR",
+        )
+
+        self.__add_webdav_based_storage(
+            spec,
+            prefix="switchDrive",
+            name="SwitchDrive",
+            description="SwitchDrive",
+            url_value="https://drive.switch.ch/public.php/webdav/",
+            public_link_help="Shared folder link. E.g., https://drive.switch.ch/index.php/s/OPSd72zrs5JGCv6",
+        )
 
     def validate(self, configuration: Union["RCloneConfig", dict[str, Any]], keep_sensitive: bool = False) -> None:
         """Validates an RClone config."""
@@ -263,6 +379,7 @@ class RCloneExample(BaseModel):
     value: str = Field(alias="Value")
     help: str = Field(alias="Help")
     provider: str = Field(alias="Provider")
+    access_level: str | None = Field(alias="AccessLevel", default=None)
 
 
 class RCloneOption(BaseModel):
@@ -271,6 +388,7 @@ class RCloneOption(BaseModel):
     name: str = Field(alias="Name")
     help: str = Field(alias="Help")
     provider: str = Field(alias="Provider")
+    access_level: str | None = Field(alias="AccessLevel", default=None)
     default: str | int | bool | list[str] | RCloneTriState | None = Field(alias="Default")
     value: str | int | bool | RCloneTriState | None = Field(alias="Value")
     examples: list[RCloneExample] | None = Field(default=None, alias="Examples")
