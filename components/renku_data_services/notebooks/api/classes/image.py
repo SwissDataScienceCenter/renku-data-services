@@ -17,8 +17,13 @@ class ManifestTypes(Enum):
     """The mime types for docker image manifests."""
 
     docker_v2: str = "application/vnd.docker.distribution.manifest.v2+json"
+    docker_v2_list: str = "application/vnd.docker.distribution.manifest.list.v2+json"
     oci_v1_manifest: str = "application/vnd.oci.image.manifest.v1+json"
     oci_v1_index: str = "application/vnd.oci.image.index.v1+json"
+
+
+DEFAULT_PLATFORM_ARCHITECTURE = "amd64"
+DEFAULT_PLATFORM_OS = "linux"
 
 
 @dataclass
@@ -62,7 +67,12 @@ class ImageRepoDockerAPI:
         token_req = await self.client.get(realm, params=params, headers=headers)
         return str(token_req.json().get("token"))
 
-    async def get_image_manifest(self, image: "Image") -> Optional[dict[str, Any]]:
+    async def get_image_manifest(
+        self,
+        image: "Image",
+        platform_architecture: str = DEFAULT_PLATFORM_ARCHITECTURE,
+        platform_os: str = DEFAULT_PLATFORM_OS,
+    ) -> Optional[dict[str, Any]]:
         """Query the docker API to get the manifest of an image."""
         if image.hostname != self.hostname:
             raise errors.ValidationError(
@@ -70,26 +80,47 @@ class ImageRepoDockerAPI:
             )
         token = await self._get_docker_token(image)
         image_digest_url = f"https://{image.hostname}/v2/{image.name}/manifests/{image.tag}"
+        print(image_digest_url)
         headers = {"Accept": ManifestTypes.docker_v2.value}
         if token:
             headers["Authorization"] = f"Bearer {token}"
         res = await self.client.get(image_digest_url, headers=headers)
+
         if res.status_code != 200:
             headers["Accept"] = ManifestTypes.oci_v1_manifest.value
             res = await self.client.get(image_digest_url, headers=headers)
         if res.status_code != 200:
             headers["Accept"] = ManifestTypes.oci_v1_index.value
             res = await self.client.get(image_digest_url, headers=headers)
-            if res.status_code == 200:
-                index_parsed = res.json()
-                manifest = next(
-                    (man for man in index_parsed.get("manifests", []) if man.get("platform", {}).get("os") == "linux"),
-                    None,
-                )
-                manifest = cast(dict[str, Any] | None, manifest)
-                return manifest
         if res.status_code != 200:
             return None
+
+        content_type = res.headers.get("Content-Type")
+        if content_type in [ManifestTypes.docker_v2_list.value, ManifestTypes.oci_v1_index.value]:
+            index_parsed = res.json()
+
+            def platform_matches(manifest: dict[str, Any]) -> bool:
+                platform: dict[str, Any] = manifest.get("platform", {})
+                return platform.get("architecture") == platform_architecture and platform.get("os") == platform_os
+
+            manifest = next(filter(platform_matches, index_parsed.get("manifests", [])), None)
+            image_digest: str | None = manifest.get("digest") if manifest else None
+            if not image_digest:
+                return None
+            image_digest_url = f"https://{image.hostname}/v2/{image.name}/manifests/{image_digest}"
+            headers["Accept"] = ManifestTypes.docker_v2.value
+            res = await self.client.get(image_digest_url, headers=headers)
+            if res.status_code != 200:
+                headers["Accept"] = ManifestTypes.oci_v1_manifest.value
+                res = await self.client.get(image_digest_url, headers=headers)
+            if res.status_code != 200:
+                return None
+            if res.headers.get("Content-Type") not in [
+                ManifestTypes.docker_v2.value,
+                ManifestTypes.oci_v1_manifest.value,
+            ]:
+                return None
+
         return cast(dict[str, Any], res.json())
 
     async def image_exists(self, image: "Image") -> bool:
