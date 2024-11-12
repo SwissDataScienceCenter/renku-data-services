@@ -198,6 +198,7 @@ async def test_public_image_check(image: str, exists_expected: bool) -> None:
 @pytest.mark.parametrize(
     "image,expected_path",
     [
+        ("jupyter/minimal-notebook", PurePosixPath("/home/jovyan")),
         ("jupyter/minimal-notebook:x86_64-python-3.11.6", PurePosixPath("/home/jovyan")),
         ("nginx", PurePosixPath("/")),
         ("nginx@sha256:367678a80c0be120f67f3adfccc2f408bd2c1319ed98c1975ac88e750d0efe26", PurePosixPath("/")),
