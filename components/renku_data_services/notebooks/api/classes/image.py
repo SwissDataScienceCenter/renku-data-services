@@ -80,12 +80,10 @@ class ImageRepoDockerAPI:
             )
         token = await self._get_docker_token(image)
         image_digest_url = f"https://{image.hostname}/v2/{image.name}/manifests/{image.tag}"
-        print(image_digest_url)
         headers = {"Accept": ManifestTypes.docker_v2.value}
         if token:
             headers["Authorization"] = f"Bearer {token}"
         res = await self.client.get(image_digest_url, headers=headers)
-
         if res.status_code != 200:
             headers["Accept"] = ManifestTypes.oci_v1_manifest.value
             res = await self.client.get(image_digest_url, headers=headers)
