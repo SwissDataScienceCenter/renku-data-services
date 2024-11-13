@@ -354,7 +354,7 @@ class ProjectSessionSecretBP(CustomBlueprint):
             )
             return validated_json(apispec.SessionSecretSlot, secret_slot, status=201)
 
-        return "/session_launcher_secret_slots", ["POST"], _post_session_secret_slot
+        return "/session_secret_slots", ["POST"], _post_session_secret_slot
 
     def get_session_secret_slot(self) -> BlueprintFactoryResponse:
         """Get the details of a session secret slot."""
