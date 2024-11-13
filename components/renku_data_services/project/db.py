@@ -465,11 +465,9 @@ class ProjectSessionSecretRepository:
         self,
         session_maker: Callable[..., AsyncSession],
         authz: Authz,
-        #   session_repo: SessionRepository
     ) -> None:
         self.session_maker = session_maker
         self.authz = authz
-        # self.session_repo = session_repo
 
     async def get_all_session_secret_slots_from_project(
         self,
