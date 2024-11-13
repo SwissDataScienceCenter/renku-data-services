@@ -77,9 +77,9 @@ from renku_data_services.notebooks.utils import (
     node_affinity_from_resource_class,
     tolerations_from_resource_class,
 )
-from renku_data_services.project.db import ProjectRepository
+from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
-from renku_data_services.session.db import SessionRepository, SessionSecretRepository
+from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository
 
 
@@ -256,8 +256,9 @@ class NotebooksNewBP(CustomBlueprint):
     internal_gitlab_authenticator: base_models.Authenticator
     nb_config: NotebooksConfig
     project_repo: ProjectRepository
+    project_session_secret_repo: ProjectSessionSecretRepository
     session_repo: SessionRepository
-    session_secret_repo: SessionSecretRepository
+    # session_secret_repo: SessionSecretRepository
     rp_repo: ResourcePoolRepository
     storage_repo: StorageRepository
     data_connector_repo: DataConnectorRepository
@@ -301,8 +302,8 @@ class NotebooksNewBP(CustomBlueprint):
             # TODO: Wait for pitch on users secrets to implement this
             # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
             secrets_to_create: list[V1Secret] = []
-            session_secrets = await self.session_secret_repo.get_all_session_launcher_secrets_from_sesion_launcher(
-                user=user, session_launcher_id=launcher.id
+            session_secrets = await self.project_session_secret_repo.get_all_session_secrets_from_project(
+                user=user, project_id=project.id
             )
             # secrets_to_create.append(
             #     V1Secret(

@@ -13,7 +13,9 @@ from renku_data_services.notebooks.api.amalthea_patches.utils import get_certifi
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.notebooks.crs import EmptyDir, ExtraVolume, ExtraVolumeMount, InitContainer, SecretAsVolume
-from renku_data_services.session.models import SessionLauncherSecret
+
+# from renku_data_services.session.models import SessionLauncherSecret
+from renku_data_services.project.models import SessionSecret
 
 if TYPE_CHECKING:
     # NOTE: If these are directly imported then you get circular imports.
@@ -399,7 +401,7 @@ def user_secrets_container(
     user: AuthenticatedAPIUser | AnonymousAPIUser,
     config: NotebooksConfig,
     k8s_secret_name: str,
-    session_secrets: list[SessionLauncherSecret],
+    session_secrets: list[SessionSecret],
 ) -> tuple[InitContainer, list[ExtraVolume], list[ExtraVolumeMount]] | None:
     """The init container which decrypts user secrets to be mounted in the session."""
     if not session_secrets or user.is_anonymous:
