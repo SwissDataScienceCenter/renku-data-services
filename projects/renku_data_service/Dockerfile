@@ -1,11 +1,20 @@
 FROM python:3.12-bookworm as builder
 ARG DEV_BUILD=false
 ARG USER_UID=1000
+ARG RCLONE_VERSION=v1.65.2
+ARG RCLONE_ARCH=amd64
+ARG RCLONE_OS=linux
 ARG USER_GID=$USER_UID
 
 RUN groupadd --gid $USER_GID renku && \
     DEBIAN_FRONTEND=noninteractive adduser --gid $USER_GID --uid $USER_UID renku
-RUN curl -fsSL https://rclone.org/install.sh| bash
+RUN cd /tmp \
+    && wget -q https://downloads.rclone.org/${RCLONE_VERSION}/rclone-${RCLONE_VERSION}-${RCLONE_OS}-${RCLONE_ARCH}.zip \
+    && unzip /tmp/rclone-${RCLONE_VERSION}-${RCLONE_OS}-${RCLONE_ARCH}.zip \
+    && mv /tmp/rclone-${RCLONE_VERSION}-${RCLONE_OS}-${RCLONE_ARCH}/rclone /usr/bin \
+    && chmod 755 /usr/bin/rclone \
+    && chown root:root /usr/bin/rclone \
+    && rm -r /tmp/rclone*
 USER $USER_UID:$USER_GID
 WORKDIR /app
 RUN python3 -m pip install --user pipx && \
