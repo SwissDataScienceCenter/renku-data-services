@@ -48,6 +48,36 @@ def validate_session_secret_slot_patch(
     )
 
 
+def validate_session_secrets_patch(
+    body: apispec.SessionSecretPatchList,
+) -> list[models.SessionSecretPatchExistingSecret | models.SessionSecretPatchSecretValue]:
+    """Validate the update to a session launcher's secrets."""
+    result: list[models.SessionSecretPatchExistingSecret | models.SessionSecretPatchSecretValue] = []
+    seen_slot_ids: set[str] = set()
+    for item in body.root:
+        if item.secret_slot_id in seen_slot_ids:
+            raise errors.ValidationError(
+                message=f"Found duplicate secret_slot_id '{item.secret_slot_id}' in the list of secrets."
+            )
+        seen_slot_ids.add(item.secret_slot_id)
+
+        if isinstance(item, apispec.SessionSecretPatch2):
+            result.append(
+                models.SessionSecretPatchExistingSecret(
+                    secret_slot_id=ULID.from_str(item.secret_slot_id),
+                    secret_id=ULID.from_str(item.secret_id),
+                )
+            )
+        else:
+            result.append(
+                models.SessionSecretPatchSecretValue(
+                    secret_slot_id=ULID.from_str(item.secret_slot_id),
+                    value=item.value,
+                )
+            )
+    return result
+
+
 def _validate_session_launcher_secret_slot_filename(filename: str) -> None:
     """Validate the filename field of a secret slot."""
     filename_candidate = PurePosixPath(filename)
