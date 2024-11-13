@@ -101,7 +101,7 @@ class ImageRepoDockerAPI:
                 platform: dict[str, Any] = manifest.get("platform", {})
                 return platform.get("architecture") == platform_architecture and platform.get("os") == platform_os
 
-            manifest = next(filter(platform_matches, index_parsed.get("manifests", [])), {})
+            manifest: dict[str, Any] = next(filter(platform_matches, index_parsed.get("manifests", [])), {})
             image_digest: str | None = manifest.get("digest")
             if not manifest or not image_digest:
                 return None
