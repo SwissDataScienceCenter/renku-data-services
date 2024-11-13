@@ -20,7 +20,7 @@ from renku_data_services.message_queue.blueprints import MessageQueueBP
 from renku_data_services.namespace.blueprints import GroupsBP
 from renku_data_services.notebooks.blueprints import NotebooksBP, NotebooksNewBP
 from renku_data_services.platform.blueprints import PlatformConfigBP
-from renku_data_services.project.blueprints import ProjectsBP
+from renku_data_services.project.blueprints import ProjectsBP, ProjectSessionSecretBP
 from renku_data_services.repositories.blueprints import RepositoriesBP
 from renku_data_services.session.blueprints import EnvironmentsBP, SessionLaunchersBP
 from renku_data_services.storage.blueprints import StorageBP, StorageSchemaBP
@@ -92,6 +92,12 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         project_member_repo=config.project_member_repo,
         authenticator=config.authenticator,
         user_repo=config.kc_user_repo,
+    )
+    project_session_secrets = ProjectSessionSecretBP(
+        name="project_session_secrets",
+        url_prefix=url_prefix,
+        project_session_secret_repo=config.project_session_secret_repo,
+        authenticator=config.authenticator,
     )
     group = GroupsBP(
         name="groups",
@@ -193,6 +199,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
             user_preferences.blueprint(),
             misc.blueprint(),
             project.blueprint(),
+            project_session_secrets.blueprint(),
             group.blueprint(),
             session_environments.blueprint(),
             session_launchers.blueprint(),
