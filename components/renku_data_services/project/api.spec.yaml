@@ -346,6 +346,8 @@ components:
           $ref: "#/components/schemas/ETag"
         keywords:
           $ref: "#/components/schemas/KeywordsList"
+        documentation:
+          $ref: "#/components/schemas/ProjectDocumentation"
       required:
         - "id"
         - "name"

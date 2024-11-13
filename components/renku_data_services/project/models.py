@@ -61,6 +61,7 @@ class ProjectPatch:
     repositories: list[Repository] | None
     description: str | None
     keywords: list[str] | None
+    documentation: str | None
 
 
 @dataclass

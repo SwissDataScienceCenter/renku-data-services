@@ -290,6 +290,8 @@ class ProjectRepository:
             project.description = patch.description if patch.description else None
         if patch.keywords is not None:
             project.keywords = patch.keywords if patch.keywords else None
+        if patch.documentation is not None:
+            project.documentation = patch.documentation
 
         await session.flush()
         await session.refresh(project)
