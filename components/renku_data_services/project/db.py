@@ -7,6 +7,7 @@ from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Concatenate, ParamSpec, TypeVar
 
+from cryptography.hazmat.primitives.asymmetric import rsa
 from sqlalchemy import Select, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.functions import coalesce
@@ -27,7 +28,11 @@ from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project import apispec as project_apispec
 from renku_data_services.project import models
 from renku_data_services.project import orm as schemas
+from renku_data_services.secrets import orm as secrets_schemas
+from renku_data_services.secrets.core import encrypt_user_secret
+from renku_data_services.secrets.models import SecretKind
 from renku_data_services.storage import orm as storage_schemas
+from renku_data_services.users.db import UserRepo
 from renku_data_services.users.orm import UserORM
 from renku_data_services.utils.core import with_db_transaction
 
@@ -465,9 +470,13 @@ class ProjectSessionSecretRepository:
         self,
         session_maker: Callable[..., AsyncSession],
         authz: Authz,
+        user_repo: UserRepo,
+        secret_service_public_key: rsa.RSAPublicKey,
     ) -> None:
         self.session_maker = session_maker
         self.authz = authz
+        self.user_repo = user_repo
+        self.secret_service_public_key = secret_service_public_key
 
     async def get_all_session_secret_slots_from_project(
         self,
@@ -618,3 +627,148 @@ class ProjectSessionSecretRepository:
                 )
 
             await session.delete(secret_slot)
+
+    async def get_all_session_secrets_from_project(
+        self,
+        user: base_models.APIUser,
+        project_id: ULID,
+    ) -> list[models.SessionSecret]:
+        """Get all session secrets from a project."""
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        # Check that the user is allowed to access the project
+        authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
+
+        async with self.session_maker() as session:
+            result = await session.scalars(
+                select(schemas.SessionSecretORM)
+                .where(schemas.SessionSecretORM.user_id == user.id)
+                .where(schemas.SessionSecretORM.secret_slot_id == schemas.SessionSecretSlotORM.id)
+                .where(schemas.SessionSecretSlotORM.project_id == project_id)
+            )
+            secrets = result.all()
+
+            return [s.dump() for s in secrets]
+
+    async def patch_session_secrets(
+        self,
+        user: base_models.APIUser,
+        project_id: ULID,
+        secrets: list[models.SessionSecretPatchExistingSecret | models.SessionSecretPatchSecretValue],
+    ) -> list[models.SessionSecret]:
+        """Create, update or remove session secrets."""
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        # Check that the user is allowed to access the session launcher
+        authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
+
+        secrets_as_dict = {s.secret_slot_id: s for s in secrets}
+
+        async with self.session_maker() as session, session.begin():
+            result = await session.scalars(
+                select(schemas.SessionSecretORM)
+                .where(schemas.SessionSecretORM.user_id == user.id)
+                .where(schemas.SessionSecretORM.secret_slot_id == schemas.SessionSecretSlotORM.id)
+                .where(schemas.SessionSecretSlotORM.project_id == project_id)
+            )
+            existing_secrets = result.all()
+            existing_secrets_as_dict = {s.secret_slot_id: s for s in existing_secrets}
+
+            result_slots = await session.scalars(
+                select(schemas.SessionSecretSlotORM).where(schemas.SessionSecretSlotORM.project_id == project_id)
+            )
+            secret_slots = result_slots.all()
+            secret_slots_as_dict = {s.id: s for s in secret_slots}
+
+            all_secrets = []
+
+            for slot_id, secret_update in secrets_as_dict.items():
+                secret_slot = secret_slots_as_dict.get(slot_id)
+                if secret_slot is None:
+                    raise errors.ValidationError(
+                        message=f"Session secret slot with id '{slot_id}' does not exist or you do not have access to it."  # noqa: E501
+                    )
+
+                if isinstance(secret_update, models.SessionSecretPatchExistingSecret):
+                    # Update the secret_id
+                    if session_launcher_secret_orm := existing_secrets_as_dict.get(slot_id):
+                        session_launcher_secret_orm.secret_id = secret_update.secret_id
+                    else:
+                        session_launcher_secret_orm = schemas.SessionSecretORM(
+                            secret_slot_id=secret_update.secret_slot_id,
+                            secret_id=secret_update.secret_id,
+                            user_id=user.id,
+                        )
+                    session.add(session_launcher_secret_orm)
+                    all_secrets.append(session_launcher_secret_orm.dump())
+                    continue
+
+                if secret_update.value is None:
+                    # Remove the secret
+                    session_launcher_secret_orm = existing_secrets_as_dict.get(slot_id)
+                    if session_launcher_secret_orm is None:
+                        continue
+                    await session.delete(session_launcher_secret_orm)
+                    del existing_secrets_as_dict[slot_id]
+                    continue
+
+                encrypted_value, encrypted_key = await encrypt_user_secret(
+                    user_repo=self.user_repo,
+                    requested_by=user,
+                    secret_service_public_key=self.secret_service_public_key,
+                    secret_value=secret_update.value,
+                )
+                if session_launcher_secret_orm := existing_secrets_as_dict.get(slot_id):
+                    session_launcher_secret_orm.secret.update(
+                        encrypted_value=encrypted_value, encrypted_key=encrypted_key
+                    )
+                else:
+                    name = base_models.Slug.from_name(f"{secret_slot.name}-{secret_update.secret_slot_id}")
+                    secret_orm = secrets_schemas.SecretORM(
+                        name=name.value,
+                        user_id=user.id,
+                        encrypted_value=encrypted_value,
+                        encrypted_key=encrypted_key,
+                        kind=SecretKind.general,
+                    )
+                    session_launcher_secret_orm = schemas.SessionSecretORM(
+                        secret_slot_id=secret_update.secret_slot_id,
+                        secret_id=secret_orm.id,
+                        user_id=user.id,
+                    )
+                    session.add(secret_orm)
+                    session.add(session_launcher_secret_orm)
+                    await session.flush()
+                    await session.refresh(session_launcher_secret_orm)
+                all_secrets.append(session_launcher_secret_orm.dump())
+
+            return all_secrets
+
+    async def delete_session_secrets(
+        self,
+        user: base_models.APIUser,
+        project_id: ULID,
+    ) -> None:
+        """Delete all session secrets associated with a project."""
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session, session.begin():
+            result = await session.scalars(
+                select(schemas.SessionSecretORM)
+                .where(schemas.SessionSecretORM.user_id == user.id)
+                .where(schemas.SessionSecretORM.secret_slot_id == schemas.SessionSecretSlotORM.id)
+                .where(schemas.SessionSecretSlotORM.project_id == project_id)
+            )
+            for secret in result:
+                await session.delete(secret)
