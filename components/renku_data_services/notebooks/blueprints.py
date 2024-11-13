@@ -54,6 +54,7 @@ from renku_data_services.notebooks.crs import (
     Ingress,
     InitContainer,
     Metadata,
+    ReconcileStrategy,
     Resources,
     SecretAsVolume,
     SecretAsVolumeItem,
@@ -437,6 +438,7 @@ class NotebooksNewBP(CustomBlueprint):
                 spec=AmaltheaSessionSpec(
                     codeRepositories=[],
                     hibernated=False,
+                    reconcileStrategy=ReconcileStrategy.whenFailedOrHibernated,
                     session=Session(
                         image=image,
                         urlPath=ui_path,
