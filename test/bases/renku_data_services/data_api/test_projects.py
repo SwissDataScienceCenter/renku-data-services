@@ -113,6 +113,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
     assert project["namespace"] == regular_user.namespace.slug
     assert project["documentation"] == "$\\sqrt(2)$"
 
+
 @pytest.mark.asyncio
 async def test_project_creation_with_default_values(
     sanic_client, user_headers, regular_user: UserInfo, get_project
