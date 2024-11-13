@@ -181,9 +181,9 @@ class SessionSecretORM(BaseORM):
     secret_id: Mapped[ULID] = mapped_column("secret_id", ForeignKey(SecretORM.id, ondelete="CASCADE"))
     secret: Mapped[SecretORM] = relationship(init=False, repr=False, lazy="selectin")
 
-    # def dump(self) -> models.SessionLauncherSecret:
-    #     """Create a session launcher secret model from the SessionLauncherSecretORM."""
-    #     return models.SessionLauncherSecret(
-    #         secret_slot=self.secret_slot.dump(),
-    #         secret_id=self.secret_id,
-    #     )
+    def dump(self) -> models.SessionSecret:
+        """Create a session secret model from the SessionSecretORM."""
+        return models.SessionSecret(
+            secret_slot=self.secret_slot.dump(),
+            secret_id=self.secret_id,
+        )
