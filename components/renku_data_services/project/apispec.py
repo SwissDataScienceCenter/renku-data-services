@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from pydantic import ConfigDict, Field, RootModel
 from renku_data_services.project.apispec_base import BaseAPISpec
@@ -76,6 +76,29 @@ class ProjectPermissions(BaseAPISpec):
     delete: Optional[bool] = Field(None, description="The user can delete the project")
     change_membership: Optional[bool] = Field(
         None, description="The user can manage project members"
+    )
+
+
+class SessionSecretPatch1(BaseAPISpec):
+    secret_slot_id: str = Field(
+        ...,
+        description="ULID identifier",
+        max_length=26,
+        min_length=26,
+        pattern="^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+    )
+
+
+class SessionSecretPatchExistingSecret(BaseAPISpec):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    secret_id: str = Field(
+        ...,
+        description="ULID identifier",
+        max_length=26,
+        min_length=26,
+        pattern="^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
     )
 
 
@@ -272,6 +295,37 @@ class SessionSecretSlotPatch(BaseAPISpec):
         max_length=200,
         min_length=1,
         pattern="^[a-zA-Z0-9_\\-.]+$",
+    )
+
+
+class SessionSecret(BaseAPISpec):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    secret_slot: SessionSecretSlot
+    secret_id: str = Field(
+        ...,
+        description="ULID identifier",
+        max_length=26,
+        min_length=26,
+        pattern="^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+    )
+
+
+class SessionSecretPatch2(SessionSecretPatchExistingSecret, SessionSecretPatch1):
+    pass
+
+
+class SessionSecretPatchSecretValue(BaseAPISpec):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    value: Optional[str] = Field(
+        None,
+        description="Secret value that can be any text",
+        example="My secret value",
+        max_length=5000,
+        min_length=1,
     )
 
 
@@ -504,7 +558,23 @@ class SessionSecretSlotList(RootModel[List[SessionSecretSlot]]):
     )
 
 
+class SessionSecretList(RootModel[List[SessionSecret]]):
+    root: List[SessionSecret] = Field(
+        ..., description="A list of session launcher secrets"
+    )
+
+
+class SessionSecretPatch3(SessionSecretPatchSecretValue, SessionSecretPatch1):
+    pass
+
+
 class ProjectsList(RootModel[List[Project]]):
     root: List[Project] = Field(
         ..., description="A list of Renku projects", min_length=0
     )
+
+
+class SessionSecretPatchList(
+    RootModel[List[Union[SessionSecretPatch2, SessionSecretPatch3]]]
+):
+    root: List[Union[SessionSecretPatch2, SessionSecretPatch3]]
