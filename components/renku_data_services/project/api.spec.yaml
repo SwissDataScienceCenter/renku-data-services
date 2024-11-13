@@ -385,6 +385,112 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - projects
+  /projects/{project_id}/secret_slots:
+    parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+    get:
+      summary: Get the session secret slots of a project
+      responses:
+        "200":
+          description: The list of session secret slots
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionSecretSlotList"
+        "404":
+          description: The project does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - projects
+  /session_secret_slots:
+    post:
+      summary: Create a new session secret slot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionSecretSlotPost"
+      responses:
+        "201":
+          description: The secret slot was created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionSecretSlot"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_secret_slots
+  /session_secret_slots/{slot_id}:
+    parameters:
+      - in: path
+        name: slot_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+    get:
+      summary: Get the details of a session secret slot
+      responses:
+        "200":
+          description: The session secret slot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionSecretSlot"
+        "404":
+          description: The secret slot does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_secret_slots
+    patch:
+      summary: Update specific fields of an existing session secret slot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionSecretSlotPatch"
+      responses:
+        "200":
+          description: The patched session secret slot
+          content:
+            application/json:
+              schema:
+                type: object
+        "404":
+          description: The session secret slot does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_secret_slots
+    delete:
+      summary: Remove a session secret slot
+      responses:
+        "204":
+          description: The session secret slot was removed or did not exist in the first place
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - session_secret_slots
 components:
   schemas:
     ProjectsList:
@@ -732,6 +838,68 @@ components:
         change_membership:
           description: The user can manage project members
           type: boolean
+    SessionSecretSlotList:
+      description: A list of session secret slots
+      type: array
+      items:
+        $ref: "#/components/schemas/SessionSecretSlot"
+    SessionSecretSlot:
+      description: A slot for a secret in a session
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        project_id:
+          $ref: "#/components/schemas/Ulid"
+        name:
+          $ref: "#/components/schemas/SecretSlotName"
+        description:
+          $ref: "#/components/schemas/Description"
+        filename:
+          $ref: "#/components/schemas/SecretSlotFileName"
+      required:
+        - id
+        - project_id
+        - name
+        - filename
+    SessionSecretSlotPost:
+      type: object
+      additionalProperties: false
+      properties:
+        project_id:
+          $ref: "#/components/schemas/Ulid"
+        name:
+          $ref: "#/components/schemas/SecretSlotName"
+        description:
+          $ref: "#/components/schemas/Description"
+        filename:
+          $ref: "#/components/schemas/SecretSlotFileName"
+      required:
+        - project_id
+        - filename
+    SessionSecretSlotPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/SecretSlotName"
+        description:
+          $ref: "#/components/schemas/Description"
+        filename:
+          $ref: "#/components/schemas/SecretSlotFileName"
+    SecretSlotName:
+      description: The name of a secret slot
+      type: string
+      minLength: 1
+      maxLength: 99
+      example: API Token
+    SecretSlotFileName:
+      description: The filename given to the corresponding secret in the session
+      type: string
+      minLength: 1
+      maxLength: 200
+      example: api_token
     PaginationRequest:
       type: object
       additionalProperties: false
