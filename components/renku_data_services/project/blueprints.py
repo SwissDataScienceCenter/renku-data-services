@@ -82,10 +82,11 @@ class ProjectsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @extract_if_none_match
+        @validate_query(query=apispec.ProjectsProjectIdGetParametersQuery)
         async def _get_one(
-            request: Request, user: base_models.APIUser, project_id: ULID, etag: str | None
+            request: Request, user: base_models.APIUser, project_id: ULID, etag: str | None, query: apispec.ProjectsProjectIdGetParametersQuery
         ) -> JSONResponse | HTTPResponse:
-            with_documentation = bool(request.args.get("with_documentation", False))
+            with_documentation = query.with_documentation is True
             project = await self.project_repo.get_project(
                 user=user, project_id=project_id, with_documentation=with_documentation
             )
@@ -105,10 +106,11 @@ class ProjectsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @extract_if_none_match
+        @validate_query(query=apispec.NamespacesNamespaceProjectsSlugGetParametersQuery)
         async def _get_one_by_namespace_slug(
-            request: Request, user: base_models.APIUser, namespace: str, slug: str, etag: str | None
+            request: Request, user: base_models.APIUser, namespace: str, slug: str, etag: str | None, query: apispec.NamespacesNamespaceProjectsSlugGetParametersQuery
         ) -> JSONResponse | HTTPResponse:
-            with_documentation = bool(request.args.get("with_documentation", False))
+            with_documentation = query.with_documentation is True
             project = await self.project_repo.get_project_by_namespace_slug(
                 user=user, namespace=namespace, slug=slug, with_documentation=with_documentation
             )
