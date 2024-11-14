@@ -494,7 +494,7 @@ components:
     ProjectDocumentation:
       description: Renku project documentation
       type: string
-      minLength: 1
+      minLength: 0
       maxLength: 5000
       example: "My Renku Project Documentation :)"
     RepositoriesList:
