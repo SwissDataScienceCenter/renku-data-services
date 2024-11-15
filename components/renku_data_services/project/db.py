@@ -615,7 +615,7 @@ class ProjectSessionSecretRepository:
                 secret_slot.name = patch.name
             if patch.description is not None:
                 secret_slot.description = patch.description if patch.description else None
-            if patch.filename is not None:
+            if patch.filename is not None and patch.filename != secret_slot.filename:
                 existing_secret_slot = await session.scalar(
                     select(schemas.SessionSecretSlotORM)
                     .where(schemas.SessionSecretSlotORM.project_id == secret_slot.project_id)
