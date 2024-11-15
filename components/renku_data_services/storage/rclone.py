@@ -55,7 +55,7 @@ class RCloneValidator:
                 provider_schema = RCloneProviderSchema.model_validate(provider_config)
                 self.providers[provider_schema.prefix] = provider_schema
             except ValidationError:
-                logger.error("🚀 Couldn't load RClone config: %s", provider_config)
+                logger.error("Couldn't load RClone config: %s", provider_config)
                 raise
 
     @staticmethod
@@ -509,6 +509,7 @@ class RCloneProviderSchema(BaseModel):
         """Validate an RClone config."""
         keys = set(configuration.keys()) - {"type"}
         provider: str | None = configuration.get("provider")
+        access_level: str | None = configuration.get("access_level")
 
         missing: list[str] = []
 
@@ -519,8 +520,11 @@ class RCloneProviderSchema(BaseModel):
                 keys.remove(key)
 
         for required in self.required_options:
+            # Check if the option is missing in the configuration
             if required.name not in configuration and required.matches_provider(provider):
-                missing.append(required.name)
+                # Add check for access_level compatibility
+                if required.access_level is None or required.access_level == access_level:
+                    missing.append(required.name)
 
         if missing:
             missing_str = "\n".join(missing)
