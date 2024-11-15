@@ -747,7 +747,9 @@ class ProjectSessionSecretRepository:
                             secret_id=secret_update.secret_id,
                             user_id=user.id,
                         )
-                    session.add(session_launcher_secret_orm)
+                        session.add(session_launcher_secret_orm)
+                        await session.flush()
+                        await session.refresh(session_launcher_secret_orm)
                     all_secrets.append(session_launcher_secret_orm.dump())
                     continue
 
@@ -770,7 +772,6 @@ class ProjectSessionSecretRepository:
                     session_launcher_secret_orm.secret.update(
                         encrypted_value=encrypted_value, encrypted_key=encrypted_key
                     )
-                    session.add(session_launcher_secret_orm)
                 else:
                     name = base_models.Slug.from_name(f"{secret_slot.name}-{secret_update.secret_slot_id}")
                     secret_orm = secrets_schemas.SecretORM(
