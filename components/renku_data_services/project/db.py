@@ -732,6 +732,7 @@ class ProjectSessionSecretRepository:
                     session_launcher_secret_orm.secret.update(
                         encrypted_value=encrypted_value, encrypted_key=encrypted_key
                     )
+                    session.add(session_launcher_secret_orm)
                 else:
                     name = base_models.Slug.from_name(f"{secret_slot.name}-{secret_update.secret_slot_id}")
                     secret_orm = secrets_schemas.SecretORM(
