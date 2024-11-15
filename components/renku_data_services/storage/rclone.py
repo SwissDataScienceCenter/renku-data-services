@@ -209,7 +209,7 @@ class RCloneValidator:
                 "ValueStr": "",
             },
             {
-                "Name": "publicLink",
+                "Name": "public_link",
                 "Help": public_link_help,
                 "Provider": "",
                 "AccessLevel": "Public",
@@ -234,7 +234,7 @@ class RCloneValidator:
         # Modify existing options
         for option in storage_copy["Options"]:
             if option["Name"] == "url":
-                option.update({"AccessLevel": "Private", "Value": url_value})
+                option.update({"AccessLevel": "Private", "Default": url_value})
             elif option["Name"] == "user":
                 option.update({"Help": "", "AccessLevel": "Private"})
             elif option["Name"] == "pass":
@@ -271,7 +271,7 @@ class RCloneValidator:
             name="PolyBox",
             description="Polybox",
             url_value="https://polybox.ethz.ch/remote.php/webdav/",
-            public_link_help="Shared folder link. E.g., https://polybox.ethz.ch/index.php/s/8NffJ3rFyHaVjgR",
+            public_link_help="Shared folder link. E.g., https://polybox.ethz.ch/index.php/s/8NffJ3rFyHaVyyy",
         )
 
         self.__add_webdav_based_storage(
@@ -279,8 +279,8 @@ class RCloneValidator:
             prefix="switchDrive",
             name="SwitchDrive",
             description="SwitchDrive",
-            url_value="https://drive.switch.ch/public.php/webdav/",
-            public_link_help="Shared folder link. E.g., https://drive.switch.ch/index.php/s/OPSd72zrs5JGCv6",
+            url_value="https://drive.switch.ch/remote.php/webdav/",
+            public_link_help="Shared folder link. E.g., https://drive.switch.ch/index.php/s/OPSd72zrs5JG666",
         )
 
     def validate(self, configuration: Union["RCloneConfig", dict[str, Any]], keep_sensitive: bool = False) -> None:
@@ -298,10 +298,12 @@ class RCloneValidator:
         except errors.ValidationError as e:
             return ConnectionResult(False, str(e))
 
+        # Obscure configuration and transform if needed
         obscured_config = await self.obscure_config(configuration)
+        transformed_config = self.transform_public_access_config(obscured_config)
 
         with tempfile.NamedTemporaryFile(mode="w+", delete=False, encoding="utf-8") as f:
-            config = "\n".join(f"{k}={v}" for k, v in obscured_config.items())
+            config = "\n".join(f"{k}={v}" for k, v in transformed_config.items())
             f.write(f"[temp]\n{config}")
             f.close()
             proc = await asyncio.create_subprocess_exec(
@@ -360,6 +362,36 @@ class RCloneValidator:
         """Get private field descriptions for storage."""
         provider = self.get_provider(configuration)
         return provider.get_private_fields(configuration)
+
+    @staticmethod
+    def transform_public_access_config(
+        configuration: Union["RCloneConfig", dict[str, Any]],
+    ) -> Union["RCloneConfig", dict[str, Any]]:
+        """Transform the configuration for public access."""
+        access_level = configuration.get("access_level")
+        if access_level != "Public":
+            return configuration
+
+        storage_type = configuration.get("type")
+        public_link = configuration.get("public_link")
+
+        if not public_link:
+            raise ValueError("Missing 'public_link' for public access configuration.")
+
+        if storage_type == "polybox":
+            configuration["type"] = "webdav"
+            configuration["url"] = "https://polybox.ethz.ch/public.php/webdav/"
+        elif storage_type == "switchDrive":
+            configuration["type"] = "webdav"
+            configuration["url"] = "https://drive.switch.ch/public.php/webdav/"
+        else:
+            raise ValueError(f"Unsupported type '{storage_type}' for public access.")
+
+        # Extract the user from the public link
+        user_identifier = public_link.split("/")[-1]
+        configuration["user"] = user_identifier
+
+        return configuration
 
 
 class RCloneTriState(BaseModel):
@@ -520,11 +552,20 @@ class RCloneProviderSchema(BaseModel):
                 keys.remove(key)
 
         for required in self.required_options:
-            # Check if the option is missing in the configuration
-            if required.name not in configuration and required.matches_provider(provider):
-                # Add check for access_level compatibility
-                if required.access_level is None or required.access_level == access_level:
-                    missing.append(required.name)
+            # Skip if the option is present in the configuration
+            if required.name in configuration:
+                continue
+
+            # Skip if the provider doesn't match
+            if not required.matches_provider(provider):
+                continue
+
+            # Skip if the access level is incompatible
+            if required.access_level is not None and required.access_level != access_level:
+                continue
+
+            # Add the missing required option
+            missing.append(required.name)
 
         if missing:
             missing_str = "\n".join(missing)
