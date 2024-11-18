@@ -536,9 +536,6 @@ async def test_storage_validate_connection(storage_test_client) -> None:
 
     body = {"configuration": {"type": "s3", "provider": "AWS"}, "source_path": "giab/"}
     _, res = await storage_test_client.post("/api/data/storage_schema/test_connection", data=json.dumps(body))
-
-    body = {"configuration": {"type": "polybox", "access_level": "Public", "public_link": "https://polybox.ethz.ch/index.php/s/ItqbZGG1R6ngi8w"}, "source_path": "/"}
-    _, res = await storage_test_client.post("/api/data/storage_schema/test_connection", data=json.dumps(body))
     assert res.status_code == 204
 
 

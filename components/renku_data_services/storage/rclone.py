@@ -300,7 +300,7 @@ class RCloneValidator:
 
         # Obscure configuration and transform if needed
         obscured_config = await self.obscure_config(configuration)
-        transformed_config = self.transform_public_access_config(obscured_config)
+        transformed_config = self.transform_polybox_switchdriver_config(obscured_config)
 
         with tempfile.NamedTemporaryFile(mode="w+", delete=False, encoding="utf-8") as f:
             config = "\n".join(f"{k}={v}" for k, v in transformed_config.items())
@@ -364,32 +364,33 @@ class RCloneValidator:
         return provider.get_private_fields(configuration)
 
     @staticmethod
-    def transform_public_access_config(
+    def transform_polybox_switchdriver_config(
         configuration: Union["RCloneConfig", dict[str, Any]],
     ) -> Union["RCloneConfig", dict[str, Any]]:
         """Transform the configuration for public access."""
-        access_level = configuration.get("access_level")
-        if access_level != "Public":
+        storage_type = configuration.get("type")
+
+        # Only process Polybox or SwitchDrive configurations
+        if storage_type not in {"polybox", "switchDrive"}:
             return configuration
 
-        storage_type = configuration.get("type")
+        configuration["type"] = "webdav"
+
+        if configuration.get("access_level") == "Private":
+            return configuration
+
         public_link = configuration.get("public_link")
 
         if not public_link:
             raise ValueError("Missing 'public_link' for public access configuration.")
 
-        if storage_type == "polybox":
-            configuration["type"] = "webdav"
-            configuration["url"] = "https://polybox.ethz.ch/public.php/webdav/"
-        elif storage_type == "switchDrive":
-            configuration["type"] = "webdav"
-            configuration["url"] = "https://drive.switch.ch/public.php/webdav/"
-        else:
-            raise ValueError(f"Unsupported type '{storage_type}' for public access.")
-
+        configuration["url"] = (
+            "https://polybox.ethz.ch/public.php/webdav/"
+            if storage_type == "polybox"
+            else "https://drive.switch.ch/public.php/webdav/"
+        )
         # Extract the user from the public link
-        user_identifier = public_link.split("/")[-1]
-        configuration["user"] = user_identifier
+        configuration["user"] = public_link.split("/")[-1]
 
         return configuration
 
