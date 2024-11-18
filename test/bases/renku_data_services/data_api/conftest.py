@@ -1,6 +1,6 @@
 import json
 from copy import deepcopy
-from typing import Any, Tuple
+from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -241,9 +241,9 @@ def create_project(sanic_client, user_headers, admin_headers, regular_user, admi
 @pytest.fixture
 def create_project_copy(sanic_client, user_headers, admin_headers, regular_user, admin_user):
     async def create_project_copy_helper(
-        id: str, namespace: str, name: str, *, headers: dict[str, str] = None, **payload
+        id: str, namespace: str, name: str, *, user: UserInfo | None = None, **payload
     ) -> dict[str, Any]:
-        headers = user_headers if headers is None else headers
+        headers = user_headers if user is None or user is regular_user else admin_headers
         copy_payload = {"slug": Slug.from_name(name).value}
         copy_payload.update(payload)
         copy_payload.update({"namespace": namespace, "name": name})
@@ -362,7 +362,7 @@ def create_data_connector_and_link_project(
 ):
     async def create_data_connector_and_link_project_helper(
         name: str, project_id: str, admin: bool = False, **payload
-    ) -> Tuple[dict[str, Any], dict[str, Any]]:
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         headers = admin_headers if admin else user_headers
         user = admin_user if admin else regular_user
 

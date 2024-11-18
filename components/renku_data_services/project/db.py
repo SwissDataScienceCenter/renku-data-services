@@ -128,10 +128,9 @@ class ProjectRepository:
             result = await session.execute(stmt)
             project_orms = result.scalars().all()
 
-            # TODO: Refactor this to use (a modified) `has_permissions`
-            project_orms = [
-                p for p in project_orms if await self.authz.has_permission(user, ResourceType.project, p.id, Scope.READ)
-            ]
+            # NOTE: Show only those projects that user has access to
+            project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
+            project_orms = [p for p in project_orms if p.id in project_ids]
 
             return [p.dump() for p in project_orms]
 

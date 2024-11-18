@@ -1171,7 +1171,7 @@ async def test_project_copy_includes_data_connector_links(
 
 @pytest.mark.asyncio
 async def test_project_get_all_copies(
-    sanic_client, regular_user, user_headers, create_project, create_project_copy
+    sanic_client, admin_user, regular_user, admin_headers, user_headers, create_project, create_project_copy
 ) -> None:
     await create_project("Project 1")
     project = await create_project("Project 2")
@@ -1179,14 +1179,23 @@ async def test_project_get_all_copies(
     project_id = project["id"]
 
     copy_1 = await create_project_copy(project_id, regular_user.namespace.slug, "Copy 1")
-    copy_2 = await create_project_copy(project_id, regular_user.namespace.slug, "Copy 2")
+    copy_2 = await create_project_copy(project_id, admin_user.namespace.slug, "Copy 2", user=admin_user)
 
-    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/copies", headers=user_headers)
+    # NOTE: Admins can see all copies
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/copies", headers=admin_headers)
 
     assert response.status_code == 200, response.text
     copies = response.json
     assert len(copies) == 2
     assert {c["id"] for c in copies} == {copy_1["id"], copy_2["id"]}
+
+    # NOTE: Regular users can only see copies that they have access to
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/copies", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    copies = response.json
+    assert len(copies) == 1
+    assert {c["id"] for c in copies} == {copy_1["id"]}
 
 
 @pytest.mark.asyncio
@@ -1285,7 +1294,7 @@ async def test_project_copy_succeeds_even_if_data_connector_is_inaccessible(
     create_session_environment,
     create_session_launcher,
     create_project_copy,
-    create_data_connector_and_link_project
+    create_data_connector_and_link_project,
 ) -> None:
     project = await create_project("Project")
     project_id = project["id"]
