@@ -239,7 +239,7 @@ class UserSecretsBP(CustomBlueprint):
     def _dump_secret(secret: Secret) -> dict[str, Any]:
         """Dumps a secret for API responses."""
         return secret.model_dump(
-            include={"name", "id", "modification_date", "kind", "session_launcher_ids"}, exclude_none=True, mode="json"
+            include={"name", "id", "modification_date", "kind", "session_secret_ids"}, exclude_none=True, mode="json"
         )
 
 

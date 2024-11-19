@@ -179,7 +179,7 @@ class SessionSecretORM(BaseORM):
     secret_slot: Mapped[SessionSecretSlotORM] = relationship(init=False, repr=False, lazy="selectin")
 
     secret_id: Mapped[ULID] = mapped_column("secret_id", ForeignKey(SecretORM.id, ondelete="CASCADE"))
-    secret: Mapped[SecretORM] = relationship(init=False, repr=False, lazy="selectin")
+    secret: Mapped[SecretORM] = relationship(init=False, repr=False, back_populates="session_secrets", lazy="selectin")
 
     def dump(self) -> models.SessionSecret:
         """Create a session secret model from the SessionSecretORM."""

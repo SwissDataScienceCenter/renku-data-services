@@ -422,14 +422,14 @@ components:
           $ref: "#/components/schemas/ModificationDate"
         kind:
           $ref: "#/components/schemas/SecretKind"
-        session_launcher_ids:
+        session_secret_ids:
           $ref: "#/components/schemas/UlidList"
       required:
         - "id"
         - "name"
         - "modification_date"
         - "kind"
-        - "session_launcher_ids"
+        - "session_secret_ids"
     SecretPost:
       description: Secret metadata to be created
       type: object
