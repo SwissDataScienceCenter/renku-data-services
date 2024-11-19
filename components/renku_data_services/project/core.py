@@ -38,7 +38,7 @@ async def copy_project(
     project_repo: ProjectRepository,
     session_repo: SessionRepository,
     data_connector_to_project_link_repo: DataConnectorProjectLinkRepository,
-) -> tuple[models.Project, bool]:
+) -> models.Project:
     """Create a copy of a given project."""
     template = await project_repo.get_project(user=user, project_id=project_id)
 
@@ -70,4 +70,7 @@ async def copy_project(
         except errors.MissingResourceError:
             copy_error = True
 
-    return project, copy_error
+    if copy_error:
+        raise errors.CopyDataConnectorsError()
+
+    return project

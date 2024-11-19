@@ -1299,9 +1299,9 @@ async def test_project_copy_succeeds_even_if_data_connector_is_inaccessible(
     project = await create_project("Project")
     project_id = project["id"]
     environment = await create_session_environment("Environment")
-    launcher = await create_session_launcher("Launcher", project["id"], environment={"id": environment["id"]})
+    await create_session_launcher("Launcher", project["id"], environment={"id": environment["id"]})
     # NOTE: Create a data connector that regular user cannot access
-    _, _ = await create_data_connector_and_link_project("Connector", project_id=project_id, admin=True)
+    await create_data_connector_and_link_project("Connector", project_id=project_id, admin=True)
 
     payload = {
         "name": "Copy Project",
@@ -1311,16 +1311,6 @@ async def test_project_copy_succeeds_even_if_data_connector_is_inaccessible(
 
     _, response = await sanic_client.post(f"/api/data/projects/{project_id}/copies", headers=user_headers, json=payload)
 
-    # NOTE: The copy is created, but the status code indicates that one of the multiple statuses is a failure
-    assert response.status_code == 207, response.text
-
-    copy_project = response.json
-    project_id = copy_project["id"]
-    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/session_launchers", headers=user_headers)
-
-    assert response.status_code == 200, response.text
-    launchers = response.json
-    assert {launcher["name"] for launcher in launchers} == {"Launcher"}
-    assert launchers[0]["project_id"] == project_id
-    # NOTE: Check that a new launcher is created
-    assert launchers[0]["id"] != launcher["id"]
+    # NOTE: The copy is created, but the status code indicates that one or more data connectors cannot be copied
+    assert response.status_code == 403, response.text
+    assert "The project was copied but there is no permission to copy data connectors" in response.text

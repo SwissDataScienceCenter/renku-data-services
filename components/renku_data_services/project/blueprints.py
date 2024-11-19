@@ -96,7 +96,7 @@ class ProjectsBP(CustomBlueprint):
             except ValueError:
                 raise errors.ValidationError(message=f"Template project ID isn't valid: {project_id}")
 
-            result, error = await copy_project(
+            project = await copy_project(
                 project_id=template_project_id,
                 user=user,
                 name=body.name,
@@ -111,11 +111,7 @@ class ProjectsBP(CustomBlueprint):
                 data_connector_to_project_link_repo=self.data_connector_to_project_link_repo,
             )
 
-            # NOTE: Return a multi-status code to indicate that the project was copied but copying data connectors
-            # failed due to lack of authorization (this is the only possible failure when copying projects)
-            status = 207 if error else 201
-
-            return validated_json(apispec.Project, self._dump_project(result), status=status)
+            return validated_json(apispec.Project, self._dump_project(project), status=201)
 
         return "/projects/<project_id>/copies", ["POST"], _copy
 

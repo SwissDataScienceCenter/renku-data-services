@@ -231,12 +231,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Project"
-        "207":
+        "403":
           description: The project was copied but at least one data connector cannot be copied due to lack of permission
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Project"
+                $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: The project does not exist
           content:
