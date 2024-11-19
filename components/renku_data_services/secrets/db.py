@@ -1,5 +1,7 @@
 """Database repo for secrets."""
 
+import random
+import string
 from collections.abc import AsyncGenerator, Callable, Sequence
 from datetime import UTC, datetime
 from typing import cast
@@ -10,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
 from renku_data_services.base_api.auth import APIUser, only_authenticated
-from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
+from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId, Slug
 from renku_data_services.errors import errors
 from renku_data_services.secrets.models import Secret, SecretKind, UnsavedSecret
 from renku_data_services.secrets.orm import SecretORM
@@ -58,28 +60,37 @@ class UserSecretsRepo:
     @only_authenticated
     async def insert_secret(self, requested_by: APIUser, secret: UnsavedSecret) -> Secret:
         """Insert a new secret."""
+        if requested_by.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        default_filename = secret.default_filename
+        if default_filename is None:
+            suffix = "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(8)])  # nosec B311
+            name_slug = Slug.from_name(secret.name).value
+            default_filename = f"{name_slug[:200]}-{suffix}"
 
         async with self.session_maker() as session, session.begin():
-            orm = SecretORM(
+            secret_orm = SecretORM(
                 name=secret.name,
-                user_id=cast(str, requested_by.id),
+                default_filename=default_filename,
+                user_id=requested_by.id,
                 encrypted_value=secret.encrypted_value,
                 encrypted_key=secret.encrypted_key,
                 kind=secret.kind,
             )
-            session.add(orm)
+            session.add(secret_orm)
 
             try:
                 await session.flush()
             except IntegrityError as err:
                 if len(err.args) > 0 and "UniqueViolationError" in err.args[0]:
                     raise errors.ValidationError(
-                        message="The name for the secret should be unique but it already exists",
-                        detail="Please modify the name field and then retry",
+                        message="The default_filename for the secret should be unique but it already exists",
+                        detail="Please modify the default_filename field and then retry",
                     )
                 else:
                     raise
-            return orm.dump()
+            return secret_orm.dump()
 
     @only_authenticated
     async def update_secret(

@@ -190,9 +190,10 @@ class UserSecretsBP(CustomBlueprint):
             )
             secret = UnsavedSecret(
                 name=body.name,
+                default_filename=body.default_filename,
                 encrypted_value=encrypted_value,
                 encrypted_key=encrypted_key,
-                kind=SecretKind[body.kind.value],
+                kind=SecretKind(body.kind.value),
             )
             inserted_secret = await self.secret_repo.insert_secret(requested_by=user, secret=secret)
             return validated_json(apispec.SecretWithId, self._dump_secret(inserted_secret), status=201)
@@ -208,6 +209,16 @@ class UserSecretsBP(CustomBlueprint):
         async def _patch(
             _: Request, user: base_models.APIUser, secret_id: ULID, body: apispec.SecretPatch
         ) -> JSONResponse:
+            # TODO
+            if body.value is None:
+                secret = await self.secret_repo.get_secret_by_id(requested_by=user, secret_id=secret_id)
+                if not secret:
+                    raise errors.MissingResourceError(message=f"The secret with id {secret_id} cannot be found.")
+                return validated_json(
+                    apispec.SecretWithId,
+                    self._dump_secret(secret),
+                )
+
             encrypted_value, encrypted_key = await encrypt_user_secret(
                 user_repo=self.user_repo,
                 requested_by=user,
@@ -238,9 +249,17 @@ class UserSecretsBP(CustomBlueprint):
     @staticmethod
     def _dump_secret(secret: Secret) -> dict[str, Any]:
         """Dumps a secret for API responses."""
-        return secret.model_dump(
-            include={"name", "id", "modification_date", "kind", "session_secret_ids"}, exclude_none=True, mode="json"
+        return dict(
+            id=str(secret.id),
+            name=secret.name,
+            default_filename=secret.default_filename,
+            kind=secret.kind.value,
+            modification_date=secret.modification_date,
+            session_secret_ids=[str(item) for item in secret.session_secret_ids],
         )
+        # return secret.model_dump(
+        #     include={"name", "id", "modification_date", "kind", "session_secret_ids"}, exclude_none=True, mode="json"
+        # )
 
 
 @dataclass(kw_only=True)

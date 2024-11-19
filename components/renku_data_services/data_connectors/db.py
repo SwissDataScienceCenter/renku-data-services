@@ -1,5 +1,7 @@
 """Adapters for data connectors database classes."""
 
+import random
+import string
 from collections.abc import AsyncIterator, Callable
 from typing import TypeVar
 
@@ -561,7 +563,9 @@ class DataConnectorSecretRepository:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
         # NOTE: check that the user can access the data connector
-        await self.data_connector_repo.get_data_connector(user=user, data_connector_id=data_connector_id)
+        data_connector = await self.data_connector_repo.get_data_connector(
+            user=user, data_connector_id=data_connector_id
+        )
 
         secrets_as_dict = {s.name: s.value for s in secrets}
 
@@ -601,8 +605,20 @@ class DataConnectorSecretRepository:
                         encrypted_value=encrypted_value, encrypted_key=encrypted_key
                     )
                 else:
+                    # secret_orm = secrets_schemas.SecretORM(
+                    #     name=f"{data_connector_id}-{name}",
+                    #     user_id=user.id,
+                    #     encrypted_value=encrypted_value,
+                    #     encrypted_key=encrypted_key,
+                    #     kind=SecretKind.storage,
+                    # )
+                    name = f"{data_connector.name[:45]} - {name[:45]}"
+                    suffix = "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(8)])  # nosec B311
+                    name_slug = base_models.Slug.from_name(name).value
+                    default_filename = f"{name_slug[:200]}-{suffix}"
                     secret_orm = secrets_schemas.SecretORM(
-                        name=f"{data_connector_id}-{name}",
+                        name=name,
+                        default_filename=default_filename,
                         user_id=user.id,
                         encrypted_value=encrypted_value,
                         encrypted_key=encrypted_key,

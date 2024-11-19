@@ -417,7 +417,9 @@ components:
         id:
           $ref: "#/components/schemas/Ulid"
         name:
-          $ref: "#/components/schemas/SecretName"
+         $ref: "#/components/schemas/SecretName"
+        default_filename:
+          $ref: "#/components/schemas/SecretDefaultFilename"
         modification_date:
           $ref: "#/components/schemas/ModificationDate"
         kind:
@@ -428,6 +430,7 @@ components:
       required:
         - "id"
         - "name"
+        - "default_filename"
         - "modification_date"
         - "kind"
         - "session_secret_ids"
@@ -438,6 +441,8 @@ components:
       properties:
         name:
           $ref: "#/components/schemas/SecretName"
+        default_filename:
+          $ref: "#/components/schemas/SecretDefaultFilename"
         value:
           $ref: "#/components/schemas/SecretValue"
         kind:
@@ -453,12 +458,21 @@ components:
       description: Secret metadata to be modified
       additionalProperties: false
       properties:
+        name:
+          $ref: "#/components/schemas/SecretName"
+        default_filename:
+          $ref: "#/components/schemas/SecretDefaultFilename"
         value:
           $ref: "#/components/schemas/SecretValue"
-      required:
-        - "value"
     SecretName:
-      description: Secret name
+      description: The name of a user secret
+      type: string
+      minLength: 1
+      maxLength: 99
+      example: API Token
+    SecretDefaultFilename:
+      description: |
+        Filename to give to this secret when mounted in Renku 1.0 sessions
       type: string
       minLength: 1
       maxLength: 99

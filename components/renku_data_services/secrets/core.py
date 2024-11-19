@@ -162,12 +162,12 @@ async def rotate_single_encryption_key(
         decryption_key = decrypt_rsa(old_key, secret.encrypted_key)
         decrypted_value = decrypt_string(decryption_key, user_id, secret.encrypted_value).encode()
         new_encryption_key = generate_random_encryption_key()
-        secret.encrypted_value = encrypt_string(new_encryption_key, user_id, decrypted_value.decode())
-        secret.encrypted_key = encrypt_rsa(new_key.public_key(), new_encryption_key)
+        encrypted_value = encrypt_string(new_encryption_key, user_id, decrypted_value.decode())
+        encrypted_key = encrypt_rsa(new_key.public_key(), new_encryption_key)
+        return secret.update_encrypted_value(encrypted_value=encrypted_value, encrypted_key=encrypted_key)
     except Exception as e:
         logger.error(f"Couldn't decrypt secret {secret.name}({secret.id}): {e}")
         return None
-    return secret
 
 
 async def encrypt_user_secret(
