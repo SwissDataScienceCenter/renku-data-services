@@ -44,11 +44,15 @@ async def create_k8s_secret(
     if len(missing_secret_ids) > 0:
         raise errors.MissingResourceError(message=f"Couldn't find secrets with ids {', '.join(missing_secret_ids)}")
 
-    if key_mapping:
-        if set(key_mapping) != requested_secret_ids:
-            raise errors.ValidationError(message="Key mapping must include all requested secret IDs")
-        if len(key_mapping) != len(set(key_mapping.values())):
-            raise errors.ValidationError(message="Key mapping values are not unique")
+    if key_mapping and set(key_mapping) != requested_secret_ids:
+        raise errors.ValidationError(message="Key mapping must include all requested secret IDs")
+
+    # if key_mapping:
+    #     if set(key_mapping) != requested_secret_ids:
+    #         raise errors.ValidationError(message="Key mapping must include all requested secret IDs")
+    # TODO: update the check below
+    # if len(key_mapping) != len(set(key_mapping.values())):
+    #     raise errors.ValidationError(message="Key mapping values are not unique")
 
     decrypted_secrets = {}
     try:
