@@ -32,7 +32,7 @@ sanitize_for_serialization = ApiClient().sanitize_for_serialization
 
 
 # NOTE The type ignore below is because the kr8s library has no type stubs, they claim pyright better handles type hints
-class AmaltheaSessionV1Alpha1Kr8s(APIObject):  # type: ignore
+class AmaltheaSessionV1Alpha1Kr8s(APIObject):
     """Spec for amalthea sessions used by the k8s client."""
 
     kind: str = "AmaltheaSession"
@@ -45,7 +45,7 @@ class AmaltheaSessionV1Alpha1Kr8s(APIObject):  # type: ignore
 
 
 # NOTE The type ignore below is because the kr8s library has no type stubs, they claim pyright better handles type hints
-class JupyterServerV1Alpha1Kr8s(APIObject):  # type: ignore
+class JupyterServerV1Alpha1Kr8s(APIObject):
     """Spec for jupyter servers used by the k8s client."""
 
     kind: str = "JupyterServer"
@@ -76,7 +76,7 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
 
     async def get_pod_logs(self, name: str, max_log_lines: Optional[int] = None) -> dict[str, str]:
         """Get the logs of all containers in the session."""
-        pod = cast(Pod, await Pod.get(name=name, namespace=self.namespace))
+        pod = await Pod.get(name=name, namespace=self.namespace)
         logs: dict[str, str] = {}
         containers = [container.name for container in pod.spec.containers + pod.spec.get("initContainers", [])]
         for container in containers:
@@ -163,7 +163,7 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
                 # the missing statefulset
                 return None
             raise
-        return sts
+        return cast(StatefulSet, sts)
 
     async def delete_server(self, server_name: str) -> None:
         """Delete the server."""
@@ -197,18 +197,19 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
                 logging.exception(f"Cannot list servers because of {err}")
                 raise IntermittentError(f"Cannot list servers from the k8s API with selector {label_selector}.")
             return []
-        output: list[_SessionType] = (
-            [self.server_type.model_validate(servers.to_dict())]
-            if isinstance(servers, APIObject)
-            else [self.server_type.model_validate(server.to_dict()) for server in servers]
-        )
+        output: list[_SessionType]
+        if isinstance(servers, APIObject):
+            output = [self.server_type.model_validate(servers.to_dict())]
+        else:
+            output = [self.server_type.model_validate(server.to_dict()) for server in servers]
+
         return output
 
     async def patch_image_pull_secret(self, server_name: str, gitlab_token: GitlabToken) -> None:
         """Patch the image pull secret used in a Renku session."""
         secret_name = f"{server_name}-image-secret"
         try:
-            secret = cast(Secret, await Secret.get(name=secret_name, namespace=self.namespace))
+            secret = await Secret.get(name=secret_name, namespace=self.namespace)
         except NotFoundError:
             return None
         secret_data = secret.data.to_dict()
@@ -241,7 +242,7 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
     async def patch_statefulset_tokens(self, name: str, renku_tokens: RenkuTokens) -> None:
         """Patch the Renku and Gitlab access tokens that are used in the session statefulset."""
         try:
-            sts = cast(StatefulSet, await StatefulSet.get(name=name, namespace=self.namespace))
+            sts = await StatefulSet.get(name=name, namespace=self.namespace)
         except NotFoundError:
             return None
 
