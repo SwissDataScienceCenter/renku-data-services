@@ -30,7 +30,9 @@ class Secret(UnsavedSecret):
     """Secret object stored in the database."""
 
     id: ULID = Field()
-    session_launcher_ids: list[ULID]
+
+    session_secret_ids: list[ULID]
+    """List of session secret IDs where this user secret is used."""
 
 
 @dataclass
