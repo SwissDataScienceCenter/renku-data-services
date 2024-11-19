@@ -218,8 +218,8 @@ class RCloneStorage(ICloudStorageRequest):
             raise ValidationError("Missing configuration for cloud storage")
 
         # Transform configuration for polybox or switchDrive only if access_level is Public
-        storage_type = self.configuration.get("storage_type", "").lower()
-        access_level = self.configuration.get("access_level", "").lower()
+        storage_type = self.configuration.get("type", "")
+        access_level = self.configuration.get("access_level", "")
 
         if storage_type == "polybox" or storage_type == "switchDrive":
             self.configuration["type"] = "webdav"

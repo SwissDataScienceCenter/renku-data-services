@@ -236,12 +236,7 @@ class RCloneValidator:
             if option["Name"] == "url":
                 option.update({"AccessLevel": "Private", "Default": url_value})
             elif option["Name"] == "user":
-                option.update({"Help": "", "AccessLevel": "Private"})
-            elif option["Name"] == "pass":
-                option["Examples"] = [
-                    {"Value": "", "Help": "", "AccessLevel": "Private", "Provider": ""},
-                    {"Value": "", "Help": "", "AccessLevel": "Public", "Provider": ""},
-                ]
+                option.update({"AccessLevel": "Private"})
             elif option["Name"] in ["bearer_token", "bearer_token_command"]:
                 option["AccessLevel"] = "Private"
 
