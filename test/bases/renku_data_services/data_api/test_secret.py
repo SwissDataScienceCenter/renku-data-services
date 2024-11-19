@@ -1,6 +1,7 @@
 """Tests for secrets blueprints."""
 
 from base64 import b64decode
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -46,9 +47,10 @@ async def test_create_secrets(sanic_client: SanicASGITestClient, user_headers, k
 
     assert response.status_code == 201, response.text
     assert response.json is not None
-    assert response.json.keys() == {"name", "id", "modification_date", "kind"}
-    assert response.json["name"] == "my-secret"
+    assert response.json.keys() == {"id", "name", "default_filename", "modification_date", "kind", "session_secret_ids"}
     assert response.json["id"] is not None
+    assert response.json["name"] == "my-secret"
+    assert response.json["default_filename"] is not None
     assert response.json["modification_date"] is not None
     assert response.json["kind"] == kind
 
@@ -307,10 +309,13 @@ async def test_single_secret_rotation():
 
     secret = Secret(
         id=ULID(),
-        name="test_secret",
+        name="My secret",
+        default_filename="test_secret",
         encrypted_value=encrypted_value,
         encrypted_key=encrypted_key,
         kind=SecretKind.general,
+        modification_date=datetime.now(tz=UTC),
+        session_secret_ids=[],
     )
 
     rotated_secret = await rotate_single_encryption_key(secret, user_id, new_key, old_key)
