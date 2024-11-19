@@ -583,13 +583,18 @@ class NotebooksNewBP(CustomBlueprint):
                 try:
                     # User secrets
                     if session_secrets:
+                        key_mapping: dict[str, list[str]] = dict()
+                        for s in session_secrets:
+                            secret_id = str(s.secret_id)
+                            if secret_id not in key_mapping:
+                                key_mapping[secret_id] = list()
+                            key_mapping[secret_id].append(s.secret_slot.filename)
                         request_data = {
                             "name": f"{server_name}-secrets",
                             "namespace": self.nb_config.k8s_v2_client.preferred_namespace,
                             "secret_ids": [str(s.secret_id) for s in session_secrets],
                             "owner_references": [owner_reference],
-                            # NOTE: a user secret cannot be mounted as multiple files at the moment. This is fixed later. #noqa E501
-                            "key_mapping": {str(s.secret_id): s.secret_slot.filename for s in session_secrets},
+                            "key_mapping": key_mapping,
                         }
                         async with httpx.AsyncClient(timeout=10) as client:
                             res = await client.post(secrets_url, headers=headers, json=request_data)
