@@ -26,6 +26,7 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     NodeSelectorTerm,
     Preference,
     PreferredDuringSchedulingIgnoredDuringExecutionItem,
+    ReconcileStrategy,
     RequiredDuringSchedulingIgnoredDuringExecution,
     SecretRef,
     Session,
