@@ -34,7 +34,7 @@ async def create_k8s_secret(
     secret_service_private_key: rsa.RSAPrivateKey,
     previous_secret_service_private_key: rsa.RSAPrivateKey | None,
     core_client: K8sCoreClientInterface,
-    key_mapping: dict[str, str] | None,
+    key_mapping: dict[str, str | list[str]] | None,
 ) -> None:
     """Creates a single k8s secret from a list of user secrets stored in the DB."""
     secrets = await secrets_repo.get_secrets_by_ids(requested_by=user, secret_ids=secret_ids)
@@ -63,8 +63,11 @@ async def create_k8s_secret(
                     raise
 
             decrypted_value = decrypt_string(decryption_key, user.id, secret.encrypted_value).encode()  # type: ignore
-            key = secret.name if not key_mapping else key_mapping[str(secret.id)]
-            decrypted_secrets[key] = b64encode(decrypted_value).decode()
+
+            single_or_multi_key = key_mapping[str(secret.id)] if key_mapping else secret.name
+            keys = [single_or_multi_key] if isinstance(single_or_multi_key, str) else single_or_multi_key
+            for key in keys:
+                decrypted_secrets[key] = b64encode(decrypted_value).decode()
     except Exception as e:
         # don't wrap the error, we don't want secrets accidentally leaking.
         raise errors.SecretDecryptionError(message=f"An error occurred decrypting secrets: {str(type(e))}")
