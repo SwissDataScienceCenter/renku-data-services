@@ -115,7 +115,9 @@ class ProjectRepository:
 
             return project_orm.dump(with_documentation=with_documentation)
 
-    async def get_all_copied_projects(self, user: base_models.APIUser, project_id: ULID) -> list[models.Project]:
+    async def get_all_copied_projects(
+        self, user: base_models.APIUser, project_id: ULID, only_writable: bool
+    ) -> list[models.Project]:
         """Get all projects that are copied from the specified project."""
         authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
         if not authorized:
@@ -129,7 +131,8 @@ class ProjectRepository:
             project_orms = result.scalars().all()
 
             # NOTE: Show only those projects that user has access to
-            project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
+            scope = Scope.WRITE if only_writable else Scope.READ
+            project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, scope=scope)
             project_orms = [p for p in project_orms if p.id in project_ids]
 
             return [p.dump() for p in project_orms]
@@ -311,6 +314,11 @@ class ProjectRepository:
             project.keywords = patch.keywords if patch.keywords else None
         if patch.documentation is not None:
             project.documentation = patch.documentation
+
+        if patch.template_id is not None:
+            project.template_id = None
+        if patch.template is not None:
+            project.template = patch.template
 
         await session.flush()
         await session.refresh(project)

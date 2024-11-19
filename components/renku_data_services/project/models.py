@@ -28,6 +28,7 @@ class BaseProject:
     keywords: Optional[list[str]] = None
     documentation: Optional[str] = None
     template_id: Optional[ULID] = None
+    template: bool = False
 
     @property
     def etag(self) -> str | None:
@@ -63,6 +64,8 @@ class ProjectPatch:
     description: str | None
     keywords: list[str] | None
     documentation: str | None
+    template_id: str | None
+    template: bool | None
 
 
 @dataclass

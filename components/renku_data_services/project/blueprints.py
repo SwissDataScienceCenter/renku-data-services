@@ -114,8 +114,16 @@ class ProjectsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _get_all_copies(_: Request, user: base_models.APIUser, project_id: ULID) -> JSONResponse:
-            projects = await self.project_repo.get_all_copied_projects(user=user, project_id=project_id)
+        @validate(query=apispec.ProjectsProjectIdCopiesGetParametersQuery)
+        async def _get_all_copies(
+            _: Request,
+            user: base_models.APIUser,
+            project_id: ULID,
+            query: apispec.ProjectsProjectIdCopiesGetParametersQuery,
+        ) -> JSONResponse:
+            projects = await self.project_repo.get_all_copied_projects(
+                user=user, project_id=project_id, only_writable=query.writable
+            )
             projects_dump = [self._dump_project(p) for p in projects]
             return validated_json(apispec.ProjectsList, projects_dump)
 
@@ -300,6 +308,7 @@ class ProjectsBP(CustomBlueprint):
             etag=project.etag,
             keywords=project.keywords or [],
             template_id=project.template_id,
+            template=project.template,
         )
         if with_documentation:
             result = dict(result, documentation=project.documentation)
