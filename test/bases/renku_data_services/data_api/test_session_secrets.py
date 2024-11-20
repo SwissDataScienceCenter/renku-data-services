@@ -162,3 +162,41 @@ async def test_get_project_session_secret_slots(
     assert response.json is not None
     secret_slots = response.json
     assert {secret_slot["filename"] for secret_slot in secret_slots} == {f"secret_slot_{i}" for i in range(1, 10)}
+
+
+@pytest.mark.asyncio
+async def test_get_one_session_secret_slot(
+    sanic_client: SanicASGITestClient, create_project, create_session_secret_slot, user_headers
+) -> None:
+    project = await create_project("My project")
+    project_id = project["id"]
+    secret_slot = await create_session_secret_slot(project_id, "test_secret")
+    secret_slot_id = secret_slot["id"]
+
+    _, response = await sanic_client.get(f"/api/data/session_secret_slots/{secret_slot_id}", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    secret_slot = response.json
+    assert secret_slot.keys() == {"id", "project_id", "name", "description", "filename"}
+    assert secret_slot.get("id") == secret_slot_id
+    assert secret_slot.get("project_id") == project_id
+    assert secret_slot.get("filename") == "test_secret"
+    assert secret_slot.get("name") == "test_secret"
+    assert secret_slot.get("description") == "A secret slot"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("headers_name", ["unauthorized_headers", "member_1_headers"])
+async def test_get_one_session_secret_slot_unauthorized(
+    sanic_client: SanicASGITestClient, create_project, create_session_secret_slot, headers_name, request
+) -> None:
+    project = await create_project("My project")
+    project_id = project["id"]
+    secret_slot = await create_session_secret_slot(project_id, "test_secret")
+    secret_slot_id = secret_slot["id"]
+
+    headers = request.getfixturevalue(headers_name)
+    _, response = await sanic_client.get(f"/api/data/session_secret_slots/{secret_slot_id}", headers=headers)
+
+    assert response.status_code == 404, response.text
