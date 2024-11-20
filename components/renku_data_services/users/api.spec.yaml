@@ -422,6 +422,7 @@ components:
           $ref: "#/components/schemas/ModificationDate"
         kind:
           $ref: "#/components/schemas/SecretKind"
+        # TODO: rename this field
         session_secret_ids:
           $ref: "#/components/schemas/UlidList"
       required:
