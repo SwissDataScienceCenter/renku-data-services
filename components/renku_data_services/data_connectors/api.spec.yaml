@@ -578,10 +578,6 @@ components:
           type: string
           description: The cloud provider the option is for (See 'provider' RCloneOption in the schema for potential values)
           example: AWS
-        access_level:
-          type: string
-          description: Mode to connect to PolyBox and SwitchDrive it can be Public for shared folder or Private for own storage
-          example: Public
         default:
           oneOf:
             - type: number

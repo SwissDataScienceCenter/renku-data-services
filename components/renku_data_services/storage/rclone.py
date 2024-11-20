@@ -179,24 +179,22 @@ class RCloneValidator:
         storage_copy = RCloneValidator.__find_webdav_storage(spec)
         storage_copy.update({"Prefix": prefix, "Name": name, "Description": description})
 
-        # Define new custom options and append them
         custom_options = [
             {
-                "Name": "access_level",
+                "Name": "access",
                 "Help": "Choose the mode to access the data source.",
                 "Provider": "",
-                "AccessLevel": None,
                 "Default": "",
                 "Value": None,
                 "Examples": [
-                    {"Value": "Private", "Help": "Use Private to connect a folder that only you use", "Provider": ""},
+                    {"Value": "personal", "Help": "Use Private to connect a folder that only you use", "Provider": ""},
                     {
-                        "Value": "Public",
-                        "Help": "To connect a folder you share with others, both privately & publicly shared folders.",
+                        "Value": "shared",
+                        "Help": "To connect a folder you share with others, both personal & shared folders.",
                         "Provider": "",
                     },
                 ],
-                "Required": True,
+                "Required": False,
                 "Type": "string",
                 "ShortOpt": "",
                 "Hide": 0,
@@ -211,8 +209,7 @@ class RCloneValidator:
             {
                 "Name": "public_link",
                 "Help": public_link_help,
-                "Provider": "",
-                "AccessLevel": "Public",
+                "Provider": "shared",
                 "Default": "",
                 "Value": None,
                 "Examples": None,
@@ -231,21 +228,18 @@ class RCloneValidator:
         ]
         storage_copy["Options"].extend(custom_options)
 
-        # Modify existing options
+        # use provider to indicate if the option is for an personal o shared storage
         for option in storage_copy["Options"]:
             if option["Name"] == "url":
-                option.update({"AccessLevel": "Private", "Default": url_value})
-            elif option["Name"] == "user":
-                option.update({"AccessLevel": "Private"})
-            elif option["Name"] in ["bearer_token", "bearer_token_command"]:
-                option["AccessLevel"] = "Private"
+                option.update({"Provider": "personal", "Default": url_value, "Required": False})
+            elif option["Name"] in ["bearer_token", "bearer_token_command", "headers", "user"]:
+                option["Provider"] = "personal"
 
-        # Remove unwanted options
+        # Remove obsolete options no longer applicable for Polybox or SwitchDrive
         storage_copy["Options"] = [
             o for o in storage_copy["Options"] if o["Name"] not in ["vendor", "nextcloud_chunk_size"]
         ]
 
-        # Append the customized storage configuration to the spec
         spec.append(storage_copy)
 
     def apply_patches(self, spec: list[dict[str, Any]]) -> None:
@@ -371,19 +365,27 @@ class RCloneValidator:
 
         configuration["type"] = "webdav"
 
-        if configuration.get("access_level") == "Private":
+        provider = configuration.get("provider")
+
+        if provider == "personal":
+            configuration["url"] = configuration.get("url") or (
+                "https://polybox.ethz.ch/remote.php/webdav/"
+                if storage_type == "polybox"
+                else "https://drive.switch.ch/remote.php/webdav/"
+            )
             return configuration
 
-        public_link = configuration.get("public_link")
-
-        if not public_link:
-            raise ValueError("Missing 'public_link' for public access configuration.")
-
+        ## Set url and username when is a shared configuration
         configuration["url"] = (
             "https://polybox.ethz.ch/public.php/webdav/"
             if storage_type == "polybox"
             else "https://drive.switch.ch/public.php/webdav/"
         )
+        public_link = configuration.get("public_link")
+
+        if not public_link:
+            raise ValueError("Missing 'public_link' for public access configuration.")
+
         # Extract the user from the public link
         configuration["user"] = public_link.split("/")[-1]
 
@@ -407,7 +409,6 @@ class RCloneExample(BaseModel):
     value: str = Field(alias="Value")
     help: str = Field(alias="Help")
     provider: str = Field(alias="Provider")
-    access_level: str | None = Field(alias="AccessLevel", default=None)
 
 
 class RCloneOption(BaseModel):
@@ -416,7 +417,6 @@ class RCloneOption(BaseModel):
     name: str = Field(alias="Name")
     help: str = Field(alias="Help")
     provider: str = Field(alias="Provider")
-    access_level: str | None = Field(alias="AccessLevel", default=None)
     default: str | int | bool | list[str] | RCloneTriState | None = Field(alias="Default")
     value: str | int | bool | RCloneTriState | None = Field(alias="Value")
     examples: list[RCloneExample] | None = Field(default=None, alias="Examples")
@@ -537,7 +537,6 @@ class RCloneProviderSchema(BaseModel):
         """Validate an RClone config."""
         keys = set(configuration.keys()) - {"type"}
         provider: str | None = configuration.get("provider")
-        access_level: str | None = configuration.get("access_level")
 
         missing: list[str] = []
 
@@ -548,20 +547,8 @@ class RCloneProviderSchema(BaseModel):
                 keys.remove(key)
 
         for required in self.required_options:
-            # Skip if the option is present in the configuration
-            if required.name in configuration:
-                continue
-
-            # Skip if the provider doesn't match
-            if not required.matches_provider(provider):
-                continue
-
-            # Skip if the access level is incompatible
-            if required.access_level is not None and required.access_level != access_level:
-                continue
-
-            # Add the missing required option
-            missing.append(required.name)
+            if required.name not in configuration and required.matches_provider(provider):
+                missing.append(required.name)
 
         if missing:
             missing_str = "\n".join(missing)
