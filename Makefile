@@ -143,7 +143,9 @@ help:  ## Display this help.
 .PHONY: k3d_cluster
 k3d_cluster:  ## Creates a k3d cluster for testing
 	k3d cluster delete
-	k3d cluster create --agents 1 --k3s-arg --disable=metrics-server@server:0
+	# k3d registry delete myregistry.localhost || true
+	# k3d registry create myregistry.localhost
+	k3d cluster create --registry-create k3d-myregistry.localhost:5000 --agents 1 --k3s-arg --disable=metrics-server@server:0 
 
 .PHONY: install_amaltheas
 install_amaltheas:  ## Installs both version of amalthea in the. NOTE: It uses the currently active k8s context.
@@ -151,6 +153,12 @@ install_amaltheas:  ## Installs both version of amalthea in the. NOTE: It uses t
 	helm repo update
 	helm upgrade --install amalthea-js renku/amalthea --version $(AMALTHEA_JS_VERSION)
 	helm upgrade --install amalthea-se renku/amalthea-sessions --version ${AMALTHEA_SESSIONS_VERSION}
+install_kpack:
+	curl -L https://github.com/buildpacks-community/kpack/releases/download/v0.15.0/release-0.15.0.yaml | kubectl apply -f -
+	kubectl apply -f .devcontainer/kpack/clusterstore.yaml
+	kubectl apply -f .devcontainer/kpack/clusterstack.yaml
+	sleep 10
+	kubectl apply -f .devcontainer/kpack/python-builder.yaml
 
 # TODO: Add the version variables from the top of the file here when the charts are fully published
 .PHONY: amalthea_schema
