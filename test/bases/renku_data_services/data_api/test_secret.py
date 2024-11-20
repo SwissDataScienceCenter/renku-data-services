@@ -47,7 +47,15 @@ async def test_create_secrets(sanic_client: SanicASGITestClient, user_headers, k
 
     assert response.status_code == 201, response.text
     assert response.json is not None
-    assert response.json.keys() == {"id", "name", "default_filename", "modification_date", "kind", "session_secret_ids"}
+    assert response.json.keys() == {
+        "id",
+        "name",
+        "default_filename",
+        "modification_date",
+        "kind",
+        "session_secret_ids",
+        "data_connector_ids",
+    }
     assert response.json["id"] is not None
     assert response.json["name"] == "my-secret"
     assert response.json["default_filename"] is not None
@@ -316,6 +324,7 @@ async def test_single_secret_rotation():
         kind=SecretKind.general,
         modification_date=datetime.now(tz=UTC),
         session_secret_ids=[],
+        data_connector_ids=[],
     )
 
     rotated_secret = await rotate_single_encryption_key(secret, user_id, new_key, old_key)

@@ -13,6 +13,7 @@ from renku_data_services.users.orm import UserORM
 from renku_data_services.utils.sqlalchemy import ULIDType
 
 if TYPE_CHECKING:
+    from renku_data_services.data_connectors.orm import DataConnectorSecretORM
     from renku_data_services.project.orm import SessionSecretORM
 
 
@@ -64,6 +65,10 @@ class SecretORM(BaseORM):
         init=False, repr=False, back_populates="secret", lazy="selectin", default_factory=list
     )
 
+    data_connector_secrets: Mapped[list["DataConnectorSecretORM"]] = relationship(
+        init=False, repr=False, back_populates="secret", lazy="selectin", default_factory=list
+    )
+
     def dump(self) -> models.Secret:
         """Create a secret object from the ORM object."""
         return models.Secret(
@@ -75,31 +80,8 @@ class SecretORM(BaseORM):
             kind=self.kind,
             modification_date=self.modification_date,
             session_secret_ids=[item.secret_slot_id for item in self.session_secrets],
+            data_connector_ids=[item.data_connector_id for item in self.data_connector_secrets],
         )
-
-    # def dump(self) -> models.Secret:
-    #     """Create a secret object from the ORM object."""
-    #     secret = models.Secret(
-    #         id=self.id,
-    #         name=self.name,
-    #         encrypted_value=self.encrypted_value,
-    #         encrypted_key=self.encrypted_key,
-    #         kind=self.kind,
-    #         session_secret_ids=[item.id for item in self.session_secrets],
-    #     )
-    #     secret.modification_date = self.modification_date
-    #     return secret
-
-    # @classmethod
-    # def load(cls, secret: models.UnsavedSecret) -> "SecretORM":
-    #     """Create an ORM object from the user object."""
-    #     return cls(
-    #         name=secret.name,
-    #         encrypted_value=secret.encrypted_value,
-    #         encrypted_key=secret.encrypted_key,
-    #         modification_date=secret.modification_date,
-    #         kind=secret.kind,
-    #     )
 
     def update(self, encrypted_value: bytes, encrypted_key: bytes) -> None:
         """Update an existing secret."""

@@ -256,10 +256,8 @@ class UserSecretsBP(CustomBlueprint):
             kind=secret.kind.value,
             modification_date=secret.modification_date,
             session_secret_ids=[str(item) for item in secret.session_secret_ids],
+            data_connector_ids=[str(item) for item in secret.data_connector_ids],
         )
-        # return secret.model_dump(
-        #     include={"name", "id", "modification_date", "kind", "session_secret_ids"}, exclude_none=True, mode="json"
-        # )
 
 
 @dataclass(kw_only=True)

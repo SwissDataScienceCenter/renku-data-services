@@ -37,6 +37,9 @@ class Secret(UnsavedSecret):
     session_secret_ids: list[ULID]
     """List of session secret IDs where this user secret is used."""
 
+    data_connector_ids: list[ULID]
+    """List of data connector IDs where this user secret is used."""
+
     def update_encrypted_value(self, encrypted_value: bytes, encrypted_key: bytes) -> "Secret":
         """Returns a new secret instance with updated encrypted_value and encrypted_key."""
         return Secret(
@@ -48,6 +51,7 @@ class Secret(UnsavedSecret):
             kind=self.kind,
             modification_date=self.modification_date,
             session_secret_ids=self.session_secret_ids,
+            data_connector_ids=self.data_connector_ids,
         )
 
 

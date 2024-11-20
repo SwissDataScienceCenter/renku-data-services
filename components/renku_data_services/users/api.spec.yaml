@@ -427,6 +427,8 @@ components:
         # TODO: rename this field
         session_secret_ids:
           $ref: "#/components/schemas/UlidList"
+        data_connector_ids:
+          $ref: "#/components/schemas/UlidList"
       required:
         - "id"
         - "name"
@@ -434,6 +436,7 @@ components:
         - "modification_date"
         - "kind"
         - "session_secret_ids"
+        - "data_connector_ids"
     SecretPost:
       description: Secret metadata to be created
       type: object
