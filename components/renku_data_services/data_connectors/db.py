@@ -612,12 +612,12 @@ class DataConnectorSecretRepository:
                     #     encrypted_key=encrypted_key,
                     #     kind=SecretKind.storage,
                     # )
-                    name = f"{data_connector.name[:45]} - {name[:45]}"
+                    secret_name = f"{data_connector.name[:45]} - {name[:45]}"
                     suffix = "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(8)])  # nosec B311
-                    name_slug = base_models.Slug.from_name(name).value
-                    default_filename = f"{name_slug[:200]}-{suffix}"
+                    secret_name_slug = base_models.Slug.from_name(name).value
+                    default_filename = f"{secret_name_slug[:200]}-{suffix}"
                     secret_orm = secrets_schemas.SecretORM(
-                        name=name,
+                        name=secret_name,
                         default_filename=default_filename,
                         user_id=user.id,
                         encrypted_value=encrypted_value,
