@@ -858,11 +858,14 @@ components:
           $ref: "#/components/schemas/Description"
         filename:
           $ref: "#/components/schemas/SecretSlotFileName"
+        etag:
+          $ref: "#/components/schemas/ETag"
       required:
         - id
         - project_id
         - name
         - filename
+        - etag
     SessionSecretSlotPost:
       type: object
       additionalProperties: false

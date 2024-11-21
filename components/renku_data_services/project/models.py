@@ -111,6 +111,11 @@ class SessionSecretSlot(UnsavedSessionSecretSlot):
     creation_date: datetime
     updated_at: datetime
 
+    @property
+    def etag(self) -> str:
+        """Entity tag value for this session secret slot object."""
+        return compute_etag_from_timestamp(self.updated_at, include_quotes=True)
+
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class SessionSecretSlotPatch:

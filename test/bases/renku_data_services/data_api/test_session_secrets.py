@@ -7,6 +7,7 @@ from sanic_testing.testing import SanicASGITestClient
 from ulid import ULID
 
 from renku_data_services.users.models import UserInfo
+from test.bases.renku_data_services.data_api.utils import merge_headers
 
 
 @pytest.fixture
@@ -178,12 +179,13 @@ async def test_get_one_session_secret_slot(
     assert response.status_code == 200, response.text
     assert response.json is not None
     secret_slot = response.json
-    assert secret_slot.keys() == {"id", "project_id", "name", "description", "filename"}
+    assert secret_slot.keys() == {"id", "project_id", "name", "description", "filename", "etag"}
     assert secret_slot.get("id") == secret_slot_id
     assert secret_slot.get("project_id") == project_id
     assert secret_slot.get("filename") == "test_secret"
     assert secret_slot.get("name") == "test_secret"
     assert secret_slot.get("description") == "A secret slot"
+    assert secret_slot.get("etag") is not None
 
 
 @pytest.mark.asyncio
@@ -200,3 +202,166 @@ async def test_get_one_session_secret_slot_unauthorized(
     _, response = await sanic_client.get(f"/api/data/session_secret_slots/{secret_slot_id}", headers=headers)
 
     assert response.status_code == 404, response.text
+
+
+@pytest.mark.asyncio
+async def test_patch_session_secret_slot(
+    sanic_client: SanicASGITestClient, create_project, create_session_secret_slot, user_headers
+) -> None:
+    project = await create_project("My project")
+    project_id = project["id"]
+    secret_slot = await create_session_secret_slot(project_id, "test_secret")
+    secret_slot_id = secret_slot["id"]
+
+    headers = merge_headers(user_headers, {"If-Match": secret_slot["etag"]})
+    patch = {
+        "name": "New Name",
+        "description": "Updated session secret slot",
+        "filename": "new_filename",
+    }
+
+    _, response = await sanic_client.patch(
+        f"/api/data/session_secret_slots/{secret_slot_id}", headers=headers, json=patch
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    secret_slot = response.json
+    assert secret_slot.get("id") == secret_slot_id
+    assert secret_slot.get("project_id") == project_id
+    assert secret_slot.get("filename") == "new_filename"
+    assert secret_slot.get("name") == "New Name"
+    assert secret_slot.get("description") == "Updated session secret slot"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["id", "project_id"])
+async def test_patch_session_secret_slot_reserved_fields_are_forbidden(
+    sanic_client: SanicASGITestClient, create_project, create_session_secret_slot, user_headers, field
+) -> None:
+    project = await create_project("My project")
+    project_id = project["id"]
+    secret_slot = await create_session_secret_slot(project_id, "test_secret")
+    secret_slot_id = secret_slot["id"]
+    original_value = secret_slot[field]
+
+    headers = merge_headers(user_headers, {"If-Match": secret_slot["etag"]})
+    patch = {
+        field: "new-value",
+    }
+    _, response = await sanic_client.patch(
+        f"/api/data/session_secret_slots/{secret_slot_id}", headers=headers, json=patch
+    )
+
+    assert response.status_code == 422, response.text
+    assert f"{field}: Extra inputs are not permitted" in response.text
+
+    # Check that the field's value didn't change
+    _, response = await sanic_client.get(f"/api/data/session_secret_slots/{secret_slot_id}", headers=user_headers)
+    assert response.status_code == 200, response.text
+    secret_slot = response.json
+    assert secret_slot[field] == original_value
+
+
+@pytest.mark.asyncio
+async def test_patch_session_secret_slot_without_if_match_header(
+    sanic_client: SanicASGITestClient, create_project, create_session_secret_slot, user_headers
+) -> None:
+    project = await create_project("My project")
+    project_id = project["id"]
+    secret_slot = await create_session_secret_slot(project_id, "test_secret")
+    secret_slot_id = secret_slot["id"]
+    original_value = secret_slot["name"]
+
+    patch = {
+        "name": "New Name",
+    }
+    _, response = await sanic_client.patch(
+        f"/api/data/session_secret_slots/{secret_slot_id}", headers=user_headers, json=patch
+    )
+
+    assert response.status_code == 428, response.text
+    assert "If-Match header not provided" in response.text
+
+    # Check that the field's value didn't change
+    _, response = await sanic_client.get(f"/api/data/session_secret_slots/{secret_slot_id}", headers=user_headers)
+    assert response.status_code == 200, response.text
+    data_connector = response.json
+    assert data_connector["name"] == original_value
+
+
+@pytest.mark.asyncio
+async def test_patch_session_secret_slot_with_invalid_filename(
+    sanic_client: SanicASGITestClient, create_project, create_session_secret_slot, user_headers
+) -> None:
+    project = await create_project("My project")
+    project_id = project["id"]
+    secret_slot = await create_session_secret_slot(project_id, "test_secret")
+    secret_slot_id = secret_slot["id"]
+    original_value = secret_slot["name"]
+
+    headers = merge_headers(user_headers, {"If-Match": secret_slot["etag"]})
+    patch = {
+        "filename": "test/secret",
+    }
+    _, response = await sanic_client.patch(
+        f"/api/data/session_secret_slots/{secret_slot_id}", headers=headers, json=patch
+    )
+
+    assert response.status_code == 422, response.text
+    assert "filename: String should match pattern" in response.json["error"]["message"]
+
+    # Check that the field's value didn't change
+    _, response = await sanic_client.get(f"/api/data/session_secret_slots/{secret_slot_id}", headers=user_headers)
+    assert response.status_code == 200, response.text
+    secret_slot = response.json
+    assert secret_slot["filename"] == original_value
+
+
+@pytest.mark.asyncio
+async def test_patch_session_secret_slot_with_conflicting_filename(
+    sanic_client: SanicASGITestClient, create_project, create_session_secret_slot, user_headers
+) -> None:
+    project = await create_project("My project")
+    project_id = project["id"]
+    await create_session_secret_slot(project_id, "existing_filename")
+    secret_slot = await create_session_secret_slot(project_id, "test_secret")
+    secret_slot_id = secret_slot["id"]
+    original_value = secret_slot["name"]
+
+    headers = merge_headers(user_headers, {"If-Match": secret_slot["etag"]})
+    patch = {
+        "filename": "existing_filename",
+    }
+    _, response = await sanic_client.patch(
+        f"/api/data/session_secret_slots/{secret_slot_id}", headers=headers, json=patch
+    )
+
+    assert response.status_code == 409, response.text
+
+    # Check that the field's value didn't change
+    _, response = await sanic_client.get(f"/api/data/session_secret_slots/{secret_slot_id}", headers=user_headers)
+    assert response.status_code == 200, response.text
+    secret_slot = response.json
+    assert secret_slot["filename"] == original_value
+
+
+@pytest.mark.asyncio
+async def test_delete_session_secret_slot(
+    sanic_client: SanicASGITestClient, create_project, create_session_secret_slot, user_headers
+) -> None:
+    project = await create_project("My project")
+    project_id = project["id"]
+    await create_session_secret_slot(project_id, "test_secret_1")
+    secret_slot = await create_session_secret_slot(project_id, "test_secret_2")
+    await create_session_secret_slot(project_id, "test_secret_3")
+    secret_slot_id = secret_slot["id"]
+
+    _, response = await sanic_client.delete(f"/api/data/session_secret_slots/{secret_slot_id}", headers=user_headers)
+
+    assert response.status_code == 204, response.text
+
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/secret_slots", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert {secret_slot["filename"] for secret_slot in response.json} == {"test_secret_1", "test_secret_3"}

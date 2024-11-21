@@ -589,10 +589,7 @@ class ProjectSessionSecretRepository:
             return secret_slot_orm.dump()
 
     async def update_session_secret_slot(
-        self,
-        user: base_models.APIUser,
-        slot_id: ULID,
-        patch: models.SessionSecretSlotPatch,
+        self, user: base_models.APIUser, slot_id: ULID, patch: models.SessionSecretSlotPatch, etag: str
     ) -> models.SessionSecretSlot:
         """Update a session secret slot entry."""
         not_found_msg = f"Session secret slot with id '{slot_id}' does not exist or you do not have access to it."
@@ -610,6 +607,10 @@ class ProjectSessionSecretRepository:
             )
             if not authorized:
                 raise errors.MissingResourceError(message=not_found_msg)
+
+            current_etag = secret_slot.dump().etag
+            if current_etag != etag:
+                raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
 
             if patch.name is not None:
                 secret_slot.name = patch.name

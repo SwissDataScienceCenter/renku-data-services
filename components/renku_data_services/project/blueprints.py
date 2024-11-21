@@ -360,8 +360,15 @@ class ProjectSessionSecretBP(CustomBlueprint):
         """Get the details of a session secret slot."""
 
         @authenticate(self.authenticator)
-        async def _get_session_secret_slot(_: Request, user: base_models.APIUser, slot_id: ULID) -> JSONResponse:
+        @extract_if_none_match
+        async def _get_session_secret_slot(
+            _: Request, user: base_models.APIUser, slot_id: ULID, etag: str | None
+        ) -> HTTPResponse:
             secret_slot = await self.project_session_secret_repo.get_session_secret_slot(user=user, slot_id=slot_id)
+
+            if secret_slot.etag == etag:
+                return HTTPResponse(status=304)
+
             return validated_json(apispec.SessionSecretSlot, secret_slot)
 
         return "/session_secret_slots/<slot_id:ulid>", ["GET"], _get_session_secret_slot
@@ -371,13 +378,18 @@ class ProjectSessionSecretBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
+        @if_match_required
         @validate(json=apispec.SessionSecretSlotPatch)
         async def _patch_session_secret_slot(
-            _: Request, user: base_models.APIUser, slot_id: ULID, body: apispec.SessionSecretSlotPatch
+            _: Request,
+            user: base_models.APIUser,
+            slot_id: ULID,
+            body: apispec.SessionSecretSlotPatch,
+            etag: str,
         ) -> JSONResponse:
             secret_slot_patch = validate_session_secret_slot_patch(body)
             secret_slot = await self.project_session_secret_repo.update_session_secret_slot(
-                user=user, slot_id=slot_id, patch=secret_slot_patch
+                user=user, slot_id=slot_id, patch=secret_slot_patch, etag=etag
             )
             return validated_json(apispec.SessionSecretSlot, secret_slot)
 
