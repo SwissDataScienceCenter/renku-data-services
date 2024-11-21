@@ -186,7 +186,7 @@ paths:
         - projects
   /projects/{project_id}/copies:
     get:
-      summary: Get list of all copied projects
+      summary: Get list of all copies of this project
       parameters:
         - in: path
           name: project_id

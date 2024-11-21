@@ -1265,8 +1265,8 @@ async def test_project_copy_invalid_project_id(sanic_client, user_headers, regul
 
     _, response = await sanic_client.post(f"/api/data/projects/{project_id}/copies", headers=user_headers, json=payload)
 
-    assert response.status_code == 422
-    assert "Template project ID isn't valid" in response.text
+    assert response.status_code == 404
+    assert "Requested URL /api/data/projects/Invalid-ULID-project-id/copies not found" in response.text
 
 
 @pytest.mark.asyncio

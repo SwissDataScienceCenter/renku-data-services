@@ -33,7 +33,7 @@ async def copy_project(
     slug: str | None,
     description: str | None,
     repositories: list[models.Repository] | None,
-    visibility: str | None,
+    visibility: Visibility | None,
     keywords: list[str],
     project_repo: ProjectRepository,
     session_repo: SessionRepository,
@@ -49,7 +49,7 @@ async def copy_project(
         description=description or template.description,
         repositories=repositories or template.repositories,
         created_by=user.id,  # type: ignore[arg-type]
-        visibility=template.visibility if visibility is None else Visibility(visibility),
+        visibility=template.visibility if visibility is None else visibility,
         keywords=keywords or template.keywords,
         template_id=template.id,
     )

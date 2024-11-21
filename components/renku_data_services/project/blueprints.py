@@ -89,50 +89,37 @@ class ProjectsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.ProjectPost)
         async def _copy(
-            _: Request, user: base_models.APIUser, project_id: str, body: apispec.ProjectPost
+            _: Request, user: base_models.APIUser, project_id: ULID, body: apispec.ProjectPost
         ) -> JSONResponse:
-            try:
-                template_project_id = ULID.from_str(project_id)
-            except ValueError:
-                raise errors.ValidationError(message=f"Template project ID isn't valid: {project_id}")
-
             project = await copy_project(
-                project_id=template_project_id,
+                project_id=project_id,
                 user=user,
                 name=body.name,
                 namespace=body.namespace,
                 slug=body.slug,
                 description=body.description,
                 repositories=body.repositories,
-                visibility=body.visibility.value if body.visibility is not None else None,
+                visibility=Visibility(body.visibility.value) if body.visibility is not None else None,
                 keywords=[kw.root for kw in body.keywords] if body.keywords is not None else [],
                 project_repo=self.project_repo,
                 session_repo=self.session_repo,
                 data_connector_to_project_link_repo=self.data_connector_to_project_link_repo,
             )
-
             return validated_json(apispec.Project, self._dump_project(project), status=201)
 
-        return "/projects/<project_id>/copies", ["POST"], _copy
+        return "/projects/<project_id:ulid>/copies", ["POST"], _copy
 
     def get_all_copies(self) -> BlueprintFactoryResponse:
         """Get all copies of a specific project that the user has access to."""
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _get_all_copies(_: Request, user: base_models.APIUser, project_id: str) -> JSONResponse:
-            try:
-                template_project_id = ULID.from_str(project_id)
-            except ValueError:
-                raise errors.ValidationError(message=f"Template project ID isn't valid: {project_id}")
-
-            projects = await self.project_repo.get_all_copied_projects(user=user, project_id=template_project_id)
-
+        async def _get_all_copies(_: Request, user: base_models.APIUser, project_id: ULID) -> JSONResponse:
+            projects = await self.project_repo.get_all_copied_projects(user=user, project_id=project_id)
             projects_dump = [self._dump_project(p) for p in projects]
-
             return validated_json(apispec.ProjectsList, projects_dump)
 
-        return "/projects/<project_id>/copies", ["GET"], _get_all_copies
+        return "/projects/<project_id:ulid>/copies", ["GET"], _get_all_copies
 
     def get_one(self) -> BlueprintFactoryResponse:
         """Get a specific project."""
@@ -300,7 +287,7 @@ class ProjectsBP(CustomBlueprint):
     def _dump_project(project: project_models.Project, with_documentation: bool = False) -> dict[str, Any]:
         """Dumps a project for API responses."""
         result = dict(
-            id=str(project.id),
+            id=project.id,
             name=project.name,
             namespace=project.namespace.slug,
             slug=project.slug,
@@ -312,7 +299,7 @@ class ProjectsBP(CustomBlueprint):
             description=project.description,
             etag=project.etag,
             keywords=project.keywords or [],
-            template_id=str(project.template_id) if project.template_id else None,
+            template_id=project.template_id,
         )
         if with_documentation:
             result = dict(result, documentation=project.documentation)
