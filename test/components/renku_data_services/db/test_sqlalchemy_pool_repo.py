@@ -26,11 +26,11 @@ from test.utils import create_rp, remove_id_from_user, sort_rp_classes
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_pool_insert_get(
-    rp: models.ResourcePool, app_config: Config, db_instance, authz_instance, admin_user: base_models.APIUser
+    rp: models.ResourcePool, app_config_instance: Config, admin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp = None
-    pool_repo = app_config.rp_repo
+    pool_repo = app_config_instance.rp_repo
     try:
         inserted_rp = await create_rp(rp, pool_repo, admin_user)
     except (ValidationError, errors.ValidationError):
@@ -45,15 +45,13 @@ async def test_resource_pool_insert_get(
 @pytest.mark.asyncio
 async def test_resource_pool_update_name(
     rp: models.ResourcePool,
-    app_config: Config,
-    db_instance,
-    authz_instance,
+    app_config_instance: Config,
     new_name: str,
     admin_user: base_models.APIUser,
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp = None
-    pool_repo = app_config.rp_repo
+    pool_repo = app_config_instance.rp_repo
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
@@ -74,10 +72,10 @@ async def test_resource_pool_update_name(
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_pool_update_quota(
-    rp: models.ResourcePool, app_config: Config, db_instance, authz_instance, admin_user: base_models.APIUser
+    rp: models.ResourcePool, app_config_instance: Config, admin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
-    pool_repo = app_config.rp_repo
+    pool_repo = app_config_instance.rp_repo
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
@@ -105,11 +103,11 @@ async def test_resource_pool_update_quota(
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_pool_update_classes(
-    rp: models.ResourcePool, app_config: Config, db_instance, authz_instance, data, admin_user: base_models.APIUser
+    rp: models.ResourcePool, app_config_instance: Config, data, admin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp = None
-    pool_repo = app_config.rp_repo
+    pool_repo = app_config_instance.rp_repo
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
@@ -148,11 +146,11 @@ async def test_resource_pool_update_classes(
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_get_classes(
-    rp: models.ResourcePool, app_config: Config, db_instance, authz_instance, admin_user: base_models.APIUser
+    rp: models.ResourcePool, app_config_instance: Config, admin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp = None
-    pool_repo = app_config.rp_repo
+    pool_repo = app_config_instance.rp_repo
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
@@ -169,11 +167,11 @@ async def test_get_classes(
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_get_class_by_id(
-    rp: models.ResourcePool, app_config: Config, db_instance, authz_instance, admin_user: base_models.APIUser
+    rp: models.ResourcePool, app_config_instance: Config, admin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp = None
-    pool_repo = app_config.rp_repo
+    pool_repo = app_config_instance.rp_repo
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
@@ -193,11 +191,11 @@ async def test_get_class_by_id(
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_get_class_by_name(
-    rp: models.ResourcePool, app_config: Config, db_instance, authz_instance, admin_user: base_models.APIUser
+    rp: models.ResourcePool, app_config_instance: Config, admin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp = None
-    pool_repo = app_config.rp_repo
+    pool_repo = app_config_instance.rp_repo
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
@@ -217,10 +215,10 @@ async def test_get_class_by_name(
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_pool_delete(
-    rp: models.ResourcePool, app_config: Config, db_instance, authz_instance, admin_user: base_models.APIUser
+    rp: models.ResourcePool, app_config_instance: Config, admin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
-    pool_repo = app_config.rp_repo
+    pool_repo = app_config_instance.rp_repo
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
@@ -237,14 +235,12 @@ async def test_resource_pool_delete(
 async def test_resource_class_create(
     rc: models.ResourceClass,
     rp: models.ResourcePool,
-    app_config: Config,
-    db_instance,
-    authz_instance,
+    app_config_instance: Config,
     admin_user: base_models.APIUser,
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp = None
-    pool_repo = app_config.rp_repo
+    pool_repo = app_config_instance.rp_repo
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
@@ -271,11 +267,11 @@ async def test_resource_class_create(
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_class_delete(
-    rp: models.ResourcePool, app_config: Config, db_instance, authz_instance, admin_user: base_models.APIUser
+    rp: models.ResourcePool, app_config_instance: Config, admin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp = None
-    pool_repo = app_config.rp_repo
+    pool_repo = app_config_instance.rp_repo
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
@@ -306,15 +302,13 @@ async def test_resource_class_delete(
 @pytest.mark.asyncio
 async def test_resource_class_update(
     rp: models.ResourcePool,
-    app_config: Config,
-    db_instance,
-    authz_instance,
+    app_config_instance: Config,
     admin_user: base_models.APIUser,
     rc_update: dict,
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp = None
-    pool_repo = app_config.rp_repo
+    pool_repo = app_config_instance.rp_repo
     try:
         inserted_rp = await pool_repo.insert_resource_pool(resource_pool=rp, api_user=admin_user)
         assert inserted_rp is not None
@@ -357,11 +351,11 @@ async def test_resource_class_update(
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_lookup_rp_by_name(
-    rp: models.ResourcePool, app_config: Config, db_instance, authz_instance, admin_user: base_models.APIUser
+    rp: models.ResourcePool, app_config_instance: Config, admin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp = None
-    pool_repo = app_config.rp_repo
+    pool_repo = app_config_instance.rp_repo
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
@@ -379,22 +373,24 @@ async def test_lookup_rp_by_name(
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_insert_class_in_nonexisting_rp(
-    app_config: Config, db_instance, authz_instance, rc: models.ResourceClass, admin_user: base_models.APIUser
+    app_config_instance: Config, rc: models.ResourceClass, admin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     with pytest.raises(errors.MissingResourceError):
-        await app_config.rp_repo.insert_resource_class(resource_class=rc, resource_pool_id=99999, api_user=admin_user)
+        await app_config_instance.rp_repo.insert_resource_class(
+            resource_class=rc, resource_pool_id=99999, api_user=admin_user
+        )
 
 
 @given(new_quota_id=a_uuid_string)
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_update_quota_in_nonexisting_rp(
-    app_config: Config, db_instance, authz_instance, new_quota_id: str, admin_user: base_models.APIUser
+    app_config_instance: Config, new_quota_id: str, admin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     with pytest.raises(errors.MissingResourceError):
-        await app_config.rp_repo.update_resource_pool(id=99999, api_user=admin_user, quota=new_quota_id)
+        await app_config_instance.rp_repo.update_resource_pool(id=99999, api_user=admin_user, quota=new_quota_id)
 
 
 @given(public_rp=public_rp_strat, private_rp=private_rp_strat)
@@ -405,15 +401,13 @@ async def test_resource_pools_access_control(
     private_rp: models.ResourcePool,
     admin_user: base_models.APIUser,
     loggedin_user: base_models.APIUser,
-    app_config: Config,
-    db_instance,
-    authz_instance,
+    app_config_instance: Config,
 ) -> None:
     run_migrations_for_app("common")
     inserted_public_rp = None
     inserted_private_rp = None
-    pool_repo = app_config.rp_repo
-    user_repo = app_config.user_repo
+    pool_repo = app_config_instance.rp_repo
+    user_repo = app_config_instance.user_repo
     try:
         inserted_public_rp = await create_rp(public_rp, pool_repo, admin_user)
         assert inserted_public_rp.id is not None
@@ -450,14 +444,12 @@ async def test_classes_filtering(
     rp1: models.ResourcePool,
     rp2: models.ResourcePool,
     admin_user: base_models.APIUser,
-    app_config: Config,
-    db_instance,
-    authz_instance,
+    app_config_instance: Config,
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp1 = None
     inserted_rp2 = None
-    pool_repo = app_config.rp_repo
+    pool_repo = app_config_instance.rp_repo
     try:
         inserted_rp1 = await create_rp(rp1, pool_repo, api_user=admin_user)
         inserted_rp2 = await create_rp(rp2, pool_repo, api_user=admin_user)

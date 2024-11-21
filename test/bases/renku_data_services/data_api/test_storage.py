@@ -45,7 +45,8 @@ async def storage_test_client_setup(app_config: Config) -> SanicASGITestClient:
 
 @pytest_asyncio.fixture
 async def storage_test_client(
-    storage_test_client_setup, app_config: Config, db_instance, authz_instance
+    storage_test_client_setup,
+    app_config_instance: Config,
 ) -> SanicASGITestClient:
     run_migrations_for_app("common")
     yield storage_test_client_setup

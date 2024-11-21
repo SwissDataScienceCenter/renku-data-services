@@ -53,12 +53,12 @@ async def test_user_preferences_add_pinned_project(
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None, max_examples=25)
 @pytest.mark.asyncio
 async def test_user_preferences_add_pinned_project_existing(
-    project_slugs: list[str], app_config: Config, db_instance, authz_instance, loggedin_user: base_models.APIUser
+    project_slugs: list[str], app_config_instance: Config, loggedin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     target(len(project_slugs))
-    user_preferences_repo = app_config.user_preferences_repo
-    project_slugs = project_slugs[: app_config.user_preferences_config.max_pinned_projects]
+    user_preferences_repo = app_config_instance.user_preferences_repo
+    project_slugs = project_slugs[: app_config_instance.user_preferences_config.max_pinned_projects]
     try:
         for project_slug in project_slugs:
             await user_preferences_repo.add_pinned_project(requested_by=loggedin_user, project_slug=project_slug)
@@ -77,12 +77,12 @@ async def test_user_preferences_add_pinned_project_existing(
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None, max_examples=25)
 @pytest.mark.asyncio
 async def test_user_preferences_delete_pinned_project(
-    project_slugs: list[str], app_config: Config, db_instance, authz_instance, loggedin_user: base_models.APIUser
+    project_slugs: list[str], app_config_instance: Config, loggedin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     target(len(project_slugs))
-    user_preferences_repo = app_config.user_preferences_repo
-    project_slugs_valid = project_slugs[: app_config.user_preferences_config.max_pinned_projects]
+    user_preferences_repo = app_config_instance.user_preferences_repo
+    project_slugs_valid = project_slugs[: app_config_instance.user_preferences_config.max_pinned_projects]
     try:
         for project_slug in project_slugs_valid:
             await user_preferences_repo.add_pinned_project(requested_by=loggedin_user, project_slug=project_slug)
@@ -102,13 +102,13 @@ async def test_user_preferences_delete_pinned_project(
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None, max_examples=25)
 @pytest.mark.asyncio
 async def test_user_preferences_add_pinned_project_respects_maximum(
-    project_slugs: list[str], app_config: Config, db_instance, authz_instance, loggedin_user: base_models.APIUser
+    project_slugs: list[str], app_config_instance: Config, loggedin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     target(len(project_slugs))
-    user_preferences_repo = app_config.user_preferences_repo
-    project_slugs_valid = project_slugs[: app_config.user_preferences_config.max_pinned_projects]
-    project_slugs_invalid = project_slugs[app_config.user_preferences_config.max_pinned_projects :]
+    user_preferences_repo = app_config_instance.user_preferences_repo
+    project_slugs_valid = project_slugs[: app_config_instance.user_preferences_config.max_pinned_projects]
+    project_slugs_invalid = project_slugs[app_config_instance.user_preferences_config.max_pinned_projects :]
     try:
         for project_slug in project_slugs_valid:
             await user_preferences_repo.add_pinned_project(requested_by=loggedin_user, project_slug=project_slug)

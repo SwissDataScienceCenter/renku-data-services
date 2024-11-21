@@ -24,9 +24,9 @@ regular_user2 = APIUser(is_admin=False, id="user2-id", access_token="some-token2
 
 
 @pytest_asyncio.fixture
-async def bootstrap_admins(app_config: Config, db_instance, authz_instance, event_loop) -> None:
+async def bootstrap_admins(app_config_instance: Config, event_loop) -> None:
     run_migrations_for_app("common")
-    authz = app_config.authz
+    authz = app_config_instance.authz
     admins = [admin_user]
     rels: list[RelationshipUpdate] = []
     for admin in admins:
@@ -43,10 +43,10 @@ async def bootstrap_admins(app_config: Config, db_instance, authz_instance, even
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("public_project", [True, False])
-async def test_adding_deleting_project(app_config: Config, bootstrap_admins, public_project: bool) -> None:
+async def test_adding_deleting_project(app_config_instance: Config, bootstrap_admins, public_project: bool) -> None:
     project_owner = regular_user1
     assert project_owner.id
-    authz = app_config.authz
+    authz = app_config_instance.authz
     project_id = ULID()
     project = Project(
         id=project_id,
@@ -92,11 +92,13 @@ async def test_adding_deleting_project(app_config: Config, bootstrap_admins, pub
 @pytest.mark.asyncio
 @pytest.mark.parametrize("public_project", [True, False])
 @pytest.mark.parametrize("granted_role", [Role.VIEWER, Role.EDITOR, Role.OWNER])
-async def test_granting_access(app_config: Config, bootstrap_admins, public_project: bool, granted_role: Role) -> None:
+async def test_granting_access(
+    app_config_instance: Config, bootstrap_admins, public_project: bool, granted_role: Role
+) -> None:
     project_owner = regular_user1
     assert project_owner.id
     assert regular_user2.id
-    authz = app_config.authz
+    authz = app_config_instance.authz
     project_id = ULID()
     project = Project(
         id=project_id,
@@ -137,11 +139,11 @@ async def test_granting_access(app_config: Config, bootstrap_admins, public_proj
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("public_project", [True, False])
-async def test_listing_users_with_access(app_config: Config, public_project: bool, bootstrap_admins) -> None:
+async def test_listing_users_with_access(app_config_instance: Config, public_project: bool, bootstrap_admins) -> None:
     project_owner = regular_user1
     assert project_owner.id
     assert regular_user2.id
-    authz = app_config.authz
+    authz = app_config_instance.authz
     project1_id = ULID()
     project1 = Project(
         id=project1_id,
@@ -185,8 +187,8 @@ async def test_listing_users_with_access(app_config: Config, public_project: boo
 
 
 @pytest.mark.asyncio
-async def test_listing_projects_with_access(app_config: Config, bootstrap_admins) -> None:
-    authz = app_config.authz
+async def test_listing_projects_with_access(app_config_instance: Config, bootstrap_admins) -> None:
+    authz = app_config_instance.authz
     public_project_id = ULID()
     private_project_id1 = ULID()
     private_project_id2 = ULID()

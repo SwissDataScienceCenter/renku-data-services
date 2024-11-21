@@ -3,7 +3,6 @@ from collections.abc import AsyncGenerator
 from copy import deepcopy
 from typing import Any
 
-import pytest
 import pytest_asyncio
 from authzed.api.v1 import Relationship, RelationshipUpdate, SubjectReference, WriteRelationshipsRequest
 from sanic import Sanic
@@ -163,9 +162,9 @@ async def unauthorized_headers() -> dict[str, str]:
 
 @pytest_asyncio.fixture
 async def bootstrap_admins(
-    sanic_client_with_migrations, app_config: Config, db_instance, authz_instance, event_loop, admin_user: UserInfo
+    sanic_client_with_migrations, app_config_instance: Config, event_loop, admin_user: UserInfo
 ) -> None:
-    authz = app_config.authz
+    authz = app_config_instance.authz
     rels: list[RelationshipUpdate] = []
     sub = SubjectReference(object=_AuthzConverter.user(admin_user.id))
     rels.append(
@@ -196,7 +195,7 @@ async def sanic_client_no_migrations(sanic_app_no_migrations: Sanic) -> AsyncGen
 
 @pytest_asyncio.fixture
 async def sanic_client_with_migrations(
-    sanic_client_no_migrations: SanicASGITestClient, app_config, db_instance, authz_instance
+    sanic_client_no_migrations: SanicASGITestClient, app_config_instance
 ) -> SanicASGITestClient:
     run_migrations_for_app("common")
     return sanic_client_no_migrations
@@ -204,11 +203,11 @@ async def sanic_client_with_migrations(
 
 @pytest_asyncio.fixture
 async def sanic_client(
-    sanic_client_with_migrations: SanicASGITestClient, app_config, db_instance, authz_instance, bootstrap_admins
+    sanic_client_with_migrations: SanicASGITestClient, app_config_instance, bootstrap_admins
 ) -> SanicASGITestClient:
-    await app_config.kc_user_repo.initialize(app_config.kc_api)
-    await sync_admins_from_keycloak(app_config.kc_api, app_config.authz)
-    await app_config.group_repo.generate_user_namespaces()
+    await app_config_instance.kc_user_repo.initialize(app_config_instance.kc_api)
+    await sync_admins_from_keycloak(app_config_instance.kc_api, app_config_instance.authz)
+    await app_config_instance.group_repo.generate_user_namespaces()
     return sanic_client_with_migrations
 
 

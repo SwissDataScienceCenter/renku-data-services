@@ -34,13 +34,11 @@ def user():
 @pytest.mark.asyncio
 async def test_storage_insert_get(
     storage: dict[str, Any],
-    app_config: Config,
+    app_config_instance: Config,
     user: APIUser,
-    db_instance,
-    authz_instance,
 ) -> None:
     run_migrations_for_app("common")
-    storage_repo = app_config.storage_repo
+    storage_repo = app_config_instance.storage_repo
     with contextlib.suppress(ValidationError, errors.ValidationError):
         await create_storage(storage, storage_repo, user=user)
 
@@ -52,13 +50,11 @@ async def test_storage_update_path(
     storage: dict[str, Any],
     new_source_path: str,
     new_target_path: str,
-    app_config: Config,
+    app_config_instance: Config,
     user: APIUser,
-    db_instance,
-    authz_instance,
 ) -> None:
     run_migrations_for_app("common")
-    storage_repo = app_config.storage_repo
+    storage_repo = app_config_instance.storage_repo
     try:
         inserted_storage = await create_storage(storage, storage_repo, user)
         assert inserted_storage.storage_id is not None
@@ -79,13 +75,11 @@ async def test_storage_update_path(
 async def test_storage_update_config(
     storage: dict[str, Any],
     new_config: dict[str, Any],
-    app_config: Config,
+    app_config_instance: Config,
     user: APIUser,
-    db_instance,
-    authz_instance,
 ) -> None:
     run_migrations_for_app("common")
-    storage_repo = app_config.storage_repo
+    storage_repo = app_config_instance.storage_repo
     try:
         inserted_storage = await create_storage(storage, storage_repo, user)
         assert inserted_storage.storage_id is not None
@@ -104,13 +98,11 @@ async def test_storage_update_config(
 @pytest.mark.asyncio
 async def test_storage_delete(
     storage: dict[str, Any],
-    app_config: Config,
+    app_config_instance: Config,
     user: APIUser,
-    db_instance,
-    authz_instance,
 ) -> None:
     run_migrations_for_app("common")
-    storage_repo = app_config.storage_repo
+    storage_repo = app_config_instance.storage_repo
     try:
         inserted_storage = await create_storage(storage, storage_repo, user)
         assert inserted_storage.storage_id is not None
