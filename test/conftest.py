@@ -200,6 +200,11 @@ async def app_config(
 
 
 @pytest_asyncio.fixture
+async def app_config_instance(app_config, db_instance, authz_instance) -> AsyncGenerator[DataConfig, None]:
+    yield app_config
+
+
+@pytest_asyncio.fixture
 async def secrets_storage_app_config(
     db_config: DBConfig, secrets_key_pair, monkeypatch, tmp_path
 ) -> AsyncGenerator[DataConfig, None]:
