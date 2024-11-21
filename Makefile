@@ -104,10 +104,9 @@ style_checks:  ## Run linting and style checks
 	@$(call test_apispec_up_to_date,"message_queue")
 	@echo "checking session apispec is up to date"
 	@$(call test_apispec_up_to_date,"session")
-	poetry run mypy
 	@echo "checking data connectors apispec is up to date"
 	@$(call test_apispec_up_to_date,"data_connectors")
-	#poetry run mypy
+	poetry run mypy
 	poetry run ruff format --check
 	poetry run ruff check .
 	poetry run bandit -c pyproject.toml -r .

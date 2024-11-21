@@ -70,6 +70,7 @@ class ProjectsBP(CustomBlueprint):
                 created_by=user.id,  # type: ignore[arg-type]
                 visibility=Visibility(body.visibility.value),
                 keywords=keywords,
+                documentation=body.documentation,
             )
             result = await self.project_repo.insert_project(user, project)
             return validated_json(apispec.Project, self._dump_project(result), status=201)
@@ -81,16 +82,26 @@ class ProjectsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @extract_if_none_match
+        @validate_query(query=apispec.ProjectsProjectIdGetParametersQuery)
         async def _get_one(
-            _: Request, user: base_models.APIUser, project_id: ULID, etag: str | None
+            _: Request,
+            user: base_models.APIUser,
+            project_id: ULID,
+            etag: str | None,
+            query: apispec.ProjectsProjectIdGetParametersQuery,
         ) -> JSONResponse | HTTPResponse:
-            project = await self.project_repo.get_project(user=user, project_id=project_id)
+            with_documentation = query.with_documentation is True
+            project = await self.project_repo.get_project(
+                user=user, project_id=project_id, with_documentation=with_documentation
+            )
 
             if project.etag is not None and project.etag == etag:
                 return HTTPResponse(status=304)
 
             headers = {"ETag": project.etag} if project.etag is not None else None
-            return validated_json(apispec.Project, self._dump_project(project), headers=headers)
+            return validated_json(
+                apispec.Project, self._dump_project(project, with_documentation=with_documentation), headers=headers
+            )
 
         return "/projects/<project_id:ulid>", ["GET"], _get_one
 
@@ -99,16 +110,29 @@ class ProjectsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @extract_if_none_match
+        @validate_query(query=apispec.NamespacesNamespaceProjectsSlugGetParametersQuery)
         async def _get_one_by_namespace_slug(
-            _: Request, user: base_models.APIUser, namespace: str, slug: str, etag: str | None
+            _: Request,
+            user: base_models.APIUser,
+            namespace: str,
+            slug: str,
+            etag: str | None,
+            query: apispec.NamespacesNamespaceProjectsSlugGetParametersQuery,
         ) -> JSONResponse | HTTPResponse:
-            project = await self.project_repo.get_project_by_namespace_slug(user=user, namespace=namespace, slug=slug)
+            with_documentation = query.with_documentation is True
+            project = await self.project_repo.get_project_by_namespace_slug(
+                user=user, namespace=namespace, slug=slug, with_documentation=with_documentation
+            )
 
             if project.etag is not None and project.etag == etag:
                 return HTTPResponse(status=304)
 
             headers = {"ETag": project.etag} if project.etag is not None else None
-            return validated_json(apispec.Project, self._dump_project(project), headers=headers)
+            return validated_json(
+                apispec.Project,
+                self._dump_project(project, with_documentation=with_documentation),
+                headers=headers,
+            )
 
         return "/namespaces/<namespace>/projects/<slug:renku_slug>", ["GET"], _get_one_by_namespace_slug
 
@@ -216,9 +240,9 @@ class ProjectsBP(CustomBlueprint):
         return "/projects/<project_id:ulid>/permissions", ["GET"], _get_permissions
 
     @staticmethod
-    def _dump_project(project: project_models.Project) -> dict[str, Any]:
+    def _dump_project(project: project_models.Project, with_documentation: bool = False) -> dict[str, Any]:
         """Dumps a project for API responses."""
-        return dict(
+        result = dict(
             id=str(project.id),
             name=project.name,
             namespace=project.namespace.slug,
@@ -232,3 +256,6 @@ class ProjectsBP(CustomBlueprint):
             etag=project.etag,
             keywords=project.keywords or [],
         )
+        if with_documentation:
+            result = dict(result, documentation=project.documentation)
+        return result

@@ -26,6 +26,7 @@ class BaseProject:
     repositories: list[Repository] = field(default_factory=list)
     description: Optional[str] = None
     keywords: Optional[list[str]] = None
+    documentation: Optional[str] = None
 
     @property
     def etag(self) -> str | None:
@@ -60,6 +61,7 @@ class ProjectPatch:
     repositories: list[Repository] | None
     description: str | None
     keywords: list[str] | None
+    documentation: str | None
 
 
 @dataclass
