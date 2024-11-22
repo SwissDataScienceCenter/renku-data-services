@@ -13,8 +13,6 @@ from renku_data_services.notebooks.api.amalthea_patches.utils import get_certifi
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.notebooks.crs import EmptyDir, ExtraVolume, ExtraVolumeMount, InitContainer, SecretAsVolume
-
-# from renku_data_services.session.models import SessionLauncherSecret
 from renku_data_services.project.models import SessionSecret
 
 if TYPE_CHECKING:
@@ -417,7 +415,7 @@ def user_secrets_container(
 
     decrypted_volume_mount = ExtraVolumeMount(
         name="user-secrets-volume",
-        # TODO: Make this path configurable
+        # TODO: Make this path configurable, defaulting to "/secrets".
         mountPath="/secrets",
         readOnly=True,
     )
