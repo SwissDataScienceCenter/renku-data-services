@@ -14,4 +14,5 @@ def validate_project_patch(patch: apispec.ProjectPatch) -> models.ProjectPatch:
         repositories=patch.repositories,
         description=patch.description,
         keywords=keywords,
+        documentation=patch.documentation,
     )

@@ -38,6 +38,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
         "repositories": ["http://renkulab.io/repository-1", "http://renkulab.io/repository-2"],
         "namespace": regular_user.namespace.slug,
         "keywords": ["keyword 1", "keyword.2", "keyword-3", "KEYWORD_4"],
+        "documentation": "$\\sqrt(2)$",
     }
 
     _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
@@ -47,13 +48,15 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
     assert project["name"] == "Renku Native Project"
     assert project["slug"] == "project-slug"
     assert project["description"] == "First Renku native project"
-    assert set(project["keywords"]) == {"keyword 1", "keyword.2", "keyword-3", "KEYWORD_4"}
     assert project["visibility"] == "public"
-    assert project["created_by"] == "user"
     assert {r for r in project["repositories"]} == {
         "http://renkulab.io/repository-1",
         "http://renkulab.io/repository-2",
     }
+    assert set(project["keywords"]) == {"keyword 1", "keyword.2", "keyword-3", "KEYWORD_4"}
+    assert "documentation" not in project
+    assert project["created_by"] == "user"
+
     project_id = project["id"]
 
     events = await app_config.event_repo._get_pending_events()
@@ -79,17 +82,28 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
     assert project["name"] == "Renku Native Project"
     assert project["slug"] == "project-slug"
     assert project["description"] == "First Renku native project"
-    assert set(project["keywords"]) == {"keyword 1", "keyword.2", "keyword-3", "KEYWORD_4"}
     assert project["visibility"] == "public"
-    assert project["created_by"] == "user"
     assert {r for r in project["repositories"]} == {
         "http://renkulab.io/repository-1",
         "http://renkulab.io/repository-2",
     }
+    assert set(project["keywords"]) == {"keyword 1", "keyword.2", "keyword-3", "KEYWORD_4"}
+    assert "documentation" not in project
+    assert project["created_by"] == "user"
+
+    _, response = await sanic_client.get(
+        f"/api/data/projects/{project_id}", params={"with_documentation": True}, headers=user_headers
+    )
+
+    assert response.status_code == 200, response.text
+    project = response.json
+    assert project["documentation"] == "$\\sqrt(2)$"
 
     # same as above, but using namespace/slug to retreive the pr
     _, response = await sanic_client.get(
-        f"/api/data/namespaces/{payload['namespace']}/projects/{payload['slug']}", headers=user_headers
+        f"/api/data/namespaces/{payload['namespace']}/projects/{payload['slug']}",
+        params={"with_documentation": True},
+        headers=user_headers,
     )
 
     assert response.status_code == 200, response.text
@@ -97,6 +111,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
     assert project["name"] == "Renku Native Project"
     assert project["slug"] == "project-slug"
     assert project["namespace"] == regular_user.namespace.slug
+    assert project["documentation"] == "$\\sqrt(2)$"
 
 
 @pytest.mark.asyncio
@@ -338,6 +353,7 @@ async def test_patch_project(create_project, get_project, sanic_client, user_hea
         "keywords": ["keyword 1", "keyword 2"],
         "visibility": "public",
         "repositories": ["http://renkulab.io/repository-1", "http://renkulab.io/repository-2"],
+        "documentation": "$\\infty$",
     }
     project_id = project["id"]
     _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=headers, json=patch)
@@ -367,6 +383,15 @@ async def test_patch_project(create_project, get_project, sanic_client, user_hea
         "http://renkulab.io/repository-1",
         "http://renkulab.io/repository-2",
     }
+    assert "documentation" not in project
+
+    _, response = await sanic_client.get(
+        f"/api/data/projects/{project_id}", params={"with_documentation": True}, headers=user_headers
+    )
+
+    assert response.status_code == 200, response.text
+    project = response.json
+    assert project["documentation"] == "$\\infty$"
 
 
 @pytest.mark.asyncio
