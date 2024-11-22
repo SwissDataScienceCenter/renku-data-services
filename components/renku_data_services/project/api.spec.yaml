@@ -459,6 +459,8 @@ paths:
         - session_secret_slots
     patch:
       summary: Update specific fields of an existing session secret slot
+      parameters:
+        - $ref: "#/components/parameters/If-Match"
       requestBody:
         required: true
         content:
