@@ -44,15 +44,20 @@ async def create_k8s_secret(
     if len(missing_secret_ids) > 0:
         raise errors.MissingResourceError(message=f"Couldn't find secrets with ids {', '.join(missing_secret_ids)}")
 
-    if key_mapping and set(key_mapping) != requested_secret_ids:
-        raise errors.ValidationError(message="Key mapping must include all requested secret IDs")
+    def ensure_list(value: str | list[str]) -> list[str]:
+        return [value] if isinstance(value, str) else value
 
-    # if key_mapping:
-    #     if set(key_mapping) != requested_secret_ids:
-    #         raise errors.ValidationError(message="Key mapping must include all requested secret IDs")
-    # TODO: update the check below
-    # if len(key_mapping) != len(set(key_mapping.values())):
-    #     raise errors.ValidationError(message="Key mapping values are not unique")
+    key_mapping_list = {key: ensure_list(key_mapping[key]) for key in key_mapping} if key_mapping else None
+
+    if key_mapping_list:
+        if set(key_mapping_list) != requested_secret_ids:
+            raise errors.ValidationError(message="Key mapping must include all requested secret IDs")
+
+        all_keys: list[str] = []
+        for value in key_mapping_list.values():
+            all_keys.extend(value)
+        if len(all_keys) != len(set(all_keys)):
+            raise errors.ValidationError(message="Key mapping values are not unique")
 
     decrypted_secrets = {}
     try:
@@ -68,8 +73,7 @@ async def create_k8s_secret(
 
             decrypted_value = decrypt_string(decryption_key, user.id, secret.encrypted_value).encode()  # type: ignore
 
-            single_or_multi_key = key_mapping[str(secret.id)] if key_mapping else secret.name
-            keys = [single_or_multi_key] if isinstance(single_or_multi_key, str) else single_or_multi_key
+            keys = key_mapping_list[str(secret.id)] if key_mapping_list else [secret.name]
             for key in keys:
                 decrypted_secrets[key] = b64encode(decrypted_value).decode()
     except Exception as e:
