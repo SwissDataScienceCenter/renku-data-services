@@ -24,8 +24,12 @@ from renku_data_services.utils.cryptography import (
 
 @pytest.fixture
 def create_secret(sanic_client: SanicASGITestClient, user_headers):
-    async def create_secret_helper(name: str, value: str, kind: str = "general") -> dict[str, Any]:
+    async def create_secret_helper(
+        name: str, value: str, kind: str = "general", default_filename: str | None = None
+    ) -> dict[str, Any]:
         payload = {"name": name, "value": value, "kind": kind}
+        if default_filename:
+            payload["default_filename"] = default_filename
 
         _, response = await sanic_client.post("/api/data/user/secrets", headers=user_headers, json=payload)
 
@@ -200,9 +204,9 @@ async def test_secret_encryption_decryption(
     create_secret,
 ) -> None:
     """Test adding a secret and decrypting it in the secret service."""
-    secret1 = await create_secret("secret-1", "value-1")
+    secret1 = await create_secret("secret-1", "value-1", default_filename="secret-1")
     secret1_id = secret1["id"]
-    secret2 = await create_secret("secret-2", "value-2")
+    secret2 = await create_secret("secret-2", "value-2", default_filename="secret-2")
     secret2_id = secret2["id"]
 
     payload = {
