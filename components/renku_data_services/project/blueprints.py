@@ -437,15 +437,13 @@ class ProjectSessionSecretBP(CustomBlueprint):
 
         return "/projects/<project_id:ulid>/secrets", ["PATCH"], _patch_session_secrets
 
-    def delete_patch_session_secrets(self) -> BlueprintFactoryResponse:
+    def delete_session_secrets(self) -> BlueprintFactoryResponse:
         """Remove all user secrets for a project."""
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _delete_patch_session_secrets(
-            _: Request, user: base_models.APIUser, project_id: ULID
-        ) -> HTTPResponse:
+        async def _delete_session_secrets(_: Request, user: base_models.APIUser, project_id: ULID) -> HTTPResponse:
             await self.project_session_secret_repo.delete_session_secrets(user=user, project_id=project_id)
             return HTTPResponse(status=204)
 
-        return "/projects/<project_id:ulid>/secrets", ["DELETE"], _delete_patch_session_secrets
+        return "/projects/<project_id:ulid>/secrets", ["DELETE"], _delete_session_secrets
