@@ -34,7 +34,7 @@ from renku_data_services.utils.core import with_db_transaction
 
 
 class ProjectRepository:
-    """Repository for project."""
+    """Repository for projects."""
 
     def __init__(
         self,
@@ -58,7 +58,6 @@ class ProjectRepository:
         direct_member: bool = False,
     ) -> tuple[list[models.Project], int]:
         """Get all projects from the database."""
-        project_ids = []
         if direct_member:
             project_ids = await self.authz.resources_with_direct_membership(user, ResourceType.project)
         else:
@@ -115,6 +114,25 @@ class ProjectRepository:
                 raise errors.MissingResourceError(message=f"Project with id '{project_id}' does not exist.")
 
             return project_orm.dump(with_documentation=with_documentation)
+
+    async def get_all_copied_projects(self, user: base_models.APIUser, project_id: ULID) -> list[models.Project]:
+        """Get all projects that are copied from the specified project."""
+        authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
+
+        async with self.session_maker() as session:
+            stmt = select(schemas.ProjectORM).where(schemas.ProjectORM.template_id == project_id)
+            result = await session.execute(stmt)
+            project_orms = result.scalars().all()
+
+            # NOTE: Show only those projects that user has access to
+            project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
+            project_orms = [p for p in project_orms if p.id in project_ids]
+
+            return [p.dump() for p in project_orms]
 
     async def get_project_by_namespace_slug(
         self, user: base_models.APIUser, namespace: str, slug: str, with_documentation: bool = False
@@ -206,6 +224,7 @@ class ProjectRepository:
             creation_date=datetime.now(UTC).replace(microsecond=0),
             keywords=project.keywords,
             documentation=project.documentation,
+            template_id=project.template_id,
         )
         project_slug = ns_schemas.EntitySlugORM.create_project_slug(slug, project_id=project_orm.id, namespace_id=ns.id)
 

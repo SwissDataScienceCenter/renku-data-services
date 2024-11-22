@@ -440,6 +440,21 @@ class DataConnectorProjectLinkRepository:
         return link_orm.dump()
 
     @with_db_transaction
+    async def copy_link(
+        self,
+        user: base_models.APIUser,
+        project_id: ULID,
+        link: models.DataConnectorToProjectLink,
+        *,
+        session: AsyncSession | None = None,
+    ) -> models.DataConnectorToProjectLink:
+        """Create a new link from a given data connector link to a project."""
+        unsaved_link = models.UnsavedDataConnectorToProjectLink(
+            data_connector_id=link.data_connector_id, project_id=project_id
+        )
+        return await self.insert_link(user=user, link=unsaved_link, session=session)
+
+    @with_db_transaction
     @Authz.authz_change(AuthzOperation.delete_link, ResourceType.data_connector)
     async def delete_link(
         self,

@@ -13,45 +13,6 @@ from renku_data_services.users.models import UserInfo
 
 
 @pytest.fixture
-def create_session_environment(sanic_client: SanicASGITestClient, admin_headers):
-    async def create_session_environment_helper(name: str, **payload) -> dict[str, Any]:
-        payload = payload.copy()
-        payload.update({"name": name})
-        payload["description"] = payload.get("description") or "A session environment."
-        payload["container_image"] = payload.get("container_image") or "some_image:some_tag"
-
-        _, res = await sanic_client.post("/api/data/environments", headers=admin_headers, json=payload)
-
-        assert res.status_code == 201, res.text
-        assert res.json is not None
-        return res.json
-
-    return create_session_environment_helper
-
-
-@pytest.fixture
-def create_session_launcher(sanic_client: SanicASGITestClient, user_headers):
-    async def create_session_launcher_helper(name: str, project_id: str, **payload) -> dict[str, Any]:
-        payload = payload.copy()
-        payload.update({"name": name, "project_id": project_id})
-        payload["description"] = payload.get("description") or "A session launcher."
-        if "environment" not in payload:
-            payload["environment"] = {
-                "environment_kind": "CUSTOM",
-                "name": "Test",
-                "container_image": "some_image:some_tag",
-            }
-
-        _, res = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
-
-        assert res.status_code == 201, res.text
-        assert res.json is not None
-        return res.json
-
-    return create_session_launcher_helper
-
-
-@pytest.fixture
 def launch_session(
     sanic_client: SanicASGITestClient,
     user_headers: dict,

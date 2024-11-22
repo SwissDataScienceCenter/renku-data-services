@@ -45,19 +45,19 @@ async def test_queue_send(app_config, monkeypatch) -> None:
 
     events = await app_config.redis.redis_connection.xrange(QUEUE_NAME)
     assert len(events) == 0
-    pending_events = await app_config.event_repo._get_pending_events()
+    pending_events = await app_config.event_repo.get_pending_events()
     assert len(pending_events) == 1
 
     await app_config.event_repo.send_pending_events()
 
     events = await app_config.redis.redis_connection.xrange(QUEUE_NAME)
     assert len(events) == 1
-    pending_events = await app_config.event_repo._get_pending_events()
+    pending_events = await app_config.event_repo.get_pending_events()
     assert len(pending_events) == 0
 
     await app_config.event_repo.send_pending_events()
 
     events = await app_config.redis.redis_connection.xrange(QUEUE_NAME)
     assert len(events) == 1
-    pending_events = await app_config.event_repo._get_pending_events()
+    pending_events = await app_config.event_repo.get_pending_events()
     assert len(pending_events) == 0

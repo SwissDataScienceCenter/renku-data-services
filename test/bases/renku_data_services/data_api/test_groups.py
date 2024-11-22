@@ -39,7 +39,7 @@ async def test_group_creation_basic(
     assert group["created_by"] == "user"
     datetime.fromisoformat(group["creation_date"])
 
-    events = await app_config.event_repo._get_pending_events()
+    events = await app_config.event_repo.get_pending_events()
 
     group_events = [e for e in events if e.get_message_type() == "group.added"]
     assert len(group_events) == 1
@@ -137,7 +137,7 @@ async def test_group_patch_delete(
     assert group["slug"] == new_payload["slug"]
     assert group["description"] == new_payload["description"]
 
-    events = await app_config.event_repo._get_pending_events()
+    events = await app_config.event_repo.get_pending_events()
 
     group_events = [e for e in events if e.get_message_type() == "group.updated"]
     assert len(group_events) == 1
@@ -154,7 +154,7 @@ async def test_group_patch_delete(
     _, response = await sanic_client.delete("/api/data/groups/group-2", headers=user_headers)
     assert response.status_code == 204
 
-    events = await app_config.event_repo._get_pending_events()
+    events = await app_config.event_repo.get_pending_events()
 
     group_events = [e for e in events if e.get_message_type() == "group.removed"]
     assert len(group_events) == 1
@@ -194,7 +194,7 @@ async def test_group_members(
     assert member_1 is not None
     assert member_1["role"] == "viewer"
 
-    events = await app_config.event_repo._get_pending_events()
+    events = await app_config.event_repo.get_pending_events()
 
     group_events = sorted([e for e in events if e.get_message_type() == "memberGroup.added"], key=lambda e: e.id)
     assert len(group_events) == 2
@@ -241,7 +241,7 @@ async def test_removing_single_group_owner_not_allowed(
     _, response = await sanic_client.patch("/api/data/groups/group-1/members", headers=user_headers, json=new_members)
     assert response.status_code == 200
 
-    events = await app_config.event_repo._get_pending_events()
+    events = await app_config.event_repo.get_pending_events()
 
     group_events = [e for e in events if e.get_message_type() == "memberGroup.updated"]
     assert len(group_events) == 1
@@ -254,7 +254,7 @@ async def test_removing_single_group_owner_not_allowed(
     _, response = await sanic_client.delete("/api/data/groups/group-1/members/user", headers=user_headers)
     assert response.status_code == 204
 
-    events = await app_config.event_repo._get_pending_events()
+    events = await app_config.event_repo.get_pending_events()
 
     group_events = [e for e in events if e.get_message_type() == "memberGroup.removed"]
     assert len(group_events) == 1

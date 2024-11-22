@@ -1,4 +1,4 @@
-"""authz add intial schema
+"""authz add initial schema
 
 Revision ID: ce1a111d6694
 Revises: 89aa4573cfa9

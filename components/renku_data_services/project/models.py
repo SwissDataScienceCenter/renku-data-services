@@ -27,6 +27,7 @@ class BaseProject:
     description: Optional[str] = None
     keywords: Optional[list[str]] = None
     documentation: Optional[str] = None
+    template_id: Optional[ULID] = None
 
     @property
     def etag(self) -> str | None:
