@@ -1,7 +1,7 @@
 """add project template
 
 Revision ID: ea52d750e389
-Revises: 1ef98b967767
+Revises: 6ed550690c0c
 Create Date: 2024-11-07 14:58:16.155262
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "ea52d750e389"
-down_revision = "1ef98b967767"
+down_revision = "6ed550690c0c"
 branch_labels = None
 depends_on = None
 
