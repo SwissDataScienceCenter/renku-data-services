@@ -197,7 +197,7 @@ async def test_migration_to_1ef98b967767(app_config_instance: Config, admin_user
         "/entrypoint.sh jupyter server --ServerApp.ip=0.0.0.0 --ServerApp.port=8888 "
         "--ServerApp.base_url=$RENKU_BASE_URL_PATH "
         '--ServerApp.token="" --ServerApp.password="" --ServerApp.allow_remote_access=true '
-        "--ContentsManager.allow_hidden=true --ServerApp.allow_origin=*",
+        '--ContentsManager.allow_hidden=true --ServerApp.allow_origin=* --ServerApp.root_dir="/home/jovyan/work"',
     ]
     assert global_env["environment_kind"] == "GLOBAL"
     async with app_config_instance.db.async_session_maker() as session, session.begin():
@@ -218,7 +218,7 @@ async def test_migration_to_1ef98b967767(app_config_instance: Config, admin_user
         "/entrypoint.sh jupyter server --ServerApp.ip=0.0.0.0 --ServerApp.port=8888 "
         "--ServerApp.base_url=$RENKU_BASE_URL_PATH "
         '--ServerApp.token="" --ServerApp.password="" --ServerApp.allow_remote_access=true '
-        "--ContentsManager.allow_hidden=true --ServerApp.allow_origin=*",
+        '--ContentsManager.allow_hidden=true --ServerApp.allow_origin=* --ServerApp.root_dir="/home/jovyan/work"',
     ]
     assert custom_env["environment_kind"] == "CUSTOM"
     async with app_config_instance.db.async_session_maker() as session, session.begin():
