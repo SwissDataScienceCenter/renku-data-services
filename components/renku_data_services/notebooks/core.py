@@ -288,6 +288,22 @@ async def docker_image_exists(config: NotebooksConfig, image_url: str, internal_
     return await image_repo.image_exists(parsed_image)
 
 
+async def docker_image_workdir(
+    config: NotebooksConfig, image_url: str, internal_gitlab_user: APIUser
+) -> PurePosixPath | None:
+    """Returns the working directory for the image.
+
+    If the user is logged in the internal GitLab (Renku V1), set the
+    credentials for the check.
+    """
+
+    parsed_image = Image.from_path(image_url)
+    image_repo = parsed_image.repo_api()
+    if parsed_image.hostname == config.git.registry and internal_gitlab_user.access_token:
+        image_repo = image_repo.with_oauth2_token(internal_gitlab_user.access_token)
+    return await image_repo.image_workdir(parsed_image)
+
+
 async def launch_notebook_helper(
     nb_config: NotebooksConfig,
     server_name: str,
