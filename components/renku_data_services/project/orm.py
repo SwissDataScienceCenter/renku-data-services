@@ -57,7 +57,7 @@ class ProjectORM(BaseORM):
         "updated_at", DateTime(timezone=True), default=None, server_default=func.now(), onupdate=func.now()
     )
     template_id: Mapped[Optional[ULID]] = mapped_column(ForeignKey("projects.id", ondelete="SET NULL"), default=None)
-    template: Mapped[bool] = mapped_column("template", Boolean(), default=False, nullable=False)
+    is_template: Mapped[bool] = mapped_column("is_template", Boolean(), default=False, nullable=False)
     """Indicates whether a project is a template project or not."""
 
     def dump(self, with_documentation: bool = False) -> models.Project:
@@ -78,7 +78,7 @@ class ProjectORM(BaseORM):
             keywords=self.keywords,
             documentation=self.documentation if with_documentation else None,
             template_id=self.template_id,
-            template=self.template,
+            is_template=self.is_template,
         )
 
 

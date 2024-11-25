@@ -317,8 +317,8 @@ class ProjectRepository:
 
         if patch.template_id is not None:
             project.template_id = None
-        if patch.template is not None:
-            project.template = patch.template
+        if patch.is_template is not None:
+            project.is_template = patch.is_template
 
         await session.flush()
         await session.refresh(project)

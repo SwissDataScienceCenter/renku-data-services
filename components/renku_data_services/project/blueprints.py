@@ -308,7 +308,7 @@ class ProjectsBP(CustomBlueprint):
             etag=project.etag,
             keywords=project.keywords or [],
             template_id=project.template_id,
-            template=project.template,
+            is_template=project.is_template,
         )
         if with_documentation:
             result = dict(result, documentation=project.documentation)
