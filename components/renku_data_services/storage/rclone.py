@@ -179,7 +179,37 @@ class RCloneValidator:
         storage_copy = RCloneValidator.__find_storage(spec, "webdav")
         storage_copy.update({"Prefix": prefix, "Name": name, "Description": description})
 
-        custom_option = [
+        custom_options = [
+            {
+                "Name": "provider",
+                "Help": "Choose the mode to access the data source.",
+                "Provider": "",
+                "Default": "",
+                "Value": None,
+                "Examples": [
+                    {
+                        "Value": "personal",
+                        "Help": "Connect to your personal storage space. This data connector cannot be used to share access to a folder.",
+                        "Provider": "",
+                    },
+                    {
+                        "Value": "shared",
+                        "Help": "Connect a 'public' folder shared with others. A 'public' folder may or may not be protected with a password.",
+                        "Provider": "",
+                    },
+                ],
+                "Required": True,
+                "Type": "string",
+                "ShortOpt": "",
+                "Hide": 0,
+                "IsPassword": False,
+                "NoPrefix": False,
+                "Advanced": False,
+                "Exclusive": True,
+                "Sensitive": False,
+                "DefaultStr": "",
+                "ValueStr": "",
+            },
             {
                 "Name": "public_link",
                 "Help": public_link_help,
@@ -200,21 +230,11 @@ class RCloneValidator:
                 "Type": "string",
             },
         ]
-        storage_copy["Options"].extend(custom_option)
+        storage_copy["Options"].extend(custom_options)
 
         # use provider to indicate if the option is for an personal o shared storage
         for option in storage_copy["Options"]:
-            if option["Name"] == "provider":
-                option["example"] = [
-                    {"Value": "personal", "Help": "Use Private to connect a folder that only you use", "Provider": ""},
-                    {
-                        "Value": "shared",
-                        "Help": "To connect a folder you share with others, both personal & shared folders.",
-                        "Provider": "",
-                    },
-                ]
-                option["Exclusive"] = True
-            elif option["Name"] == "url":
+            if option["Name"] == "url":
                 option.update({"Provider": "personal", "Default": url_value, "Required": False})
             elif option["Name"] in ["bearer_token", "bearer_token_command", "headers", "user"]:
                 option["Provider"] = "personal"
