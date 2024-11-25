@@ -271,8 +271,6 @@ class SessionRepository:
                     creation_date=datetime.now(UTC).replace(microsecond=0),
                 )
                 session.add(environment_orm)
-                environment = environment_orm.dump()
-                environment_id = environment.id
             else:
                 environment_id = ULID.from_str(launcher.environment)
                 res_env = await session.scalars(
@@ -285,7 +283,9 @@ class SessionRepository:
                     raise errors.MissingResourceError(
                         message=f"Session environment with id '{environment_id}' does not exist or you do not have access to it."  # noqa: E501
                     )
-                environment = environment_orm.dump()
+
+            environment = environment_orm.dump()
+            environment_id = environment.id
 
             resource_class_id = launcher.resource_class_id
             if resource_class_id is not None:
@@ -310,6 +310,41 @@ class SessionRepository:
                 project_id=launcher.project_id,
                 description=launcher.description if launcher.description else None,
                 environment_id=environment_id,
+                resource_class_id=launcher.resource_class_id,
+                created_by_id=user.id,
+                creation_date=datetime.now(UTC).replace(microsecond=0),
+            )
+            session.add(launcher_orm)
+            await session.flush()
+            await session.refresh(launcher_orm)
+            return launcher_orm.dump()
+
+    async def copy_launcher(
+        self, user: base_models.APIUser, project_id: ULID, launcher: models.SessionLauncher
+    ) -> models.SessionLauncher:
+        """Create a copy of the launcher in the given project."""
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        authorized = await self.project_authz.has_permission(user, ResourceType.project, project_id, Scope.WRITE)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
+
+        async with self.session_maker() as session, session.begin():
+            res = await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
+            project = res.one_or_none()
+            if project is None:
+                raise errors.MissingResourceError(
+                    message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+                )
+
+            launcher_orm = schemas.SessionLauncherORM(
+                name=launcher.name,
+                project_id=project_id,
+                description=launcher.description,
+                environment_id=launcher.environment.id,
                 resource_class_id=launcher.resource_class_id,
                 created_by_id=user.id,
                 creation_date=datetime.now(UTC).replace(microsecond=0),

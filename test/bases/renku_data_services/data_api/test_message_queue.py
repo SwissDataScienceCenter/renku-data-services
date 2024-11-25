@@ -39,7 +39,7 @@ async def test_message_queue_reprovisioning(
     await create_group("Group 2", admin=True)
     await create_group("Group 3", members=project_members)
 
-    events = await app_config.event_repo._get_pending_events()
+    events = await app_config.event_repo.get_pending_events()
 
     # NOTE: Clear all events before reprovisioning
     await app_config.event_repo.delete_all_events()
@@ -52,7 +52,7 @@ async def test_message_queue_reprovisioning(
 
     await _reprovisioning()
 
-    reprovisioning_events = await app_config.event_repo._get_pending_events()
+    reprovisioning_events = await app_config.event_repo.get_pending_events()
 
     events_before = {dataclass_to_str(deserialize_event(e)) for e in events}
     events_after = {dataclass_to_str(deserialize_event(e)) for e in reprovisioning_events[1:-1]}

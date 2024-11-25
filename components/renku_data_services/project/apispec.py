@@ -255,6 +255,13 @@ class Project(BaseAPISpec):
         max_length=5000,
         min_length=0,
     )
+    template_id: Optional[str] = Field(
+        None,
+        description="ULID identifier",
+        max_length=26,
+        min_length=26,
+        pattern="^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+    )
 
 
 class ProjectPost(BaseAPISpec):
@@ -293,7 +300,7 @@ class ProjectPost(BaseAPISpec):
         ],
         min_length=0,
     )
-    visibility: Visibility = Visibility.private
+    visibility: Optional[Visibility] = None
     description: Optional[str] = Field(
         None, description="A description for the resource", max_length=500
     )

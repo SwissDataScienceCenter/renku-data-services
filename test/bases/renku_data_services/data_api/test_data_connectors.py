@@ -1,43 +1,8 @@
-from typing import Any
-
 import pytest
 from sanic_testing.testing import SanicASGITestClient
 
 from renku_data_services.users.models import UserInfo
 from test.bases.renku_data_services.data_api.utils import merge_headers
-
-
-@pytest.fixture
-def create_data_connector(sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers):
-    async def create_data_connector_helper(
-        name: str, user: UserInfo | None = None, headers: dict[str, str] | None = None, **payload
-    ) -> dict[str, Any]:
-        user = user or regular_user
-        headers = headers or user_headers
-        dc_payload = {
-            "name": name,
-            "description": "A data connector",
-            "visibility": "private",
-            "namespace": user.namespace.slug,
-            "storage": {
-                "configuration": {
-                    "type": "s3",
-                    "provider": "AWS",
-                    "region": "us-east-1",
-                },
-                "source_path": "bucket/my-folder",
-                "target_path": "my/target",
-            },
-            "keywords": ["keyword 1", "keyword.2", "keyword-3", "KEYWORD_4"],
-        }
-        dc_payload.update(payload)
-
-        _, response = await sanic_client.post("/api/data/data_connectors", headers=headers, json=dc_payload)
-
-        assert response.status_code == 201, response.text
-        return response.json
-
-    return create_data_connector_helper
 
 
 @pytest.mark.asyncio

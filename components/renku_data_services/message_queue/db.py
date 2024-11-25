@@ -27,7 +27,7 @@ class EventRepository:
         self.session_maker = session_maker
         self.message_queue: IMessageQueue = message_queue
 
-    async def _get_pending_events(self) -> list[schemas.EventORM]:
+    async def get_pending_events(self) -> list[schemas.EventORM]:
         """Get all pending events."""
         async with self.session_maker() as session:
             stmt = select(schemas.EventORM).order_by(schemas.EventORM.timestamp_utc)

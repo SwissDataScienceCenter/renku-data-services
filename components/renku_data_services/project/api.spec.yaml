@@ -184,6 +184,69 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - projects
+  /projects/{project_id}/copies:
+    get:
+      summary: Get list of all copies of this project
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/Ulid"
+      responses:
+        "200":
+          description: The list of projects
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectsList"
+        "404":
+          description: The project does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - projects
+    post:
+      summary: Create a new copy
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/Ulid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectPost"
+      responses:
+        "201":
+          description: The project was created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "403":
+          description: The project was copied but at least one data connector cannot be copied due to lack of permission
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: The project does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - projects
   /projects/{project_id}/members:
     get:
       summary: Get all members of a project
@@ -353,6 +416,8 @@ components:
           $ref: "#/components/schemas/KeywordsList"
         documentation:
           $ref: "#/components/schemas/ProjectDocumentation"
+        template_id:
+          $ref: "#/components/schemas/Ulid"
       required:
         - "id"
         - "name"
@@ -375,6 +440,7 @@ components:
         keywords:
           - "keyword 1"
           - "keyword 2"
+        template_id: "01JC3CB5426KC7P5STS5X3KSS8"
     ProjectPost:
       description: Project metadata to be created in Renku
       type: object
@@ -389,8 +455,10 @@ components:
         repositories:
           $ref: "#/components/schemas/RepositoriesList"
         visibility:
-          $ref: "#/components/schemas/Visibility" # Visibility is ``private`` if not passed at this point
-          default: "private"
+          # When copying a project from a template project, the default visibility is the same as template project's
+          # visibility.
+          # Its default value is ``private``, when creating a project without copying.
+          $ref: "#/components/schemas/Visibility"
         description:
           $ref: "#/components/schemas/Description"
         keywords:

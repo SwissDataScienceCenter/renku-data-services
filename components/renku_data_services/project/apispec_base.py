@@ -15,8 +15,8 @@ class BaseAPISpec(BaseModel):
         # this rust crate does not support lookahead regex syntax but we need it in this component
         regex_engine = "python-re"
 
-    @field_validator("id", mode="before", check_fields=False)
+    @field_validator("id", "template_id", mode="before", check_fields=False)
     @classmethod
-    def serialize_id(cls, id: str | ULID) -> str:
+    def serialize_ulid_fields(cls, value: str | ULID | None) -> str | None:
         """Custom serializer that can handle ULIDs."""
-        return str(id)
+        return None if value is None else str(value)

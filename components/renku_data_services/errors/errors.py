@@ -63,6 +63,13 @@ class ForbiddenError(BaseError):
 
 
 @dataclass
+class CopyDataConnectorsError(ForbiddenError):
+    """Raised when a project can be copied but its data connectors cannot be copied due to lack of permission."""
+
+    message: str = "The project was copied but there is no permission to copy data connectors."
+
+
+@dataclass
 class MissingResourceError(BaseError):
     """Raised when a resource is not found."""
 
