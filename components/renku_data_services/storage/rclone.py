@@ -94,7 +94,7 @@ class RCloneValidator:
     @staticmethod
     def __patch_schema_add_switch_provider(spec: list[dict[str, Any]]) -> None:
         """Adds a fake provider to help with setting up switch storage."""
-        s3 = next(s for s in spec if s["Prefix"] == "s3")
+        s3 = RCloneValidator.__find_storage(spec, "s3")
         providers = next(o for o in s3["Options"] if o["Name"] == "provider")
         providers["Examples"].append({"Value": "Switch", "Help": "Switch Object Storage", "Provider": ""})
         s3["Options"].append(
@@ -158,12 +158,12 @@ class RCloneValidator:
                 storage["Options"] = options
 
     @staticmethod
-    def __find_webdav_storage(spec: list[dict[str, Any]]) -> dict[str, Any]:
+    def __find_storage(spec: list[dict[str, Any]], prefix: str) -> dict[str, Any]:
         """Find and return the WebDAV storage schema from the spec."""
-        webdav_storage = next((s for s in spec if s["Prefix"] == "webdav"), None)
-        if not webdav_storage:
-            raise errors.ValidationError(message="WebDAV storage not found in schema.")
-        return deepcopy(webdav_storage)
+        storage = next((s for s in spec if s["Prefix"] == prefix), None)
+        if not storage:
+            raise errors.ValidationError(message=f"'{prefix}' storage not found in schema.")
+        return deepcopy(storage)
 
     @staticmethod
     def __add_webdav_based_storage(
@@ -176,36 +176,10 @@ class RCloneValidator:
     ) -> None:
         """Create a modified copy of WebDAV storage and add it to the schema."""
         # Find WebDAV storage schema and create a modified copy
-        storage_copy = RCloneValidator.__find_webdav_storage(spec)
+        storage_copy = RCloneValidator.__find_storage(spec, "webDav")
         storage_copy.update({"Prefix": prefix, "Name": name, "Description": description})
 
-        custom_options = [
-            {
-                "Name": "access",
-                "Help": "Choose the mode to access the data source.",
-                "Provider": "",
-                "Default": "",
-                "Value": None,
-                "Examples": [
-                    {"Value": "personal", "Help": "Use Private to connect a folder that only you use", "Provider": ""},
-                    {
-                        "Value": "shared",
-                        "Help": "To connect a folder you share with others, both personal & shared folders.",
-                        "Provider": "",
-                    },
-                ],
-                "Required": False,
-                "Type": "string",
-                "ShortOpt": "",
-                "Hide": 0,
-                "IsPassword": False,
-                "NoPrefix": False,
-                "Advanced": False,
-                "Exclusive": False,
-                "Sensitive": False,
-                "DefaultStr": "",
-                "ValueStr": "",
-            },
+        custom_option = [
             {
                 "Name": "public_link",
                 "Help": public_link_help,
@@ -226,11 +200,21 @@ class RCloneValidator:
                 "Type": "string",
             },
         ]
-        storage_copy["Options"].extend(custom_options)
+        storage_copy["Options"].extend(custom_option)
 
         # use provider to indicate if the option is for an personal o shared storage
         for option in storage_copy["Options"]:
-            if option["Name"] == "url":
+            if option["Name"] == "provider":
+                option["example"] = [
+                    {"Value": "personal", "Help": "Use Private to connect a folder that only you use", "Provider": ""},
+                    {
+                        "Value": "shared",
+                        "Help": "To connect a folder you share with others, both personal & shared folders.",
+                        "Provider": "",
+                    },
+                ]
+                option["Exclusive"] = True
+            elif option["Name"] == "url":
                 option.update({"Provider": "personal", "Default": url_value, "Required": False})
             elif option["Name"] in ["bearer_token", "bearer_token_command", "headers", "user"]:
                 option["Provider"] = "personal"

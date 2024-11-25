@@ -227,11 +227,11 @@ class RCloneStorage(ICloudStorageRequest):
 
         if access == "shared" and storage_type == "polybox":
             self.configuration["url"] = "https://polybox.ethz.ch/public.php/webdav/"
-        if access == "shared" and storage_type == "switchDrive":
+        elif access == "shared" and storage_type == "switchDrive":
             self.configuration["url"] = "https://drive.switch.ch/public.php/webdav/"
-        if access == "personal" and storage_type == "polybox":
+        elif access == "personal" and storage_type == "polybox":
             self.configuration["url"] = "https://polybox.ethz.ch/remote.php/webdav/"
-        if access == "personal" and storage_type == "switchDrive":
+        elif access == "personal" and storage_type == "switchDrive":
             self.configuration["url"] = "https://drive.switch.ch/remote.php/webdav/"
 
         # Extract the user from the public link
