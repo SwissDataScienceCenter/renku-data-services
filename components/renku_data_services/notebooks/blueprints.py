@@ -294,13 +294,9 @@ class NotebooksNewBP(CustomBlueprint):
             resource_class_id = body.resource_class_id or default_resource_class.id
             await self.nb_config.crc_validator.validate_class_storage(user, resource_class_id, body.disk_storage)
             resource_class = await self.rp_repo.get_resource_class(user, resource_class_id)
-            work_dir_fallback = PurePosixPath("/home/jovyan/work")
+            work_dir_fallback = PurePosixPath("/home/jovyan")
             work_dir = environment.working_directory or image_workdir or work_dir_fallback
-            storage_mount_fallback = work_dir
-            if storage_mount_fallback == PurePosixPath("/"):
-                # NOTE: If the mount point is / then the image's files will be wiped and
-                # the image will not work at all.
-                storage_mount_fallback = work_dir_fallback
+            storage_mount_fallback = work_dir / "work"
             # TODO: Wait for pitch on users secrets to implement this
             # user_secrets: K8sUserSecrets | None = None
             # if body.user_secrets:
