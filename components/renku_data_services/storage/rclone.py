@@ -176,7 +176,7 @@ class RCloneValidator:
     ) -> None:
         """Create a modified copy of WebDAV storage and add it to the schema."""
         # Find WebDAV storage schema and create a modified copy
-        storage_copy = RCloneValidator.__find_storage(spec, "webDav")
+        storage_copy = RCloneValidator.__find_storage(spec, "webdav")
         storage_copy.update({"Prefix": prefix, "Name": name, "Description": description})
 
         custom_option = [
