@@ -285,13 +285,18 @@ class NotebooksNewBP(CustomBlueprint):
                 return json(existing_session.as_apispec().model_dump(exclude_none=True, mode="json"))
             environment = launcher.environment
             image = environment.container_image
+            image_workdir = await core.docker_image_workdir(
+                self.nb_config, environment.container_image, internal_gitlab_user
+            )
             default_resource_class = await self.rp_repo.get_default_resource_class()
             if default_resource_class.id is None:
                 raise errors.ProgrammingError(message="The default resource class has to have an ID", quiet=True)
             resource_class_id = body.resource_class_id or default_resource_class.id
             await self.nb_config.crc_validator.validate_class_storage(user, resource_class_id, body.disk_storage)
             resource_class = await self.rp_repo.get_resource_class(user, resource_class_id)
-            work_dir = environment.working_directory
+            work_dir_fallback = PurePosixPath("/home/jovyan")
+            work_dir = environment.working_directory or image_workdir or work_dir_fallback
+            storage_mount_fallback = work_dir / "work"
             # TODO: Wait for pitch on users secrets to implement this
             # user_secrets: K8sUserSecrets | None = None
             # if body.user_secrets:
@@ -391,8 +396,8 @@ class NotebooksNewBP(CustomBlueprint):
                 config=self.nb_config,
                 repositories=repositories,
                 git_providers=git_providers,
-                workspace_mount_path=launcher.environment.mount_directory,
-                work_dir=launcher.environment.working_directory,
+                workspace_mount_path=launcher.environment.mount_directory or storage_mount_fallback,
+                work_dir=work_dir,
             )
             if git_clone is not None:
                 session_init_containers.append(InitContainer.model_validate(git_clone))
@@ -446,9 +451,11 @@ class NotebooksNewBP(CustomBlueprint):
                         storage=Storage(
                             className=self.nb_config.sessions.storage.pvs_storage_class,
                             size=str(body.disk_storage) + "G",
-                            mountPath=environment.mount_directory.as_posix(),
+                            mountPath=environment.mount_directory.as_posix()
+                            if environment.mount_directory
+                            else storage_mount_fallback.as_posix(),
                         ),
-                        workingDir=environment.working_directory.as_posix(),
+                        workingDir=work_dir.as_posix(),
                         runAsUser=environment.uid,
                         runAsGroup=environment.gid,
                         resources=Resources(requests=requests),

@@ -282,10 +282,22 @@ async def docker_image_exists(config: NotebooksConfig, image_url: str, internal_
     """
 
     parsed_image = Image.from_path(image_url)
-    image_repo = parsed_image.repo_api()
-    if parsed_image.hostname == config.git.registry and internal_gitlab_user.access_token:
-        image_repo = image_repo.with_oauth2_token(internal_gitlab_user.access_token)
+    image_repo = parsed_image.repo_api().maybe_with_oauth2_token(config.git.registry, internal_gitlab_user.access_token)
     return await image_repo.image_exists(parsed_image)
+
+
+async def docker_image_workdir(
+    config: NotebooksConfig, image_url: str, internal_gitlab_user: APIUser
+) -> PurePosixPath | None:
+    """Returns the working directory for the image.
+
+    If the user is logged in the internal GitLab (Renku V1), set the
+    credentials for the check.
+    """
+
+    parsed_image = Image.from_path(image_url)
+    image_repo = parsed_image.repo_api().maybe_with_oauth2_token(config.git.registry, internal_gitlab_user.access_token)
+    return await image_repo.image_workdir(parsed_image)
 
 
 async def launch_notebook_helper(
@@ -361,9 +373,9 @@ async def launch_notebook_helper(
         # and by default it can only be public since only public projects are visible to
         # non-authenticated users. Also, a nice footgun from the Gitlab API Python library.
         is_image_private = getattr(gl_project, "visibility", GitlabVisibility.PUBLIC) != GitlabVisibility.PUBLIC
-        image_repo = parsed_image.repo_api()
-        if is_image_private and internal_gitlab_user.access_token:
-            image_repo = image_repo.with_oauth2_token(internal_gitlab_user.access_token)
+        image_repo = parsed_image.repo_api().maybe_with_oauth2_token(
+            nb_config.git.registry, internal_gitlab_user.access_token
+        )
         if not image_repo.image_exists(parsed_image):
             raise errors.MissingResourceError(
                 message=(
