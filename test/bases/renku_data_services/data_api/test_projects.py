@@ -74,7 +74,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
     assert "documentation" not in project
     assert project["created_by"] == "user"
     assert "template_id" not in project or project["template_id"] is None
-    assert project["template"] is False
+    assert project["is_template"] is False
     project_id = project["id"]
 
     events = await app_config.event_repo.get_pending_events()
@@ -117,7 +117,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
     project = response.json
     assert project["documentation"] == "$\\sqrt(2)$"
     assert "template_id" not in project or project["template_id"] is None
-    assert project["template"] is False
+    assert project["is_template"] is False
 
     # same as above, but using namespace/slug to retrieve the pr
     _, response = await sanic_client.get(
@@ -1382,18 +1382,18 @@ async def test_project_patch_template(create_project, get_project, update_projec
     project = await create_project("Project")
     project_id = project["id"]
 
-    await update_project(project_id, template=True)
+    await update_project(project_id, is_template=True)
 
     # TODO: Check the event queue if we decided to send the results to search
 
     project = await get_project(project_id)
-    assert project["template"] is True
+    assert project["is_template"] is True
 
     # NOTE: Set back value to False
-    await update_project(project_id, template=False)
+    await update_project(project_id, is_template=False)
 
     project = await get_project(project_id)
-    assert project["template"] is False
+    assert project["is_template"] is False
 
 
 @pytest.mark.asyncio

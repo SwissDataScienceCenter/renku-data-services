@@ -1,7 +1,7 @@
 """add template flag to projects
 
 Revision ID: 08ac2714e8e2
-Revises: ea52d750e389
+Revises: 086eb60b42c8
 Create Date: 2024-11-19 13:17:22.222365
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "08ac2714e8e2"
-down_revision = "ea52d750e389"
+down_revision = "086eb60b42c8"
 branch_labels = None
 depends_on = None
 
