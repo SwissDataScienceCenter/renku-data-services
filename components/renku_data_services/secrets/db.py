@@ -130,7 +130,7 @@ class UserSecretsRepo:
                 )
                 secret.update(encrypted_value=encrypted_value, encrypted_key=encrypted_key)
 
-        return secret.dump()
+            return secret.dump()
 
     @only_authenticated
     async def delete_secret(self, requested_by: APIUser, secret_id: ULID) -> None:

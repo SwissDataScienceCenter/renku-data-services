@@ -594,8 +594,6 @@ class DataConnectorSecretRepository:
                             secrets_schemas.SecretORM.id == data_connector_secret_orm.secret_id
                         )
                     )
-                    # await session.delete(data_connector_secret_orm.secret)
-                    # await session.delete(data_connector_secret_orm)
                     del existing_secrets_as_dict[name]
                     continue
 
