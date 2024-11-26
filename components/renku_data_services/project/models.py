@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from ulid import ULID
 
@@ -28,6 +28,7 @@ class BaseProject:
     keywords: Optional[list[str]] = None
     documentation: Optional[str] = None
     template_id: Optional[ULID] = None
+    is_template: bool = False
 
     @property
     def etag(self) -> str | None:
@@ -63,6 +64,8 @@ class ProjectPatch:
     description: str | None
     keywords: list[str] | None
     documentation: str | None
+    template_id: Literal[""] | None
+    is_template: bool | None
 
 
 @dataclass

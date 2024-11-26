@@ -193,6 +193,13 @@ paths:
           required: true
           schema:
             $ref: "#/components/schemas/Ulid"
+        - in: query
+          description: When true, only return projects that the user has write access to
+          name: writable
+          required: false
+          schema:
+            type: boolean
+            default: false
       responses:
         "200":
           description: The list of projects
@@ -418,6 +425,9 @@ components:
           $ref: "#/components/schemas/ProjectDocumentation"
         template_id:
           $ref: "#/components/schemas/Ulid"
+        is_template:
+          $ref: "#/components/schemas/IsTemplate"
+          default: False
       required:
         - "id"
         - "name"
@@ -466,8 +476,8 @@ components:
         documentation:
           $ref: "#/components/schemas/ProjectDocumentation"
       required:
-        - "name"
-        - "namespace"
+        - name
+        - namespace
     ProjectPatch:
       type: object
       description: Patch of a project
@@ -487,6 +497,17 @@ components:
           $ref: "#/components/schemas/KeywordsList"
         documentation:
           $ref: "#/components/schemas/ProjectDocumentation"
+        template_id:
+          description: template_id is set when copying a project from a template project and it cannot be modified.
+                       This field can be either null or an empty string; a null value won't change it while an empty
+                       string value will delete it, meaning that the project is unlinked from its template
+          type: string
+          # TODO: Once https://github.com/koxudaxi/datamodel-code-generator/issues/2191 is addressed use `enum: [""]`
+          # here and add `--enum-field-as-literal=one` flag to `codegen_params` in the `Makefile`
+          minLength: 0
+          maxLength: 0
+        is_template:
+          $ref: "#/components/schemas/IsTemplate"
     Ulid:
       description: ULID identifier
       type: string
@@ -584,6 +605,9 @@ components:
       enum:
         - private
         - public
+    IsTemplate:
+      description: Shows if a project is a template or not
+      type: boolean
     ProjectMemberListPatchRequest:
       description: List of members and their access level to the project
       type: array

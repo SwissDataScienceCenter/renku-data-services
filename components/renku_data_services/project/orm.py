@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import DateTime, Identity, Index, Integer, MetaData, String, func
+from sqlalchemy import Boolean, DateTime, Identity, Index, Integer, MetaData, String, func
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
@@ -57,6 +57,8 @@ class ProjectORM(BaseORM):
         "updated_at", DateTime(timezone=True), default=None, server_default=func.now(), onupdate=func.now()
     )
     template_id: Mapped[Optional[ULID]] = mapped_column(ForeignKey("projects.id", ondelete="SET NULL"), default=None)
+    is_template: Mapped[bool] = mapped_column("is_template", Boolean(), default=False, nullable=False)
+    """Indicates whether a project is a template project or not."""
 
     def dump(self, with_documentation: bool = False) -> models.Project:
         """Create a project model from the ProjectORM."""
@@ -76,6 +78,7 @@ class ProjectORM(BaseORM):
             keywords=self.keywords,
             documentation=self.documentation if with_documentation else None,
             template_id=self.template_id,
+            is_template=self.is_template,
         )
 
 
