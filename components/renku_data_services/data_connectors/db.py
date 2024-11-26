@@ -590,6 +590,7 @@ class DataConnectorSecretRepository:
                     if data_connector_secret_orm is None:
                         continue
                     await session.delete(data_connector_secret_orm.secret)
+                    await session.delete(data_connector_secret_orm)
                     del existing_secrets_as_dict[name]
                     continue
 
@@ -605,13 +606,6 @@ class DataConnectorSecretRepository:
                         encrypted_value=encrypted_value, encrypted_key=encrypted_key
                     )
                 else:
-                    # secret_orm = secrets_schemas.SecretORM(
-                    #     name=f"{data_connector_id}-{name}",
-                    #     user_id=user.id,
-                    #     encrypted_value=encrypted_value,
-                    #     encrypted_key=encrypted_key,
-                    #     kind=SecretKind.storage,
-                    # )
                     secret_name = f"{data_connector.name[:45]} - {name[:45]}"
                     suffix = "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(8)])  # nosec B311
                     secret_name_slug = base_models.Slug.from_name(name).value
@@ -632,6 +626,8 @@ class DataConnectorSecretRepository:
                     )
                     session.add(secret_orm)
                     session.add(data_connector_secret_orm)
+                    await session.flush()
+                    await session.refresh(data_connector_secret_orm)
 
                 all_secrets.append(data_connector_secret_orm.dump())
 
