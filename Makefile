@@ -117,7 +117,7 @@ test_setup:  ## Prep for the tests - removes old coverage reports if one is pres
 main_tests:  ## Run the main (i.e. non-schemathesis tests)
 	DUMMY_STORES=true poetry run alembic --name common upgrade heads
 	poetry run alembic --name common check
-	poetry run pytest -m "not schemathesis" -n auto
+	poetry run pytest -m "not schemathesis" -n auto -v
 schemathesis_tests:  ## Run schemathesis checks
 	poetry run pytest -m "schemathesis" --cov-append
 collect_coverage:  ## Collect test coverage reports

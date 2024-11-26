@@ -1,14 +1,19 @@
 """Fixtures for testing."""
 
+import asyncio
 import logging
 import os
 import secrets
 import socket
 import subprocess
-from collections.abc import Generator, Iterator
+from collections.abc import AsyncGenerator, Iterator
 from multiprocessing import Lock
+from pathlib import Path
+from uuid import uuid4
 
 import pytest
+import pytest_asyncio
+import uvloop
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from hypothesis import settings
@@ -20,15 +25,40 @@ from renku_data_services.app_config import Config as DataConfig
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.secrets.config import Config as SecretsConfig
+from renku_data_services.users import models as user_preferences_models
+from test.utils import TestAppConfig
 
 settings.register_profile("ci", deadline=400, max_examples=5)
 settings.register_profile("dev", deadline=200, max_examples=5)
 
 settings.load_profile(os.getenv("HYPOTHESIS_PROFILE", "dev"))
 
+# there are some cases where sanic inadvertently sets the loop policy to uvloop
+# This can cause issues if the main loop isn't an uvloop loop, so we force the use of uvloop
+asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+
 
 @pytest.fixture(scope="session")
-def free_port() -> int:
+def event_loop():
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        policy = asyncio.get_event_loop_policy()
+        loop = policy.new_event_loop()
+    yield loop
+    print("closing event loop")
+    loop.close()
+
+
+@pytest_asyncio.fixture(scope="session")
+async def monkeysession():
+    mpatch = pytest.MonkeyPatch()
+    yield mpatch
+    mpatch.undo()
+
+
+@pytest_asyncio.fixture(scope="session")
+async def free_port() -> int:
     lock = Lock()
     with lock, socket.socket() as s:
         s.bind(("", 0))
@@ -36,8 +66,8 @@ def free_port() -> int:
         return port
 
 
-@pytest.fixture
-def authz_config(monkeypatch, free_port) -> Iterator[AuthzConfig]:
+@pytest_asyncio.fixture(scope="session")
+async def authz_setup(monkeysession, free_port) -> AsyncGenerator[None, None]:
     port = free_port
     proc = subprocess.Popen(
         [
@@ -50,11 +80,11 @@ def authz_config(monkeypatch, free_port) -> Iterator[AuthzConfig]:
             "--log-level=debug",
         ]
     )
-    monkeypatch.setenv("AUTHZ_DB_HOST", "127.0.0.1")
+    monkeysession.setenv("AUTHZ_DB_HOST", "127.0.0.1")
     # NOTE: In our devcontainer setup 50051 and 50052 is taken by the running authzed instance
-    monkeypatch.setenv("AUTHZ_DB_GRPC_PORT", f"{port}")
-    monkeypatch.setenv("AUTHZ_DB_KEY", "renku")
-    yield AuthzConfig.from_env()
+    monkeysession.setenv("AUTHZ_DB_GRPC_PORT", f"{port}")
+    monkeysession.setenv("AUTHZ_DB_KEY", "renku")
+    yield
     try:
         proc.terminate()
     except Exception as err:
@@ -62,8 +92,8 @@ def authz_config(monkeypatch, free_port) -> Iterator[AuthzConfig]:
         proc.kill()
 
 
-@pytest.fixture
-def db_config(monkeypatch, worker_id, authz_config) -> Iterator[DBConfig]:
+@pytest_asyncio.fixture
+async def db_config(monkeypatch, worker_id, authz_setup) -> AsyncGenerator[DBConfig, None]:
     db_name = str(ULID()).lower() + "_" + worker_id
     user = os.getenv("DB_USER", "renku")
     host = os.getenv("DB_HOST", "127.0.0.1")
@@ -82,16 +112,49 @@ def db_config(monkeypatch, worker_id, authz_config) -> Iterator[DBConfig]:
         template_dbname="renku_template",
     ):
         yield DBConfig.from_env()
-        DBConfig.dispose_connection()
-        DBConfig._async_engine = None
+        await DBConfig.dispose_connection()
 
 
-@pytest.fixture
-def secrets_key_pair(monkeypatch, tmp_path) -> None:
+@pytest_asyncio.fixture
+async def db_instance(monkeysession, worker_id, app_config, event_loop) -> AsyncGenerator[DBConfig, None]:
+    db_name = str(ULID()).lower() + "_" + worker_id
+    user = os.getenv("DB_USER", "renku")
+    host = os.getenv("DB_HOST", "127.0.0.1")
+    port = os.getenv("DB_PORT", "5432")
+    password = os.getenv("DB_PASSWORD", "renku")  # nosec: B105
+
+    monkeysession.setenv("DUMMY_STORES", "true")
+    monkeysession.setenv("DB_NAME", db_name)
+    with DatabaseJanitor(
+        user=user,
+        host=host,
+        port=port,
+        dbname=db_name,
+        version="16.2",
+        password=password,
+        template_dbname="renku_template",
+    ):
+        db = DBConfig.from_env()
+        app_config.db.push(db)
+        yield db
+        await app_config.db.pop()
+
+
+@pytest_asyncio.fixture
+async def authz_instance(app_config, monkeypatch) -> Iterator[AuthzConfig]:
+    monkeypatch.setenv("AUTHZ_DB_KEY", f"renku-{uuid4().hex}")
+    app_config.authz_config.push(AuthzConfig.from_env())
+    yield app_config.authz_config
+    app_config.authz_config.pop()
+
+
+@pytest_asyncio.fixture(scope="session")
+async def secrets_key_pair(monkeysession, tmpdir_factory) -> None:
     """Create a public/private key pair to be used for secrets service tests."""
+    tmp_path = tmpdir_factory.mktemp("secrets_key")
 
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    priv_key_path = tmp_path / "key.priv"
+    priv_key_path = Path(tmp_path) / "key.priv"
     priv_key_path.write_bytes(
         private_key.private_bytes(
             encoding=serialization.Encoding.PEM,
@@ -101,7 +164,7 @@ def secrets_key_pair(monkeypatch, tmp_path) -> None:
     )
 
     secrets_service_public_key = private_key.public_key()
-    pub_key_path = tmp_path / "key.pub"
+    pub_key_path = Path(tmp_path) / "key.pub"
     pub_key_path.write_bytes(
         secrets_service_public_key.public_bytes(
             encoding=serialization.Encoding.PEM,
@@ -109,24 +172,42 @@ def secrets_key_pair(monkeypatch, tmp_path) -> None:
         )
     )
 
-    monkeypatch.setenv("SECRETS_SERVICE_PUBLIC_KEY_PATH", pub_key_path.as_posix())
-    monkeypatch.setenv("SECRETS_SERVICE_PRIVATE_KEY_PATH", priv_key_path.as_posix())
+    monkeysession.setenv("SECRETS_SERVICE_PUBLIC_KEY_PATH", pub_key_path.as_posix())
+    monkeysession.setenv("SECRETS_SERVICE_PRIVATE_KEY_PATH", priv_key_path.as_posix())
 
 
-@pytest.fixture
-def app_config(authz_config, db_config, monkeypatch, worker_id, secrets_key_pair) -> Generator[DataConfig, None, None]:
-    monkeypatch.setenv("MAX_PINNED_PROJECTS", "5")
-    monkeypatch.setenv("NB_SERVER_OPTIONS__DEFAULTS_PATH", "server_defaults.json")
-    monkeypatch.setenv("NB_SERVER_OPTIONS__UI_CHOICES_PATH", "server_options.json")
+@pytest_asyncio.fixture(scope="session")
+async def dummy_users():
+    return [
+        user_preferences_models.UnsavedUserInfo(id="user1", first_name="user1", last_name="doe", email="user1@doe.com"),
+        user_preferences_models.UnsavedUserInfo(id="user2", first_name="user2", last_name="doe", email="user2@doe.com"),
+    ]
 
-    config = DataConfig.from_env()
+
+@pytest_asyncio.fixture(scope="session")
+async def app_config(
+    authz_setup, monkeysession, worker_id, secrets_key_pair, dummy_users
+) -> AsyncGenerator[DataConfig, None]:
+    monkeysession.setenv("DUMMY_STORES", "true")
+    monkeysession.setenv("MAX_PINNED_PROJECTS", "5")
+    monkeysession.setenv("NB_SERVER_OPTIONS__DEFAULTS_PATH", "server_defaults.json")
+    monkeysession.setenv("NB_SERVER_OPTIONS__UI_CHOICES_PATH", "server_options.json")
+
+    config = TestAppConfig.from_env(dummy_users)
     app_name = "app_" + str(ULID()).lower() + "_" + worker_id
     config.app_name = app_name
     yield config
 
 
-@pytest.fixture
-def secrets_storage_app_config(db_config: DBConfig, secrets_key_pair, monkeypatch, tmp_path) -> Iterator[DataConfig]:
+@pytest_asyncio.fixture
+async def app_config_instance(app_config, db_instance, authz_instance) -> AsyncGenerator[DataConfig, None]:
+    yield app_config
+
+
+@pytest_asyncio.fixture
+async def secrets_storage_app_config(
+    db_config: DBConfig, secrets_key_pair, monkeypatch, tmp_path
+) -> AsyncGenerator[DataConfig, None]:
     encryption_key_path = tmp_path / "encryption-key"
     encryption_key_path.write_bytes(secrets.token_bytes(32))
 
@@ -139,8 +220,8 @@ def secrets_storage_app_config(db_config: DBConfig, secrets_key_pair, monkeypatc
     yield config
 
 
-@pytest.fixture
-def admin_user() -> base_models.APIUser:
+@pytest_asyncio.fixture
+async def admin_user() -> base_models.APIUser:
     return base_models.APIUser(
         is_admin=True,
         id="some-random-id-123456",
@@ -152,8 +233,8 @@ def admin_user() -> base_models.APIUser:
     )  # nosec B106
 
 
-@pytest.fixture
-def loggedin_user() -> base_models.APIUser:
+@pytest_asyncio.fixture
+async def loggedin_user() -> base_models.APIUser:
     return base_models.APIUser(is_admin=False, id="some-random-id-123456", access_token="some-access-token")  # nosec B106
 
 
