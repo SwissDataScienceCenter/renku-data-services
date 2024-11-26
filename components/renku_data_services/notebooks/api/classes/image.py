@@ -169,6 +169,16 @@ class ImageRepoDockerAPI:
         """Return a docker API instance with the token as authentication."""
         return ImageRepoDockerAPI(self.hostname, oauth2_token)
 
+    def maybe_with_oauth2_token(self, token_hostname: str | None, oauth2_token: str | None) -> "ImageRepoDockerAPI":
+        """Return a docker API instance with the token as authentication.
+
+        The token is used only if the image hostname matches the token hostname.
+        """
+        if isinstance(token_hostname, str) and self.hostname == token_hostname and oauth2_token:
+            return ImageRepoDockerAPI(self.hostname, oauth2_token)
+        else:
+            return self
+
 
 @dataclass
 class Image:

@@ -283,8 +283,6 @@ components:
         - creation_date
         - container_image
         - port
-        - working_directory
-        - mount_directory
         - uid
         - gid
         - default_url
@@ -348,15 +346,9 @@ components:
             - default: 1000
           default: 1000
         working_directory:
-          allOf:
-            - $ref: "#/components/schemas/EnvironmentWorkingDirectory"
-            - default: /home/jovyan/work
-          default: /home/jovyan/work
+          $ref: "#/components/schemas/EnvironmentWorkingDirectory"
         mount_directory:
-          allOf:
-            - $ref: "#/components/schemas/EnvironmentMountDirectory"
-            - default: /home/jovyan/work
-          default: /home/jovyan/work
+          $ref: "#/components/schemas/EnvironmentMountDirectory"
         port:
           allOf:
             - $ref: "#/components/schemas/EnvironmentPort"
@@ -576,11 +568,11 @@ components:
       description: The group ID used to run the session
     EnvironmentWorkingDirectory:
       type: string
-      description: The location where the session will start
+      description: The location where the session will start, if left unset it will default to the session image working directory.
       minLength: 1
     EnvironmentMountDirectory:
       type: string
-      description: The location where the persistent storage for the session will be mounted, usually it should be identical to or a parent of the working directory
+      description: The location where the persistent storage for the session will be mounted, usually it should be identical to or a parent of the working directory, if left unset will default to the working directory.
       minLength: 1
     EnvironmentCommand:
       type: array

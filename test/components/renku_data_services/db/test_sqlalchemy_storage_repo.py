@@ -32,9 +32,13 @@ def user():
 @given(storage=storage_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
-async def test_storage_insert_get(storage: dict[str, Any], app_config: Config, user: APIUser) -> None:
+async def test_storage_insert_get(
+    storage: dict[str, Any],
+    app_config_instance: Config,
+    user: APIUser,
+) -> None:
     run_migrations_for_app("common")
-    storage_repo = app_config.storage_repo
+    storage_repo = app_config_instance.storage_repo
     with contextlib.suppress(ValidationError, errors.ValidationError):
         await create_storage(storage, storage_repo, user=user)
 
@@ -43,10 +47,14 @@ async def test_storage_insert_get(storage: dict[str, Any], app_config: Config, u
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_storage_update_path(
-    storage: dict[str, Any], new_source_path: str, new_target_path: str, app_config: Config, user: APIUser
+    storage: dict[str, Any],
+    new_source_path: str,
+    new_target_path: str,
+    app_config_instance: Config,
+    user: APIUser,
 ) -> None:
     run_migrations_for_app("common")
-    storage_repo = app_config.storage_repo
+    storage_repo = app_config_instance.storage_repo
     try:
         inserted_storage = await create_storage(storage, storage_repo, user)
         assert inserted_storage.storage_id is not None
@@ -65,10 +73,13 @@ async def test_storage_update_path(
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_storage_update_config(
-    storage: dict[str, Any], new_config: dict[str, Any], app_config: Config, user: APIUser
+    storage: dict[str, Any],
+    new_config: dict[str, Any],
+    app_config_instance: Config,
+    user: APIUser,
 ) -> None:
     run_migrations_for_app("common")
-    storage_repo = app_config.storage_repo
+    storage_repo = app_config_instance.storage_repo
     try:
         inserted_storage = await create_storage(storage, storage_repo, user)
         assert inserted_storage.storage_id is not None
@@ -85,9 +96,13 @@ async def test_storage_update_config(
 @given(storage=storage_strat())
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
-async def test_storage_delete(storage: dict[str, Any], app_config: Config, user: APIUser) -> None:
+async def test_storage_delete(
+    storage: dict[str, Any],
+    app_config_instance: Config,
+    user: APIUser,
+) -> None:
     run_migrations_for_app("common")
-    storage_repo = app_config.storage_repo
+    storage_repo = app_config_instance.storage_repo
     try:
         inserted_storage = await create_storage(storage, storage_repo, user)
         assert inserted_storage.storage_id is not None

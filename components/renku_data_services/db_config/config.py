@@ -1,6 +1,5 @@
 """DB Configuration."""
 
-import asyncio
 import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -57,8 +56,9 @@ class DBConfig:
         return async_sessionmaker(DBConfig._async_engine, expire_on_commit=False)
 
     @staticmethod
-    def dispose_connection() -> None:
+    async def dispose_connection() -> None:
         """Dispose of the main database connection pool."""
 
         if DBConfig._async_engine:
-            asyncio.get_event_loop().run_until_complete(DBConfig._async_engine.dispose())
+            await DBConfig._async_engine.dispose()
+            DBConfig._async_engine = None

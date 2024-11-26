@@ -48,8 +48,10 @@ class EnvironmentORM(BaseORM):
     """Default URL path to open in a session."""
 
     port: Mapped[int] = mapped_column("port")
-    working_directory: Mapped[PurePosixPath] = mapped_column("working_directory", PurePosixPathType)
-    mount_directory: Mapped[PurePosixPath] = mapped_column("mount_directory", PurePosixPathType)
+    working_directory: Mapped[PurePosixPath | None] = mapped_column(
+        "working_directory", PurePosixPathType, nullable=True
+    )
+    mount_directory: Mapped[PurePosixPath | None] = mapped_column("mount_directory", PurePosixPathType, nullable=True)
     uid: Mapped[int] = mapped_column("uid")
     gid: Mapped[int] = mapped_column("gid")
     environment_kind: Mapped[models.EnvironmentKind] = mapped_column("environment_kind")

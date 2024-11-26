@@ -543,7 +543,7 @@ async def test_get_group_permissions(sanic_client, admin_headers, user_headers, 
 
 
 @pytest.mark.asyncio
-async def test_get_project_permissions_unauthorized(sanic_client, admin_headers, user_headers) -> None:
+async def test_get_group_permissions_unauthorized(sanic_client, admin_headers, user_headers) -> None:
     namespace = "my-group"
     payload = {
         "name": "Group",

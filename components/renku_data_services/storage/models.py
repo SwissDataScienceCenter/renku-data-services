@@ -227,4 +227,4 @@ class UnsavedCloudStorage(BaseModel):
 class CloudStorage(UnsavedCloudStorage):
     """Cloudstorage saved in the database."""
 
-    storage_id: ULID = Field(default=None)
+    storage_id: ULID = Field()
