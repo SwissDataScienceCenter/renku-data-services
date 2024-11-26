@@ -589,8 +589,13 @@ class DataConnectorSecretRepository:
                     data_connector_secret_orm = existing_secrets_as_dict.get(name)
                     if data_connector_secret_orm is None:
                         continue
-                    await session.delete(data_connector_secret_orm.secret)
-                    await session.delete(data_connector_secret_orm)
+                    await session.execute(
+                        delete(secrets_schemas.SecretORM).where(
+                            secrets_schemas.SecretORM.id == data_connector_secret_orm.secret_id
+                        )
+                    )
+                    # await session.delete(data_connector_secret_orm.secret)
+                    # await session.delete(data_connector_secret_orm)
                     del existing_secrets_as_dict[name]
                     continue
 

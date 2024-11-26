@@ -18,7 +18,7 @@ from renku_data_services.authn.keycloak import KeycloakAuthenticator
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface
 from renku_data_services.k8s.clients import DummyCoreClient, K8sCoreClient
-from renku_data_services.secrets.db import UserSecretsRepo
+from renku_data_services.secrets.low_level_db import LowLevelUserSecretsRepo
 from renku_data_services.utils.core import oidc_discovery
 
 
@@ -34,7 +34,7 @@ class Config:
     app_name: str = "secrets_storage"
     version: str = "0.0.1"
     spec: dict[str, Any] = field(init=False, default_factory=dict)
-    _user_secrets_repo: UserSecretsRepo | None = field(default=None, repr=False, init=False)
+    _user_secrets_repo: LowLevelUserSecretsRepo | None = field(default=None, repr=False, init=False)
 
     def __post_init__(self) -> None:
         spec_file = Path(renku_data_services.secrets.__file__).resolve().parent / "api.spec.yaml"
@@ -42,10 +42,10 @@ class Config:
             self.spec = safe_load(f)
 
     @property
-    def user_secrets_repo(self) -> UserSecretsRepo:
+    def user_secrets_repo(self) -> LowLevelUserSecretsRepo:
         """The DB adapter for users."""
         if not self._user_secrets_repo:
-            self._user_secrets_repo = UserSecretsRepo(
+            self._user_secrets_repo = LowLevelUserSecretsRepo(
                 session_maker=self.db.async_session_maker,
             )
         return self._user_secrets_repo

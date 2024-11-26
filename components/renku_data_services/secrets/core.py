@@ -12,7 +12,7 @@ from ulid import ULID
 from renku_data_services import base_models, errors
 from renku_data_services.base_models.core import InternalServiceAdmin
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface
-from renku_data_services.secrets.db import UserSecretsRepo
+from renku_data_services.secrets.low_level_db import LowLevelUserSecretsRepo
 from renku_data_services.secrets.models import OwnerReference, Secret
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.cryptography import (
@@ -30,7 +30,7 @@ async def create_k8s_secret(
     namespace: str,
     secret_ids: list[ULID],
     owner_references: list[OwnerReference],
-    secrets_repo: UserSecretsRepo,
+    secrets_repo: LowLevelUserSecretsRepo,
     secret_service_private_key: rsa.RSAPrivateKey,
     previous_secret_service_private_key: rsa.RSAPrivateKey | None,
     core_client: K8sCoreClientInterface,
@@ -112,7 +112,7 @@ async def rotate_encryption_keys(
     requested_by: InternalServiceAdmin,
     new_key: rsa.RSAPrivateKey,
     old_key: rsa.RSAPrivateKey,
-    secrets_repo: UserSecretsRepo,
+    secrets_repo: LowLevelUserSecretsRepo,
     batch_size: int = 100,
 ) -> None:
     """Rotate all secrets to a new private key.
@@ -137,7 +137,7 @@ async def rotate_encryption_keys(
                 if new_secret is not None:
                     updated_secrets.append(new_secret)
 
-            await secrets_repo.update_secrets(requested_by, updated_secrets)
+            await secrets_repo.update_secret_values(requested_by, updated_secrets)
             processed_secrets_metrics.inc(len(updated_secrets))
     except:
         running_metrics.state("errored")

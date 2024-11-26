@@ -78,3 +78,22 @@ class OwnerReference:
             uid=self.uid,
             controller=True,
         )
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class NewSecret:
+    """Model to request the creation of a new user secret."""
+
+    name: str
+    default_filename: str | None
+    secret_value: str = field(repr=False)
+    kind: SecretKind
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SecretPatch:
+    """Model for changes requested on a user secret."""
+
+    name: str | None
+    default_filename: str | None
+    secret_value: str | None = field(repr=False)

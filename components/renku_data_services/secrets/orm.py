@@ -1,6 +1,6 @@
 """Secrets ORM."""
 
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, ForeignKey, LargeBinary, MetaData, String, UniqueConstraint, func
@@ -87,4 +87,3 @@ class SecretORM(BaseORM):
         """Update an existing secret."""
         self.encrypted_value = encrypted_value
         self.encrypted_key = encrypted_key
-        self.modification_date = datetime.now(UTC).replace(microsecond=0)

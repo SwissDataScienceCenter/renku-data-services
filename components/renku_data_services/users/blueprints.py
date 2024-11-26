@@ -3,7 +3,6 @@
 from dataclasses import dataclass
 from typing import Any
 
-from cryptography.hazmat.primitives.asymmetric import rsa
 from sanic import HTTPResponse, Request, json
 from sanic.response import JSONResponse
 from sanic_ext import validate
@@ -15,10 +14,10 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.errors import errors
-from renku_data_services.secrets.core import encrypt_user_secret
 from renku_data_services.secrets.db import UserSecretsRepo
-from renku_data_services.secrets.models import Secret, SecretKind, UnsavedSecret
+from renku_data_services.secrets.models import Secret, SecretKind
 from renku_data_services.users import apispec, models
+from renku_data_services.users.core import validate_new_secret, validate_secret_patch
 from renku_data_services.users.db import UserPreferencesRepository, UserRepo
 
 
@@ -137,9 +136,9 @@ class UserSecretsBP(CustomBlueprint):
     """
 
     secret_repo: UserSecretsRepo
-    user_repo: UserRepo
+    # user_repo: UserRepo
     authenticator: base_models.Authenticator
-    secret_service_public_key: rsa.RSAPublicKey
+    # secret_service_public_key: rsa.RSAPublicKey
 
     def get_all(self) -> BlueprintFactoryResponse:
         """Get all user's secrets."""
@@ -166,8 +165,6 @@ class UserSecretsBP(CustomBlueprint):
         @only_authenticated
         async def _get_one(_: Request, user: base_models.APIUser, secret_id: ULID) -> JSONResponse:
             secret = await self.secret_repo.get_secret_by_id(requested_by=user, secret_id=secret_id)
-            if not secret:
-                raise errors.MissingResourceError(message=f"The secret with id {secret_id} cannot be found.")
             return validated_json(
                 apispec.SecretWithId,
                 self._dump_secret(secret),
@@ -182,20 +179,8 @@ class UserSecretsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.SecretPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.SecretPost) -> JSONResponse:
-            encrypted_value, encrypted_key = await encrypt_user_secret(
-                user_repo=self.user_repo,
-                requested_by=user,
-                secret_service_public_key=self.secret_service_public_key,
-                secret_value=body.value,
-            )
-            secret = UnsavedSecret(
-                name=body.name,
-                default_filename=body.default_filename,
-                encrypted_value=encrypted_value,
-                encrypted_key=encrypted_key,
-                kind=SecretKind(body.kind.value),
-            )
-            inserted_secret = await self.secret_repo.insert_secret(requested_by=user, secret=secret)
+            new_secret = validate_new_secret(body)
+            inserted_secret = await self.secret_repo.insert_secret(requested_by=user, secret=new_secret)
             return validated_json(apispec.SecretWithId, self._dump_secret(inserted_secret), status=201)
 
         return "/user/secrets", ["POST"], _post
@@ -209,24 +194,9 @@ class UserSecretsBP(CustomBlueprint):
         async def _patch(
             _: Request, user: base_models.APIUser, secret_id: ULID, body: apispec.SecretPatch
         ) -> JSONResponse:
-            # TODO
-            if body.value is None:
-                secret = await self.secret_repo.get_secret_by_id(requested_by=user, secret_id=secret_id)
-                if not secret:
-                    raise errors.MissingResourceError(message=f"The secret with id {secret_id} cannot be found.")
-                return validated_json(
-                    apispec.SecretWithId,
-                    self._dump_secret(secret),
-                )
-
-            encrypted_value, encrypted_key = await encrypt_user_secret(
-                user_repo=self.user_repo,
-                requested_by=user,
-                secret_service_public_key=self.secret_service_public_key,
-                secret_value=body.value,
-            )
+            secret_patch = validate_secret_patch(body)
             updated_secret = await self.secret_repo.update_secret(
-                requested_by=user, secret_id=secret_id, encrypted_value=encrypted_value, encrypted_key=encrypted_key
+                requested_by=user, secret_id=secret_id, patch=secret_patch
             )
             return validated_json(
                 apispec.SecretWithId,

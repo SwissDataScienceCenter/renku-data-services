@@ -637,7 +637,7 @@ class ProjectSessionSecretRepository:
                 )
                 if existing_secret_slot is not None:
                     raise errors.ConflictError(
-                        message=f"A session secret slot with the filename '{secret_slot.filename}' already exists."
+                        message=f"A session secret slot with the filename '{patch.filename}' already exists."
                     )
                 secret_slot.filename = patch.filename
 
@@ -778,14 +778,6 @@ class ProjectSessionSecretRepository:
                         encrypted_value=encrypted_value, encrypted_key=encrypted_key
                     )
                 else:
-                    # name = base_models.Slug.from_name(f"{secret_slot.name}-{secret_update.secret_slot_id}")
-                    # secret_orm = secrets_schemas.SecretORM(
-                    #     name=name.value,
-                    #     user_id=user.id,
-                    #     encrypted_value=encrypted_value,
-                    #     encrypted_key=encrypted_key,
-                    #     kind=SecretKind.general,
-                    # )
                     name = secret_slot.name
                     suffix = "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(8)])  # nosec B311
                     name_slug = base_models.Slug.from_name(name).value
