@@ -90,3 +90,37 @@ class ProjectPermissions:
     write: bool
     delete: bool
     change_membership: bool
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedSessionSecretSlot:
+    """Session secret slot model that has not been persisted."""
+
+    project_id: ULID
+    name: str | None
+    description: str | None
+    filename: str
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionSecretSlot(UnsavedSessionSecretSlot):
+    """Session secret slot model that has been persisted."""
+
+    id: ULID
+    created_by_id: str
+    creation_date: datetime
+    updated_at: datetime
+
+    @property
+    def etag(self) -> str:
+        """Entity tag value for this session secret slot object."""
+        return compute_etag_from_timestamp(self.updated_at, include_quotes=True)
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionSecretSlotPatch:
+    """Model for changes requested on a session secret slot."""
+
+    name: str | None
+    description: str | None
+    filename: str | None

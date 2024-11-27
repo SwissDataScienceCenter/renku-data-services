@@ -61,7 +61,7 @@ from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.platform.db import PlatformRepository
-from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository
+from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository, ProjectSessionSecretRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.secrets.db import UserSecretsRepo
 from renku_data_services.session.db import SessionRepository
@@ -180,6 +180,7 @@ class Config:
     _kc_user_repo: KcUserRepo | None = field(default=None, repr=False, init=False)
     _user_secrets_repo: UserSecretsRepo | None = field(default=None, repr=False, init=False)
     _project_member_repo: ProjectMemberRepository | None = field(default=None, repr=False, init=False)
+    _project_session_secret_repo: ProjectSessionSecretRepository | None = field(default=None, repr=False, init=False)
     _connected_services_repo: ConnectedServicesRepository | None = field(default=None, repr=False, init=False)
     _git_repositories_repo: GitRepositoriesRepository | None = field(default=None, repr=False, init=False)
     _platform_repo: PlatformRepository | None = field(default=None, repr=False, init=False)
@@ -345,6 +346,16 @@ class Config:
                 message_queue=self.message_queue,
             )
         return self._project_member_repo
+
+    @property
+    def project_session_secret_repo(self) -> ProjectSessionSecretRepository:
+        """The DB adapter for session secrets on projects."""
+        if not self._project_session_secret_repo:
+            self._project_session_secret_repo = ProjectSessionSecretRepository(
+                session_maker=self.db.async_session_maker,
+                authz=self.authz,
+            )
+        return self._project_session_secret_repo
 
     @property
     def group_repo(self) -> GroupRepository:
