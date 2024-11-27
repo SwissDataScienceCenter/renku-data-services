@@ -1,7 +1,7 @@
 """Add session secrets
 
 Revision ID: 77f46efc541d
-Revises: 1ef98b967767
+Revises: 08ac2714e8e2
 Create Date: 2024-11-13 08:48:32.180897
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "77f46efc541d"
-down_revision = "1ef98b967767"
+down_revision = "08ac2714e8e2"
 branch_labels = None
 depends_on = None
 
