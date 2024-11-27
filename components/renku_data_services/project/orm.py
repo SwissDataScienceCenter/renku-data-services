@@ -1,6 +1,7 @@
 """SQLAlchemy's schemas for the projects database."""
 
 from datetime import datetime
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import Boolean, DateTime, Identity, Index, Integer, MetaData, String, false, func
@@ -15,7 +16,7 @@ from renku_data_services.project import models
 from renku_data_services.project.apispec import Visibility
 from renku_data_services.secrets.orm import SecretORM
 from renku_data_services.users.orm import UserORM
-from renku_data_services.utils.sqlalchemy import ULIDType
+from renku_data_services.utils.sqlalchemy import PurePosixPathType, ULIDType
 
 if TYPE_CHECKING:
     from renku_data_services.namespace.orm import EntitySlugORM
@@ -52,6 +53,10 @@ class ProjectORM(BaseORM):
         lazy="selectin",
         repr=False,
     )
+    secrets_mount_directory: Mapped[PurePosixPath | None] = mapped_column(
+        "secrets_mount_directory", PurePosixPathType, default=None, nullable=True
+    )
+    """Location where secrets are mounted in this project's sessions."""
     creation_date: Mapped[datetime] = mapped_column(
         "creation_date", DateTime(timezone=True), default=func.now(), nullable=False
     )
