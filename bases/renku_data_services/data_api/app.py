@@ -98,7 +98,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
     project_session_secrets = ProjectSessionSecretBP(
         name="project_session_secrets",
         url_prefix=url_prefix,
-        project_session_secret_repo=config.project_session_secret_repo,
+        session_secret_repo=config.project_session_secret_repo,
         authenticator=config.authenticator,
     )
     group = GroupsBP(

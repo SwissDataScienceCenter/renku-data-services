@@ -158,7 +158,7 @@ async def test_get_project_session_secret_slots(
     for i in range(1, 10):
         await create_session_secret_slot(project_id, f"secret_slot_{i}")
 
-    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/secret_slots", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/session_secret_slots", headers=user_headers)
 
     assert response.status_code == 200, response.text
     assert response.json is not None
@@ -368,7 +368,7 @@ async def test_delete_session_secret_slot(
 
     assert response.status_code == 204, response.text
 
-    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/secret_slots", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/session_secret_slots", headers=user_headers)
 
     assert response.status_code == 200, response.text
     assert {secret_slot["filename"] for secret_slot in response.json} == {"test_secret_1", "test_secret_3"}

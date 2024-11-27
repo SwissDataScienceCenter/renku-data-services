@@ -324,7 +324,7 @@ class ProjectsBP(CustomBlueprint):
 class ProjectSessionSecretBP(CustomBlueprint):
     """Handlers for manipulating session secrets in a project."""
 
-    project_session_secret_repo: ProjectSessionSecretRepository
+    session_secret_repo: ProjectSessionSecretRepository
     authenticator: base_models.Authenticator
 
     def get_session_secret_slots(self) -> BlueprintFactoryResponse:
@@ -332,12 +332,12 @@ class ProjectSessionSecretBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _get_session_secret_slots(_: Request, user: base_models.APIUser, project_id: ULID) -> JSONResponse:
-            secret_slots = await self.project_session_secret_repo.get_all_session_secret_slots_from_project(
+            secret_slots = await self.session_secret_repo.get_all_session_secret_slots_from_project(
                 user=user, project_id=project_id
             )
             return validated_json(apispec.SessionSecretSlotList, secret_slots)
 
-        return "/projects/<project_id:ulid>/secret_slots", ["GET"], _get_session_secret_slots
+        return "/projects/<project_id:ulid>/session_secret_slots", ["GET"], _get_session_secret_slots
 
     def post_session_secret_slot(self) -> BlueprintFactoryResponse:
         """Create a new session secret slot on a project."""
@@ -349,7 +349,7 @@ class ProjectSessionSecretBP(CustomBlueprint):
             _: Request, user: base_models.APIUser, body: apispec.SessionSecretSlotPost
         ) -> JSONResponse:
             unsaved_secret_slot = validate_unsaved_session_secret_slot(body)
-            secret_slot = await self.project_session_secret_repo.insert_session_secret_slot(
+            secret_slot = await self.session_secret_repo.insert_session_secret_slot(
                 user=user, secret_slot=unsaved_secret_slot
             )
             return validated_json(apispec.SessionSecretSlot, secret_slot, status=201)
@@ -364,7 +364,7 @@ class ProjectSessionSecretBP(CustomBlueprint):
         async def _get_session_secret_slot(
             _: Request, user: base_models.APIUser, slot_id: ULID, etag: str | None
         ) -> HTTPResponse:
-            secret_slot = await self.project_session_secret_repo.get_session_secret_slot(user=user, slot_id=slot_id)
+            secret_slot = await self.session_secret_repo.get_session_secret_slot(user=user, slot_id=slot_id)
 
             if secret_slot.etag == etag:
                 return HTTPResponse(status=304)
@@ -388,7 +388,7 @@ class ProjectSessionSecretBP(CustomBlueprint):
             etag: str,
         ) -> JSONResponse:
             secret_slot_patch = validate_session_secret_slot_patch(body)
-            secret_slot = await self.project_session_secret_repo.update_session_secret_slot(
+            secret_slot = await self.session_secret_repo.update_session_secret_slot(
                 user=user, slot_id=slot_id, patch=secret_slot_patch, etag=etag
             )
             return validated_json(apispec.SessionSecretSlot, secret_slot)
@@ -401,7 +401,7 @@ class ProjectSessionSecretBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_authenticated
         async def _delete_session_secret_slot(_: Request, user: base_models.APIUser, slot_id: ULID) -> HTTPResponse:
-            await self.project_session_secret_repo.delete_session_secret_slot(user=user, slot_id=slot_id)
+            await self.session_secret_repo.delete_session_secret_slot(user=user, slot_id=slot_id)
             return HTTPResponse(status=204)
 
         return "/session_secret_slots/<slot_id:ulid>", ["DELETE"], _delete_session_secret_slot

@@ -385,7 +385,7 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - projects
-  /projects/{project_id}/secret_slots:
+  /projects/{project_id}/session_secret_slots:
     parameters:
       - in: path
         name: project_id
