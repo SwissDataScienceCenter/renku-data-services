@@ -678,7 +678,7 @@ components:
         is_template:
           $ref: "#/components/schemas/IsTemplate"
         secrets_mount_directory:
-          $ref: "#/components/schemas/SecretsMountDirectory"
+          $ref: "#/components/schemas/SecretsMountDirectoryPatch"
     Ulid:
       description: ULID identifier
       type: string
@@ -784,6 +784,10 @@ components:
       type: string
       minLength: 1
       default: "/secrets"
+      example: "/secrets"
+    SecretsMountDirectoryPatch:
+      type: string
+      example: "/secrets"
     ProjectMemberListPatchRequest:
       description: List of members and their access level to the project
       type: array

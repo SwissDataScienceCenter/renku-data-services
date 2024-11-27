@@ -8,6 +8,7 @@ from typing import Literal
 from ulid import ULID
 
 from renku_data_services.authz.models import Visibility
+from renku_data_services.base_models import ResetType
 from renku_data_services.namespace.models import Namespace
 from renku_data_services.utils.etag import compute_etag_from_timestamp
 
@@ -69,7 +70,7 @@ class ProjectPatch:
     documentation: str | None
     template_id: Literal[""] | None
     is_template: bool | None
-    secrets_mount_directory: PurePosixPath | None
+    secrets_mount_directory: PurePosixPath | ResetType | None
 
 
 @dataclass
