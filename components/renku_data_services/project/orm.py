@@ -6,13 +6,14 @@ from typing import TYPE_CHECKING, Optional
 from sqlalchemy import Boolean, DateTime, Identity, Index, Integer, MetaData, String, false, func
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
-from sqlalchemy.schema import ForeignKey
+from sqlalchemy.schema import ForeignKey, UniqueConstraint
 from ulid import ULID
 
 from renku_data_services.authz import models as authz_models
 from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
 from renku_data_services.project import models
 from renku_data_services.project.apispec import Visibility
+from renku_data_services.users.orm import UserORM
 from renku_data_services.utils.sqlalchemy import ULIDType
 
 if TYPE_CHECKING:
@@ -95,3 +96,60 @@ class ProjectRepositoryORM(BaseORM):
         ForeignKey("projects.id", ondelete="CASCADE"), default=None, index=True
     )
     project: Mapped[Optional[ProjectORM]] = relationship(back_populates="repositories", default=None, repr=False)
+
+
+class SessionSecretSlotORM(BaseORM):
+    """A slot for a secret in a session."""
+
+    __tablename__ = "session_secret_slots"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "filename",
+            name="_unique_project_id_filename",
+        ),
+    )
+
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    """ID of this session secret slot."""
+
+    project_id: Mapped[ULID] = mapped_column(ForeignKey(ProjectORM.id, ondelete="CASCADE"), index=True, nullable=False)
+    """ID of the project."""
+    project: Mapped[ProjectORM] = relationship(init=False, repr=False, lazy="selectin")
+
+    name: Mapped[str] = mapped_column("name", String(99))
+    """Name of the session secret slot."""
+
+    description: Mapped[str | None] = mapped_column("description", String(500))
+    """Human-readable description of the session secret slot."""
+
+    filename: Mapped[str] = mapped_column("filename", String(200))
+    """The filename given to the corresponding secret when mounted in the session."""
+
+    created_by_id: Mapped[str] = mapped_column(ForeignKey(UserORM.keycloak_id), index=True, nullable=False)
+    """User ID of the creator of the session secret slot."""
+
+    creation_date: Mapped[datetime] = mapped_column(
+        "creation_date", DateTime(timezone=True), default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        "updated_at",
+        DateTime(timezone=True),
+        default=None,
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    def dump(self) -> models.SessionSecretSlot:
+        """Create a session secret slot model from the SessionSecretSlotORM."""
+        return models.SessionSecretSlot(
+            id=self.id,
+            project_id=self.project_id,
+            name=self.name,
+            description=self.description,
+            filename=self.filename,
+            created_by_id=self.created_by_id,
+            creation_date=self.creation_date,
+            updated_at=self.updated_at,
+        )
