@@ -3,6 +3,7 @@
 from typing import Any
 
 import pytest
+import pytest_asyncio
 from sanic_testing.testing import SanicASGITestClient
 from ulid import ULID
 
@@ -10,8 +11,8 @@ from renku_data_services.users.models import UserInfo
 from test.bases.renku_data_services.data_api.utils import merge_headers
 
 
-@pytest.fixture
-def create_session_secret_slot(sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers):
+@pytest_asyncio.fixture
+async def create_session_secret_slot(sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers):
     async def create_session_secret_slot_helper(
         project_id: str, filename: str, user: UserInfo | None = None, headers: dict[str, str] | None = None, **payload
     ) -> dict[str, Any]:
@@ -191,7 +192,13 @@ async def test_get_one_session_secret_slot(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("headers_name", ["unauthorized_headers", "member_1_headers"])
 async def test_get_one_session_secret_slot_unauthorized(
-    sanic_client: SanicASGITestClient, create_project, create_session_secret_slot, headers_name, request
+    sanic_client: SanicASGITestClient,
+    create_project,
+    create_session_secret_slot,
+    headers_name,
+    request,
+    unauthorized_headers,
+    member_1_headers,
 ) -> None:
     project = await create_project("My project")
     project_id = project["id"]
