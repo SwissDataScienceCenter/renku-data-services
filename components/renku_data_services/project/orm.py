@@ -12,7 +12,7 @@ from ulid import ULID
 
 from renku_data_services.authz import models as authz_models
 from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
-from renku_data_services.project import models
+from renku_data_services.project import constants, models
 from renku_data_services.project.apispec import Visibility
 from renku_data_services.secrets.orm import SecretORM
 from renku_data_services.users.orm import UserORM
@@ -88,6 +88,7 @@ class ProjectORM(BaseORM):
             documentation=self.documentation if with_documentation else None,
             template_id=self.template_id,
             is_template=self.is_template,
+            secrets_mount_directory=self.secrets_mount_directory or constants.DEFAULT_SESSION_MOUNT_DIR,
         )
 
 
