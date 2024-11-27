@@ -411,7 +411,7 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - projects
-  /projects/{project_id}/secrets:
+  /projects/{project_id}/session_secrets:
     parameters:
       - in: path
         name: project_id

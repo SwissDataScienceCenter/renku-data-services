@@ -418,7 +418,7 @@ class ProjectSessionSecretBP(CustomBlueprint):
             )
             return validated_json(apispec.SessionSecretList, secrets)
 
-        return "/projects/<project_id:ulid>/secrets", ["GET"], _get_session_secrets
+        return "/projects/<project_id:ulid>/session_secrets", ["GET"], _get_session_secrets
 
     def patch_session_secrets(self) -> BlueprintFactoryResponse:
         """Save user secrets for a project."""
@@ -435,7 +435,7 @@ class ProjectSessionSecretBP(CustomBlueprint):
             )
             return validated_json(apispec.SessionSecretList, secrets)
 
-        return "/projects/<project_id:ulid>/secrets", ["PATCH"], _patch_session_secrets
+        return "/projects/<project_id:ulid>/session_secrets", ["PATCH"], _patch_session_secrets
 
     def delete_session_secrets(self) -> BlueprintFactoryResponse:
         """Remove all user secrets for a project."""
@@ -446,4 +446,4 @@ class ProjectSessionSecretBP(CustomBlueprint):
             await self.session_secret_repo.delete_session_secrets(user=user, project_id=project_id)
             return HTTPResponse(status=204)
 
-        return "/projects/<project_id:ulid>/secrets", ["DELETE"], _delete_session_secrets
+        return "/projects/<project_id:ulid>/session_secrets", ["DELETE"], _delete_session_secrets

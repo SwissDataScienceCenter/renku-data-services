@@ -389,7 +389,9 @@ async def test_patch_session_secrets_with_existing_user_secret(
     user_secret_id = user_secret["id"]
 
     patch = [{"secret_slot_id": secret_slot_id, "secret_id": user_secret_id}]
-    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}/secrets", headers=user_headers, json=patch)
+    _, response = await sanic_client.patch(
+        f"/api/data/projects/{project_id}/session_secrets", headers=user_headers, json=patch
+    )
 
     assert response.status_code == 200, response.text
     assert response.json is not None
@@ -402,7 +404,7 @@ async def test_patch_session_secrets_with_existing_user_secret(
     assert session_secrets[0].get("secret_id") == user_secret_id
 
     # Check that the secrets are returned from a GET request
-    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/secrets", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/session_secrets", headers=user_headers)
     assert response.status_code == 200, response.json
     assert response.json is not None
     session_secrets = response.json
@@ -422,7 +424,9 @@ async def test_patch_session_secrets_with_new_secret_value(
     secret_slot_id = secret_slot["id"]
 
     patch = [{"secret_slot_id": secret_slot_id, "value": "a new secret value"}]
-    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}/secrets", headers=user_headers, json=patch)
+    _, response = await sanic_client.patch(
+        f"/api/data/projects/{project_id}/session_secrets", headers=user_headers, json=patch
+    )
 
     assert response.status_code == 200, response.text
     assert response.json is not None
@@ -439,7 +443,7 @@ async def test_patch_session_secrets_with_new_secret_value(
     assert response.status_code == 200, response.text
     user_secrets = response.json
     new_user_secret = user_secrets[0]
-    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/secrets", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/session_secrets", headers=user_headers)
     assert response.status_code == 200, response.json
     assert response.json is not None
     session_secrets = response.json
@@ -458,7 +462,9 @@ async def test_patch_session_secrets_update_with_another_user_secret(
     secret_slot = await create_session_secret_slot(project_id, "test_secret")
     secret_slot_id = secret_slot["id"]
     patch = [{"secret_slot_id": secret_slot_id, "value": "a new secret value"}]
-    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}/secrets", headers=user_headers, json=patch)
+    _, response = await sanic_client.patch(
+        f"/api/data/projects/{project_id}/session_secrets", headers=user_headers, json=patch
+    )
     assert response.status_code == 200, response.json
     session_secrets = response.json
 
@@ -469,7 +475,9 @@ async def test_patch_session_secrets_update_with_another_user_secret(
     replacement_user_secret_id = replacement_user_secret["id"]
 
     patch = [{"secret_slot_id": secret_slot_id, "secret_id": replacement_user_secret_id}]
-    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}/secrets", headers=user_headers, json=patch)
+    _, response = await sanic_client.patch(
+        f"/api/data/projects/{project_id}/session_secrets", headers=user_headers, json=patch
+    )
 
     assert response.status_code == 200, response.text
     assert response.json is not None
@@ -482,7 +490,7 @@ async def test_patch_session_secrets_update_with_another_user_secret(
     assert session_secrets[0].get("secret_id") == replacement_user_secret_id
 
     # Check that the secrets are returned from a GET request
-    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/secrets", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/session_secrets", headers=user_headers)
     assert response.status_code == 200, response.json
     assert response.json is not None
     session_secrets = response.json
@@ -501,7 +509,9 @@ async def test_patch_session_secrets_update_with_a_new_secret_value(
     secret_slot = await create_session_secret_slot(project_id, "test_secret")
     secret_slot_id = secret_slot["id"]
     patch = [{"secret_slot_id": secret_slot_id, "value": "a new secret value"}]
-    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}/secrets", headers=user_headers, json=patch)
+    _, response = await sanic_client.patch(
+        f"/api/data/projects/{project_id}/session_secrets", headers=user_headers, json=patch
+    )
     assert response.status_code == 200, response.json
     session_secrets = response.json
     _, response = await sanic_client.get("/api/data/user/secrets", headers=user_headers)
@@ -510,7 +520,9 @@ async def test_patch_session_secrets_update_with_a_new_secret_value(
     existing_user_secret = user_secrets[0]
 
     patch = [{"secret_slot_id": secret_slot_id, "value": "an updated secret value"}]
-    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}/secrets", headers=user_headers, json=patch)
+    _, response = await sanic_client.patch(
+        f"/api/data/projects/{project_id}/session_secrets", headers=user_headers, json=patch
+    )
 
     assert response.status_code == 200, response.text
     assert response.json is not None
@@ -523,7 +535,7 @@ async def test_patch_session_secrets_update_with_a_new_secret_value(
     assert session_secrets[0].get("secret_id") == existing_user_secret["id"]
 
     # Check that the secrets are returned from a GET request
-    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/secrets", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/session_secrets", headers=user_headers)
     assert response.status_code == 200, response.json
     assert response.json is not None
     session_secrets = response.json
@@ -542,7 +554,9 @@ async def test_patch_session_secrets_unlink_secret_with_null(
     secret_slot = await create_session_secret_slot(project_id, "test_secret")
     secret_slot_id = secret_slot["id"]
     patch = [{"secret_slot_id": secret_slot_id, "value": "a new secret value"}]
-    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}/secrets", headers=user_headers, json=patch)
+    _, response = await sanic_client.patch(
+        f"/api/data/projects/{project_id}/session_secrets", headers=user_headers, json=patch
+    )
     assert response.status_code == 200, response.json
     session_secrets = response.json
     _, response = await sanic_client.get("/api/data/user/secrets", headers=user_headers)
@@ -551,7 +565,9 @@ async def test_patch_session_secrets_unlink_secret_with_null(
     existing_user_secret = user_secrets[0]
 
     patch = [{"secret_slot_id": secret_slot_id, "value": None}]
-    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}/secrets", headers=user_headers, json=patch)
+    _, response = await sanic_client.patch(
+        f"/api/data/projects/{project_id}/session_secrets", headers=user_headers, json=patch
+    )
 
     assert response.status_code == 200, response.text
     assert response.json is not None
@@ -559,7 +575,7 @@ async def test_patch_session_secrets_unlink_secret_with_null(
     assert len(session_secrets) == 0
 
     # Check that the secrets are returned from a GET request
-    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/secrets", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/session_secrets", headers=user_headers)
     assert response.status_code == 200, response.json
     assert response.json is not None
     session_secrets = response.json
@@ -581,15 +597,17 @@ async def test_delete_session_secrets(
     secret_slot = await create_session_secret_slot(project_id, "test_secret")
     secret_slot_id = secret_slot["id"]
     patch = [{"secret_slot_id": secret_slot_id, "value": "a new secret value"}]
-    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}/secrets", headers=user_headers, json=patch)
+    _, response = await sanic_client.patch(
+        f"/api/data/projects/{project_id}/session_secrets", headers=user_headers, json=patch
+    )
     assert response.status_code == 200, response.json
 
-    _, response = await sanic_client.delete(f"/api/data/projects/{project_id}/secrets", headers=user_headers)
+    _, response = await sanic_client.delete(f"/api/data/projects/{project_id}/session_secrets", headers=user_headers)
 
     assert response.status_code == 204, response.text
 
     # Check that the secrets are returned from a GET request
-    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/secrets", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/session_secrets", headers=user_headers)
     assert response.status_code == 200, response.json
     assert response.json is not None
     session_secrets = response.json
