@@ -13,6 +13,7 @@ from renku_data_services.notebooks.api.amalthea_patches.utils import get_certifi
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.notebooks.crs import EmptyDir, ExtraVolume, ExtraVolumeMount, InitContainer, SecretAsVolume
+from renku_data_services.project import constants as project_constants
 from renku_data_services.project.models import SessionSecret
 
 if TYPE_CHECKING:
@@ -398,6 +399,7 @@ def download_image(server: "UserServer") -> list[dict[str, Any]]:
 def user_secrets_container(
     user: AuthenticatedAPIUser | AnonymousAPIUser,
     config: NotebooksConfig,
+    secrets_mount_directory: str,
     k8s_secret_name: str,
     session_secrets: list[SessionSecret],
 ) -> tuple[InitContainer, list[ExtraVolume], list[ExtraVolumeMount]] | None:
@@ -415,8 +417,7 @@ def user_secrets_container(
 
     decrypted_volume_mount = ExtraVolumeMount(
         name="user-secrets-volume",
-        # TODO: Make this path configurable, defaulting to "/secrets".
-        mountPath="/secrets",
+        mountPath=secrets_mount_directory or project_constants.DEFAULT_SESSION_MOUNT_DIR.as_posix(),
         readOnly=True,
     )
 

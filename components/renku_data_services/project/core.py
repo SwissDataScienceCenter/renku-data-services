@@ -18,6 +18,8 @@ def validate_unsaved_project(body: apispec.ProjectPost, created_by: str) -> mode
     keywords = [kw.root for kw in body.keywords] if body.keywords is not None else []
     visibility = Visibility.PRIVATE if body.visibility is None else Visibility(body.visibility.value)
     secrets_mount_directory = PurePosixPath(body.secrets_mount_directory) if body.secrets_mount_directory else None
+    if secrets_mount_directory is not None and not secrets_mount_directory.is_absolute():
+        secrets_mount_directory = PurePosixPath("/") / secrets_mount_directory
     return models.UnsavedProject(
         name=body.name,
         namespace=body.namespace,
@@ -42,6 +44,8 @@ def validate_project_patch(patch: apispec.ProjectPatch) -> models.ProjectPatch:
         if patch.secrets_mount_directory == ""
         else None
     )
+    if isinstance(secrets_mount_directory, PurePosixPath) and not secrets_mount_directory.is_absolute():
+        secrets_mount_directory = PurePosixPath("/") / secrets_mount_directory
     return models.ProjectPatch(
         name=patch.name,
         namespace=patch.namespace,

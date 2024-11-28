@@ -403,6 +403,7 @@ class NotebooksNewBP(CustomBlueprint):
             user_secrets_container = init_containers.user_secrets_container(
                 user=user,
                 config=self.nb_config,
+                secrets_mount_directory=project.secrets_mount_directory.as_posix(),
                 k8s_secret_name=f"{server_name}-secrets",
                 session_secrets=session_secrets,
             )
