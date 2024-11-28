@@ -105,7 +105,7 @@ async def get_openbis_session_token(
 ) -> str:
     """Requests an openBIS session token with the user's login credentials."""
     login = {"method": "login", "params": [username, password], "id": "2", "jsonrpc": "2.0"}
-    async with httpx.AsyncClient(verify=get_ssl_context()) as client:
+    async with httpx.AsyncClient(verify=get_ssl_context(), timeout=5) as client:
         response = await client.post(_get_url(host), json=login, timeout=timeout)
         if response.status_code == 200:
             json: dict[str, str] = response.json()
@@ -126,7 +126,7 @@ async def get_openbis_pat(
     """Requests an openBIS PAT with an openBIS session ID."""
     url = _get_url(host)
 
-    async with httpx.AsyncClient(verify=get_ssl_context()) as client:
+    async with httpx.AsyncClient(verify=get_ssl_context(), timeout=5) as client:
         get_server_information = {"method": "getServerInformation", "params": [session_id], "id": "2", "jsonrpc": "2.0"}
         response = await client.post(url, json=get_server_information, timeout=timeout)
         if response.status_code == 200:
