@@ -1,8 +1,8 @@
 """add secret expiration timestamp
 
-Revision ID: d19cf323482e
+Revision ID: 998a5b8cb4f2
 Revises: d1cdcbb2adc3
-Create Date: 2025-01-09 15:53:52.947037
+Create Date: 2025-01-09 16:05:17.299531
 
 """
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision = "d19cf323482e"
+revision = "998a5b8cb4f2"
 down_revision = "d1cdcbb2adc3"
 branch_labels = None
 depends_on = None
