@@ -31,7 +31,7 @@ class BaseProject:
     documentation: str | None = None
     template_id: ULID | None = None
     is_template: bool = False
-    secrets_mount_directory: PurePosixPath | None
+    secrets_mount_directory: PurePosixPath | None = None
 
     @property
     def etag(self) -> str | None:
