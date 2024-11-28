@@ -1,5 +1,3 @@
-.PHONY: schemas tests test_setup main_tests schemathesis_tests collect_coverage style_checks pre_commit_checks run download_avro check_avro avro_models update_avro k3d_cluster install_amaltheas all
-
 AMALTHEA_JS_VERSION ?= 0.13.0
 AMALTHEA_SESSIONS_VERSION ?= 0.13.0
 CODEGEN_PARAMS := \
@@ -26,6 +24,7 @@ define test_apispec_up_to_date
 	exit ${RESULT}
 endef
 
+.PHONY: all
 all: help
 
 ##@ Apispec
@@ -66,24 +65,29 @@ schemas: ${API_SPECS}  ## Generate pydantic classes from apispec yaml files
 
 ##@ Avro schemas
 
+.PHONY: download_avro
 download_avro:  ## Download the latest avro schema files
 	@echo "Downloading avro schema files"
 	curl -L -o schemas.tar.gz https://github.com/SwissDataScienceCenter/renku-schema/tarball/main
 	tar xf schemas.tar.gz --directory=components/renku_data_services/message_queue/schemas/ --strip-components=1
 	rm schemas.tar.gz
 
+.PHONY: check_avro
 check_avro: download_avro avro_models  ## Download avro schemas, generate models and check if the avro schemas are up to date
 	@echo "checking if avro schemas are up to date"
 	git diff --exit-code || (git diff && exit 1)
 
+.PHONY: avro_models
 avro_models:  ## Generate message queue classes and code from the avro schemas
 	@echo "generating message queues classes from avro schemas"
 	poetry run python components/renku_data_services/message_queue/generate_models.py
 
+.PHONY: update_avro
 update_avro: download_avro avro_models  ## Download avro schemas and generate models
 
 ##@ Test and linting
 
+.PHONY: style_checks
 style_checks:  ## Run linting and style checks
 	poetry check
 	@echo "checking crc apispec is up to date"
@@ -117,31 +121,39 @@ style_checks:  ## Run linting and style checks
 	poetry poly check
 	poetry poly libs
 
+.PHONY: test_setup
 test_setup:  ## Prep for the tests - removes old coverage reports if one is present
 	@rm -f coverage.lcov .coverage
 
+.PHONY: main_tests
 main_tests:  ## Run the main (i.e. non-schemathesis tests)
 	DUMMY_STORES=true poetry run alembic --name common upgrade heads
 	poetry run alembic --name common check
 	poetry run pytest -m "not schemathesis" -n auto -v
 
+.PHONY: schemathesis_tests
 schemathesis_tests:  ## Run schemathesis checks
 	poetry run pytest -m "schemathesis" --cov-append
 
+.PHONY: collect_coverage
 collect_coverage:  ## Collect test coverage reports
 	poetry run coverage report --show-missing
 	poetry run coverage lcov -o coverage.lcov
 
+.PHONY: tests
 tests: test_setup main_tests schemathesis_tests collect_coverage  ## Run all tests
 
+.PHONY: pre_commit_checks
 pre_commit_checks:  ## Run pre-commit checks
 	poetry run pre-commit run --all-files
 
 ##@ General
 
+.PHONY: run
 run:  ## Run the sanic server
 	DUMMY_STORES=true poetry run python bases/renku_data_services/data_api/main.py --dev --debug
 
+.PHONY: debug
 debug:  ## Debug the sanic server
 	DUMMY_STORES=true poetry run python -Xfrozen_modules=off -m debugpy --listen 0.0.0.0:5678 --wait-for-client -m sanic renku_data_services.data_api.main:create_app --debug --single-process --port 8000 --host 0.0.0.0
 
@@ -162,10 +174,12 @@ help:  ## Display this help.
 
 ##@ Helm/k8s
 
+.PHONY: k3d_cluster
 k3d_cluster:  ## Creates a k3d cluster for testing
 	k3d cluster delete
 	k3d cluster create --agents 1 --k3s-arg --disable=metrics-server@server:0
 
+.PHONY: install_amaltheas
 install_amaltheas:  ## Installs both version of amalthea in the. NOTE: It uses the currently active k8s context.
 	helm repo add renku https://swissdatasciencecenter.github.io/helm-charts
 	helm repo update
@@ -173,6 +187,7 @@ install_amaltheas:  ## Installs both version of amalthea in the. NOTE: It uses t
 	helm upgrade --install amalthea-se renku/amalthea-sessions --version ${AMALTHEA_SESSIONS_VERSION}
 
 # TODO: Add the version variables from the top of the file here when the charts are fully published
+.PHONY: amalthea_schema
 amalthea_schema:  ## Updates generates pydantic classes from CRDs
 	curl https://raw.githubusercontent.com/SwissDataScienceCenter/amalthea/main/config/crd/bases/amalthea.dev_amaltheasessions.yaml | yq '.spec.versions[0].schema.openAPIV3Schema' | poetry run datamodel-codegen --input-file-type jsonschema --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/notebooks/cr_amalthea_session.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.notebooks.cr_base.BaseCRD --allow-extra-fields --use-default-kwarg
 	curl https://raw.githubusercontent.com/SwissDataScienceCenter/amalthea/main/controller/crds/jupyter_server.yaml | yq '.spec.versions[0].schema.openAPIV3Schema' | poetry run datamodel-codegen --input-file-type jsonschema --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/notebooks/cr_jupyter_server.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.notebooks.cr_base.BaseCRD --allow-extra-fields --use-default-kwarg
