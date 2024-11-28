@@ -2,7 +2,19 @@
 
 AMALTHEA_JS_VERSION ?= 0.13.0
 AMALTHEA_SESSIONS_VERSION ?= 0.13.0
-codegen_params = --input-file-type openapi --output-model-type pydantic_v2.BaseModel --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --set-default-enum-member --openapi-scopes schemas paths parameters --set-default-enum-member --use-one-literal-as-default --use-default
+CODEGEN_PARAMS := \
+    --input-file-type openapi \
+    --output-model-type pydantic_v2.BaseModel \
+    --use-double-quotes \
+    --target-python-version 3.12 \
+    --collapse-root-models \
+    --field-constraints \
+    --strict-nullable \
+    --set-default-enum-member \
+    --openapi-scopes schemas paths parameters \
+    --set-default-enum-member \
+    --use-one-literal-as-default \
+    --use-default
 
 define test_apispec_up_to_date
 	$(eval $@_NAME=$(1))
@@ -16,34 +28,21 @@ endef
 
 all: help
 
-components/renku_data_services/crc/apispec.py: components/renku_data_services/crc/api.spec.yaml
-	poetry run datamodel-codegen --input components/renku_data_services/crc/api.spec.yaml --output components/renku_data_services/crc/apispec.py --base-class renku_data_services.crc.apispec_base.BaseAPISpec $(codegen_params)
-components/renku_data_services/storage/apispec.py: components/renku_data_services/storage/api.spec.yaml
-	poetry run datamodel-codegen --input components/renku_data_services/storage/api.spec.yaml --output components/renku_data_services/storage/apispec.py --base-class renku_data_services.storage.apispec_base.BaseAPISpec $(codegen_params)
-components/renku_data_services/users/apispec.py: components/renku_data_services/users/api.spec.yaml
-	poetry run datamodel-codegen --input components/renku_data_services/users/api.spec.yaml --output components/renku_data_services/users/apispec.py --base-class renku_data_services.users.apispec_base.BaseAPISpec $(codegen_params)
-components/renku_data_services/project/apispec.py: components/renku_data_services/project/api.spec.yaml
-	poetry run datamodel-codegen --input components/renku_data_services/project/api.spec.yaml --output components/renku_data_services/project/apispec.py --base-class renku_data_services.project.apispec_base.BaseAPISpec $(codegen_params)
-components/renku_data_services/session/apispec.py: components/renku_data_services/session/api.spec.yaml
-	poetry run datamodel-codegen --input components/renku_data_services/session/api.spec.yaml --output components/renku_data_services/session/apispec.py --base-class renku_data_services.session.apispec_base.BaseAPISpec $(codegen_params)
-components/renku_data_services/namespace/apispec.py: components/renku_data_services/namespace/api.spec.yaml
-	poetry run datamodel-codegen --input components/renku_data_services/namespace/api.spec.yaml --output components/renku_data_services/namespace/apispec.py --base-class renku_data_services.namespace.apispec_base.BaseAPISpec $(codegen_params)
-components/renku_data_services/secrets/apispec.py: components/renku_data_services/secrets/api.spec.yaml
-	poetry run datamodel-codegen --input components/renku_data_services/secrets/api.spec.yaml --output components/renku_data_services/secrets/apispec.py --base-class renku_data_services.secrets.apispec_base.BaseAPISpec $(codegen_params)
-components/renku_data_services/connected_services/apispec.py: components/renku_data_services/connected_services/api.spec.yaml
-	poetry run datamodel-codegen --input components/renku_data_services/connected_services/api.spec.yaml --output components/renku_data_services/connected_services/apispec.py --base-class renku_data_services.connected_services.apispec_base.BaseAPISpec $(codegen_params)
-components/renku_data_services/repositories/apispec.py: components/renku_data_services/repositories/api.spec.yaml
-	poetry run datamodel-codegen --input components/renku_data_services/repositories/api.spec.yaml --output components/renku_data_services/repositories/apispec.py --base-class renku_data_services.repositories.apispec_base.BaseAPISpec $(codegen_params)
-components/renku_data_services/notebooks/apispec.py: components/renku_data_services/notebooks/api.spec.yaml
-	poetry run datamodel-codegen --input components/renku_data_services/notebooks/api.spec.yaml --output components/renku_data_services/notebooks/apispec.py --base-class renku_data_services.notebooks.apispec_base.BaseAPISpec $(codegen_params)
-components/renku_data_services/platform/apispec.py: components/renku_data_services/platform/api.spec.yaml
-	poetry run datamodel-codegen --input components/renku_data_services/platform/api.spec.yaml --output components/renku_data_services/platform/apispec.py --base-class renku_data_services.platform.apispec_base.BaseAPISpec $(codegen_params)
-components/renku_data_services/message_queue/apispec.py: components/renku_data_services/message_queue/api.spec.yaml
-	poetry run datamodel-codegen --input components/renku_data_services/message_queue/api.spec.yaml --output components/renku_data_services/message_queue/apispec.py --base-class renku_data_services.message_queue.apispec_base.BaseAPISpec $(codegen_params)
-components/renku_data_services/data_connectors/apispec.py: components/renku_data_services/data_connectors/api.spec.yaml
-	poetry run datamodel-codegen --input components/renku_data_services/data_connectors/api.spec.yaml --output components/renku_data_services/data_connectors/apispec.py --base-class renku_data_services.data_connectors.apispec_base.BaseAPISpec $(codegen_params)
-
 ##@ Apispec
+
+components/renku_data_services/crc/apispec.py: components/renku_data_services/crc/api.spec.yaml
+components/renku_data_services/storage/apispec.py: components/renku_data_services/storage/api.spec.yaml
+components/renku_data_services/users/apispec.py: components/renku_data_services/users/api.spec.yaml
+components/renku_data_services/project/apispec.py: components/renku_data_services/project/api.spec.yaml
+components/renku_data_services/session/apispec.py: components/renku_data_services/session/api.spec.yaml
+components/renku_data_services/namespace/apispec.py: components/renku_data_services/namespace/api.spec.yaml
+components/renku_data_services/secrets/apispec.py: components/renku_data_services/secrets/api.spec.yaml
+components/renku_data_services/connected_services/apispec.py: components/renku_data_services/connected_services/api.spec.yaml
+components/renku_data_services/repositories/apispec.py: components/renku_data_services/repositories/api.spec.yaml
+components/renku_data_services/notebooks/apispec.py: components/renku_data_services/notebooks/api.spec.yaml
+components/renku_data_services/platform/apispec.py: components/renku_data_services/platform/api.spec.yaml
+components/renku_data_services/message_queue/apispec.py: components/renku_data_services/message_queue/api.spec.yaml
+components/renku_data_services/data_connectors/apispec.py: components/renku_data_services/data_connectors/api.spec.yaml
 
 schemas: components/renku_data_services/crc/apispec.py \
 components/renku_data_services/storage/apispec.py \
@@ -112,17 +111,22 @@ style_checks:  ## Run linting and style checks
 	poetry run bandit -c pyproject.toml -r .
 	poetry poly check
 	poetry poly libs
+
 test_setup:  ## Prep for the tests - removes old coverage reports if one is present
 	@rm -f coverage.lcov .coverage
+
 main_tests:  ## Run the main (i.e. non-schemathesis tests)
 	DUMMY_STORES=true poetry run alembic --name common upgrade heads
 	poetry run alembic --name common check
 	poetry run pytest -m "not schemathesis" -n auto -v
+
 schemathesis_tests:  ## Run schemathesis checks
 	poetry run pytest -m "schemathesis" --cov-append
+
 collect_coverage:  ## Collect test coverage reports
 	poetry run coverage report --show-missing
 	poetry run coverage lcov -o coverage.lcov
+
 tests: test_setup main_tests schemathesis_tests collect_coverage  ## Run all tests
 
 pre_commit_checks:  ## Run pre-commit checks
@@ -167,3 +171,8 @@ install_amaltheas:  ## Installs both version of amalthea in the. NOTE: It uses t
 amalthea_schema:  ## Updates generates pydantic classes from CRDs
 	curl https://raw.githubusercontent.com/SwissDataScienceCenter/amalthea/main/config/crd/bases/amalthea.dev_amaltheasessions.yaml | yq '.spec.versions[0].schema.openAPIV3Schema' | poetry run datamodel-codegen --input-file-type jsonschema --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/notebooks/cr_amalthea_session.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.notebooks.cr_base.BaseCRD --allow-extra-fields --use-default-kwarg
 	curl https://raw.githubusercontent.com/SwissDataScienceCenter/amalthea/main/controller/crds/jupyter_server.yaml | yq '.spec.versions[0].schema.openAPIV3Schema' | poetry run datamodel-codegen --input-file-type jsonschema --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/notebooks/cr_jupyter_server.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.notebooks.cr_base.BaseCRD --allow-extra-fields --use-default-kwarg
+
+# Pattern rules
+
+%/apispec.py: %/api.spec.yaml
+	poetry run datamodel-codegen --input $< --output $@ --base-class $(subst /,.,$(subst .py,_base.BaseAPISpec,$(subst components/,,$@))) ${CODEGEN_PARAMS}
