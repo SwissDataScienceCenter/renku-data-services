@@ -5,6 +5,7 @@ from renku_data_services.users.models import UserInfo
 from renku_data_services.utils.core import get_openbis_session_token
 from test.bases.renku_data_services.data_api.utils import merge_headers
 
+
 @pytest.mark.asyncio
 async def test_post_data_connector(sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers) -> None:
     payload = {
