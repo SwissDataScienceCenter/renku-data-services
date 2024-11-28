@@ -2,8 +2,8 @@ import pytest
 from sanic_testing.testing import SanicASGITestClient
 
 from renku_data_services.users.models import UserInfo
+from renku_data_services.utils.core import get_openbis_session_token
 from test.bases.renku_data_services.data_api.utils import merge_headers
-
 
 @pytest.mark.asyncio
 async def test_post_data_connector(sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers) -> None:
@@ -1073,6 +1073,14 @@ async def test_patch_data_connector_secrets(
     assert len(secrets) == 2
     assert {s["name"] for s in secrets} == {"access_key_id", "secret_access_key"}
 
+    payload = [
+        {"name": "not_sensitive", "value": "not_sensitive_value"},
+    ]
+    _, response = await sanic_client.patch(
+        f"/api/data/data_connectors/{data_connector_id}/secrets", headers=user_headers, json=payload
+    )
+    assert response.status_code == 422, response.json
+
 
 @pytest.mark.asyncio
 async def test_patch_data_connector_secrets_update_secrets(
@@ -1142,7 +1150,7 @@ async def test_patch_data_connector_secrets_add_and_remove_secrets(
     payload = [
         {"name": "access_key_id", "value": "new access key id value"},
         {"name": "secret_access_key", "value": None},
-        {"name": "password", "value": "password"},
+        {"name": "sse_kms_key_id", "value": "password"},
     ]
     _, response = await sanic_client.patch(
         f"/api/data/data_connectors/{data_connector_id}/secrets", headers=user_headers, json=payload
@@ -1152,7 +1160,7 @@ async def test_patch_data_connector_secrets_add_and_remove_secrets(
     assert response.json is not None
     secrets = response.json
     assert len(secrets) == 2
-    assert {s["name"] for s in secrets} == {"access_key_id", "password"}
+    assert {s["name"] for s in secrets} == {"access_key_id", "sse_kms_key_id"}
     new_access_key_id_secret_id = next(filter(lambda s: s["name"] == "access_key_id", secrets), None)
     assert new_access_key_id_secret_id == access_key_id_secret_id
 
@@ -1162,15 +1170,14 @@ async def test_patch_data_connector_secrets_add_and_remove_secrets(
     assert response.json is not None
     secrets = response.json
     assert len(secrets) == 2
-    assert {s["name"] for s in secrets} == {"access_key_id", "password"}
+    assert {s["name"] for s in secrets} == {"access_key_id", "sse_kms_key_id"}
 
     # Check the associated secrets
     _, response = await sanic_client.get("/api/data/user/secrets", params={"kind": "storage"}, headers=user_headers)
-
     assert response.status_code == 200
     assert response.json is not None
     assert len(response.json) == 2
-    assert {s["name"] for s in secrets} == {"access_key_id", "password"}
+    assert {s["name"] for s in secrets} == {"access_key_id", "sse_kms_key_id"}
 
 
 @pytest.mark.asyncio
@@ -1208,6 +1215,51 @@ async def test_delete_data_connector_secrets(
 
     assert response.status_code == 200
     assert response.json == [], response.json
+
+
+@pytest.mark.myskip(1 == 1, reason="Depends on a remote openBIS host which may not always be available.")
+@pytest.mark.asyncio
+async def test_create_openbis_data_connector(sanic_client, create_openbis_data_connector, user_headers) -> None:
+    openbis_session_token = await get_openbis_session_token(
+        host="openbis-eln-lims.ethz.ch",  # Public openBIS demo instance.
+        username="observer",
+        password="1234",
+    )
+    data_connector = await create_openbis_data_connector(
+        "openBIS data connector 1", session_token=openbis_session_token
+    )
+    data_connector_id = data_connector["id"]
+
+    payload = [
+        {"name": "session_token", "value": openbis_session_token},
+    ]
+    _, response = await sanic_client.patch(
+        f"/api/data/data_connectors/{data_connector_id}/secrets", headers=user_headers, json=payload
+    )
+    assert response.status_code == 200, response.json
+    assert {s["name"] for s in response.json} == {"session_token"}
+    created_secret_ids = {s["secret_id"] for s in response.json}
+    assert len(created_secret_ids) == 1
+    assert response.json[0].keys() == {"secret_id", "name"}
+
+
+@pytest.mark.myskip(1 == 1, reason="Depends on a remote openBIS host which may not always be available.")
+@pytest.mark.asyncio
+async def test_create_openbis_data_connector_with_invalid_session_token(
+    sanic_client, create_openbis_data_connector, user_headers
+) -> None:
+    invalid_openbis_session_token = "1234"
+    data_connector = await create_openbis_data_connector("openBIS data connector 1", invalid_openbis_session_token)
+    data_connector_id = data_connector["id"]
+
+    payload = [
+        {"name": "session_token", "value": invalid_openbis_session_token},
+    ]
+    _, response = await sanic_client.patch(
+        f"/api/data/data_connectors/{data_connector_id}/secrets", headers=user_headers, json=payload
+    )
+    assert response.status_code == 500, response.json
+    assert response.json["error"]["message"] == "An openBIS personal access token related request failed."
 
 
 @pytest.mark.asyncio
