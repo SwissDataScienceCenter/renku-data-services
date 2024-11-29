@@ -14,16 +14,6 @@ CODEGEN_PARAMS := \
     --use-one-literal-as-default \
     --use-default
 
-define test_apispec_up_to_date
-	$(eval $@_NAME=$(1))
-	cp "components/renku_data_services/${$@_NAME}/apispec.py" "/tmp/apispec_orig.py"
-	poetry run datamodel-codegen --input components/renku_data_services/${$@_NAME}/api.spec.yaml --output components/renku_data_services/${$@_NAME}/apispec.py --base-class renku_data_services.${$@_NAME}.apispec_base.BaseAPISpec $(codegen_params)
-	diff -I "^#   timestamp\: " "/tmp/apispec_orig.py" "components/renku_data_services/${$@_NAME}/apispec.py"
-	@RESULT=$?
-	cp "/tmp/apispec_orig.py" "components/renku_data_services/${$@_NAME}/apispec.py"
-	exit ${RESULT}
-endef
-
 .PHONY: all
 all: help
 
@@ -88,32 +78,8 @@ update_avro: download_avro avro_models  ## Download avro schemas and generate mo
 ##@ Test and linting
 
 .PHONY: style_checks
-style_checks:  ## Run linting and style checks
+style_checks: ${API_SPECS} ## Run linting and style checks
 	poetry check
-	@echo "checking crc apispec is up to date"
-	@$(call test_apispec_up_to_date,"crc")
-	@echo "checking storage apispec is up to date"
-	@$(call test_apispec_up_to_date,"storage")
-	@echo "checking users apispec is up to date"
-	@$(call test_apispec_up_to_date,"users")
-	@echo "checking project apispec is up to date"
-	@$(call test_apispec_up_to_date,"project")
-	@echo "checking namespace apispec is up to date"
-	@$(call test_apispec_up_to_date,"namespace")
-	@echo "checking connected_services apispec is up to date"
-	@$(call test_apispec_up_to_date,"connected_services")
-	@echo "checking repositories apispec is up to date"
-	@$(call test_apispec_up_to_date,"repositories")
-	@echo "checking notebooks apispec is up to date"
-	@$(call test_apispec_up_to_date,"notebooks")
-	@echo "checking platform apispec is up to date"
-	@$(call test_apispec_up_to_date,"platform")
-	@echo "checking message_queue apispec is up to date"
-	@$(call test_apispec_up_to_date,"message_queue")
-	@echo "checking session apispec is up to date"
-	@$(call test_apispec_up_to_date,"session")
-	@echo "checking data connectors apispec is up to date"
-	@$(call test_apispec_up_to_date,"data_connectors")
 	poetry run mypy
 	poetry run ruff format --check
 	poetry run ruff check .
@@ -196,3 +162,7 @@ amalthea_schema:  ## Updates generates pydantic classes from CRDs
 
 %/apispec.py: %/api.spec.yaml
 	poetry run datamodel-codegen --input $< --output $@ --base-class $(subst /,.,$(subst .py,_base.BaseAPISpec,$(subst components/,,$@))) ${CODEGEN_PARAMS}
+	# If the only difference is the timestamp comment line, ignore it by
+	# reverting to the checked in version. As the file timestamps is now
+	# newer than the requirements these steps won't be re-triggered.
+	git diff --exit-code -I "^#   timestamp\: " $@ >/dev/null && git checkout $@
