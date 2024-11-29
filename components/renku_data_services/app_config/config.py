@@ -354,6 +354,8 @@ class Config:
             self._project_session_secret_repo = ProjectSessionSecretRepository(
                 session_maker=self.db.async_session_maker,
                 authz=self.authz,
+                user_repo=self.kc_user_repo,
+                secret_service_public_key=self.secrets_service_public_key,
             )
         return self._project_session_secret_repo
 

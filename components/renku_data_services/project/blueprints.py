@@ -28,6 +28,7 @@ from renku_data_services.project.core import (
     copy_project,
     validate_project_patch,
     validate_session_secret_slot_patch,
+    validate_session_secrets_patch,
     validate_unsaved_session_secret_slot,
 )
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository, ProjectSessionSecretRepository
@@ -405,3 +406,44 @@ class ProjectSessionSecretBP(CustomBlueprint):
             return HTTPResponse(status=204)
 
         return "/session_secret_slots/<slot_id:ulid>", ["DELETE"], _delete_session_secret_slot
+
+    def get_session_secrets(self) -> BlueprintFactoryResponse:
+        """Get the current user's secrets of a project."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _get_session_secrets(_: Request, user: base_models.APIUser, project_id: ULID) -> JSONResponse:
+            secrets = await self.session_secret_repo.get_all_session_secrets_from_project(
+                user=user, project_id=project_id
+            )
+            return validated_json(apispec.SessionSecretList, secrets)
+
+        return "/projects/<project_id:ulid>/session_secrets", ["GET"], _get_session_secrets
+
+    def patch_session_secrets(self) -> BlueprintFactoryResponse:
+        """Save user secrets for a project."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @validate_body_root_model(json=apispec.SessionSecretPatchList)
+        async def _patch_session_secrets(
+            _: Request, user: base_models.APIUser, project_id: ULID, body: apispec.SessionSecretPatchList
+        ) -> JSONResponse:
+            secrets_patch = validate_session_secrets_patch(body)
+            secrets = await self.session_secret_repo.patch_session_secrets(
+                user=user, project_id=project_id, secrets=secrets_patch
+            )
+            return validated_json(apispec.SessionSecretList, secrets)
+
+        return "/projects/<project_id:ulid>/session_secrets", ["PATCH"], _patch_session_secrets
+
+    def delete_session_secrets(self) -> BlueprintFactoryResponse:
+        """Remove all user secrets for a project."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _delete_session_secrets(_: Request, user: base_models.APIUser, project_id: ULID) -> HTTPResponse:
+            await self.session_secret_repo.delete_session_secrets(user=user, project_id=project_id)
+            return HTTPResponse(status=204)
+
+        return "/projects/<project_id:ulid>/session_secrets", ["DELETE"], _delete_session_secrets
