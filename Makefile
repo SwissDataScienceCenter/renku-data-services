@@ -162,7 +162,8 @@ amalthea_schema:  ## Updates generates pydantic classes from CRDs
 
 %/apispec.py: %/api.spec.yaml
 	poetry run datamodel-codegen --input $< --output $@ --base-class $(subst /,.,$(subst .py,_base.BaseAPISpec,$(subst components/,,$@))) ${CODEGEN_PARAMS}
-	# If the only difference is the timestamp comment line, ignore it by
-	# reverting to the checked in version. As the file timestamps is now
-	# newer than the requirements these steps won't be re-triggered.
-	git diff --exit-code -I "^#   timestamp\: " $@ >/dev/null && git checkout $@
+# If the only difference is the timestamp comment line, ignore it by
+# reverting to the checked in version. As the file timestamps is now
+# newer than the requirements these steps won't be re-triggered.
+# Ignore the return value when there are more differences.
+	( git diff --exit-code -I "^#   timestamp\: " $@ >/dev/null && git checkout $@ ) || true
