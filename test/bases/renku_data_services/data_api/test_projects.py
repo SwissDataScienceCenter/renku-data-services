@@ -1435,10 +1435,15 @@ async def test_get_project_after_group_moved(
     sanic_client,
     user_headers,
 ) -> None:
+    await create_project(
+        "Project 1",
+    )
+    await create_project("Project 2")
     group = await create_group("test-group")
     group_slug = group["slug"]
     project = await create_project("My project", namespace=group_slug)
     project_id = project["id"]
+    await create_project("Project 3")
 
     new_group_slug = "test-group-updated"
     patch = {"slug": new_group_slug}

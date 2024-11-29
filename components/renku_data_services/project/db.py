@@ -152,7 +152,7 @@ class ProjectRepository:
 
             if project_orm is None:
                 old_project_stmt_old_ns_current_slug = (
-                    select(schemas.ProjectORM)
+                    select(schemas.ProjectORM.id)
                     .where(ns_schemas.NamespaceOldORM.slug == namespace.lower())
                     .where(ns_schemas.NamespaceOldORM.latest_slug_id == ns_schemas.NamespaceORM.id)
                     .where(ns_schemas.EntitySlugORM.namespace_id == ns_schemas.NamespaceORM.id)
@@ -160,7 +160,7 @@ class ProjectRepository:
                     .where(schemas.ProjectORM.slug.has(ns_schemas.EntitySlugORM.slug == slug))
                 )
                 old_project_stmt_current_ns_old_slug = (
-                    select(schemas.ProjectORM)
+                    select(schemas.ProjectORM.id)
                     .where(ns_schemas.NamespaceORM.slug == namespace.lower())
                     .where(ns_schemas.EntitySlugORM.namespace_id == ns_schemas.NamespaceORM.id)
                     .where(schemas.ProjectORM.id == ns_schemas.EntitySlugORM.project_id)
@@ -168,7 +168,7 @@ class ProjectRepository:
                     .where(ns_schemas.EntitySlugOldORM.latest_slug_id == ns_schemas.EntitySlugORM.id)
                 )
                 old_project_stmt_old_ns_old_slug = (
-                    select(schemas.ProjectORM)
+                    select(schemas.ProjectORM.id)
                     .where(ns_schemas.NamespaceOldORM.slug == namespace.lower())
                     .where(ns_schemas.NamespaceOldORM.latest_slug_id == ns_schemas.NamespaceORM.id)
                     .where(ns_schemas.EntitySlugORM.namespace_id == ns_schemas.NamespaceORM.id)
@@ -179,12 +179,13 @@ class ProjectRepository:
                 old_project_stmt = old_project_stmt_old_ns_current_slug.union(
                     old_project_stmt_current_ns_old_slug, old_project_stmt_old_ns_old_slug
                 )
-                result_old = cast(schemas.ProjectORM | None, await session.scalar(old_project_stmt))
-                if result_old is not None:
-                    stmt = select(schemas.ProjectORM)
+                result_old = await session.scalars(old_project_stmt)
+                result_old_id = cast(ULID | None, result_old.first())
+                if result_old_id is not None:
+                    stmt = select(schemas.ProjectORM).where(schemas.ProjectORM.id == result_old_id)
                     if with_documentation:
                         stmt = stmt.options(undefer(schemas.ProjectORM.documentation))
-                    project_orm = await session.scalar(stmt)
+                    project_orm = (await session.scalars(stmt)).first()
 
             not_found_msg = (
                 f"Project with identifier '{namespace}/{slug}' does not exist or you do not have access to it."
