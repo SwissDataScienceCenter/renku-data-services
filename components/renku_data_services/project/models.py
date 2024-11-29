@@ -124,3 +124,27 @@ class SessionSecretSlotPatch:
     name: str | None
     description: str | None
     filename: str | None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionSecret:
+    """Session secret model that has been persisted."""
+
+    secret_slot: SessionSecretSlot
+    secret_id: ULID
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionSecretPatchExistingSecret:
+    """Model for changes requested on a session secret."""
+
+    secret_slot_id: ULID
+    secret_id: ULID
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionSecretPatchSecretValue:
+    """Model for changes requested on a session secret."""
+
+    secret_slot_id: ULID
+    value: str | None
