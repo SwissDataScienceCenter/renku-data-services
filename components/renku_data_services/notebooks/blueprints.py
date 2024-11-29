@@ -427,9 +427,11 @@ class NotebooksNewBP(CustomBlueprint):
                 "cpu": str(round(resource_class.cpu * 1000)) + "m",
                 "memory": f"{resource_class.memory}Gi",
             }
+            limits: dict[str, str | int] = {}
             if resource_class.gpu > 0:
                 gpu_name = GpuKind.NVIDIA.value + "/gpu"
                 requests[gpu_name] = resource_class.gpu
+                limits[gpu_name] = resource_class.gpu
             tolerations = [
                 Toleration.model_validate(toleration) for toleration in self.nb_config.sessions.tolerations
             ] + tolerations_from_resource_class(resource_class)
@@ -459,7 +461,7 @@ class NotebooksNewBP(CustomBlueprint):
                         workingDir=work_dir.as_posix(),
                         runAsUser=environment.uid,
                         runAsGroup=environment.gid,
-                        resources=Resources(requests=requests),
+                        resources=Resources(requests=requests, limits=limits if len(limits) > 0 else None),
                         extraVolumeMounts=[],
                         command=environment.command,
                         args=environment.args,
