@@ -303,13 +303,16 @@ class ProjectRepository:
         if patch.namespace is not None and patch.namespace != old_project.namespace.slug:
             # NOTE: changing the namespace requires the user to be owner which means they should have DELETE permission
             required_scope = Scope.DELETE
+        if patch.slug is not None and patch.slug != old_project.slug:
+            # NOTE: changing the slug requires the user to be owner which means they should have DELETE permission
+            required_scope = Scope.DELETE
         authorized = await self.authz.has_permission(user, ResourceType.project, project_id, required_scope)
         if not authorized:
             raise errors.MissingResourceError(
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
 
-        current_etag = project.dump().etag
+        current_etag = old_project.etag
         if etag is not None and current_etag != etag:
             raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
 
@@ -332,6 +335,20 @@ class ProjectRepository:
                     message=f"The project cannot be moved because you do not have sufficient permissions with the namespace {patch.namespace}"  # noqa: E501
                 )
             project.slug.namespace_id = ns.id
+        if patch.slug is not None and patch.slug != old_project.slug:
+            namespace_id = project.slug.namespace_id
+            existing_entity = await session.scalar(
+                select(ns_schemas.EntitySlugORM)
+                .where(ns_schemas.EntitySlugORM.slug == patch.slug)
+                .where(ns_schemas.EntitySlugORM.namespace_id == namespace_id)
+            )
+            if existing_entity is not None:
+                raise errors.ConflictError(
+                    message=f"An entity with the slug '{project.slug.namespace.slug}/{patch.slug}' already exists."
+                )
+            # project
+            session.add(ns_schemas.EntitySlugOldORM(slug=old_project.slug, latest_slug=project.slug))
+            project.slug.slug = patch.slug
         if patch.visibility is not None:
             visibility_orm = (
                 project_apispec.Visibility(patch.visibility)

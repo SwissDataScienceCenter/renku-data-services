@@ -59,6 +59,7 @@ class ProjectPatch:
 
     name: str | None
     namespace: str | None
+    slug: str | None
     visibility: Visibility | None
     repositories: list[Repository] | None
     description: str | None
