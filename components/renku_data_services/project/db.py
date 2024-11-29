@@ -703,7 +703,7 @@ class ProjectSessionSecretRepository:
         if user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
-        # Check that the user is allowed to access the session launcher
+        # Check that the user is allowed to access the project
         authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
         if not authorized:
             raise errors.MissingResourceError(
