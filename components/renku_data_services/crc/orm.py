@@ -127,6 +127,7 @@ class ResourceClassORM(BaseORM):
             node_affinities=[affinity.dump() for affinity in self.node_affinities],
             tolerations=[toleration.key for toleration in self.tolerations],
             matching=matching,
+            quota=self.resource_pool.quota if self.resource_pool else None,
         )
 
 
