@@ -347,7 +347,7 @@ class ProjectRepository:
                     message=f"An entity with the slug '{project.slug.namespace.slug}/{patch.slug}' already exists."
                 )
             # project
-            session.add(ns_schemas.EntitySlugOldORM(slug=old_project.slug, latest_slug=project.slug))
+            session.add(ns_schemas.EntitySlugOldORM(slug=old_project.slug, latest_slug_id=project.slug.id))
             project.slug.slug = patch.slug
         if patch.visibility is not None:
             visibility_orm = (
