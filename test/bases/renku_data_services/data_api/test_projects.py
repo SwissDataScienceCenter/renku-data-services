@@ -1426,3 +1426,45 @@ async def test_project_unlink_from_template_project(
 
     project = await get_project(project_id)
     assert "template_id" not in project or project["template_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_get_project_after_group_moved(
+    create_project,
+    create_group,
+    sanic_client,
+    user_headers,
+) -> None:
+    group = await create_group("test-group")
+    group_slug = group["slug"]
+    project = await create_project("My project", namespace=group_slug)
+    project_id = project["id"]
+
+    new_group_slug = "test-group-updated"
+    patch = {"slug": new_group_slug}
+    _, response = await sanic_client.patch(f"/api/data/groups/{group_slug}", headers=user_headers, json=patch)
+    assert response.status_code == 200, response.text
+
+    # Check that the project's namespace has been updated
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == project_id
+    assert response.json.get("namespace") == new_group_slug
+    assert response.json.get("slug") == "my-project"
+
+    # Check that we can get the project with the new namespace
+    _, response = await sanic_client.get(
+        f"/api/data/namespaces/{new_group_slug}/projects/{project['slug']}", headers=user_headers
+    )
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == project_id
+
+    # Check that we can get the project with the old namespace
+    _, response = await sanic_client.get(
+        f"/api/data/namespaces/{group_slug}/projects/{project['slug']}", headers=user_headers
+    )
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == project_id
