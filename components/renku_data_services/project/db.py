@@ -529,7 +529,9 @@ class ProjectSessionSecretRepository:
             )
         async with self.session_maker() as session:
             result = await session.scalars(
-                select(schemas.SessionSecretSlotORM).where(schemas.SessionSecretSlotORM.project_id == project_id)
+                select(schemas.SessionSecretSlotORM)
+                .where(schemas.SessionSecretSlotORM.project_id == project_id)
+                .order_by(schemas.SessionSecretSlotORM.id.desc)
             )
             secret_slots = result.all()
             return [s.dump() for s in secret_slots]
@@ -688,6 +690,7 @@ class ProjectSessionSecretRepository:
                 .where(schemas.SessionSecretORM.user_id == user.id)
                 .where(schemas.SessionSecretORM.secret_slot_id == schemas.SessionSecretSlotORM.id)
                 .where(schemas.SessionSecretSlotORM.project_id == project_id)
+                .order_by(schemas.SessionSecretORM.id.desc)
             )
             secrets = result.all()
 
