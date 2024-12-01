@@ -40,7 +40,7 @@ packages = [
 [tool.poetry.dependencies]
 python = "^3.12"
 alembic = "^1.14.0"
-pydantic = {extras = ["email"], version = "^2.10.1"}
+pydantic = {extras = ["email"], version = "^2.10.2"}
 requests = "^2.32.3"
 sqlalchemy = "^2.0.36"
 asyncpg = "^0.30.0"
@@ -49,12 +49,12 @@ psycopg = { extras = ["binary"], version = "^3.2.3" }
 authlib = "^1.3.2"
 sanic = { extras = ["ext"], version = "^24.6.0" }
 redis = "^5.2.0"
-dataclasses-avroschema = "^0.65.3"
+dataclasses-avroschema = "^0.65.4"
 undictify = "^0.11.3"
 tenacity = "^9.0.0"
-httpx = "<0.28"
-python-gitlab = "^5.0.0"
-pyjwt = { extras = ["crypto"], version = "^2.10.0" }
+httpx = "<0.29"
+python-gitlab = "^5.1.0"
+pyjwt = { extras = ["crypto"], version = "^2.10.1" }
 kubernetes = "^31.0.0"
 python-ulid = "^3.0.0"
 deepmerge = "^2.0"
@@ -67,7 +67,7 @@ aiofile = "^3.9.0"
 # Not a direct dependency, it is needed by authzed. Was causing things to crash at startup beacuse of
 # google.protobuf.runtime_version.VersionError:
 # Detected incompatible Protobuf Gencode/Runtime versions when loading authzed/api/v1/core.proto: gencode 5.28.2 runtime 5.27.3.
-protobuf = "^5.28.3"
+protobuf = "^5.29.0"
 escapism = "^1.0.1"
 kr8s = "^0.18.1"
 marshmallow = "^3.23.1"
