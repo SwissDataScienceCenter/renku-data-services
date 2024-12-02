@@ -24,6 +24,7 @@ class UnsavedSecret(BaseModel):
     encrypted_key: bytes = Field(repr=False)
     modification_date: datetime = Field(default_factory=lambda: datetime.now(UTC).replace(microsecond=0), init=False)
     kind: SecretKind
+    expiration_timestamp: datetime | None = Field(default=None)
 
 
 class Secret(UnsavedSecret):

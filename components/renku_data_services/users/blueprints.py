@@ -152,7 +152,11 @@ class UserSecretsBP(CustomBlueprint):
             secret_kind = SecretKind[query.kind.value]
             secrets = await self.secret_repo.get_user_secrets(requested_by=user, kind=secret_kind)
             secrets_json = [
-                secret.model_dump(include={"name", "id", "modification_date", "kind"}, exclude_none=True, mode="json")
+                secret.model_dump(
+                    include={"id", "name", "kind", "expiration_timestamp", "modification_date"},
+                    exclude_none=True,
+                    mode="json",
+                )
                 for secret in secrets
             ]
             return validated_json(
@@ -173,9 +177,11 @@ class UserSecretsBP(CustomBlueprint):
             if not secret:
                 raise errors.MissingResourceError(message=f"The secret with id {secret_id} cannot be found.")
             result = secret.model_dump(
-                include={"name", "id", "modification_date", "kind"}, exclude_none=True, mode="json"
+                include={"id", "name", "kind", "expiration_timestamp", "modification_date"},
+                exclude_none=False,
+                mode="json",
             )
-            return validated_json(apispec.SecretWithId, result)
+            return validated_json(apispec.SecretWithId, result, exclude_none=False)
 
         return "/user/secrets/<secret_id:ulid>", ["GET"], _get_one
 
@@ -197,12 +203,15 @@ class UserSecretsBP(CustomBlueprint):
                 encrypted_value=encrypted_value,
                 encrypted_key=encrypted_key,
                 kind=SecretKind[body.kind.value],
+                expiration_timestamp=body.expiration_timestamp,
             )
             inserted_secret = await self.secret_repo.insert_secret(requested_by=user, secret=secret)
             result = inserted_secret.model_dump(
-                include={"name", "id", "modification_date", "kind"}, exclude_none=True, mode="json"
+                include={"id", "name", "kind", "expiration_timestamp", "modification_date"},
+                exclude_none=False,
+                mode="json",
             )
-            return validated_json(apispec.SecretWithId, result, 201)
+            return validated_json(apispec.SecretWithId, result, 201, exclude_none=False)
 
         return "/user/secrets", ["POST"], _post
 
@@ -222,13 +231,19 @@ class UserSecretsBP(CustomBlueprint):
                 secret_value=body.value,
             )
             updated_secret = await self.secret_repo.update_secret(
-                requested_by=user, secret_id=secret_id, encrypted_value=encrypted_value, encrypted_key=encrypted_key
+                requested_by=user,
+                secret_id=secret_id,
+                encrypted_value=encrypted_value,
+                encrypted_key=encrypted_key,
+                expiration_timestamp=body.expiration_timestamp,
             )
             result = updated_secret.model_dump(
-                include={"name", "id", "modification_date", "kind"}, exclude_none=True, mode="json"
+                include={"id", "name", "kind", "expiration_timestamp", "modification_date"},
+                exclude_none=False,
+                mode="json",
             )
 
-            return validated_json(apispec.SecretWithId, result)
+            return validated_json(apispec.SecretWithId, result, exclude_none=False)
 
         return "/user/secrets/<secret_id:ulid>", ["PATCH"], _patch
 

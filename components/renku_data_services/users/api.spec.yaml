@@ -418,20 +418,23 @@ components:
           $ref: "#/components/schemas/Ulid"
         name:
           $ref: "#/components/schemas/SecretName"
-        modification_date:
-          $ref: "#/components/schemas/ModificationDate"
         kind:
           $ref: "#/components/schemas/SecretKind"
+        expiration_timestamp:
+          $ref: "#/components/schemas/ExpirationTimestamp"
+        modification_date:
+          $ref: "#/components/schemas/ModificationDate"
       required:
         - "id"
         - "name"
-        - "modification_date"
         - "kind"
+        - "modification_date"
       example:
         id: "01AN4Z79ZS5XN0F25N3DB94T4R"
         name: "S3-Credentials"
-        modification_date: "2024-01-16T11:42:05Z"
         kind: general
+        expiration_timestamp: null
+        modification_date: "2024-01-16T11:42:05Z"
     SecretPost:
       description: Secret metadata to be created
       type: object
@@ -446,6 +449,8 @@ components:
             - $ref: "#/components/schemas/SecretKind"
             - default: "general"
           default: general
+        expiration_timestamp:
+          $ref: "#/components/schemas/ExpirationTimestamp"
       required:
         - "name"
         - "value"
@@ -456,6 +461,8 @@ components:
       properties:
         value:
           $ref: "#/components/schemas/SecretValue"
+        expiration_timestamp:
+          $ref: "#/components/schemas/ExpirationTimestamp"
       required:
         - "value"
     SecretName:
@@ -487,6 +494,13 @@ components:
       enum:
         - general
         - storage
+    ExpirationTimestamp:
+      description: The date and time the secret is not valid anymore (this is in any timezone)
+      type: string
+      nullable: true
+      format: date-time
+      example: "2030-11-01T17:32:28UTC+01:00"
+      default: null
     UserPreferences:
       type: object
       description: The object containing user preferences

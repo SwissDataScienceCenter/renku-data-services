@@ -127,6 +127,66 @@ class RCloneValidator:
         existing_endpoint_spec["Provider"] += ",Switch"
 
     @staticmethod
+    def __patch_schema_add_openbis_type(spec: list[dict[str, Any]]) -> None:
+        """Adds a fake type to help with setting up openBIS storage."""
+        spec.append(
+            {
+                "Name": "openbis",
+                "Description": "openBIS",
+                "Prefix": "openbis",
+                "Options": [
+                    {
+                        "Name": "host",
+                        "Help": 'openBIS host to connect to.\n\nE.g. "openbis-eln-lims.ethz.ch".',
+                        "Provider": "",
+                        "Default": "",
+                        "Value": None,
+                        "Examples": [
+                            {
+                                "Value": "openbis-eln-lims.ethz.ch",
+                                "Help": "Public openBIS demo instance",
+                                "Provider": "",
+                            },
+                        ],
+                        "ShortOpt": "",
+                        "Hide": 0,
+                        "Required": True,
+                        "IsPassword": False,
+                        "NoPrefix": False,
+                        "Advanced": False,
+                        "Exclusive": False,
+                        "Sensitive": False,
+                        "DefaultStr": "",
+                        "ValueStr": "",
+                        "Type": "string",
+                    },
+                    {
+                        "Name": "session_token",
+                        "Help": "openBIS session token",
+                        "Provider": "",
+                        "Default": "",
+                        "Value": None,
+                        "ShortOpt": "",
+                        "Hide": 0,
+                        "Required": True,
+                        "IsPassword": True,
+                        "NoPrefix": False,
+                        "Advanced": False,
+                        "Exclusive": False,
+                        "Sensitive": True,
+                        "DefaultStr": "",
+                        "ValueStr": "",
+                        "Type": "string",
+                    },
+                ],
+                "CommandHelp": None,
+                "Aliases": None,
+                "Hide": False,
+                "MetadataInfo": None,
+            }
+        )
+
+    @staticmethod
     def __patch_schema_remove_oauth_propeties(spec: list[dict[str, Any]]) -> None:
         """Removes OAuth2 fields since we can't do an oauth flow in the rclone CSI."""
         providers = [
@@ -173,6 +233,29 @@ class RCloneValidator:
 
         provider.validate_config(configuration, keep_sensitive=keep_sensitive)
 
+    def validate_sensitive_data(
+        self, configuration: Union["RCloneConfig", dict[str, Any]], sensitive_data: dict[str, str]
+    ) -> None:
+        """Validates whether the provided sensitive data is marked as sensitive in the rclone schema."""
+        sensitive_options = self.get_provider(configuration).sensitive_options
+        sensitive_options_name_lookup = [o.name for o in sensitive_options]
+        sensitive_data_counter = 0
+        for key, value in sensitive_data.items():
+            if len(value) > 0 and key in sensitive_options_name_lookup:
+                sensitive_data_counter += 1
+                continue
+            raise errors.ValidationError(message=f"The '{key}' property is not marked as sensitive.")
+
+    def get_real_config(self, configuration: Union["RCloneConfig", dict[str, Any]]) -> dict[str, Any]:
+        """Converts a Renku rclone configuration to a real rclone config."""
+        real_config = dict(configuration)
+        if configuration["type"] == "openbis":
+            real_config["type"] = "sftp"
+            real_config["port"] = "2222"
+            real_config["user"] = "?"
+            real_config["pass"] = real_config.pop("session_token")
+        return real_config
+
     async def test_connection(
         self, configuration: Union["RCloneConfig", dict[str, Any]], source_path: str
     ) -> ConnectionResult:
@@ -182,15 +265,17 @@ class RCloneValidator:
         except errors.ValidationError as e:
             return ConnectionResult(False, str(e))
 
-        obscured_config = await self.obscure_config(configuration)
+        obscured_rclone_config = await self.obscure_config(self.get_real_config(configuration))
 
         with tempfile.NamedTemporaryFile(mode="w+", delete=False, encoding="utf-8") as f:
-            config = "\n".join(f"{k}={v}" for k, v in obscured_config.items())
-            f.write(f"[temp]\n{config}")
+            obscured_rclone_config_string = "\n".join(f"{k}={v}" for k, v in obscured_rclone_config.items())
+            f.write(f"[temp]\n{obscured_rclone_config_string}")
             f.close()
             proc = await asyncio.create_subprocess_exec(
                 "rclone",
                 "lsf",
+                "--low-level-retries=1",  # Connection tests should fail fast.
+                "--retries=1",  # Connection tests should fail fast.
                 "--config",
                 f.name,
                 f"temp:{source_path}",
