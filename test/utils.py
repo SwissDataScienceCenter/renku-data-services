@@ -327,11 +327,15 @@ def remove_id_from_rc(rc: rp_models.ResourceClass) -> rp_models.ResourceClass:
     return rp_models.ResourceClass.from_dict(kwargs)
 
 
+def remove_quota_from_rc(rc: rp_models.ResourceClass) -> rp_models.ResourceClass:
+    return rc.update(quota=None)
+
+
 def remove_id_from_rp(rp: rp_models.ResourcePool) -> rp_models.ResourcePool:
     quota = rp.quota
     if isinstance(quota, rp_models.Quota):
         quota = remove_id_from_quota(quota)
-    classes = [remove_id_from_rc(rc) for rc in rp.classes]
+    classes = [remove_quota_from_rc(remove_id_from_rc(rc)) for rc in rp.classes]
     return rp_models.ResourcePool(
         name=rp.name,
         id=None,

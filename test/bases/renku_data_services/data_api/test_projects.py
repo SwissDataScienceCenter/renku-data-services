@@ -5,6 +5,7 @@ from base64 import b64decode
 from typing import Any
 
 import pytest
+from httpx import Response
 from sqlalchemy import select
 from ulid import ULID
 
@@ -26,6 +27,20 @@ def get_project(sanic_client, user_headers, admin_headers):
         return response.json
 
     return get_project_helper
+
+
+@pytest.fixture
+def update_project(sanic_client, user_headers, get_project):
+    async def update_project_helper(project_id: str, headers: dict[str, str] | None = None, **patch) -> Response:
+        project = await get_project(project_id)
+        headers = headers or user_headers
+        headers = merge_headers(headers, {"If-Match": project["etag"]})
+
+        _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=headers, json=patch)
+
+        return response
+
+    return update_project_helper
 
 
 @pytest.mark.asyncio
@@ -59,6 +74,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
     assert "documentation" not in project
     assert project["created_by"] == "user"
     assert "template_id" not in project or project["template_id"] is None
+    assert project["is_template"] is False
     project_id = project["id"]
 
     events = await app_config.event_repo.get_pending_events()
@@ -101,6 +117,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
     project = response.json
     assert project["documentation"] == "$\\sqrt(2)$"
     assert "template_id" not in project or project["template_id"] is None
+    assert project["is_template"] is False
 
     # same as above, but using namespace/slug to retrieve the pr
     _, response = await sanic_client.get(
@@ -1058,7 +1075,7 @@ async def test_project_copy_basics(sanic_client, app_config, user_headers, regul
     await create_project("Project 1")
     project = await create_project(
         "Project 2",
-        description="template project",
+        description="Template project",
         keywords=["tag 1", "tag 2"],
         repositories=["http://repository-1.ch", "http://repository-2.ch"],
         visibility="public",
@@ -1082,7 +1099,7 @@ async def test_project_copy_basics(sanic_client, app_config, user_headers, regul
     assert copy_project["slug"] == "project-slug"
     assert copy_project["created_by"] == "user"
     assert copy_project["namespace"] == regular_user.namespace.slug
-    assert copy_project["description"] == "template project"
+    assert copy_project["description"] == "Template project"
     assert copy_project["visibility"] == project["visibility"]
     assert copy_project["keywords"] == ["tag 1", "tag 2"]
     assert copy_project["repositories"] == project["repositories"]
@@ -1109,7 +1126,7 @@ async def test_project_copy_basics(sanic_client, app_config, user_headers, regul
     assert copy_project["slug"] == "project-slug"
     assert copy_project["created_by"] == "user"
     assert copy_project["namespace"] == regular_user.namespace.slug
-    assert copy_project["description"] == "template project"
+    assert copy_project["description"] == "Template project"
     assert copy_project["visibility"] == "public"
     assert copy_project["keywords"] == ["tag 1", "tag 2"]
     assert copy_project["repositories"] == ["http://repository-1.ch", "http://repository-2.ch"]
@@ -1180,22 +1197,66 @@ async def test_project_get_all_copies(
 
     copy_1 = await create_project_copy(project_id, regular_user.namespace.slug, "Copy 1")
     copy_2 = await create_project_copy(project_id, admin_user.namespace.slug, "Copy 2", user=admin_user)
+    copy_3 = await create_project_copy(
+        project_id, admin_user.namespace.slug, "Copy 3", user=admin_user, visibility="public"
+    )
 
     # NOTE: Admins can see all copies
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}/copies", headers=admin_headers)
 
     assert response.status_code == 200, response.text
     copies = response.json
-    assert len(copies) == 2
-    assert {c["id"] for c in copies} == {copy_1["id"], copy_2["id"]}
+    assert {copy["id"] for copy in copies} == {copy_1["id"], copy_2["id"], copy_3["id"]}
 
     # NOTE: Regular users can only see copies that they have access to
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}/copies", headers=user_headers)
 
     assert response.status_code == 200, response.text
     copies = response.json
-    assert len(copies) == 1
-    assert {c["id"] for c in copies} == {copy_1["id"]}
+    assert {copy["id"] for copy in copies} == {copy_1["id"], copy_3["id"]}
+
+
+@pytest.mark.asyncio
+async def test_project_get_all_writable_copies(
+    sanic_client, admin_user, regular_user, user_headers, create_project, create_project_copy
+) -> None:
+    project = await create_project("Project")
+    project_id = project["id"]
+
+    copy_1 = await create_project_copy(project_id, regular_user.namespace.slug, "Copy 1")
+    copy_2 = await create_project_copy(
+        project_id,
+        admin_user.namespace.slug,
+        "Copy 2",
+        user=admin_user,
+        visibility="public",
+    )
+    copy_3 = await create_project_copy(
+        project_id,
+        admin_user.namespace.slug,
+        "Copy 3",
+        user=admin_user,
+        members=[{"id": regular_user.id, "role": "viewer"}],
+    )
+    copy_4 = await create_project_copy(
+        project_id,
+        admin_user.namespace.slug,
+        "Copy 4",
+        user=admin_user,
+        members=[{"id": regular_user.id, "role": "editor"}],
+    )
+
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/copies", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    copies = response.json
+    assert {copy["id"] for copy in copies} == {copy_1["id"], copy_2["id"], copy_3["id"], copy_4["id"]}
+
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/copies?writable=true", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    copies = response.json
+    assert {copy["id"] for copy in copies} == {copy_1["id"], copy_4["id"]}
 
 
 @pytest.mark.asyncio
@@ -1314,3 +1375,54 @@ async def test_project_copy_succeeds_even_if_data_connector_is_inaccessible(
     # NOTE: The copy is created, but the status code indicates that one or more data connectors cannot be copied
     assert response.status_code == 403, response.text
     assert "The project was copied but there is no permission to copy data connectors" in response.text
+
+
+@pytest.mark.asyncio
+async def test_project_patch_template(create_project, get_project, update_project) -> None:
+    project = await create_project("Project")
+    project_id = project["id"]
+
+    await update_project(project_id, is_template=True)
+
+    # TODO: Check the event queue if we decided to send the results to search
+
+    project = await get_project(project_id)
+    assert project["is_template"] is True
+
+    # NOTE: Set back value to False
+    await update_project(project_id, is_template=False)
+
+    project = await get_project(project_id)
+    assert project["is_template"] is False
+
+
+@pytest.mark.asyncio
+async def test_project_unlink_from_template_project(
+    create_project, create_project_copy, get_project, update_project, regular_user
+) -> None:
+    project = await create_project("Project")
+    project_id = project["id"]
+
+    project = await create_project_copy(project_id, regular_user.namespace.slug, "Copy Project")
+    project_id = project["id"]
+
+    # NOTE: A null value won't change anything
+    await update_project(project_id, template_id=None)
+
+    project = await get_project(project_id)
+    assert "template_id" in project and project["template_id"] is not None
+
+    # NOTE: A non-null value for template_id means that we want to delete it from the project (unlinking from template)
+    await update_project(project_id, template_id="")
+
+    project = await get_project(project_id)
+    assert "template_id" not in project or project["template_id"] is None
+
+    # NOTE: There's no way to set template_id by patching the project
+    response = await update_project(project_id, template_id="01AN4Z79ZS5XN0F25N3DB94T4R")
+
+    assert response.status_code == 422
+    assert "template_id: String should have at most 0 characters" in response.text
+
+    project = await get_project(project_id)
+    assert "template_id" not in project or project["template_id"] is None

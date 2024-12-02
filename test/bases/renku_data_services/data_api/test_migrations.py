@@ -107,7 +107,7 @@ async def test_migration_to_f34b87ddd954(
 
 @pytest.mark.asyncio
 async def test_migration_to_1ef98b967767_and_086eb60b42c8(app_config_instance: Config, admin_user: UserInfo) -> None:
-    """Tests the migration of the session lauchers."""
+    """Tests the migration of the session launchers."""
     run_migrations_for_app("common", "b8cbd62e85b9")
     await app_config_instance.kc_user_repo.initialize(app_config_instance.kc_api)
     await app_config_instance.group_repo.generate_user_namespaces()
