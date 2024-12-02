@@ -34,8 +34,8 @@ class Secret(UnsavedSecret):
     default_filename: str
     modification_date: datetime
 
-    session_secret_ids: list[ULID]
-    """List of session secret IDs where this user secret is used."""
+    session_secret_slot_ids: list[ULID]
+    """List of session secret slot IDs where this user secret is used."""
 
     data_connector_ids: list[ULID]
     """List of data connector IDs where this user secret is used."""
@@ -50,7 +50,7 @@ class Secret(UnsavedSecret):
             encrypted_key=encrypted_key,
             kind=self.kind,
             modification_date=self.modification_date,
-            session_secret_ids=self.session_secret_ids,
+            session_secret_slot_ids=self.session_secret_slot_ids,
             data_connector_ids=self.data_connector_ids,
         )
 

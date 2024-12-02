@@ -78,7 +78,7 @@ class SecretORM(BaseORM):
             encrypted_key=self.encrypted_key,
             kind=self.kind,
             modification_date=self.modification_date,
-            session_secret_ids=[item.secret_slot_id for item in self.session_secrets],
+            session_secret_slot_ids=[item.secret_slot_id for item in self.session_secrets],
             data_connector_ids=[item.data_connector_id for item in self.data_connector_secrets],
         )
 

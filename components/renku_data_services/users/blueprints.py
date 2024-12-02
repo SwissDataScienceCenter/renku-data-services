@@ -223,7 +223,7 @@ class UserSecretsBP(CustomBlueprint):
             default_filename=secret.default_filename,
             kind=secret.kind.value,
             modification_date=secret.modification_date,
-            session_secret_ids=[str(item) for item in secret.session_secret_ids],
+            session_secret_slot_ids=[str(item) for item in secret.session_secret_slot_ids],
             data_connector_ids=[str(item) for item in secret.data_connector_ids],
         )
 

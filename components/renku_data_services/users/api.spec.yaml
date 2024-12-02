@@ -424,8 +424,7 @@ components:
           $ref: "#/components/schemas/ModificationDate"
         kind:
           $ref: "#/components/schemas/SecretKind"
-        # TODO: rename this field
-        session_secret_ids:
+        session_secret_slot_ids:
           $ref: "#/components/schemas/UlidList"
         data_connector_ids:
           $ref: "#/components/schemas/UlidList"
@@ -435,7 +434,7 @@ components:
         - "default_filename"
         - "modification_date"
         - "kind"
-        - "session_secret_ids"
+        - "session_secret_slot_ids"
         - "data_connector_ids"
     SecretPost:
       description: Secret metadata to be created
