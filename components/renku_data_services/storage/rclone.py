@@ -189,12 +189,18 @@ class RCloneValidator:
                 "Examples": [
                     {
                         "Value": "personal",
-                        "Help": "Connect to your personal storage space. This data connector cannot be used to share access to a folder.",
+                        "Help": (
+                            "Connect to your personal storage space. "
+                            "This data connector cannot be used to share access to a folder."
+                        ),
                         "Provider": "",
                     },
                     {
                         "Value": "shared",
-                        "Help": "Connect a 'public' folder shared with others. A 'public' folder may or may not be protected with a password.",
+                        "Help": (
+                            "Connect a 'public' folder shared with others. "
+                            "A 'public' folder may or may not be protected with a password."
+                        ),
                         "Provider": "",
                     },
                 ],
