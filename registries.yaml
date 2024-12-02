@@ -1,0 +1,4 @@
+mirrors:
+  "kpack-registry.local:5000":
+    endpoint:
+      - http://k3d-kpack-registry.local:5000
