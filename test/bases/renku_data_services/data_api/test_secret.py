@@ -57,7 +57,7 @@ async def test_create_secrets(sanic_client: SanicASGITestClient, user_headers, k
         "default_filename",
         "modification_date",
         "kind",
-        "session_secret_ids",
+        "session_secret_slot_ids",
         "data_connector_ids",
     }
     assert response.json["id"] is not None
@@ -327,7 +327,7 @@ async def test_single_secret_rotation():
         encrypted_key=encrypted_key,
         kind=SecretKind.general,
         modification_date=datetime.now(tz=UTC),
-        session_secret_ids=[],
+        session_secret_slot_ids=[],
         data_connector_ids=[],
     )
 
