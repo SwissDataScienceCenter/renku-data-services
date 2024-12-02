@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Self, TypeVar
+from typing import Any, Self, TypeVar, cast
 
 from dataclasses_avroschema import AvroModel
 from fastavro import parse_schema, schemaless_reader, schemaless_writer
@@ -48,7 +48,7 @@ def deserialize_binary(data: bytes, model: type[TAvro]) -> TAvro:
     input_stream.flush()
     obj = model.parse_obj(payload)  # type: ignore
 
-    return obj
+    return cast(TAvro, obj)
 
 
 def _create_header(
