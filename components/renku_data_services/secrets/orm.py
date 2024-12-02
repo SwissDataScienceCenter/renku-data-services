@@ -1,9 +1,9 @@
 """Secrets ORM."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import DateTime, ForeignKey, LargeBinary, MetaData, String, UniqueConstraint, func
+from sqlalchemy import DateTime, ForeignKey, LargeBinary, MetaData, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from ulid import ULID
 
@@ -52,8 +52,7 @@ class SecretORM(BaseORM):
         "modification_date",
         DateTime(timezone=True),
         default=None,
-        server_default=func.now(),
-        onupdate=func.now(),
+        default_factory=lambda: datetime.now(UTC),
         nullable=False,
     )
 
@@ -87,3 +86,4 @@ class SecretORM(BaseORM):
         """Update an existing secret."""
         self.encrypted_value = encrypted_value
         self.encrypted_key = encrypted_key
+        self.modification_date = datetime.now(UTC)

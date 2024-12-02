@@ -52,9 +52,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
     user_secrets = UserSecretsBP(
         name="user_secrets",
         url_prefix=url_prefix,
-        # user_repo=config.kc_user_repo,
         secret_repo=config.user_secrets_repo,
-        # secret_service_public_key=config.secrets_service_public_key,
         authenticator=config.authenticator,
     )
     resource_pools_users = ResourcePoolUsersBP(

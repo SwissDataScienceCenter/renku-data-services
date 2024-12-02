@@ -136,9 +136,7 @@ class UserSecretsBP(CustomBlueprint):
     """
 
     secret_repo: UserSecretsRepo
-    # user_repo: UserRepo
     authenticator: base_models.Authenticator
-    # secret_service_public_key: rsa.RSAPublicKey
 
     def get_all(self) -> BlueprintFactoryResponse:
         """Get all user's secrets."""

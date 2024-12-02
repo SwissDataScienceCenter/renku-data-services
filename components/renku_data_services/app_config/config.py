@@ -408,7 +408,7 @@ class Config:
 
     @property
     def low_level_user_secrets_repo(self) -> LowLevelUserSecretsRepo:
-        """The DB adapter for user secrets storage."""
+        """The low-level DB adapter for user secrets storage."""
         if not self._low_level_user_secrets_repo:
             self._low_level_user_secrets_repo = LowLevelUserSecretsRepo(
                 session_maker=self.db.async_session_maker,
