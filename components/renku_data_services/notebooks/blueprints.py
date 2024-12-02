@@ -77,7 +77,7 @@ from renku_data_services.notebooks.utils import (
     node_affinity_from_resource_class,
     tolerations_from_resource_class,
 )
-from renku_data_services.project.db import ProjectRepository
+from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository
@@ -256,6 +256,7 @@ class NotebooksNewBP(CustomBlueprint):
     internal_gitlab_authenticator: base_models.Authenticator
     nb_config: NotebooksConfig
     project_repo: ProjectRepository
+    project_session_secret_repo: ProjectSessionSecretRepository
     session_repo: SessionRepository
     rp_repo: ResourcePoolRepository
     storage_repo: StorageRepository
@@ -297,14 +298,9 @@ class NotebooksNewBP(CustomBlueprint):
             work_dir_fallback = PurePosixPath("/home/jovyan")
             work_dir = environment.working_directory or image_workdir or work_dir_fallback
             storage_mount_fallback = work_dir / "work"
-            # TODO: Wait for pitch on users secrets to implement this
-            # user_secrets: K8sUserSecrets | None = None
-            # if body.user_secrets:
-            #     user_secrets = K8sUserSecrets(
-            #         name=server_name,
-            #         user_secret_ids=body.user_secrets.user_secret_ids,
-            #         mount_path=body.user_secrets.mount_path,
-            #     )
+            session_secrets = await self.project_session_secret_repo.get_all_session_secrets_from_project(
+                user=user, project_id=project.id
+            )
             data_connectors_stream = self.data_connector_secret_repo.get_data_connectors_with_secrets(user, project.id)
             dcs: dict[str, RCloneStorage] = {}
             dcs_secrets: dict[str, list[DataConnectorSecret]] = {}
@@ -381,6 +377,7 @@ class NotebooksNewBP(CustomBlueprint):
             extra_volumes = [
                 ExtraVolume.model_validate(self.nb_config.k8s_v2_client.sanitize(volume)) for volume in cert_vols
             ]
+            extra_volume_mounts: list[ExtraVolumeMount] = []
             if isinstance(user, AuthenticatedAPIUser):
                 extra_volumes.append(
                     ExtraVolume(
@@ -391,6 +388,20 @@ class NotebooksNewBP(CustomBlueprint):
                         ),
                     )
                 )
+
+            # User secrets
+            user_secrets_container = init_containers.user_secrets_container(
+                user=user,
+                config=self.nb_config,
+                k8s_secret_name=f"{server_name}-secrets",
+                session_secrets=session_secrets,
+            )
+            if user_secrets_container is not None:
+                (init_container, volumes, volume_mounts) = user_secrets_container
+                extra_volumes.extend(volumes)
+                extra_volume_mounts.extend(volume_mounts)
+                session_init_containers.append(init_container)
+
             git_clone = await init_containers.git_clone_container_v2(
                 user=user,
                 config=self.nb_config,
@@ -459,7 +470,7 @@ class NotebooksNewBP(CustomBlueprint):
                         runAsUser=environment.uid,
                         runAsGroup=environment.gid,
                         resources=Resources(requests=requests),
-                        extraVolumeMounts=[],
+                        extraVolumeMounts=extra_volume_mounts,
                         command=environment.command,
                         args=environment.args,
                         shmSize="1G",
@@ -570,6 +581,26 @@ class NotebooksNewBP(CustomBlueprint):
                 secrets_url = self.nb_config.user_secrets.secrets_storage_service_url + "/api/secrets/kubernetes"
                 headers = {"Authorization": f"bearer {user.access_token}"}
                 try:
+                    # User secrets
+                    if session_secrets:
+                        request_data = {
+                            "name": f"{server_name}-secrets",
+                            "namespace": self.nb_config.k8s_v2_client.preferred_namespace,
+                            "secret_ids": [str(s.secret_id) for s in session_secrets],
+                            "owner_references": [owner_reference],
+                            # NOTE: a user secret cannot be mounted as multiple files at the moment. This is fixed later. #noqa E501
+                            "key_mapping": {str(s.secret_id): s.secret_slot.filename for s in session_secrets},
+                        }
+                        async with httpx.AsyncClient(timeout=10) as client:
+                            res = await client.post(secrets_url, headers=headers, json=request_data)
+                            if res.status_code >= 300 or res.status_code < 200:
+                                raise errors.ProgrammingError(
+                                    message="The session secrets could not be successfully created, "
+                                    f"the status code was {res.status_code}."
+                                    "Please contact a Renku administrator.",
+                                    detail=res.text,
+                                )
+                    # Data connectors secrets
                     for s_id, secrets in dcs_secrets.items():
                         if len(secrets) == 0:
                             continue
