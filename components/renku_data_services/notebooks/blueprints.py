@@ -306,6 +306,7 @@ class NotebooksNewBP(CustomBlueprint):
             work_dir_fallback = PurePosixPath("/home/jovyan")
             work_dir = environment.working_directory or image_workdir or work_dir_fallback
             storage_mount_fallback = work_dir / "work"
+            storage_mount = launcher.environment.mount_directory or storage_mount_fallback
             # TODO: Wait for pitch on users secrets to implement this
             # user_secrets: K8sUserSecrets | None = None
             # if body.user_secrets:
@@ -344,7 +345,7 @@ class NotebooksNewBP(CustomBlueprint):
                         quiet=True,
                     )
                 if csr.target_path is not None and not PurePosixPath(csr.target_path).is_absolute():
-                    csr.target_path = (work_dir / csr.target_path).as_posix()
+                    csr.target_path = (storage_mount / csr.target_path).as_posix()
                 dcs[csr_id] = dcs[csr_id].with_override(csr)
             git_providers = await self.nb_config.git_provider_helper.get_providers(user=user)
             repositories: list[Repository] = []
@@ -405,7 +406,7 @@ class NotebooksNewBP(CustomBlueprint):
                 config=self.nb_config,
                 repositories=repositories,
                 git_providers=git_providers,
-                workspace_mount_path=launcher.environment.mount_directory or storage_mount_fallback,
+                workspace_mount_path=storage_mount,
                 work_dir=work_dir,
             )
             if git_clone is not None:
@@ -464,9 +465,7 @@ class NotebooksNewBP(CustomBlueprint):
                         storage=Storage(
                             className=self.nb_config.sessions.storage.pvs_storage_class,
                             size=str(body.disk_storage) + "G",
-                            mountPath=environment.mount_directory.as_posix()
-                            if environment.mount_directory
-                            else storage_mount_fallback.as_posix(),
+                            mountPath=storage_mount.as_posix(),
                         ),
                         workingDir=work_dir.as_posix(),
                         runAsUser=environment.uid,
