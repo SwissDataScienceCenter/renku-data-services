@@ -244,7 +244,13 @@ async def create_project(sanic_client, user_headers, admin_headers, regular_user
 @pytest_asyncio.fixture
 async def create_project_copy(sanic_client, user_headers, admin_headers, regular_user, admin_user):
     async def create_project_copy_helper(
-        id: str, namespace: str, name: str, *, user: UserInfo | None = None, **payload
+        id: str,
+        namespace: str,
+        name: str,
+        *,
+        user: UserInfo | None = None,
+        members: list[dict[str, str]] = None,
+        **payload,
     ) -> dict[str, Any]:
         headers = user_headers if user is None or user is regular_user else admin_headers
         copy_payload = {"slug": Slug.from_name(name).value}
@@ -252,10 +258,16 @@ async def create_project_copy(sanic_client, user_headers, admin_headers, regular
         copy_payload.update({"namespace": namespace, "name": name})
 
         _, response = await sanic_client.post(f"/api/data/projects/{id}/copies", headers=headers, json=copy_payload)
-
         assert response.status_code == 201, response.text
+        project = response.json
 
-        return response.json
+        if members:
+            _, response = await sanic_client.patch(
+                f"/api/data/projects/{project['id']}/members", headers=headers, json=members
+            )
+            assert response.status_code == 200, response.text
+
+        return project
 
     return create_project_copy_helper
 

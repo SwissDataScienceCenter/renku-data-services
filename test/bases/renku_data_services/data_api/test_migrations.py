@@ -106,8 +106,8 @@ async def test_migration_to_f34b87ddd954(
 
 
 @pytest.mark.asyncio
-async def test_migration_to_1ef98b967767(app_config_instance: Config, admin_user: UserInfo) -> None:
-    """Tests the migration of the session lauchers."""
+async def test_migration_to_1ef98b967767_and_086eb60b42c8(app_config_instance: Config, admin_user: UserInfo) -> None:
+    """Tests the migration of the session launchers."""
     run_migrations_for_app("common", "b8cbd62e85b9")
     await app_config_instance.kc_user_repo.initialize(app_config_instance.kc_api)
     await app_config_instance.group_repo.generate_user_namespaces()
@@ -241,3 +241,17 @@ async def test_migration_to_1ef98b967767(app_config_instance: Config, admin_user
     assert global_launcher["name"] == "global"
     assert global_launcher["project_id"] == project_id
     assert global_launcher["environment_id"] == global_env["id"]
+    run_migrations_for_app("common", "086eb60b42c8")
+    async with app_config_instance.db.async_session_maker() as session, session.begin():
+        res = await session.execute(
+            sa.text("SELECT * FROM sessions.environments WHERE name = :name").bindparams(name="global env")
+        )
+    data = res.all()
+    assert len(data) == 1
+    global_env = data[0]._mapping
+    assert global_env["args"] == [
+        "/entrypoint.sh jupyter server --ServerApp.ip=0.0.0.0 --ServerApp.port=8888 "
+        "--ServerApp.base_url=$RENKU_BASE_URL_PATH "
+        '--ServerApp.token="" --ServerApp.password="" --ServerApp.allow_remote_access=true '
+        '--ContentsManager.allow_hidden=true --ServerApp.allow_origin=* --ServerApp.root_dir="/home/jovyan/work"',
+    ]

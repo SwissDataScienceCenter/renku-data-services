@@ -34,8 +34,8 @@ class UnsavedEnvironment:
     container_image: str
     default_url: str
     port: int = 8888
-    working_directory: PurePosixPath = PurePosixPath("/home/jovyan/work")
-    mount_directory: PurePosixPath = PurePosixPath("/home/jovyan/work")
+    working_directory: PurePosixPath | None = None
+    mount_directory: PurePosixPath | None = None
     uid: int = 1000
     gid: int = 1000
     environment_kind: EnvironmentKind
@@ -43,15 +43,15 @@ class UnsavedEnvironment:
     command: list[str] | None = None
 
     def __post_init__(self) -> None:
-        if not self.working_directory.is_absolute():
+        if self.working_directory and not self.working_directory.is_absolute():
             raise errors.ValidationError(message="The working directory for a session is supposed to be absolute")
-        if not self.mount_directory.is_absolute():
+        if self.mount_directory and not self.mount_directory.is_absolute():
             raise errors.ValidationError(message="The mount directory for a session is supposed to be absolute")
-        if self.working_directory.is_reserved():
+        if self.working_directory and self.working_directory.is_reserved():
             raise errors.ValidationError(
                 message="The requested value for the working directory is reserved by the OS and cannot be used."
             )
-        if self.mount_directory.is_reserved():
+        if self.mount_directory and self.mount_directory.is_reserved():
             raise errors.ValidationError(
                 message="The requested value for the mount directory is reserved by the OS and cannot be used."
             )
@@ -67,8 +67,8 @@ class Environment(UnsavedEnvironment):
     container_image: str
     default_url: str
     port: int
-    working_directory: PurePosixPath
-    mount_directory: PurePosixPath
+    working_directory: PurePosixPath | None
+    mount_directory: PurePosixPath | None
     uid: int
     gid: int
 

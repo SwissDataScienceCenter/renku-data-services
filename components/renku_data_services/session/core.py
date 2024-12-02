@@ -18,8 +18,8 @@ def validate_unsaved_environment(
         container_image=environment.container_image,
         default_url=environment.default_url,
         port=environment.port,
-        working_directory=PurePosixPath(environment.working_directory),
-        mount_directory=PurePosixPath(environment.mount_directory),
+        working_directory=PurePosixPath(environment.working_directory) if environment.working_directory else None,
+        mount_directory=PurePosixPath(environment.mount_directory) if environment.mount_directory else None,
         uid=environment.uid,
         gid=environment.gid,
         environment_kind=environment_kind,
@@ -81,8 +81,10 @@ def validate_session_launcher_patch(
             container_image=validated_env.container_image,
             default_url=validated_env.default_url,
             port=validated_env.port,
-            working_directory=PurePosixPath(validated_env.working_directory),
-            mount_directory=PurePosixPath(validated_env.mount_directory),
+            working_directory=PurePosixPath(validated_env.working_directory)
+            if validated_env.working_directory
+            else None,
+            mount_directory=PurePosixPath(validated_env.mount_directory) if validated_env.mount_directory else None,
             uid=validated_env.uid,
             gid=validated_env.gid,
             environment_kind=models.EnvironmentKind(validated_env.environment_kind.value),

@@ -75,7 +75,9 @@ class ResourceClassORM(BaseORM):
     resource_pool_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("resource_pools.id", ondelete="CASCADE"), default=None, index=True
     )
-    resource_pool: Mapped[Optional["ResourcePoolORM"]] = relationship(back_populates="classes", default=None)
+    resource_pool: Mapped[Optional["ResourcePoolORM"]] = relationship(
+        back_populates="classes", default=None, lazy="joined"
+    )
     id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, default=None, init=False)
     tolerations: Mapped[list["TolerationORM"]] = relationship(
         back_populates="resource_class",
@@ -127,6 +129,7 @@ class ResourceClassORM(BaseORM):
             node_affinities=[affinity.dump() for affinity in self.node_affinities],
             tolerations=[toleration.key for toleration in self.tolerations],
             matching=matching,
+            quota=self.resource_pool.quota if self.resource_pool else None,
         )
 
 
