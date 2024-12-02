@@ -291,9 +291,18 @@ class NotebooksNewBP(CustomBlueprint):
             default_resource_class = await self.rp_repo.get_default_resource_class()
             if default_resource_class.id is None:
                 raise errors.ProgrammingError(message="The default resource class has to have an ID", quiet=True)
-            resource_class_id = body.resource_class_id or default_resource_class.id
+            resource_class_id: int
+            quota: str | None = None
+            if body.resource_class_id is None:
+                resource_class = await self.rp_repo.get_default_resource_class()
+                # TODO: Add types for saved and unsaved resource class
+                resource_class_id = cast(int, resource_class.id)
+            else:
+                resource_class = await self.rp_repo.get_resource_class(user, resource_class_id)
+                # TODO: Add types for saved and unsaved resource class
+                resource_class_id = cast(int, resource_class.id)
+                quota = resource_class.quota
             await self.nb_config.crc_validator.validate_class_storage(user, resource_class_id, body.disk_storage)
-            resource_class = await self.rp_repo.get_resource_class(user, resource_class_id)
             work_dir_fallback = PurePosixPath("/home/jovyan")
             work_dir = environment.working_directory or image_workdir or work_dir_fallback
             storage_mount_fallback = work_dir / "work"
@@ -411,6 +420,7 @@ class NotebooksNewBP(CustomBlueprint):
                 )
 
             base_server_url = self.nb_config.sessions.ingress.base_url(server_name)
+            base_server_https_url = self.nb_config.sessions.ingress.base_url(server_name, force_https=True)
             base_server_path = self.nb_config.sessions.ingress.base_path(server_name)
             ui_path: str = (
                 f"{base_server_path.rstrip("/")}/{environment.default_url.lstrip("/")}"
@@ -426,9 +436,11 @@ class NotebooksNewBP(CustomBlueprint):
                 "cpu": str(round(resource_class.cpu * 1000)) + "m",
                 "memory": f"{resource_class.memory}Gi",
             }
+            limits: dict[str, str | int] = {}
             if resource_class.gpu > 0:
                 gpu_name = GpuKind.NVIDIA.value + "/gpu"
                 requests[gpu_name] = resource_class.gpu
+                limits[gpu_name] = resource_class.gpu
             tolerations = [
                 Toleration.model_validate(toleration) for toleration in self.nb_config.sessions.tolerations
             ] + tolerations_from_resource_class(resource_class)
@@ -444,6 +456,7 @@ class NotebooksNewBP(CustomBlueprint):
                     codeRepositories=[],
                     hibernated=False,
                     reconcileStrategy=ReconcileStrategy.whenFailedOrHibernated,
+                    priorityClassName=quota,
                     session=Session(
                         image=image,
                         urlPath=ui_path,
@@ -458,7 +471,7 @@ class NotebooksNewBP(CustomBlueprint):
                         workingDir=work_dir.as_posix(),
                         runAsUser=environment.uid,
                         runAsGroup=environment.gid,
-                        resources=Resources(requests=requests),
+                        resources=Resources(requests=requests, limits=limits if len(limits) > 0 else None),
                         extraVolumeMounts=[],
                         command=environment.command,
                         args=environment.args,
@@ -521,7 +534,8 @@ class NotebooksNewBP(CustomBlueprint):
                         "oidc_issuer_url": self.nb_config.sessions.oidc.issuer_url,
                         "session_cookie_minimal": True,
                         "skip_provider_button": True,
-                        "redirect_url": urljoin(base_server_url + "/", "oauth2/callback"),
+                        # NOTE: If the redirect url is not HTTPS then some or identity providers will fail.
+                        "redirect_url": urljoin(base_server_https_url + "/", "oauth2/callback"),
                         "cookie_path": base_server_path,
                         "proxy_prefix": parsed_proxy_url.path,
                         "authenticated_emails_file": "/authorized_emails",
