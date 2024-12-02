@@ -182,7 +182,7 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
         except NotFoundError:
             return None
         except ServerError as err:
-            if err.status not in [400, 404]:
+            if err.response is None or err.response.status_code not in [400, 404]:
                 logging.exception(f"Cannot get server {name} because of {err}")
                 raise IntermittentError(f"Cannot get server {name} from the k8s API.")
             return None
@@ -193,16 +193,11 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
         try:
             servers = await self._kr8s_type.list(namespace=self.namespace, label_selector=label_selector)
         except ServerError as err:
-            if err.status not in [400, 404]:
+            if err.response is None or err.response.status_code not in [400, 404]:
                 logging.exception(f"Cannot list servers because of {err}")
                 raise IntermittentError(f"Cannot list servers from the k8s API with selector {label_selector}.")
             return []
-        output: list[_SessionType]
-        if isinstance(servers, APIObject):
-            output = [self.server_type.model_validate(servers.to_dict())]
-        else:
-            output = [self.server_type.model_validate(server.to_dict()) for server in servers]
-
+        output: list[_SessionType] = [self.server_type.model_validate(server.to_dict()) for server in servers]
         return output
 
     async def patch_image_pull_secret(self, server_name: str, gitlab_token: GitlabToken) -> None:
