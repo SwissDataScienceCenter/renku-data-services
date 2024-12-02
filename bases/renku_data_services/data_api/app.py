@@ -155,6 +155,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         authenticator=config.authenticator,
         nb_config=config.nb_config,
         project_repo=config.project_repo,
+        project_session_secret_repo=config.project_session_secret_repo,
         session_repo=config.session_repo,
         storage_repo=config.storage_repo,
         rp_repo=config.rp_repo,
