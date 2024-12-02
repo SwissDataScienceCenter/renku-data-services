@@ -298,9 +298,9 @@ class NotebooksNewBP(CustomBlueprint):
                 # TODO: Add types for saved and unsaved resource class
                 resource_class_id = cast(int, resource_class.id)
             else:
-                resource_class = await self.rp_repo.get_resource_class(user, resource_class_id)
+                resource_class = await self.rp_repo.get_resource_class(user, body.resource_class_id)
                 # TODO: Add types for saved and unsaved resource class
-                resource_class_id = cast(int, resource_class.id)
+                resource_class_id = body.resource_class_id
                 quota = resource_class.quota
             await self.nb_config.crc_validator.validate_class_storage(user, resource_class_id, body.disk_storage)
             work_dir_fallback = PurePosixPath("/home/jovyan")
