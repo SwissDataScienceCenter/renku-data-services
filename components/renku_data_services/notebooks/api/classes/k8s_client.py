@@ -182,7 +182,7 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
         except NotFoundError:
             return None
         except ServerError as err:
-            if err.response is not None and err.response.status_code not in [400, 404]:
+            if err.response is None or err.response.status_code not in [400, 404]:
                 logging.exception(f"Cannot get server {name} because of {err}")
                 raise IntermittentError(f"Cannot get server {name} from the k8s API.")
             return None
