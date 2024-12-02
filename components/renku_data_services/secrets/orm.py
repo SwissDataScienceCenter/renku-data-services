@@ -51,7 +51,6 @@ class SecretORM(BaseORM):
     modification_date: Mapped[datetime] = mapped_column(
         "modification_date",
         DateTime(timezone=True),
-        default=None,
         default_factory=lambda: datetime.now(UTC),
         nullable=False,
     )
