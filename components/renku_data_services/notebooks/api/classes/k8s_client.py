@@ -197,12 +197,7 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
                 logging.exception(f"Cannot list servers because of {err}")
                 raise IntermittentError(f"Cannot list servers from the k8s API with selector {label_selector}.")
             return []
-        output: list[_SessionType]
-        if isinstance(servers, APIObject):
-            output = [self.server_type.model_validate(servers.to_dict())]
-        else:
-            output = [self.server_type.model_validate(server.to_dict()) for server in servers]
-
+        output: list[_SessionType] = [self.server_type.model_validate(server.to_dict()) for server in servers]
         return output
 
     async def patch_image_pull_secret(self, server_name: str, gitlab_token: GitlabToken) -> None:
