@@ -379,3 +379,24 @@ async def test_secret_rotation(sanic_client, secrets_storage_app_config, create_
         decrypted_value = decrypt_string(new_encryption_key, users[1].id, secret.encrypted_value).encode()  # type: ignore
         decrypted_value = decrypt_string(secret_key.encode(), users[1].id, decrypted_value)
         assert f"secret-{decrypted_value}" == secret.name
+
+
+@pytest.mark.asyncio
+async def test_patch_user_secret(sanic_client: SanicASGITestClient, user_headers, create_secret) -> None:
+    secret = await create_secret("a-secret", "value-2")
+    secret_id = secret["id"]
+
+    payload = {"name": "A very important secret", "default_filename": "my-secret.txt"}
+
+    _, response = await sanic_client.patch(f"/api/data/user/secrets/{secret_id}", headers=user_headers, json=payload)
+
+    assert response.status_code == 200, response.text
+
+    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret_id}", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json["id"] == secret_id
+    assert "value" not in response.json
+    assert response.json.get("name") == "A very important secret"
+    assert response.json.get("default_filename") == "my-secret.txt"
