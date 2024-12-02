@@ -12,6 +12,8 @@ from renku_data_services.base_models.core import AnonymousAPIUser, Authenticated
 from renku_data_services.notebooks.api.amalthea_patches.utils import get_certificates_volume_mounts
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.config import NotebooksConfig
+from renku_data_services.notebooks.crs import EmptyDir, ExtraVolume, ExtraVolumeMount, InitContainer, SecretAsVolume
+from renku_data_services.project.models import SessionSecret
 
 if TYPE_CHECKING:
     # NOTE: If these are directly imported then you get circular imports.
@@ -391,3 +393,66 @@ def download_image(server: "UserServer") -> list[dict[str, Any]]:
             ],
         },
     ]
+
+
+def user_secrets_container(
+    user: AuthenticatedAPIUser | AnonymousAPIUser,
+    config: NotebooksConfig,
+    k8s_secret_name: str,
+    session_secrets: list[SessionSecret],
+) -> tuple[InitContainer, list[ExtraVolume], list[ExtraVolumeMount]] | None:
+    """The init container which decrypts user secrets to be mounted in the session."""
+    if not session_secrets or user.is_anonymous:
+        return None
+
+    volume_k8s_secrets = ExtraVolume(
+        name=f"{k8s_secret_name}-volume",
+        secret=SecretAsVolume(
+            secretName=k8s_secret_name,
+        ),
+    )
+    volume_decrypted_secrets = ExtraVolume(name="user-secrets-volume", emptyDir=EmptyDir(medium="Memory"))
+
+    decrypted_volume_mount = ExtraVolumeMount(
+        name="user-secrets-volume",
+        # TODO: Make this path configurable, defaulting to "/secrets".
+        mountPath="/secrets",
+        readOnly=True,
+    )
+
+    init_container = InitContainer.model_validate(
+        dict(
+            name="init-user-secrets",
+            image=config.user_secrets.image,
+            env=[
+                dict(name="DATA_SERVICE_URL", value=config.data_service_url),
+                dict(name="RENKU_ACCESS_TOKEN", value=user.access_token or ""),
+                dict(name="ENCRYPTED_SECRETS_MOUNT_PATH", value="/encrypted"),
+                dict(name="DECRYPTED_SECRETS_MOUNT_PATH", value="/decrypted"),
+            ],
+            volumeMounts=[
+                dict(
+                    name=f"{k8s_secret_name}-volume",
+                    mountPath="/encrypted",
+                    readOnly=True,
+                ),
+                dict(
+                    name="user-secrets-volume",
+                    mountPath="/decrypted",
+                    readOnly=False,
+                ),
+            ],
+            resources={
+                "requests": {
+                    "cpu": "50m",
+                    "memory": "50Mi",
+                }
+            },
+        )
+    )
+
+    return (
+        init_container,
+        [volume_k8s_secrets, volume_decrypted_secrets],
+        [decrypted_volume_mount],
+    )
