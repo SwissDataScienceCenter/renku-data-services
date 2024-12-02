@@ -92,6 +92,7 @@ class ResourceClass(ResourcesCompareMixin):
     matching: Optional[bool] = None
     node_affinities: list[NodeAffinity] = field(default_factory=list)
     tolerations: list[str] = field(default_factory=list)
+    quota: str | None = None
 
     def __post_init__(self) -> None:
         if len(self.name) > 40:
@@ -109,6 +110,7 @@ class ResourceClass(ResourcesCompareMixin):
         """Create the model from a plain dictionary."""
         node_affinities: list[NodeAffinity] = []
         tolerations: list[str] = []
+        quota: str | None = None
         if data.get("node_affinities"):
             node_affinities = [
                 NodeAffinity.from_dict(affinity) if isinstance(affinity, dict) else affinity
@@ -116,7 +118,12 @@ class ResourceClass(ResourcesCompareMixin):
             ]
         if isinstance(data.get("tolerations"), list):
             tolerations = [toleration for toleration in data["tolerations"]]
-        return cls(**{**data, "tolerations": tolerations, "node_affinities": node_affinities})
+        if data_quota := data.get("quota"):
+            if isinstance(data_quota, str):
+                quota = data_quota
+            elif isinstance(data_quota, Quota):
+                quota = data_quota.id
+        return cls(**{**data, "tolerations": tolerations, "node_affinities": node_affinities, "quota": quota})
 
     def is_quota_valid(self, quota: "Quota") -> bool:
         """Determine if a quota is compatible with the resource class."""
