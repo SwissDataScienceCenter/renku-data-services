@@ -50,7 +50,7 @@ async def create_k8s_secret(
     key_mapping_list = {key: ensure_list(key_mapping[key]) for key in key_mapping} if key_mapping else None
 
     if key_mapping_list:
-        if set(key_mapping_list) != requested_secret_ids:
+        if key_mapping_list.keys() != requested_secret_ids:
             raise errors.ValidationError(message="Key mapping must include all requested secret IDs")
 
         all_keys: list[str] = []
