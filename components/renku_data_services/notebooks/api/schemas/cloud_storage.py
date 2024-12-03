@@ -216,6 +216,30 @@ class RCloneStorage(ICloudStorageRequest):
         """
         if not self.configuration:
             raise ValidationError("Missing configuration for cloud storage")
+
+        # Transform configuration for polybox or switchDrive
+        storage_type = self.configuration.get("type", "")
+        access = self.configuration.get("provider", "")
+
+        if storage_type == "polybox" or storage_type == "switchDrive":
+            self.configuration["type"] = "webdav"
+            self.configuration["provider"] = ""
+
+        if access == "shared" and storage_type == "polybox":
+            self.configuration["url"] = "https://polybox.ethz.ch/public.php/webdav/"
+        elif access == "shared" and storage_type == "switchDrive":
+            self.configuration["url"] = "https://drive.switch.ch/public.php/webdav/"
+        elif access == "personal" and storage_type == "polybox":
+            self.configuration["url"] = "https://polybox.ethz.ch/remote.php/webdav/"
+        elif access == "personal" and storage_type == "switchDrive":
+            self.configuration["url"] = "https://drive.switch.ch/remote.php/webdav/"
+
+        # Extract the user from the public link
+        if access == "shared" and storage_type in {"polybox", "switchDrive"}:
+            public_link = self.configuration.get("public_link", "")
+            user_identifier = public_link.split("/")[-1]
+            self.configuration["user"] = user_identifier
+
         if self.configuration["type"] == "s3" and self.configuration.get("provider", None) == "Switch":
             # Switch is a fake provider we add for users, we need to replace it since rclone itself
             # doesn't know it
