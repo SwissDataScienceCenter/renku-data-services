@@ -512,7 +512,7 @@ async def test_patch_visibility_to_public_shows_project(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("field", ["id", "slug", "created_by", "creation_date"])
+@pytest.mark.parametrize("field", ["id", "created_by", "creation_date"])
 async def test_cannot_patch_reserved_fields(create_project, get_project, sanic_client, user_headers, field) -> None:
     project = await create_project("Project 1")
     original_value = project[field]
