@@ -640,6 +640,56 @@ async def test_patch_data_connector_as_editor(
 
 
 @pytest.mark.asyncio
+async def test_patch_data_connector_slug(
+    sanic_client: SanicASGITestClient,
+    create_data_connector,
+    user_headers,
+) -> None:
+    await create_data_connector("Data connector 1")
+    await create_data_connector("Data connector 2")
+    data_connector = await create_data_connector("My data connector")
+    data_connector_id = data_connector["id"]
+    namespace = data_connector["namespace"]
+    old_slug = data_connector["slug"]
+    await create_data_connector("Data connector 3")
+
+    # Patch a data connector
+    headers = merge_headers(user_headers, {"If-Match": data_connector["etag"]})
+    new_slug = "some-updated-slug"
+    patch = {"slug": new_slug}
+    _, response = await sanic_client.patch(
+        f"/api/data/data_connectors/{data_connector_id}", headers=headers, json=patch
+    )
+
+    assert response.status_code == 200, response.text
+
+    # Check that the data connector's slug has been updated
+    _, response = await sanic_client.get(f"/api/data/data_connectors/{data_connector_id}", headers=user_headers)
+    assert response.status_code == 200, response.text
+    data_connector = response.json
+    assert data_connector["id"] == data_connector_id
+    assert data_connector["name"] == "My data connector"
+    assert data_connector["namespace"] == namespace
+    assert data_connector["slug"] == new_slug
+
+    # Check that we can get the data connector with the new slug
+    _, response = await sanic_client.get(
+        f"/api/data/namespaces/{namespace}/data_connectors/{new_slug}", headers=user_headers
+    )
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == data_connector_id
+
+    # Check that we can get the data connector with the old slug
+    _, response = await sanic_client.get(
+        f"/api/data/namespaces/{namespace}/data_connectors/{old_slug}", headers=user_headers
+    )
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == data_connector_id
+
+
+@pytest.mark.asyncio
 async def test_delete_data_connector(sanic_client: SanicASGITestClient, create_data_connector, user_headers) -> None:
     await create_data_connector("Data connector 1")
     data_connector = await create_data_connector("Data connector 2")
