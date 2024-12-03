@@ -53,9 +53,7 @@ async def create_k8s_secret(
         if key_mapping_list.keys() != requested_secret_ids:
             raise errors.ValidationError(message="Key mapping must include all requested secret IDs")
 
-        all_keys: list[str] = []
-        for value in key_mapping_list.values():
-            all_keys.extend(value)
+        all_keys = [key for value in key_mapping_list.values() for key in value]
         if len(all_keys) != len(set(all_keys)):
             raise errors.ValidationError(message="Key mapping values are not unique")
 
