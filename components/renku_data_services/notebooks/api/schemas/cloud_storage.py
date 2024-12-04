@@ -210,16 +210,24 @@ class RCloneStorage(ICloudStorageRequest):
         return patches
 
     def config_string(self, name: str) -> str:
-        """Convert configuration oblect to string representation.
+        """Convert configuration object to string representation.
 
         Needed to create RClone compatible INI files.
         """
         if not self.configuration:
             raise ValidationError("Missing configuration for cloud storage")
-        if self.configuration["type"] == "s3" and self.configuration.get("provider", None) == "Switch":
+        # TODO Use RCloneValidator.get_real_configuration(...) instead.
+        real_config = dict(self.configuration)
+        if real_config["type"] == "s3" and real_config.get("provider") == "Switch":
             # Switch is a fake provider we add for users, we need to replace it since rclone itself
             # doesn't know it
-            self.configuration["provider"] = "Other"
+            real_config["provider"] = "Other"
+        elif real_config["type"] == "openbis":
+            real_config["type"] = "sftp"
+            real_config["port"] = "2222"
+            real_config["user"] = "?"
+            real_config["pass"] = real_config.pop("session_token")
+
         parser = ConfigParser()
         parser.add_section(name)
 
@@ -228,7 +236,7 @@ class RCloneStorage(ICloudStorageRequest):
                 return "true" if value else "false"
             return str(value)
 
-        for k, v in self.configuration.items():
+        for k, v in real_config.items():
             parser.set(name, k, _stringify(v))
         stringio = StringIO()
         parser.write(stringio)
