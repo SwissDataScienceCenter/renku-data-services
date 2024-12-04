@@ -361,10 +361,15 @@ class RCloneValidator:
                 continue
             raise errors.ValidationError(message=f"The '{key}' property is not marked as sensitive.")
 
-    def get_real_config(self, configuration: Union["RCloneConfig", dict[str, Any]]) -> dict[str, Any]:
+    def get_real_configuration(self, configuration: Union["RCloneConfig", dict[str, Any]]) -> dict[str, Any]:
         """Converts a Renku rclone configuration to a real rclone config."""
         real_config = dict(configuration)
-        if configuration["type"] == "openbis":
+
+        if real_config["type"] == "s3" and real_config.get("provider") == "Switch":
+            # Switch is a fake provider we add for users, we need to replace it since rclone itself
+            # doesn't know it
+            real_config["provider"] = "Other"
+        elif configuration["type"] == "openbis":
             real_config["type"] = "sftp"
             real_config["port"] = "2222"
             real_config["user"] = "?"
@@ -381,7 +386,7 @@ class RCloneValidator:
             return ConnectionResult(False, str(e))
 
         # Obscure configuration and transform if needed
-        obscured_config = await self.obscure_config(self.get_real_config(configuration))
+        obscured_config = await self.obscure_config(self.get_real_configuration(configuration))
         transformed_config = self.transform_polybox_switchdriver_config(obscured_config)
 
         with tempfile.NamedTemporaryFile(mode="w+", delete=False, encoding="utf-8") as f:
