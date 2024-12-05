@@ -14,7 +14,7 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface
 from renku_data_services.secrets import apispec
 from renku_data_services.secrets.core import create_k8s_secret
-from renku_data_services.secrets.low_level_db import LowLevelUserSecretsRepo
+from renku_data_services.secrets.db import LowLevelUserSecretsRepo
 from renku_data_services.secrets.models import OwnerReference
 
 

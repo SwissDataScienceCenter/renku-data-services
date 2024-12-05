@@ -63,8 +63,7 @@ from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.platform.db import PlatformRepository
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository, ProjectSessionSecretRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
-from renku_data_services.secrets.db import UserSecretsRepo
-from renku_data_services.secrets.low_level_db import LowLevelUserSecretsRepo
+from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsRepo
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.config import UserPreferencesConfig

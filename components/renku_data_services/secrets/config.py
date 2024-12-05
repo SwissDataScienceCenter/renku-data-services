@@ -18,7 +18,7 @@ from renku_data_services.authn.keycloak import KeycloakAuthenticator
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface
 from renku_data_services.k8s.clients import DummyCoreClient, K8sCoreClient
-from renku_data_services.secrets.low_level_db import LowLevelUserSecretsRepo
+from renku_data_services.secrets.db import LowLevelUserSecretsRepo
 from renku_data_services.utils.core import oidc_discovery
 
 
