@@ -406,21 +406,15 @@ class Config:
         return self._kc_user_repo
 
     @property
-    def low_level_user_secrets_repo(self) -> LowLevelUserSecretsRepo:
-        """The low-level DB adapter for user secrets storage."""
-        if not self._low_level_user_secrets_repo:
-            self._low_level_user_secrets_repo = LowLevelUserSecretsRepo(
-                session_maker=self.db.async_session_maker,
-            )
-        return self._low_level_user_secrets_repo
-
-    @property
     def user_secrets_repo(self) -> UserSecretsRepo:
         """The DB adapter for user secrets storage."""
         if not self._user_secrets_repo:
+            low_level_user_secrets_repo = LowLevelUserSecretsRepo(
+                session_maker=self.db.async_session_maker,
+            )
             self._user_secrets_repo = UserSecretsRepo(
                 session_maker=self.db.async_session_maker,
-                low_level_repo=self.low_level_user_secrets_repo,
+                low_level_repo=low_level_user_secrets_repo,
                 user_repo=self.kc_user_repo,
                 secret_service_public_key=self.secrets_service_public_key,
             )
