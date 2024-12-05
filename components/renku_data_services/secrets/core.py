@@ -47,13 +47,13 @@ async def create_k8s_secret(
     def ensure_list(value: str | list[str]) -> list[str]:
         return [value] if isinstance(value, str) else value
 
-    key_mapping_list = {key: ensure_list(key_mapping[key]) for key in key_mapping} if key_mapping else None
+    key_mapping_with_lists_only = {key: ensure_list(key_mapping[key]) for key in key_mapping} if key_mapping else None
 
-    if key_mapping_list:
-        if key_mapping_list.keys() != requested_secret_ids:
+    if key_mapping_with_lists_only:
+        if key_mapping_with_lists_only.keys() != requested_secret_ids:
             raise errors.ValidationError(message="Key mapping must include all requested secret IDs")
 
-        all_keys = [key for value in key_mapping_list.values() for key in value]
+        all_keys = [key for value in key_mapping_with_lists_only.values() for key in value]
         if len(all_keys) != len(set(all_keys)):
             raise errors.ValidationError(message="Key mapping values are not unique")
 
@@ -71,7 +71,7 @@ async def create_k8s_secret(
 
             decrypted_value = decrypt_string(decryption_key, user.id, secret.encrypted_value).encode()  # type: ignore
 
-            keys = key_mapping_list[str(secret.id)] if key_mapping_list else [secret.name]
+            keys = key_mapping_with_lists_only[str(secret.id)] if key_mapping_with_lists_only else [secret.name]
             for key in keys:
                 decrypted_secrets[key] = b64encode(decrypted_value).decode()
     except Exception as e:
