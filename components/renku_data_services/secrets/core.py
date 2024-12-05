@@ -34,7 +34,7 @@ async def create_k8s_secret(
     secret_service_private_key: rsa.RSAPrivateKey,
     previous_secret_service_private_key: rsa.RSAPrivateKey | None,
     core_client: K8sCoreClientInterface,
-    key_mapping: dict[str, str] | None,
+    key_mapping: dict[str, str | list[str]] | None,
 ) -> None:
     """Creates a single k8s secret from a list of user secrets stored in the DB."""
     secrets = await secrets_repo.get_secrets_by_ids(requested_by=user, secret_ids=secret_ids)
@@ -44,10 +44,17 @@ async def create_k8s_secret(
     if len(missing_secret_ids) > 0:
         raise errors.MissingResourceError(message=f"Couldn't find secrets with ids {', '.join(missing_secret_ids)}")
 
-    if key_mapping:
-        if set(key_mapping) != requested_secret_ids:
+    def ensure_list(value: str | list[str]) -> list[str]:
+        return [value] if isinstance(value, str) else value
+
+    key_mapping_with_lists_only = {key: ensure_list(key_mapping[key]) for key in key_mapping} if key_mapping else None
+
+    if key_mapping_with_lists_only:
+        if key_mapping_with_lists_only.keys() != requested_secret_ids:
             raise errors.ValidationError(message="Key mapping must include all requested secret IDs")
-        if len(key_mapping) != len(set(key_mapping.values())):
+
+        all_keys = [key for value in key_mapping_with_lists_only.values() for key in value]
+        if len(all_keys) != len(set(all_keys)):
             raise errors.ValidationError(message="Key mapping values are not unique")
 
     decrypted_secrets = {}
@@ -63,8 +70,10 @@ async def create_k8s_secret(
                     raise
 
             decrypted_value = decrypt_string(decryption_key, user.id, secret.encrypted_value).encode()  # type: ignore
-            key = secret.name if not key_mapping else key_mapping[str(secret.id)]
-            decrypted_secrets[key] = b64encode(decrypted_value).decode()
+
+            keys = key_mapping_with_lists_only[str(secret.id)] if key_mapping_with_lists_only else [secret.name]
+            for key in keys:
+                decrypted_secrets[key] = b64encode(decrypted_value).decode()
     except Exception as e:
         # don't wrap the error, we don't want secrets accidentally leaking.
         raise errors.SecretDecryptionError(message=f"An error occurred decrypting secrets: {str(type(e))}")

@@ -237,11 +237,13 @@ async def test_secret_encryption_decryption_with_key_mapping(
     secret1_id = secret1["id"]
     secret2 = await create_secret("secret-2", "value-2")
     secret2_id = secret2["id"]
+    secret3 = await create_secret("secret-3", "value-3")
+    secret3_id = secret3["id"]
 
     payload = {
         "name": "test-secret",
         "namespace": "test-namespace",
-        "secret_ids": [secret1_id, secret2_id],
+        "secret_ids": [secret1_id, secret2_id, secret3_id],
         "owner_references": [
             {
                 "apiVersion": "amalthea.dev/v1alpha1",
@@ -253,6 +255,7 @@ async def test_secret_encryption_decryption_with_key_mapping(
         "key_mapping": {
             secret1_id: "access_key_id",
             secret2_id: "secret_access_key",
+            secret3_id: ["secret-3-one", "secret-3-two"],
         },
     }
 
@@ -260,7 +263,7 @@ async def test_secret_encryption_decryption_with_key_mapping(
     assert response.status_code == 201
     assert "test-secret" in secrets_storage_app_config.core_client.secrets
     k8s_secret = secrets_storage_app_config.core_client.secrets["test-secret"].data
-    assert k8s_secret.keys() == {"access_key_id", "secret_access_key"}
+    assert k8s_secret.keys() == {"access_key_id", "secret_access_key", "secret-3-one", "secret-3-two"}
 
     _, response = await sanic_client.get("/api/data/user/secret_key", headers=user_headers)
     assert response.status_code == 200
@@ -269,6 +272,8 @@ async def test_secret_encryption_decryption_with_key_mapping(
 
     assert decrypt_string(secret_key.encode(), "user", b64decode(k8s_secret["access_key_id"])) == "value-1"
     assert decrypt_string(secret_key.encode(), "user", b64decode(k8s_secret["secret_access_key"])) == "value-2"
+    assert decrypt_string(secret_key.encode(), "user", b64decode(k8s_secret["secret-3-one"])) == "value-3"
+    assert decrypt_string(secret_key.encode(), "user", b64decode(k8s_secret["secret-3-two"])) == "value-3"
 
     # NOTE: Test missing secret_id in key mapping
     payload["key_mapping"] = {secret1_id: "access_key_id"}
@@ -279,7 +284,7 @@ async def test_secret_encryption_decryption_with_key_mapping(
     assert response.json["error"]["message"] == "Key mapping must include all requested secret IDs"
 
     # NOTE: Test duplicated key mapping
-    payload["key_mapping"] = {secret1_id: "access_key_id", secret2_id: "access_key_id"}
+    payload["key_mapping"] = {secret1_id: "access_key_id", secret2_id: "access_key_id", secret3_id: "secret-3"}
 
     _, response = await secrets_sanic_client.post("/api/secrets/kubernetes", headers=user_headers, json=payload)
 
