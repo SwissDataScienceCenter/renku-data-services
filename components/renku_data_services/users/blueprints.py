@@ -17,7 +17,7 @@ from renku_data_services.errors import errors
 from renku_data_services.secrets.db import UserSecretsRepo
 from renku_data_services.secrets.models import Secret, SecretKind
 from renku_data_services.users import apispec, models
-from renku_data_services.users.core import validate_new_secret, validate_secret_patch
+from renku_data_services.users.core import validate_secret_patch, validate_unsaved_secret
 from renku_data_services.users.db import UserPreferencesRepository, UserRepo
 
 
@@ -177,7 +177,7 @@ class UserSecretsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.SecretPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.SecretPost) -> JSONResponse:
-            new_secret = validate_new_secret(body)
+            new_secret = validate_unsaved_secret(body)
             inserted_secret = await self.secret_repo.insert_secret(requested_by=user, secret=new_secret)
             return validated_json(apispec.SecretWithId, self._dump_secret(inserted_secret), status=201)
 

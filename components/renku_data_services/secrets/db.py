@@ -16,7 +16,7 @@ from renku_data_services.base_api.auth import APIUser, only_authenticated
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId, Slug
 from renku_data_services.errors import errors
 from renku_data_services.secrets.core import encrypt_user_secret
-from renku_data_services.secrets.models import NewSecret, Secret, SecretKind, SecretPatch
+from renku_data_services.secrets.models import Secret, SecretKind, SecretPatch, UnsavedSecret
 from renku_data_services.secrets.orm import SecretORM
 from renku_data_services.users.db import UserRepo
 
@@ -127,7 +127,7 @@ class UserSecretsRepo:
                 raise errors.MissingResourceError(message=f"The secret with id {secret_id} cannot be found.")
             return orm.dump()
 
-    async def insert_secret(self, requested_by: APIUser, secret: NewSecret) -> Secret:
+    async def insert_secret(self, requested_by: APIUser, secret: UnsavedSecret) -> Secret:
         """Insert a new secret."""
         if requested_by.id is None:
             raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")

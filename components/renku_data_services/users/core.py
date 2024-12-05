@@ -1,13 +1,13 @@
 """Business logic for user endpoints."""
 
-from renku_data_services.secrets.models import NewSecret, SecretKind, SecretPatch
+from renku_data_services.secrets.models import SecretKind, SecretPatch, UnsavedSecret
 from renku_data_services.users import apispec
 
 
-def validate_new_secret(body: apispec.SecretPost) -> NewSecret:
+def validate_unsaved_secret(body: apispec.SecretPost) -> UnsavedSecret:
     """Validate a new secret to be created."""
     secret_kind = SecretKind(body.kind.value)
-    return NewSecret(
+    return UnsavedSecret(
         name=body.name,
         default_filename=body.default_filename,
         secret_value=body.value,

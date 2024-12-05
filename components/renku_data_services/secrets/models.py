@@ -16,22 +16,15 @@ class SecretKind(StrEnum):
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class UnsavedSecret:
-    """Secret objects not stored in the database."""
-
-    name: str
-    default_filename: str | None
-    encrypted_value: bytes = field(repr=False)
-    encrypted_key: bytes = field(repr=False)
-    kind: SecretKind
-
-
-@dataclass(frozen=True, eq=True, kw_only=True)
-class Secret(UnsavedSecret):
+class Secret:
     """Secret object stored in the database."""
 
     id: ULID
+    name: str
     default_filename: str
+    encrypted_value: bytes = field(repr=False)
+    encrypted_key: bytes = field(repr=False)
+    kind: SecretKind
     modification_date: datetime
 
     session_secret_slot_ids: list[ULID]
@@ -81,7 +74,7 @@ class OwnerReference:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class NewSecret:
+class UnsavedSecret:
     """Model to request the creation of a new user secret."""
 
     name: str
