@@ -276,7 +276,6 @@ class EntitySlugOldORM(BaseORM):
     latest_slug_id: Mapped[int] = mapped_column(
         ForeignKey(EntitySlugORM.id, ondelete="CASCADE"),
         nullable=False,
-        init=False,
         index=True,
     )
-    latest_slug: Mapped[EntitySlugORM] = relationship(lazy="joined", repr=False, viewonly=True)
+    latest_slug: Mapped[EntitySlugORM] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
