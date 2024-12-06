@@ -63,7 +63,7 @@ from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.platform.db import PlatformRepository
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository, ProjectSessionSecretRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
-from renku_data_services.secrets.db import UserSecretsRepo
+from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsRepo
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.config import UserPreferencesConfig
@@ -178,6 +178,7 @@ class Config:
     _session_repo: SessionRepository | None = field(default=None, repr=False, init=False)
     _user_preferences_repo: UserPreferencesRepository | None = field(default=None, repr=False, init=False)
     _kc_user_repo: KcUserRepo | None = field(default=None, repr=False, init=False)
+    _low_level_user_secrets_repo: LowLevelUserSecretsRepo | None = field(default=None, repr=False, init=False)
     _user_secrets_repo: UserSecretsRepo | None = field(default=None, repr=False, init=False)
     _project_member_repo: ProjectMemberRepository | None = field(default=None, repr=False, init=False)
     _project_session_secret_repo: ProjectSessionSecretRepository | None = field(default=None, repr=False, init=False)
@@ -408,8 +409,14 @@ class Config:
     def user_secrets_repo(self) -> UserSecretsRepo:
         """The DB adapter for user secrets storage."""
         if not self._user_secrets_repo:
+            low_level_user_secrets_repo = LowLevelUserSecretsRepo(
+                session_maker=self.db.async_session_maker,
+            )
             self._user_secrets_repo = UserSecretsRepo(
                 session_maker=self.db.async_session_maker,
+                low_level_repo=low_level_user_secrets_repo,
+                user_repo=self.kc_user_repo,
+                secret_service_public_key=self.secrets_service_public_key,
             )
         return self._user_secrets_repo
 
