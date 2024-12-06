@@ -14,7 +14,7 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface
 from renku_data_services.secrets import apispec
 from renku_data_services.secrets.core import create_k8s_secret
-from renku_data_services.secrets.db import UserSecretsRepo
+from renku_data_services.secrets.db import LowLevelUserSecretsRepo
 from renku_data_services.secrets.models import OwnerReference
 
 
@@ -23,7 +23,7 @@ class K8sSecretsBP(CustomBlueprint):
     """Handlers for using user secrets in K8s."""
 
     authenticator: base_models.Authenticator
-    user_secrets_repo: UserSecretsRepo
+    user_secrets_repo: LowLevelUserSecretsRepo
     secret_service_private_key: rsa.RSAPrivateKey
     previous_secret_service_private_key: rsa.RSAPrivateKey | None
     core_client: K8sCoreClientInterface
