@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import functools
+import random
+import string
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Concatenate, ParamSpec, TypeVar
@@ -635,7 +637,7 @@ class ProjectSessionSecretRepository:
                 )
                 if existing_secret_slot is not None:
                     raise errors.ConflictError(
-                        message=f"A session secret slot with the filename '{secret_slot.filename}' already exists."
+                        message=f"A session secret slot with the filename '{patch.filename}' already exists."
                     )
                 secret_slot.filename = patch.filename
 
@@ -776,9 +778,13 @@ class ProjectSessionSecretRepository:
                         encrypted_value=encrypted_value, encrypted_key=encrypted_key
                     )
                 else:
-                    name = base_models.Slug.from_name(f"{secret_slot.name}-{secret_update.secret_slot_id}")
+                    name = secret_slot.name
+                    suffix = "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(8)])  # nosec B311
+                    name_slug = base_models.Slug.from_name(name).value
+                    default_filename = f"{name_slug[:200]}-{suffix}"
                     secret_orm = secrets_schemas.SecretORM(
-                        name=name.value,
+                        name=name,
+                        default_filename=default_filename,
                         user_id=user.id,
                         encrypted_value=encrypted_value,
                         encrypted_key=encrypted_key,

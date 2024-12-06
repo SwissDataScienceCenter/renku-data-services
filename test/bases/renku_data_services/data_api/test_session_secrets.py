@@ -413,6 +413,13 @@ async def test_patch_session_secrets_with_existing_user_secret(
     assert session_secrets[0]["secret_slot"].get("id") == secret_slot_id
     assert session_secrets[0].get("secret_id") == user_secret_id
 
+    # Check that the secret slot is referenced from the user secret
+    _, response = await sanic_client.get(f"/api/data/user/secrets/{user_secret_id}", headers=user_headers)
+    assert response.status_code == 200, response.json
+    assert response.json is not None
+    assert response.json.get("session_secret_slot_ids") is not None
+    assert {id for id in response.json.get("session_secret_slot_ids")} == {secret_slot_id}
+
 
 @pytest.mark.asyncio
 async def test_patch_session_secrets_with_new_secret_value(
@@ -451,6 +458,13 @@ async def test_patch_session_secrets_with_new_secret_value(
     assert session_secrets[0].get("secret_slot") is not None
     assert session_secrets[0]["secret_slot"].get("id") == secret_slot_id
     assert session_secrets[0].get("secret_id") == new_user_secret["id"]
+
+    # Check that the secret slot is referenced from the user secret
+    _, response = await sanic_client.get(f"/api/data/user/secrets/{new_user_secret["id"]}", headers=user_headers)
+    assert response.status_code == 200, response.json
+    assert response.json is not None
+    assert response.json.get("session_secret_slot_ids") is not None
+    assert {id for id in response.json.get("session_secret_slot_ids")} == {secret_slot_id}
 
 
 @pytest.mark.asyncio

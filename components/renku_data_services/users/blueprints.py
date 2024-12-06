@@ -1,8 +1,8 @@
 """Blueprints for the user endpoints."""
 
 from dataclasses import dataclass
+from typing import Any
 
-from cryptography.hazmat.primitives.asymmetric import rsa
 from sanic import HTTPResponse, Request, json
 from sanic.response import JSONResponse
 from sanic_ext import validate
@@ -14,10 +14,10 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.errors import errors
-from renku_data_services.secrets.core import encrypt_user_secret
 from renku_data_services.secrets.db import UserSecretsRepo
-from renku_data_services.secrets.models import SecretKind, UnsavedSecret
+from renku_data_services.secrets.models import Secret, SecretKind
 from renku_data_services.users import apispec, models
+from renku_data_services.users.core import validate_secret_patch, validate_unsaved_secret
 from renku_data_services.users.db import UserPreferencesRepository, UserRepo
 
 
@@ -136,9 +136,7 @@ class UserSecretsBP(CustomBlueprint):
     """
 
     secret_repo: UserSecretsRepo
-    user_repo: UserRepo
     authenticator: base_models.Authenticator
-    secret_service_public_key: rsa.RSAPublicKey
 
     def get_all(self) -> BlueprintFactoryResponse:
         """Get all user's secrets."""
@@ -151,14 +149,9 @@ class UserSecretsBP(CustomBlueprint):
         ) -> JSONResponse:
             secret_kind = SecretKind[query.kind.value]
             secrets = await self.secret_repo.get_user_secrets(requested_by=user, kind=secret_kind)
-            secrets_json = [
-                secret.model_dump(include={"name", "id", "modification_date", "kind"}, exclude_none=True, mode="json")
-                for secret in secrets
-            ]
             return validated_json(
                 apispec.SecretsList,
-                secrets_json,
-                200,
+                [self._dump_secret(s) for s in secrets],
             )
 
         return "/user/secrets", ["GET"], _get_all
@@ -170,12 +163,10 @@ class UserSecretsBP(CustomBlueprint):
         @only_authenticated
         async def _get_one(_: Request, user: base_models.APIUser, secret_id: ULID) -> JSONResponse:
             secret = await self.secret_repo.get_secret_by_id(requested_by=user, secret_id=secret_id)
-            if not secret:
-                raise errors.MissingResourceError(message=f"The secret with id {secret_id} cannot be found.")
-            result = secret.model_dump(
-                include={"name", "id", "modification_date", "kind"}, exclude_none=True, mode="json"
+            return validated_json(
+                apispec.SecretWithId,
+                self._dump_secret(secret),
             )
-            return validated_json(apispec.SecretWithId, result)
 
         return "/user/secrets/<secret_id:ulid>", ["GET"], _get_one
 
@@ -186,23 +177,9 @@ class UserSecretsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.SecretPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.SecretPost) -> JSONResponse:
-            encrypted_value, encrypted_key = await encrypt_user_secret(
-                user_repo=self.user_repo,
-                requested_by=user,
-                secret_service_public_key=self.secret_service_public_key,
-                secret_value=body.value,
-            )
-            secret = UnsavedSecret(
-                name=body.name,
-                encrypted_value=encrypted_value,
-                encrypted_key=encrypted_key,
-                kind=SecretKind[body.kind.value],
-            )
-            inserted_secret = await self.secret_repo.insert_secret(requested_by=user, secret=secret)
-            result = inserted_secret.model_dump(
-                include={"name", "id", "modification_date", "kind"}, exclude_none=True, mode="json"
-            )
-            return validated_json(apispec.SecretWithId, result, 201)
+            new_secret = validate_unsaved_secret(body)
+            inserted_secret = await self.secret_repo.insert_secret(requested_by=user, secret=new_secret)
+            return validated_json(apispec.SecretWithId, self._dump_secret(inserted_secret), status=201)
 
         return "/user/secrets", ["POST"], _post
 
@@ -215,20 +192,14 @@ class UserSecretsBP(CustomBlueprint):
         async def _patch(
             _: Request, user: base_models.APIUser, secret_id: ULID, body: apispec.SecretPatch
         ) -> JSONResponse:
-            encrypted_value, encrypted_key = await encrypt_user_secret(
-                user_repo=self.user_repo,
-                requested_by=user,
-                secret_service_public_key=self.secret_service_public_key,
-                secret_value=body.value,
-            )
+            secret_patch = validate_secret_patch(body)
             updated_secret = await self.secret_repo.update_secret(
-                requested_by=user, secret_id=secret_id, encrypted_value=encrypted_value, encrypted_key=encrypted_key
+                requested_by=user, secret_id=secret_id, patch=secret_patch
             )
-            result = updated_secret.model_dump(
-                include={"name", "id", "modification_date", "kind"}, exclude_none=True, mode="json"
+            return validated_json(
+                apispec.SecretWithId,
+                self._dump_secret(updated_secret),
             )
-
-            return validated_json(apispec.SecretWithId, result)
 
         return "/user/secrets/<secret_id:ulid>", ["PATCH"], _patch
 
@@ -242,6 +213,19 @@ class UserSecretsBP(CustomBlueprint):
             return HTTPResponse(status=204)
 
         return "/user/secrets/<secret_id:ulid>", ["DELETE"], _delete
+
+    @staticmethod
+    def _dump_secret(secret: Secret) -> dict[str, Any]:
+        """Dumps a secret for API responses."""
+        return dict(
+            id=str(secret.id),
+            name=secret.name,
+            default_filename=secret.default_filename,
+            kind=secret.kind.value,
+            modification_date=secret.modification_date,
+            session_secret_slot_ids=[str(item) for item in secret.session_secret_slot_ids],
+            data_connector_ids=[str(item) for item in secret.data_connector_ids],
+        )
 
 
 @dataclass(kw_only=True)

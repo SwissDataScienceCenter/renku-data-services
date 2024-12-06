@@ -2,6 +2,7 @@
 
 import asyncio
 from base64 import b64encode
+from typing import TYPE_CHECKING
 
 from cryptography.hazmat.primitives.asymmetric import rsa
 from kubernetes import client as k8s_client
@@ -12,7 +13,6 @@ from ulid import ULID
 from renku_data_services import base_models, errors
 from renku_data_services.base_models.core import InternalServiceAdmin
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface
-from renku_data_services.secrets.db import UserSecretsRepo
 from renku_data_services.secrets.models import OwnerReference, Secret
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.cryptography import (
@@ -23,6 +23,9 @@ from renku_data_services.utils.cryptography import (
     generate_random_encryption_key,
 )
 
+if TYPE_CHECKING:
+    from renku_data_services.secrets.db import LowLevelUserSecretsRepo
+
 
 async def create_k8s_secret(
     user: base_models.APIUser,
@@ -30,7 +33,7 @@ async def create_k8s_secret(
     namespace: str,
     secret_ids: list[ULID],
     owner_references: list[OwnerReference],
-    secrets_repo: UserSecretsRepo,
+    secrets_repo: "LowLevelUserSecretsRepo",
     secret_service_private_key: rsa.RSAPrivateKey,
     previous_secret_service_private_key: rsa.RSAPrivateKey | None,
     core_client: K8sCoreClientInterface,
@@ -112,7 +115,7 @@ async def rotate_encryption_keys(
     requested_by: InternalServiceAdmin,
     new_key: rsa.RSAPrivateKey,
     old_key: rsa.RSAPrivateKey,
-    secrets_repo: UserSecretsRepo,
+    secrets_repo: "LowLevelUserSecretsRepo",
     batch_size: int = 100,
 ) -> None:
     """Rotate all secrets to a new private key.
@@ -137,7 +140,7 @@ async def rotate_encryption_keys(
                 if new_secret is not None:
                     updated_secrets.append(new_secret)
 
-            await secrets_repo.update_secrets(requested_by, updated_secrets)
+            await secrets_repo.update_secret_values(requested_by, updated_secrets)
             processed_secrets_metrics.inc(len(updated_secrets))
     except:
         running_metrics.state("errored")
@@ -162,12 +165,12 @@ async def rotate_single_encryption_key(
         decryption_key = decrypt_rsa(old_key, secret.encrypted_key)
         decrypted_value = decrypt_string(decryption_key, user_id, secret.encrypted_value).encode()
         new_encryption_key = generate_random_encryption_key()
-        secret.encrypted_value = encrypt_string(new_encryption_key, user_id, decrypted_value.decode())
-        secret.encrypted_key = encrypt_rsa(new_key.public_key(), new_encryption_key)
+        encrypted_value = encrypt_string(new_encryption_key, user_id, decrypted_value.decode())
+        encrypted_key = encrypt_rsa(new_key.public_key(), new_encryption_key)
+        return secret.update_encrypted_value(encrypted_value=encrypted_value, encrypted_key=encrypted_key)
     except Exception as e:
         logger.error(f"Couldn't decrypt secret {secret.name}({secret.id}): {e}")
         return None
-    return secret
 
 
 async def encrypt_user_secret(

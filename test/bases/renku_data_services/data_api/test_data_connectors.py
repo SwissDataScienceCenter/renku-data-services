@@ -1073,6 +1073,14 @@ async def test_patch_data_connector_secrets(
     assert len(secrets) == 2
     assert {s["name"] for s in secrets} == {"access_key_id", "secret_access_key"}
 
+    # Check that the data connector is referenced from the first user secret
+    user_secret_id = secrets[0]["secret_id"]
+    _, response = await sanic_client.get(f"/api/data/user/secrets/{user_secret_id}", headers=user_headers)
+    assert response.status_code == 200, response.json
+    assert response.json is not None
+    assert response.json.get("data_connector_ids") is not None
+    assert {id for id in response.json.get("data_connector_ids")} == {data_connector_id}
+
 
 @pytest.mark.asyncio
 async def test_patch_data_connector_secrets_update_secrets(
