@@ -7,6 +7,7 @@ import random
 import string
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import UTC, datetime
+from pathlib import PurePosixPath
 from typing import Concatenate, ParamSpec, TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -21,6 +22,7 @@ from renku_data_services import errors
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.authz.models import CheckPermissionItem, Member, MembershipChange, Scope
 from renku_data_services.base_api.pagination import PaginationRequest
+from renku_data_services.base_models import RESET
 from renku_data_services.message_queue import events
 from renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
 from renku_data_services.message_queue.db import EventRepository
@@ -235,6 +237,7 @@ class ProjectRepository:
             keywords=project.keywords,
             documentation=project.documentation,
             template_id=project.template_id,
+            secrets_mount_directory=project.secrets_mount_directory,
         )
         project_slug = ns_schemas.EntitySlugORM.create_project_slug(slug, project_id=project_orm.id, namespace_id=ns.id)
 
@@ -321,11 +324,14 @@ class ProjectRepository:
             project.keywords = patch.keywords if patch.keywords else None
         if patch.documentation is not None:
             project.documentation = patch.documentation
-
         if patch.template_id is not None:
             project.template_id = None
         if patch.is_template is not None:
             project.is_template = patch.is_template
+        if patch.secrets_mount_directory is not None and patch.secrets_mount_directory is RESET:
+            project.secrets_mount_directory = None
+        elif patch.secrets_mount_directory is not None and isinstance(patch.secrets_mount_directory, PurePosixPath):
+            project.secrets_mount_directory = patch.secrets_mount_directory
 
         await session.flush()
         await session.refresh(project)
