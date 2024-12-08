@@ -74,7 +74,7 @@ aiofiles = "^24.1.0"
 # Not a direct dependency, it is needed by authzed. Was causing things to crash at startup beacuse of
 # google.protobuf.runtime_version.VersionError:
 # Detected incompatible Protobuf Gencode/Runtime versions when loading authzed/api/v1/core.proto: gencode 5.28.2 runtime 5.27.3.
-protobuf = "^5.29.0"
+protobuf = "^5.29.1"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.8.0"
@@ -92,7 +92,7 @@ types-urllib3 = "^1.26.25.14"
 pyavro-gen = "^0.3.3"
 avro-preprocessor = "^0.3.0"
 fakeredis = "^2.26.1"
-ruff = "^0.8.1"
+ruff = "^0.8.2"
 debugpy = "^1.8.9"
 pytest-xdist = { version = "^3.5.0", extras = ["psutil"] }
 types-requests = "^2.32.0.20241016"

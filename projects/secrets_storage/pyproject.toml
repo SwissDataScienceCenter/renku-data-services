@@ -67,7 +67,7 @@ aiofile = "^3.9.0"
 # Not a direct dependency, it is needed by authzed. Was causing things to crash at startup beacuse of
 # google.protobuf.runtime_version.VersionError:
 # Detected incompatible Protobuf Gencode/Runtime versions when loading authzed/api/v1/core.proto: gencode 5.28.2 runtime 5.27.3.
-protobuf = "^5.29.0"
+protobuf = "^5.29.1"
 escapism = "^1.0.1"
 kr8s = "^0.18.1"
 marshmallow = "^3.23.1"
