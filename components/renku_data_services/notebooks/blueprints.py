@@ -279,6 +279,7 @@ class NotebooksNewBP(CustomBlueprint):
             work_dir = environment.working_directory or image_workdir or work_dir_fallback
             storage_mount_fallback = work_dir / "work"
             storage_mount = launcher.environment.mount_directory or storage_mount_fallback
+            secrets_mount_directory = storage_mount / project.secrets_mount_directory
             session_secrets = await self.project_session_secret_repo.get_all_session_secrets_from_project(
                 user=user, project_id=project.id
             )
@@ -374,6 +375,7 @@ class NotebooksNewBP(CustomBlueprint):
             user_secrets_container = init_containers.user_secrets_container(
                 user=user,
                 config=self.nb_config,
+                secrets_mount_directory=secrets_mount_directory.as_posix(),
                 k8s_secret_name=f"{server_name}-secrets",
                 session_secrets=session_secrets,
             )

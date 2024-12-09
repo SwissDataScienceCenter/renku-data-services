@@ -29,6 +29,7 @@ from renku_data_services.project.core import (
     validate_project_patch,
     validate_session_secret_slot_patch,
     validate_session_secrets_patch,
+    validate_unsaved_project,
     validate_unsaved_session_secret_slot,
 )
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository, ProjectSessionSecretRepository
@@ -71,20 +72,8 @@ class ProjectsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.ProjectPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.ProjectPost) -> JSONResponse:
-            keywords = [kw.root for kw in body.keywords] if body.keywords is not None else []
-            visibility = Visibility.PRIVATE if body.visibility is None else Visibility(body.visibility.value)
-            project = project_models.UnsavedProject(
-                name=body.name,
-                namespace=body.namespace,
-                slug=body.slug or base_models.Slug.from_name(body.name).value,
-                description=body.description,
-                repositories=body.repositories or [],
-                created_by=user.id,  # type: ignore[arg-type]
-                visibility=visibility,
-                keywords=keywords,
-                documentation=body.documentation,
-            )
-            result = await self.project_repo.insert_project(user, project)
+            new_project = validate_unsaved_project(body, created_by=user.id or "")
+            result = await self.project_repo.insert_project(user, new_project)
             return validated_json(apispec.Project, self._dump_project(result), status=201)
 
         return "/projects", ["POST"], _post
@@ -108,6 +97,7 @@ class ProjectsBP(CustomBlueprint):
                 repositories=body.repositories,
                 visibility=Visibility(body.visibility.value) if body.visibility is not None else None,
                 keywords=[kw.root for kw in body.keywords] if body.keywords is not None else [],
+                secrets_mount_directory=body.secrets_mount_directory,
                 project_repo=self.project_repo,
                 session_repo=self.session_repo,
                 data_connector_to_project_link_repo=self.data_connector_to_project_link_repo,
@@ -317,6 +307,7 @@ class ProjectsBP(CustomBlueprint):
             keywords=project.keywords or [],
             template_id=project.template_id,
             is_template=project.is_template,
+            secrets_mount_directory=str(project.secrets_mount_directory),
         )
         if with_documentation:
             result = dict(result, documentation=project.documentation)

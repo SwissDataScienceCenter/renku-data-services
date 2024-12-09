@@ -6,16 +6,42 @@ from ulid import ULID
 
 from renku_data_services import errors
 from renku_data_services.authz.models import Visibility
-from renku_data_services.base_models import APIUser, Slug
+from renku_data_services.base_models import RESET, APIUser, Slug
 from renku_data_services.data_connectors.db import DataConnectorProjectLinkRepository, DataConnectorRepository
 from renku_data_services.project import apispec, models
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.session.db import SessionRepository
 
 
+def validate_unsaved_project(body: apispec.ProjectPost, created_by: str) -> models.UnsavedProject:
+    """Validate an unsaved project."""
+    keywords = [kw.root for kw in body.keywords] if body.keywords is not None else []
+    visibility = Visibility.PRIVATE if body.visibility is None else Visibility(body.visibility.value)
+    secrets_mount_directory = PurePosixPath(body.secrets_mount_directory) if body.secrets_mount_directory else None
+    return models.UnsavedProject(
+        name=body.name,
+        namespace=body.namespace,
+        slug=body.slug or Slug.from_name(body.name).value,
+        description=body.description,
+        repositories=body.repositories or [],
+        created_by=created_by,
+        visibility=visibility,
+        keywords=keywords,
+        documentation=body.documentation,
+        secrets_mount_directory=secrets_mount_directory,
+    )
+
+
 def validate_project_patch(patch: apispec.ProjectPatch) -> models.ProjectPatch:
     """Validate the update to a project."""
     keywords = [kw.root for kw in patch.keywords] if patch.keywords is not None else None
+    secrets_mount_directory = (
+        PurePosixPath(patch.secrets_mount_directory)
+        if patch.secrets_mount_directory
+        else RESET
+        if patch.secrets_mount_directory == ""
+        else None
+    )
     return models.ProjectPatch(
         name=patch.name,
         namespace=patch.namespace,
@@ -26,6 +52,7 @@ def validate_project_patch(patch: apispec.ProjectPatch) -> models.ProjectPatch:
         documentation=patch.documentation,
         template_id=None if patch.template_id is None else "",
         is_template=patch.is_template,
+        secrets_mount_directory=secrets_mount_directory,
     )
 
 
@@ -39,6 +66,7 @@ async def copy_project(
     repositories: list[models.Repository] | None,
     visibility: Visibility | None,
     keywords: list[str],
+    secrets_mount_directory: str | None,
     project_repo: ProjectRepository,
     session_repo: SessionRepository,
     data_connector_to_project_link_repo: DataConnectorProjectLinkRepository,
@@ -57,6 +85,7 @@ async def copy_project(
         visibility=template.visibility if visibility is None else visibility,
         keywords=keywords or template.keywords,
         template_id=template.id,
+        secrets_mount_directory=PurePosixPath(secrets_mount_directory) if secrets_mount_directory else None,
     )
     project = await project_repo.insert_project(user, unsaved_project)
 

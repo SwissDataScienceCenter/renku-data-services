@@ -2,11 +2,13 @@
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Literal, Optional
+from pathlib import PurePosixPath
+from typing import Literal
 
 from ulid import ULID
 
 from renku_data_services.authz.models import Visibility
+from renku_data_services.base_models import ResetType
 from renku_data_services.namespace.models import Namespace
 from renku_data_services.utils.etag import compute_etag_from_timestamp
 
@@ -24,11 +26,12 @@ class BaseProject:
     creation_date: datetime = field(default_factory=lambda: datetime.now(UTC).replace(microsecond=0))
     updated_at: datetime | None = field(default=None)
     repositories: list[Repository] = field(default_factory=list)
-    description: Optional[str] = None
-    keywords: Optional[list[str]] = None
-    documentation: Optional[str] = None
-    template_id: Optional[ULID] = None
+    description: str | None = None
+    keywords: list[str] | None = None
+    documentation: str | None = None
+    template_id: ULID | None = None
     is_template: bool = False
+    secrets_mount_directory: PurePosixPath | None = None
 
     @property
     def etag(self) -> str | None:
@@ -40,10 +43,11 @@ class BaseProject:
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class Project(BaseProject):
-    """Base Project model."""
+    """Model for a project which has been persisted in the database."""
 
     id: ULID
     namespace: Namespace
+    secrets_mount_directory: PurePosixPath
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -66,6 +70,7 @@ class ProjectPatch:
     documentation: str | None
     template_id: Literal[""] | None
     is_template: bool | None
+    secrets_mount_directory: PurePosixPath | ResetType | None
 
 
 @dataclass
