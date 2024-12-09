@@ -1,6 +1,7 @@
 """SQLAlchemy's schemas for the projects database."""
 
 from datetime import datetime
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import Boolean, DateTime, Identity, Index, Integer, MetaData, String, false, func
@@ -11,11 +12,11 @@ from ulid import ULID
 
 from renku_data_services.authz import models as authz_models
 from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
-from renku_data_services.project import models
+from renku_data_services.project import constants, models
 from renku_data_services.project.apispec import Visibility
 from renku_data_services.secrets.orm import SecretORM
 from renku_data_services.users.orm import UserORM
-from renku_data_services.utils.sqlalchemy import ULIDType
+from renku_data_services.utils.sqlalchemy import PurePosixPathType, ULIDType
 
 if TYPE_CHECKING:
     from renku_data_services.namespace.orm import EntitySlugORM
@@ -40,6 +41,8 @@ class ProjectORM(BaseORM):
     description: Mapped[str | None] = mapped_column("description", String(500))
     keywords: Mapped[Optional[list[str]]] = mapped_column("keywords", ARRAY(String(99)), nullable=True)
     documentation: Mapped[str | None] = mapped_column("documentation", String(), nullable=True, deferred=True)
+    secrets_mount_directory: Mapped[PurePosixPath] = mapped_column("secrets_mount_directory", PurePosixPathType)
+    """Location where secrets are mounted in this project's sessions."""
     # NOTE: The project slugs table has a foreign key from the projects table, but there is a stored procedure
     # triggered by the deletion of slugs to remove the project used by the slug. See migration 89aa4573cfa9.
     slug: Mapped["EntitySlugORM"] = relationship(
@@ -83,6 +86,7 @@ class ProjectORM(BaseORM):
             documentation=self.documentation if with_documentation else None,
             template_id=self.template_id,
             is_template=self.is_template,
+            secrets_mount_directory=self.secrets_mount_directory or constants.DEFAULT_SESSION_SECRETS_MOUNT_DIR,
         )
 
 
