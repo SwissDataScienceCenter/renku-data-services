@@ -15,6 +15,7 @@ from renku_data_services.base_models import APIUser
 from renku_data_services.errors import errors
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.namespace.models import Namespace, NamespaceKind
+from renku_data_services.project import constants as project_constants
 from renku_data_services.project.models import Project
 
 admin_user = APIUser(is_admin=True, id="admin-id", access_token="some-token", full_name="admin")  # nosec B106
@@ -61,6 +62,7 @@ async def test_adding_deleting_project(app_config_instance: Config, bootstrap_ad
         ),
         visibility=Visibility.PUBLIC if public_project else Visibility.PRIVATE,
         created_by=project_owner.id,
+        secrets_mount_directory=project_constants.DEFAULT_SESSION_SECRETS_MOUNT_DIR,
     )
     authz_changes = authz._add_project(project)
     await authz.client.WriteRelationships(authz_changes.apply)

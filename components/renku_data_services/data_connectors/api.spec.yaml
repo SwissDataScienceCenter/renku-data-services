@@ -564,6 +564,7 @@ components:
       minLength: 1
       maxLength: 5000
       nullable: true
+      example: My secret value
     RCloneOption:
       type: object
       description: Single field on an RClone storage, like "remote" or "access_key_id"

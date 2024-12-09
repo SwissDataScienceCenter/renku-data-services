@@ -1,5 +1,7 @@
 """Adapters for data connectors database classes."""
 
+import random
+import string
 from collections.abc import AsyncIterator, Callable
 from typing import TypeVar
 
@@ -561,7 +563,9 @@ class DataConnectorSecretRepository:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
         # NOTE: check that the user can access the data connector
-        await self.data_connector_repo.get_data_connector(user=user, data_connector_id=data_connector_id)
+        data_connector = await self.data_connector_repo.get_data_connector(
+            user=user, data_connector_id=data_connector_id
+        )
 
         secrets_as_dict = {s.name: s.value for s in secrets}
 
@@ -585,7 +589,11 @@ class DataConnectorSecretRepository:
                     data_connector_secret_orm = existing_secrets_as_dict.get(name)
                     if data_connector_secret_orm is None:
                         continue
-                    await session.delete(data_connector_secret_orm.secret)
+                    await session.execute(
+                        delete(secrets_schemas.SecretORM).where(
+                            secrets_schemas.SecretORM.id == data_connector_secret_orm.secret_id
+                        )
+                    )
                     del existing_secrets_as_dict[name]
                     continue
 
@@ -601,8 +609,13 @@ class DataConnectorSecretRepository:
                         encrypted_value=encrypted_value, encrypted_key=encrypted_key
                     )
                 else:
+                    secret_name = f"{data_connector.name[:45]} - {name[:45]}"
+                    suffix = "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(8)])  # nosec B311
+                    secret_name_slug = base_models.Slug.from_name(name).value
+                    default_filename = f"{secret_name_slug[:200]}-{suffix}"
                     secret_orm = secrets_schemas.SecretORM(
-                        name=f"{data_connector_id}-{name}",
+                        name=secret_name,
+                        default_filename=default_filename,
                         user_id=user.id,
                         encrypted_value=encrypted_value,
                         encrypted_key=encrypted_key,
@@ -616,6 +629,8 @@ class DataConnectorSecretRepository:
                     )
                     session.add(secret_orm)
                     session.add(data_connector_secret_orm)
+                    await session.flush()
+                    await session.refresh(data_connector_secret_orm)
 
                 all_secrets.append(data_connector_secret_orm.dump())
 
