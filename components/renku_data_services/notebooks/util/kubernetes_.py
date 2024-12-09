@@ -24,7 +24,7 @@ from hashlib import md5
 from typing import Any, TypeAlias, cast
 
 import escapism
-from kubernetes.client import V1Container
+from kubernetes.client import V1Container, V1EnvVarSource
 
 from renku_data_services.base_models.core import AnonymousAPIUser, AuthenticatedAPIUser, Slug
 from renku_data_services.notebooks.crs import Patch, PatchType
@@ -72,7 +72,7 @@ def renku_2_make_server_name(user: AuthenticatedAPIUser | AnonymousAPIUser, proj
     return f"{prefix[:12]}-{server_hash[:12]}"
 
 
-def find_env_var(container: V1Container, env_name: str) -> tuple[int, str] | None:
+def find_env_var(container: V1Container, env_name: str) -> tuple[int, str | V1EnvVarSource] | None:
     """Find the index and value of a specific environment variable by name from a Kubernetes container."""
     env_var = next(
         filter(
@@ -85,6 +85,8 @@ def find_env_var(container: V1Container, env_name: str) -> tuple[int, str] | Non
         return None
     ind = env_var[0]
     val = env_var[1].value
+    if val is None:
+        val = env_var[1].value_from
     return ind, val
 
 

@@ -234,24 +234,18 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
         ]
         await secret.patch(patch, type="json")
 
-    async def patch_statefulset_tokens(self, name: str, renku_tokens: RenkuTokens) -> None:
+    @staticmethod
+    def _get_statefulset_token_patches(sts: StatefulSet, renku_tokens: RenkuTokens) -> list[dict[str, str]]:
         """Patch the Renku and Gitlab access tokens that are used in the session statefulset."""
-        try:
-            sts = await StatefulSet.get(name=name, namespace=self.namespace)
-        except NotFoundError:
-            return None
-
-        containers: list[V1Container] = [V1Container(**container) for container in sts.spec.template.spec.containers]
-        init_containers: list[V1Container] = [
-            V1Container(**container) for container in sts.spec.template.spec.init_containers
-        ]
+        containers: list[V1Container] = sts.spec.template.spec.containers
+        init_containers: list[V1Container] = sts.spec.template.spec.init_containers
 
         git_proxy_container_index, git_proxy_container = next(
             ((i, c) for i, c in enumerate(containers) if c.name == "git-proxy"),
             (None, None),
         )
         git_clone_container_index, git_clone_container = next(
-            ((i, c) for i, c in enumerate(init_containers) if c.name == "git-proxy"),
+            ((i, c) for i, c in enumerate(init_containers) if c.name == "git-clone"),
             (None, None),
         )
         secrets_container_index, secrets_container = next(
@@ -306,7 +300,7 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
                 {
                     "op": "replace",
                     "path": (
-                        f"/spec/template/spec/containers/{git_clone_container_index}"
+                        f"/spec/template/spec/initContainers/{git_clone_container_index}"
                         f"/env/{git_clone_renku_access_token_env[0]}/value"
                     ),
                     "value": renku_tokens.access_token,
@@ -317,16 +311,25 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
                 {
                     "op": "replace",
                     "path": (
-                        f"/spec/template/spec/containers/{secrets_container_index}"
+                        f"/spec/template/spec/initContainers/{secrets_container_index}"
                         f"/env/{secrets_renku_access_token_env[0]}/value"
                     ),
                     "value": renku_tokens.access_token,
                 },
             )
 
-        if not patches:
+        return patches
+
+    async def patch_statefulset_tokens(self, name: str, renku_tokens: RenkuTokens) -> None:
+        """Patch the Renku and Gitlab access tokens that are used in the session statefulset."""
+        try:
+            sts = await StatefulSet.get(name=name, namespace=self.namespace)
+        except NotFoundError:
             return None
 
+        patches = self._get_statefulset_token_patches(sts, renku_tokens)
+        if not patches:
+            return
         await sts.patch(patches, type="json")
 
     async def create_secret(self, secret: V1Secret) -> V1Secret:
