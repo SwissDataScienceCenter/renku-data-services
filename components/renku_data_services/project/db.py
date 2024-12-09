@@ -31,7 +31,7 @@ from renku_data_services.message_queue.redis_queue import dispatch_message
 from renku_data_services.namespace import orm as ns_schemas
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project import apispec as project_apispec
-from renku_data_services.project import models
+from renku_data_services.project import constants, models
 from renku_data_services.project import orm as schemas
 from renku_data_services.secrets import orm as secrets_schemas
 from renku_data_services.secrets.core import encrypt_user_secret
@@ -237,7 +237,7 @@ class ProjectRepository:
             keywords=project.keywords,
             documentation=project.documentation,
             template_id=project.template_id,
-            secrets_mount_directory=project.secrets_mount_directory,
+            secrets_mount_directory=project.secrets_mount_directory or constants.DEFAULT_SESSION_SECRETS_MOUNT_DIR,
         )
         project_slug = ns_schemas.EntitySlugORM.create_project_slug(slug, project_id=project_orm.id, namespace_id=ns.id)
 
@@ -329,7 +329,7 @@ class ProjectRepository:
         if patch.is_template is not None:
             project.is_template = patch.is_template
         if patch.secrets_mount_directory is not None and patch.secrets_mount_directory is RESET:
-            project.secrets_mount_directory = None
+            project.secrets_mount_directory = constants.DEFAULT_SESSION_SECRETS_MOUNT_DIR
         elif patch.secrets_mount_directory is not None and isinstance(patch.secrets_mount_directory, PurePosixPath):
             project.secrets_mount_directory = patch.secrets_mount_directory
 

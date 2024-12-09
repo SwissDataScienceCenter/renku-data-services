@@ -41,6 +41,8 @@ class ProjectORM(BaseORM):
     description: Mapped[str | None] = mapped_column("description", String(500))
     keywords: Mapped[Optional[list[str]]] = mapped_column("keywords", ARRAY(String(99)), nullable=True)
     documentation: Mapped[str | None] = mapped_column("documentation", String(), nullable=True, deferred=True)
+    secrets_mount_directory: Mapped[PurePosixPath] = mapped_column("secrets_mount_directory", PurePosixPathType)
+    """Location where secrets are mounted in this project's sessions."""
     # NOTE: The project slugs table has a foreign key from the projects table, but there is a stored procedure
     # triggered by the deletion of slugs to remove the project used by the slug. See migration 89aa4573cfa9.
     slug: Mapped["EntitySlugORM"] = relationship(
@@ -53,10 +55,6 @@ class ProjectORM(BaseORM):
         lazy="selectin",
         repr=False,
     )
-    secrets_mount_directory: Mapped[PurePosixPath | None] = mapped_column(
-        "secrets_mount_directory", PurePosixPathType, default=None, nullable=True
-    )
-    """Location where secrets are mounted in this project's sessions."""
     creation_date: Mapped[datetime] = mapped_column(
         "creation_date", DateTime(timezone=True), default=func.now(), nullable=False
     )
