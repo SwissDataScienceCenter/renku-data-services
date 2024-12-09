@@ -780,7 +780,9 @@ components:
       description: Shows if a project is a template or not
       type: boolean
     SecretsMountDirectory:
-      description: The location where the secrets will be provided inside sessions, if left unset it will default to `/secrets`.
+      description: |
+        The location where the secrets will be provided inside sessions, if left unset it will default to `/secrets`.
+        Relative locations are supported and will be mounted relative to the session environment's mount directory.
       type: string
       minLength: 1
       default: "/secrets"

@@ -88,7 +88,7 @@ class ProjectORM(BaseORM):
             documentation=self.documentation if with_documentation else None,
             template_id=self.template_id,
             is_template=self.is_template,
-            secrets_mount_directory=self.secrets_mount_directory or constants.DEFAULT_SESSION_MOUNT_DIR,
+            secrets_mount_directory=self.secrets_mount_directory or constants.DEFAULT_SESSION_SECRETS_MOUNT_DIR,
         )
 
 

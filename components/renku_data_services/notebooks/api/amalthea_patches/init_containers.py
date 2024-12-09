@@ -417,7 +417,7 @@ def user_secrets_container(
 
     decrypted_volume_mount = ExtraVolumeMount(
         name="user-secrets-volume",
-        mountPath=secrets_mount_directory or project_constants.DEFAULT_SESSION_MOUNT_DIR.as_posix(),
+        mountPath=secrets_mount_directory or project_constants.DEFAULT_SESSION_SECRETS_MOUNT_DIR.as_posix(),
         readOnly=True,
     )
 

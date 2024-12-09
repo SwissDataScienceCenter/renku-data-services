@@ -62,7 +62,7 @@ async def test_adding_deleting_project(app_config_instance: Config, bootstrap_ad
         ),
         visibility=Visibility.PUBLIC if public_project else Visibility.PRIVATE,
         created_by=project_owner.id,
-        secrets_mount_directory=project_constants.DEFAULT_SESSION_MOUNT_DIR,
+        secrets_mount_directory=project_constants.DEFAULT_SESSION_SECRETS_MOUNT_DIR,
     )
     authz_changes = authz._add_project(project)
     await authz.client.WriteRelationships(authz_changes.apply)
