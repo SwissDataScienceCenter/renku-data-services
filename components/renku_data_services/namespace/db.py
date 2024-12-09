@@ -90,6 +90,8 @@ class GroupRepository:
             groups_orm = result.scalars().all()
 
             stmt_count = select(func.count()).select_from(schemas.GroupORM)
+            if direct_member:
+                stmt_count = stmt_count.where(schemas.GroupORM.id.in_(group_ids))
             result = await session.execute(stmt_count)
             n_total_elements = result.scalar() or 0
             return [g.dump() for g in groups_orm], n_total_elements
