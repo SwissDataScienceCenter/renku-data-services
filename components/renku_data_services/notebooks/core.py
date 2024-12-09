@@ -523,7 +523,6 @@ async def launch_notebook_helper(
             "kind": "JupyterServer",
             "name": server.server_name,
             "uid": manifest.metadata.uid,
-            "controller": True,
         }
         request_data = {
             "name": k8s_user_secret.name,
