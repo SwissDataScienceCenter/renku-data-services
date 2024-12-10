@@ -1,13 +1,15 @@
 """K8s client for shipwright."""
 
 import logging
+from urllib.parse import urljoin
 
+import httpx
 from kr8s import NotFoundError, ServerError
 from kr8s.asyncio.objects import APIObject
 from kubernetes.client import ApiClient
 
-from renku_data_services.errors.errors import CannotStartBuildError, DeleteBuildError
-from renku_data_services.notebooks.errors.intermittent import IntermittentError
+from renku_data_services.errors.errors import CannotStartBuildError, DeleteBuildError, ProgrammingError
+from renku_data_services.notebooks.errors.intermittent import CacheError, IntermittentError
 from renku_data_services.notebooks.util.retries import retry_with_exponential_backoff_async
 from renku_data_services.session.shipwright_crs import Build, BuildRun
 
@@ -146,3 +148,53 @@ class ShipwrightClient:
             logging.exception(f"Cannot delete build {name} because of {e}")
             raise DeleteBuildError()
         return None
+
+
+class ShipwrightCache:
+    """Utility class for calling the shipwright k8s cache."""
+
+    def __init__(self, url: str):
+        self.url = url
+        self.client = httpx.AsyncClient(timeout=10)
+
+    async def list_buildruns(self, name: str) -> list[BuildRun]:
+        """List the jupyter servers."""
+        url = urljoin(self.url, f"/buildruns/{name}")
+        try:
+            res = await self.client.get(url, timeout=10)
+        except httpx.RequestError as err:
+            logging.warning(f"Shipwright k8s cache at {url} cannot be reached: {err}")
+            raise CacheError("The shipwright k8s cache is not available")
+        if res.status_code != 200:
+            logging.warning(
+                f"Listing build runs at {url} from "
+                f"shipwright k8s cache failed with status code: {res.status_code} "
+                f"and body: {res.text}"
+            )
+            raise CacheError(f"The K8s Cache produced an unexpected status code: {res.status_code}")
+
+        return [BuildRun.model_validate(server) for server in res.json()]
+
+    async def get_server(self, name: str) -> BuildRun | None:
+        """Get a specific jupyter server."""
+        url = urljoin(self.url, f"/buildruns/{name}")
+        try:
+            res = await self.client.get(url, timeout=10)
+        except httpx.RequestError as err:
+            logging.warning(f"Shipwright k8s cache at {url} cannot be reached: {err}")
+            raise CacheError("The shipwright k8s cache is not available")
+        if res.status_code != 200:
+            logging.warning(
+                f"Reading build run at {url} from "
+                f"shipwright k8s cache failed with status code: {res.status_code} "
+                f"and body: {res.text}"
+            )
+            raise CacheError(f"The K8s Cache produced an unexpected status code: {res.status_code}")
+        output = res.json()
+        if len(output) == 0:
+            return None
+        if len(output) > 1:
+            raise ProgrammingError(
+                message=f"Expected to find 1 build run when getting run {name}, found {len(output)}."
+            )
+        return BuildRun.model_validate(output[0])
