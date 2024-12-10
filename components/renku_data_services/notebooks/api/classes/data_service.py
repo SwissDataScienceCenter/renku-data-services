@@ -17,6 +17,7 @@ from renku_data_services.notebooks.api.classes.repository import (
     OAuth2Provider,
 )
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
+from renku_data_services.notebooks.config import StorageValidatorProto
 from renku_data_services.notebooks.errors.intermittent import IntermittentError
 from renku_data_services.notebooks.errors.user import (
     AuthenticationError,
@@ -37,7 +38,7 @@ class CloudStorageConfig(NamedTuple):
 
 
 @dataclass
-class StorageValidator:
+class StorageValidator(StorageValidatorProto):
     """Cloud storage validator."""
 
     storage_url: str
@@ -104,7 +105,7 @@ class StorageValidator:
 
 
 @dataclass
-class DummyStorageValidator:
+class DummyStorageValidator(StorageValidatorProto):
     """Dummy cloud storage validator used for testing."""
 
     async def get_storage_by_id(

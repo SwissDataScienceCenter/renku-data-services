@@ -130,38 +130,17 @@ class NotebooksBP(CustomBlueprint):
         """Start a renku session."""
 
         @authenticate_2(self.authenticator, self.internal_gitlab_authenticator)
-        @validate(json=apispec.LaunchNotebookRequest)
-        async def _launch_notebook(
-            request: Request,
-            user: AnonymousAPIUser | AuthenticatedAPIUser,
-            internal_gitlab_user: APIUser,
-            body: apispec.LaunchNotebookRequest,
-        ) -> JSONResponse:
-            server, status_code = await core.launch_notebook(self.nb_config, user, internal_gitlab_user, body)
-            return json(NotebookResponse().dump(server), status_code)
-
-        return "/notebooks/servers", ["POST"], _launch_notebook
-
-    def launch_notebook_old(self) -> BlueprintFactoryResponse:
-        """Start a renku session using the old operator."""
-
-        @authenticate_2(self.authenticator, self.internal_gitlab_authenticator)
         @validate(json=apispec.LaunchNotebookRequestOld)
-        async def _launch_notebook_old(
+        async def _launch_notebook(
             request: Request,
             user: AnonymousAPIUser | AuthenticatedAPIUser,
             internal_gitlab_user: APIUser,
             body: apispec.LaunchNotebookRequestOld,
         ) -> JSONResponse:
-            server, status_code = await core.launch_notebook_old(
-                self.nb_config,
-                user,
-                internal_gitlab_user,
-                body,
-            )
+            server, status_code = await core.launch_notebook(self.nb_config, user, internal_gitlab_user, body)
             return json(NotebookResponse().dump(server), status_code)
 
-        return "/notebooks/old/servers", ["POST"], _launch_notebook_old
+        return "/notebooks/servers", ["POST"], _launch_notebook
 
     def patch_server(self) -> BlueprintFactoryResponse:
         """Patch a user server by name based on the query param."""
