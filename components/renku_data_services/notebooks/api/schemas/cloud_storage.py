@@ -94,7 +94,7 @@ class RCloneStorage(ICloudStorageRequest):
             ) = await config.storage_validator.get_storage_by_id(
                 user, internal_gitlab_user, project_id, data["storage_id"]
             )
-            configuration = {**configuration, **(configuration or {})}
+            configuration = {**configuration, **(data.get("configuration", {}))}
             readonly = readonly
         else:
             source_path = data["source_path"]
