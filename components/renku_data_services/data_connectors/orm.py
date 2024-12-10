@@ -187,7 +187,9 @@ class DataConnectorSecretORM(BaseORM):
     name: Mapped[str] = mapped_column("name", String(), primary_key=True)
 
     secret_id: Mapped[ULID] = mapped_column("secret_id", ForeignKey(SecretORM.id, ondelete="CASCADE"))
-    secret: Mapped[SecretORM] = relationship(init=False, repr=False, lazy="selectin")
+    secret: Mapped[SecretORM] = relationship(
+        init=False, repr=False, back_populates="data_connector_secrets", lazy="selectin"
+    )
 
     def dump(self) -> models.DataConnectorSecret:
         """Create a data connector secret model from the DataConnectorSecretORM."""
