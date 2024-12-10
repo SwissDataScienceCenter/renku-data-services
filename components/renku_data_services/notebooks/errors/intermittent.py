@@ -47,17 +47,17 @@ class CannotStartServerError(IntermittentError):
 
 
 @dataclass
-class JSCacheError(IntermittentError):
-    """Raised when the jupyter server cache responds with anything other than a 200 status code.
+class CacheError(IntermittentError):
+    """Raised when the k8s cache responds with anything other than a 200 status code.
 
-    This indicates trouble with the path requested (i.e. the jupyter cache is not aware
-    of the path) or the jupyter server cache is not functioning properly. When this error
+    This indicates trouble with the path requested (i.e. the k8s cache is not aware
+    of the path) or the k8s cache is not functioning properly. When this error
     is raised the regular (non-cached) k8s client takes over the fulfils the request. Please
-    note that this is possible because the jupyter server cache will respond with 200 and
+    note that this is possible because the k8s cache will respond with 200 and
     an empty response if resource that do not exist are requested.
     """
 
-    message: str = "The jupyter server cache produced and unexpected error."
+    message: str = "The k8s cache produced and unexpected error."
     code: int = IntermittentError.code + 3
 
 
