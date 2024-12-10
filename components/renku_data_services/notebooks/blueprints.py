@@ -81,6 +81,7 @@ from renku_data_services.project.db import ProjectRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository
+from renku_data_services.users.db import UserRepo
 
 
 @dataclass(kw_only=True)
@@ -92,6 +93,7 @@ class NotebooksBP(CustomBlueprint):
     git_repo: GitRepositoriesRepository
     internal_gitlab_authenticator: base_models.Authenticator
     rp_repo: ResourcePoolRepository
+    user_repo: UserRepo
 
     def version(self) -> BlueprintFactoryResponse:
         """Return notebook services version."""
@@ -137,7 +139,9 @@ class NotebooksBP(CustomBlueprint):
             internal_gitlab_user: APIUser,
             body: apispec.LaunchNotebookRequest,
         ) -> JSONResponse:
-            server, status_code = await core.launch_notebook(self.nb_config, user, internal_gitlab_user, body)
+            server, status_code = await core.launch_notebook(
+                self.nb_config, user, internal_gitlab_user, body, user_repo=self.user_repo
+            )
             return json(NotebookResponse().dump(server), status_code)
 
         return "/notebooks/servers", ["POST"], _launch_notebook
@@ -158,6 +162,7 @@ class NotebooksBP(CustomBlueprint):
                 user,
                 internal_gitlab_user,
                 body,
+                user_repo=self.user_repo,
             )
             return json(NotebookResponse().dump(server), status_code)
 
@@ -328,6 +333,7 @@ class NotebooksNewBP(CustomBlueprint):
                     readonly=dc.data_connector.storage.readonly,
                     config=self.nb_config,
                     name=dc.data_connector.name,
+                    secrets={str(secret.secret_id): secret.name for secret in dc.secrets},
                 )
                 if len(dc.secrets) > 0:
                     dcs_secrets[str(dc.data_connector.id)] = dc.secrets

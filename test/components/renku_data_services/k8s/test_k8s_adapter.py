@@ -2,10 +2,23 @@ from dataclasses import asdict
 
 from hypothesis import given
 from kubernetes import client
+from kubernetes.client import (
+    V1Container,
+    V1EnvVar,
+    V1EnvVarSource,
+    V1LabelSelector,
+    V1PodSpec,
+    V1PodTemplateSpec,
+    V1StatefulSet,
+    V1StatefulSetSpec,
+)
 
 from renku_data_services.crc import models
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
+from renku_data_services.notebooks.api.classes.auth import RenkuTokens
+from renku_data_services.notebooks.api.classes.k8s_client import NamespacedK8sClient
+from renku_data_services.notebooks.util.kubernetes_ import find_env_var
 from test.components.renku_data_services.crc_models.hypothesis import quota_strat
 
 
@@ -94,3 +107,82 @@ def test_update_quota(old_quota: models.Quota, new_quota: models.Quota) -> None:
     finally:
         if old_quota is not None:
             quota_repo.delete_quota(old_quota.id)
+
+
+def test_find_env_var() -> None:
+    container = V1Container(
+        name="test", env=[V1EnvVar(name="key1", value="val1"), V1EnvVar(name="key2", value_from=V1EnvVarSource())]
+    )
+    assert find_env_var(container, "key1") == (0, "val1")
+    assert find_env_var(container, "key2") == (1, V1EnvVarSource())
+    assert find_env_var(container, "missing") is None
+
+
+def test_patch_statefulset_tokens() -> None:
+    git_clone_access_env = "GIT_CLONE_USER__RENKU_TOKEN"
+    git_proxy_access_env = "GIT_PROXY_RENKU_ACCESS_TOKEN"
+    git_proxy_refresh_env = "GIT_PROXY_RENKU_REFRESH_TOKEN"
+    secrets_access_env = "RENKU_ACCESS_TOKEN"
+    git_clone = V1Container(
+        name="git-clone",
+        env=[
+            V1EnvVar(name="test", value="value"),
+            V1EnvVar(git_clone_access_env, "old_value"),
+            V1EnvVar(name="test-from-source", value_from=V1EnvVarSource()),
+        ],
+    )
+    git_proxy = V1Container(
+        name="git-proxy",
+        env=[
+            V1EnvVar(name="test", value="value"),
+            V1EnvVar(name="test-from-source", value_from=V1EnvVarSource()),
+            V1EnvVar(git_proxy_refresh_env, "old_value"),
+            V1EnvVar(git_proxy_access_env, "old_value"),
+        ],
+    )
+    secrets = V1Container(
+        name="init-user-secrets",
+        env=[
+            V1EnvVar(secrets_access_env, "old_value"),
+            V1EnvVar(name="test", value="value"),
+            V1EnvVar(name="test-from-source", value_from=V1EnvVarSource()),
+        ],
+    )
+    random1 = V1Container(name="random1")
+    random2 = V1Container(
+        name="random2",
+        env=[
+            V1EnvVar(name="test", value="value"),
+            V1EnvVar(name="test-from-source", value_from=V1EnvVarSource()),
+        ],
+    )
+
+    new_renku_tokens = RenkuTokens(access_token="new_renku_access_token", refresh_token="new_renku_refresh_token")
+
+    sts = V1StatefulSet(
+        spec=V1StatefulSetSpec(
+            service_name="test",
+            selector=V1LabelSelector(),
+            template=V1PodTemplateSpec(
+                spec=V1PodSpec(
+                    containers=[git_proxy, random1, random2], init_containers=[git_clone, random1, secrets, random2]
+                )
+            ),
+        )
+    )
+    patches = NamespacedK8sClient._get_statefulset_token_patches(sts, new_renku_tokens)
+
+    # Order of patches should be git proxy access, git proxy refresh, git clone, secrets
+    assert len(patches) == 4
+    # Git proxy access token
+    assert patches[0]["path"] == "/spec/template/spec/containers/0/env/3/value"
+    assert patches[0]["value"] == new_renku_tokens.access_token
+    # Git proxy refresh token
+    assert patches[1]["path"] == "/spec/template/spec/containers/0/env/2/value"
+    assert patches[1]["value"] == new_renku_tokens.refresh_token
+    # Git clone
+    assert patches[2]["path"] == "/spec/template/spec/initContainers/0/env/1/value"
+    assert patches[2]["value"] == new_renku_tokens.access_token
+    # Secrets init
+    assert patches[3]["path"] == "/spec/template/spec/initContainers/2/env/0/value"
+    assert patches[3]["value"] == new_renku_tokens.access_token
