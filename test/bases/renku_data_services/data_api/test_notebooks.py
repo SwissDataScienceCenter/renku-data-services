@@ -103,7 +103,17 @@ async def practice_jupyter_server(renku_image: str, server_name: str) -> AsyncIt
                     "renku.io/repository": "dummy",
                 },
             },
-            "spec": {"jupyterServer": {"image": renku_image}},
+            "spec": {
+                "jupyterServer": {
+                    "image": renku_image,
+                    "resources": {
+                        "requests": {
+                            "cpu": 0.1,
+                            "memory": 100_000_000,
+                        },
+                    },
+                },
+            },
         }
     )
 
@@ -263,16 +273,30 @@ class TestNotebooks(ClusterRequired):
         sanic_client: SanicASGITestClient,
         request,
         server_name,
-        jupyter_server,
         authenticated_user_headers,
+        fake_gitlab,
     ):
         """Validate that the user server list endpoint answers correctly"""
+        data = {
+            "branch": "main",
+            "commit_sha": "ee4b1c9fedc99abe5892ee95320bbd8471c5985b",
+            "namespace": "test-namespace",
+            "project": "my-test",
+            "image": "alpine:3",
+        }
+        _, res = await sanic_client.post("/api/data/notebooks/servers/", json=data, headers=authenticated_user_headers)
+        assert res.status_code == 201, res.text
+        server_name = res.json["name"]
 
         _, res = await sanic_client.get("/api/data/notebooks/servers", headers=authenticated_user_headers)
-
         assert res.status_code == 200, res.text
         assert "servers" in res.json
         assert len(res.json["servers"]) == 1
+
+        _, res = await sanic_client.delete(
+            f"/api/data/notebooks/servers/{server_name}", headers=authenticated_user_headers
+        )
+        assert res.status_code == 204, res.text
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -349,9 +373,7 @@ class TestNotebooks(ClusterRequired):
             "image": "alpine:3",
         }
 
-        _, res = await sanic_client.post(
-            "/api/data/notebooks/old/servers/", json=data, headers=authenticated_user_headers
-        )
+        _, res = await sanic_client.post("/api/data/notebooks/servers/", json=data, headers=authenticated_user_headers)
 
         assert res.status_code == 201, res.text
 
@@ -367,8 +389,8 @@ class TestNotebooks(ClusterRequired):
         data = {
             "branch": "main",
             "commit_sha": "ee4b1c9fedc99abe5892ee95320bbd8471c5985b",
-            "project_id": "test-namespace/my-test",
-            "launcher_id": "test_launcher",
+            "namespace": "test-namespace",
+            "project": "my-test",
             "image": "alpine:3",
         }
 
