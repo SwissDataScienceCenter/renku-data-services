@@ -80,6 +80,25 @@ class DataConnectorRepository:
                 raise errors.MissingResourceError(message=not_found_msg)
             return data_connector.dump()
 
+    async def get_data_connectors_names(
+        self,
+        user: base_models.APIUser,
+        data_connector_ids: set[ULID],
+    ) -> set[str]:
+        """Get names of the data connectors.
+
+        Don't check permissions for logged-in users since this is used to get names when users cannot copy data
+        connectors due to lack of permission.
+        """
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session:
+            stmt = select(schemas.DataConnectorORM.name).where(schemas.DataConnectorORM.id.in_(data_connector_ids))
+            result = await session.scalars(stmt)
+            data_connectors_names = result.all()
+            return set(data_connectors_names)
+
     async def get_data_connector_by_slug(
         self, user: base_models.APIUser, namespace: str, slug: str
     ) -> models.DataConnector:
