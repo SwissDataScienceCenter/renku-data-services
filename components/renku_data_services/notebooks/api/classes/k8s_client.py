@@ -16,10 +16,10 @@ from renku_data_services.errors import errors
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
 from renku_data_services.notebooks.errors.intermittent import (
+    CacheError,
     CannotStartServerError,
     DeleteServerError,
     IntermittentError,
-    JSCacheError,
     PatchServerError,
 )
 from renku_data_services.notebooks.errors.programming import ProgrammingError
@@ -362,14 +362,14 @@ class ServerCache(Generic[_SessionType]):
             res = await self.client.get(url, timeout=10)
         except httpx.RequestError as err:
             logging.warning(f"Jupyter server cache at {url} cannot be reached: {err}")
-            raise JSCacheError("The jupyter server cache is not available")
+            raise CacheError("The jupyter server cache is not available")
         if res.status_code != 200:
             logging.warning(
                 f"Listing servers at {url} from "
                 f"jupyter server cache failed with status code: {res.status_code} "
                 f"and body: {res.text}"
             )
-            raise JSCacheError(f"The JSCache produced an unexpected status code: {res.status_code}")
+            raise CacheError(f"The JSCache produced an unexpected status code: {res.status_code}")
 
         return [self.server_type.model_validate(server) for server in res.json()]
 
@@ -380,14 +380,14 @@ class ServerCache(Generic[_SessionType]):
             res = await self.client.get(url, timeout=10)
         except httpx.RequestError as err:
             logging.warning(f"Jupyter server cache at {url} cannot be reached: {err}")
-            raise JSCacheError("The jupyter server cache is not available")
+            raise CacheError("The jupyter server cache is not available")
         if res.status_code != 200:
             logging.warning(
                 f"Reading server at {url} from "
                 f"jupyter server cache failed with status code: {res.status_code} "
                 f"and body: {res.text}"
             )
-            raise JSCacheError(f"The JSCache produced an unexpected status code: {res.status_code}")
+            raise CacheError(f"The JSCache produced an unexpected status code: {res.status_code}")
         output = res.json()
         if len(output) == 0:
             return None
@@ -419,7 +419,7 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
         """
         try:
             return await self.cache.list_servers(safe_username)
-        except JSCacheError:
+        except CacheError:
             logging.warning(f"Skipping the cache to list servers for user: {safe_username}")
             label_selector = f"{self.username_label}={safe_username}"
             return await self.renku_ns_client.list_servers(label_selector)
@@ -432,7 +432,7 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
         server = None
         try:
             server = await self.cache.get_server(name)
-        except JSCacheError:
+        except CacheError:
             server = await self.renku_ns_client.get_server(name)
 
         if server and server.metadata and server.metadata.labels.get(self.username_label) != safe_username:
