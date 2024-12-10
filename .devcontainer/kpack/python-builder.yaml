@@ -4,7 +4,7 @@ metadata:
   name: python-builder
   namespace: default
 spec:
-  tag: k3d-myregistry.localhost:12345/apps/python-builder
+  tag: kpack-registry.local:5000/apps/python-builder:latest
   stack:
     name: base
     kind: ClusterStack
