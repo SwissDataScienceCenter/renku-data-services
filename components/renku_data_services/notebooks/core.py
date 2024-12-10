@@ -7,7 +7,7 @@ from pathlib import PurePosixPath
 from typing import Any
 
 import escapism
-import requests
+import httpx
 from gitlab.const import Visibility as GitlabVisibility
 from gitlab.v4.objects.projects import Project as GitlabProject
 from sanic.log import logger
@@ -33,6 +33,7 @@ from renku_data_services.notebooks.errors import intermittent
 from renku_data_services.notebooks.errors import user as user_errors
 from renku_data_services.notebooks.util import repository
 from renku_data_services.notebooks.util.kubernetes_ import find_container, renku_1_make_server_name
+from renku_data_services.users.db import UserRepo
 
 
 def notebooks_info(config: NotebooksConfig) -> dict:
@@ -313,6 +314,7 @@ async def launch_notebook_helper(
     default_url: str,
     lfs_auto_fetch: bool,
     cloudstorage: list[apispec.RCloneStorageRequest],
+    cloudstorage_endpoint: str,
     server_options: ServerOptions | dict | None,
     namespace: str | None,  # Renku 1.0
     project: str | None,  # Renku 1.0
@@ -325,6 +327,7 @@ async def launch_notebook_helper(
     launcher_id: str | None,  # Renku 2.0
     repositories: list[apispec.LaunchNotebookRequestRepository] | None,  # Renku 2.0
     internal_gitlab_user: APIUser,
+    user_repo: UserRepo,
 ) -> tuple[UserServerManifest, int]:
     """Helper function to launch a Jupyter server."""
 
@@ -444,17 +447,18 @@ async def launch_notebook_helper(
 
     storages: list[RCloneStorage] = []
     if cloudstorage:
-        gl_project_id = gl_project.id if gl_project is not None else 0
+        user_secret_key = await user_repo.get_or_create_user_secret_key(user)
         try:
             for cstorage in cloudstorage:
                 storages.append(
                     await RCloneStorage.storage_from_schema(
                         cstorage.model_dump(),
                         user=user,
-                        project_id=gl_project_id,
+                        endpoint=cloudstorage_endpoint,
                         work_dir=server_work_dir,
                         config=nb_config,
                         internal_gitlab_user=internal_gitlab_user,
+                        user_secret_key=user_secret_key,
                     )
                 )
         except errors.ValidationError as e:
@@ -517,37 +521,54 @@ async def launch_notebook_helper(
 
     logger.debug(f"Server {server.server_name} has been started")
 
-    if k8s_user_secret is not None:
-        owner_reference = {
-            "apiVersion": "amalthea.dev/v1alpha1",
-            "kind": "JupyterServer",
-            "name": server.server_name,
-            "uid": manifest.metadata.uid,
-        }
-        request_data = {
-            "name": k8s_user_secret.name,
-            "namespace": server.k8s_client.preferred_namespace,
-            "secret_ids": [str(id_) for id_ in k8s_user_secret.user_secret_ids],
-            "owner_references": [owner_reference],
-        }
-        headers = {"Authorization": f"bearer {user.access_token}"}
+    owner_reference = {
+        "apiVersion": "amalthea.dev/v1alpha1",
+        "kind": "JupyterServer",
+        "name": server.server_name,
+        "uid": manifest.metadata.uid,
+    }
 
+    async def create_secret(payload: dict[str, Any], type_message: str) -> None:
         async def _on_error(server_name: str, error_msg: str) -> None:
             await nb_config.k8s_client.delete_server(server_name, safe_username=user.id)
             raise RuntimeError(error_msg)
 
         try:
-            response = requests.post(
-                nb_config.user_secrets.secrets_storage_service_url + "/api/secrets/kubernetes",
-                json=request_data,
-                headers=headers,
-                timeout=10,
-            )
-        except requests.exceptions.ConnectionError:
-            await _on_error(server.server_name, "User secrets storage service could not be contacted {exc}")
+            async with httpx.AsyncClient(timeout=10) as client:
+                response = await client.post(
+                    nb_config.user_secrets.secrets_storage_service_url + "/api/secrets/kubernetes",
+                    json=payload,
+                    headers={"Authorization": f"bearer {user.access_token}"},
+                )
+        except httpx.ConnectError as exc:
+            await _on_error(server_name, f"{type_message} storage service could not be contacted {exc}")
+        else:
+            if response.status_code != 201:
+                await _on_error(server_name, f"{type_message} could not be created {response.json()}")
 
-        if response.status_code != 201:
-            await _on_error(server.server_name, f"User secret could not be created {response.json()}")
+    if k8s_user_secret is not None:
+        request_data: dict[str, Any] = {
+            "name": k8s_user_secret.name,
+            "namespace": server.k8s_client.preferred_namespace,
+            "secret_ids": [str(id_) for id_ in k8s_user_secret.user_secret_ids],
+            "owner_references": [owner_reference],
+        }
+        await create_secret(payload=request_data, type_message="User secrets")
+
+    # NOTE: Create a secret for each storage that has saved secrets
+    for icloud_storage, cloud_storage in enumerate(storages):
+        if cloud_storage.secrets and cloud_storage.base_name:
+            base_name = cloud_storage.base_name
+            if not base_name:
+                base_name = f"{server_name}-ds-{icloud_storage}"
+            request_data = {
+                "name": f"{base_name}-secrets",
+                "namespace": server.k8s_client.preferred_namespace,
+                "secret_ids": list(cloud_storage.secrets.keys()),
+                "owner_references": [owner_reference],
+                "key_mapping": cloud_storage.secrets,
+            }
+            await create_secret(payload=request_data, type_message="Saved storage secrets")
 
     return UserServerManifest(manifest, nb_config.sessions.default_image), 201
 
@@ -557,6 +578,7 @@ async def launch_notebook(
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     internal_gitlab_user: APIUser,
     launch_request: apispec.LaunchNotebookRequestOld,
+    user_repo: UserRepo,
 ) -> tuple[UserServerManifest, int]:
     """Starts a server using the old operator."""
     if isinstance(user, AnonymousAPIUser):
@@ -612,6 +634,8 @@ async def launch_notebook(
         launcher_id=None,
         repositories=None,
         internal_gitlab_user=internal_gitlab_user,
+        user_repo=user_repo,
+        cloudstorage_endpoint="/storage",
     )
 
 

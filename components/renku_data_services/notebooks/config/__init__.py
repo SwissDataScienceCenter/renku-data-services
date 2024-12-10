@@ -71,7 +71,7 @@ class StorageValidatorProto(Protocol):
     """Cloud storage validator protocol."""
 
     async def get_storage_by_id(
-        self, user: APIUser, internal_gitlab_user: APIUser, project_id: int, storage_id: str
+        self, user: APIUser, internal_gitlab_user: APIUser, endpoint: str, storage_id: str
     ) -> CloudStorageConfig:
         """Get storage by ID."""
         ...
