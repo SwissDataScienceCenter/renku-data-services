@@ -10,8 +10,10 @@ import requests
 from gitlab.const import Visibility as GitlabVisibility
 from gitlab.v4.objects.projects import Project as GitlabProject
 from sanic.log import logger
+from sanic.response import JSONResponse
 
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser
+from renku_data_services.base_models.validation import validated_json
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
@@ -23,6 +25,7 @@ from renku_data_services.notebooks.api.classes.user import NotebooksGitlabClient
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_data_services.notebooks.api.schemas.secrets import K8sUserSecrets
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
+from renku_data_services.notebooks.api.schemas.servers_get import NotebookResponse
 from renku_data_services.notebooks.api.schemas.servers_patch import PatchServerStatusEnum
 from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.notebooks.errors import intermittent
@@ -64,7 +67,7 @@ def notebooks_info(config: NotebooksConfig) -> dict:
 
 async def user_servers(
     config: NotebooksConfig, user: AnonymousAPIUser | AuthenticatedAPIUser, filter_attrs: list[dict]
-) -> dict:
+) -> dict[str, UserServerManifest]:
     """Returns a filtered list of servers for the given user."""
 
     servers = [
@@ -602,3 +605,20 @@ async def launch_notebook(
         repositories=None,
         internal_gitlab_user=internal_gitlab_user,
     )
+
+
+def serialize_v1_server(manifest: UserServerManifest, nb_config: NotebooksConfig, status: int = 200) -> JSONResponse:
+    """Format and serialize a Renku v1 JupyterServer manifest."""
+    data = NotebookResponse().dump(NotebookResponse.format_user_pod_data(manifest, nb_config))
+    return validated_json(apispec.NotebookResponse, data, status=status)
+
+
+def serialize_v1_servers(
+    manifests: dict[str, UserServerManifest], nb_config: NotebooksConfig, status: int = 200
+) -> JSONResponse:
+    """Format and serialize many Renku v1 JupyterServer manifests."""
+    data = {
+        manifest.server_name: NotebookResponse().dump(NotebookResponse.format_user_pod_data(manifest, nb_config))
+        for manifest in sorted(manifests.values(), key=lambda x: x.server_name)
+    }
+    return validated_json(apispec.ServersGetResponse, {"servers": data}, status=status)
