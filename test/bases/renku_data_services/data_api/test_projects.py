@@ -1362,7 +1362,7 @@ async def test_project_copy_succeeds_even_if_data_connector_is_inaccessible(
     environment = await create_session_environment("Environment")
     await create_session_launcher("Launcher", project["id"], environment={"id": environment["id"]})
     # NOTE: Create a data connector that regular user cannot access
-    await create_data_connector_and_link_project("Connector", project_id=project_id, admin=True)
+    await create_data_connector_and_link_project("Admin Connector", project_id=project_id, admin=True)
 
     payload = {
         "name": "Copy Project",
@@ -1374,7 +1374,7 @@ async def test_project_copy_succeeds_even_if_data_connector_is_inaccessible(
 
     # NOTE: The copy is created, but the status code indicates that one or more data connectors cannot be copied
     assert response.status_code == 403, response.text
-    assert "The project was copied but there is no permission to copy data connectors" in response.text
+    assert "The project was copied but data connector with name 'Admin Connector' was not" in response.text
 
 
 @pytest.mark.asyncio
