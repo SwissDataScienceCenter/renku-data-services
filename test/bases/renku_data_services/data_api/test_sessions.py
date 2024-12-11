@@ -80,11 +80,21 @@ async def test_get_session_environment(
 
 
 @pytest.mark.asyncio
-async def test_post_session_environment(sanic_client: SanicASGITestClient, admin_headers) -> None:
+@pytest.mark.parametrize(
+    "image_name",
+    [
+        "renku/renku",
+        "u/renku/renku:latest",
+        "docker.io/renku/renku:latest",
+        "renku/renku@sha256:eceed25752d7544db159e4144a41ed6e96e667f39ff9fa18322d79c33729a18c",
+        "registry.renkulab.io/john.doe/test-34:38d8b3d",
+    ],
+)
+async def test_post_session_environment(sanic_client: SanicASGITestClient, admin_headers, image_name: str) -> None:
     payload = {
         "name": "Environment 1",
         "description": "A session environment.",
-        "container_image": "some_image:some_tag",
+        "container_image": image_name,
     }
 
     _, res = await sanic_client.post("/api/data/environments", headers=admin_headers, json=payload)
@@ -93,7 +103,32 @@ async def test_post_session_environment(sanic_client: SanicASGITestClient, admin
     assert res.json is not None
     assert res.json.get("name") == "Environment 1"
     assert res.json.get("description") == "A session environment."
-    assert res.json.get("container_image") == "some_image:some_tag"
+    assert res.json.get("container_image") == image_name
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "image_name",
+    [
+        "https://example.com/r/test:latest",
+        "renku/_bla",
+        "renku/test:töst",
+        "renku/test@sha254:abcd",
+        " renku/test:latest",
+    ],
+)
+async def test_post_session_environment_invalid_image(
+    sanic_client: SanicASGITestClient, admin_headers, image_name: str
+) -> None:
+    payload = {
+        "name": "Environment 1",
+        "description": "A session environment.",
+        "container_image": image_name,
+    }
+
+    _, res = await sanic_client.post("/api/data/environments", headers=admin_headers, json=payload)
+
+    assert res.status_code == 422, res.text
 
 
 @pytest.mark.asyncio
