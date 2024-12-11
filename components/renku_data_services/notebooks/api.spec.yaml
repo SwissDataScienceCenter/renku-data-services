@@ -71,26 +71,6 @@ paths:
           description: Server options such as CPU, memory, storage, etc.
       tags:
       - notebooks
-  "/notebooks/old/servers":
-    post:
-      summary: Launch a new session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LaunchNotebookRequestOld"
-      responses:
-        "201":
-          description: The project was created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/NotebookResponse"
-        default:
-          $ref: "#/components/responses/Error"
-      tags:
-        - notebooks
   "/notebooks/servers":
     post:
       summary: Launch a new session
@@ -99,7 +79,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/LaunchNotebookRequest"
+              $ref: "#/components/schemas/LaunchNotebookRequestOld"
       responses:
         "201":
           description: The project was created
