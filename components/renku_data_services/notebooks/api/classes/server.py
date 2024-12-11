@@ -332,11 +332,14 @@ class UserServer(ABC):
     def get_annotations(self) -> dict[str, str | None]:
         """Get the annotations for the session."""
         prefix = self._get_renku_annotation_prefix()
+        username = self._user.id
+        if isinstance(self.user, AuthenticatedAPIUser) and self._user.email:
+            username = self._user.email
         annotations = {
             f"{prefix}commit-sha": None,
             f"{prefix}gitlabProjectId": None,
             f"{prefix}safe-username": self._user.id,
-            f"{prefix}username": self._user.id,
+            f"{prefix}username": username,
             f"{prefix}userId": self._user.id,
             f"{prefix}servername": self.server_name,
             f"{prefix}branch": None,
