@@ -6,6 +6,7 @@ from math import floor
 from pathlib import PurePosixPath
 from typing import Any
 
+import escapism
 import requests
 from gitlab.const import Visibility as GitlabVisibility
 from gitlab.v4.objects.projects import Project as GitlabProject
@@ -558,9 +559,16 @@ async def launch_notebook(
     launch_request: apispec.LaunchNotebookRequestOld,
 ) -> tuple[UserServerManifest, int]:
     """Starts a server using the old operator."""
-
+    if isinstance(user, AnonymousAPIUser):
+        safe_username = escapism.escape(user.id, escape_char="-").lower()
+    else:
+        safe_username = escapism.escape(user.email, escape_char="-").lower()
     server_name = renku_1_make_server_name(
-        user.id, launch_request.namespace, launch_request.project, launch_request.branch, launch_request.commit_sha
+        safe_username,
+        launch_request.namespace,
+        launch_request.project,
+        launch_request.branch,
+        launch_request.commit_sha,
     )
     project_slug = f"{launch_request.namespace}/{launch_request.project}"
     gitlab_client = NotebooksGitlabClient(config.git.url, APIUser.access_token)

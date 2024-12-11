@@ -165,7 +165,7 @@ class NotebooksConfig:
         k8s_client = K8sClient(
             cache=js_cache,
             renku_ns_client=renku_ns_client,
-            username_label="renku.io/safe-username",
+            username_label="renku.io/userId",
             # NOTE: if testing then we should skip the cache if unavailable because we dont deploy the cache in tests
             skip_cache_if_unavailable=dummy_stores,
         )
@@ -176,6 +176,7 @@ class NotebooksConfig:
         k8s_v2_client = K8sClient(
             cache=v2_cache,
             renku_ns_client=renku_ns_v2_client,
+            # NOTE: v2 sessions have no userId label, the safe-username label is the keycloak user ID
             username_label="renku.io/safe-username",
             # NOTE: if testing then we should skip the cache if unavailable because we dont deploy the cache in tests
             skip_cache_if_unavailable=dummy_stores,
