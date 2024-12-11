@@ -241,9 +241,13 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
         except NotFoundError:
             return None
 
-        containers: list[V1Container] = [V1Container(**container) for container in sts.spec.template.spec.containers]
+        containers: list[V1Container] = [
+            V1Container(**container)
+            for container in sts.raw.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
+        ]
         init_containers: list[V1Container] = [
-            V1Container(**container) for container in sts.spec.template.spec.init_containers
+            V1Container(**container)
+            for container in sts.raw.get("spec", {}).get("template", {}).get("spec", {}).get("initContainers", [])
         ]
 
         git_proxy_container_index, git_proxy_container = next(
