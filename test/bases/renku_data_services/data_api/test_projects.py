@@ -1374,7 +1374,7 @@ async def test_project_copy_succeeds_even_if_data_connector_is_inaccessible(
 
     # NOTE: The copy is created, but the status code indicates that one or more data connectors cannot be copied
     assert response.status_code == 403, response.text
-    assert "The project was copied but data connector with name 'Admin Connector' was not" in response.text
+    assert "was copied but data connector with name 'Admin Connector (admin.doe/admin-connector)'" in response.text
 
 
 @pytest.mark.asyncio
