@@ -55,8 +55,15 @@ async def jupyter_server(renku_image: str, server_name: str, pod_name: str) -> A
 
     server = await JupyterServerV1Alpha1Kr8s(
         {
-            "metadata": {"name": server_name, "labels": {"renku.io/safe-username": "user"}},
-            "spec": {"jupyterServer": {"image": renku_image}, "routing": {"host": "locahost"}, "auth": {"token": ""}},
+            "metadata": {
+                "name": server_name,
+                "labels": {"renku.io/safe-username": "user", "renku.io/userId": "user"},
+            },
+            "spec": {
+                "jupyterServer": {"image": renku_image},
+                "routing": {"host": "locahost"},
+                "auth": {"token": ""},
+            },
         }
     )
 
@@ -93,7 +100,7 @@ async def practice_jupyter_server(renku_image: str, server_name: str) -> AsyncIt
         {
             "metadata": {
                 "name": server_name,
-                "labels": {"renku.io/safe-username": "user"},
+                "labels": {"renku.io/safe-username": "user", "renku.io/userId": "user"},
                 "annotations": {
                     "renku.io/branch": "dummy",
                     "renku.io/commit-sha": "sha",

@@ -618,7 +618,7 @@ async def launch_notebook(
 def serialize_v1_server(manifest: UserServerManifest, nb_config: NotebooksConfig, status: int = 200) -> JSONResponse:
     """Format and serialize a Renku v1 JupyterServer manifest."""
     data = NotebookResponse().dump(NotebookResponse.format_user_pod_data(manifest, nb_config))
-    return validated_json(apispec.NotebookResponse, data, status=status)
+    return validated_json(apispec.NotebookResponse, data, status=status, model_dump_kwargs=dict(by_alias=True))
 
 
 def serialize_v1_servers(
@@ -629,4 +629,6 @@ def serialize_v1_servers(
         manifest.server_name: NotebookResponse().dump(NotebookResponse.format_user_pod_data(manifest, nb_config))
         for manifest in sorted(manifests.values(), key=lambda x: x.server_name)
     }
-    return validated_json(apispec.ServersGetResponse, {"servers": data}, status=status)
+    return validated_json(
+        apispec.ServersGetResponse, {"servers": data}, status=status, model_dump_kwargs=dict(by_alias=True)
+    )
