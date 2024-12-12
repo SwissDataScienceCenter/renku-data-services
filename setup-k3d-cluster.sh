@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
 
 KPACK_VERSION=0.15.0
+SHIPWRIGHT_VERSION=v0.14.0
 INTERNL_RE="host\.k3d\.internal"
-REGISTRY_NAME="kpack-registry.local"
+REGISTRY_NAME="dev-registry.local"
 REGISTRY_PORT=5000
 REGISTRY_URI=$REGISTRY_NAME:$REGISTRY_PORT
 K3D_REGISTRY_NAME="k3d-$REGISTRY_NAME"
+CLUSTER_NAME="devel"
+
+function delete_all() {
+    k3d cluster delete $CLUSTER_NAME
+    k3d registry delete $REGISTRY_NAME
+}
 
 function setup_registry() {
     set +e
@@ -19,6 +26,21 @@ function setup_registry() {
         k3d registry create $REGISTRY_NAME -p $REGISTRY_PORT
     else
         echo "Registry $REGISTRY_NAME already exist -> reusing."
+    fi
+}
+
+function setup_cluster() {
+    set +e
+    cluster=$(k3d cluster list | grep $CLUSTER_NAME)
+
+    set -e
+
+    if [[ "$cluster" == "" ]]
+    then
+        echo "Creating cluster $CLUSTER_NAME"
+        k3d cluster create $CLUSTER_NAME --registry-use $K3D_REGISTRY_NAME:$REGISTRY_PORT --registry-config registries.yaml --agents 1 --k3s-arg --disable=metrics-server@server:0
+    else
+        echo "Cluster $CLUSTER_NAME already exist -> reusing."
     fi
 }
 
@@ -82,17 +104,76 @@ function setup_kpack() {
     kubectl wait --for=condition=Ready=True builder.kpack.io/python-builder
 }
 
+function setup_shipwright() {
+    # Setup tekton
+    curl --silent --location https://raw.githubusercontent.com/shipwright-io/build/$SHIPWRIGHT_VERSION/hack/install-tekton.sh | bash
+
+    # Setup Shipwright
+    kubectl apply --filename https://github.com/shipwright-io/build/releases/download/$SHIPWRIGHT_VERSION/release.yaml --server-side
+    curl --silent --location https://raw.githubusercontent.com/shipwright-io/build/$SHIPWRIGHT_VERSION/hack/setup-webhook-cert.sh | bash
+    curl --silent --location https://raw.githubusercontent.com/shipwright-io/build/main/hack/storage-version-migration.sh | bash
+
+    # Install Shipwright strategies
+    kubectl apply --filename https://github.com/shipwright-io/build/releases/download/$SHIPWRIGHT_VERSION/sample-strategies.yaml --server-side
+
+    set -x
+}
+
+function test_shipwright_build() {
+    cat <<EOF | kubectl apply -f -
+apiVersion: shipwright.io/v1beta1
+kind: Build
+metadata:
+  name: buildpack-nodejs-build
+spec:
+  source:
+    type: Git
+    git:
+      url: https://github.com/shipwright-io/sample-nodejs
+    contextDir: source-build
+  strategy:
+    name: buildpacks-v3
+    kind: ClusterBuildStrategy
+  output:
+    image: ${REGISTRY_URI}/sample-nodejs:latest
+EOF
+    cat <<EOF | kubectl create -f -
+    apiVersion: shipwright.io/v1beta1
+    kind: BuildRun
+    metadata:
+      generateName: buildpack-nodejs-buildrun-
+    spec:
+      build:
+        name: buildpack-nodejs-build
+EOF
+}
+
+reset=false
 deploy_kpack=false
+deploy_shipwright=false
 create_image=false
+test_build=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --reset)
+            reset=true
+            shift # past value
+            ;;
         --deploy-kpack)
             deploy_kpack=true
             shift # past value
             ;;
+        --deploy-shipwright)
+            deploy_shipwright=true
+            shift # past value
+            ;;
         --create-image)
             create_image=true
+            shift # past value
+            ;;
+        --test-build)
+            test_build=true
             shift # past value
             ;;
         -*|--*)
@@ -102,20 +183,33 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-setup_registry
+if [[ $reset == true ]]
+then
+    delete_all
+fi
 
-set -e
-k3d cluster create kpack-test --registry-use $K3D_REGISTRY_NAME:$REGISTRY_PORT --registry-config registries.yaml --agents 1 --k3s-arg --disable=metrics-server@server:0
+setup_registry
+setup_cluster
 
 setup_dns
-copy_image
 
 if [[ $deploy_kpack == true ]]
 then
+    copy_image
     setup_kpack
+fi
+
+if [[ $deploy_shipwright == true ]]
+then
+    setup_shipwright
 fi
 
 if [[ $create_image == true ]]
 then
     kubectl apply -f image.yaml
+fi
+
+if [[ $test_build == true ]]
+then
+    test_shipwright_build
 fi
