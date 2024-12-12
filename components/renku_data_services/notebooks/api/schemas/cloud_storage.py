@@ -226,38 +226,37 @@ class RCloneStorage(ICloudStorageRequest):
         if not self.configuration:
             raise ValidationError("Missing configuration for cloud storage")
         # TODO Use RCloneValidator.get_real_configuration(...) instead.
-        real_config = dict(self.configuration)
         # Transform configuration for polybox, switchDrive or openBIS
         storage_type = self.configuration.get("type", "")
         access = self.configuration.get("provider", "")
 
         if storage_type == "polybox" or storage_type == "switchDrive":
-            real_config["type"] = "webdav"
-            real_config["provider"] = ""
+            self.configuration["type"] = "webdav"
+            self.configuration["provider"] = ""
         elif storage_type == "s3" and access == "Switch":
             # Switch is a fake provider we add for users, we need to replace it since rclone itself
             # doesn't know it
-            real_config["provider"] = "Other"
+            self.configuration["provider"] = "Other"
         elif storage_type == "openbis":
-            real_config["type"] = "sftp"
-            real_config["port"] = "2222"
-            real_config["user"] = "?"
-            real_config["pass"] = real_config.pop("session_token")
+            self.configuration["type"] = "sftp"
+            self.configuration["port"] = "2222"
+            self.configuration["user"] = "?"
+            self.configuration["pass"] = self.configuration.pop("session_token", self.configuration["pass"])
 
         if access == "shared" and storage_type == "polybox":
-            real_config["url"] = "https://polybox.ethz.ch/public.php/webdav/"
+            self.configuration["url"] = "https://polybox.ethz.ch/public.php/webdav/"
         elif access == "shared" and storage_type == "switchDrive":
-            real_config["url"] = "https://drive.switch.ch/public.php/webdav/"
+            self.configuration["url"] = "https://drive.switch.ch/public.php/webdav/"
         elif access == "personal" and storage_type == "polybox":
-            real_config["url"] = "https://polybox.ethz.ch/remote.php/webdav/"
+            self.configuration["url"] = "https://polybox.ethz.ch/remote.php/webdav/"
         elif access == "personal" and storage_type == "switchDrive":
-            real_config["url"] = "https://drive.switch.ch/remote.php/webdav/"
+            self.configuration["url"] = "https://drive.switch.ch/remote.php/webdav/"
 
         # Extract the user from the public link
         if access == "shared" and storage_type in {"polybox", "switchDrive"}:
             public_link = self.configuration.get("public_link", "")
             user_identifier = public_link.split("/")[-1]
-            real_config["user"] = user_identifier
+            self.configuration["user"] = user_identifier
 
         parser = ConfigParser()
         parser.add_section(name)
@@ -267,7 +266,7 @@ class RCloneStorage(ICloudStorageRequest):
                 return "true" if value else "false"
             return str(value)
 
-        for k, v in real_config.items():
+        for k, v in self.configuration.items():
             parser.set(name, k, _stringify(v))
         stringio = StringIO()
         parser.write(stringio)
