@@ -8,9 +8,10 @@ from typing import Any, Generic, Optional, TypeVar, cast
 from urllib.parse import urljoin
 
 import httpx
+from box import Box
 from kr8s import NotFoundError, ServerError
 from kr8s.asyncio.objects import APIObject, Pod, Secret, StatefulSet
-from kubernetes.client import ApiClient, V1Container, V1Secret
+from kubernetes.client import ApiClient, V1Secret
 
 from renku_data_services.errors import errors
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
@@ -241,14 +242,8 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
         except NotFoundError:
             return None
 
-        containers: list[V1Container] = [
-            V1Container(**container)
-            for container in sts.raw.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
-        ]
-        init_containers: list[V1Container] = [
-            V1Container(**container)
-            for container in sts.raw.get("spec", {}).get("template", {}).get("spec", {}).get("initContainers", [])
-        ]
+        containers = cast(list[Box], sts.spec.template.spec.containers)
+        init_containers = cast(list[Box], sts.spec.template.spec.initContainers)
 
         git_proxy_container_index, git_proxy_container = next(
             ((i, c) for i, c in enumerate(containers) if c.name == "git-proxy"),
@@ -263,23 +258,26 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
             (None, None),
         )
 
+        def _get_env(container: Box) -> list[Box]:
+            return cast(list[Box], container.env)
+
         git_proxy_renku_access_token_env = (
-            find_env_var(git_proxy_container, "GIT_PROXY_RENKU_ACCESS_TOKEN")
+            find_env_var(_get_env(git_proxy_container), "GIT_PROXY_RENKU_ACCESS_TOKEN")
             if git_proxy_container is not None
             else None
         )
         git_proxy_renku_refresh_token_env = (
-            find_env_var(git_proxy_container, "GIT_PROXY_RENKU_REFRESH_TOKEN")
+            find_env_var(_get_env(git_proxy_container), "GIT_PROXY_RENKU_REFRESH_TOKEN")
             if git_proxy_container is not None
             else None
         )
         git_clone_renku_access_token_env = (
-            find_env_var(git_clone_container, "GIT_CLONE_USER__RENKU_TOKEN")
+            find_env_var(_get_env(git_clone_container), "GIT_CLONE_USER__RENKU_TOKEN")
             if git_clone_container is not None
             else None
         )
         secrets_renku_access_token_env = (
-            find_env_var(secrets_container, "RENKU_ACCESS_TOKEN") if secrets_container is not None else None
+            find_env_var(_get_env(secrets_container), "RENKU_ACCESS_TOKEN") if secrets_container is not None else None
         )
 
         patches = list()
