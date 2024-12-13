@@ -342,7 +342,7 @@ async def launch_notebook_helper(
         # A specific image was requested
         parsed_image = Image.from_path(image)
         image_repo = parsed_image.repo_api()
-        image_exists_publicly = image_repo.image_exists(parsed_image)
+        image_exists_publicly = await image_repo.image_exists(parsed_image)
         image_exists_privately = False
         if (
             not image_exists_publicly
@@ -376,7 +376,7 @@ async def launch_notebook_helper(
         image_repo = parsed_image.repo_api().maybe_with_oauth2_token(
             nb_config.git.registry, internal_gitlab_user.access_token
         )
-        if not image_repo.image_exists(parsed_image):
+        if not await image_repo.image_exists(parsed_image):
             raise errors.MissingResourceError(
                 message=(
                     f"Cannot start the session because the following the image {image} does not "
