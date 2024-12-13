@@ -305,7 +305,7 @@ async def launch_notebook_helper(
     server_name: str,
     server_class: type[UserServer],
     user: AnonymousAPIUser | AuthenticatedAPIUser,
-    image: str,
+    image: str | None,
     resource_class_id: int | None,
     storage: int | None,
     environment_variables: dict[str, str],
@@ -571,7 +571,7 @@ async def launch_notebook(
         launch_request.commit_sha,
     )
     project_slug = f"{launch_request.namespace}/{launch_request.project}"
-    gitlab_client = NotebooksGitlabClient(config.git.url, APIUser.access_token)
+    gitlab_client = NotebooksGitlabClient(config.git.url, internal_gitlab_user.access_token)
     gl_project = gitlab_client.get_renku_project(project_slug)
     if gl_project is None:
         raise errors.MissingResourceError(message=f"Cannot find gitlab project with slug {project_slug}")
@@ -592,7 +592,7 @@ async def launch_notebook(
         server_name=server_name,
         server_class=server_class,
         user=user,
-        image=launch_request.image or config.sessions.default_image,
+        image=launch_request.image,
         resource_class_id=launch_request.resource_class_id,
         storage=launch_request.storage,
         environment_variables=launch_request.environment_variables,
