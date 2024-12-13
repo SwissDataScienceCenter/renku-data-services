@@ -1,5 +1,6 @@
 """An abstraction over the kr8s kubernetes client and the k8s-watcher."""
 
+import asyncio
 import base64
 import json
 import logging
@@ -176,13 +177,22 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
             raise DeleteServerError()
         return None
 
-    async def get_server(self, name: str) -> _SessionType | None:
+    async def get_server(self, name: str, num_retries: int = 0) -> _SessionType | None:
         """Get a specific JupyterServer object."""
         try:
             server = await self._kr8s_type.get(name=name, namespace=self.namespace)
         except NotFoundError:
             return None
         except ServerError as err:
+            if err.response is not None and err.response.status_code == 429:
+                retry_after_sec = err.response.headers.get("Retry-After")
+                logging.warning(
+                    "Received 429 status code from k8s when getting server "
+                    f"will wait for {retry_after_sec} seconds and retry"
+                )
+                if isinstance(retry_after_sec, str) and retry_after_sec.isnumeric() and num_retries < 3:
+                    await asyncio.sleep(int(retry_after_sec))
+                    return await self.get_server(name, num_retries=num_retries + 1)
             if err.response is None or err.response.status_code not in [400, 404]:
                 logging.exception(f"Cannot get server {name} because of {err}")
                 raise IntermittentError(f"Cannot get server {name} from the k8s API.")
