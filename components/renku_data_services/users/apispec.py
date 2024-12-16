@@ -198,12 +198,17 @@ class SecretWithId(BaseAPISpec):
         min_length=1,
         pattern="^[a-zA-Z0-9_\\-.]*$",
     )
+    kind: SecretKind
+    expiration_timestamp: Optional[datetime] = Field(
+        None,
+        description="The date and time the secret is not valid anymore (this is in any timezone)",
+        example="2030-11-01T17:32:28UTC+01:00",
+    )
     modification_date: datetime = Field(
         ...,
         description="The date and time the secret was created or modified (this is always in UTC)",
         example="2023-11-01T17:32:28Z",
     )
-    kind: SecretKind
 
 
 class SecretPost(BaseAPISpec):
@@ -225,6 +230,11 @@ class SecretPost(BaseAPISpec):
         min_length=1,
     )
     kind: SecretKind = SecretKind.general
+    expiration_timestamp: Optional[datetime] = Field(
+        None,
+        description="The date and time the secret is not valid anymore (this is in any timezone)",
+        example="2030-11-01T17:32:28UTC+01:00",
+    )
 
 
 class SecretPatch(BaseAPISpec):
@@ -236,6 +246,11 @@ class SecretPatch(BaseAPISpec):
         description="Secret value that can be any text",
         max_length=5000,
         min_length=1,
+    )
+    expiration_timestamp: Optional[datetime] = Field(
+        None,
+        description="The date and time the secret is not valid anymore (this is in any timezone)",
+        example="2030-11-01T17:32:28UTC+01:00",
     )
 
 
