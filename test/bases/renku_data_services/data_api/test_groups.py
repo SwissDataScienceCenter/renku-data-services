@@ -283,7 +283,7 @@ async def test_delete_group_member_invalid(sanic_client: SanicASGITestClient, us
 
     _, response = await sanic_client.delete(f"/api/data/groups/{group_slug}/members/%3A", headers=user_headers)
 
-    assert response.status_code == 0, response.text
+    assert response.status_code == 422, response.text
 
 
 @pytest.mark.asyncio
