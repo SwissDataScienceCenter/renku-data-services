@@ -271,6 +271,22 @@ async def test_removing_single_group_owner_not_allowed(
 
 
 @pytest.mark.asyncio
+async def test_delete_group_member_invalid(sanic_client: SanicASGITestClient, user_headers: dict[str, str]) -> None:
+    payload = {
+        "name": "demo group",
+        "slug": "demo-group",
+    }
+    _, response = await sanic_client.post("/api/data/groups", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    group = response.json
+    group_slug = group["slug"]
+
+    _, response = await sanic_client.delete(f"/api/data/groups/{group_slug}/members/%3A", headers=user_headers)
+
+    assert response.status_code == 0, response.text
+
+
+@pytest.mark.asyncio
 async def test_cannot_change_role_for_last_group_owner(
     sanic_client: SanicASGITestClient,
     user_headers: dict[str, str],
