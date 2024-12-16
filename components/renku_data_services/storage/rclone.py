@@ -4,6 +4,7 @@ import asyncio
 import json
 import tempfile
 from collections.abc import Generator
+from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple, Union, cast
 
@@ -93,7 +94,7 @@ class RCloneValidator:
     @staticmethod
     def __patch_schema_add_switch_provider(spec: list[dict[str, Any]]) -> None:
         """Adds a fake provider to help with setting up switch storage."""
-        s3 = next(s for s in spec if s["Prefix"] == "s3")
+        s3 = RCloneValidator.__find_storage(spec, "s3")
         providers = next(o for o in s3["Options"] if o["Name"] == "provider")
         providers["Examples"].append({"Value": "Switch", "Help": "Switch Object Storage", "Provider": ""})
         s3["Options"].append(
@@ -156,6 +157,101 @@ class RCloneValidator:
                         options.append(option)
                 storage["Options"] = options
 
+    @staticmethod
+    def __find_storage(spec: list[dict[str, Any]], prefix: str) -> dict[str, Any]:
+        """Find and return the WebDAV storage schema from the spec."""
+        storage = next((s for s in spec if s["Prefix"] == prefix), None)
+        if not storage:
+            raise errors.ValidationError(message=f"'{prefix}' storage not found in schema.")
+        return deepcopy(storage)
+
+    @staticmethod
+    def __add_webdav_based_storage(
+        spec: list[dict[str, Any]],
+        prefix: str,
+        name: str,
+        description: str,
+        url_value: str,
+        public_link_help: str,
+    ) -> None:
+        """Create a modified copy of WebDAV storage and add it to the schema."""
+        # Find WebDAV storage schema and create a modified copy
+        storage_copy = RCloneValidator.__find_storage(spec, "webdav")
+        storage_copy.update({"Prefix": prefix, "Name": name, "Description": description})
+
+        custom_options = [
+            {
+                "Name": "provider",
+                "Help": "Choose the mode to access the data source.",
+                "Provider": "",
+                "Default": "",
+                "Value": None,
+                "Examples": [
+                    {
+                        "Value": "personal",
+                        "Help": (
+                            "Connect to your personal storage space. "
+                            "This data connector cannot be used to share access to a folder."
+                        ),
+                        "Provider": "",
+                    },
+                    {
+                        "Value": "shared",
+                        "Help": (
+                            "Connect a 'public' folder shared with others. "
+                            "A 'public' folder may or may not be protected with a password."
+                        ),
+                        "Provider": "",
+                    },
+                ],
+                "Required": True,
+                "Type": "string",
+                "ShortOpt": "",
+                "Hide": 0,
+                "IsPassword": False,
+                "NoPrefix": False,
+                "Advanced": False,
+                "Exclusive": True,
+                "Sensitive": False,
+                "DefaultStr": "",
+                "ValueStr": "",
+            },
+            {
+                "Name": "public_link",
+                "Help": public_link_help,
+                "Provider": "shared",
+                "Default": "",
+                "Value": None,
+                "Examples": None,
+                "ShortOpt": "",
+                "Hide": 0,
+                "Required": True,
+                "IsPassword": False,
+                "NoPrefix": False,
+                "Advanced": False,
+                "Exclusive": False,
+                "Sensitive": False,
+                "DefaultStr": "",
+                "ValueStr": "",
+                "Type": "string",
+            },
+        ]
+        storage_copy["Options"].extend(custom_options)
+
+        # use provider to indicate if the option is for an personal o shared storage
+        for option in storage_copy["Options"]:
+            if option["Name"] == "url":
+                option.update({"Provider": "personal", "Default": url_value, "Required": False})
+            elif option["Name"] in ["bearer_token", "bearer_token_command", "headers", "user"]:
+                option["Provider"] = "personal"
+
+        # Remove obsolete options no longer applicable for Polybox or SwitchDrive
+        storage_copy["Options"] = [
+            o for o in storage_copy["Options"] if o["Name"] not in ["vendor", "nextcloud_chunk_size"]
+        ]
+
+        spec.append(storage_copy)
+
     def apply_patches(self, spec: list[dict[str, Any]]) -> None:
         """Apply patches to RClone schema."""
         patches = [
@@ -166,6 +262,25 @@ class RCloneValidator:
 
         for patch in patches:
             patch(spec)
+
+        # Apply patches for PolyBox and SwitchDrive to the schema.
+        self.__add_webdav_based_storage(
+            spec,
+            prefix="polybox",
+            name="PolyBox",
+            description="Polybox",
+            url_value="https://polybox.ethz.ch/remote.php/webdav/",
+            public_link_help="Shared folder link. E.g., https://polybox.ethz.ch/index.php/s/8NffJ3rFyHaVyyy",
+        )
+
+        self.__add_webdav_based_storage(
+            spec,
+            prefix="switchDrive",
+            name="SwitchDrive",
+            description="SwitchDrive",
+            url_value="https://drive.switch.ch/remote.php/webdav/",
+            public_link_help="Shared folder link. E.g., https://drive.switch.ch/index.php/s/OPSd72zrs5JG666",
+        )
 
     def validate(self, configuration: Union["RCloneConfig", dict[str, Any]], keep_sensitive: bool = False) -> None:
         """Validates an RClone config."""
@@ -182,10 +297,12 @@ class RCloneValidator:
         except errors.ValidationError as e:
             return ConnectionResult(False, str(e))
 
+        # Obscure configuration and transform if needed
         obscured_config = await self.obscure_config(configuration)
+        transformed_config = self.transform_polybox_switchdriver_config(obscured_config)
 
         with tempfile.NamedTemporaryFile(mode="w+", delete=False, encoding="utf-8") as f:
-            config = "\n".join(f"{k}={v}" for k, v in obscured_config.items())
+            config = "\n".join(f"{k}={v}" for k, v in transformed_config.items())
             f.write(f"[temp]\n{config}")
             f.close()
             proc = await asyncio.create_subprocess_exec(
@@ -244,6 +361,45 @@ class RCloneValidator:
         """Get private field descriptions for storage."""
         provider = self.get_provider(configuration)
         return provider.get_private_fields(configuration)
+
+    @staticmethod
+    def transform_polybox_switchdriver_config(
+        configuration: Union["RCloneConfig", dict[str, Any]],
+    ) -> Union["RCloneConfig", dict[str, Any]]:
+        """Transform the configuration for public access."""
+        storage_type = configuration.get("type")
+
+        # Only process Polybox or SwitchDrive configurations
+        if storage_type not in {"polybox", "switchDrive"}:
+            return configuration
+
+        configuration["type"] = "webdav"
+
+        provider = configuration.get("provider")
+
+        if provider == "personal":
+            configuration["url"] = configuration.get("url") or (
+                "https://polybox.ethz.ch/remote.php/webdav/"
+                if storage_type == "polybox"
+                else "https://drive.switch.ch/remote.php/webdav/"
+            )
+            return configuration
+
+        ## Set url and username when is a shared configuration
+        configuration["url"] = (
+            "https://polybox.ethz.ch/public.php/webdav/"
+            if storage_type == "polybox"
+            else "https://drive.switch.ch/public.php/webdav/"
+        )
+        public_link = configuration.get("public_link")
+
+        if not public_link:
+            raise ValueError("Missing 'public_link' for public access configuration.")
+
+        # Extract the user from the public link
+        configuration["user"] = public_link.split("/")[-1]
+
+        return configuration
 
 
 class RCloneTriState(BaseModel):

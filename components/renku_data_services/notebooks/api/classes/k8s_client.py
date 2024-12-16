@@ -404,6 +404,9 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
         cache: ServerCache[_SessionType],
         renku_ns_client: NamespacedK8sClient[_SessionType, _Kr8sType],
         username_label: str,
+        # NOTE: If cache skipping is enabled then when the cache fails a large number of
+        # sessions can overload the k8s API by submitting a lot of calls directly.
+        skip_cache_if_unavailable: bool = False,
     ):
         self.cache: ServerCache[_SessionType] = cache
         self.renku_ns_client: NamespacedK8sClient[_SessionType, _Kr8sType] = renku_ns_client
@@ -411,6 +414,7 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
         if not self.username_label:
             raise ProgrammingError("username_label has to be provided to K8sClient")
         self.sanitize = self.renku_ns_client.sanitize
+        self.skip_cache_if_unavailable = skip_cache_if_unavailable
 
     async def list_servers(self, safe_username: str) -> list[_SessionType]:
         """Get a list of servers that belong to a user.
@@ -420,9 +424,13 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
         try:
             return await self.cache.list_servers(safe_username)
         except JSCacheError:
-            logging.warning(f"Skipping the cache to list servers for user: {safe_username}")
-            label_selector = f"{self.username_label}={safe_username}"
-            return await self.renku_ns_client.list_servers(label_selector)
+            if self.skip_cache_if_unavailable:
+                logging.warning(f"Skipping the cache to list servers for user: {safe_username}")
+                # NOTE: The label selector ensures that users can only see their own servers
+                label_selector = f"{self.username_label}={safe_username}"
+                return await self.renku_ns_client.list_servers(label_selector)
+            else:
+                raise
 
     async def get_server(self, name: str, safe_username: str) -> _SessionType | None:
         """Attempt to get a specific server by name from the cache.
@@ -433,8 +441,13 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
         try:
             server = await self.cache.get_server(name)
         except JSCacheError:
-            server = await self.renku_ns_client.get_server(name)
+            if self.skip_cache_if_unavailable:
+                server = await self.renku_ns_client.get_server(name)
+            else:
+                raise
 
+        # NOTE: only the user that the server belongs to can read it, without the line
+        # below anyone can request and read any one else's server
         if server and server.metadata and server.metadata.labels.get(self.username_label) != safe_username:
             return None
         return server

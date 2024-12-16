@@ -10,29 +10,28 @@ import requests
 from gitlab.const import Visibility as GitlabVisibility
 from gitlab.v4.objects.projects import Project as GitlabProject
 from sanic.log import logger
+from sanic.response import JSONResponse
 
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser
+from renku_data_services.base_models.validation import validated_json
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
 from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.classes.repository import Repository
-from renku_data_services.notebooks.api.classes.server import Renku1UserServer, Renku2UserServer, UserServer
+from renku_data_services.notebooks.api.classes.server import Renku1UserServer, UserServer
 from renku_data_services.notebooks.api.classes.server_manifest import UserServerManifest
 from renku_data_services.notebooks.api.classes.user import NotebooksGitlabClient
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_data_services.notebooks.api.schemas.secrets import K8sUserSecrets
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
+from renku_data_services.notebooks.api.schemas.servers_get import NotebookResponse
 from renku_data_services.notebooks.api.schemas.servers_patch import PatchServerStatusEnum
 from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.notebooks.errors import intermittent
 from renku_data_services.notebooks.errors import user as user_errors
 from renku_data_services.notebooks.util import repository
-from renku_data_services.notebooks.util.kubernetes_ import (
-    find_container,
-    renku_1_make_server_name,
-    renku_2_make_server_name,
-)
+from renku_data_services.notebooks.util.kubernetes_ import find_container, renku_1_make_server_name
 
 
 def notebooks_info(config: NotebooksConfig) -> dict:
@@ -68,7 +67,7 @@ def notebooks_info(config: NotebooksConfig) -> dict:
 
 async def user_servers(
     config: NotebooksConfig, user: AnonymousAPIUser | AuthenticatedAPIUser, filter_attrs: list[dict]
-) -> dict:
+) -> dict[str, UserServerManifest]:
     """Returns a filtered list of servers for the given user."""
 
     servers = [
@@ -523,7 +522,6 @@ async def launch_notebook_helper(
             "kind": "JupyterServer",
             "name": server.server_name,
             "uid": manifest.metadata.uid,
-            "controller": True,
         }
         request_data = {
             "name": k8s_user_secret.name,
@@ -554,45 +552,6 @@ async def launch_notebook_helper(
 
 
 async def launch_notebook(
-    config: NotebooksConfig,
-    user: AnonymousAPIUser | AuthenticatedAPIUser,
-    internal_gitlab_user: APIUser,
-    launch_request: apispec.LaunchNotebookRequest,
-) -> tuple[UserServerManifest, int]:
-    """Starts a server."""
-
-    server_name = renku_2_make_server_name(
-        user=user, project_id=launch_request.project_id, launcher_id=launch_request.launcher_id
-    )
-    return await launch_notebook_helper(
-        nb_config=config,
-        server_name=server_name,
-        server_class=Renku2UserServer,
-        user=user,
-        image=launch_request.image or config.sessions.default_image,
-        resource_class_id=launch_request.resource_class_id,
-        storage=launch_request.storage,
-        environment_variables=launch_request.environment_variables,
-        user_secrets=launch_request.user_secrets,
-        default_url=config.server_options.default_url_default,
-        lfs_auto_fetch=config.server_options.lfs_auto_fetch_default,
-        cloudstorage=launch_request.cloudstorage,
-        server_options=None,
-        namespace=None,
-        project=None,
-        branch=None,
-        commit_sha=None,
-        notebook=None,
-        gl_project=None,
-        gl_project_path=None,
-        project_id=launch_request.project_id,
-        launcher_id=launch_request.launcher_id,
-        repositories=launch_request.repositories,
-        internal_gitlab_user=internal_gitlab_user,
-    )
-
-
-async def launch_notebook_old(
     config: NotebooksConfig,
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     internal_gitlab_user: APIUser,
@@ -646,3 +605,20 @@ async def launch_notebook_old(
         repositories=None,
         internal_gitlab_user=internal_gitlab_user,
     )
+
+
+def serialize_v1_server(manifest: UserServerManifest, nb_config: NotebooksConfig, status: int = 200) -> JSONResponse:
+    """Format and serialize a Renku v1 JupyterServer manifest."""
+    data = NotebookResponse().dump(NotebookResponse.format_user_pod_data(manifest, nb_config))
+    return validated_json(apispec.NotebookResponse, data, status=status)
+
+
+def serialize_v1_servers(
+    manifests: dict[str, UserServerManifest], nb_config: NotebooksConfig, status: int = 200
+) -> JSONResponse:
+    """Format and serialize many Renku v1 JupyterServer manifests."""
+    data = {
+        manifest.server_name: NotebookResponse().dump(NotebookResponse.format_user_pod_data(manifest, nb_config))
+        for manifest in sorted(manifests.values(), key=lambda x: x.server_name)
+    }
+    return validated_json(apispec.ServersGetResponse, {"servers": data}, status=status)

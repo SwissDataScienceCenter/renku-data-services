@@ -166,6 +166,8 @@ class NotebooksConfig:
             cache=js_cache,
             renku_ns_client=renku_ns_client,
             username_label="renku.io/safe-username",
+            # NOTE: if testing then we should skip the cache if unavailable because we dont deploy the cache in tests
+            skip_cache_if_unavailable=dummy_stores,
         )
         v2_cache = ServerCache(amalthea_v2_config.cache_url, AmaltheaSessionV1Alpha1)
         renku_ns_v2_client = NamespacedK8sClient(
@@ -175,6 +177,8 @@ class NotebooksConfig:
             cache=v2_cache,
             renku_ns_client=renku_ns_v2_client,
             username_label="renku.io/safe-username",
+            # NOTE: if testing then we should skip the cache if unavailable because we dont deploy the cache in tests
+            skip_cache_if_unavailable=dummy_stores,
         )
         return cls(
             server_options=server_options,

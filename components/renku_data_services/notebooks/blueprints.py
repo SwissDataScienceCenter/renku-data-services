@@ -35,10 +35,6 @@ from renku_data_services.notebooks.api.classes.repository import Repository
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_data_services.notebooks.api.schemas.config_server_options import ServerOptionsEndpointResponse
 from renku_data_services.notebooks.api.schemas.logs import ServerLogs
-from renku_data_services.notebooks.api.schemas.servers_get import (
-    NotebookResponse,
-    ServersGetResponse,
-)
 from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.notebooks.crs import (
     Affinity,
@@ -110,7 +106,7 @@ class NotebooksBP(CustomBlueprint):
         ) -> JSONResponse:
             filter_attrs = list(filter(lambda x: x[1] is not None, request.get_query_args()))
             filtered_servers = await core.user_servers(self.nb_config, user, filter_attrs)
-            return json(ServersGetResponse().dump({"servers": filtered_servers}))
+            return core.serialize_v1_servers(filtered_servers, self.nb_config)
 
         return "/notebooks/servers", ["GET"], _user_servers
 
@@ -122,7 +118,7 @@ class NotebooksBP(CustomBlueprint):
             request: Request, user: AnonymousAPIUser | AuthenticatedAPIUser, server_name: str
         ) -> JSONResponse:
             server = await core.user_server(self.nb_config, user, server_name)
-            return json(NotebookResponse().dump(server))
+            return core.serialize_v1_server(server, self.nb_config)
 
         return "/notebooks/servers/<server_name>", ["GET"], _user_server
 
@@ -130,38 +126,17 @@ class NotebooksBP(CustomBlueprint):
         """Start a renku session."""
 
         @authenticate_2(self.authenticator, self.internal_gitlab_authenticator)
-        @validate(json=apispec.LaunchNotebookRequest)
-        async def _launch_notebook(
-            request: Request,
-            user: AnonymousAPIUser | AuthenticatedAPIUser,
-            internal_gitlab_user: APIUser,
-            body: apispec.LaunchNotebookRequest,
-        ) -> JSONResponse:
-            server, status_code = await core.launch_notebook(self.nb_config, user, internal_gitlab_user, body)
-            return json(NotebookResponse().dump(server), status_code)
-
-        return "/notebooks/servers", ["POST"], _launch_notebook
-
-    def launch_notebook_old(self) -> BlueprintFactoryResponse:
-        """Start a renku session using the old operator."""
-
-        @authenticate_2(self.authenticator, self.internal_gitlab_authenticator)
         @validate(json=apispec.LaunchNotebookRequestOld)
-        async def _launch_notebook_old(
+        async def _launch_notebook(
             request: Request,
             user: AnonymousAPIUser | AuthenticatedAPIUser,
             internal_gitlab_user: APIUser,
             body: apispec.LaunchNotebookRequestOld,
         ) -> JSONResponse:
-            server, status_code = await core.launch_notebook_old(
-                self.nb_config,
-                user,
-                internal_gitlab_user,
-                body,
-            )
-            return json(NotebookResponse().dump(server), status_code)
+            server, status_code = await core.launch_notebook(self.nb_config, user, internal_gitlab_user, body)
+            return core.serialize_v1_server(server, self.nb_config, status_code)
 
-        return "/notebooks/old/servers", ["POST"], _launch_notebook_old
+        return "/notebooks/servers", ["POST"], _launch_notebook
 
     def patch_server(self) -> BlueprintFactoryResponse:
         """Patch a user server by name based on the query param."""
@@ -179,11 +154,7 @@ class NotebooksBP(CustomBlueprint):
                 raise AnonymousUserPatchError()
 
             manifest = await core.patch_server(self.nb_config, user, internal_gitlab_user, server_name, body)
-            notebook_response = apispec.NotebookResponse.parse_obj(manifest)
-            return json(
-                notebook_response.model_dump(),
-                200,
-            )
+            return core.serialize_v1_server(manifest, self.nb_config)
 
         return "/notebooks/servers/<server_name>", ["PATCH"], _patch_server
 
@@ -478,6 +449,11 @@ class NotebooksNewBP(CustomBlueprint):
                         env=[
                             SessionEnvItem(name="RENKU_BASE_URL_PATH", value=base_server_path),
                             SessionEnvItem(name="RENKU_BASE_URL", value=base_server_url),
+                            SessionEnvItem(name="RENKU_MOUNT_DIR", value=storage_mount.as_posix()),
+                            SessionEnvItem(name="RENKU_SESSION", value="1"),
+                            SessionEnvItem(name="RENKU_SESSION_IP", value="0.0.0.0"),  # nosec B104
+                            SessionEnvItem(name="RENKU_SESSION_PORT", value=f"{environment.port}"),
+                            SessionEnvItem(name="RENKU_WORKING_DIR", value=work_dir.as_posix()),
                         ],
                     ),
                     ingress=Ingress(
