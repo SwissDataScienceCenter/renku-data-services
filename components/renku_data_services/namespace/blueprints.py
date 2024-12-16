@@ -8,7 +8,7 @@ from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
 from renku_data_services.authz.models import Role, UnsavedMember
-from renku_data_services.base_api.auth import authenticate, only_authenticated
+from renku_data_services.base_api.auth import authenticate, only_authenticated, validate_path_user_id
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_body_root_model, validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
@@ -148,6 +148,7 @@ class GroupsBP(CustomBlueprint):
         """Remove a specific user from the list of members of a group."""
 
         @authenticate(self.authenticator)
+        @validate_path_user_id
         @only_authenticated
         async def _delete_member(_: Request, user: base_models.APIUser, slug: str, user_id: str) -> HTTPResponse:
             await self.group_repo.delete_group_member(user=user, slug=slug, user_id_to_delete=user_id)
