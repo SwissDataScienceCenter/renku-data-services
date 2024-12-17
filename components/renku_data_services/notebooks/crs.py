@@ -16,6 +16,7 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     CodeRepository,
     Culling,
     DataSource,
+    EmptyDir,
     ExtraContainer,
     ExtraVolume,
     ExtraVolumeMount,
