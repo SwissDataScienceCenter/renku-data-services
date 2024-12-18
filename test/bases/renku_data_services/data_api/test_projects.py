@@ -54,6 +54,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
         "namespace": regular_user.namespace.slug,
         "keywords": ["keyword 1", "keyword.2", "keyword-3", "KEYWORD_4"],
         "documentation": "$\\sqrt(2)$",
+        "secrets_mount_directory": "/etc/renku_secrets",
     }
 
     await app_config.event_repo.delete_all_events()
@@ -75,6 +76,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
     assert project["created_by"] == "user"
     assert "template_id" not in project or project["template_id"] is None
     assert project["is_template"] is False
+    assert project["secrets_mount_directory"] == "/etc/renku_secrets"
     project_id = project["id"]
 
     events = await app_config.event_repo.get_pending_events()
@@ -119,15 +121,17 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
     assert "template_id" not in project or project["template_id"] is None
     assert project["is_template"] is False
 
-    # same as above, but using namespace/slug to retrieve the pr
+    # same as above, but using namespace/slug to retrieve the project
     _, response = await sanic_client.get(
-        f"/api/data/namespaces/{payload['namespace']}/projects/{payload['slug']}",
+        f"/api/data/namespaces/{payload['namespace']
+                                }/projects/{payload['slug']}",
         params={"with_documentation": True},
         headers=user_headers,
     )
 
     assert response.status_code == 200, response.text
     project = response.json
+    assert project["id"] == project_id
     assert project["name"] == "Renku Native Project"
     assert project["slug"] == "project-slug"
     assert project["namespace"] == regular_user.namespace.slug
@@ -156,6 +160,7 @@ async def test_project_creation_with_default_values(
     assert project["created_by"] == "user"
     assert len(project["keywords"]) == 0
     assert len(project["repositories"]) == 0
+    assert project["secrets_mount_directory"] == "/secrets"
 
 
 @pytest.mark.asyncio
@@ -374,6 +379,7 @@ async def test_patch_project(create_project, get_project, sanic_client, user_hea
         "visibility": "public",
         "repositories": ["http://renkulab.io/repository-1", "http://renkulab.io/repository-2"],
         "documentation": "$\\infty$",
+        "secrets_mount_directory": "/etc/new/location",
     }
     project_id = project["id"]
     _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=headers, json=patch)
@@ -404,6 +410,7 @@ async def test_patch_project(create_project, get_project, sanic_client, user_hea
         "http://renkulab.io/repository-2",
     }
     assert "documentation" not in project
+    assert project["secrets_mount_directory"] == "/etc/new/location"
 
     _, response = await sanic_client.get(
         f"/api/data/projects/{project_id}", params={"with_documentation": True}, headers=user_headers
@@ -653,6 +660,27 @@ async def test_patch_project_slug(
     assert response.json is not None
     assert response.json.get("id") == project_id
     assert response.json.get("documentation") == "Hello, World!"
+
+
+@pytest.mark.asyncio
+async def test_patch_project_reset_secrets_mount_directory(
+    create_project, get_project, sanic_client, user_headers
+) -> None:
+    project = await create_project("My Project", secrets_mount_directory="/etc/fancy/location")
+    assert project["secrets_mount_directory"] == "/etc/fancy/location"
+
+    # Patch a project
+    user_headers.update({"If-Match": project["etag"]})
+    patch = {"secrets_mount_directory": ""}
+    project_id = project["id"]
+    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=user_headers, json=patch)
+
+    assert response.status_code == 200, response.text
+
+    # Get the project
+    project = await get_project(project_id=project_id)
+
+    assert project["secrets_mount_directory"] == "/secrets"
 
 
 @pytest.mark.asyncio

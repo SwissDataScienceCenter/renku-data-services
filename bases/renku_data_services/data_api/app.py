@@ -20,7 +20,7 @@ from renku_data_services.message_queue.blueprints import MessageQueueBP
 from renku_data_services.namespace.blueprints import GroupsBP
 from renku_data_services.notebooks.blueprints import NotebooksBP, NotebooksNewBP
 from renku_data_services.platform.blueprints import PlatformConfigBP
-from renku_data_services.project.blueprints import ProjectsBP
+from renku_data_services.project.blueprints import ProjectsBP, ProjectSessionSecretBP
 from renku_data_services.repositories.blueprints import RepositoriesBP
 from renku_data_services.session.blueprints import EnvironmentsBP, SessionLaunchersBP
 from renku_data_services.storage.blueprints import StorageBP, StorageSchemaBP
@@ -52,9 +52,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
     user_secrets = UserSecretsBP(
         name="user_secrets",
         url_prefix=url_prefix,
-        user_repo=config.kc_user_repo,
         secret_repo=config.user_secrets_repo,
-        secret_service_public_key=config.secrets_service_public_key,
         authenticator=config.authenticator,
     )
     resource_pools_users = ResourcePoolUsersBP(
@@ -95,6 +93,12 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         session_repo=config.session_repo,
         data_connector_to_project_link_repo=config.data_connector_to_project_link_repo,
         data_connector_repo=config.data_connector_repo,
+    )
+    project_session_secrets = ProjectSessionSecretBP(
+        name="project_session_secrets",
+        url_prefix=url_prefix,
+        session_secret_repo=config.project_session_secret_repo,
+        authenticator=config.authenticator,
     )
     group = GroupsBP(
         name="groups",
@@ -149,6 +153,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         authenticator=config.authenticator,
         nb_config=config.nb_config,
         project_repo=config.project_repo,
+        project_session_secret_repo=config.project_session_secret_repo,
         session_repo=config.session_repo,
         storage_repo=config.storage_repo,
         rp_repo=config.rp_repo,
@@ -196,6 +201,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
             user_preferences.blueprint(),
             misc.blueprint(),
             project.blueprint(),
+            project_session_secrets.blueprint(),
             group.blueprint(),
             session_environments.blueprint(),
             session_launchers.blueprint(),

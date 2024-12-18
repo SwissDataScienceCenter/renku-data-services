@@ -1,19 +1,47 @@
 """Business logic for projects."""
 
+from pathlib import PurePosixPath
+
 from ulid import ULID
 
+from renku_data_services import errors
 from renku_data_services.authz.models import Visibility
-from renku_data_services.base_models import APIUser, Slug
+from renku_data_services.base_models import RESET, APIUser, Slug
 from renku_data_services.data_connectors.db import DataConnectorProjectLinkRepository, DataConnectorRepository
-from renku_data_services.errors import errors
 from renku_data_services.project import apispec, models
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.session.db import SessionRepository
 
 
+def validate_unsaved_project(body: apispec.ProjectPost, created_by: str) -> models.UnsavedProject:
+    """Validate an unsaved project."""
+    keywords = [kw.root for kw in body.keywords] if body.keywords is not None else []
+    visibility = Visibility.PRIVATE if body.visibility is None else Visibility(body.visibility.value)
+    secrets_mount_directory = PurePosixPath(body.secrets_mount_directory) if body.secrets_mount_directory else None
+    return models.UnsavedProject(
+        name=body.name,
+        namespace=body.namespace,
+        slug=body.slug or Slug.from_name(body.name).value,
+        description=body.description,
+        repositories=body.repositories or [],
+        created_by=created_by,
+        visibility=visibility,
+        keywords=keywords,
+        documentation=body.documentation,
+        secrets_mount_directory=secrets_mount_directory,
+    )
+
+
 def validate_project_patch(patch: apispec.ProjectPatch) -> models.ProjectPatch:
     """Validate the update to a project."""
     keywords = [kw.root for kw in patch.keywords] if patch.keywords is not None else None
+    secrets_mount_directory = (
+        PurePosixPath(patch.secrets_mount_directory)
+        if patch.secrets_mount_directory
+        else RESET
+        if patch.secrets_mount_directory == ""
+        else None
+    )
     return models.ProjectPatch(
         name=patch.name,
         namespace=patch.namespace,
@@ -25,6 +53,7 @@ def validate_project_patch(patch: apispec.ProjectPatch) -> models.ProjectPatch:
         documentation=patch.documentation,
         template_id=None if patch.template_id is None else "",
         is_template=patch.is_template,
+        secrets_mount_directory=secrets_mount_directory,
     )
 
 
@@ -38,6 +67,7 @@ async def copy_project(
     repositories: list[models.Repository] | None,
     visibility: Visibility | None,
     keywords: list[str],
+    secrets_mount_directory: str | None,
     project_repo: ProjectRepository,
     session_repo: SessionRepository,
     data_connector_to_project_link_repo: DataConnectorProjectLinkRepository,
@@ -56,6 +86,7 @@ async def copy_project(
         visibility=template.visibility if visibility is None else visibility,
         keywords=keywords or template.keywords,
         template_id=template.id,
+        secrets_mount_directory=PurePosixPath(secrets_mount_directory) if secrets_mount_directory else None,
     )
     project = await project_repo.insert_project(user, unsaved_project)
 
@@ -92,3 +123,66 @@ async def copy_project(
         raise errors.CopyDataConnectorsError(message=message)
 
     return project
+
+
+def validate_unsaved_session_secret_slot(
+    body: apispec.SessionSecretSlotPost,
+) -> models.UnsavedSessionSecretSlot:
+    """Validate an unsaved secret slot."""
+    _validate_session_launcher_secret_slot_filename(body.filename)
+    return models.UnsavedSessionSecretSlot(
+        project_id=ULID.from_str(body.project_id),
+        name=body.name,
+        description=body.description,
+        filename=body.filename,
+    )
+
+
+def validate_session_secret_slot_patch(
+    body: apispec.SessionSecretSlotPatch,
+) -> models.SessionSecretSlotPatch:
+    """Validate the update to a secret slot."""
+    if body.filename is not None:
+        _validate_session_launcher_secret_slot_filename(body.filename)
+    return models.SessionSecretSlotPatch(
+        name=body.name,
+        description=body.description,
+        filename=body.filename,
+    )
+
+
+def validate_session_secrets_patch(
+    body: apispec.SessionSecretPatchList,
+) -> list[models.SessionSecretPatchExistingSecret | models.SessionSecretPatchSecretValue]:
+    """Validate the update to a session launcher's secrets."""
+    result: list[models.SessionSecretPatchExistingSecret | models.SessionSecretPatchSecretValue] = []
+    seen_slot_ids: set[str] = set()
+    for item in body.root:
+        if item.secret_slot_id in seen_slot_ids:
+            raise errors.ValidationError(
+                message=f"Found duplicate secret_slot_id '{item.secret_slot_id}' in the list of secrets."
+            )
+        seen_slot_ids.add(item.secret_slot_id)
+
+        if isinstance(item, apispec.SessionSecretPatch2):
+            result.append(
+                models.SessionSecretPatchExistingSecret(
+                    secret_slot_id=ULID.from_str(item.secret_slot_id),
+                    secret_id=ULID.from_str(item.secret_id),
+                )
+            )
+        else:
+            result.append(
+                models.SessionSecretPatchSecretValue(
+                    secret_slot_id=ULID.from_str(item.secret_slot_id),
+                    value=item.value,
+                )
+            )
+    return result
+
+
+def _validate_session_launcher_secret_slot_filename(filename: str) -> None:
+    """Validate the filename field of a secret slot."""
+    filename_candidate = PurePosixPath(filename)
+    if filename_candidate.name != filename:
+        raise errors.ValidationError(message=f"Filename {filename} is not valid.")
