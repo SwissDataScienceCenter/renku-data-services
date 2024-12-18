@@ -52,7 +52,8 @@ async def test_post_data_connector(sanic_client: SanicASGITestClient, regular_us
 
     # Check that we can retrieve the data connector by slug
     _, response = await sanic_client.get(
-        f"/api/data/namespaces/{data_connector["namespace"]}/data_connectors/{data_connector["slug"]}",
+        f"/api/data/namespaces/{data_connector["namespace"]
+                                }/data_connectors/{data_connector["slug"]}",
         headers=user_headers,
     )
     assert response.status_code == 200, response.text
@@ -569,7 +570,8 @@ async def test_patch_data_connector_namespace(
 
     # Check that we can retrieve the data connector by slug
     _, response = await sanic_client.get(
-        f"/api/data/namespaces/{data_connector["namespace"]}/data_connectors/{data_connector["slug"]}",
+        f"/api/data/namespaces/{data_connector["namespace"]
+                                }/data_connectors/{data_connector["slug"]}",
         headers=user_headers,
     )
     assert response.status_code == 200, response.text
@@ -679,6 +681,8 @@ async def test_patch_data_connector_slug(
     assert response.status_code == 200, response.text
     assert response.json is not None
     assert response.json.get("id") == data_connector_id
+    assert data_connector["namespace"] == namespace
+    assert data_connector["slug"] == new_slug
 
     # Check that we can get the data connector with the old slug
     _, response = await sanic_client.get(
@@ -687,6 +691,8 @@ async def test_patch_data_connector_slug(
     assert response.status_code == 200, response.text
     assert response.json is not None
     assert response.json.get("id") == data_connector_id
+    assert data_connector["namespace"] == namespace
+    assert data_connector["slug"] == new_slug
 
 
 @pytest.mark.asyncio
