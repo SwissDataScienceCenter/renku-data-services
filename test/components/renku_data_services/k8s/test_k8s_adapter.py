@@ -1,6 +1,8 @@
 from dataclasses import asdict
 
+from box import Box
 from hypothesis import given
+from kr8s.asyncio.objects import StatefulSet
 from kubernetes import client
 from kubernetes.client import (
     V1Container,
@@ -110,12 +112,10 @@ def test_update_quota(old_quota: models.Quota, new_quota: models.Quota) -> None:
 
 
 def test_find_env_var() -> None:
-    container = V1Container(
-        name="test", env=[V1EnvVar(name="key1", value="val1"), V1EnvVar(name="key2", value_from=V1EnvVarSource())]
-    )
-    assert find_env_var(container, "key1") == (0, "val1")
-    assert find_env_var(container, "key2") == (1, V1EnvVarSource())
-    assert find_env_var(container, "missing") is None
+    env = [Box(name="key1", value="val1"), Box(name="key2", value="val2")]
+    assert find_env_var(env, "key1") == (0, env[0])
+    assert find_env_var(env, "key2") == (1, env[1])
+    assert find_env_var(env, "missing") is None
 
 
 def test_patch_statefulset_tokens() -> None:
@@ -170,7 +170,8 @@ def test_patch_statefulset_tokens() -> None:
             ),
         )
     )
-    patches = NamespacedK8sClient._get_statefulset_token_patches(sts, new_renku_tokens)
+    sanitized_sts = client.ApiClient().sanitize_for_serialization(sts)
+    patches = NamespacedK8sClient._get_statefulset_token_patches(StatefulSet(sanitized_sts), new_renku_tokens)
 
     # Order of patches should be git proxy access, git proxy refresh, git clone, secrets
     assert len(patches) == 4
