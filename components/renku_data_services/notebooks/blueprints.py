@@ -142,7 +142,7 @@ class NotebooksBP(CustomBlueprint):
                 body,
                 user_repo=self.user_repo,
             )
-            return json(NotebookResponse().dump(server), status_code)
+            return core.serialize_v1_server(server, self.nb_config, status_code)
 
         return "/notebooks/servers", ["POST"], _launch_notebook
 
