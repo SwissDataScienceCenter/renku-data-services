@@ -115,6 +115,8 @@ class RCloneStorage(ICloudStorageRequest):
     ) -> client.V1PersistentVolumeClaim:
         """The PVC for mounting cloud storage."""
         return client.V1PersistentVolumeClaim(
+            api_version="v1",
+            kind="PersistentVolumeClaim",
             metadata=client.V1ObjectMeta(
                 name=base_name,
                 namespace=namespace,
@@ -162,6 +164,8 @@ class RCloneStorage(ICloudStorageRequest):
         if user_secret_key:
             string_data["secretKey"] = user_secret_key
         return client.V1Secret(
+            api_version="v1",
+            kind="Secret",
             metadata=client.V1ObjectMeta(
                 name=base_name,
                 namespace=namespace,

@@ -1,5 +1,6 @@
 """An abstraction over the kr8s kubernetes client and the k8s-watcher."""
 
+import asyncio
 import base64
 import json
 import logging
@@ -8,9 +9,10 @@ from typing import Any, Generic, Optional, TypeVar, cast
 from urllib.parse import urljoin
 
 import httpx
+from box import Box
 from kr8s import NotFoundError, ServerError
 from kr8s.asyncio.objects import APIObject, Pod, Secret, StatefulSet
-from kubernetes.client import ApiClient, V1Container, V1Secret
+from kubernetes.client import ApiClient, V1Secret
 
 from renku_data_services.errors import errors
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
@@ -175,13 +177,22 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
             raise DeleteServerError()
         return None
 
-    async def get_server(self, name: str) -> _SessionType | None:
+    async def get_server(self, name: str, num_retries: int = 0) -> _SessionType | None:
         """Get a specific JupyterServer object."""
         try:
             server = await self._kr8s_type.get(name=name, namespace=self.namespace)
         except NotFoundError:
             return None
         except ServerError as err:
+            if err.response is not None and err.response.status_code == 429:
+                retry_after_sec = err.response.headers.get("Retry-After")
+                logging.warning(
+                    "Received 429 status code from k8s when getting server "
+                    f"will wait for {retry_after_sec} seconds and retry"
+                )
+                if isinstance(retry_after_sec, str) and retry_after_sec.isnumeric() and num_retries < 3:
+                    await asyncio.sleep(int(retry_after_sec))
+                    return await self.get_server(name, num_retries=num_retries + 1)
             if err.response is None or err.response.status_code not in [400, 404]:
                 logging.exception(f"Cannot get server {name} because of {err}")
                 raise IntermittentError(f"Cannot get server {name} from the k8s API.")
@@ -241,10 +252,8 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
         except NotFoundError:
             return None
 
-        containers: list[V1Container] = [V1Container(**container) for container in sts.spec.template.spec.containers]
-        init_containers: list[V1Container] = [
-            V1Container(**container) for container in sts.spec.template.spec.init_containers
-        ]
+        containers = cast(list[Box], sts.spec.template.spec.containers)
+        init_containers = cast(list[Box], sts.spec.template.spec.initContainers)
 
         git_proxy_container_index, git_proxy_container = next(
             ((i, c) for i, c in enumerate(containers) if c.name == "git-proxy"),
@@ -259,23 +268,26 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
             (None, None),
         )
 
+        def _get_env(container: Box) -> list[Box]:
+            return cast(list[Box], container.env)
+
         git_proxy_renku_access_token_env = (
-            find_env_var(git_proxy_container, "GIT_PROXY_RENKU_ACCESS_TOKEN")
+            find_env_var(_get_env(git_proxy_container), "GIT_PROXY_RENKU_ACCESS_TOKEN")
             if git_proxy_container is not None
             else None
         )
         git_proxy_renku_refresh_token_env = (
-            find_env_var(git_proxy_container, "GIT_PROXY_RENKU_REFRESH_TOKEN")
+            find_env_var(_get_env(git_proxy_container), "GIT_PROXY_RENKU_REFRESH_TOKEN")
             if git_proxy_container is not None
             else None
         )
         git_clone_renku_access_token_env = (
-            find_env_var(git_clone_container, "GIT_CLONE_USER__RENKU_TOKEN")
+            find_env_var(_get_env(git_clone_container), "GIT_CLONE_USER__RENKU_TOKEN")
             if git_clone_container is not None
             else None
         )
         secrets_renku_access_token_env = (
-            find_env_var(secrets_container, "RENKU_ACCESS_TOKEN") if secrets_container is not None else None
+            find_env_var(_get_env(secrets_container), "RENKU_ACCESS_TOKEN") if secrets_container is not None else None
         )
 
         patches = list()
