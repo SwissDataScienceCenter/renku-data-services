@@ -31,14 +31,28 @@ def validate_unsaved_environment(
 def validate_environment_patch(patch: apispec.EnvironmentPatch) -> models.EnvironmentPatch:
     """Validate the update to a session environment."""
     data_dict = patch.model_dump(exclude_unset=True, mode="json")
+    working_directory = (
+        PurePosixPath(patch.working_directory)
+        if patch.working_directory
+        else RESET
+        if patch.working_directory == ""
+        else None
+    )
+    mount_directory = (
+        PurePosixPath(patch.mount_directory)
+        if patch.mount_directory
+        else RESET
+        if patch.mount_directory == ""
+        else None
+    )
     return models.EnvironmentPatch(
         name=patch.name,
         description=patch.description,
         container_image=patch.container_image,
         default_url=patch.default_url,
         port=patch.port,
-        working_directory=PurePosixPath(patch.working_directory) if patch.working_directory else None,
-        mount_directory=PurePosixPath(patch.mount_directory) if patch.mount_directory else None,
+        working_directory=working_directory,
+        mount_directory=mount_directory,
         uid=patch.uid,
         gid=patch.gid,
         args=RESET if "args" in data_dict and data_dict["args"] is None else patch.args,

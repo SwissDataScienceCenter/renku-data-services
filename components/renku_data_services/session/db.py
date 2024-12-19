@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, nullcontext
 from datetime import UTC, datetime
+from pathlib import PurePosixPath
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -119,9 +120,13 @@ class SessionRepository:
             environment.default_url = update.default_url
         if update.port is not None:
             environment.port = update.port
-        if update.working_directory is not None:
+        if update.working_directory is not None and update.working_directory is RESET:
+            environment.working_directory = None
+        elif update.working_directory is not None and isinstance(update.working_directory, PurePosixPath):
             environment.working_directory = update.working_directory
-        if update.mount_directory is not None:
+        if update.mount_directory is not None and update.mount_directory is RESET:
+            environment.mount_directory = None
+        elif update.mount_directory is not None and isinstance(update.mount_directory, PurePosixPath):
             environment.mount_directory = update.mount_directory
         if update.uid is not None:
             environment.uid = update.uid
