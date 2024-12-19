@@ -656,6 +656,8 @@ components:
           $ref: "#/components/schemas/ProjectName"
         namespace:
           $ref: "#/components/schemas/Slug"
+        slug:
+          $ref: "#/components/schemas/Slug"
         repositories:
           $ref: "#/components/schemas/RepositoriesList"
         visibility:

@@ -45,6 +45,7 @@ def validate_project_patch(patch: apispec.ProjectPatch) -> models.ProjectPatch:
     return models.ProjectPatch(
         name=patch.name,
         namespace=patch.namespace,
+        slug=patch.slug,
         visibility=Visibility(patch.visibility.value) if patch.visibility is not None else None,
         repositories=patch.repositories,
         description=patch.description,

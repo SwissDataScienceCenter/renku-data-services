@@ -3,7 +3,7 @@
 import random
 import string
 from collections.abc import AsyncIterator, Callable
-from typing import TypeVar
+from typing import TypeVar, cast
 
 from cryptography.hazmat.primitives.asymmetric import rsa
 from sqlalchemy import Select, delete, func, select
@@ -116,6 +116,42 @@ class DataConnectorRepository:
             stmt = stmt.where(ns_schemas.EntitySlugORM.slug == slug.lower())
             result = await session.scalars(stmt)
             data_connector = result.one_or_none()
+
+            if data_connector is None:
+                old_data_connector_stmt_old_ns_current_slug = (
+                    select(schemas.DataConnectorORM.id)
+                    .where(ns_schemas.NamespaceOldORM.slug == namespace.lower())
+                    .where(ns_schemas.NamespaceOldORM.latest_slug_id == ns_schemas.NamespaceORM.id)
+                    .where(ns_schemas.EntitySlugORM.namespace_id == ns_schemas.NamespaceORM.id)
+                    .where(schemas.DataConnectorORM.id == ns_schemas.EntitySlugORM.data_connector_id)
+                    .where(schemas.DataConnectorORM.slug.has(ns_schemas.EntitySlugORM.slug == slug.lower()))
+                )
+                old_data_connector_stmt_current_ns_old_slug = (
+                    select(schemas.DataConnectorORM.id)
+                    .where(ns_schemas.NamespaceORM.slug == namespace.lower())
+                    .where(ns_schemas.EntitySlugORM.namespace_id == ns_schemas.NamespaceORM.id)
+                    .where(schemas.DataConnectorORM.id == ns_schemas.EntitySlugORM.data_connector_id)
+                    .where(ns_schemas.EntitySlugOldORM.slug == slug.lower())
+                    .where(ns_schemas.EntitySlugOldORM.latest_slug_id == ns_schemas.EntitySlugORM.id)
+                )
+                old_data_connector_stmt_old_ns_old_slug = (
+                    select(schemas.DataConnectorORM.id)
+                    .where(ns_schemas.NamespaceOldORM.slug == namespace.lower())
+                    .where(ns_schemas.NamespaceOldORM.latest_slug_id == ns_schemas.NamespaceORM.id)
+                    .where(ns_schemas.EntitySlugORM.namespace_id == ns_schemas.NamespaceORM.id)
+                    .where(schemas.DataConnectorORM.id == ns_schemas.EntitySlugORM.data_connector_id)
+                    .where(ns_schemas.EntitySlugOldORM.slug == slug.lower())
+                    .where(ns_schemas.EntitySlugOldORM.latest_slug_id == ns_schemas.EntitySlugORM.id)
+                )
+                old_data_connector_stmt = old_data_connector_stmt_old_ns_current_slug.union(
+                    old_data_connector_stmt_current_ns_old_slug, old_data_connector_stmt_old_ns_old_slug
+                )
+                result_old = await session.scalars(old_data_connector_stmt)
+                result_old_id = cast(ULID | None, result_old.first())
+                if result_old_id is not None:
+                    stmt = select(schemas.DataConnectorORM).where(schemas.DataConnectorORM.id == result_old_id)
+                    data_connector = (await session.scalars(stmt)).first()
+
             if data_connector is None:
                 raise errors.MissingResourceError(message=not_found_msg)
 
@@ -233,17 +269,19 @@ class DataConnectorRepository:
         if patch.namespace is not None and patch.namespace != old_data_connector.namespace.slug:
             # NOTE: changing the namespace requires the user to be owner which means they should have DELETE permission # noqa E501
             required_scope = Scope.DELETE
+        if patch.slug is not None and patch.slug != old_data_connector.slug:
+            # NOTE: changing the slug requires the user to be owner which means they should have DELETE permission
+            required_scope = Scope.DELETE
         authorized = await self.authz.has_permission(
             user, ResourceType.data_connector, data_connector_id, required_scope
         )
         if not authorized:
             raise errors.MissingResourceError(message=not_found_msg)
 
-        current_etag = data_connector.dump().etag
+        current_etag = old_data_connector.etag
         if current_etag != etag:
             raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
 
-        # TODO: handle slug update
         if patch.name is not None:
             data_connector.name = patch.name
         if patch.visibility is not None:
@@ -253,7 +291,7 @@ class DataConnectorRepository:
                 else apispec.Visibility(patch.visibility.value)
             )
             data_connector.visibility = visibility_orm
-        if patch.namespace is not None:
+        if patch.namespace is not None and patch.namespace != old_data_connector.namespace.slug:
             ns = await session.scalar(
                 select(ns_schemas.NamespaceORM).where(ns_schemas.NamespaceORM.slug == patch.namespace.lower())
             )
@@ -270,6 +308,21 @@ class DataConnectorRepository:
                     message=f"The data connector cannot be moved because you do not have sufficient permissions with the namespace {patch.namespace}."  # noqa: E501
                 )
             data_connector.slug.namespace_id = ns.id
+        if patch.slug is not None and patch.slug != old_data_connector.slug:
+            namespace_id = data_connector.slug.namespace_id
+            existing_entity = await session.scalar(
+                select(ns_schemas.EntitySlugORM)
+                .where(ns_schemas.EntitySlugORM.slug == patch.slug)
+                .where(ns_schemas.EntitySlugORM.namespace_id == namespace_id)
+            )
+            if existing_entity is not None:
+                raise errors.ConflictError(
+                    message=f"An entity with the slug '{data_connector.slug.namespace.slug}/{patch.slug}' already exists."  # noqa E501
+                )
+            session.add(
+                ns_schemas.EntitySlugOldORM(slug=old_data_connector.slug, latest_slug_id=data_connector.slug.id)
+            )
+            data_connector.slug.slug = patch.slug
         if patch.description is not None:
             data_connector.description = patch.description if patch.description else None
         if patch.keywords is not None:
