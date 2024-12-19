@@ -74,7 +74,11 @@ async def create_k8s_secret(
 
             decrypted_value = decrypt_string(decryption_key, user.id, secret.encrypted_value).encode()  # type: ignore
 
-            keys = key_mapping_with_lists_only[str(secret.id)] if key_mapping_with_lists_only else [secret.name]
+            keys = (
+                key_mapping_with_lists_only[str(secret.id)]
+                if key_mapping_with_lists_only
+                else [secret.default_filename]
+            )
             for key in keys:
                 decrypted_secrets[key] = b64encode(decrypted_value).decode()
     except Exception as e:
