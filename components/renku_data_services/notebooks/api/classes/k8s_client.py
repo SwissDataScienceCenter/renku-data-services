@@ -248,11 +248,6 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
     @staticmethod
     def _get_statefulset_token_patches(sts: StatefulSet, renku_tokens: RenkuTokens) -> list[dict[str, str]]:
         """Patch the Renku and Gitlab access tokens that are used in the session statefulset."""
-        try:
-            sts = await StatefulSet.get(name=name, namespace=self.namespace)
-        except NotFoundError:
-            return None
-
         containers = cast(list[Box], sts.spec.template.spec.containers)
         init_containers = cast(list[Box], sts.spec.template.spec.initContainers)
 
@@ -341,6 +336,8 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
 
     async def patch_statefulset_tokens(self, name: str, renku_tokens: RenkuTokens) -> None:
         """Patch the Renku and Gitlab access tokens that are used in the session statefulset."""
+        if self.server_type != JupyterServerV1Alpha1 or self._kr8s_type != JupyterServerV1Alpha1Kr8s:
+            raise NotImplementedError("patch_statefulset_tokens is only implemented for JupyterServers")
         try:
             sts = await StatefulSet.get(name=name, namespace=self.namespace)
         except NotFoundError:
