@@ -34,19 +34,20 @@ class CloudStorageConfig(NamedTuple):
     target_path: str
     readonly: bool
     name: str
+    secrets: dict[str, str]  # Mapping of secret IDs to secret name
 
 
 @dataclass
 class StorageValidator:
     """Cloud storage validator."""
 
-    storage_url: str
+    data_service_url: str
 
     def __post_init__(self) -> None:
-        self.storage_url = self.storage_url.rstrip("/")
+        self.data_service_url = self.data_service_url.rstrip("/")
 
     async def get_storage_by_id(
-        self, user: APIUser, internal_gitlab_user: APIUser, project_id: int, storage_id: str
+        self, user: APIUser, internal_gitlab_user: APIUser, endpoint: str, storage_id: str
     ) -> CloudStorageConfig:
         """Get a specific cloud storage configuration by ID."""
         headers = None
@@ -55,8 +56,8 @@ class StorageValidator:
                 "Authorization": f"bearer {user.access_token}",
                 "Gitlab-Access-Token": user.access_token,
             }
-        # TODO: remove project_id once authz on the data service works properly
-        request_url = self.storage_url + f"/storage/{storage_id}?project_id={project_id}"
+        endpoint = endpoint.strip("/")
+        request_url = self.data_service_url + f"/{endpoint}/{storage_id}"
         logger.info(f"getting storage info by id: {request_url}")
         async with httpx.AsyncClient(timeout=10) as client:
             res = await client.get(request_url, headers=headers)
@@ -68,19 +69,22 @@ class StorageValidator:
             raise IntermittentError(
                 message="The data service sent an unexpected response, please try again later",
             )
-        storage = res.json()["storage"]
+        response = res.json()
+        storage = response["storage"]
+        secrets = {s["secret_id"]: s["name"] for s in response["secrets"]} if "secrets" in response else {}
         return CloudStorageConfig(
             config=storage["configuration"],
             source_path=storage["source_path"],
             target_path=storage["target_path"],
             readonly=storage.get("readonly", True),
             name=storage["name"],
+            secrets=secrets,
         )
 
     async def validate_storage_configuration(self, configuration: dict[str, Any], source_path: str) -> None:
         """Validate the cloud storage configuration."""
         async with httpx.AsyncClient(timeout=10) as client:
-            res = await client.post(self.storage_url + "/storage_schema/validate", json=configuration)
+            res = await client.post(self.data_service_url + "/storage_schema/validate", json=configuration)
         if res.status_code == 422:
             raise InvalidCloudStorageConfiguration(
                 message=f"The provided cloud storage configuration isn't valid: {res.json()}",
@@ -93,7 +97,7 @@ class StorageValidator:
     async def obscure_password_fields_for_storage(self, configuration: dict[str, Any]) -> dict[str, Any]:
         """Obscures password fields for use with rclone."""
         async with httpx.AsyncClient(timeout=10) as client:
-            res = await client.post(self.storage_url + "/storage_schema/obscure", json=configuration)
+            res = await client.post(self.data_service_url + "/storage_schema/obscure", json=configuration)
 
         if res.status_code != 200:
             raise InvalidCloudStorageConfiguration(
@@ -108,7 +112,7 @@ class DummyStorageValidator:
     """Dummy cloud storage validator used for testing."""
 
     async def get_storage_by_id(
-        self, user: APIUser, internal_gitlab_user: APIUser, project_id: int, storage_id: str
+        self, user: APIUser, internal_gitlab_user: APIUser, endpoint: str, storage_id: str
     ) -> CloudStorageConfig:
         """Get storage by ID."""
         raise NotImplementedError()

@@ -58,6 +58,8 @@ class RCloneStorage(ICloudStorageRequest):
         mount_folder: str,
         name: Optional[str],
         config: NotebooksConfig,
+        secrets: dict[str, str],  # "Mapping between secret ID (key) and secret name (value)
+        user_secret_key: str | None = None,
     ) -> None:
         """Creates a cloud storage instance without validating the configuration."""
         self.config = config
@@ -66,6 +68,9 @@ class RCloneStorage(ICloudStorageRequest):
         self.mount_folder = mount_folder
         self.readonly = readonly
         self.name = name
+        self.secrets = secrets
+        self.base_name: str | None = None
+        self.user_secret_key = user_secret_key
 
     @classmethod
     async def storage_from_schema(
@@ -73,9 +78,10 @@ class RCloneStorage(ICloudStorageRequest):
         data: dict[str, Any],
         user: APIUser,
         internal_gitlab_user: APIUser,
-        project_id: int,
+        endpoint: str,
         work_dir: PurePosixPath,
         config: NotebooksConfig,
+        user_secret_key: str | None = None,
     ) -> Self:
         """Create storage object from request."""
         name = None
@@ -83,16 +89,15 @@ class RCloneStorage(ICloudStorageRequest):
             # Load from storage service
             if user.access_token is None:
                 raise ValidationError("Storage mounting is only supported for logged-in users.")
-            if project_id < 1:
-                raise ValidationError("Could not get gitlab project id")
             (
                 configuration,
                 source_path,
                 target_path,
                 readonly,
                 name,
+                secrets,
             ) = await config.storage_validator.get_storage_by_id(
-                user, internal_gitlab_user, project_id, data["storage_id"]
+                user, internal_gitlab_user, endpoint, data["storage_id"]
             )
             configuration = {**configuration, **(data.get("configuration", {}))}
             readonly = readonly
@@ -101,10 +106,11 @@ class RCloneStorage(ICloudStorageRequest):
             target_path = data["target_path"]
             configuration = data["configuration"]
             readonly = data.get("readonly", True)
+            secrets = {}
         mount_folder = str(work_dir / target_path)
 
         await config.storage_validator.validate_storage_configuration(configuration, source_path)
-        return cls(source_path, configuration, readonly, mount_folder, name, config)
+        return cls(source_path, configuration, readonly, mount_folder, name, config, secrets, user_secret_key)
 
     def pvc(
         self,
@@ -161,6 +167,10 @@ class RCloneStorage(ICloudStorageRequest):
             "remotePath": self.source_path,
             "configData": self.config_string(self.name or base_name),
         }
+        # NOTE: in Renku v1 this function is not directly called so the base name
+        # comes from the user_secret_key property on the class instance
+        if self.user_secret_key:
+            string_data["secretKey"] = self.user_secret_key
         if user_secret_key:
             string_data["secretKey"] = user_secret_key
         return client.V1Secret(
@@ -183,6 +193,7 @@ class RCloneStorage(ICloudStorageRequest):
         annotations: dict[str, str] | None = None,
     ) -> list[dict[str, Any]]:
         """Get server manifest patch."""
+        self.base_name = base_name
         patches = []
         patches.append(
             {
@@ -271,6 +282,14 @@ class RCloneStorage(ICloudStorageRequest):
             configuration=override.configuration if override.configuration else self.configuration,
             name=self.name,
             config=self.config,
+            secrets=self.secrets,
+        )
+
+    def __repr__(self) -> str:
+        """Override to make sure no secrets or sensitive configuration gets printed in logs."""
+        return (
+            f"{RCloneStorageRequest.__name__}(name={self.name}, source_path={self.source_path}, "
+            f"mount_folder={self.mount_folder}, readonly={self.readonly})"
         )
 
 
