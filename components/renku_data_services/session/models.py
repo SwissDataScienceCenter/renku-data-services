@@ -99,8 +99,8 @@ class EnvironmentPatch:
     container_image: str | None = None
     default_url: str | None = None
     port: int | None = None
-    working_directory: PurePosixPath | None = None
-    mount_directory: PurePosixPath | None = None
+    working_directory: PurePosixPath | ResetType | None
+    mount_directory: PurePosixPath | ResetType | None
     uid: int | None = None
     gid: int | None = None
     args: list[str] | None | ResetType = None
