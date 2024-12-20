@@ -6,7 +6,7 @@ from ulid import ULID
 
 from renku_data_services import errors
 from renku_data_services.authz.models import Visibility
-from renku_data_services.base_models import RESET, APIUser, Slug
+from renku_data_services.base_models import RESET, APIUser, ResetType, Slug
 from renku_data_services.data_connectors.db import DataConnectorProjectLinkRepository, DataConnectorRepository
 from renku_data_services.project import apispec, models
 from renku_data_services.project.db import ProjectRepository
@@ -35,13 +35,14 @@ def validate_unsaved_project(body: apispec.ProjectPost, created_by: str) -> mode
 def validate_project_patch(patch: apispec.ProjectPatch) -> models.ProjectPatch:
     """Validate the update to a project."""
     keywords = [kw.root for kw in patch.keywords] if patch.keywords is not None else None
-    secrets_mount_directory = (
-        PurePosixPath(patch.secrets_mount_directory)
-        if patch.secrets_mount_directory
-        else RESET
-        if patch.secrets_mount_directory == ""
-        else None
-    )
+    secrets_mount_directory: PurePosixPath | ResetType | None
+    match patch.secrets_mount_directory:
+        case "":
+            secrets_mount_directory = RESET
+        case str():
+            secrets_mount_directory = PurePosixPath(patch.secrets_mount_directory)
+        case _:
+            secrets_mount_directory = None
     return models.ProjectPatch(
         name=patch.name,
         namespace=patch.namespace,

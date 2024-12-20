@@ -73,23 +73,6 @@ class Environment(UnsavedEnvironment):
     gid: int
 
 
-@dataclass(kw_only=True, frozen=True, eq=True)
-class EnvironmentUpdate:
-    """Model for the update of some or all parts of an environment."""
-
-    name: str | None = None
-    description: str | None = None
-    container_image: str | None = None
-    default_url: str | None = None
-    port: int | None = None
-    working_directory: PurePosixPath | None = None
-    mount_directory: PurePosixPath | None = None
-    uid: int | None = None
-    gid: int | None = None
-    args: list[str] | None | ResetType = None
-    command: list[str] | None | ResetType = None
-
-
 @dataclass(frozen=True, eq=True, kw_only=True)
 class EnvironmentPatch:
     """Model for changes requested on a session environment."""
@@ -99,8 +82,8 @@ class EnvironmentPatch:
     container_image: str | None = None
     default_url: str | None = None
     port: int | None = None
-    working_directory: PurePosixPath | ResetType | None
-    mount_directory: PurePosixPath | ResetType | None
+    working_directory: PurePosixPath | ResetType | None = None
+    mount_directory: PurePosixPath | ResetType | None = None
     uid: int | None = None
     gid: int | None = None
     args: list[str] | None | ResetType = None
