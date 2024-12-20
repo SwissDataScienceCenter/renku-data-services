@@ -98,6 +98,7 @@ class UnsavedSessionLauncher:
     name: str
     description: str | None
     resource_class_id: int | None
+    disk_storage: int | None
     environment: str | UnsavedEnvironment
     """When a string is passed for the environment it should be the ID of an existing environment."""
 
@@ -122,3 +123,4 @@ class SessionLauncherPatch:
     # launcher with the update of the launcher.
     environment: str | EnvironmentPatch | UnsavedEnvironment | None = None
     resource_class_id: int | None | ResetType = None
+    disk_storage: int | None | ResetType = None
