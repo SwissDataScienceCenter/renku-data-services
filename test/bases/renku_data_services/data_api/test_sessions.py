@@ -159,6 +159,8 @@ async def test_patch_session_environment(
         "container_image": "new_image:new_tag",
         "command": command,
         "args": args,
+        "working_directory": "/home/user",
+        "mount_directory": "/home/user/work",
     }
 
     _, res = await sanic_client.patch(f"/api/data/environments/{environment_id}", headers=admin_headers, json=payload)
@@ -170,12 +172,24 @@ async def test_patch_session_environment(
     assert res.json.get("container_image") == "new_image:new_tag"
     assert res.json.get("args") == args
     assert res.json.get("command") == command
+    assert res.json.get("working_directory") == "/home/user"
+    assert res.json.get("mount_directory") == "/home/user/work"
 
-    # Test that patching with None will reset the command and args
-    payload = {"args": None, "command": None}
+    # Test that patching with None will reset the command and args,
+    # and also that we can reset the working and mounting directories
+    payload = {
+        "args": None,
+        "command": None,
+        "working_directory": "",
+        "mount_directory": "",
+    }
     _, res = await sanic_client.patch(f"/api/data/environments/{environment_id}", headers=admin_headers, json=payload)
+    assert res.status_code == 200, res.text
+    assert res.json is not None
     assert res.json.get("args") is None
     assert res.json.get("command") is None
+    assert res.json.get("working_directory") is None
+    assert res.json.get("mount_directory") is None
 
 
 @pytest.mark.asyncio
