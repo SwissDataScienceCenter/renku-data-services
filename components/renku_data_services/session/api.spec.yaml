@@ -386,9 +386,9 @@ components:
         gid:
           $ref: "#/components/schemas/EnvironmentGid"
         working_directory:
-          $ref: "#/components/schemas/EnvironmentWorkingDirectory"
+          $ref: "#/components/schemas/EnvironmentWorkingDirectoryPatch"
         mount_directory:
-          $ref: "#/components/schemas/EnvironmentMountDirectory"
+          $ref: "#/components/schemas/EnvironmentMountDirectoryPatch"
         port:
           $ref: "#/components/schemas/EnvironmentPort"
         command:
@@ -537,7 +537,7 @@ components:
       maxLength: 500
       # NOTE: regex for an image name, optionally with a tag or sha256 specified
       # based on https://github.com/opencontainers/distribution-spec/blob/main/spec.md
-      pattern: "^[a-z0-9]+((\\.|_|__|-+)[a-z0-9]+)*(\\/[a-z0-9]+((\\.|_|__|-+)[a-z0-9]+)*)*(:[a-zA-Z0-9_][a-zA-Z0-9._-]{0,127}|@sha256:[a-fA-F0-9]{64}){0,1}$" 
+      pattern: "^[a-z0-9]+((\\.|_|__|-+)[a-z0-9]+)*(\\/[a-z0-9]+((\\.|_|__|-+)[a-z0-9]+)*)*(:[a-zA-Z0-9_][a-zA-Z0-9._-]{0,127}|@sha256:[a-fA-F0-9]{64}){0,1}$"
       example: renku/renkulab-py:3.10-0.18.1
     DefaultUrl:
       description: The default path to open in a session
@@ -573,10 +573,18 @@ components:
       type: string
       description: The location where the session will start, if left unset it will default to the session image working directory.
       minLength: 1
+      example: "/home/jovyan/work"
+    EnvironmentWorkingDirectoryPatch:
+      type: string
+      example: "/home/jovyan/work"
     EnvironmentMountDirectory:
       type: string
       description: The location where the persistent storage for the session will be mounted, usually it should be identical to or a parent of the working directory, if left unset will default to the working directory.
       minLength: 1
+      example: "/home/jovyan/work"
+    EnvironmentMountDirectoryPatch:
+      type: string
+      example: "/home/jovyan/work"
     EnvironmentCommand:
       type: array
       items:
