@@ -6,6 +6,7 @@ from math import floor
 from pathlib import PurePosixPath
 from typing import Any
 
+import escapism
 import requests
 from gitlab.const import Visibility as GitlabVisibility
 from gitlab.v4.objects.projects import Project as GitlabProject
@@ -304,7 +305,7 @@ async def launch_notebook_helper(
     server_name: str,
     server_class: type[UserServer],
     user: AnonymousAPIUser | AuthenticatedAPIUser,
-    image: str,
+    image: str | None,
     resource_class_id: int | None,
     storage: int | None,
     environment_variables: dict[str, str],
@@ -341,7 +342,7 @@ async def launch_notebook_helper(
         # A specific image was requested
         parsed_image = Image.from_path(image)
         image_repo = parsed_image.repo_api()
-        image_exists_publicly = image_repo.image_exists(parsed_image)
+        image_exists_publicly = await image_repo.image_exists(parsed_image)
         image_exists_privately = False
         if (
             not image_exists_publicly
@@ -375,7 +376,7 @@ async def launch_notebook_helper(
         image_repo = parsed_image.repo_api().maybe_with_oauth2_token(
             nb_config.git.registry, internal_gitlab_user.access_token
         )
-        if not image_repo.image_exists(parsed_image):
+        if not await image_repo.image_exists(parsed_image):
             raise errors.MissingResourceError(
                 message=(
                     f"Cannot start the session because the following the image {image} does not "
@@ -558,12 +559,19 @@ async def launch_notebook(
     launch_request: apispec.LaunchNotebookRequestOld,
 ) -> tuple[UserServerManifest, int]:
     """Starts a server using the old operator."""
-
+    if isinstance(user, AnonymousAPIUser):
+        safe_username = escapism.escape(user.id, escape_char="-").lower()
+    else:
+        safe_username = escapism.escape(user.email, escape_char="-").lower()
     server_name = renku_1_make_server_name(
-        user.id, launch_request.namespace, launch_request.project, launch_request.branch, launch_request.commit_sha
+        safe_username,
+        launch_request.namespace,
+        launch_request.project,
+        launch_request.branch,
+        launch_request.commit_sha,
     )
     project_slug = f"{launch_request.namespace}/{launch_request.project}"
-    gitlab_client = NotebooksGitlabClient(config.git.url, APIUser.access_token)
+    gitlab_client = NotebooksGitlabClient(config.git.url, internal_gitlab_user.access_token)
     gl_project = gitlab_client.get_renku_project(project_slug)
     if gl_project is None:
         raise errors.MissingResourceError(message=f"Cannot find gitlab project with slug {project_slug}")
@@ -584,7 +592,7 @@ async def launch_notebook(
         server_name=server_name,
         server_class=server_class,
         user=user,
-        image=launch_request.image or config.sessions.default_image,
+        image=launch_request.image,
         resource_class_id=launch_request.resource_class_id,
         storage=launch_request.storage,
         environment_variables=launch_request.environment_variables,
@@ -610,7 +618,7 @@ async def launch_notebook(
 def serialize_v1_server(manifest: UserServerManifest, nb_config: NotebooksConfig, status: int = 200) -> JSONResponse:
     """Format and serialize a Renku v1 JupyterServer manifest."""
     data = NotebookResponse().dump(NotebookResponse.format_user_pod_data(manifest, nb_config))
-    return validated_json(apispec.NotebookResponse, data, status=status)
+    return validated_json(apispec.NotebookResponse, data, status=status, model_dump_kwargs=dict(by_alias=True))
 
 
 def serialize_v1_servers(
@@ -621,4 +629,6 @@ def serialize_v1_servers(
         manifest.server_name: NotebookResponse().dump(NotebookResponse.format_user_pod_data(manifest, nb_config))
         for manifest in sorted(manifests.values(), key=lambda x: x.server_name)
     }
-    return validated_json(apispec.ServersGetResponse, {"servers": data}, status=status)
+    return validated_json(
+        apispec.ServersGetResponse, {"servers": data}, status=status, model_dump_kwargs=dict(by_alias=True)
+    )

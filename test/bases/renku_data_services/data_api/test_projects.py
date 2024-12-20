@@ -519,7 +519,7 @@ async def test_patch_visibility_to_public_shows_project(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("field", ["id", "slug", "created_by", "creation_date"])
+@pytest.mark.parametrize("field", ["id", "created_by", "creation_date"])
 async def test_cannot_patch_reserved_fields(create_project, get_project, sanic_client, user_headers, field) -> None:
     project = await create_project("Project 1")
     original_value = project[field]
@@ -608,6 +608,58 @@ async def test_patch_description_as_editor_and_keep_namespace_and_visibility(
     assert response.json.get("namespace") == project["namespace"]
     assert response.json.get("visibility") == project["visibility"]
     assert response.json.get("description") == "Updated description"
+
+
+@pytest.mark.asyncio
+async def test_patch_project_slug(
+    sanic_client,
+    create_project,
+    get_project,
+    user_headers,
+) -> None:
+    await create_project("Project 1")
+    await create_project("Project 2")
+    project = await create_project("My project", documentation="Hello, World!")
+    project_id = project["id"]
+    namespace = project["namespace"]
+    old_slug = project["slug"]
+    await create_project("Project 3")
+
+    # Patch a project
+    headers = merge_headers(user_headers, {"If-Match": project["etag"]})
+    new_slug = "some-updated-slug"
+    patch = {"slug": new_slug}
+    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=headers, json=patch)
+
+    assert response.status_code == 200, response.text
+
+    # Check that the project's slug has been updated
+    project = await get_project(project_id=project_id)
+    assert project["id"] == project_id
+    assert project["name"] == "My project"
+    assert project["namespace"] == namespace
+    assert project["slug"] == new_slug
+
+    # Check that we can get the project with the new slug
+    _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}/projects/{new_slug}", headers=user_headers)
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == project_id
+
+    # Check that we can get the project with the old slug
+    _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}/projects/{old_slug}", headers=user_headers)
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == project_id
+    _, response = await sanic_client.get(
+        f"/api/data/namespaces/{namespace}/projects/{old_slug}",
+        params={"with_documentation": True},
+        headers=user_headers,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == project_id
+    assert response.json.get("documentation") == "Hello, World!"
 
 
 @pytest.mark.asyncio
@@ -1454,3 +1506,57 @@ async def test_project_unlink_from_template_project(
 
     project = await get_project(project_id)
     assert "template_id" not in project or project["template_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_get_project_after_group_moved(
+    create_project,
+    create_group,
+    sanic_client,
+    user_headers,
+) -> None:
+    await create_project("Project 1")
+    await create_project("Project 2")
+    group = await create_group("test-group")
+    group_slug = group["slug"]
+    project = await create_project("My project", namespace=group_slug, documentation="Hello, World!")
+    project_id = project["id"]
+    await create_project("Project 3")
+
+    new_group_slug = "test-group-updated"
+    patch = {"slug": new_group_slug}
+    _, response = await sanic_client.patch(f"/api/data/groups/{group_slug}", headers=user_headers, json=patch)
+    assert response.status_code == 200, response.text
+
+    # Check that the project's namespace has been updated
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == project_id
+    assert response.json.get("namespace") == new_group_slug
+    assert response.json.get("slug") == "my-project"
+
+    # Check that we can get the project with the new namespace
+    _, response = await sanic_client.get(
+        f"/api/data/namespaces/{new_group_slug}/projects/{project['slug']}", headers=user_headers
+    )
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == project_id
+
+    # Check that we can get the project with the old namespace
+    _, response = await sanic_client.get(
+        f"/api/data/namespaces/{group_slug}/projects/{project['slug']}", headers=user_headers
+    )
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == project_id
+    _, response = await sanic_client.get(
+        f"/api/data/namespaces/{group_slug}/projects/{project['slug']}",
+        params={"with_documentation": True},
+        headers=user_headers,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == project_id
+    assert response.json.get("documentation") == "Hello, World!"

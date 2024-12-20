@@ -8,7 +8,7 @@ import string
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import PurePosixPath
-from typing import Concatenate, ParamSpec, TypeVar
+from typing import Concatenate, ParamSpec, TypeVar, cast
 
 from cryptography.hazmat.primitives.asymmetric import rsa
 from sqlalchemy import Select, delete, func, select, update
@@ -156,8 +156,45 @@ class ProjectRepository:
             stmt = stmt.where(schemas.ProjectORM.slug.has(ns_schemas.EntitySlugORM.slug == slug))
             if with_documentation:
                 stmt = stmt.options(undefer(schemas.ProjectORM.documentation))
-            result = await session.execute(stmt)
-            project_orm = result.scalars().first()
+            result = await session.scalars(stmt)
+            project_orm = result.first()
+
+            if project_orm is None:
+                old_project_stmt_old_ns_current_slug = (
+                    select(schemas.ProjectORM.id)
+                    .where(ns_schemas.NamespaceOldORM.slug == namespace.lower())
+                    .where(ns_schemas.NamespaceOldORM.latest_slug_id == ns_schemas.NamespaceORM.id)
+                    .where(ns_schemas.EntitySlugORM.namespace_id == ns_schemas.NamespaceORM.id)
+                    .where(schemas.ProjectORM.id == ns_schemas.EntitySlugORM.project_id)
+                    .where(schemas.ProjectORM.slug.has(ns_schemas.EntitySlugORM.slug == slug))
+                )
+                old_project_stmt_current_ns_old_slug = (
+                    select(schemas.ProjectORM.id)
+                    .where(ns_schemas.NamespaceORM.slug == namespace.lower())
+                    .where(ns_schemas.EntitySlugORM.namespace_id == ns_schemas.NamespaceORM.id)
+                    .where(schemas.ProjectORM.id == ns_schemas.EntitySlugORM.project_id)
+                    .where(ns_schemas.EntitySlugOldORM.slug == slug)
+                    .where(ns_schemas.EntitySlugOldORM.latest_slug_id == ns_schemas.EntitySlugORM.id)
+                )
+                old_project_stmt_old_ns_old_slug = (
+                    select(schemas.ProjectORM.id)
+                    .where(ns_schemas.NamespaceOldORM.slug == namespace.lower())
+                    .where(ns_schemas.NamespaceOldORM.latest_slug_id == ns_schemas.NamespaceORM.id)
+                    .where(ns_schemas.EntitySlugORM.namespace_id == ns_schemas.NamespaceORM.id)
+                    .where(schemas.ProjectORM.id == ns_schemas.EntitySlugORM.project_id)
+                    .where(ns_schemas.EntitySlugOldORM.slug == slug)
+                    .where(ns_schemas.EntitySlugOldORM.latest_slug_id == ns_schemas.EntitySlugORM.id)
+                )
+                old_project_stmt = old_project_stmt_old_ns_current_slug.union(
+                    old_project_stmt_current_ns_old_slug, old_project_stmt_old_ns_old_slug
+                )
+                result_old = await session.scalars(old_project_stmt)
+                result_old_id = cast(ULID | None, result_old.first())
+                if result_old_id is not None:
+                    stmt = select(schemas.ProjectORM).where(schemas.ProjectORM.id == result_old_id)
+                    if with_documentation:
+                        stmt = stmt.options(undefer(schemas.ProjectORM.documentation))
+                    project_orm = (await session.scalars(stmt)).first()
 
             not_found_msg = (
                 f"Project with identifier '{namespace}/{slug}' does not exist or you do not have access to it."
@@ -276,13 +313,16 @@ class ProjectRepository:
         if patch.namespace is not None and patch.namespace != old_project.namespace.slug:
             # NOTE: changing the namespace requires the user to be owner which means they should have DELETE permission
             required_scope = Scope.DELETE
+        if patch.slug is not None and patch.slug != old_project.slug:
+            # NOTE: changing the slug requires the user to be owner which means they should have DELETE permission
+            required_scope = Scope.DELETE
         authorized = await self.authz.has_permission(user, ResourceType.project, project_id, required_scope)
         if not authorized:
             raise errors.MissingResourceError(
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
 
-        current_etag = project.dump().etag
+        current_etag = old_project.etag
         if etag is not None and current_etag != etag:
             raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
 
@@ -305,6 +345,19 @@ class ProjectRepository:
                     message=f"The project cannot be moved because you do not have sufficient permissions with the namespace {patch.namespace}"  # noqa: E501
                 )
             project.slug.namespace_id = ns.id
+        if patch.slug is not None and patch.slug != old_project.slug:
+            namespace_id = project.slug.namespace_id
+            existing_entity = await session.scalar(
+                select(ns_schemas.EntitySlugORM)
+                .where(ns_schemas.EntitySlugORM.slug == patch.slug)
+                .where(ns_schemas.EntitySlugORM.namespace_id == namespace_id)
+            )
+            if existing_entity is not None:
+                raise errors.ConflictError(
+                    message=f"An entity with the slug '{project.slug.namespace.slug}/{patch.slug}' already exists."
+                )
+            session.add(ns_schemas.EntitySlugOldORM(slug=old_project.slug, latest_slug_id=project.slug.id))
+            project.slug.slug = patch.slug
         if patch.visibility is not None:
             visibility_orm = (
                 project_apispec.Visibility(patch.visibility)
