@@ -12,6 +12,7 @@ from gitlab.const import Visibility as GitlabVisibility
 from gitlab.v4.objects.projects import Project as GitlabProject
 from sanic.log import logger
 from sanic.response import JSONResponse
+from ulid import ULID
 
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser
 from renku_data_services.base_models.validation import validated_json
@@ -33,6 +34,8 @@ from renku_data_services.notebooks.errors import intermittent
 from renku_data_services.notebooks.errors import user as user_errors
 from renku_data_services.notebooks.util import repository
 from renku_data_services.notebooks.util.kubernetes_ import find_container, renku_1_make_server_name
+from renku_data_services.storage.db import StorageRepository
+from renku_data_services.storage.models import CloudStorage
 from renku_data_services.users.db import UserRepo
 
 
@@ -314,7 +317,6 @@ async def launch_notebook_helper(
     default_url: str,
     lfs_auto_fetch: bool,
     cloudstorage: list[apispec.RCloneStorageRequest],
-    cloudstorage_endpoint: str,
     server_options: ServerOptions | dict | None,
     namespace: str | None,  # Renku 1.0
     project: str | None,  # Renku 1.0
@@ -328,6 +330,7 @@ async def launch_notebook_helper(
     repositories: list[apispec.LaunchNotebookRequestRepository] | None,  # Renku 2.0
     internal_gitlab_user: APIUser,
     user_repo: UserRepo,
+    storage_repo: StorageRepository,
 ) -> tuple[UserServerManifest, int]:
     """Helper function to launch a Jupyter server."""
 
@@ -450,15 +453,16 @@ async def launch_notebook_helper(
         user_secret_key = await user_repo.get_or_create_user_secret_key(user)
         try:
             for cstorage in cloudstorage:
+                saved_storage: CloudStorage | None = None
+                if cstorage.storage_id:
+                    saved_storage = await storage_repo.get_storage_by_id(ULID.from_str(cstorage.storage_id), user)
                 storages.append(
                     await RCloneStorage.storage_from_schema(
-                        cstorage.model_dump(),
-                        user=user,
-                        endpoint=cloudstorage_endpoint,
+                        data=cstorage.model_dump(),
                         work_dir=server_work_dir,
-                        config=nb_config,
-                        internal_gitlab_user=internal_gitlab_user,
                         user_secret_key=user_secret_key,
+                        saved_storage=saved_storage,
+                        storage_class=nb_config.cloud_storage.storage_class,
                     )
                 )
         except errors.ValidationError as e:
@@ -579,6 +583,7 @@ async def launch_notebook(
     internal_gitlab_user: APIUser,
     launch_request: apispec.LaunchNotebookRequestOld,
     user_repo: UserRepo,
+    storage_repo: StorageRepository,
 ) -> tuple[UserServerManifest, int]:
     """Starts a server using the old operator."""
     if isinstance(user, AnonymousAPIUser):
@@ -635,7 +640,7 @@ async def launch_notebook(
         repositories=None,
         internal_gitlab_user=internal_gitlab_user,
         user_repo=user_repo,
-        cloudstorage_endpoint="/storage",
+        storage_repo=storage_repo,
     )
 
 

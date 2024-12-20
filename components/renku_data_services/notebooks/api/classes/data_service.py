@@ -1,11 +1,10 @@
 """Helpers for interacting wit the data service."""
 
 from dataclasses import dataclass, field
-from typing import Any, NamedTuple, Optional, cast
+from typing import Optional
 from urllib.parse import urljoin, urlparse
 
 import httpx
-from sanic.log import logger
 
 from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ResourcePoolRepository
@@ -18,112 +17,7 @@ from renku_data_services.notebooks.api.classes.repository import (
 )
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
 from renku_data_services.notebooks.errors.intermittent import IntermittentError
-from renku_data_services.notebooks.errors.user import (
-    AuthenticationError,
-    InvalidCloudStorageConfiguration,
-    InvalidComputeResourceError,
-    MissingResourceError,
-)
-
-
-class CloudStorageConfig(NamedTuple):
-    """Cloud storage configuration."""
-
-    config: dict[str, Any]
-    source_path: str
-    target_path: str
-    readonly: bool
-    name: str
-    secrets: dict[str, str]  # Mapping of secret IDs to secret name
-
-
-@dataclass
-class StorageValidator:
-    """Cloud storage validator."""
-
-    data_service_url: str
-
-    def __post_init__(self) -> None:
-        self.data_service_url = self.data_service_url.rstrip("/")
-
-    async def get_storage_by_id(
-        self, user: APIUser, internal_gitlab_user: APIUser, endpoint: str, storage_id: str
-    ) -> CloudStorageConfig:
-        """Get a specific cloud storage configuration by ID."""
-        headers = None
-        if user is not None and user.access_token is not None and internal_gitlab_user.access_token is not None:
-            headers = {
-                "Authorization": f"bearer {user.access_token}",
-                "Gitlab-Access-Token": user.access_token,
-            }
-        endpoint = endpoint.strip("/")
-        request_url = self.data_service_url + f"/{endpoint}/{storage_id}"
-        logger.info(f"getting storage info by id: {request_url}")
-        async with httpx.AsyncClient(timeout=10) as client:
-            res = await client.get(request_url, headers=headers)
-        if res.status_code == 404:
-            raise MissingResourceError(message=f"Couldn't find cloud storage with id {storage_id}")
-        if res.status_code == 401:
-            raise AuthenticationError("User is not authorized to access this storage on this project.")
-        if res.status_code != 200:
-            raise IntermittentError(
-                message="The data service sent an unexpected response, please try again later",
-            )
-        response = res.json()
-        storage = response["storage"]
-        secrets = {s["secret_id"]: s["name"] for s in response["secrets"]} if "secrets" in response else {}
-        return CloudStorageConfig(
-            config=storage["configuration"],
-            source_path=storage["source_path"],
-            target_path=storage["target_path"],
-            readonly=storage.get("readonly", True),
-            name=storage["name"],
-            secrets=secrets,
-        )
-
-    async def validate_storage_configuration(self, configuration: dict[str, Any], source_path: str) -> None:
-        """Validate the cloud storage configuration."""
-        async with httpx.AsyncClient(timeout=10) as client:
-            res = await client.post(self.data_service_url + "/storage_schema/validate", json=configuration)
-        if res.status_code == 422:
-            raise InvalidCloudStorageConfiguration(
-                message=f"The provided cloud storage configuration isn't valid: {res.json()}",
-            )
-        if res.status_code != 204:
-            raise IntermittentError(
-                message="The data service sent an unexpected response, please try again later",
-            )
-
-    async def obscure_password_fields_for_storage(self, configuration: dict[str, Any]) -> dict[str, Any]:
-        """Obscures password fields for use with rclone."""
-        async with httpx.AsyncClient(timeout=10) as client:
-            res = await client.post(self.data_service_url + "/storage_schema/obscure", json=configuration)
-
-        if res.status_code != 200:
-            raise InvalidCloudStorageConfiguration(
-                message=f"Couldn't obscure password fields for configuration: {res.json()}"
-            )
-
-        return cast(dict[str, Any], res.json())
-
-
-@dataclass
-class DummyStorageValidator:
-    """Dummy cloud storage validator used for testing."""
-
-    async def get_storage_by_id(
-        self, user: APIUser, internal_gitlab_user: APIUser, endpoint: str, storage_id: str
-    ) -> CloudStorageConfig:
-        """Get storage by ID."""
-        raise NotImplementedError()
-
-    async def validate_storage_configuration(self, configuration: dict[str, Any], source_path: str) -> None:
-        """Validate the cloud storage configuration."""
-        raise NotImplementedError()
-
-    async def obscure_password_fields_for_storage(self, configuration: dict[str, Any]) -> dict[str, Any]:
-        """Obscure the password fields in a cloud storage configuration."""
-        raise NotImplementedError()
+from renku_data_services.notebooks.errors.user import InvalidComputeResourceError
 
 
 @dataclass

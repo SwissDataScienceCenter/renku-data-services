@@ -147,6 +147,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         git_repo=config.git_repositories_repo,
         rp_repo=config.rp_repo,
         user_repo=config.kc_user_repo,
+        storage_repo=config.storage_repo,
     )
     notebooks_new = NotebooksNewBP(
         name="notebooks",

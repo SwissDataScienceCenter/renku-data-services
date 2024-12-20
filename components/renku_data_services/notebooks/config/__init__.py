@@ -2,7 +2,7 @@
 
 import os
 from dataclasses import dataclass, field
-from typing import Any, Optional, Protocol, Self
+from typing import Optional, Protocol, Self
 
 from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ResourcePoolRepository
@@ -11,13 +11,10 @@ from renku_data_services.db_config.config import DBConfig
 from renku_data_services.k8s.clients import K8sCoreClient, K8sSchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.notebooks.api.classes.data_service import (
-    CloudStorageConfig,
     CRCValidator,
     DummyCRCValidator,
     DummyGitProviderHelper,
-    DummyStorageValidator,
     GitProviderHelper,
-    StorageValidator,
 )
 from renku_data_services.notebooks.api.classes.k8s_client import (
     AmaltheaSessionV1Alpha1Kr8s,
@@ -67,24 +64,6 @@ class CRCValidatorProto(Protocol):
         ...
 
 
-class StorageValidatorProto(Protocol):
-    """Cloud storage validator protocol."""
-
-    async def get_storage_by_id(
-        self, user: APIUser, internal_gitlab_user: APIUser, endpoint: str, storage_id: str
-    ) -> CloudStorageConfig:
-        """Get storage by ID."""
-        ...
-
-    async def validate_storage_configuration(self, configuration: dict[str, Any], source_path: str) -> None:
-        """Validate a storage configuration."""
-        ...
-
-    async def obscure_password_fields_for_storage(self, configuration: dict[str, Any]) -> dict[str, Any]:
-        """Obscure passsword fields in storage credentials."""
-        ...
-
-
 class GitProviderHelperProto(Protocol):
     """Git provider protocol."""
 
@@ -106,7 +85,6 @@ class NotebooksConfig:
     cloud_storage: _CloudStorage
     user_secrets: _UserSecrets
     crc_validator: CRCValidatorProto
-    storage_validator: StorageValidatorProto
     git_provider_helper: GitProviderHelperProto
     k8s_client: K8sClient[JupyterServerV1Alpha1, JupyterServerV1Alpha1Kr8s]
     k8s_v2_client: K8sClient[AmaltheaSessionV1Alpha1, AmaltheaSessionV1Alpha1Kr8s]
@@ -132,14 +110,12 @@ class NotebooksConfig:
         data_service_url = os.environ.get("NB_DATA_SERVICE_URL", "http://127.0.0.1:8000")
         server_options = _ServerOptionsConfig.from_env()
         crc_validator: CRCValidatorProto
-        storage_validator: StorageValidatorProto
         git_provider_helper: GitProviderHelperProto
         k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
         quota_repo: QuotaRepository
         if dummy_stores:
             crc_validator = DummyCRCValidator()
             sessions_config = _SessionConfig._for_testing()
-            storage_validator = DummyStorageValidator()
             git_provider_helper = DummyGitProviderHelper()
             amalthea_config = _AmaltheaConfig(cache_url="http://not.specified")
             amalthea_v2_config = _AmaltheaV2Config(cache_url="http://not.specified")
@@ -149,7 +125,6 @@ class NotebooksConfig:
             rp_repo = ResourcePoolRepository(db_config.async_session_maker, quota_repo)
             crc_validator = CRCValidator(rp_repo)
             sessions_config = _SessionConfig.from_env()
-            storage_validator = StorageValidator(data_service_url)
             amalthea_config = _AmaltheaConfig.from_env()
             amalthea_v2_config = _AmaltheaV2Config.from_env()
             git_config = _GitConfig.from_env()
@@ -198,7 +173,6 @@ class NotebooksConfig:
             data_service_url=data_service_url,
             dummy_stores=dummy_stores,
             crc_validator=crc_validator,
-            storage_validator=storage_validator,
             git_provider_helper=git_provider_helper,
             k8s_client=k8s_client,
             k8s_v2_client=k8s_v2_client,

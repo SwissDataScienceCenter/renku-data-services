@@ -90,6 +90,7 @@ class NotebooksBP(CustomBlueprint):
     internal_gitlab_authenticator: base_models.Authenticator
     rp_repo: ResourcePoolRepository
     user_repo: UserRepo
+    storage_repo: StorageRepository
 
     def version(self) -> BlueprintFactoryResponse:
         """Return notebook services version."""
@@ -141,6 +142,7 @@ class NotebooksBP(CustomBlueprint):
                 internal_gitlab_user,
                 body,
                 user_repo=self.user_repo,
+                storage_repo=self.storage_repo,
             )
             return core.serialize_v1_server(server, self.nb_config, status_code)
 
@@ -297,14 +299,14 @@ class NotebooksNewBP(CustomBlueprint):
             async for dc in data_connectors_stream:
                 dcs[str(dc.data_connector.id)] = RCloneStorage(
                     source_path=dc.data_connector.storage.source_path,
+                    configuration=dc.data_connector.storage.configuration,
+                    readonly=dc.data_connector.storage.readonly,
                     mount_folder=dc.data_connector.storage.target_path
                     if PurePosixPath(dc.data_connector.storage.target_path).is_absolute()
                     else (work_dir / dc.data_connector.storage.target_path).as_posix(),
-                    configuration=dc.data_connector.storage.configuration,
-                    readonly=dc.data_connector.storage.readonly,
-                    config=self.nb_config,
                     name=dc.data_connector.name,
                     secrets={str(secret.secret_id): secret.name for secret in dc.secrets},
+                    storage_class=self.nb_config.cloud_storage.storage_class,
                 )
                 if len(dc.secrets) > 0:
                     dcs_secrets[str(dc.data_connector.id)] = dc.secrets
