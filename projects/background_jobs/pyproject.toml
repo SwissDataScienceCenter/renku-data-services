@@ -46,7 +46,7 @@ sqlalchemy = "^2.0.36"
 asyncpg = "^0.30.0"
 sanic-ext = "^23.6.0"
 psycopg = { extras = ["binary"], version = "^3.2.3" }
-authlib = "^1.3.2"
+authlib = "^1.4.0"
 sanic = { extras = ["ext"], version = "^24.6.0" }
 redis = "^5.2.1"
 dataclasses-avroschema = "^0.65.7"
