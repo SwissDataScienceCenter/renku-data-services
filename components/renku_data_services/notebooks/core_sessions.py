@@ -36,6 +36,7 @@ from renku_data_services.notebooks.crs import (
 )
 from renku_data_services.notebooks.models import ExtraSecret
 from renku_data_services.notebooks.utils import get_user_secret
+from renku_data_services.project.models import SessionSecret
 
 
 async def get_extra_init_containers(
@@ -170,7 +171,6 @@ async def get_data_sources(
             else (work_dir / dc.data_connector.storage.target_path).as_posix(),
             configuration=dc.data_connector.storage.configuration,
             readonly=dc.data_connector.storage.readonly,
-            config=nb_config,
             name=dc.data_connector.name,
             secrets={str(secret.secret_id): secret.name for secret in dc.secrets},
             storage_class=nb_config.cloud_storage.storage_class,

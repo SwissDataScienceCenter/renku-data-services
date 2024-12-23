@@ -23,6 +23,7 @@ from renku_data_services.data_connectors.db import (
 )
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec, core
+from renku_data_services.notebooks.api.amalthea_patches.init_containers import user_secrets_container
 from renku_data_services.notebooks.api.classes.repository import Repository
 from renku_data_services.notebooks.api.schemas.config_server_options import ServerOptionsEndpointResponse
 from renku_data_services.notebooks.api.schemas.logs import ServerLogs
@@ -34,6 +35,7 @@ from renku_data_services.notebooks.core_sessions import (
     get_extra_containers,
     get_extra_init_containers,
     request_dc_secret_creation,
+    request_session_secret_creation,
 )
 from renku_data_services.notebooks.crs import (
     Affinity,
@@ -43,7 +45,9 @@ from renku_data_services.notebooks.crs import (
     AuthenticationType,
     Culling,
     ExtraVolume,
+    ExtraVolumeMount,
     Ingress,
+    InitContainer,
     Metadata,
     ReconcileStrategy,
     Resources,
@@ -296,21 +300,26 @@ class NotebooksNewBP(CustomBlueprint):
                         found_provider_id = provider.id
                         break
                 repositories.append(Repository(url=repo, provider=found_provider_id))
-            
+
             # User secrets
-            user_secrets_container = init_containers.user_secrets_container(
+            extra_volume_mounts: list[ExtraVolumeMount] = []
+            extra_volumes: list[ExtraVolume] = []
+            extra_init_containers: list[InitContainer] = []
+            user_secrets_container_patches = user_secrets_container(
                 user=user,
                 config=self.nb_config,
                 secrets_mount_directory=secrets_mount_directory.as_posix(),
                 k8s_secret_name=f"{server_name}-secrets",
                 session_secrets=session_secrets,
             )
-            if user_secrets_container is not None:
-                (init_container, volumes, volume_mounts) = user_secrets_container
-                extra_volumes.extend(volumes)
-                extra_volume_mounts.extend(volume_mounts)
-                session_init_containers.append(init_container)
-            
+            if user_secrets_container_patches is not None:
+                (init_container_session_secret, volumes_session_secret, volume_mounts_session_secret) = (
+                    user_secrets_container_patches
+                )
+                extra_volumes.extend(volumes_session_secret)
+                extra_volume_mounts.extend(volume_mounts_session_secret)
+                extra_init_containers.append(init_container_session_secret)
+
             secrets_to_create: list[ExtraSecret] = []
             data_sources, data_secrets, enc_secrets = await get_data_sources(
                 nb_config=self.nb_config,
@@ -322,8 +331,7 @@ class NotebooksNewBP(CustomBlueprint):
                 cloud_storage_overrides=body.cloudstorage or [],
             )
             secrets_to_create.extend(data_secrets)
-            extra_volumes: list[ExtraVolume] = []
-            extra_init_containers, extra_init_volumes = await get_extra_init_containers(
+            extra_init_containers_dc, extra_init_volumes_dc = await get_extra_init_containers(
                 self.nb_config,
                 user,
                 repositories,
@@ -332,7 +340,8 @@ class NotebooksNewBP(CustomBlueprint):
                 work_dir,
             )
             extra_containers = await get_extra_containers(self.nb_config, user, repositories, git_providers)
-            extra_volumes.extend(extra_init_volumes)
+            extra_volumes.extend(extra_init_volumes_dc)
+            extra_init_containers.extend(extra_init_containers_dc)
 
             base_server_url = self.nb_config.sessions.ingress.base_url(server_name)
             base_server_path = self.nb_config.sessions.ingress.base_path(server_name)
