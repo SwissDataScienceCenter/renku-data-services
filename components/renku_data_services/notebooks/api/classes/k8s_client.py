@@ -362,6 +362,17 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
             await secret.delete()
         return None
 
+    async def patch_secret(self, name: str, patch: dict[str, Any] | list[dict[str, Any]]) -> None:
+        """Patch a secret."""
+        patch_type: str | None = None  # rfc7386 patch
+        if isinstance(patch, list):
+            patch_type = "json"  # rfc6902 patch
+        secret = await Secret(dict(metadata=dict(name=name, namespace=self.namespace)))
+        if not secret:
+            raise errors.MissingResourceError(message=f"Cannot find secret {name}.")
+        with suppress(NotFoundError):
+            await secret.patch(patch, type=patch_type)
+
 
 class ServerCache(Generic[_SessionType]):
     """Utility class for calling the jupyter server cache."""
@@ -543,3 +554,7 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
     async def delete_secret(self, name: str) -> None:
         """Delete a secret."""
         return await self.renku_ns_client.delete_secret(name)
+
+    async def patch_secret(self, name: str, patch: dict[str, Any] | list[dict[str, Any]]) -> None:
+        """Patch a secret."""
+        return await self.renku_ns_client.patch_secret(name, patch)
