@@ -77,6 +77,7 @@ from renku_data_services.project.db import ProjectRepository, ProjectSessionSecr
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository
+from renku_data_services.users.db import UserRepo
 
 
 @dataclass(kw_only=True)
@@ -88,6 +89,8 @@ class NotebooksBP(CustomBlueprint):
     git_repo: GitRepositoriesRepository
     internal_gitlab_authenticator: base_models.Authenticator
     rp_repo: ResourcePoolRepository
+    user_repo: UserRepo
+    storage_repo: StorageRepository
 
     def version(self) -> BlueprintFactoryResponse:
         """Return notebook services version."""
@@ -133,7 +136,14 @@ class NotebooksBP(CustomBlueprint):
             internal_gitlab_user: APIUser,
             body: apispec.LaunchNotebookRequestOld,
         ) -> JSONResponse:
-            server, status_code = await core.launch_notebook(self.nb_config, user, internal_gitlab_user, body)
+            server, status_code = await core.launch_notebook(
+                self.nb_config,
+                user,
+                internal_gitlab_user,
+                body,
+                user_repo=self.user_repo,
+                storage_repo=self.storage_repo,
+            )
             return core.serialize_v1_server(server, self.nb_config, status_code)
 
         return "/notebooks/servers", ["POST"], _launch_notebook
@@ -289,13 +299,14 @@ class NotebooksNewBP(CustomBlueprint):
             async for dc in data_connectors_stream:
                 dcs[str(dc.data_connector.id)] = RCloneStorage(
                     source_path=dc.data_connector.storage.source_path,
+                    configuration=dc.data_connector.storage.configuration,
+                    readonly=dc.data_connector.storage.readonly,
                     mount_folder=dc.data_connector.storage.target_path
                     if PurePosixPath(dc.data_connector.storage.target_path).is_absolute()
                     else (work_dir / dc.data_connector.storage.target_path).as_posix(),
-                    configuration=dc.data_connector.storage.configuration,
-                    readonly=dc.data_connector.storage.readonly,
-                    config=self.nb_config,
                     name=dc.data_connector.name,
+                    secrets={str(secret.secret_id): secret.name for secret in dc.secrets},
+                    storage_class=self.nb_config.cloud_storage.storage_class,
                 )
                 if len(dc.secrets) > 0:
                     dcs_secrets[str(dc.data_connector.id)] = dc.secrets
