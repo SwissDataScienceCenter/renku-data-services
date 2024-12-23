@@ -92,7 +92,7 @@ class RCloneStorage(ICloudStorageRequest):
             configuration = data["configuration"]
             readonly = data.get("readonly", True)
 
-        # NOTE: This is used only in Renku v1, there we cannot save secrets for storage
+        # NOTE: This is used only in Renku v1, there we do not save secrets for storage
         secrets: dict[str, str] = {}
         mount_folder = str(work_dir / target_path)
         return cls(
