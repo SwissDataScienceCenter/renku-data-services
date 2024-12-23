@@ -532,7 +532,7 @@ components:
       maxLength: 200
       example: "/lab"
     ResourceClassId:
-      dexscription: The identifier of a resource class
+      description: The identifier of a resource class
       type: integer
       default: null
       nullable: true
