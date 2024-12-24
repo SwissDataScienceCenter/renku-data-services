@@ -142,7 +142,7 @@ help:  ## Display this help.
 
 .PHONY: k3d_cluster
 k3d_cluster:  ## Creates a k3d cluster for testing
-	./setup-k3d-cluster.sh --reset --install-shipwright
+	./setup-k3d-cluster.sh --reset --deploy-shipwright
 
 .PHONY: install_amaltheas
 install_amaltheas:  ## Installs both version of amalthea in the. NOTE: It uses the currently active k8s context.
