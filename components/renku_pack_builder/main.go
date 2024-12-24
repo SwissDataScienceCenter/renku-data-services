@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"slices"
 	"strings"
+
+	"github.com/go-cmd/cmd"
 )
 
 const (
@@ -30,10 +31,47 @@ func checkError(err error) {
 	}
 }
 
-func checkCmdError(err error, output []byte) {
-	if err != nil {
-		fmt.Println(string(output))
-		panic(err)
+func runCommand(command string, args ...string) {
+	cmdOptions := cmd.Options{
+		Buffered:  false,
+		Streaming: true,
+	}
+
+	runCmd := cmd.NewCmdOptions(cmdOptions, command, args...)
+
+	// Print STDOUT and STDERR lines streaming from Cmd
+	doneChan := make(chan struct{})
+	go func() {
+		defer close(doneChan)
+		// Done when both channels have been closed
+		// https://dave.cheney.net/2013/04/30/curious-channels
+		for runCmd.Stdout != nil || runCmd.Stderr != nil {
+			select {
+			case line, open := <-runCmd.Stdout:
+				if !open {
+					runCmd.Stdout = nil
+					continue
+				}
+				fmt.Println(line)
+			case line, open := <-runCmd.Stderr:
+				if !open {
+					runCmd.Stderr = nil
+					continue
+				}
+				fmt.Fprintln(os.Stderr, line)
+			}
+		}
+	}()
+
+	// Run and wait for Cmd to return, discard Status
+	status := <-runCmd.Start()
+
+	// Wait for goroutine to print everything
+	<-doneChan
+
+	if status.Error != nil {
+		fmt.Println(status.Stderr)
+		panic(status.Error)
 	}
 }
 
@@ -69,11 +107,11 @@ func main() {
 	}
 
 	if paramOutputImage == "" {
-		panic("missing or empty PARAM_OUTPUT_IMAGE")
+		panic("missing or empty PARAM_OUTPUT_IMAGE environment variable")
 	}
 
 	if paramSourceContext == "" {
-		panic("missing or empty PARAM_SOURCE_CONTEXT")
+		panic("missing or empty PARAM_SOURCE_CONTEXT environment variable")
 	}
 
 	err := os.MkdirAll(layersDir, 0777)
@@ -82,48 +120,35 @@ func main() {
 	checkError(err)
 
 	announcePhase("ANALYZING")
-	cmd := exec.Command("/cnb/lifecycle/analyzer", "-layers="+layersDir, paramOutputImage)
-	out, err := cmd.Output()
-	checkCmdError(err, out)
+	runCommand("/cnb/lifecycle/analyzer", "-layers="+layersDir, paramOutputImage)
 
 	announcePhase("DETECTING")
-	cmd = exec.Command("/cnb/lifecycle/detector", "-app="+paramSourceContext, "-layers="+layersDir)
-	out, err = cmd.Output()
-	checkCmdError(err, out)
+	runCommand("/cnb/lifecycle/detector", "-app="+paramSourceContext, "-layers="+layersDir)
 
 	announcePhase("RESTORING")
-	cmd = exec.Command("/cnb/lifecycle/restorer", "-cache-dir="+cacheDir, "-layers="+layersDir)
-	out, err = cmd.Output()
-	checkCmdError(err, out)
+	runCommand("/cnb/lifecycle/restorer", "-cache-dir="+cacheDir, "-layers="+layersDir)
 
 	announcePhase("BUILDING")
-	cmd = exec.Command("/cnb/lifecycle/builder", "-app="+paramSourceContext, "-layers="+layersDir)
-	out, err = cmd.Output()
-	checkCmdError(err, out)
+	runCommand("/cnb/lifecycle/builder", "-app="+paramSourceContext, "-layers="+layersDir)
 
 	announcePhase("EXPORTING")
-	exporterArgs := []string{"-layers=" + layersDir, "-report=/tmp/report.toml", "-cache-dir=" + cacheDir, "-app=" + paramSourceContext}
 
 	f, err := os.Open(layersDir + "/config/metadata.toml")
 	checkError(err)
-	defer f.Close()
-
 	data, err := io.ReadAll(f)
 	checkError(err)
+	f.Close()
 
+	exporterArgs := []string{"-layers=" + layersDir, "-report=/tmp/report.toml", "-cache-dir=" + cacheDir, "-app=" + paramSourceContext}
 	if !strings.Contains(string(data), "buildpack-default-process-type") {
 		exporterArgs = append(exporterArgs, "-process-type=web")
 	}
-
 	exporterArgs = append(exporterArgs, paramOutputImage)
 
-	cmd = exec.Command("/cnb/lifecycle/exporter", exporterArgs...)
-	out, err = cmd.CombinedOutput()
-	checkCmdError(err, out)
+	runCommand("/cnb/lifecycle/exporter", exporterArgs...)
 
 	f, err = os.Open("/tmp/report.toml")
 	checkError(err)
-
 	fileScanner := bufio.NewScanner(f)
 	fileScanner.Split(bufio.ScanLines)
 	var fileLines []string
@@ -131,7 +156,6 @@ func main() {
 	for fileScanner.Scan() {
 		fileLines = append(fileLines, fileScanner.Text())
 	}
-
 	f.Close()
 
 	imageDigest := ""
