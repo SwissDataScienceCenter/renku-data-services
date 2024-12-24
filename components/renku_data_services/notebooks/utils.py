@@ -2,6 +2,7 @@
 
 import renku_data_services.crc.models as crc_models
 from renku_data_services.notebooks.crs import (
+    Affinity,
     MatchExpression,
     NodeAffinity,
     NodeSelectorTerm,
@@ -53,9 +54,12 @@ def merge_node_affinities(
     return output
 
 
-def node_affinity_from_resource_class(resource_class: crc_models.ResourceClass) -> NodeAffinity:
+def node_affinity_from_resource_class(
+    resource_class: crc_models.ResourceClass,
+    default_affinity: Affinity,
+) -> Affinity:
     """Generate an affinity from the affinities stored in a resource class."""
-    output = NodeAffinity()
+    rc_node_affinity = NodeAffinity()
     required_expr = [
         MatchExpression(key=affinity.key, operator="Exists")
         for affinity in resource_class.node_affinities
@@ -67,17 +71,19 @@ def node_affinity_from_resource_class(resource_class: crc_models.ResourceClass) 
         if not affinity.required_during_scheduling
     ]
     if required_expr:
-        output.requiredDuringSchedulingIgnoredDuringExecution = RequiredDuringSchedulingIgnoredDuringExecution(
-            nodeSelectorTerms=[
-                # NOTE: Node selector terms are ORed by kubernetes
-                NodeSelectorTerm(
-                    # NOTE: matchExpression terms are ANDed by kubernetes
-                    matchExpressions=required_expr,
-                )
-            ]
+        rc_node_affinity.requiredDuringSchedulingIgnoredDuringExecution = (
+            RequiredDuringSchedulingIgnoredDuringExecution(
+                nodeSelectorTerms=[
+                    # NOTE: Node selector terms are ORed by kubernetes
+                    NodeSelectorTerm(
+                        # NOTE: matchExpression terms are ANDed by kubernetes
+                        matchExpressions=required_expr,
+                    )
+                ]
+            )
         )
     if preferred_expr:
-        output.preferredDuringSchedulingIgnoredDuringExecution = [
+        rc_node_affinity.preferredDuringSchedulingIgnoredDuringExecution = [
             PreferredDuringSchedulingIgnoredDuringExecutionItem(
                 weight=1,
                 preference=Preference(
@@ -86,12 +92,21 @@ def node_affinity_from_resource_class(resource_class: crc_models.ResourceClass) 
                 ),
             )
         ]
-    return output
+
+    affinity = default_affinity.model_copy(deep=True)
+    if affinity.nodeAffinity:
+        affinity.nodeAffinity = merge_node_affinities(affinity.nodeAffinity, rc_node_affinity)
+    else:
+        affinity.nodeAffinity = rc_node_affinity
+    return affinity
 
 
-def tolerations_from_resource_class(resource_class: crc_models.ResourceClass) -> list[Toleration]:
+def tolerations_from_resource_class(
+    resource_class: crc_models.ResourceClass, default_tolerations: list[Toleration]
+) -> list[Toleration]:
     """Generate tolerations from the list of tolerations of a resource class."""
     output: list[Toleration] = []
+    output.extend(default_tolerations)
     for tol in resource_class.tolerations:
         output.append(Toleration(key=tol, operator="Exists"))
     return output

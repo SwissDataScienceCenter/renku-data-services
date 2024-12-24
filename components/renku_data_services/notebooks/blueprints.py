@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from pathlib import PurePosixPath
-from typing import Any, cast
+from typing import cast
 from urllib.parse import urlparse
 
 from sanic import Request, empty, exceptions, json
@@ -34,11 +34,11 @@ from renku_data_services.notebooks.core_sessions import (
     get_data_sources,
     get_extra_containers,
     get_extra_init_containers,
+    patch_session,
     request_dc_secret_creation,
     request_session_secret_creation,
 )
 from renku_data_services.notebooks.crs import (
-    Affinity,
     AmaltheaSessionSpec,
     AmaltheaSessionV1Alpha1,
     Authentication,
@@ -53,10 +53,8 @@ from renku_data_services.notebooks.crs import (
     Resources,
     Session,
     SessionEnvItem,
-    State,
     Storage,
     TlsSecret,
-    Toleration,
 )
 from renku_data_services.notebooks.errors.intermittent import AnonymousUserPatchError
 from renku_data_services.notebooks.models import ExtraSecret
@@ -64,7 +62,6 @@ from renku_data_services.notebooks.util.kubernetes_ import (
     renku_2_make_server_name,
 )
 from renku_data_services.notebooks.utils import (
-    merge_node_affinities,
     node_affinity_from_resource_class,
     tolerations_from_resource_class,
 )
@@ -364,15 +361,6 @@ class NotebooksNewBP(CustomBlueprint):
                 gpu_name = GpuKind.NVIDIA.value + "/gpu"
                 requests[gpu_name] = resource_class.gpu
                 limits[gpu_name] = resource_class.gpu
-            tolerations = [
-                Toleration.model_validate(toleration) for toleration in self.nb_config.sessions.tolerations
-            ] + tolerations_from_resource_class(resource_class)
-            affinity = Affinity.model_validate(self.nb_config.sessions.affinity)
-            rc_node_affinity = node_affinity_from_resource_class(resource_class)
-            if affinity.nodeAffinity:
-                affinity.nodeAffinity = merge_node_affinities(affinity.nodeAffinity, rc_node_affinity)
-            else:
-                affinity.nodeAffinity = rc_node_affinity
             if isinstance(user, AuthenticatedAPIUser):
                 auth_secret = await get_auth_secret_authenticated(self.nb_config, user, server_name)
             else:
@@ -442,8 +430,10 @@ class NotebooksNewBP(CustomBlueprint):
                         extraVolumeMounts=[auth_secret.volume_mount] if auth_secret.volume_mount else [],
                     ),
                     dataSources=data_sources,
-                    tolerations=tolerations,
-                    affinity=affinity,
+                    tolerations=tolerations_from_resource_class(
+                        resource_class, self.nb_config.sessions.tolerations_model
+                    ),
+                    affinity=node_affinity_from_resource_class(resource_class, self.nb_config.sessions.affinity_model),
                 ),
             )
             for s in secrets_to_create:
@@ -512,54 +502,7 @@ class NotebooksNewBP(CustomBlueprint):
             session_id: str,
             body: apispec.SessionPatchRequest,
         ) -> HTTPResponse:
-            session = await self.nb_config.k8s_v2_client.get_server(session_id, user.id)
-            if session is None:
-                raise errors.MissingResourceError(
-                    message=f"The sesison with ID {session_id} does not exist", quiet=True
-                )
-            # TODO: Some patching should only be done when the session is in some states to avoid inadvertent restarts
-            patches: dict[str, Any] = {}
-            if body.resource_class_id is not None:
-                rcs = await self.rp_repo.get_classes(user, id=body.resource_class_id)
-                if len(rcs) == 0:
-                    raise errors.MissingResourceError(
-                        message=f"The resource class you requested with ID {body.resource_class_id} does not exist",
-                        quiet=True,
-                    )
-                rc = rcs[0]
-                patches |= dict(
-                    spec=dict(
-                        session=dict(
-                            resources=dict(requests=dict(cpu=f"{round(rc.cpu * 1000)}m", memory=f"{rc.memory}Gi"))
-                        )
-                    )
-                )
-                # TODO: Add a config to specifiy the gpu kind, there is also GpuKind enum in reosurce_pools
-                patches["spec"]["session"]["resources"]["requests"]["nvidia.com/gpu"] = rc.gpu
-                # NOTE: K8s fails if the gpus limit is not equal to the requests because it cannot be overcommited
-                patches["spec"]["session"]["resources"]["limits"] = {"nvidia.com/gpu": rc.gpu}
-            if (
-                body.state is not None
-                and body.state.value.lower() == State.Hibernated.value.lower()
-                and body.state.value.lower() != session.status.state.value.lower()
-            ):
-                if "spec" not in patches:
-                    patches["spec"] = {}
-                patches["spec"]["hibernated"] = True
-            elif (
-                body.state is not None
-                and body.state.value.lower() == State.Running.value.lower()
-                and session.status.state.value.lower() != body.state.value.lower()
-            ):
-                if "spec" not in patches:
-                    patches["spec"] = {}
-                patches["spec"]["hibernated"] = False
-
-            if len(patches) > 0:
-                new_session = await self.nb_config.k8s_v2_client.patch_server(session_id, user.id, patches)
-            else:
-                new_session = session
-
+            new_session = await patch_session(body, session_id, self.nb_config, user, self.rp_repo, self.project_repo)
             return json(new_session.as_apispec().model_dump(exclude_none=True, mode="json"))
 
         return "/sessions/<session_id>", ["PATCH"], _handler
