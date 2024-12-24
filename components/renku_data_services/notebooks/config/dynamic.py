@@ -10,7 +10,8 @@ from urllib.parse import urlunparse
 
 import yaml
 
-from ..api.schemas.config_server_options import ServerOptionsChoices, ServerOptionsDefaults
+from renku_data_services.notebooks.api.schemas.config_server_options import ServerOptionsChoices, ServerOptionsDefaults
+from renku_data_services.notebooks.crs import Affinity, Toleration
 
 latest_version: str = "1.25.3"
 
@@ -443,6 +444,14 @@ class _SessionConfig:
             affinity=yaml.safe_load(StringIO(os.environ.get("", "{}"))),
             tolerations=yaml.safe_load(StringIO(os.environ.get("", "[]"))),
         )
+
+    @property
+    def affinity_model(self) -> Affinity:
+        return Affinity.model_validate(self.affinity)
+
+    @property
+    def tolerations_model(self) -> list[Toleration]:
+        return [Toleration.model_validate(tol) for tol in self.tolerations]
 
 
 @dataclass

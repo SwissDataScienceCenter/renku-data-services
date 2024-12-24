@@ -5,17 +5,17 @@ import os
 from collections.abc import AsyncIterator
 from json import dumps
 from pathlib import PurePosixPath
-from typing import Any, cast
+from typing import cast
 from urllib.parse import urljoin, urlparse
 
 import httpx
 from kubernetes.client import V1ObjectMeta, V1Secret
-from sanic import Request, json
-from sanic.response import JSONResponse
+from sanic import Request
 from yaml import safe_dump
 
 from renku_data_services.base_models.core import AnonymousAPIUser, AuthenticatedAPIUser
 from renku_data_services.crc.db import ResourcePoolRepository
+from renku_data_services.crc.models import GpuKind, ResourceClass
 from renku_data_services.data_connectors.models import DataConnectorSecret, DataConnectorWithSecrets
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec
@@ -25,18 +25,27 @@ from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorag
 from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.notebooks.crs import (
     AmaltheaSessionV1Alpha1,
+    AmaltheaSessionV1Alpha1Patch,
+    AmaltheaSessionV1Alpha1SpecPatch,
+    AmaltheaSessionV1Alpha1SpecSessionPatch,
     DataSource,
     ExtraContainer,
     ExtraVolume,
     ExtraVolumeMount,
     InitContainer,
+    Resources,
     SecretAsVolume,
     SecretAsVolumeItem,
     State,
 )
 from renku_data_services.notebooks.models import ExtraSecret
-from renku_data_services.notebooks.utils import get_user_secret
-from renku_data_services.project.models import SessionSecret
+from renku_data_services.notebooks.utils import (
+    get_user_secret,
+    node_affinity_from_resource_class,
+    tolerations_from_resource_class,
+)
+from renku_data_services.project.db import ProjectRepository
+from renku_data_services.project.models import Project, SessionSecret
 
 
 async def get_extra_init_containers(
@@ -303,19 +312,85 @@ async def request_session_secret_creation(
             )
 
 
+def resources_from_resource_class(resource_class: ResourceClass) -> Resources:
+    """Convert the resource class to a k8s resources spec."""
+    requests: dict[str, str | int] = {
+        "cpu": str(round(resource_class.cpu * 1000)) + "m",
+        "memory": f"{resource_class.memory}Gi",
+    }
+    limits: dict[str, str | int] = {}
+    if resource_class.gpu > 0:
+        gpu_name = GpuKind.NVIDIA.value + "/gpu"
+        requests[gpu_name] = resource_class.gpu
+        # NOTE: GPUs have to be set in limits too since GPUs cannot be overcommited, if
+        # not on some clusters this will cause the session to fully fail to start.
+        limits[gpu_name] = resource_class.gpu
+    return Resources(requests=requests, limits=limits if len(limits) > 0 else None)
+
+
+def repositories_from_project(project: Project, git_providers: list[GitProvider]) -> list[Repository]:
+    """Get the list of git repositories from a project."""
+    repositories: list[Repository] = []
+    for repo in project.repositories:
+        found_provider_id: str | None = None
+        for provider in git_providers:
+            if urlparse(provider.url).netloc == urlparse(repo).netloc:
+                found_provider_id = provider.id
+                break
+        repositories.append(Repository(url=repo, provider=found_provider_id))
+    return repositories
+
+
+async def repositories_from_session(
+    user: AnonymousAPIUser | AuthenticatedAPIUser,
+    session: AmaltheaSessionV1Alpha1,
+    project_repo: ProjectRepository,
+    git_providers: list[GitProvider],
+) -> list[Repository]:
+    """Get the list of git repositories from a session."""
+    try:
+        project = await project_repo.get_project(user, session.project_id)
+    except errors.MissingResourceError:
+        return []
+    return repositories_from_project(project, git_providers)
+
+
 async def patch_session(
     body: apispec.SessionPatchRequest,
     session_id: str,
     nb_config: NotebooksConfig,
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     rp_repo: ResourcePoolRepository,
-) -> JSONResponse:
+    project_repo: ProjectRepository,
+) -> AmaltheaSessionV1Alpha1:
     """Patch an Amalthea session."""
     session = await nb_config.k8s_v2_client.get_server(session_id, user.id)
     if session is None:
         raise errors.MissingResourceError(message=f"The sesison with ID {session_id} does not exist", quiet=True)
+
+    patch = AmaltheaSessionV1Alpha1Patch(spec=AmaltheaSessionV1Alpha1SpecPatch())
+    is_getting_hibernated: bool = False
+
+    # Hibernation
     # TODO: Some patching should only be done when the session is in some states to avoid inadvertent restarts
-    patches: dict[str, Any] = {}
+    # Refresh tokens for git proxy
+    if (
+        body.state is not None
+        and body.state.value.lower() == State.Hibernated.value.lower()
+        and body.state.value.lower() != session.status.state.value.lower()
+    ):
+        # Session is being hibernated
+        patch.spec.hibernated = True
+        is_getting_hibernated = True
+    elif (
+        body.state is not None
+        and body.state.value.lower() == State.Running.value.lower()
+        and session.status.state.value.lower() != body.state.value.lower()
+    ):
+        # Session is being resumed
+        patch.spec.hibernated = False
+
+    # Resource class
     if body.resource_class_id is not None:
         rcs = await rp_repo.get_classes(user, id=body.resource_class_id)
         if len(rcs) == 0:
@@ -324,35 +399,35 @@ async def patch_session(
                 quiet=True,
             )
         rc = rcs[0]
-        patches |= dict(
-            spec=dict(
-                session=dict(resources=dict(requests=dict(cpu=f"{round(rc.cpu * 1000)}m", memory=f"{rc.memory}Gi")))
-            )
-        )
-        # TODO: Add a config to specifiy the gpu kind, there is also GpuKind enum in reosurce_pools
-        patches["spec"]["session"]["resources"]["requests"]["nvidia.com/gpu"] = rc.gpu
-        # NOTE: K8s fails if the gpus limit is not equal to the requests because it cannot be overcommited
-        patches["spec"]["session"]["resources"]["limits"] = {"nvidia.com/gpu": rc.gpu}
-    if (
-        body.state is not None
-        and body.state.value.lower() == State.Hibernated.value.lower()
-        and body.state.value.lower() != session.status.state.value.lower()
-    ):
-        if "spec" not in patches:
-            patches["spec"] = {}
-        patches["spec"]["hibernated"] = True
-    elif (
-        body.state is not None
-        and body.state.value.lower() == State.Running.value.lower()
-        and session.status.state.value.lower() != body.state.value.lower()
-    ):
-        if "spec" not in patches:
-            patches["spec"] = {}
-        patches["spec"]["hibernated"] = False
+        if not patch.spec.session:
+            patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()
+        patch.spec.session.resources = resources_from_resource_class(rc)
+        # Tolerations
+        tolerations = tolerations_from_resource_class(rc, nb_config.sessions.tolerations_model)
+        if tolerations:
+            patch.spec.tolerations = tolerations
+        # Affinities
+        patch.spec.affinity = node_affinity_from_resource_class(rc, nb_config.sessions.affinity_model)
 
-    if len(patches) > 0:
-        new_session = await nb_config.k8s_v2_client.patch_server(session_id, user.id, patches)
-    else:
-        new_session = session
+    # If the session is being hibernated we do not need to patch anything else that is
+    # not specifically called for in the request body, we can refresh things when the user resumes.
+    if is_getting_hibernated:
+        return await nb_config.k8s_v2_client.patch_server(session_id, user.id, patch.to_rfc7386())
 
-    return json(new_session.as_apispec().model_dump(exclude_none=True, mode="json"))
+    # Patching the extra containers (includes the git proxy)
+    git_providers = await nb_config.git_provider_helper.get_providers(user)
+    repositories = await repositories_from_session(user, session, project_repo, git_providers)
+    extra_containers = await get_extra_containers(
+        nb_config,
+        user,
+        repositories,
+        git_providers,
+    )
+    if extra_containers:
+        patch.spec.extraContainers = extra_containers
+
+    patch_serialized = patch.to_rfc7386()
+    if len(patch_serialized) == 0:
+        return session
+
+    return await nb_config.k8s_v2_client.patch_server(session_id, user.id, patch_serialized)
