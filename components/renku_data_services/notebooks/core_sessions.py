@@ -408,6 +408,9 @@ async def patch_session(
             patch.spec.tolerations = tolerations
         # Affinities
         patch.spec.affinity = node_affinity_from_resource_class(rc, nb_config.sessions.affinity_model)
+        # Priority class (if a quota is being used)
+        if rc.quota:
+            patch.spec.priorityClassName = rc.quota
 
     # If the session is being hibernated we do not need to patch anything else that is
     # not specifically called for in the request body, we can refresh things when the user resumes.
