@@ -268,7 +268,6 @@ class NotebooksNewBP(CustomBlueprint):
             if default_resource_class.id is None:
                 raise errors.ProgrammingError(message="The default resource class has to have an ID", quiet=True)
             resource_class_id: int
-            quota: str | None = None
             if body.resource_class_id is None:
                 resource_class = await self.rp_repo.get_default_resource_class()
                 # TODO: Add types for saved and unsaved resource class
@@ -277,7 +276,6 @@ class NotebooksNewBP(CustomBlueprint):
                 resource_class = await self.rp_repo.get_resource_class(user, body.resource_class_id)
                 # TODO: Add types for saved and unsaved resource class
                 resource_class_id = body.resource_class_id
-                quota = resource_class.quota
             await self.nb_config.crc_validator.validate_class_storage(user, resource_class_id, body.disk_storage)
             work_dir_fallback = PurePosixPath("/home/jovyan")
             work_dir = environment.working_directory or image_workdir or work_dir_fallback
@@ -374,7 +372,7 @@ class NotebooksNewBP(CustomBlueprint):
                     codeRepositories=[],
                     hibernated=False,
                     reconcileStrategy=ReconcileStrategy.whenFailedOrHibernated,
-                    priorityClassName=quota,
+                    priorityClassName=resource_class.quota,
                     session=Session(
                         image=image,
                         urlPath=ui_path,
