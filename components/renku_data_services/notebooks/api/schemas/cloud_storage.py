@@ -8,9 +8,8 @@ from typing import Any, Final, Optional, Protocol, Self
 from kubernetes import client
 from marshmallow import EXCLUDE, Schema, ValidationError, fields, validates_schema
 
-from renku_data_services.base_models import APIUser
 from renku_data_services.notebooks.api.classes.cloud_storage import ICloudStorageRequest
-from renku_data_services.notebooks.config import NotebooksConfig
+from renku_data_services.storage.models import CloudStorage
 
 _sanitize_for_serialization = client.ApiClient().sanitize_for_serialization
 
@@ -57,54 +56,55 @@ class RCloneStorage(ICloudStorageRequest):
         readonly: bool,
         mount_folder: str,
         name: Optional[str],
-        config: NotebooksConfig,
+        secrets: dict[str, str],  # "Mapping between secret ID (key) and secret name (value)
+        storage_class: str,
+        user_secret_key: str | None = None,
     ) -> None:
         """Creates a cloud storage instance without validating the configuration."""
-        self.config = config
         self.configuration = configuration
         self.source_path = source_path
         self.mount_folder = mount_folder
         self.readonly = readonly
         self.name = name
+        self.secrets = secrets
+        self.base_name: str | None = None
+        self.user_secret_key = user_secret_key
+        self.storage_class = storage_class
 
     @classmethod
     async def storage_from_schema(
         cls,
         data: dict[str, Any],
-        user: APIUser,
-        internal_gitlab_user: APIUser,
-        project_id: int,
         work_dir: PurePosixPath,
-        config: NotebooksConfig,
+        saved_storage: CloudStorage | None,
+        storage_class: str,
+        user_secret_key: str | None = None,
     ) -> Self:
         """Create storage object from request."""
         name = None
-        if data.get("storage_id"):
-            # Load from storage service
-            if user.access_token is None:
-                raise ValidationError("Storage mounting is only supported for logged-in users.")
-            if project_id < 1:
-                raise ValidationError("Could not get gitlab project id")
-            (
-                configuration,
-                source_path,
-                target_path,
-                readonly,
-                name,
-            ) = await config.storage_validator.get_storage_by_id(
-                user, internal_gitlab_user, project_id, data["storage_id"]
-            )
-            configuration = {**configuration, **(data.get("configuration", {}))}
-            readonly = readonly
+        if saved_storage:
+            configuration = {**saved_storage.configuration.model_dump(), **(data.get("configuration", {}))}
+            readonly = saved_storage.readonly
+            name = saved_storage.name
         else:
             source_path = data["source_path"]
             target_path = data["target_path"]
             configuration = data["configuration"]
             readonly = data.get("readonly", True)
-        mount_folder = str(work_dir / target_path)
 
-        await config.storage_validator.validate_storage_configuration(configuration, source_path)
-        return cls(source_path, configuration, readonly, mount_folder, name, config)
+        # NOTE: This is used only in Renku v1, there we do not save secrets for storage
+        secrets: dict[str, str] = {}
+        mount_folder = str(work_dir / target_path)
+        return cls(
+            source_path=source_path,
+            configuration=configuration,
+            readonly=readonly,
+            mount_folder=mount_folder,
+            name=name,
+            storage_class=storage_class,
+            secrets=secrets,
+            user_secret_key=user_secret_key,
+        )
 
     def pvc(
         self,
@@ -126,7 +126,7 @@ class RCloneStorage(ICloudStorageRequest):
             spec=client.V1PersistentVolumeClaimSpec(
                 access_modes=["ReadOnlyMany" if self.readonly else "ReadWriteMany"],
                 resources=client.V1VolumeResourceRequirements(requests={"storage": "10Gi"}),
-                storage_class_name=self.config.cloud_storage.storage_class,
+                storage_class_name=self.storage_class,
             ),
         )
 
@@ -161,6 +161,10 @@ class RCloneStorage(ICloudStorageRequest):
             "remotePath": self.source_path,
             "configData": self.config_string(self.name or base_name),
         }
+        # NOTE: in Renku v1 this function is not directly called so the base name
+        # comes from the user_secret_key property on the class instance
+        if self.user_secret_key:
+            string_data["secretKey"] = self.user_secret_key
         if user_secret_key:
             string_data["secretKey"] = user_secret_key
         return client.V1Secret(
@@ -183,6 +187,7 @@ class RCloneStorage(ICloudStorageRequest):
         annotations: dict[str, str] | None = None,
     ) -> list[dict[str, Any]]:
         """Get server manifest patch."""
+        self.base_name = base_name
         patches = []
         patches.append(
             {
@@ -270,7 +275,16 @@ class RCloneStorage(ICloudStorageRequest):
             readonly=override.readonly if override.readonly is not None else self.readonly,
             configuration=override.configuration if override.configuration else self.configuration,
             name=self.name,
-            config=self.config,
+            secrets=self.secrets,
+            storage_class=self.storage_class,
+            user_secret_key=self.user_secret_key,
+        )
+
+    def __repr__(self) -> str:
+        """Override to make sure no secrets or sensitive configuration gets printed in logs."""
+        return (
+            f"{RCloneStorageRequest.__name__}(name={self.name}, source_path={self.source_path}, "
+            f"mount_folder={self.mount_folder}, readonly={self.readonly})"
         )
 
 
