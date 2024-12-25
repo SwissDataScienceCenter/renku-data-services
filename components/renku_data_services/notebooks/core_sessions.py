@@ -3,7 +3,6 @@
 import base64
 import os
 from collections.abc import AsyncIterator
-from json import dumps
 from pathlib import PurePosixPath
 from typing import cast
 from urllib.parse import urljoin, urlparse
@@ -11,6 +10,7 @@ from urllib.parse import urljoin, urlparse
 import httpx
 from kubernetes.client import V1ObjectMeta, V1Secret
 from sanic import Request
+from toml import dumps
 from yaml import safe_dump
 
 from renku_data_services.base_models.core import AnonymousAPIUser, AuthenticatedAPIUser

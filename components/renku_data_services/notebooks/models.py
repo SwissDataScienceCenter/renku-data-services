@@ -95,18 +95,24 @@ class ExtraSecret:
 
     def key_ref(self, key: str) -> SecretRef:
         """Get an amalthea secret key reference."""
-        secret_name = getattr(self.secret, "metadata", {}).get("name")
+        meta = self.secret.metadata
+        if not meta:
+            raise ProgrammingError(message="Cannot get reference to a secret that does not have metadata.")
+        secret_name = meta.name
         if not secret_name:
             raise ProgrammingError(message="Cannot get reference to a secret that does not have a name.")
         data = self.secret.data or {}
         string_data = self.secret.string_data or {}
         if key not in data and key not in string_data:
             raise KeyError(f"Cannot find the key {key} in the secret with name {secret_name}")
-        return SecretRef(key=key, name=self.secret.metadata["name"], adopt=self.adopt)
+        return SecretRef(key=key, name=secret_name, adopt=self.adopt)
 
     def ref(self) -> SecretRefWhole:
         """Get an amalthea reference to the whole secret."""
-        secret_name = getattr(self.secret, "metadata", {}).get("name")
+        meta = self.secret.metadata
+        if not meta:
+            raise ProgrammingError(message="Cannot get reference to a secret that does not have metadata.")
+        secret_name = meta.name
         if not secret_name:
             raise ProgrammingError(message="Cannot get reference to a secret that does not have a name.")
         return SecretRefWhole(name=secret_name, adopt=self.adopt)
