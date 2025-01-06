@@ -6,7 +6,9 @@
 	"workspaceFolder": "/workspace",
 	"shutdownAction": "stopCompose",
 	"features": {
-		"ghcr.io/devcontainers-contrib/features/poetry:2": {},
+		"ghcr.io/devcontainers-contrib/features/poetry:2": {
+			"version": "1.8.5"
+		},
 		"ghcr.io/devcontainers-contrib/features/bash-command:1": {
 			"command": "poetry self add poetry-polylith-plugin"
 		},
