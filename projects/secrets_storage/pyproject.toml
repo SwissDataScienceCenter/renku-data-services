@@ -1,10 +1,15 @@
-[tool.poetry]
+[project]
 name = "secrets_storage"
 version = "0.1.0"
 description = ""
-authors = ['Swiss Data Science Center <contact@datascience.ch>']
-license = "Apache License 2.0"
+authors = [
+  { name = "Swiss Data Science Center", email = "contact@datascience.ch" },
+]
+license = ""
+requires-python = ">=3.12"
+dynamic = ["dependencies"]
 
+[tool.poetry]
 packages = [
   { include = "renku_data_services/secrets_storage_api", from = "../../bases" },
   { include = "renku_data_services/data_api", from = "../../bases" },

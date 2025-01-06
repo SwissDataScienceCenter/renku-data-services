@@ -1,10 +1,15 @@
-[tool.poetry]
+[project]
 name = "renku_data_service"
 version = "0.1.0"
 description = ""
-authors = ['Swiss Data Science Center <contact@datascience.ch>']
-license = "Apache License 2.0"
+authors = [
+  { name = "Swiss Data Science Center", email = "contact@datascience.ch" },
+]
+license = ""
+requires-python = ">=3.12"
+dynamic = ["dependencies"]
 
+[tool.poetry]
 packages = [
   { include = "renku_data_services/data_api", from = "../../bases" },
   { include = "renku_data_services/app_config", from = "../../components" },
@@ -38,7 +43,7 @@ packages = [
 [tool.poetry.dependencies]
 python = "^3.12"
 sanic = { extras = ["ext"], version = "^24.12.0" }
-pydantic = {extras = ["email"], version = "^2.10.4"}
+pydantic = { extras = ["email"], version = "^2.10.4" }
 datamodel-code-generator = "^0.24.2"
 sqlalchemy = { extras = ["asyncio"], version = "^2.0.36" }
 alembic = "^1.14.0"
@@ -57,7 +62,7 @@ redis = "^5.2.1"
 dataclasses-avroschema = "^0.65.7"
 undictify = "^0.11.3"
 prometheus-sanic = "^3.0.0"
-sentry-sdk = {version = "^2.19.2", extras = ["sanic"]}
+sentry-sdk = { version = "^2.19.2", extras = ["sanic"] }
 authzed = "^1.1.0"
 # see https://github.com/sanic-org/sanic/issues/2828 for setuptools dependency, remove when not needed anymore
 setuptools = { version = "^75.6.0" }

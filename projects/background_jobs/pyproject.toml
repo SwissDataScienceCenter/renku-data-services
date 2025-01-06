@@ -1,10 +1,15 @@
-[tool.poetry]
+[project]
 name = "background_jobs"
 version = "0.1.0"
 description = ""
-authors = ['Swiss Data Science Center <contact@datascience.ch>']
+authors = [
+  { name = "Swiss Data Science Center", email = "contact@datascience.ch" },
+]
 license = ""
+requires-python = ">=3.12"
+dynamic = ["dependencies"]
 
+[tool.poetry]
 packages = [
   { include = "renku_data_services/background_jobs", from = "../../bases" },
   { include = "renku_data_services/data_api", from = "../../bases" },
@@ -40,7 +45,7 @@ packages = [
 [tool.poetry.dependencies]
 python = "^3.12"
 alembic = "^1.14.0"
-pydantic = {extras = ["email"], version = "^2.10.4"}
+pydantic = { extras = ["email"], version = "^2.10.4" }
 requests = "^2.32.3"
 sqlalchemy = "^2.0.36"
 asyncpg = "^0.30.0"

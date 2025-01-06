@@ -61,7 +61,7 @@ def dispatch_message(
                 )
             result = await f(self, *args, **kwargs)
             if result is None:
-                return result  # type: ignore[unreachable]
+                return result
             events = EventConverter.to_events(result, event_type)
 
             for event in events:

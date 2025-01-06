@@ -1,10 +1,16 @@
-[tool.poetry]
+[project]
 name = "renku-data-services"
 version = "0.0.1"
 description = "Collection of services that deal with data in Postgres."
-authors = ["Swiss Data Science Center <contact@datascience.ch>"]
+authors = [
+  { name = "Swiss Data Science Center", email = "contact@datascience.ch" },
+]
 readme = "README.md"
 license = "Apache License 2.0"
+requires-python = ">=3.12"
+dynamic = ["dependencies"]
+
+[tool.poetry]
 packages = [
   { include = "renku_data_services/data_api", from = "bases" },
   { include = "renku_data_services/background_jobs", from = "bases" },
@@ -75,6 +81,7 @@ aiofiles = "^24.1.0"
 # google.protobuf.runtime_version.VersionError:
 # Detected incompatible Protobuf Gencode/Runtime versions when loading authzed/api/v1/core.proto: gencode 5.28.2 runtime 5.27.3.
 protobuf = "^5.29.2"
+poetry = "^2.0.0"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.8.0"

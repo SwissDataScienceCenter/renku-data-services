@@ -21,8 +21,8 @@ class Member:
 class EnvironmentKind(StrEnum):
     """The type of environment."""
 
-    GLOBAL: str = "GLOBAL"
-    CUSTOM: str = "CUSTOM"
+    GLOBAL = "GLOBAL"
+    CUSTOM = "CUSTOM"
 
 
 @dataclass(kw_only=True, frozen=True, eq=True)

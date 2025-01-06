@@ -37,9 +37,9 @@ def _parse_value_as_float(val: Any) -> float:
 class CPUEnforcement(str, Enum):
     """CPU enforcement policies."""
 
-    LAX: str = "lax"  # CPU limit equals 3x cpu request
-    STRICT: str = "strict"  # CPU limit equals cpu request
-    OFF: str = "off"  # no CPU limit at all
+    LAX = "lax"  # CPU limit equals 3x cpu request
+    STRICT = "strict"  # CPU limit equals cpu request
+    OFF = "off"  # no CPU limit at all
 
 
 @dataclass

@@ -118,18 +118,18 @@ class _AuthzChange:
 class _Relation(StrEnum):
     """Relations for Authzed."""
 
-    owner: str = "owner"
-    editor: str = "editor"
-    viewer: str = "viewer"
-    public_viewer: str = "public_viewer"
-    admin: str = "admin"
-    project_platform: str = "project_platform"
-    group_platform: str = "group_platform"
-    user_namespace_platform: str = "user_namespace_platform"
-    project_namespace: str = "project_namespace"
-    data_connector_platform: str = "data_connector_platform"
-    data_connector_namespace: str = "data_connector_namespace"
-    linked_to: str = "linked_to"
+    owner = "owner"
+    editor = "editor"
+    viewer = "viewer"
+    public_viewer = "public_viewer"
+    admin = "admin"
+    project_platform = "project_platform"
+    group_platform = "group_platform"
+    user_namespace_platform = "user_namespace_platform"
+    project_namespace = "project_namespace"
+    data_connector_platform = "data_connector_platform"
+    data_connector_namespace = "data_connector_namespace"
+    linked_to = "linked_to"
 
     @classmethod
     def from_role(cls, role: Role) -> "_Relation":
@@ -156,25 +156,25 @@ class _Relation(StrEnum):
 class ResourceType(StrEnum):
     """All possible resources stored in Authzed."""
 
-    project: str = "project"
-    user: str = "user"
-    anonymous_user: str = "anonymous_user"
-    platform: str = "platform"
-    group: str = "group"
-    user_namespace: str = "user_namespace"
-    data_connector: str = "data_connector"
+    project = "project"
+    user = "user"
+    anonymous_user = "anonymous_user"
+    platform = "platform"
+    group = "group"
+    user_namespace = "user_namespace"
+    data_connector = "data_connector"
 
 
 class AuthzOperation(StrEnum):
     """The type of change that requires authorization database update."""
 
-    create: str = "create"
-    delete: str = "delete"
-    update: str = "update"
-    update_or_insert: str = "update_or_insert"
-    insert_many: str = "insert_many"
-    create_link: str = "create_link"
-    delete_link: str = "delete_link"
+    create = "create"
+    delete = "delete"
+    update = "update"
+    update_or_insert = "update_or_insert"
+    insert_many = "insert_many"
+    create_link = "create_link"
+    delete_link = "delete_link"
 
 
 class _AuthzConverter:
