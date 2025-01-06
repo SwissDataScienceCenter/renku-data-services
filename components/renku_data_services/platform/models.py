@@ -25,7 +25,7 @@ class PlatformConfig:
     @property
     def etag(self) -> str:
         """Entity tag value for this project object."""
-        return compute_etag_from_timestamp(self.updated_at, include_quotes=True)
+        return compute_etag_from_timestamp(self.updated_at)
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
