@@ -10,7 +10,7 @@ from ulid import ULID
 from renku_data_services.authz.models import Visibility
 from renku_data_services.base_models import ResetType
 from renku_data_services.namespace.models import Namespace
-from renku_data_services.utils.etag import compute_etag_from_timestamp
+from renku_data_services.utils.etag import compute_etag_from_fields, compute_etag_from_timestamp
 
 Repository = str
 
@@ -33,13 +33,6 @@ class BaseProject:
     is_template: bool = False
     secrets_mount_directory: PurePosixPath | None = None
 
-    @property
-    def etag(self) -> str | None:
-        """Entity tag value for this project object."""
-        if self.updated_at is None:
-            return None
-        return compute_etag_from_timestamp(self.updated_at)
-
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class Project(BaseProject):
@@ -48,6 +41,14 @@ class Project(BaseProject):
     id: ULID
     namespace: Namespace
     secrets_mount_directory: PurePosixPath
+
+    @property
+    def etag(self) -> str | None:
+        """Entity tag value for this project object."""
+        if self.updated_at is None:
+            return None
+        # NOTE: `slug` is the only field from `self.namespace` which is serialized in API responses.
+        return compute_etag_from_fields(self.updated_at, self.namespace.slug)
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -120,7 +121,7 @@ class SessionSecretSlot(UnsavedSessionSecretSlot):
     @property
     def etag(self) -> str:
         """Entity tag value for this session secret slot object."""
-        return compute_etag_from_timestamp(self.updated_at, include_quotes=True)
+        return compute_etag_from_timestamp(self.updated_at)
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
