@@ -17,16 +17,16 @@ from renku_data_services.namespace.models import Namespace
 class KeycloakEvent(Enum):
     """The Keycloak user events that result from the user registering or updating their personal information."""
 
-    REGISTER: str = "REGISTER"
-    UPDATE_PROFILE: str = "UPDATE_PROFILE"
+    REGISTER = "REGISTER"
+    UPDATE_PROFILE = "UPDATE_PROFILE"
 
 
 class KeycloakAdminEvent(Enum):
     """The Keycloak admin events used to keep users up to date."""
 
-    DELETE: str = "DELETE"
-    UPDATE: str = "UPDATE"
-    CREATE: str = "CREATE"
+    DELETE = "DELETE"
+    UPDATE = "UPDATE"
+    CREATE = "CREATE"
 
 
 @dataclass
