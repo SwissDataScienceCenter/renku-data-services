@@ -103,6 +103,24 @@ async def test_group_pagination(
 
 
 @pytest.mark.asyncio
+async def test_get_single_group(sanic_client, user_headers) -> None:
+    payload = {
+        "name": "Group1",
+        "slug": "group-1",
+        "description": "Group 1 Description",
+    }
+    _, response = await sanic_client.post("/api/data/groups", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    _, response = await sanic_client.get("/api/data/groups/%3f", headers=user_headers)
+    assert response.status_code == 404, response.text
+    _, response = await sanic_client.get("/api/data/groups/group-1", headers=user_headers)
+    assert response.status_code == 200, response.text
+    group = response.json
+    assert group["name"] == payload["name"]
+    assert group["slug"] == payload["slug"]
+
+
+@pytest.mark.asyncio
 async def test_group_patch_delete(
     sanic_client: SanicASGITestClient, user_headers: dict[str, str], app_config: Config
 ) -> None:
