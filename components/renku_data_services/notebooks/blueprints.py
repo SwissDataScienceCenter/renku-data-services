@@ -68,7 +68,6 @@ from renku_data_services.notebooks.util.kubernetes_ import (
     renku_2_make_server_name,
 )
 from renku_data_services.notebooks.utils import (
-    get_user_secret,
     merge_node_affinities,
     node_affinity_from_resource_class,
     tolerations_from_resource_class,
@@ -78,6 +77,7 @@ from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.db import UserRepo
+from renku_data_services.utils.cryptography import get_encryption_key
 
 
 @dataclass(kw_only=True)
@@ -241,6 +241,7 @@ class NotebooksNewBP(CustomBlueprint):
     session_repo: SessionRepository
     rp_repo: ResourcePoolRepository
     storage_repo: StorageRepository
+    user_repo: UserRepo
     data_connector_repo: DataConnectorRepository
     data_connector_project_link_repo: DataConnectorProjectLinkRepository
     data_connector_secret_repo: DataConnectorSecretRepository
@@ -340,7 +341,9 @@ class NotebooksNewBP(CustomBlueprint):
             data_sources: list[DataSource] = []
             user_secret_key: str | None = None
             if isinstance(user, AuthenticatedAPIUser) and len(dcs_secrets) > 0:
-                user_secret_key = await get_user_secret(self.nb_config.data_service_url, user)
+                secret_key = await self.user_repo.get_or_create_user_secret_key(requested_by=user)
+                user_secret_key = get_encryption_key(secret_key.encode(), user.id.encode()).decode("utf-8")
+
             for cs_id, cs in dcs.items():
                 secret_name = f"{server_name}-ds-{cs_id.lower()}"
                 secret_key_needed = len(dcs_secrets.get(cs_id, [])) > 0
