@@ -1,4 +1,4 @@
-"""Notebooks service core implementation."""
+"""Notebooks service core implementation, specifically for JupyterServer sessions."""
 
 import json as json_lib
 from datetime import UTC, datetime
