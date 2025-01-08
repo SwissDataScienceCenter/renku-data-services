@@ -73,6 +73,10 @@ audit: ## Run quality control checks
 test: build ## Run tests
 	go test $$(go list ./... | grep -v /e2e) -race -buildvcs
 
+.PHONY: test-e2e  # Run the e2e tests against a Kind k8s instance that is spun up.
+test-e2e:
+	go test ./test/e2e/ -v -ginkgo.v
+
 .PHONY: vet
 vet: ## Run go vet against code.
 	go vet ./...
@@ -97,6 +101,7 @@ build: fmt vet
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
+# Currently forcing the build to amd64 as the base image is only available for that architecture
 .PHONY: docker-build
 docker-build: ## Build docker image with the manager.
 	$(CONTAINER_TOOL) buildx build --platform linux/amd64 -t ${IMG} .
