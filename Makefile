@@ -144,11 +144,7 @@ help:  ## Display this help.
 
 .PHONY: k3d_cluster
 k3d_cluster:  ## Creates a k3d cluster for testing
-	k3d node delete k3d-myregistry.localhost
-	k3d cluster delete
-	# k3d registry delete myregistry.localhost || true
-	# k3d registry create myregistry.localhost
-	k3d cluster create --registry-create k3d-myregistry.localhost:5000 --agents 1 --k3s-arg --disable=metrics-server@server:0 
+	./setup-k3d-cluster.sh --reset --deploy-shipwright
 
 .PHONY: install_amaltheas
 install_amaltheas:  ## Installs both version of amalthea in the. NOTE: It uses the currently active k8s context.
