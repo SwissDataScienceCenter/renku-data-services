@@ -100,8 +100,8 @@ MergePatch: TypeAlias = dict[str, Any]
 class PatchKind(StrEnum):
     """Content types for different json patches."""
 
-    json: str = "application/json-patch+json"
-    merge: str = "application/merge-patch+json"
+    json = "application/json-patch+json"
+    merge = "application/merge-patch+json"
 
 
 def find_container(patches: list[Patch], container_name: str) -> dict[str, Any] | None:

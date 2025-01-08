@@ -58,8 +58,8 @@ class GroupMemberDetails:
 class NamespaceKind(str, Enum):
     """Allowed kinds of namespaces."""
 
-    group: str = "group"
-    user: str = "user"
+    group = "group"
+    user = "user"
 
 
 @dataclass
