@@ -546,9 +546,7 @@ async def test_patch_session_launcher_environment(
     assert res.json["environment"].get("command") is None
 
 
-pytest.mark.asyncio
-
-
+@pytest.mark.asyncio
 async def test_patch_session_launcher_reset_fields(
     sanic_client: SanicASGITestClient,
     valid_resource_pool_payload: dict[str, Any],
@@ -596,13 +594,50 @@ async def test_patch_session_launcher_reset_fields(
     assert res.json.get("disk_storage") is None
 
 
+@pytest.mark.asyncio
+async def test_patch_session_launcher_keeps_unset_values(
+    sanic_client, user_headers, create_project, create_resource_pool, create_session_launcher
+) -> None:
+    project = await create_project("Some project")
+    resource_pool = await create_resource_pool(admin=True)
+    session_launcher = await create_session_launcher(
+        name="Session Launcher",
+        project_id=project["id"],
+        description="A session launcher.",
+        resource_class_id=resource_pool["classes"][0]["id"],
+        disk_storage=42,
+        environment={
+            "container_image": "some_image:some_tag",
+            "environment_kind": "CUSTOM",
+            "name": "custom_name",
+        },
+    )
+
+    _, response = await sanic_client.patch(
+        f"/api/data/session_launchers/{session_launcher['id']}", headers=user_headers, json={}
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("name") == "Session Launcher"
+    assert response.json.get("project_id") == project["id"]
+    assert response.json.get("description") == "A session launcher."
+    assert response.json.get("resource_class_id") == resource_pool["classes"][0]["id"]
+    assert response.json.get("disk_storage") == 42
+    environment = response.json.get("environment", {})
+    assert environment.get("container_image") == "some_image:some_tag"
+    assert environment.get("environment_kind") == "CUSTOM"
+    assert environment.get("name") == "custom_name"
+    assert environment.get("id") is not None
+
+
 @pytest.fixture
 def anonymous_user_headers() -> dict[str, str]:
     return {"Renku-Auth-Anon-Id": "some-random-value-1234"}
 
 
 @pytest.mark.asyncio
-@pytest.mark.skip(reason="Setup for testing sessions is not done yet.")  # TODO: enable in follwup PR
+@pytest.mark.skip(reason="Setup for testing sessions is not done yet.")  # TODO: enable in followup PR
 async def test_starting_session_anonymous(
     sanic_client: SanicASGITestClient,
     create_project,
