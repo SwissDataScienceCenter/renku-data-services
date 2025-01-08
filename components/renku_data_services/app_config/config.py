@@ -199,68 +199,30 @@ class Config:
         Note: loading these files takes quite some time and is repeated for each test. Having
         them cached in this method reduces that time significantly.
         """
+        files = [
+            renku_data_services.crc.__file__,
+            renku_data_services.storage.__file__,
+            renku_data_services.users.__file__,
+            renku_data_services.project.__file__,
+            renku_data_services.namespace.__file__,
+            renku_data_services.session.__file__,
+            renku_data_services.connected_services.__file__,
+            renku_data_services.repositories.__file__,
+            renku_data_services.notebooks.__file__,
+            renku_data_services.platform.__file__,
+            renku_data_services.message_queue.__file__,
+            renku_data_services.data_connectors.__file__,
+        ]
+
+        api_specs = []
+
         # NOTE: Read spec files required for Swagger
-        spec_file = Path(renku_data_services.crc.__file__).resolve().parent / "api.spec.yaml"
-        with open(spec_file) as f:
-            crc_spec = safe_load(f)
+        for file in files:
+            spec_file = Path(file).resolve().parent / "api.spec.yaml"
+            with open(spec_file) as f:
+                api_specs.append(safe_load(f))
 
-        spec_file = Path(renku_data_services.storage.__file__).resolve().parent / "api.spec.yaml"
-        with open(spec_file) as f:
-            storage_spec = safe_load(f)
-
-        spec_file = Path(renku_data_services.users.__file__).resolve().parent / "api.spec.yaml"
-        with open(spec_file) as f:
-            users = safe_load(f)
-
-        spec_file = Path(renku_data_services.project.__file__).resolve().parent / "api.spec.yaml"
-        with open(spec_file) as f:
-            projects = safe_load(f)
-
-        spec_file = Path(renku_data_services.namespace.__file__).resolve().parent / "api.spec.yaml"
-        with open(spec_file) as f:
-            groups = safe_load(f)
-
-        spec_file = Path(renku_data_services.session.__file__).resolve().parent / "api.spec.yaml"
-        with open(spec_file) as f:
-            sessions = safe_load(f)
-
-        spec_file = Path(renku_data_services.connected_services.__file__).resolve().parent / "api.spec.yaml"
-        with open(spec_file) as f:
-            connected_services = safe_load(f)
-
-        spec_file = Path(renku_data_services.repositories.__file__).resolve().parent / "api.spec.yaml"
-        with open(spec_file) as f:
-            repositories = safe_load(f)
-
-        spec_file = Path(renku_data_services.notebooks.__file__).resolve().parent / "api.spec.yaml"
-        with open(spec_file) as f:
-            repositories = safe_load(f)
-
-        spec_file = Path(renku_data_services.platform.__file__).resolve().parent / "api.spec.yaml"
-        with open(spec_file) as f:
-            platform = safe_load(f)
-
-        spec_file = Path(renku_data_services.message_queue.__file__).resolve().parent / "api.spec.yaml"
-        with open(spec_file) as f:
-            search = safe_load(f)
-
-        spec_file = Path(renku_data_services.data_connectors.__file__).resolve().parent / "api.spec.yaml"
-        with open(spec_file) as f:
-            data_connectors = safe_load(f)
-
-        return merge_api_specs(
-            crc_spec,
-            storage_spec,
-            users,
-            projects,
-            groups,
-            sessions,
-            connected_services,
-            repositories,
-            platform,
-            search,
-            data_connectors,
-        )
+        return merge_api_specs(*api_specs)
 
     def __post_init__(self) -> None:
         self.spec = self.load_apispec()
