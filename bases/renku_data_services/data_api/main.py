@@ -7,8 +7,9 @@ from typing import TYPE_CHECKING, Any
 
 import sentry_sdk
 import uvloop
-from sanic import Sanic
+from sanic import Request, Sanic
 from sanic.log import logger
+from sanic.response import BaseHTTPResponse
 from sanic.worker.loader import AppLoader
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
 from sentry_sdk.integrations.grpc import GRPCIntegration
@@ -123,6 +124,12 @@ def create_app() -> Sanic:
         Extend(app)
 
     app.register_middleware(validate_null_byte, "request")
+
+    @app.middleware("response")
+    async def handle_head(request: Request, response: BaseHTTPResponse) -> None:
+        """Make sure HEAD requests return an empty body."""
+        if request.method == "HEAD":
+            response.body = None
 
     @app.main_process_start
     async def do_migrations(_: Sanic) -> None:
