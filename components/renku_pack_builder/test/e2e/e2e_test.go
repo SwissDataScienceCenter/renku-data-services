@@ -19,8 +19,6 @@ package e2e
 import (
 	"fmt"
 	"os/exec"
-	// "path/filepath"
-	// "strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
