@@ -1,0 +1,41 @@
+---
+apiVersion: shipwright.io/v1beta1
+kind: ClusterBuildStrategy
+metadata:
+  name: buildpacks-v3-renku
+spec:
+  volumes:
+    - name: platform-env
+      emptyDir: {}
+  parameters:
+    - name: platform-api-version
+      description: The referenced version is the minimum version that all relevant buildpack implementations support.
+      default: "0.12"
+  steps:
+    - name: build-and-push
+      image: renku/pack-builder:0.0.1
+      imagePullPolicy: Never
+      env: 
+        - name: CNB_PLATFORM_API
+          value: $(params.platform-api-version)
+        - name: PARAM_SOURCE_CONTEXT
+          value: $(params.shp-source-context)
+        - name: PARAM_OUTPUT_IMAGE
+          value: $(params.shp-output-image)
+      command:
+        - renku-pack-builder
+      args:
+        - "$(results.shp-image-digest.path)"
+      volumeMounts:
+        - mountPath: /platform/env
+          name: platform-env
+      resources:
+        limits:
+          cpu: 500m
+          memory: 1Gi
+        requests:
+          cpu: 250m
+          memory: 65Mi
+  securityContext:
+    runAsUser: 1001
+    runAsGroup: 1000

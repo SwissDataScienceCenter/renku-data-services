@@ -28,7 +28,10 @@
 			"command": "alias k=kubectl"
 		},
 		"ghcr.io/devcontainers-contrib/features/rclone:1": {},
-		"./k3d": {}
+		"./k3d": {},
+		"ghcr.io/devcontainers/features/go:1": {
+			"version": "1.23"
+		}
 	},
 	"overrideFeatureInstallOrder": [
 		"ghcr.io/devcontainers-extra/features/poetry",
