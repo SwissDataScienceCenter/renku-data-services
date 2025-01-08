@@ -110,6 +110,11 @@ docker-build: ## Build docker image with the manager.
 k3d-upload:
 	k3d image import ${IMG} -c devel
 
+.PHONY: retry-buildrun
+retry-buildrun: docker-build k3d-upload
+	kubectl delete -f manifests/buildrun.yaml --ignore-not-found
+	kubectl apply -f manifests/buildrun.yaml
+
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
 	$(CONTAINER_TOOL) push ${IMG}
