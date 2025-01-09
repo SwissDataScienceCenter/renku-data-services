@@ -319,6 +319,17 @@ async def test_get_one_data_connector(sanic_client: SanicASGITestClient, create_
 
 
 @pytest.mark.asyncio
+async def test_head_one_data_connector(sanic_client: SanicASGITestClient, create_data_connector, user_headers) -> None:
+    data_connector = await create_data_connector("A new data connector")
+    data_connector_id = data_connector["id"]
+
+    _, response = await sanic_client.head(f"/api/data/data_connectors/{data_connector_id}", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json is None
+
+
+@pytest.mark.asyncio
 async def test_get_one_by_slug_data_connector(
     sanic_client: SanicASGITestClient, create_data_connector, user_headers
 ) -> None:
