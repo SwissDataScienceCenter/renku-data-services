@@ -219,20 +219,29 @@ class RCloneStorage(ICloudStorageRequest):
         return patches
 
     def config_string(self, name: str) -> str:
-        """Convert configuration oblect to string representation.
+        """Convert configuration object to string representation.
 
         Needed to create RClone compatible INI files.
         """
         if not self.configuration:
             raise ValidationError("Missing configuration for cloud storage")
-
-        # Transform configuration for polybox or switchDrive
+        # TODO Use RCloneValidator.get_real_configuration(...) instead.
+        # Transform configuration for polybox, switchDrive or openBIS
         storage_type = self.configuration.get("type", "")
         access = self.configuration.get("provider", "")
 
         if storage_type == "polybox" or storage_type == "switchDrive":
             self.configuration["type"] = "webdav"
             self.configuration["provider"] = ""
+        elif storage_type == "s3" and access == "Switch":
+            # Switch is a fake provider we add for users, we need to replace it since rclone itself
+            # doesn't know it
+            self.configuration["provider"] = "Other"
+        elif storage_type == "openbis":
+            self.configuration["type"] = "sftp"
+            self.configuration["port"] = "2222"
+            self.configuration["user"] = "?"
+            self.configuration["pass"] = self.configuration.pop("session_token", self.configuration["pass"])
 
         if access == "shared" and storage_type == "polybox":
             self.configuration["url"] = "https://polybox.ethz.ch/public.php/webdav/"
@@ -249,10 +258,6 @@ class RCloneStorage(ICloudStorageRequest):
             user_identifier = public_link.split("/")[-1]
             self.configuration["user"] = user_identifier
 
-        if self.configuration["type"] == "s3" and self.configuration.get("provider", None) == "Switch":
-            # Switch is a fake provider we add for users, we need to replace it since rclone itself
-            # doesn't know it
-            self.configuration["provider"] = "Other"
         parser = ConfigParser()
         parser.add_section(name)
 
