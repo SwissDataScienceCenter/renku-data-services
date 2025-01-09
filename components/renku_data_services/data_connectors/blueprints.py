@@ -295,8 +295,15 @@ class DataConnectorsBP(CustomBlueprint):
             secrets = await self.data_connector_secret_repo.get_data_connector_secrets(
                 user=user, data_connector_id=data_connector_id
             )
+            data_connector = await self.data_connector_repo.get_data_connector(
+                user=user, data_connector_id=data_connector_id
+            )
             return validated_json(
-                apispec.DataConnectorSecretsList, [self._dump_data_connector_secret(secret) for secret in secrets]
+                apispec.DataConnectorSecretsList,
+                [
+                    self._dump_data_connector_secret(secret)
+                    for secret in self._adjust_secrets(secrets, data_connector.storage)
+                ],
             )
 
         return "/data_connectors/<data_connector_id:ulid>/secrets", ["GET"], _get_secrets
@@ -342,7 +349,7 @@ class DataConnectorsBP(CustomBlueprint):
                                     storage.configuration["host"], unsaved_secrets[0].value
                                 )
                                 return (
-                                    [models.DataConnectorSecretUpdate(name="session_token", value=openbis_pat[0])],
+                                    [models.DataConnectorSecretUpdate(name="pass", value=openbis_pat[0])],
                                     openbis_pat[1],
                                 )
                             except Exception as e:
@@ -363,7 +370,8 @@ class DataConnectorsBP(CustomBlueprint):
                 expiration_timestamp=expiration_timestamp,
             )
             return validated_json(
-                apispec.DataConnectorSecretsList, [self._dump_data_connector_secret(secret) for secret in secrets]
+                apispec.DataConnectorSecretsList,
+                [self._dump_data_connector_secret(secret) for secret in self._adjust_secrets(secrets, storage)],
             )
 
         return "/data_connectors/<data_connector_id:ulid>/secrets", ["PATCH"], _patch_secrets
@@ -414,6 +422,22 @@ class DataConnectorsBP(CustomBlueprint):
             creation_date=link.creation_date,
             created_by=link.created_by,
         )
+
+    @staticmethod
+    def _adjust_secrets(
+        secrets: list[models.DataConnectorSecret], storage: models.CloudStorageCore
+    ) -> list[models.DataConnectorSecret]:
+        if storage.storage_type == "openbis":
+            for i, secret in enumerate(secrets):
+                if secret.name == "pass":
+                    secrets[i] = models.DataConnectorSecret(
+                        name="session_token",
+                        user_id=secret.user_id,
+                        data_connector_id=secret.data_connector_id,
+                        secret_id=secret.secret_id,
+                    )
+                    break
+        return secrets
 
     @staticmethod
     def _dump_data_connector_secret(secret: models.DataConnectorSecret) -> dict[str, Any]:

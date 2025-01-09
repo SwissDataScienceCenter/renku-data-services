@@ -1298,14 +1298,21 @@ async def test_create_openbis_data_connector(sanic_client, create_openbis_data_c
     payload = [
         {"name": "session_token", "value": openbis_session_token},
     ]
+
+    def check_response(r):
+        assert r.status_code == 200, r.json
+        assert {s["name"] for s in r.json} == {"session_token"}
+        created_secret_ids = {s["secret_id"] for s in r.json}
+        assert len(created_secret_ids) == 1
+        assert r.json[0].keys() == {"secret_id", "name"}
+
     _, response = await sanic_client.patch(
         f"/api/data/data_connectors/{data_connector_id}/secrets", headers=user_headers, json=payload
     )
-    assert response.status_code == 200, response.json
-    assert {s["name"] for s in response.json} == {"session_token"}
-    created_secret_ids = {s["secret_id"] for s in response.json}
-    assert len(created_secret_ids) == 1
-    assert response.json[0].keys() == {"secret_id", "name"}
+    check_response(response)
+
+    _, response = await sanic_client.get(f"/api/data/data_connectors/{data_connector_id}/secrets", headers=user_headers)
+    check_response(response)
 
 
 @pytest.mark.myskip(1 == 1, reason="Depends on a remote openBIS host which may not always be available.")
