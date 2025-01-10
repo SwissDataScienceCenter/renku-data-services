@@ -3,7 +3,7 @@
 from datetime import datetime
 from pathlib import PurePosixPath
 
-from sqlalchemy import JSON, DateTime, MetaData, String, func
+from sqlalchemy import JSON, Boolean, DateTime, MetaData, String, false, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
@@ -63,6 +63,10 @@ class EnvironmentORM(BaseORM):
     )
     """Creation date and time."""
 
+    is_archived: Mapped[bool] = mapped_column(
+        "is_archived", Boolean(), default=False, server_default=false(), nullable=False
+    )
+
     def dump(self) -> models.Environment:
         """Create a session environment model from the EnvironmentORM."""
         return models.Environment(
@@ -81,6 +85,7 @@ class EnvironmentORM(BaseORM):
             port=self.port,
             args=self.args,
             command=self.command,
+            is_archived=self.is_archived,
         )
 
 
