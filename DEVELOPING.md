@@ -96,17 +96,13 @@ environment can be created:
    environment.
 2. In another terminal, run `vm-run` (headless) to start a vm running
    necessary external services, like the PostgreSQL database.
-3. Potentially run `poetry-fix-cfg` to alter the `pyvenv.cfg` so that
-   poetry will use the env built by nix
+3. Run `poetry install` to install the python venv
 
 Then `make run`, `make tests` etc can be used as usual.
 
 The environment also contains other useful tools, like ruff-lsp,
 pyright and more. Instead of a vm, a development environment using
 NixOS containers is also available.
-
-The first invocation will take a while for the first run, as the
-python environment is being built. Subsequent calls are then instant.
 
 It will run a bash shell, check out [direnv](https://direnv.net/) and
 the [use flake](https://direnv.net/man/direnv-stdlib.1.html#codeuse-flake-ltinstallablegtcode)
