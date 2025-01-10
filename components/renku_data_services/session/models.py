@@ -41,6 +41,7 @@ class UnsavedEnvironment:
     environment_kind: EnvironmentKind
     args: list[str] | None = None
     command: list[str] | None = None
+    is_archived: bool = False
 
     def __post_init__(self) -> None:
         if self.working_directory and not self.working_directory.is_absolute():
@@ -88,6 +89,7 @@ class EnvironmentPatch:
     gid: int | None = None
     args: list[str] | None | ResetType = None
     command: list[str] | None | ResetType = None
+    is_archived: bool | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

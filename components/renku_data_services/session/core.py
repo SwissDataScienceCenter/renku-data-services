@@ -25,6 +25,7 @@ def validate_unsaved_environment(
         environment_kind=environment_kind,
         args=environment.args,
         command=environment.command,
+        is_archived=environment.is_archived,
     )
 
 
@@ -59,6 +60,7 @@ def validate_environment_patch(patch: apispec.EnvironmentPatch) -> models.Enviro
         gid=patch.gid,
         args=RESET if "args" in data_dict and data_dict["args"] is None else patch.args,
         command=RESET if "command" in data_dict and data_dict["command"] is None else patch.command,
+        is_archived=patch.is_archived,
     )
 
 
