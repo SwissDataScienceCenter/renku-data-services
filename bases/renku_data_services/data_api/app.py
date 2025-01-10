@@ -159,6 +159,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         session_repo=config.session_repo,
         storage_repo=config.storage_repo,
         rp_repo=config.rp_repo,
+        user_repo=config.kc_user_repo,
         data_connector_repo=config.data_connector_repo,
         data_connector_project_link_repo=config.data_connector_to_project_link_repo,
         data_connector_secret_repo=config.data_connector_secret_repo,

@@ -1,9 +1,6 @@
 """Utilities for notebooks."""
 
-import httpx
-
 import renku_data_services.crc.models as crc_models
-from renku_data_services.base_models.core import AuthenticatedAPIUser
 from renku_data_services.notebooks.crs import (
     MatchExpression,
     NodeAffinity,
@@ -13,7 +10,6 @@ from renku_data_services.notebooks.crs import (
     RequiredDuringSchedulingIgnoredDuringExecution,
     Toleration,
 )
-from renku_data_services.utils.cryptography import get_encryption_key
 
 
 def merge_node_affinities(
@@ -99,18 +95,3 @@ def tolerations_from_resource_class(resource_class: crc_models.ResourceClass) ->
     for tol in resource_class.tolerations:
         output.append(Toleration(key=tol, operator="Exists"))
     return output
-
-
-async def get_user_secret(data_svc_url: str, user: AuthenticatedAPIUser) -> str | None:
-    """Get the user secret key from the secret service."""
-
-    async with httpx.AsyncClient(timeout=5) as client:
-        response = await client.get(
-            f"{data_svc_url}/user/secret_key",
-            headers={"Authorization": f"Bearer {user.access_token}"},
-        )
-        if response.status_code != 200:
-            return None
-        user_key = response.json()
-
-        return get_encryption_key(user_key["secret_key"].encode(), user.id.encode()).decode("utf-8")
