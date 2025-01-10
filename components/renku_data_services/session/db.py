@@ -316,6 +316,7 @@ class SessionRepository:
                 description=launcher.description if launcher.description else None,
                 environment_id=environment_id,
                 resource_class_id=launcher.resource_class_id,
+                disk_storage=launcher.disk_storage,
                 created_by_id=user.id,
                 creation_date=datetime.now(UTC).replace(microsecond=0),
             )
@@ -351,6 +352,7 @@ class SessionRepository:
                 description=launcher.description,
                 environment_id=launcher.environment.id,
                 resource_class_id=launcher.resource_class_id,
+                disk_storage=launcher.disk_storage,
                 created_by_id=user.id,
                 creation_date=datetime.now(UTC).replace(microsecond=0),
             )
@@ -425,6 +427,10 @@ class SessionRepository:
                 launcher.resource_class_id = patch.resource_class_id
             elif patch.resource_class_id is RESET:
                 launcher.resource_class_id = None
+            if isinstance(patch.disk_storage, int):
+                launcher.disk_storage = patch.disk_storage
+            elif patch.disk_storage is RESET:
+                launcher.disk_storage = None
 
             if patch.environment is None:
                 return launcher.dump()

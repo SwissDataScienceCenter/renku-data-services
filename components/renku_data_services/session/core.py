@@ -69,6 +69,7 @@ def validate_unsaved_session_launcher(launcher: apispec.SessionLauncherPost) -> 
         name=launcher.name,
         description=launcher.description,
         resource_class_id=launcher.resource_class_id,
+        disk_storage=launcher.disk_storage,
         # NOTE: When you create an environment with a launcher the environment can only be custom
         environment=validate_unsaved_environment(launcher.environment, models.EnvironmentKind.CUSTOM)
         if isinstance(launcher.environment, apispec.EnvironmentPostInLauncher)
@@ -118,9 +119,11 @@ def validate_session_launcher_patch(
         resource_class_id = RESET
     else:
         resource_class_id = patch.resource_class_id
+    disk_storage = RESET if "disk_storage" in data_dict and data_dict["disk_storage"] is None else patch.disk_storage
     return models.SessionLauncherPatch(
         name=patch.name,
         description=patch.description,
         environment=environment,
         resource_class_id=resource_class_id,
+        disk_storage=disk_storage,
     )

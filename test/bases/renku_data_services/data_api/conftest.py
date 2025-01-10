@@ -398,11 +398,11 @@ async def create_data_connector_and_link_project(
 
 
 @pytest_asyncio.fixture
-async def create_resource_pool(sanic_client, user_headers, admin_headers):
+async def create_resource_pool(sanic_client, user_headers, admin_headers, valid_resource_pool_payload):
     async def create_resource_pool_helper(admin: bool = False, **payload) -> dict[str, Any]:
         headers = admin_headers if admin else user_headers
-        payload = payload.copy()
-        _, res = await sanic_client.post("/api/data/resource_pools", headers=headers, json=payload)
+        valid_resource_pool_payload.update(payload)
+        _, res = await sanic_client.post("/api/data/resource_pools", headers=headers, json=valid_resource_pool_payload)
         assert res.status_code == 201, res.text
         assert res.json is not None
         return res.json
