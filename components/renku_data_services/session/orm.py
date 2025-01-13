@@ -3,7 +3,7 @@
 from datetime import datetime
 from pathlib import PurePosixPath
 
-from sqlalchemy import JSON, DateTime, MetaData, String, func
+from sqlalchemy import JSON, BigInteger, DateTime, MetaData, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
@@ -128,6 +128,9 @@ class SessionLauncherORM(BaseORM):
     )
     """Id of the resource class."""
 
+    disk_storage: Mapped[int | None] = mapped_column("disk_storage", BigInteger, default=None, nullable=True)
+    """Default value for requested disk storage."""
+
     @classmethod
     def load(cls, launcher: models.SessionLauncher) -> "SessionLauncherORM":
         """Create SessionLauncherORM from the session launcher model."""
@@ -139,6 +142,7 @@ class SessionLauncherORM(BaseORM):
             project_id=launcher.project_id,
             environment_id=launcher.environment.id,
             resource_class_id=launcher.resource_class_id,
+            disk_storage=launcher.disk_storage,
         )
 
     def dump(self) -> models.SessionLauncher:
@@ -151,5 +155,6 @@ class SessionLauncherORM(BaseORM):
             creation_date=self.creation_date,
             description=self.description,
             resource_class_id=self.resource_class_id,
+            disk_storage=self.disk_storage,
             environment=self.environment.dump(),
         )

@@ -419,6 +419,8 @@ components:
           $ref: "#/components/schemas/EnvironmentGetInLauncher"
         resource_class_id:
           $ref: "#/components/schemas/ResourceClassId"
+        disk_storage:
+          $ref: "#/components/schemas/DiskStorage"
       required:
         - id
         - project_id
@@ -426,25 +428,6 @@ components:
         - creation_date
         - environment
         - resource_class_id
-      example:
-        id: 01AN4Z79ZS5XN0F25N3DB94T4R
-        project_id: 01AN4Z79ZS5XN0F25N3DB94T4R
-        name: Renku R Session
-        creation_date: "2023-11-01T17:32:28Z"
-        description: R compute session
-        environment:
-          id: 01AN4Z79ZS6XX96588FDX0H099
-          name: Rstudio
-          creation_date: "2023-11-01T17:32:28Z"
-          description: JupyterLab session environment
-          environment_kind: GLOBAL
-          container_image: rocker/rstudio
-          default_url: "/rstudio"
-          port: 8080
-          working_directory: /home/rstudio/work
-          mount_directory: /home/rstudio/work
-          uid: 1000
-          gid: 1000
     SessionLauncherPost:
       description: Data required to create a session launcher
       type: object
@@ -458,6 +441,8 @@ components:
           $ref: "#/components/schemas/Description"
         resource_class_id:
           $ref: "#/components/schemas/ResourceClassId"
+        disk_storage:
+          $ref: "#/components/schemas/DiskStorage"
         environment:
           oneOf:
             - $ref: "#/components/schemas/EnvironmentPostInLauncher"
@@ -482,6 +467,8 @@ components:
           $ref: "#/components/schemas/Description"
         resource_class_id:
           $ref: "#/components/schemas/ResourceClassId"
+        disk_storage:
+          $ref: "#/components/schemas/DiskStoragePatch"
         environment:
           oneOf:
             - $ref: "#/components/schemas/EnvironmentPatchInLauncher"
@@ -548,6 +535,15 @@ components:
       description: The identifier of a resource class
       type: integer
       default: null
+      nullable: true
+    DiskStorage:
+      description: The size of disk storage for the session, in gigabytes
+      type: integer
+      minimum: 1
+      example: 8
+    DiskStoragePatch:
+      type: integer
+      minimum: 1
       nullable: true
     EnvironmentPort:
       type: integer
