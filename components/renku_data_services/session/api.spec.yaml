@@ -20,7 +20,7 @@ paths:
             type: object
             additionalProperties: false
             properties:
-              with_archived:
+              include_archived:
                 type: boolean
                 default: false
                 description: Whether to return archived environments or not

@@ -31,13 +31,13 @@ class SessionRepository:
         self.project_authz: Authz = project_authz
         self.resource_pools: ResourcePoolRepository = resource_pools
 
-    async def get_environments(self, with_archived: bool = False) -> list[models.Environment]:
+    async def get_environments(self, include_archived: bool = False) -> list[models.Environment]:
         """Get all global session environments from the database."""
         async with self.session_maker() as session:
             statement = select(schemas.EnvironmentORM).where(
                 schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.GLOBAL.value
             )
-            if not with_archived:
+            if not include_archived:
                 statement = statement.where(schemas.EnvironmentORM.is_archived.is_(False))
             res = await session.scalars(statement)
             environments = res.all()

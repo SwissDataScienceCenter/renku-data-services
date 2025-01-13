@@ -58,7 +58,7 @@ async def test_get_all_session_environments(
         "Environment 2",
         "Environment 3",
     }
-    _, res = await sanic_client.get("/api/data/environments?with_archived=true", headers=unauthorized_headers)
+    _, res = await sanic_client.get("/api/data/environments?include_archived=true", headers=unauthorized_headers)
 
     assert res.status_code == 200, res.text
     assert res.json is not None

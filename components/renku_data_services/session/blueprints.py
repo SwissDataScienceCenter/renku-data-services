@@ -34,7 +34,7 @@ class EnvironmentsBP(CustomBlueprint):
 
         @validate_query(query=apispec.GetEnvironmentParams)
         async def _get_all(_: Request, query: apispec.GetEnvironmentParams) -> JSONResponse:
-            environments = await self.session_repo.get_environments(with_archived=query.with_archived)
+            environments = await self.session_repo.get_environments(include_archived=query.include_archived)
             return validated_json(apispec.EnvironmentList, environments)
 
         return "/environments", ["GET"], _get_all
