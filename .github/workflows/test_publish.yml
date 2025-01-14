@@ -274,6 +274,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=registry,ref=renku/renku-data-service:buildcache
           cache-to: type=registry,ref=renku/renku-data-service:buildcache,mode=max
+          provenance: false
       - name: Docker meta background jobs
         id: meta-background-jobs
         uses: docker/metadata-action@v5
@@ -299,6 +300,7 @@ jobs:
           labels: ${{ steps.meta-background-jobs.outputs.labels }}
           cache-from: type=registry,ref=renku/data-service-background-jobs:buildcache
           cache-to: type=registry,ref=renku/data-service-background-jobs:buildcache,mode=max
+          provenance: false
       - name: Docker meta secrets
         id: meta-secrets-storage
         uses: docker/metadata-action@v5
@@ -324,3 +326,4 @@ jobs:
           labels: ${{ steps.meta-secrets-storage.outputs.labels }}
           cache-from: type=registry,ref=renku/secrets-storage:buildcache
           cache-to: type=registry,ref=renku/secrets-storage:buildcache,mode=max
+          provenance: false
