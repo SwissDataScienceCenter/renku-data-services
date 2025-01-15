@@ -159,11 +159,14 @@ class RCloneValidator:
 
     @staticmethod
     def __find_storage(spec: list[dict[str, Any]], prefix: str) -> dict[str, Any]:
-        """Find and return the WebDAV storage schema from the spec."""
+        """Find and return the storage schema from the spec.
+
+        This returns the original entry for in-place modification.
+        """
         storage = next((s for s in spec if s["Prefix"] == prefix), None)
         if not storage:
             raise errors.ValidationError(message=f"'{prefix}' storage not found in schema.")
-        return deepcopy(storage)
+        return storage
 
     @staticmethod
     def __add_webdav_based_storage(
@@ -176,7 +179,7 @@ class RCloneValidator:
     ) -> None:
         """Create a modified copy of WebDAV storage and add it to the schema."""
         # Find WebDAV storage schema and create a modified copy
-        storage_copy = RCloneValidator.__find_storage(spec, "webdav")
+        storage_copy = deepcopy(RCloneValidator.__find_storage(spec, "webdav"))
         storage_copy.update({"Prefix": prefix, "Name": name, "Description": description})
 
         custom_options = [
