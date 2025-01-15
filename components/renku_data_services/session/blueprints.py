@@ -10,6 +10,7 @@ from ulid import ULID
 from renku_data_services import base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.session import apispec, models
 from renku_data_services.session.core import (
@@ -31,8 +32,9 @@ class EnvironmentsBP(CustomBlueprint):
     def get_all(self) -> BlueprintFactoryResponse:
         """List all session environments."""
 
-        async def _get_all(_: Request) -> JSONResponse:
-            environments = await self.session_repo.get_environments()
+        @validate_query(query=apispec.GetEnvironmentParams)
+        async def _get_all(_: Request, query: apispec.GetEnvironmentParams) -> JSONResponse:
+            environments = await self.session_repo.get_environments(include_archived=query.include_archived)
             return validated_json(apispec.EnvironmentList, environments)
 
         return "/environments", ["GET"], _get_all

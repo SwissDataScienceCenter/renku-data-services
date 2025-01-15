@@ -11,6 +11,19 @@ paths:
   /environments:
     get:
       summary: Get all global environments
+      parameters:
+        - in: query
+          style: form
+          explode: true
+          name: get_environment_params
+          schema:
+            type: object
+            additionalProperties: false
+            properties:
+              include_archived:
+                type: boolean
+                default: false
+                description: Whether to return archived environments or not
       responses:
         "200":
           description: List of global environments
@@ -277,6 +290,8 @@ components:
           $ref: "#/components/schemas/EnvironmentCommand"
         args:
           $ref: "#/components/schemas/EnvironmentArgs"
+        is_archived:
+          $ref: "#/components/schemas/IsArchived"
       required:
         - id
         - name
@@ -298,6 +313,7 @@ components:
         mount_directory: /home/jovyan/work
         uid: 1000
         gid: 1000
+        is_archive: false
     EnvironmentGetInLauncher:
       allOf:
         - $ref: "#/components/schemas/Environment"
@@ -358,6 +374,9 @@ components:
           $ref: "#/components/schemas/EnvironmentCommand"
         args:
           $ref: "#/components/schemas/EnvironmentArgs"
+        is_archived:
+          $ref: "#/components/schemas/IsArchived"
+          default: false
       required:
         - name
         - container_image
@@ -395,6 +414,8 @@ components:
           $ref: "#/components/schemas/EnvironmentCommand"
         args:
           $ref: "#/components/schemas/EnvironmentArgs"
+        is_archived:
+          $ref: "#/components/schemas/IsArchived"
     SessionLaunchersList:
       description: A list of Renku session launchers
       type: array
@@ -593,6 +614,10 @@ components:
         type: string
       description: The arguments that will follow the command, i.e. will overwrite the image Dockerfile CMD, equivalent to args in Kubernetes
       minLength: 1
+    IsArchived:
+      type: boolean
+      description: Whether this environment is archived and not for use in new projects or not
+      default: false
     ErrorResponse:
       type: object
       properties:
