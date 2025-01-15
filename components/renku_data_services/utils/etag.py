@@ -26,4 +26,4 @@ def compute_etag_from_fields(updated_at: datetime, *args: Any) -> str:
 def _get_hashable_string(value: Any) -> str:
     if isinstance(value, datetime):
         return value.isoformat()
-    return f"{value}"
+    return str(value)
