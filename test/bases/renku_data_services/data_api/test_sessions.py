@@ -46,6 +46,7 @@ async def test_get_all_session_environments(
     await create_session_environment("Environment 1")
     await create_session_environment("Environment 2")
     await create_session_environment("Environment 3")
+    await create_session_environment("Environment 4", is_archived=True)
 
     _, res = await sanic_client.get("/api/data/environments", headers=unauthorized_headers)
 
@@ -56,6 +57,17 @@ async def test_get_all_session_environments(
         "Environment 1",
         "Environment 2",
         "Environment 3",
+    }
+    _, res = await sanic_client.get("/api/data/environments?include_archived=true", headers=unauthorized_headers)
+
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    environments = res.json
+    assert {env["name"] for env in environments} == {
+        "Environment 1",
+        "Environment 2",
+        "Environment 3",
+        "Environment 4",
     }
 
 
@@ -104,6 +116,7 @@ async def test_post_session_environment(sanic_client: SanicASGITestClient, admin
     assert res.json.get("name") == "Environment 1"
     assert res.json.get("description") == "A session environment."
     assert res.json.get("container_image") == image_name
+    assert not res.json.get("is_archived")
 
 
 @pytest.mark.asyncio
@@ -190,6 +203,57 @@ async def test_patch_session_environment(
     assert res.json.get("command") is None
     assert res.json.get("working_directory") is None
     assert res.json.get("mount_directory") is None
+
+
+@pytest.mark.asyncio
+async def test_patch_session_environment_archived(
+    sanic_client: SanicASGITestClient,
+    admin_headers,
+    create_session_environment,
+    create_project,
+    valid_resource_pool_payload,
+    create_resource_pool,
+) -> None:
+    env = await create_session_environment("Environment 1")
+    environment_id = env["id"]
+
+    payload = {"is_archived": True}
+
+    _, res = await sanic_client.patch(f"/api/data/environments/{environment_id}", headers=admin_headers, json=payload)
+
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    assert res.json.get("is_archived")
+
+    # Test that you can't create a launcher with an archived environment
+    project = await create_project("Some project")
+    resource_pool_data = valid_resource_pool_payload
+    resource_pool_data["public"] = False
+
+    resource_pool = await create_resource_pool(admin=True, **resource_pool_data)
+
+    session_payload = {
+        "name": "Launcher 1",
+        "project_id": project["id"],
+        "description": "A session launcher.",
+        "resource_class_id": resource_pool["classes"][0]["id"],
+        "environment": {"id": environment_id},
+    }
+
+    _, res = await sanic_client.post("/api/data/session_launchers", headers=admin_headers, json=session_payload)
+
+    assert res.status_code == 422, res.text
+
+    # test unarchiving allows launcher creation again
+    payload = {"is_archived": False}
+
+    _, res = await sanic_client.patch(f"/api/data/environments/{environment_id}", headers=admin_headers, json=payload)
+    assert res.status_code == 200, res.text
+    assert not res.json.get("is_archived")
+
+    _, res = await sanic_client.post("/api/data/session_launchers", headers=admin_headers, json=session_payload)
+
+    assert res.status_code == 201, res.text
 
 
 @pytest.mark.asyncio
