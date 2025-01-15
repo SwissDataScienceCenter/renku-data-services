@@ -600,3 +600,4 @@ async def test_storage_schema(storage_test_client) -> None:
     providers = next(p for p in s3["options"] if p["name"] == "provider")
     assert providers
     assert providers.get("examples")
+    assert any(e["value"] == "Switch" for e in providers.get("examples"))
