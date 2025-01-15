@@ -401,6 +401,8 @@ class RCloneValidator:
 
         # Extract the user from the public link
         configuration["user"] = public_link.split("/")[-1]
+        # This allows both switch drive and polybox to handle modified times on files properly
+        configuration["vendor"] = "owncloud"
 
         return configuration
 
