@@ -219,7 +219,7 @@ class RCloneStorage(ICloudStorageRequest):
         return patches
 
     def config_string(self, name: str) -> str:
-        """Convert configuration oblect to string representation.
+        """Convert configuration object to string representation.
 
         Needed to create RClone compatible INI files.
         """
@@ -233,6 +233,9 @@ class RCloneStorage(ICloudStorageRequest):
         if storage_type == "polybox" or storage_type == "switchDrive":
             self.configuration["type"] = "webdav"
             self.configuration["provider"] = ""
+            # NOTE: Without the vendor field mounting storage and editing files results in the text
+            # editor complaining that the file has changed and whether it should overwrite new changes.
+            self.configuration["vendor"] = "owncloud"
 
         if access == "shared" and storage_type == "polybox":
             self.configuration["url"] = "https://polybox.ethz.ch/public.php/webdav/"
