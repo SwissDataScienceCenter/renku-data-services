@@ -31,14 +31,15 @@ class SessionRepository:
         self.project_authz: Authz = project_authz
         self.resource_pools: ResourcePoolRepository = resource_pools
 
-    async def get_environments(self) -> list[models.Environment]:
+    async def get_environments(self, include_archived: bool = False) -> list[models.Environment]:
         """Get all global session environments from the database."""
         async with self.session_maker() as session:
-            res = await session.scalars(
-                select(schemas.EnvironmentORM).where(
-                    schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.GLOBAL.value
-                )
+            statement = select(schemas.EnvironmentORM).where(
+                schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.GLOBAL.value
             )
+            if not include_archived:
+                statement = statement.where(schemas.EnvironmentORM.is_archived.is_(False))
+            res = await session.scalars(statement)
             environments = res.all()
             return [e.dump() for e in environments]
 
@@ -82,6 +83,7 @@ class SessionRepository:
             command=new_environment.command,
             args=new_environment.args,
             creation_date=datetime.now(UTC).replace(microsecond=0),
+            is_archived=new_environment.is_archived,
         )
 
         session.add(environment)
@@ -140,6 +142,9 @@ class SessionRepository:
             environment.command = None
         elif isinstance(update.command, list):
             environment.command = update.command
+
+        if update.is_archived is not None:
+            environment.is_archived = update.is_archived
 
     async def update_environment(
         self, user: base_models.APIUser, environment_id: ULID, patch: models.EnvironmentPatch
@@ -287,6 +292,10 @@ class SessionRepository:
                 if environment_orm is None:
                     raise errors.MissingResourceError(
                         message=f"Session environment with id '{environment_id}' does not exist or you do not have access to it."  # noqa: E501
+                    )
+                if environment_orm.is_archived:
+                    raise errors.ValidationError(
+                        message="Cannot create a new session launcher with an archived environment."
                     )
 
             environment = environment_orm.dump()
