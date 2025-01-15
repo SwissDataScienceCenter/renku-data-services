@@ -345,6 +345,8 @@ class ProjectRepository:
                     message=f"The project cannot be moved because you do not have sufficient permissions with the namespace {patch.namespace}"  # noqa: E501
                 )
             project.slug.namespace_id = ns.id
+            # Trigger update for ``updated_at`` column
+            await session.execute(update(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id).values())
         if patch.slug is not None and patch.slug != old_project.slug:
             namespace_id = project.slug.namespace_id
             existing_entity = await session.scalar(
@@ -358,6 +360,8 @@ class ProjectRepository:
                 )
             session.add(ns_schemas.EntitySlugOldORM(slug=old_project.slug, latest_slug_id=project.slug.id))
             project.slug.slug = patch.slug
+            # Trigger update for ``updated_at`` column
+            await session.execute(update(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id).values())
         if patch.visibility is not None:
             visibility_orm = (
                 project_apispec.Visibility(patch.visibility)
