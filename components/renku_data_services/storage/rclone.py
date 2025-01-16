@@ -176,7 +176,6 @@ class RCloneValidator:
         description: str,
         url_value: str,
         public_link_help: str,
-        vendor: str | None = None,
     ) -> None:
         """Create a modified copy of WebDAV storage and add it to the schema."""
         # Find WebDAV storage schema and create a modified copy
@@ -242,21 +241,17 @@ class RCloneValidator:
         ]
         storage_copy["Options"].extend(custom_options)
 
-        # use provider to indicate if the option is for a personal or shared storage
+        # use provider to indicate if the option is for an personal o shared storage
         for option in storage_copy["Options"]:
             if option["Name"] == "url":
                 option.update({"Provider": "personal", "Default": url_value, "Required": False})
             elif option["Name"] in ["bearer_token", "bearer_token_command", "headers", "user"]:
                 option["Provider"] = "personal"
 
-            # NOTE: if the vendor field is omitted it can result in the modified timestamps for mounted files
-            # being weird and causing text editors to keep asking if you want to overwrite the file when
-            # trying to write any changes.
-            if option["Name"] == "vendor" and vendor:
-                option["Default"] = vendor
-
         # Remove obsolete options no longer applicable for Polybox or SwitchDrive
-        storage_copy["Options"] = [o for o in storage_copy["Options"] if o["Name"] not in ["nextcloud_chunk_size"]]
+        storage_copy["Options"] = [
+            o for o in storage_copy["Options"] if o["Name"] not in ["vendor", "nextcloud_chunk_size"]
+        ]
 
         spec.append(storage_copy)
 
@@ -279,7 +274,6 @@ class RCloneValidator:
             description="Polybox",
             url_value="https://polybox.ethz.ch/remote.php/webdav/",
             public_link_help="Shared folder link. E.g., https://polybox.ethz.ch/index.php/s/8NffJ3rFyHaVyyy",
-            vendor="owncloud",
         )
 
         self.__add_webdav_based_storage(
@@ -289,12 +283,12 @@ class RCloneValidator:
             description="SwitchDrive",
             url_value="https://drive.switch.ch/remote.php/webdav/",
             public_link_help="Shared folder link. E.g., https://drive.switch.ch/index.php/s/OPSd72zrs5JG666",
-            vendor="owncloud",
         )
 
     def validate(self, configuration: Union["RCloneConfig", dict[str, Any]], keep_sensitive: bool = False) -> None:
         """Validates an RClone config."""
         provider = self.get_provider(configuration)
+
         provider.validate_config(configuration, keep_sensitive=keep_sensitive)
 
     async def test_connection(
