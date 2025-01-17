@@ -440,3 +440,77 @@ def generate_v4(public_project_ids: Iterable[str]) -> AuthzSchemaMigration:
         )
 
     return AuthzSchemaMigration(up=up, down=down)
+
+
+_v5: str = """\
+definition user {}
+
+definition group {
+    relation group_platform: platform
+    relation owner: user
+    relation editor: user
+    relation viewer: user
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = public_viewer + read_children
+    permission read_children = viewer + write
+    permission write = editor + delete
+    permission change_membership = delete
+    permission delete = owner + group_platform->is_admin
+    permission non_public_read = owner + editor + viewer - public_viewer
+}
+
+definition user_namespace {
+    relation user_namespace_platform: platform
+    relation owner: user
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = public_viewer + read_children
+    permission read_children = delete
+    permission write = delete
+    permission delete = owner + user_namespace_platform->is_admin
+    permission non_public_read = owner - public_viewer
+}
+
+definition anonymous_user {}
+
+definition platform {
+    relation admin: user
+    permission is_admin = admin
+}
+
+definition project {
+    relation project_platform: platform
+    relation project_namespace: user_namespace | group
+    relation owner: user
+    relation editor: user
+    relation viewer: user
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = public_viewer + viewer + write + project_namespace->read_children
+    permission read_linked_resources = viewer + editor + owner + project_platform->is_admin
+    permission write = editor + delete + project_namespace->write
+    permission change_membership = delete
+    permission delete = owner + project_platform->is_admin + project_namespace->delete
+    permission non_public_read = owner + editor + viewer + project_namespace->read_children - public_viewer
+}
+
+definition data_connector {
+    relation data_connector_platform: platform
+    relation data_connector_namespace: user_namespace | group
+    relation linked_to: project
+    relation owner: user
+    relation editor: user
+    relation viewer: user
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = public_viewer + viewer + write + \
+        data_connector_namespace->read_children + read_from_linked_resource
+    permission read_from_linked_resource = linked_to->read_linked_resources
+    permission write = editor + delete + data_connector_namespace->write
+    permission change_membership = delete
+    permission delete = owner + data_connector_platform->is_admin + data_connector_namespace->delete
+    permission add_link = write + public_viewer
+    permission non_public_read = owner + editor + viewer + data_connector_namespace->read_children - public_viewer
+}"""
+
+v5 = AuthzSchemaMigration(
+    up=[WriteSchemaRequest(schema=_v5)],
+    down=[WriteSchemaRequest(schema=_v4)],
+)
