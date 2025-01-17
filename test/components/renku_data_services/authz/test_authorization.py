@@ -308,3 +308,66 @@ async def test_listing_projects_with_access(app_config_instance: Config, bootstr
     assert private_project_id1_str not in set(
         await authz.resources_with_permission(admin_user, admin_user.id, ResourceType.project, Scope.DELETE)
     )
+
+
+@pytest.mark.asyncio
+async def test_listing_non_public_projects(app_config_instance: Config, bootstrap_admins) -> None:
+    authz = app_config_instance.authz
+    public_project_id = ULID()
+    private_project_id1 = ULID()
+    private_project_id2 = ULID()
+
+    public_project_id_str = str(public_project_id)
+    private_project_id1_str = str(private_project_id1)
+    private_project_id2_str = str(private_project_id2)
+
+    namespace = Namespace(
+        id=ULID(),
+        slug="ns-121",
+        kind=NamespaceKind.user,
+        created_by=str(regular_user1.id),
+        underlying_resource_id=ULID(),
+    )
+    assert regular_user1.id
+    assert regular_user2.id
+    public_project = Project(
+        id=public_project_id,
+        name=public_project_id_str,
+        slug=public_project_id_str,
+        namespace=namespace,
+        visibility=Visibility.PUBLIC,
+        created_by=regular_user1.id,
+    )
+    private_project1 = Project(
+        id=private_project_id1,
+        name=private_project_id1_str,
+        slug=private_project_id1_str,
+        namespace=namespace,
+        visibility=Visibility.PRIVATE,
+        created_by=regular_user1.id,
+    )
+    private_project2 = Project(
+        id=private_project_id2,
+        name=private_project_id2_str,
+        slug=private_project_id2_str,
+        namespace=namespace,
+        visibility=Visibility.PRIVATE,
+        created_by=regular_user2.id,
+    )
+    for p in [public_project, private_project1, private_project2]:
+        changes = authz._add_project(p)
+        await authz.client.WriteRelationships(changes.apply)
+
+    ids_user1 = await authz.resources_with_permission(
+        admin_user, regular_user1.id, ResourceType.project, Scope.NON_PUBLIC_READ
+    )
+    ids_user2 = await authz.resources_with_permission(
+        admin_user, regular_user2.id, ResourceType.project, Scope.NON_PUBLIC_READ
+    )
+    assert private_project_id1_str in set(ids_user1)
+    assert private_project_id2_str not in set(ids_user1)
+    assert public_project_id_str not in set(ids_user1)
+
+    assert private_project_id2_str in set(ids_user2)
+    assert private_project_id1_str not in set(ids_user2)
+    assert public_project_id_str not in set(ids_user2)
