@@ -233,8 +233,9 @@ class RCloneStorage(ICloudStorageRequest):
         if storage_type == "polybox" or storage_type == "switchDrive":
             self.configuration["type"] = "webdav"
             self.configuration["provider"] = ""
-            # NOTE: Without the vendor field mounting storage and editing files results in the text
-            # editor complaining that the file has changed and whether it should overwrite new changes.
+            # NOTE: Without the vendor field mounting storage and editing files results in the modification
+            # time for touched files to be temporarily set to `1999-09-04` which causes the text
+            # editor to complain that the file has changed and whether it should overwrite new changes.
             self.configuration["vendor"] = "owncloud"
 
         if access == "shared" and storage_type == "polybox":
