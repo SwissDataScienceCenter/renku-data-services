@@ -2,30 +2,31 @@
 apiVersion: shipwright.io/v1beta1
 kind: ClusterBuildStrategy
 metadata:
-  name: buildpacks-v3-renku
+  name: renku-buildpacks
 spec:
-  volumes:
-    - name: platform-env
-      emptyDir: {}
   parameters:
     - name: platform-api-version
       description: The referenced version is the minimum version that all relevant buildpack implementations support.
       default: "0.12"
+    - name: process-type
+      description: |
+        The process to execute at launch time
+        https://buildpacks.io/docs/for-buildpack-authors/how-to/write-buildpacks/specify-launch-processes/
+      default: "web"
   steps:
     - name: build-and-push
-      image: renku/pack-builder:0.0.1
-      imagePullPolicy: Never
+      image: docker.io/paketobuildpacks/builder-jammy-full:latest
+      imagePullPolicy: IfNotPresent
       env: 
         - name: CNB_PLATFORM_API
           value: $(params.platform-api-version)
-        - name: PARAM_SOURCE_CONTEXT
-          value: $(params.shp-source-context)
-        - name: PARAM_OUTPUT_IMAGE
-          value: $(params.shp-output-image)
       command:
-        - renku-pack-builder
+        - /cnb/lifecycle/creator
       args:
-        - "$(results.shp-image-digest.path)"
+        - "-app=$(params.shp-source-context)"
+        - "-report=/tmp/report.toml"
+        - "-process-type=$(params.process-type)"
+        - "$(params.shp-output-image)"
       volumeMounts:
         - mountPath: /platform/env
           name: platform-env
@@ -36,6 +37,9 @@ spec:
         requests:
           cpu: 250m
           memory: 65Mi
+  volumes:
+    - name: platform-env
+      emptyDir: {}
   securityContext:
     runAsUser: 1001
     runAsGroup: 1000

@@ -9,7 +9,7 @@ spec:
     git: 
       url: https://github.com/idiap/multiauthenticator
   strategy:
-    name: buildpacks-v3-renku
+    name: renku-buildpacks
     kind: ClusterBuildStrategy
   output:
     image: dev-registry.local:5000/test-shipwright-python:latest
