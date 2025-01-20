@@ -70,7 +70,6 @@ from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.db import UserRepo
-from renku_data_services.utils.cryptography import get_encryption_key
 
 
 @dataclass(kw_only=True)
@@ -324,6 +323,7 @@ class NotebooksNewBP(CustomBlueprint):
                 work_dir=work_dir,
                 storage_mount=storage_mount,
                 cloud_storage_overrides=body.cloudstorage or [],
+                user_repo=self.user_repo,
             )
             secrets_to_create.extend(data_secrets)
             extra_init_containers_dc, extra_init_volumes_dc = await get_extra_init_containers(

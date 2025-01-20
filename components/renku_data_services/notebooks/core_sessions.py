@@ -40,12 +40,13 @@ from renku_data_services.notebooks.crs import (
 )
 from renku_data_services.notebooks.models import ExtraSecret
 from renku_data_services.notebooks.utils import (
-    get_user_secret,
     node_affinity_from_resource_class,
     tolerations_from_resource_class,
 )
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.models import Project, SessionSecret
+from renku_data_services.users.db import UserRepo
+from renku_data_services.utils.cryptography import get_encryption_key
 
 
 async def get_extra_init_containers(
@@ -166,6 +167,7 @@ async def get_data_sources(
     work_dir: PurePosixPath,
     storage_mount: PurePosixPath,
     cloud_storage_overrides: list[apispec.SessionCloudStoragePost],
+    user_repo: UserRepo,
 ) -> tuple[list[DataSource], list[ExtraSecret], dict[str, list[DataConnectorSecret]]]:
     """Generate cloud storage related resources."""
     data_sources: list[DataSource] = []
@@ -187,7 +189,8 @@ async def get_data_sources(
         if len(dc.secrets) > 0:
             dcs_secrets[str(dc.data_connector.id)] = dc.secrets
     if isinstance(user, AuthenticatedAPIUser) and len(dcs_secrets) > 0:
-        user_secret_key = await get_user_secret(nb_config.data_service_url, user)
+        secret_key = await user_repo.get_or_create_user_secret_key(user)
+        user_secret_key = get_encryption_key(secret_key.encode(), user.id.encode()).decode("utf-8")
     # NOTE: Check the cloud storage overrides from the request body and if any match
     # then overwrite the projects cloud storages
     # NOTE: Cloud storages in the session launch request body that are not from the DB will cause a 404 error
