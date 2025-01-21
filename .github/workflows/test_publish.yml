@@ -264,7 +264,7 @@ jobs:
           username: ${{ secrets.RENKU_DOCKER_USERNAME }}
           password: ${{ secrets.RENKU_DOCKER_PASSWORD }}
       - name: Build and push data services
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./projects/renku_data_service/Dockerfile
@@ -274,6 +274,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=registry,ref=renku/renku-data-service:buildcache
           cache-to: type=registry,ref=renku/renku-data-service:buildcache,mode=max
+          provenance: false
       - name: Docker meta background jobs
         id: meta-background-jobs
         uses: docker/metadata-action@v5
@@ -289,7 +290,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha
       - name: Build and push background jobs
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./projects/background_jobs/Dockerfile
@@ -299,6 +300,7 @@ jobs:
           labels: ${{ steps.meta-background-jobs.outputs.labels }}
           cache-from: type=registry,ref=renku/data-service-background-jobs:buildcache
           cache-to: type=registry,ref=renku/data-service-background-jobs:buildcache,mode=max
+          provenance: false
       - name: Docker meta secrets
         id: meta-secrets-storage
         uses: docker/metadata-action@v5
@@ -314,7 +316,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha
       - name: Build and push secrets image
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./projects/secrets_storage/Dockerfile
@@ -324,3 +326,4 @@ jobs:
           labels: ${{ steps.meta-secrets-storage.outputs.labels }}
           cache-from: type=registry,ref=renku/secrets-storage:buildcache
           cache-to: type=registry,ref=renku/secrets-storage:buildcache,mode=max
+          provenance: false
