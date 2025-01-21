@@ -2,7 +2,6 @@ apiVersion: shipwright.io/v1beta1
 kind: Build
 metadata:
   name: buildpack-renku-build-dev
-  namespace: default
 spec:
   source:
     type: Git
@@ -10,6 +9,6 @@ spec:
       url: https://github.com/idiap/multiauthenticator
   strategy:
     name: renku-buildpacks
-    kind: ClusterBuildStrategy
+    kind: BuildStrategy
   output:
     image: dev-registry.local:5000/test-shipwright-python:latest

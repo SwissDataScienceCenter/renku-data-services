@@ -1,6 +1,6 @@
 ---
 apiVersion: shipwright.io/v1beta1
-kind: ClusterBuildStrategy
+kind: BuildStrategy
 metadata:
   name: renku-buildpacks
 spec:

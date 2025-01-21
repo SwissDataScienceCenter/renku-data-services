@@ -5,13 +5,13 @@ import time
 from pathlib import Path
 
 
-def kubectl_apply(manifest: str) -> subprocess.CompletedProcess:
-    cmd = ["kubectl", "apply", "-f", manifest]
+def kubectl_apply(namespace: str, manifest: str) -> subprocess.CompletedProcess:
+    cmd = ["kubectl", "--namespace", namespace, "apply", "-f", manifest]
     return subprocess.run(cmd, capture_output=True)
 
 
-def kubectl_delete(manifest: str) -> subprocess.CompletedProcess:
-    cmd = ["kubectl", "delete", "--ignore-not-found", "-f", manifest]
+def kubectl_delete(namespace: str, manifest: str) -> subprocess.CompletedProcess:
+    cmd = ["kubectl", "--namespace", namespace, "delete", "--ignore-not-found", "-f", manifest]
     return subprocess.run(cmd, capture_output=True)
 
 
@@ -20,31 +20,54 @@ def manifest_path() -> str:
     yield Path(__file__).parent / "../../../components/renku_pack_builder/manifests"
 
 
+@pytest.fixture(scope="module")
+def namespace() -> str:
+    ns = "shipwright-tests"
+    cmd = ["kubectl", "create", "namespace", ns]
+    result = subprocess.run(cmd)
+    assert result.returncode == 0
+
+    yield ns
+
+    cmd = ["kubectl", "delete", "namespace", ns]
+    result = subprocess.run(cmd)
+    assert result.returncode == 0
+
+
 @pytest.fixture
 def buildrun(manifest_path: str) -> str:
     yield manifest_path / "buildrun.yaml"
 
 
 @pytest.fixture(autouse=True)
-def setup_shipwrite_crds(manifest_path: str) -> None:
+def setup_shipwrite_crds(namespace: str, manifest_path: str) -> None:
     manifests = ["buildstrategy_buildpacks.yaml", "build.yaml"]
 
     for manifest in manifests:
-        result = kubectl_apply(manifest_path / manifest)
+        result = kubectl_apply(namespace, manifest_path / manifest)
         assert result.returncode == 0
 
     yield
 
     for manifest in reversed(manifests):
-        result = kubectl_delete(manifest_path / manifest)
+        result = kubectl_delete(namespace, manifest_path / manifest)
         assert result.returncode == 0
 
 
-def test_buildpacks_buildstrategy(buildrun: str) -> None:
-    result = kubectl_apply(buildrun)
+def test_buildpacks_buildstrategy(namespace: str, buildrun: str) -> None:
+    result = kubectl_apply(namespace, buildrun)
     assert result.returncode == 0
 
-    cmd = ["kubectl", "get", "buildrun", "buildpack-python-env-3", "-o", "jsonpath={.status.conditions[0]['reason']}"]
+    cmd = [
+        "kubectl",
+        "--namespace",
+        namespace,
+        "get",
+        "buildrun",
+        "buildpack-python-env-3",
+        "-o",
+        "jsonpath={.status.conditions[0]['reason']}",
+    ]
 
     succeeded = False
     for i in range(5 * 60):
@@ -56,6 +79,6 @@ def test_buildpacks_buildstrategy(buildrun: str) -> None:
             break
         time.sleep(1)
 
-    kubectl_delete(buildrun)
+    kubectl_delete(namespace, buildrun)
 
     assert succeeded
