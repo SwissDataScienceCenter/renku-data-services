@@ -14,6 +14,7 @@ from renku_data_services import base_models, errors
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.authz.models import CheckPermissionItem, Scope
 from renku_data_services.base_api.pagination import PaginationRequest
+from renku_data_services.base_models.core import Slug
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors import orm as schemas
 from renku_data_services.namespace import orm as ns_schemas
@@ -103,17 +104,17 @@ class DataConnectorRepository:
         return [(dc.name, f"{dc.slug.namespace.slug}/{dc.slug.slug}") for dc in data_connectors_orms]
 
     async def get_data_connector_by_slug(
-        self, user: base_models.APIUser, namespace: str, slug: str
+        self, user: base_models.APIUser, namespace: str, slug: Slug
     ) -> models.DataConnector:
         """Get one data connector from the database by slug."""
         not_found_msg = (
-            f"Data connector with identifier '{namespace}/{slug}' does not exist or you do not have access to it."
+            f"Data connector with identifier '{namespace}/{slug.value}' does not exist or you do not have access to it."
         )
 
         async with self.session_maker() as session:
             stmt = select(schemas.DataConnectorORM)
             stmt = _filter_by_namespace_slug(stmt, namespace)
-            stmt = stmt.where(ns_schemas.EntitySlugORM.slug == slug.lower())
+            stmt = stmt.where(ns_schemas.EntitySlugORM.slug == slug.value.lower())
             result = await session.scalars(stmt)
             data_connector = result.one_or_none()
 
@@ -124,14 +125,14 @@ class DataConnectorRepository:
                     .where(ns_schemas.NamespaceOldORM.latest_slug_id == ns_schemas.NamespaceORM.id)
                     .where(ns_schemas.EntitySlugORM.namespace_id == ns_schemas.NamespaceORM.id)
                     .where(schemas.DataConnectorORM.id == ns_schemas.EntitySlugORM.data_connector_id)
-                    .where(schemas.DataConnectorORM.slug.has(ns_schemas.EntitySlugORM.slug == slug.lower()))
+                    .where(schemas.DataConnectorORM.slug.has(ns_schemas.EntitySlugORM.slug == slug.value.lower()))
                 )
                 old_data_connector_stmt_current_ns_old_slug = (
                     select(schemas.DataConnectorORM.id)
                     .where(ns_schemas.NamespaceORM.slug == namespace.lower())
                     .where(ns_schemas.EntitySlugORM.namespace_id == ns_schemas.NamespaceORM.id)
                     .where(schemas.DataConnectorORM.id == ns_schemas.EntitySlugORM.data_connector_id)
-                    .where(ns_schemas.EntitySlugOldORM.slug == slug.lower())
+                    .where(ns_schemas.EntitySlugOldORM.slug == slug.value.lower())
                     .where(ns_schemas.EntitySlugOldORM.latest_slug_id == ns_schemas.EntitySlugORM.id)
                 )
                 old_data_connector_stmt_old_ns_old_slug = (
@@ -140,7 +141,7 @@ class DataConnectorRepository:
                     .where(ns_schemas.NamespaceOldORM.latest_slug_id == ns_schemas.NamespaceORM.id)
                     .where(ns_schemas.EntitySlugORM.namespace_id == ns_schemas.NamespaceORM.id)
                     .where(schemas.DataConnectorORM.id == ns_schemas.EntitySlugORM.data_connector_id)
-                    .where(ns_schemas.EntitySlugOldORM.slug == slug.lower())
+                    .where(ns_schemas.EntitySlugOldORM.slug == slug.value.lower())
                     .where(ns_schemas.EntitySlugOldORM.latest_slug_id == ns_schemas.EntitySlugORM.id)
                 )
                 old_data_connector_stmt = old_data_connector_stmt_old_ns_current_slug.union(

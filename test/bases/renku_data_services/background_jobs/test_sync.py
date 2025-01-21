@@ -33,6 +33,7 @@ from renku_data_services.background_jobs.core import (
 )
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models import APIUser
+from renku_data_services.base_models.core import Slug
 from renku_data_services.data_connectors.db import DataConnectorProjectLinkRepository, DataConnectorRepository
 from renku_data_services.data_connectors.migration_utils import DataConnectorMigrationTool
 from renku_data_services.db_config import DBConfig
@@ -875,7 +876,7 @@ async def test_fixing_project_group_namespace_relations(
         )
     )
     # Add group member
-    await sync_config.group_repo.update_group_members(user1_api, "group1", [UnsavedMember(Role.VIEWER, user2.id)])
+    await sync_config.group_repo.update_group_members(user1_api, Slug("group1"), [UnsavedMember(Role.VIEWER, user2.id)])
     with pytest.raises(errors.MissingResourceError):
         await sync_config.project_repo.get_project(user2_api, project.id)
     await fix_mismatched_project_namespace_ids(sync_config)
@@ -934,12 +935,12 @@ async def test_migrate_groups_make_all_public(
     )
 
     with pytest.raises(errors.MissingResourceError):
-        group_members = await sync_config.group_repo.get_group_members(user=anon_user_api, slug=group.slug)
+        group_members = await sync_config.group_repo.get_group_members(user=anon_user_api, slug=Slug(group.slug))
 
     await migrate_groups_make_all_public(sync_config)
 
     # After the migration, the group is public
-    group_members = await sync_config.group_repo.get_group_members(user=anon_user_api, slug=group.slug)
+    group_members = await sync_config.group_repo.get_group_members(user=anon_user_api, slug=Slug(group.slug))
     assert len(group_members) == 1
     assert group_members[0].id == "user-1-id"
     assert group_members[0].role.value == "owner"
@@ -992,12 +993,12 @@ async def test_migrate_user_namespaces_make_all_public(
     )
 
     with pytest.raises(errors.MissingResourceError):
-        await sync_config.group_repo.get_namespace_by_slug(user=anon_user_api, slug="john.doe")
+        await sync_config.group_repo.get_namespace_by_slug(user=anon_user_api, slug=Slug("john.doe"))
 
     await migrate_user_namespaces_make_all_public(sync_config)
 
     # After the migration, the user namespace is public
-    ns = await sync_config.group_repo.get_namespace_by_slug(user=anon_user_api, slug="john.doe")
+    ns = await sync_config.group_repo.get_namespace_by_slug(user=anon_user_api, slug=Slug("john.doe"))
     assert ns.slug == "john.doe"
     assert ns.kind.value == "user"
     assert ns.created_by == user.id

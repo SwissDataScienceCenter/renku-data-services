@@ -49,13 +49,10 @@ async def apispec(sanic_client: SanicASGITestClient) -> BaseOpenAPISchema:
 def filter_headers(context: HookContext, headers: dict[str, str] | None) -> bool:
     op = context.operation
     if headers is not None and op.method.upper() == "PATCH":
-        if_match = headers.get("If-Match")
-        if if_match and isinstance(if_match, str):
-            try:
-                if_match.encode("ascii")
-                return True
-            except UnicodeEncodeError:
-                return False
+        try:
+            [h.encode("ascii") for h in headers.values()]
+        except UnicodeEncodeError:
+            return False
     return True
 
 
@@ -64,7 +61,7 @@ def filter_headers(context: HookContext, headers: dict[str, str] | None) -> bool
 # and this crashes the server when it tries to validate the query.
 @schemathesis.hook
 def filter_query(context: HookContext, query: dict[str, str] | None) -> bool:
-    return query is None or "" not in query
+    return query is None or ("" not in query and "" not in query.values())
 
 
 schema = schemathesis.from_pytest_fixture(

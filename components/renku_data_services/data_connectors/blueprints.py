@@ -17,6 +17,7 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_api.etag import extract_if_none_match, if_match_required
 from renku_data_services.base_api.misc import validate_body_root_model, validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
+from renku_data_services.base_models.core import Slug
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors.core import (
@@ -122,7 +123,7 @@ class DataConnectorsBP(CustomBlueprint):
             _: Request,
             user: base_models.APIUser,
             namespace: str,
-            slug: str,
+            slug: Slug,
             etag: str | None,
             validator: RCloneValidator,
         ) -> HTTPResponse:

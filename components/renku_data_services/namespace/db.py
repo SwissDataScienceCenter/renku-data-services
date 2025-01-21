@@ -19,6 +19,7 @@ from renku_data_services import errors
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.authz.models import CheckPermissionItem, Member, MembershipChange, Role, Scope, UnsavedMember
 from renku_data_services.base_api.pagination import PaginationRequest
+from renku_data_services.base_models.core import Slug
 from renku_data_services.message_queue import events
 from renku_data_services.message_queue.avro_models.io.renku.events.v2 import GroupAdded, GroupRemoved, GroupUpdated
 from renku_data_services.message_queue.db import EventRepository
@@ -107,18 +108,18 @@ class GroupRepository:
                 yield group.dump()
 
     async def _get_group(
-        self, session: AsyncSession, user: base_models.APIUser, slug: str, load_members: bool = False
+        self, session: AsyncSession, user: base_models.APIUser, slug: Slug, load_members: bool = False
     ) -> tuple[schemas.GroupORM, list[Member]]:
         transaction = nullcontext() if session.in_transaction() else session.begin()
         async with transaction:
             stmt = select(schemas.GroupORM).where(
-                schemas.GroupORM.namespace.has(schemas.NamespaceORM.slug == slug.lower())
+                schemas.GroupORM.namespace.has(schemas.NamespaceORM.slug == slug.value.lower())
             )
             group = await session.scalar(stmt)
             if not group:
                 stmt_old_ns = (
                     select(schemas.NamespaceOldORM)
-                    .where(schemas.NamespaceOldORM.slug == slug.lower())
+                    .where(schemas.NamespaceOldORM.slug == slug.value.lower())
                     .order_by(schemas.NamespaceOldORM.created_at.desc())
                     .limit(1)
                     .options(
@@ -137,7 +138,7 @@ class GroupRepository:
                 members = await self.authz.members(user, ResourceType.group, group.id)
             return group, members
 
-    async def get_group(self, user: base_models.APIUser, slug: str) -> models.Group:
+    async def get_group(self, user: base_models.APIUser, slug: Slug) -> models.Group:
         """Get a group from the DB."""
         async with self.session_maker() as session:
             group_orm, _ = await self._get_group(session, user, slug)
@@ -145,7 +146,7 @@ class GroupRepository:
 
     @with_db_transaction
     async def get_group_members(
-        self, user: base_models.APIUser, slug: str, *, session: AsyncSession | None = None
+        self, user: base_models.APIUser, slug: Slug, *, session: AsyncSession | None = None
     ) -> list[models.GroupMemberDetails]:
         """Get all the users that are direct members of a group."""
         if not session:
@@ -173,22 +174,22 @@ class GroupRepository:
     @with_db_transaction
     @dispatch_message(GroupUpdated)
     async def update_group(
-        self, user: base_models.APIUser, slug: str, patch: models.GroupPatch, *, session: AsyncSession | None = None
+        self, user: base_models.APIUser, slug: Slug, patch: models.GroupPatch, *, session: AsyncSession | None = None
     ) -> models.Group:
         """Update a group in the DB."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
         group, _ = await self._get_group(session, user, slug)
-        if group.namespace.slug != slug.lower():
+        if group.namespace.slug != slug.value.lower():
             raise errors.UpdatingWithStaleContentError(
-                message=f"You cannot update a group by using its old slug {slug}.",
+                message=f"You cannot update a group by using its old slug {slug.value}.",
                 detail=f"The latest slug is {group.namespace.slug}, please use this for updates.",
             )
 
         authorized = await self.authz.has_permission(user, ResourceType.group, group.id, Scope.DELETE)
         if not authorized:
             raise errors.MissingResourceError(
-                message=f"Group with slug '{slug}' does not exist or you do not have access to it."
+                message=f"Group with slug '{slug.value}' does not exist or you do not have access to it."
             )
 
         new_slug_str = patch.slug.lower() if patch.slug is not None else None
@@ -215,7 +216,7 @@ class GroupRepository:
     async def update_group_members(
         self,
         user: base_models.APIUser,
-        slug: str,
+        slug: Slug,
         members: list[UnsavedMember],
         *,
         session: AsyncSession | None = None,
@@ -224,9 +225,9 @@ class GroupRepository:
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
         group, _ = await self._get_group(session, user, slug, load_members=True)
-        if group.namespace.slug != slug.lower():
+        if group.namespace.slug != slug.value.lower():
             raise errors.UpdatingWithStaleContentError(
-                message=f"You cannot update group members by using an old group slug {slug}.",
+                message=f"You cannot update group members by using an old group slug {slug.value}.",
                 detail=f"The latest slug is {group.namespace.slug}, please use this for updates.",
             )
 
@@ -239,7 +240,7 @@ class GroupRepository:
     @Authz.authz_change(AuthzOperation.delete, ResourceType.group)
     @dispatch_message(GroupRemoved)
     async def delete_group(
-        self, user: base_models.APIUser, slug: str, *, session: AsyncSession | None = None
+        self, user: base_models.APIUser, slug: Slug, *, session: AsyncSession | None = None
     ) -> models.DeletedGroup | None:
         """Delete a specific group."""
         if not session:
@@ -249,9 +250,9 @@ class GroupRepository:
             group, _ = await self._get_group(session, user, slug)
         except errors.MissingResourceError:
             return None
-        if group.namespace.slug != slug.lower():
+        if group.namespace.slug != slug.value.lower():
             raise errors.UpdatingWithStaleContentError(
-                message=f"You cannot delete a group by using an old group slug {slug}.",
+                message=f"You cannot delete a group by using an old group slug {slug.value}.",
                 detail=f"The latest slug is {group.namespace.slug}, please use this for deletions.",
             )
         # NOTE: We have a stored procedure that gets triggered when a project slug is removed to remove the project.
@@ -265,7 +266,7 @@ class GroupRepository:
     @with_db_transaction
     @dispatch_message(events.GroupMembershipChanged)
     async def delete_group_member(
-        self, user: base_models.APIUser, slug: str, user_id_to_delete: str, *, session: AsyncSession | None = None
+        self, user: base_models.APIUser, slug: Slug, user_id_to_delete: str, *, session: AsyncSession | None = None
     ) -> list[MembershipChange]:
         """Delete a specific group member."""
         if not session:
@@ -314,7 +315,7 @@ class GroupRepository:
         await session.refresh(group)
         return group.dump()
 
-    async def get_group_permissions(self, user: base_models.APIUser, slug: str) -> models.GroupPermissions:
+    async def get_group_permissions(self, user: base_models.APIUser, slug: Slug) -> models.GroupPermissions:
         """Get the permissions of the user on a given group."""
         group = await self.get_group(user=user, slug=slug)
 
@@ -380,15 +381,17 @@ class GroupRepository:
             async for namespace in namespaces:
                 yield namespace.dump_user()
 
-    async def get_namespace_by_slug(self, user: base_models.APIUser, slug: str) -> models.Namespace | None:
+    async def get_namespace_by_slug(self, user: base_models.APIUser, slug: Slug) -> models.Namespace | None:
         """Get the namespace identified by a given slug."""
         async with self.session_maker() as session, session.begin():
-            ns = await session.scalar(select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == slug.lower()))
+            ns = await session.scalar(
+                select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == slug.value.lower())
+            )
             old_ns = None
             if not ns:
                 old_ns = await session.scalar(
                     select(schemas.NamespaceOldORM)
-                    .where(schemas.NamespaceOldORM.slug == slug.lower())
+                    .where(schemas.NamespaceOldORM.slug == slug.value.lower())
                     .order_by(schemas.NamespaceOldORM.created_at.desc())
                     .limit(1)
                 )

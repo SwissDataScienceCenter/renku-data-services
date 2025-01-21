@@ -154,7 +154,7 @@ class Slug:
     def __init__(self, value: str) -> None:
         if not re.match(self._regex, value):
             raise errors.ValidationError(message=f"The slug {value} does not match the regex {self._regex}")
-        object.__setattr__(self, "value", value.lower())
+        object.__setattr__(self, "value", value)
 
     @classmethod
     def from_name(cls, name: str) -> Self:
@@ -199,6 +199,12 @@ class Slug:
                 message=f"A path can be constructed only from 2 slugs, but the 'divisor' is of type {type(other)}"
             )
         return self.value + "/" + other.value
+
+    def __str__(self) -> str:
+        return self.value
+
+    def __repr__(self) -> str:
+        return self.value
 
 
 AnyAPIUser = TypeVar("AnyAPIUser", bound=APIUser, covariant=True)
