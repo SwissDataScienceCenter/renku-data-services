@@ -23,6 +23,7 @@ from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.authz.models import CheckPermissionItem, Member, MembershipChange, Scope
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models import RESET
+from renku_data_services.base_models.core import Slug
 from renku_data_services.message_queue import events
 from renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
 from renku_data_services.message_queue.db import EventRepository
@@ -147,13 +148,13 @@ class ProjectRepository:
             return [p.dump() for p in project_orms]
 
     async def get_project_by_namespace_slug(
-        self, user: base_models.APIUser, namespace: str, slug: str, with_documentation: bool = False
+        self, user: base_models.APIUser, namespace: str, slug: Slug, with_documentation: bool = False
     ) -> models.Project:
         """Get one project from the database."""
         async with self.session_maker() as session:
             stmt = select(schemas.ProjectORM)
             stmt = _filter_by_namespace_slug(stmt, namespace)
-            stmt = stmt.where(schemas.ProjectORM.slug.has(ns_schemas.EntitySlugORM.slug == slug))
+            stmt = stmt.where(schemas.ProjectORM.slug.has(ns_schemas.EntitySlugORM.slug == slug.value))
             if with_documentation:
                 stmt = stmt.options(undefer(schemas.ProjectORM.documentation))
             result = await session.scalars(stmt)
@@ -166,14 +167,14 @@ class ProjectRepository:
                     .where(ns_schemas.NamespaceOldORM.latest_slug_id == ns_schemas.NamespaceORM.id)
                     .where(ns_schemas.EntitySlugORM.namespace_id == ns_schemas.NamespaceORM.id)
                     .where(schemas.ProjectORM.id == ns_schemas.EntitySlugORM.project_id)
-                    .where(schemas.ProjectORM.slug.has(ns_schemas.EntitySlugORM.slug == slug))
+                    .where(schemas.ProjectORM.slug.has(ns_schemas.EntitySlugORM.slug == slug.value))
                 )
                 old_project_stmt_current_ns_old_slug = (
                     select(schemas.ProjectORM.id)
                     .where(ns_schemas.NamespaceORM.slug == namespace.lower())
                     .where(ns_schemas.EntitySlugORM.namespace_id == ns_schemas.NamespaceORM.id)
                     .where(schemas.ProjectORM.id == ns_schemas.EntitySlugORM.project_id)
-                    .where(ns_schemas.EntitySlugOldORM.slug == slug)
+                    .where(ns_schemas.EntitySlugOldORM.slug == slug.value)
                     .where(ns_schemas.EntitySlugOldORM.latest_slug_id == ns_schemas.EntitySlugORM.id)
                 )
                 old_project_stmt_old_ns_old_slug = (
@@ -182,7 +183,7 @@ class ProjectRepository:
                     .where(ns_schemas.NamespaceOldORM.latest_slug_id == ns_schemas.NamespaceORM.id)
                     .where(ns_schemas.EntitySlugORM.namespace_id == ns_schemas.NamespaceORM.id)
                     .where(schemas.ProjectORM.id == ns_schemas.EntitySlugORM.project_id)
-                    .where(ns_schemas.EntitySlugOldORM.slug == slug)
+                    .where(ns_schemas.EntitySlugOldORM.slug == slug.value)
                     .where(ns_schemas.EntitySlugOldORM.latest_slug_id == ns_schemas.EntitySlugORM.id)
                 )
                 old_project_stmt = old_project_stmt_old_ns_current_slug.union(
@@ -345,6 +346,8 @@ class ProjectRepository:
                     message=f"The project cannot be moved because you do not have sufficient permissions with the namespace {patch.namespace}"  # noqa: E501
                 )
             project.slug.namespace_id = ns.id
+            # Trigger update for ``updated_at`` column
+            await session.execute(update(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id).values())
         if patch.slug is not None and patch.slug != old_project.slug:
             namespace_id = project.slug.namespace_id
             existing_entity = await session.scalar(
@@ -358,6 +361,8 @@ class ProjectRepository:
                 )
             session.add(ns_schemas.EntitySlugOldORM(slug=old_project.slug, latest_slug_id=project.slug.id))
             project.slug.slug = patch.slug
+            # Trigger update for ``updated_at`` column
+            await session.execute(update(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id).values())
         if patch.visibility is not None:
             visibility_orm = (
                 project_apispec.Visibility(patch.visibility)

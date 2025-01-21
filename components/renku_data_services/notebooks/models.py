@@ -1,11 +1,19 @@
 """Basic models for amalthea sessions."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
+from kubernetes.client import V1Secret
 from pydantic import AliasGenerator, BaseModel, Field, Json
 
-from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1
+from renku_data_services.errors.errors import ProgrammingError
+from renku_data_services.notebooks.crs import (
+    AmaltheaSessionV1Alpha1,
+    ExtraVolume,
+    ExtraVolumeMount,
+    SecretRef,
+    SecretRefWhole,
+)
 
 
 @dataclass
@@ -74,3 +82,37 @@ class AmaltheaSessionManifest:
         """The environment variables requested."""
         requested_names = self._metadata.annotations.env_variable_names
         return {ikey: ival for ikey, ival in self.env_vars.items() if ikey in requested_names}
+
+
+@dataclass
+class ExtraSecret:
+    """Specification for a K8s secret and its coresponding volumes and mounts."""
+
+    secret: V1Secret = field(repr=False)
+    volume: ExtraVolume | None = None
+    volume_mount: ExtraVolumeMount | None = None
+    adopt: bool = True
+
+    def key_ref(self, key: str) -> SecretRef:
+        """Get an amalthea secret key reference."""
+        meta = self.secret.metadata
+        if not meta:
+            raise ProgrammingError(message="Cannot get reference to a secret that does not have metadata.")
+        secret_name = meta.name
+        if not secret_name:
+            raise ProgrammingError(message="Cannot get reference to a secret that does not have a name.")
+        data = self.secret.data or {}
+        string_data = self.secret.string_data or {}
+        if key not in data and key not in string_data:
+            raise KeyError(f"Cannot find the key {key} in the secret with name {secret_name}")
+        return SecretRef(key=key, name=secret_name, adopt=self.adopt)
+
+    def ref(self) -> SecretRefWhole:
+        """Get an amalthea reference to the whole secret."""
+        meta = self.secret.metadata
+        if not meta:
+            raise ProgrammingError(message="Cannot get reference to a secret that does not have metadata.")
+        secret_name = meta.name
+        if not secret_name:
+            raise ProgrammingError(message="Cannot get reference to a secret that does not have a name.")
+        return SecretRefWhole(name=secret_name, adopt=self.adopt)

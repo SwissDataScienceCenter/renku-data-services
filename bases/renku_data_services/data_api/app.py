@@ -3,9 +3,11 @@
 from sanic import Sanic
 from ulid import ULID
 
+from renku_data_services import errors
 from renku_data_services.app_config import Config
 from renku_data_services.base_api.error_handler import CustomErrorHandler
 from renku_data_services.base_api.misc import MiscBP
+from renku_data_services.base_models.core import Slug
 from renku_data_services.connected_services.blueprints import OAuth2ClientsBP, OAuth2ConnectionsBP
 from renku_data_services.crc import apispec
 from renku_data_services.crc.blueprints import (
@@ -27,10 +29,19 @@ from renku_data_services.storage.blueprints import StorageBP, StorageSchemaBP
 from renku_data_services.users.blueprints import KCUsersBP, UserPreferencesBP, UserSecretsBP
 
 
+def str_to_slug(value: str) -> Slug:
+    """Convert a str to Slug."""
+    try:
+        return Slug(value)
+    except errors.ValidationError:
+        raise ValueError("Couldn't parse slug")
+
+
 def register_all_handlers(app: Sanic, config: Config) -> Sanic:
     """Register all handlers on the application."""
+    # WARNING: The regex is not actually used in most cases, instead the conversion function must raise a ValueError
     app.router.register_pattern("ulid", ULID.from_str, r"^[0-7][0-9A-HJKMNP-TV-Z]{25}$")
-    app.router.register_pattern("renku_slug", str, r"^[a-zA-Z0-9][a-zA-Z0-9\-_.]*$")
+    app.router.register_pattern("renku_slug", str_to_slug, r"^[a-zA-Z0-9][a-zA-Z0-9-_.]*$")
 
     url_prefix = "/api/data"
     resource_pools = ResourcePoolsBP(
