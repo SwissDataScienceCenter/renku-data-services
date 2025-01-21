@@ -8,6 +8,98 @@ info:
 servers:
   - url: /api/data
 paths:
+  /image_builder:
+    post:
+      summary: Create a new image builder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImageBuilderPost"
+      responses:
+        "201":
+          description: The image builder was created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageBuilder"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - image_builder
+  /image_builder/{builder_id}:
+    get:
+      summary: Get an image builder
+      parameters:
+        - in: path
+          name: builder_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/Ulid"
+      responses:
+        "200":
+          description: The image builder
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageBuilder"
+        "404":
+          description: The image builder does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - image_builder
+    patch:
+      summary: Update specific fields of an existing global session environment
+      parameters:
+        - in: path
+          name: builder_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/Ulid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImageBuilderPatch"
+      responses:
+        "200":
+          description: The patched image builder
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageBuilderPatch"
+        "404":
+          description: The image builder does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - image_builder
+    delete:
+      summary: Remove an image_builder environment
+      parameters:
+        - in: path
+          name: builder_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/Ulid"
+      responses:
+        "204":
+          description: The image builder was removed or did not exist in the first place
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - image_builder
   /environments:
     get:
       summary: Get all global environments
@@ -274,6 +366,8 @@ components:
           $ref: "#/components/schemas/Description"
         container_image:
           $ref: "#/components/schemas/ContainerImage"
+        builder_id:
+          $ref: "#/components/schemas/ULID"
         default_url:
           $ref: "#/components/schemas/DefaultUrl"
         uid:
@@ -506,6 +600,21 @@ components:
       minLength: 1
       maxLength: 99
       example: My Renku Session :)
+    VEnvKind:
+      description: Type of virtual environment manager.
+      type: string
+      enum:
+        - CONDA
+        - PIP
+        - R
+        - DOCKERFILE
+    EditorKind:
+      description: User's Editor Choice.
+      type: string
+      enum:
+        - VSCODIUM
+        - JUPYTERLAB
+        - STREAMLIT
     EnvironmentIdOnlyPatch:
       type: object
       properties:
@@ -524,6 +633,7 @@ components:
       enum:
         - GLOBAL
         - CUSTOM
+        - BUILDER
       example: CUSTOM
     EnvironmentId:
       description: Id of the environment to use
@@ -539,6 +649,85 @@ components:
       description: A description for the resource
       type: string
       maxLength: 500
+    ImageBuilder:
+      description: A container image builder
+      type: object
+      additionalProperties: false
+      properties:
+        builder_id:
+          $ref: "#/components/schemas/Ulid"
+        container_image:
+          $ref: "#/components/schemas/ContainerImage"
+        repository:
+          $ref: "#/components/schemas/Repository"
+        branch:
+          $ref: "#/components/schemas/branch"
+        subdir:
+          $ref: "#/components/schemas/ImageBuilderSubDir"
+        venv_kind:
+          $ref: "#/components/schemas/VEnvKind"
+        editor_kind:
+          $ref: "#/components/schemas/EditorKind"
+      required:
+        - builder_id
+        - container_image
+        - repository
+        - venv_kind
+        - editor_kind
+      example:
+        builder_id: 01AN4Z79ZS6XX96588FDX0H099
+        container_image: my_project_name/environment_name:mytag
+        repository: https://gitlab.com/my_namespace/my_project_repo.git
+        branch: main
+        subdir: "."
+        venv_kind: CONDA
+        editor_kind: JUPYTERLAB
+    ImageBuilderPost:
+      description: Data required to create an image builder
+      type: object
+      properties:
+        builder_id:
+          $ref: "#/components/schemas/Ulid"
+        container_image:
+          $ref: "#/components/schemas/ContainerImage"
+        repository:
+          $ref: "#/components/schemas/Repository"
+        branch:
+          allOf:
+            - $ref: "#/components/schemas/branch"
+            - default: main
+        subdir:
+          allOf:
+            - $ref: "#/components/schemas/ImageBuilderSubDir"
+            - default: /
+        venv_kind:
+          $ref: "#/components/schemas/VEnvKind"
+        editor_kind:
+          $ref: "#/components/schemas/EditorKind"
+      required:
+        - container_image
+        - repository
+        - venv_kind
+        - editor_kind
+    ImageBuilderPatch:
+      description: Update an image builder
+      type: object
+      additionalProperties: false
+      properties:
+        builder_id:
+          $ref: "#/components/schemas/Ulid"
+        container_image:
+          $ref: "#/components/schemas/ContainerImage"
+        repository:
+          $ref: "#/components/schemas/Repository"
+        branch:
+          $ref: "#/components/schemas/branch"
+        subdir:
+          $ref: "#/components/schemas/ImageBuilderSubDir"
+        venv_kind:
+          $ref: "#/components/schemas/VEnvKind"
+        editor_kind:
+          $ref: "#/components/schemas/EditorKind"
     ContainerImage:
       description: A container image
       type: string
@@ -547,6 +736,21 @@ components:
       # based on https://github.com/opencontainers/distribution-spec/blob/main/spec.md
       pattern: "^[a-z0-9]+((\\.|_|__|-+)[a-z0-9]+)*(\\/[a-z0-9]+((\\.|_|__|-+)[a-z0-9]+)*)*(:[a-zA-Z0-9_][a-zA-Z0-9._-]{0,127}|@sha256:[a-fA-F0-9]{64}){0,1}$"
       example: renku/renkulab-py:3.10-0.18.1
+    Repository:
+      description: The repository used as a basis for a custom builder
+      type: string
+      maxLength: 500
+      example: "https://github.com/voila-gallery/gaussian-density"
+    Branch:
+      description: The branch of the repository used as a basis for a custom builder
+      type: string
+      maxLength: 100
+      example: "main"
+    ImageBuilderSubDir:
+      description: The sub directory of the repository used as a basis for a custom builder
+      type: string
+      minLength: 1
+      example: "."
     DefaultUrl:
       description: The default path to open in a session
       type: string
