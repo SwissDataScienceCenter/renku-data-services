@@ -153,14 +153,6 @@ install_amaltheas:  ## Installs both version of amalthea in the. NOTE: It uses t
 	helm upgrade --install amalthea-js renku/amalthea --version $(AMALTHEA_JS_VERSION)
 	helm upgrade --install amalthea-se renku/amalthea-sessions --version ${AMALTHEA_SESSIONS_VERSION}
 
-.PHONY: install_kpack
-install_kpack:
-	curl -L https://github.com/buildpacks-community/kpack/releases/download/v0.15.0/release-0.15.0.yaml | kubectl apply -f -
-	kubectl apply -f .devcontainer/kpack/clusterstore.yaml
-	kubectl apply -f .devcontainer/kpack/clusterstack.yaml
-	sleep 10
-	kubectl apply -f .devcontainer/kpack/python-builder.yaml
-
 # TODO: Add the version variables from the top of the file here when the charts are fully published
 .PHONY: amalthea_schema
 amalthea_schema:  ## Updates generates pydantic classes from CRDs
@@ -176,3 +168,17 @@ amalthea_schema:  ## Updates generates pydantic classes from CRDs
 # newer than the requirements these steps won't be re-triggered.
 # Ignore the return value when there are more differences.
 	( git diff --exit-code -I "^#   timestamp\: " $@ >/dev/null && git checkout $@ ) || true
+
+# Devcontainer
+
+.PHONY: devcontainer_up
+devcontainer_up:
+	devcontainer up --workspace-folder .
+
+.PHONY: devcontainer_rebuild
+devcontainer_rebuild:
+	devcontainer up --remove-existing-container --workspace-folder .
+
+.PHONY: devcontainer_exec
+devcontainer_exec: devcontainer_up
+	devcontainer exec --container-id renku-data-services_devcontainer-data_service-1 -- bash
