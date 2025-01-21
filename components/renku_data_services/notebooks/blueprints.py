@@ -1,20 +1,14 @@
 """Notebooks service API."""
 
-import base64
-import os
 from dataclasses import dataclass
 from pathlib import PurePosixPath
-from typing import Any, cast
-from urllib.parse import urljoin, urlparse
+from typing import cast
+from urllib.parse import urlparse
 
-import httpx
-from kubernetes.client import V1ObjectMeta, V1Secret
 from sanic import Request, empty, exceptions, json
 from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
-from toml import dumps
 from ulid import ULID
-from yaml import safe_dump
 
 from renku_data_services import base_models
 from renku_data_services.base_api.auth import authenticate, authenticate_2
@@ -27,24 +21,29 @@ from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
     DataConnectorSecretRepository,
 )
-from renku_data_services.data_connectors.models import DataConnectorSecret
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec, core
-from renku_data_services.notebooks.api.amalthea_patches import git_proxy, init_containers
+from renku_data_services.notebooks.api.amalthea_patches.init_containers import user_secrets_container
 from renku_data_services.notebooks.api.classes.repository import Repository
-from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_data_services.notebooks.api.schemas.config_server_options import ServerOptionsEndpointResponse
 from renku_data_services.notebooks.api.schemas.logs import ServerLogs
 from renku_data_services.notebooks.config import NotebooksConfig
+from renku_data_services.notebooks.core_sessions import (
+    get_auth_secret_anonymous,
+    get_auth_secret_authenticated,
+    get_data_sources,
+    get_extra_containers,
+    get_extra_init_containers,
+    patch_session,
+    request_dc_secret_creation,
+    request_session_secret_creation,
+)
 from renku_data_services.notebooks.crs import (
-    Affinity,
     AmaltheaSessionSpec,
     AmaltheaSessionV1Alpha1,
     Authentication,
     AuthenticationType,
     Culling,
-    DataSource,
-    ExtraContainer,
     ExtraVolume,
     ExtraVolumeMount,
     Ingress,
@@ -52,23 +51,17 @@ from renku_data_services.notebooks.crs import (
     Metadata,
     ReconcileStrategy,
     Resources,
-    SecretAsVolume,
-    SecretAsVolumeItem,
-    SecretRefKey,
-    SecretRefWhole,
     Session,
     SessionEnvItem,
-    State,
     Storage,
     TlsSecret,
-    Toleration,
 )
 from renku_data_services.notebooks.errors.intermittent import AnonymousUserPatchError
+from renku_data_services.notebooks.models import ExtraSecret
 from renku_data_services.notebooks.util.kubernetes_ import (
     renku_2_make_server_name,
 )
 from renku_data_services.notebooks.utils import (
-    merge_node_affinities,
     node_affinity_from_resource_class,
     tolerations_from_resource_class,
 )
@@ -77,7 +70,6 @@ from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.db import UserRepo
-from renku_data_services.utils.cryptography import get_encryption_key
 
 
 @dataclass(kw_only=True)
@@ -275,7 +267,6 @@ class NotebooksNewBP(CustomBlueprint):
             if default_resource_class.id is None:
                 raise errors.ProgrammingError(message="The default resource class has to have an ID", quiet=True)
             resource_class_id: int
-            quota: str | None = None
             if body.resource_class_id is None:
                 resource_class = await self.rp_repo.get_default_resource_class()
                 # TODO: Add types for saved and unsaved resource class
@@ -284,7 +275,6 @@ class NotebooksNewBP(CustomBlueprint):
                 resource_class = await self.rp_repo.get_resource_class(user, body.resource_class_id)
                 # TODO: Add types for saved and unsaved resource class
                 resource_class_id = body.resource_class_id
-                quota = resource_class.quota
             await self.nb_config.crc_validator.validate_class_storage(user, resource_class_id, body.disk_storage)
             work_dir_fallback = PurePosixPath("/home/jovyan")
             work_dir = environment.working_directory or image_workdir or work_dir_fallback
@@ -295,38 +285,6 @@ class NotebooksNewBP(CustomBlueprint):
                 user=user, project_id=project.id
             )
             data_connectors_stream = self.data_connector_secret_repo.get_data_connectors_with_secrets(user, project.id)
-            dcs: dict[str, RCloneStorage] = {}
-            dcs_secrets: dict[str, list[DataConnectorSecret]] = {}
-            async for dc in data_connectors_stream:
-                dcs[str(dc.data_connector.id)] = RCloneStorage(
-                    source_path=dc.data_connector.storage.source_path,
-                    configuration=dc.data_connector.storage.configuration,
-                    readonly=dc.data_connector.storage.readonly,
-                    mount_folder=dc.data_connector.storage.target_path
-                    if PurePosixPath(dc.data_connector.storage.target_path).is_absolute()
-                    else (work_dir / dc.data_connector.storage.target_path).as_posix(),
-                    name=dc.data_connector.name,
-                    secrets={str(secret.secret_id): secret.name for secret in dc.secrets},
-                    storage_class=self.nb_config.cloud_storage.storage_class,
-                )
-                if len(dc.secrets) > 0:
-                    dcs_secrets[str(dc.data_connector.id)] = dc.secrets
-            # NOTE: Check the cloud storage in the request body and if any match
-            # then overwrite the projects cloud storages
-            # NOTE: Cloud storages in the session launch request body that are not from the DB will cause a 404 error
-            # NOTE: Overriding the configuration when a saved secret is there will cause a 422 error
-            cloud_storage_overrides = body.cloudstorage or []
-            for csr in cloud_storage_overrides:
-                csr_id = csr.storage_id
-                if csr_id not in dcs:
-                    raise errors.MissingResourceError(
-                        message=f"You have requested a cloud storage with ID {csr_id} which does not exist "
-                        "or you dont have access to.",
-                        quiet=True,
-                    )
-                if csr.target_path is not None and not PurePosixPath(csr.target_path).is_absolute():
-                    csr.target_path = (storage_mount / csr.target_path).as_posix()
-                dcs[csr_id] = dcs[csr_id].with_override(csr)
             git_providers = await self.nb_config.git_provider_helper.get_providers(user=user)
             repositories: list[Repository] = []
             for repo in project.repositories:
@@ -336,90 +294,51 @@ class NotebooksNewBP(CustomBlueprint):
                         found_provider_id = provider.id
                         break
                 repositories.append(Repository(url=repo, provider=found_provider_id))
-            secrets_to_create: list[V1Secret] = []
-            # Generate the cloud starge secrets
-            data_sources: list[DataSource] = []
-            user_secret_key: str | None = None
-            if isinstance(user, AuthenticatedAPIUser) and len(dcs_secrets) > 0:
-                secret_key = await self.user_repo.get_or_create_user_secret_key(requested_by=user)
-                user_secret_key = get_encryption_key(secret_key.encode(), user.id.encode()).decode("utf-8")
-
-            for cs_id, cs in dcs.items():
-                secret_name = f"{server_name}-ds-{cs_id.lower()}"
-                secret_key_needed = len(dcs_secrets.get(cs_id, [])) > 0
-                if secret_key_needed and user_secret_key is None:
-                    raise errors.ProgrammingError(
-                        message=f"You have saved storage secrets for data connector {cs_id} "
-                        f"associated with your user ID {user.id} but no key to decrypt them, "
-                        "therefore we cannot mount the requested data connector. "
-                        "Please report this to the renku administrators."
-                    )
-                secrets_to_create.append(
-                    cs.secret(
-                        secret_name,
-                        self.nb_config.k8s_client.preferred_namespace,
-                        user_secret_key=user_secret_key if secret_key_needed else None,
-                    )
-                )
-                data_sources.append(
-                    DataSource(
-                        mountPath=cs.mount_folder,
-                        secretRef=SecretRefWhole(name=secret_name, adopt=True),
-                        accessMode="ReadOnlyMany" if cs.readonly else "ReadWriteOnce",
-                    )
-                )
-            cert_init, cert_vols = init_containers.certificates_container(self.nb_config)
-            session_init_containers = [InitContainer.model_validate(self.nb_config.k8s_v2_client.sanitize(cert_init))]
-            extra_volumes = [
-                ExtraVolume.model_validate(self.nb_config.k8s_v2_client.sanitize(volume)) for volume in cert_vols
-            ]
-            extra_volume_mounts: list[ExtraVolumeMount] = []
-            if isinstance(user, AuthenticatedAPIUser):
-                extra_volumes.append(
-                    ExtraVolume(
-                        name="renku-authorized-emails",
-                        secret=SecretAsVolume(
-                            secretName=server_name,
-                            items=[SecretAsVolumeItem(key="authorized_emails", path="authorized_emails")],
-                        ),
-                    )
-                )
 
             # User secrets
-            user_secrets_container = init_containers.user_secrets_container(
+            extra_volume_mounts: list[ExtraVolumeMount] = []
+            extra_volumes: list[ExtraVolume] = []
+            extra_init_containers: list[InitContainer] = []
+            user_secrets_container_patches = user_secrets_container(
                 user=user,
                 config=self.nb_config,
                 secrets_mount_directory=secrets_mount_directory.as_posix(),
                 k8s_secret_name=f"{server_name}-secrets",
                 session_secrets=session_secrets,
             )
-            if user_secrets_container is not None:
-                (init_container, volumes, volume_mounts) = user_secrets_container
-                extra_volumes.extend(volumes)
-                extra_volume_mounts.extend(volume_mounts)
-                session_init_containers.append(init_container)
-
-            git_clone = await init_containers.git_clone_container_v2(
-                user=user,
-                config=self.nb_config,
-                repositories=repositories,
-                git_providers=git_providers,
-                workspace_mount_path=storage_mount,
-                work_dir=work_dir,
-            )
-            if git_clone is not None:
-                session_init_containers.append(InitContainer.model_validate(git_clone))
-            extra_containers: list[ExtraContainer] = []
-            git_proxy_container = await git_proxy.main_container(
-                user=user, config=self.nb_config, repositories=repositories, git_providers=git_providers
-            )
-            if git_proxy_container is not None:
-                extra_containers.append(
-                    ExtraContainer.model_validate(self.nb_config.k8s_v2_client.sanitize(git_proxy_container))
+            if user_secrets_container_patches is not None:
+                (init_container_session_secret, volumes_session_secret, volume_mounts_session_secret) = (
+                    user_secrets_container_patches
                 )
+                extra_volumes.extend(volumes_session_secret)
+                extra_volume_mounts.extend(volume_mounts_session_secret)
+                extra_init_containers.append(init_container_session_secret)
+
+            secrets_to_create: list[ExtraSecret] = []
+            data_sources, data_secrets, enc_secrets = await get_data_sources(
+                nb_config=self.nb_config,
+                server_name=server_name,
+                user=user,
+                data_connectors_stream=data_connectors_stream,
+                work_dir=work_dir,
+                storage_mount=storage_mount,
+                cloud_storage_overrides=body.cloudstorage or [],
+                user_repo=self.user_repo,
+            )
+            secrets_to_create.extend(data_secrets)
+            extra_init_containers_dc, extra_init_volumes_dc = await get_extra_init_containers(
+                self.nb_config,
+                user,
+                repositories,
+                git_providers,
+                storage_mount,
+                work_dir,
+            )
+            extra_containers = await get_extra_containers(self.nb_config, user, repositories, git_providers)
+            extra_volumes.extend(extra_init_volumes_dc)
+            extra_init_containers.extend(extra_init_containers_dc)
 
             base_server_url = self.nb_config.sessions.ingress.base_url(server_name)
-            base_server_https_url = self.nb_config.sessions.ingress.base_url(server_name, force_https=True)
             base_server_path = self.nb_config.sessions.ingress.base_path(server_name)
             ui_path: str = (
                 f"{base_server_path.rstrip("/")}/{environment.default_url.lstrip("/")}"
@@ -440,22 +359,20 @@ class NotebooksNewBP(CustomBlueprint):
                 gpu_name = GpuKind.NVIDIA.value + "/gpu"
                 requests[gpu_name] = resource_class.gpu
                 limits[gpu_name] = resource_class.gpu
-            tolerations = [
-                Toleration.model_validate(toleration) for toleration in self.nb_config.sessions.tolerations
-            ] + tolerations_from_resource_class(resource_class)
-            affinity = Affinity.model_validate(self.nb_config.sessions.affinity)
-            rc_node_affinity = node_affinity_from_resource_class(resource_class)
-            if affinity.nodeAffinity:
-                affinity.nodeAffinity = merge_node_affinities(affinity.nodeAffinity, rc_node_affinity)
+            if isinstance(user, AuthenticatedAPIUser):
+                auth_secret = await get_auth_secret_authenticated(self.nb_config, user, server_name)
             else:
-                affinity.nodeAffinity = rc_node_affinity
+                auth_secret = await get_auth_secret_anonymous(self.nb_config, server_name, request)
+            if auth_secret.volume:
+                extra_volumes.append(auth_secret.volume)
+            secrets_to_create.append(auth_secret)
             manifest = AmaltheaSessionV1Alpha1(
                 metadata=Metadata(name=server_name, annotations=annotations),
                 spec=AmaltheaSessionSpec(
                     codeRepositories=[],
                     hibernated=False,
                     reconcileStrategy=ReconcileStrategy.whenFailedOrHibernated,
-                    priorityClassName=quota,
+                    priorityClassName=resource_class.quota,
                     session=Session(
                         image=image,
                         urlPath=ui_path,
@@ -493,7 +410,7 @@ class NotebooksNewBP(CustomBlueprint):
                         pathPrefix=base_server_path,
                     ),
                     extraContainers=extra_containers,
-                    initContainers=session_init_containers,
+                    initContainers=extra_init_containers,
                     extraVolumes=extra_volumes,
                     culling=Culling(
                         maxAge=f"{self.nb_config.sessions.culling.registered.max_age_seconds}s",
@@ -507,129 +424,28 @@ class NotebooksNewBP(CustomBlueprint):
                         type=AuthenticationType.oauth2proxy
                         if isinstance(user, AuthenticatedAPIUser)
                         else AuthenticationType.token,
-                        secretRef=SecretRefKey(name=server_name, key="auth", adopt=True),
-                        extraVolumeMounts=[
-                            # NOTE: Without subpath k8s keeps updating the secret and this can lead to
-                            # the oauth2proxy restarting intermittently even when the secret does not change
-                            # because the oauth2proxy watches this file and restarts on changes
-                            ExtraVolumeMount(
-                                name="renku-authorized-emails",
-                                mountPath="/authorized_emails",
-                                subPath="authorized_emails",
-                            )
-                        ]
-                        if isinstance(user, AuthenticatedAPIUser)
-                        else [],
+                        secretRef=auth_secret.key_ref("auth"),
+                        extraVolumeMounts=[auth_secret.volume_mount] if auth_secret.volume_mount else [],
                     ),
                     dataSources=data_sources,
-                    tolerations=tolerations,
-                    affinity=affinity,
+                    tolerations=tolerations_from_resource_class(
+                        resource_class, self.nb_config.sessions.tolerations_model
+                    ),
+                    affinity=node_affinity_from_resource_class(resource_class, self.nb_config.sessions.affinity_model),
                 ),
             )
-            parsed_proxy_url = urlparse(urljoin(base_server_url + "/", "oauth2"))
-            secret_data = {}
-            if isinstance(user, AuthenticatedAPIUser):
-                secret_data["auth"] = dumps(
-                    {
-                        "provider": "oidc",
-                        "client_id": self.nb_config.sessions.oidc.client_id,
-                        "oidc_issuer_url": self.nb_config.sessions.oidc.issuer_url,
-                        "session_cookie_minimal": True,
-                        "skip_provider_button": True,
-                        # NOTE: If the redirect url is not HTTPS then some or identity providers will fail.
-                        "redirect_url": urljoin(base_server_https_url + "/", "oauth2/callback"),
-                        "cookie_path": base_server_path,
-                        "proxy_prefix": parsed_proxy_url.path,
-                        "authenticated_emails_file": "/authorized_emails",
-                        "client_secret": self.nb_config.sessions.oidc.client_secret,
-                        "cookie_secret": base64.urlsafe_b64encode(os.urandom(32)).decode(),
-                        "insecure_oidc_allow_unverified_email": self.nb_config.sessions.oidc.allow_unverified_email,
-                    }
-                )
-                secret_data["authorized_emails"] = user.email
-            else:
-                # NOTE: We extract the session cookie value here in order to avoid creating a cookie.
-                # The gateway encrypts and signs cookies so the user ID injected in the request headers does not
-                # match the value of the session cookie.
-                session_id = cast(str | None, request.cookies.get(self.nb_config.session_id_cookie_name))
-                if not session_id:
-                    raise errors.UnauthorizedError(
-                        message=f"You have to have a renku session cookie at {self.nb_config.session_id_cookie_name} "
-                        "in order to launch an anonymous session."
-                    )
-                # NOTE: Amalthea looks for the token value first in the cookie and then in the authorization header
-                secret_data["auth"] = safe_dump(
-                    {
-                        "authproxy": {
-                            "token": session_id,
-                            "cookie_key": self.nb_config.session_id_cookie_name,
-                            "verbose": True,
-                        }
-                    }
-                )
-            secrets_to_create.append(V1Secret(metadata=V1ObjectMeta(name=server_name), string_data=secret_data))
             for s in secrets_to_create:
-                await self.nb_config.k8s_v2_client.create_secret(s)
+                await self.nb_config.k8s_v2_client.create_secret(s.secret)
             try:
                 manifest = await self.nb_config.k8s_v2_client.create_server(manifest, user.id)
             except Exception:
                 for s in secrets_to_create:
-                    await self.nb_config.k8s_v2_client.delete_secret(s.metadata.name)
+                    await self.nb_config.k8s_v2_client.delete_secret(s.secret.metadata.name)
                 raise errors.ProgrammingError(message="Could not start the amalthea session")
             else:
-                owner_reference = {
-                    "apiVersion": manifest.apiVersion,
-                    "kind": manifest.kind,
-                    "name": manifest.metadata.name,
-                    "uid": manifest.metadata.uid,
-                }
-                secrets_url = self.nb_config.user_secrets.secrets_storage_service_url + "/api/secrets/kubernetes"
-                headers = {"Authorization": f"bearer {user.access_token}"}
                 try:
-                    # User secrets
-                    if session_secrets:
-                        key_mapping: dict[str, list[str]] = dict()
-                        for s in session_secrets:
-                            secret_id = str(s.secret_id)
-                            if secret_id not in key_mapping:
-                                key_mapping[secret_id] = list()
-                            key_mapping[secret_id].append(s.secret_slot.filename)
-                        request_data = {
-                            "name": f"{server_name}-secrets",
-                            "namespace": self.nb_config.k8s_v2_client.preferred_namespace,
-                            "secret_ids": [str(s.secret_id) for s in session_secrets],
-                            "owner_references": [owner_reference],
-                            "key_mapping": key_mapping,
-                        }
-                        async with httpx.AsyncClient(timeout=10) as client:
-                            res = await client.post(secrets_url, headers=headers, json=request_data)
-                            if res.status_code >= 300 or res.status_code < 200:
-                                raise errors.ProgrammingError(
-                                    message="The session secrets could not be successfully created, "
-                                    f"the status code was {res.status_code}."
-                                    "Please contact a Renku administrator.",
-                                    detail=res.text,
-                                )
-                    # Data connectors secrets
-                    for s_id, secrets in dcs_secrets.items():
-                        if len(secrets) == 0:
-                            continue
-                        request_data = {
-                            "name": f"{server_name}-ds-{s_id.lower()}-secrets",
-                            "namespace": self.nb_config.k8s_v2_client.preferred_namespace,
-                            "secret_ids": [str(secret.secret_id) for secret in secrets],
-                            "owner_references": [owner_reference],
-                            "key_mapping": {str(secret.secret_id): secret.name for secret in secrets},
-                        }
-                        async with httpx.AsyncClient(timeout=10) as client:
-                            res = await client.post(secrets_url, headers=headers, json=request_data)
-                            if res.status_code >= 300 or res.status_code < 200:
-                                raise errors.ProgrammingError(
-                                    message=f"The secret for data connector with {s_id} could not be "
-                                    f"successfully created, the status code was {res.status_code}."
-                                    "Please contact a Renku administrator.",
-                                    detail=res.text,
-                                )
+                    await request_session_secret_creation(user, self.nb_config, manifest, session_secrets)
+                    await request_dc_secret_creation(user, self.nb_config, manifest, enc_secrets)
                 except Exception:
                     await self.nb_config.k8s_v2_client.delete_server(server_name, user.id)
                     raise
@@ -684,54 +500,7 @@ class NotebooksNewBP(CustomBlueprint):
             session_id: str,
             body: apispec.SessionPatchRequest,
         ) -> HTTPResponse:
-            session = await self.nb_config.k8s_v2_client.get_server(session_id, user.id)
-            if session is None:
-                raise errors.MissingResourceError(
-                    message=f"The sesison with ID {session_id} does not exist", quiet=True
-                )
-            # TODO: Some patching should only be done when the session is in some states to avoid inadvertent restarts
-            patches: dict[str, Any] = {}
-            if body.resource_class_id is not None:
-                rcs = await self.rp_repo.get_classes(user, id=body.resource_class_id)
-                if len(rcs) == 0:
-                    raise errors.MissingResourceError(
-                        message=f"The resource class you requested with ID {body.resource_class_id} does not exist",
-                        quiet=True,
-                    )
-                rc = rcs[0]
-                patches |= dict(
-                    spec=dict(
-                        session=dict(
-                            resources=dict(requests=dict(cpu=f"{round(rc.cpu * 1000)}m", memory=f"{rc.memory}Gi"))
-                        )
-                    )
-                )
-                # TODO: Add a config to specifiy the gpu kind, there is also GpuKind enum in reosurce_pools
-                patches["spec"]["session"]["resources"]["requests"]["nvidia.com/gpu"] = rc.gpu
-                # NOTE: K8s fails if the gpus limit is not equal to the requests because it cannot be overcommited
-                patches["spec"]["session"]["resources"]["limits"] = {"nvidia.com/gpu": rc.gpu}
-            if (
-                body.state is not None
-                and body.state.value.lower() == State.Hibernated.value.lower()
-                and body.state.value.lower() != session.status.state.value.lower()
-            ):
-                if "spec" not in patches:
-                    patches["spec"] = {}
-                patches["spec"]["hibernated"] = True
-            elif (
-                body.state is not None
-                and body.state.value.lower() == State.Running.value.lower()
-                and session.status.state.value.lower() != body.state.value.lower()
-            ):
-                if "spec" not in patches:
-                    patches["spec"] = {}
-                patches["spec"]["hibernated"] = False
-
-            if len(patches) > 0:
-                new_session = await self.nb_config.k8s_v2_client.patch_server(session_id, user.id, patches)
-            else:
-                new_session = session
-
+            new_session = await patch_session(body, session_id, self.nb_config, user, self.rp_repo, self.project_repo)
             return json(new_session.as_apispec().model_dump(exclude_none=True, mode="json"))
 
         return "/sessions/<session_id>", ["PATCH"], _handler
