@@ -1,9 +1,8 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/release-24.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     devshell-tools.url = "github:eikek/devshell-tools";
-    poetry2nix.url = "github:nix-community/poetry2nix";
   };
 
   outputs = inputs @ {
@@ -11,14 +10,14 @@
     nixpkgs,
     flake-utils,
     devshell-tools,
-    poetry2nix,
   }:
     {
       nixosConfigurations = let
         services = {
           services.dev-postgres = {
             enable = true;
-            databases = ["renku"];
+            databases = ["renku_test"];
+            init-script = ./.devcontainer/generate_ulid_func.sql;
             pgweb = {
               enable = true;
               database = "renku";
@@ -55,114 +54,47 @@
       pkgs = nixpkgs.legacyPackages.${system};
       devshellToolsPkgs = devshell-tools.packages.${system};
 
-      poetryLib = poetry2nix.lib.mkPoetry2Nix {inherit pkgs;};
-      p2n-args = {
-        projectDir = ./.;
-        python = pkgs.python312;
-        editablePackageSources = {
-          bases = ./bases;
-          components = ./components;
-        };
-        extraPackages = p: [
-          p.ruff-lsp
-        ];
-        overrides = let
-          add-setuptools = name: final: prev:
-            prev.${name}.overridePythonAttrs (old: {buildInputs = (old.buildInputs or []) ++ [prev.setuptools];});
-          add-poetry = name: final: prev:
-            prev.${name}.overridePythonAttrs (old: {buildInputs = (old.buildInputs or []) ++ [prev.poetry];});
-        in
-          poetryLib.defaultPoetryOverrides.extend
-          (final: prev: {
-            appier = add-setuptools "appier" final prev;
-            inflector = add-setuptools "inflector" final prev;
-            google-api = add-setuptools "google-api" final prev;
-            sanic-ext = add-setuptools "sanic-ext" final prev;
-            undictify = add-setuptools "undictify" final prev;
-            types-cffi = add-setuptools "types-cffi" final prev;
-            avro-preprocessor = add-setuptools "avro-preprocessor" final prev;
-            authzed = add-poetry "authzed" final prev;
-            dataclasses-avroschema = add-poetry "dataclasses-avroschema" final prev;
-            datamodel-code-generator = add-poetry "datamodel-code-generator" final prev;
-            kubernetes-asyncio = add-setuptools "kubernetes-asyncio" final prev;
-            prometheus-sanic =
-              prev.prometheus-sanic.overridePythonAttrs
-              (
-                old: {
-                  buildInputs = (old.buildInputs or []) ++ [prev.poetry prev.poetry-core];
-                  # fix the wrong dependency
-                  # see https://github.com/nix-community/poetry2nix/issues/1694
-                  postPatch = ''
-                    substituteInPlace pyproject.toml --replace "poetry.masonry" "poetry.core.masonry"
-                  '';
-                }
-              );
-          });
-      };
-
-      projectEnv = poetryLib.mkPoetryEnv p2n-args;
-
       devSettings = {
         CORS_ALLOW_ALL_ORIGINS = "true";
         DB_USER = "dev";
         DB_NAME = "renku";
         DB_PASSWORD = "dev";
+        PGPASSWORD = "dev";
         AUTHZ_DB_KEY = "dev";
         AUTHZ_DB_NO_TLS_CONNECTION = "true";
         AUTHZ_DB_GRPC_PORT = "50051";
         ALEMBIC_CONFIG = "./components/renku_data_services/migrations/alembic.ini";
+        NB_SERVER_OPTIONS__DEFAULTS_PATH = "server_defaults.json";
+        NB_SERVER_OPTIONS__UI_CHOICES_PATH = "server_options.json";
 
-        # necessary for poetry run … as it might need to compile stuff
-        # ONLY WHEN NOT using python from nix dev environment
-        #LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
+        LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
         POETRY_VIRTUALENVS_PREFER_ACTIVE_PYTHON = "true";
         POETRY_VIRTUALENVS_OPTIONS_SYSTEM_SITE_PACKAGES = "true";
+        POETRY_INSTALLER_NO_BINARY = "ruff";
       };
 
-      fix-poetry-cfg = pkgs.writeShellScriptBin "poetry-fix-cfg" ''
-        python_exec="$(which python)"
-        python_bin="$(dirname "$python_exec")"
-        python_env="$(dirname "$python_bin")"
-
-        env_path="$(poetry env info -p)"
-        if [ -z "$env_path" ]; then
-          poetry env use "$python_exec"
-          env_path="$(poetry env info -p)"
-        fi
-        env_cfg="$env_path/pyvenv.cfg"
-
-        if [ ! -r "$env_path/pyvenv.cfg.bak" ]; then
-          cp "$env_path/pyvenv.cfg" "$env_path/pyvenv.cfg.bak"
-        fi
-
-        echo "Fix paths in: $env_cfg"
-        ${pkgs.gnused}/bin/sed -i -E "s,home = (.*)$,home = $python_bin,g" "$env_cfg"
-        ${pkgs.gnused}/bin/sed -i -E "s,base-prefix = (.*)$,base-prefix = $python_env,g" "$env_cfg"
-        ${pkgs.gnused}/bin/sed -i -E "s,base-exec-prefix = (.*)$,base-exec-prefix = $python_env,g" "$env_cfg"
-        ${pkgs.gnused}/bin/sed -i -E "s,base-executable = (.*)$,base-executable = $python_exec,g" "$env_cfg"
-      '';
       commonPackages = with pkgs; [
         redis
         postgresql
         jq
         devshellToolsPkgs.openapi-docs
         spicedb
+        cargo
+        rustc
         spicedb-zed
         ruff
         ruff-lsp
         poetry
+        python312
         pyright
-        mypy
         rclone
-        fix-poetry-cfg
       ];
     in {
       formatter = pkgs.alejandra;
 
       devShells = rec {
         default = vm;
-        vm = projectEnv.env.overrideAttrs (oldAttrs:
-          devSettings
+        vm = pkgs.mkShell (devSettings
           // {
             buildInputs =
               commonPackages
@@ -183,7 +115,7 @@
             ${pkgs.socat}/bin/socat TCP-LISTEN:50051,fork TCP:rsdevcnt:50051
           '';
         in
-          projectEnv.env.overrideAttrs (oldAttrs:
+          pkgs.mkShell (
             devSettings
             // {
               buildInputs =
@@ -196,7 +128,8 @@
               DB_HOST = "rsdevcnt";
               DB_PORT = "5432";
               AUTHZ_DB_HOST = "localhost";
-            });
+            }
+          );
       };
     });
 }
