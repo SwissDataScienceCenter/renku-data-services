@@ -23,6 +23,37 @@ class EnvironmentKind(StrEnum):
 
     GLOBAL = "GLOBAL"
     CUSTOM = "CUSTOM"
+    BUILDER = "BUILDER"
+
+
+class VEnvKind(StrEnum):
+    """The type of virtual environment manager."""
+
+    CONDA: str = "CONDA"
+    PIP: str = "PIP"
+    R: str = "R"
+    DOCKERFILE: str = "DOCKERFILE"
+
+
+class EditorKind(StrEnum):
+    """The editor choice."""
+
+    VSCODIUM: str = "VSCODIUM"
+    JUPYTERLAB: str = "JUPYTERLAB"
+    STREAMLIT: str = "STREAMLIT"
+
+
+@dataclass(kw_only=True, frozen=True, eq=True)
+class ImageBuilder:
+    """The definition of an image builder."""
+
+    builder_id: ULID
+    container_image: str
+    repository: str
+    branch: str | None = None
+    subdir: PurePosixPath | None = None
+    venv_kind: VEnvKind
+    editor_kind: EditorKind
 
 
 @dataclass(kw_only=True, frozen=True, eq=True)
@@ -32,6 +63,7 @@ class UnsavedEnvironment:
     name: str
     description: str | None = None
     container_image: str
+    builder_id: ULID | None = None
     default_url: str
     port: int = 8888
     working_directory: PurePosixPath | None = None
@@ -44,6 +76,12 @@ class UnsavedEnvironment:
     is_archived: bool = False
 
     def __post_init__(self) -> None:
+        if self.builder_id and not self.environment_kind == EnvironmentKind.BUILDER:
+            raise errors.ValidationError(
+                message="For a BUILDER enviroment kind, the builder_id should define the ImageBuilder"
+            )
+        if self.builder_id and not self.environment_kind != EnvironmentKind.BUILDER:
+            raise errors.ValidationError(message="If the environment kind is not a BUILDER, builder_id is useless")
         if self.working_directory and not self.working_directory.is_absolute():
             raise errors.ValidationError(message="The working directory for a session is supposed to be absolute")
         if self.mount_directory and not self.mount_directory.is_absolute():
