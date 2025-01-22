@@ -1555,21 +1555,21 @@ class Authz:
     def _add_data_connector(self, data_connector: DataConnector) -> _AuthzChange:
         """Create the new data connector and associated resources and relations in the DB."""
         data_connector_res = _AuthzConverter.data_connector(data_connector.id)
-        match data_connector.namespace.kind:
+        match data_connector.namespace.last.kind:
             case NamespaceKind.project:
                 project_id = (
-                    ULID.from_str(data_connector.namespace.underlying_resource_id)
-                    if isinstance(data_connector.namespace.underlying_resource_id, str)
-                    else data_connector.namespace.underlying_resource_id
+                    ULID.from_str(data_connector.namespace.last.underlying_resource_id)
+                    if isinstance(data_connector.namespace.last.underlying_resource_id, str)
+                    else data_connector.namespace.last.underlying_resource_id
                 )
                 owned_by = _AuthzConverter.project(project_id)
             case NamespaceKind.user:
-                owned_by = _AuthzConverter.user_namespace(data_connector.namespace.id)
+                owned_by = _AuthzConverter.user_namespace(data_connector.namespace.last.id)
             case NamespaceKind.group:
                 group_id = (
-                    ULID.from_str(data_connector.namespace.underlying_resource_id)
-                    if isinstance(data_connector.namespace.underlying_resource_id, str)
-                    else data_connector.namespace.underlying_resource_id
+                    ULID.from_str(data_connector.namespace.last.underlying_resource_id)
+                    if isinstance(data_connector.namespace.last.underlying_resource_id, str)
+                    else data_connector.namespace.last.underlying_resource_id
                 )
                 owned_by = _AuthzConverter.group(group_id)
             case _:

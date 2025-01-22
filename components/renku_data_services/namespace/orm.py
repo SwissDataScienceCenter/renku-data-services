@@ -325,3 +325,13 @@ class EntitySlugOldORM(BaseORM):
         index=True,
     )
     latest_slug: Mapped[EntitySlugORM] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
+    project_id: Mapped[ULID | None] = mapped_column(
+        ForeignKey(ProjectORM.id, ondelete="CASCADE", name="entity_slugs_project_id_fk"), index=True, nullable=True
+    )
+    project: Mapped[ProjectORM | None] = relationship(init=False, repr=False, back_populates="slug", lazy="selectin")
+    data_connector_id: Mapped[ULID | None] = mapped_column(
+        ForeignKey(DataConnectorORM.id, ondelete="CASCADE", name="entity_slugs_data_connector_id_fk"),
+        index=True,
+        nullable=True,
+    )
+    data_connector: Mapped[DataConnectorORM | None] = relationship(init=False, repr=False, back_populates="slug")

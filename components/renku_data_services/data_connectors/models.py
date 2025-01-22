@@ -110,6 +110,13 @@ class DataConnectorPatch:
     keywords: list[str] | None
     storage: CloudStorageCorePatch | None
 
+    @property
+    def namespace_path(self) -> list[Slug] | None:
+        """Represent the namespace as a list of slugs."""
+        if not self.namespace:
+            return None
+        return [Slug(i) for i in self.namespace.split("/")]
+
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class CloudStorageCoreWithSensitiveFields(CloudStorageCore):

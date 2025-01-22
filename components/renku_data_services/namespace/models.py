@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import Final
+from typing import Any, Final
 
 from ulid import ULID
 
@@ -88,6 +88,62 @@ class Namespace:
     latest_slug: str | None = None
     name: str | None = None
     creation_date: datetime | None = None
+
+    def __truediv__(self, other: "Namespace") -> "NamespacePath":
+        return NamespacePath(self, other)
+
+
+class NamespacePath:
+    """A list of namespaces that are hierarchical."""
+
+    def __init__(self, *args: Namespace) -> None:
+        if len(args) < 1:
+            raise errors.ValidationError(message="A NamespacePath has to be initialized with at least 1 namespace .")
+        if len(args) > 2:
+            raise errors.ValidationError(message="A NamespacePath has to be initialized with at most 2 namespaces .")
+        if len(args) >= 2 and args[0].kind not in [NamespaceKind.group, NamespaceKind.user]:
+            raise errors.ValidationError(
+                message="A NamespacePath with more than 1 segment has to have a user or group"
+                f" namespace in the first position, instead there is {args[0].kind}."
+            )
+        self.__value: list[Namespace] = list(args)
+
+    def __getitem__(self, ind: int) -> Namespace:
+        return self.__value[ind]
+
+    def __len__(self) -> int:
+        return len(self.__value)
+
+    def __truediv__(self, other: Namespace) -> "NamespacePath":
+        return NamespacePath(*self.__value, other)
+
+    @property
+    def path(self) -> str:
+        """Join the latest slugs of each namespace with /."""
+        return "/".join([i.latest_slug or i.slug for i in self.__value])
+
+    @property
+    def last(self) -> Namespace:
+        """Return the last namespace in the path."""
+        return self.__value[-1]
+
+    def __eq__(self, other: Any, /) -> bool:
+        if not isinstance(other, type(self)):
+            return False
+        if len(self) != len(other):
+            return False
+        return all([ns == other[i] for i, ns in enumerate(self.__value)])
+
+    def __ne__(self, other: Any, /) -> bool:
+        return not (self == other)
+
+    def __repr__(self) -> str:
+        namespaces = ", ".join([str(i) for i in self.__value])
+        return f"NamespacePath({namespaces})"
+
+    def to_list(self) -> list[Namespace]:
+        """Return a copy of the list of namespaces."""
+        return [i for i in self.__value]
 
 
 @dataclass(frozen=True, kw_only=True)

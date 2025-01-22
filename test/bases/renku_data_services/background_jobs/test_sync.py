@@ -28,7 +28,6 @@ from renku_data_services.background_jobs.core import (
     bootstrap_user_namespaces,
     fix_mismatched_project_namespace_ids,
     migrate_groups_make_all_public,
-    migrate_storages_v2_to_data_connectors,
     migrate_user_namespaces_make_all_public,
 )
 from renku_data_services.base_api.pagination import PaginationRequest
@@ -51,8 +50,6 @@ from renku_data_services.namespace.orm import NamespaceORM
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.models import UnsavedProject
 from renku_data_services.search.db import SearchUpdatesRepo
-from renku_data_services.storage.models import UnsavedCloudStorage
-from renku_data_services.storage.orm import CloudStorageORM
 from renku_data_services.users.db import UserRepo, UsersSync
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import KeycloakAdminEvent, UnsavedUserInfo, UserInfo, UserInfoFieldUpdate
@@ -127,7 +124,6 @@ def get_app_configs(db_instance: DBConfig, authz_instance: AuthzConfig):
             group_repo=group_repo,
             event_repo=event_repo,
             project_repo=project_repo,
-            data_connector_migration_tool=data_connector_migration_tool,
             session_maker=db_instance.async_session_maker,
         )
         run_migrations_for_app("common")
