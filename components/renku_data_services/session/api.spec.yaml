@@ -667,8 +667,6 @@ components:
         frontend_kind:
           $ref: "#/components/schemas/FrontendKind"
       required:
-        - builder_id
-        - container_image
         - repository
         - venv_kind
         - frontend_kind
@@ -701,7 +699,6 @@ components:
         frontend_kind:
           $ref: "#/components/schemas/FrontendKind"
       required:
-        - container_image
         - repository
         - venv_kind
         - frontend_kind
