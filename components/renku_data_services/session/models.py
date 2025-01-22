@@ -48,7 +48,6 @@ class ImageBuilder:
     """The definition of an image builder."""
 
     builder_id: ULID
-    container_image: str
     repository: str
     branch: str | None = None
     subdir: PurePosixPath | None = None

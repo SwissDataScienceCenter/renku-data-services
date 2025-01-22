@@ -656,8 +656,6 @@ components:
       properties:
         builder_id:
           $ref: "#/components/schemas/Ulid"
-        container_image:
-          $ref: "#/components/schemas/ContainerImage"
         repository:
           $ref: "#/components/schemas/Repository"
         branch:
@@ -688,8 +686,6 @@ components:
       properties:
         builder_id:
           $ref: "#/components/schemas/Ulid"
-        container_image:
-          $ref: "#/components/schemas/ContainerImage"
         repository:
           $ref: "#/components/schemas/Repository"
         branch:
@@ -716,8 +712,6 @@ components:
       properties:
         builder_id:
           $ref: "#/components/schemas/Ulid"
-        container_image:
-          $ref: "#/components/schemas/ContainerImage"
         repository:
           $ref: "#/components/schemas/Repository"
         branch:

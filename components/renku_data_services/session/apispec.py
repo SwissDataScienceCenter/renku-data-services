@@ -3,6 +3,7 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 #   timestamp: 2025-01-13T09:07:25+00:00
 =======
 #   timestamp: 2025-01-21T16:12:21+00:00
@@ -13,6 +14,9 @@
 =======
 #   timestamp: 2025-01-22T10:33:53+00:00
 >>>>>>> 81c85855 (fix(semantics): change EditorKind to FrontendKind)
+=======
+#   timestamp: 2025-01-22T10:39:25+00:00
+>>>>>>> 46558d1b (fix(apispec): assume container_image is deterministic for image builders)
 
 from __future__ import annotations
 
@@ -350,12 +354,6 @@ class ImageBuilder(BaseAPISpec):
         min_length=26,
         pattern="^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
     )
-    container_image: str = Field(
-        ...,
-        description="A container image",
-        example="renku/renkulab-py:3.10-0.18.1",
-        max_length=500,
-    )
     repository: str = Field(
         ...,
         description="The repository used as a basis for a custom builder",
@@ -380,12 +378,6 @@ class ImageBuilderPost(BaseAPISpec):
         max_length=26,
         min_length=26,
         pattern="^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
-    )
-    container_image: str = Field(
-        ...,
-        description="A container image",
-        example="renku/renkulab-py:3.10-0.18.1",
-        max_length=500,
     )
     repository: str = Field(
         ...,
@@ -414,12 +406,6 @@ class ImageBuilderPatch(BaseAPISpec):
         max_length=26,
         min_length=26,
         pattern="^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
-    )
-    container_image: Optional[str] = Field(
-        None,
-        description="A container image",
-        example="renku/renkulab-py:3.10-0.18.1",
-        max_length=500,
     )
     repository: Optional[str] = Field(
         None,
