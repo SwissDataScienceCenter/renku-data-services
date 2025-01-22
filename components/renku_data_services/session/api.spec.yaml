@@ -608,8 +608,8 @@ components:
         - pip
         - r
         - dockerfile
-    EditorKind:
-      description: User's Editor Choice.
+    FrontendKind:
+      description: User's Frontend Choice.
       type: string
       enum:
         - vscodium
@@ -666,14 +666,14 @@ components:
           $ref: "#/components/schemas/ImageBuilderSubDir"
         venv_kind:
           $ref: "#/components/schemas/VEnvKind"
-        editor_kind:
-          $ref: "#/components/schemas/EditorKind"
+        frontend_kind:
+          $ref: "#/components/schemas/FrontendKind"
       required:
         - builder_id
         - container_image
         - repository
         - venv_kind
-        - editor_kind
+        - frontend_kind
       example:
         builder_id: 01AN4Z79ZS6XX96588FDX0H099
         container_image: my_project_name/environment_name:mytag
@@ -681,7 +681,7 @@ components:
         branch: main
         subdir: "."
         venv_kind: conda
-        editor_kind: jupyterlab
+        frontend_kind: jupyterlab
     ImageBuilderPost:
       description: Data required to create an image builder
       type: object
@@ -702,13 +702,13 @@ components:
             - default: /
         venv_kind:
           $ref: "#/components/schemas/VEnvKind"
-        editor_kind:
-          $ref: "#/components/schemas/EditorKind"
+        frontend_kind:
+          $ref: "#/components/schemas/FrontendKind"
       required:
         - container_image
         - repository
         - venv_kind
-        - editor_kind
+        - frontend_kind
     ImageBuilderPatch:
       description: Update an image builder
       type: object
@@ -726,8 +726,8 @@ components:
           $ref: "#/components/schemas/ImageBuilderSubDir"
         venv_kind:
           $ref: "#/components/schemas/VEnvKind"
-        editor_kind:
-          $ref: "#/components/schemas/EditorKind"
+        frontend_kind:
+          $ref: "#/components/schemas/FrontendKind"
     ContainerImage:
       description: A container image
       type: string

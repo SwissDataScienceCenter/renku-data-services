@@ -2,6 +2,7 @@
 #   filename:  api.spec.yaml
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 #   timestamp: 2025-01-13T09:07:25+00:00
 =======
 #   timestamp: 2025-01-21T16:12:21+00:00
@@ -9,6 +10,9 @@
 =======
 #   timestamp: 2025-01-22T10:15:38+00:00
 >>>>>>> 3313bf1f (fix(consistency): lowercase for StrEnums)
+=======
+#   timestamp: 2025-01-22T10:33:53+00:00
+>>>>>>> 81c85855 (fix(semantics): change EditorKind to FrontendKind)
 
 from __future__ import annotations
 
@@ -27,7 +31,7 @@ class VEnvKind(Enum):
     dockerfile = "dockerfile"
 
 
-class EditorKind(Enum):
+class FrontendKind(Enum):
     vscodium = "vscodium"
     jupyterlab = "jupyterlab"
     streamlit = "streamlit"
@@ -366,7 +370,7 @@ class ImageBuilder(BaseAPISpec):
         min_length=1,
     )
     venv_kind: VEnvKind
-    editor_kind: EditorKind
+    frontend_kind: FrontendKind
 
 
 class ImageBuilderPost(BaseAPISpec):
@@ -397,7 +401,7 @@ class ImageBuilderPost(BaseAPISpec):
         min_length=1,
     )
     venv_kind: VEnvKind
-    editor_kind: EditorKind
+    frontend_kind: FrontendKind
 
 
 class ImageBuilderPatch(BaseAPISpec):
@@ -431,7 +435,7 @@ class ImageBuilderPatch(BaseAPISpec):
         min_length=1,
     )
     venv_kind: Optional[VEnvKind] = None
-    editor_kind: Optional[EditorKind] = None
+    frontend_kind: Optional[FrontendKind] = None
 
 
 class EnvironmentList(RootModel[List[Environment]]):

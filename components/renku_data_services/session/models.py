@@ -35,8 +35,8 @@ class VEnvKind(StrEnum):
     dockerfile: str = "dockerfile"
 
 
-class EditorKind(StrEnum):
-    """The editor choice."""
+class FrontendKind(StrEnum):
+    """The frontend choice."""
 
     vscodium: str = "vscodium"
     jupyterlab: str = "jupyterlab"
@@ -53,7 +53,7 @@ class ImageBuilder:
     branch: str | None = None
     subdir: PurePosixPath | None = None
     venv_kind: VEnvKind
-    editor_kind: EditorKind
+    frontend_kind: FrontendKind
 
 
 @dataclass(kw_only=True, frozen=True, eq=True)
