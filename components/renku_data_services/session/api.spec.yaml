@@ -604,17 +604,17 @@ components:
       description: Type of virtual environment manager.
       type: string
       enum:
-        - CONDA
-        - PIP
-        - R
-        - DOCKERFILE
+        - conda
+        - pip
+        - r
+        - dockerfile
     EditorKind:
       description: User's Editor Choice.
       type: string
       enum:
-        - VSCODIUM
-        - JUPYTERLAB
-        - STREAMLIT
+        - vscodium
+        - jupyterlab
+        - streamlit
     EnvironmentIdOnlyPatch:
       type: object
       properties:
@@ -631,10 +631,10 @@ components:
       description: Kind of environment to use
       type: string
       enum:
-        - GLOBAL
-        - CUSTOM
-        - BUILDER
-      example: CUSTOM
+        - global
+        - custom
+        - builder
+      example: custom
     EnvironmentId:
       description: Id of the environment to use
       type: string
@@ -680,8 +680,8 @@ components:
         repository: https://gitlab.com/my_namespace/my_project_repo.git
         branch: main
         subdir: "."
-        venv_kind: CONDA
-        editor_kind: JUPYTERLAB
+        venv_kind: conda
+        editor_kind: jupyterlab
     ImageBuilderPost:
       description: Data required to create an image builder
       type: object

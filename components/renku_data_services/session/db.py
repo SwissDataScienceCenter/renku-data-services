@@ -35,7 +35,7 @@ class SessionRepository:
         """Get all global session environments from the database."""
         async with self.session_maker() as session:
             statement = select(schemas.EnvironmentORM).where(
-                schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.GLOBAL.value
+                schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.global_.value
             )
             if not include_archived:
                 statement = statement.where(schemas.EnvironmentORM.is_archived.is_(False))
@@ -49,7 +49,7 @@ class SessionRepository:
             res = await session.scalars(
                 select(schemas.EnvironmentORM)
                 .where(schemas.EnvironmentORM.id == environment_id)
-                .where(schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.GLOBAL.value)
+                .where(schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.global_.value)
             )
             environment = res.one_or_none()
             if environment is None:
@@ -97,7 +97,7 @@ class SessionRepository:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
         if not user.is_admin:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
-        if environment.environment_kind != models.EnvironmentKind.GLOBAL:
+        if environment.environment_kind != models.EnvironmentKind.global_:
             raise errors.ValidationError(message="This endpoint only supports adding global environments", quiet=True)
 
         async with self.session_maker() as session, session.begin():
@@ -157,7 +157,7 @@ class SessionRepository:
             res = await session.scalars(
                 select(schemas.EnvironmentORM)
                 .where(schemas.EnvironmentORM.id == str(environment_id))
-                .where(schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.GLOBAL)
+                .where(schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.global_)
             )
             environment = res.one_or_none()
             if environment is None:
@@ -177,7 +177,7 @@ class SessionRepository:
             res = await session.scalars(
                 select(schemas.EnvironmentORM)
                 .where(schemas.EnvironmentORM.id == environment_id)
-                .where(schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.GLOBAL.value)
+                .where(schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.global_.value)
             )
             environment = res.one_or_none()
 
@@ -286,7 +286,7 @@ class SessionRepository:
                 res_env = await session.scalars(
                     select(schemas.EnvironmentORM)
                     .where(schemas.EnvironmentORM.id == environment_id)
-                    .where(schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.GLOBAL.value)
+                    .where(schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.global_.value)
                 )
                 environment_orm = res_env.one_or_none()
                 if environment_orm is None:
@@ -472,7 +472,7 @@ class SessionRepository:
                         message=f"Session environment with id '{new_environment_id}' does not exist or "
                         "you do not have access to it."
                     )
-                if new_environment.environment_kind != models.EnvironmentKind.GLOBAL:
+                if new_environment.environment_kind != models.EnvironmentKind.global_:
                     raise errors.ValidationError(
                         message="Cannot set the environment for a launcher to an existing environment if that "
                         "existing environment is not global",
@@ -480,16 +480,16 @@ class SessionRepository:
                     )
                 launcher.environment_id = new_environment_id
                 launcher.environment = new_environment
-                if old_environment.environment_kind == models.EnvironmentKind.CUSTOM:
+                if old_environment.environment_kind == models.EnvironmentKind.custom:
                     # A custom environment exists but it is being updated to a global one
                     # We remove the custom environment to avoid accumulating custom environments that are not associated
                     # with any launchers.
                     await session.delete(old_environment)
-            case models.EnvironmentPatch(), models.EnvironmentKind.CUSTOM:
+            case models.EnvironmentPatch(), models.EnvironmentKind.custom:
                 # Custom environment being updated
                 self.__update_environment(launcher.environment, update)
-            case models.UnsavedEnvironment() as new_custom_environment, models.EnvironmentKind.GLOBAL if (
-                new_custom_environment.environment_kind == models.EnvironmentKind.CUSTOM
+            case models.UnsavedEnvironment() as new_custom_environment, models.EnvironmentKind.global_ if (
+                new_custom_environment.environment_kind == models.EnvironmentKind.custom
             ):
                 # Global environment replaced by a custom one
                 new_env = self.__insert_environment(user, session, new_custom_environment)
@@ -524,5 +524,5 @@ class SessionRepository:
                 raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
             await session.delete(launcher)
-            if launcher.environment.environment_kind == models.EnvironmentKind.CUSTOM:
+            if launcher.environment.environment_kind == models.EnvironmentKind.custom:
                 await session.delete(launcher.environment)

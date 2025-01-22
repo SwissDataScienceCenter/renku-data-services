@@ -73,7 +73,7 @@ def validate_unsaved_session_launcher(launcher: apispec.SessionLauncherPost) -> 
         resource_class_id=launcher.resource_class_id,
         disk_storage=launcher.disk_storage,
         # NOTE: When you create an environment with a launcher the environment can only be custom
-        environment=validate_unsaved_environment(launcher.environment, models.EnvironmentKind.CUSTOM)
+        environment=validate_unsaved_environment(launcher.environment, models.EnvironmentKind.custom)
         if isinstance(launcher.environment, apispec.EnvironmentPostInLauncher)
         else launcher.environment.id,
     )
@@ -88,8 +88,8 @@ def validate_session_launcher_patch(
     if (
         isinstance(patch.environment, apispec.EnvironmentPatchInLauncher)
         and current_launcher is not None
-        and current_launcher.environment.environment_kind == models.EnvironmentKind.GLOBAL
-        and patch.environment.environment_kind == apispec.EnvironmentKind.CUSTOM
+        and current_launcher.environment.environment_kind == models.EnvironmentKind.global_
+        and patch.environment.environment_kind == apispec.EnvironmentKind.custom
     ):
         # This means that the global environment is being swapped for a custom one,
         # so we have to create a brand new environment, but we have to validate here.

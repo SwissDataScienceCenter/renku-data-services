@@ -21,26 +21,26 @@ class Member:
 class EnvironmentKind(StrEnum):
     """The type of environment."""
 
-    GLOBAL = "GLOBAL"
-    CUSTOM = "CUSTOM"
-    BUILDER = "BUILDER"
+    global_: str = "global"
+    custom: str = "custom"
+    builder: str = "builder"
 
 
 class VEnvKind(StrEnum):
     """The type of virtual environment manager."""
 
-    CONDA: str = "CONDA"
-    PIP: str = "PIP"
-    R: str = "R"
-    DOCKERFILE: str = "DOCKERFILE"
+    conda: str = "conda"
+    pip: str = "pip"
+    r: str = "r"
+    dockerfile: str = "dockerfile"
 
 
 class EditorKind(StrEnum):
     """The editor choice."""
 
-    VSCODIUM: str = "VSCODIUM"
-    JUPYTERLAB: str = "JUPYTERLAB"
-    STREAMLIT: str = "STREAMLIT"
+    vscodium: str = "vscodium"
+    jupyterlab: str = "jupyterlab"
+    streamlit: str = "streamlit"
 
 
 @dataclass(kw_only=True, frozen=True, eq=True)
@@ -76,11 +76,11 @@ class UnsavedEnvironment:
     is_archived: bool = False
 
     def __post_init__(self) -> None:
-        if self.builder_id and not self.environment_kind == EnvironmentKind.BUILDER:
+        if self.builder_id and not self.environment_kind == EnvironmentKind.builder:
             raise errors.ValidationError(
                 message="For a BUILDER enviroment kind, the builder_id should define the ImageBuilder"
             )
-        if self.builder_id and not self.environment_kind != EnvironmentKind.BUILDER:
+        if self.builder_id and not self.environment_kind != EnvironmentKind.builder:
             raise errors.ValidationError(message="If the environment kind is not a BUILDER, builder_id is useless")
         if self.working_directory and not self.working_directory.is_absolute():
             raise errors.ValidationError(message="The working directory for a session is supposed to be absolute")
