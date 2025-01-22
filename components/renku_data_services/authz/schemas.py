@@ -440,3 +440,78 @@ def generate_v4(public_project_ids: Iterable[str]) -> AuthzSchemaMigration:
         )
 
     return AuthzSchemaMigration(up=up, down=down)
+
+
+_v5: str = "to be added by Eike in a separate PR"
+
+v5 = AuthzSchemaMigration(
+    up=[WriteSchemaRequest(schema=_v5)],
+    down=[WriteSchemaRequest(schema=_v4)],
+)
+
+_v6: str = """\
+definition user {}
+
+definition group {
+    relation group_platform: platform
+    relation owner: user
+    relation editor: user
+    relation viewer: user
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = public_viewer + read_children
+    permission read_children = viewer + write
+    permission write = editor + delete
+    permission change_membership = delete
+    permission delete = owner + group_platform->is_admin
+}
+
+definition user_namespace {
+    relation user_namespace_platform: platform
+    relation owner: user
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = public_viewer + read_children
+    permission read_children = delete
+    permission write = delete
+    permission delete = owner + user_namespace_platform->is_admin
+}
+
+definition anonymous_user {}
+
+definition platform {
+    relation admin: user
+    permission is_admin = admin
+}
+
+definition project {
+    relation project_platform: platform
+    relation project_namespace: user_namespace | group
+    relation owner: user
+    relation editor: user
+    relation viewer: user
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = public_viewer + read_children
+    permission read_children = viewer + write + project_namespace->read_children
+    permission write = editor + delete + project_namespace->write
+    permission change_membership = delete
+    permission delete = owner + project_platform->is_admin + project_namespace->delete
+}
+
+definition data_connector {
+    relation data_connector_platform: platform
+    relation data_connector_namespace: user_namespace | group | project
+    relation linked_to: project
+    relation owner: user
+    relation editor: user
+    relation viewer: user
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = public_viewer + viewer + write + data_connector_namespace->read
+    permission write = editor + delete + data_connector_namespace->write
+    permission change_membership = delete
+    permission delete = owner + data_connector_platform->is_admin + data_connector_namespace->delete
+}"""
+
+v6 = AuthzSchemaMigration(
+    up=[WriteSchemaRequest(schema=_v6)],
+    # TODO: change to v5 when the search changes are merged
+    down=[WriteSchemaRequest(schema=_v4)],
+)
