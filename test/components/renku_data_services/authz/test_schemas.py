@@ -443,7 +443,6 @@ def v6_schema() -> SpiceDBSchema:
                 # user2 does not have write or delete permissions on dc4
                 "data_connector:dc4#delete@user:user2",
                 "data_connector:dc4#write@user:user2",
-                # user2 can read dc1 because it is owned by a public project
                 # anonymous user checks
                 "data_connector:dc1#read@user:ANON",
                 "data_connector:dc2#read@user:ANON",
