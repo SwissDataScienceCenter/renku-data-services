@@ -12,7 +12,7 @@ from renku_data_services.base_api.auth import authenticate, only_authenticated, 
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_body_root_model, validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
-from renku_data_services.base_models.core import Slug
+from renku_data_services.base_models.core import NamespaceSlug, Slug
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
 from renku_data_services.errors import errors
 from renku_data_services.namespace import apispec, apispec_enhanced, models
@@ -206,7 +206,7 @@ class GroupsBP(CustomBlueprint):
                         created_by=ns.created_by,
                         creation_date=ns.creation_date,
                         namespace_kind=apispec.NamespaceKind(ns.kind.value),
-                        path=[i.value for i in ns.path.to_list()],
+                        path=ns.path.serialize(),
                     )
                     for ns in nss
                 ],
@@ -215,11 +215,11 @@ class GroupsBP(CustomBlueprint):
         return "/namespaces", ["GET"], _get_namespaces
 
     def get_namespace(self) -> BlueprintFactoryResponse:
-        """Get namespace by slug."""
+        """Get user or group namespace by slug."""
 
         @authenticate(self.authenticator)
         async def _get_namespace(_: Request, user: base_models.APIUser, slug: Slug) -> JSONResponse:
-            ns = await self.group_repo.get_namespace_by_slug(user=user, slug=slug)
+            ns = await self.group_repo.get_namespace_by_slug(user=user, slug=NamespaceSlug(slug.value))
             if not ns:
                 raise errors.MissingResourceError(message=f"The namespace with slug {slug} does not exist")
             return validated_json(
@@ -227,13 +227,11 @@ class GroupsBP(CustomBlueprint):
                 dict(
                     id=ns.id,
                     name=ns.name,
-                    slug=ns.latest_slug
-                    if ns.latest_slug
-                    else (ns.path.second.value if isinstance(ns, models.ProjectNamespace) else ns.path.first.value),
+                    slug=ns.latest_slug or ns.path.last().value,
                     created_by=ns.created_by,
                     creation_date=None,  # NOTE: we do not save creation date in the DB
                     namespace_kind=apispec.NamespaceKind(ns.kind.value),
-                    path=[i.value for i in ns.path.to_list()],
+                    path=ns.path.serialize(),
                 ),
             )
 

@@ -9,10 +9,10 @@ from authzed.api.v1 import (
 from ulid import ULID
 
 from renku_data_services.app_config import Config
-from renku_data_services.authz.authz import ResourceType, _AuthzConverter
+from renku_data_services.authz.authz import _AuthzConverter
 from renku_data_services.authz.models import Member, Role, Scope, Visibility
 from renku_data_services.base_models import APIUser
-from renku_data_services.base_models.core import NamespacePath
+from renku_data_services.base_models.core import NamespacePath, ResourceType
 from renku_data_services.errors import errors
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.namespace.models import UserNamespace

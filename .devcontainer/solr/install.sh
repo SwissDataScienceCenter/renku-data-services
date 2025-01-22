@@ -3,7 +3,7 @@ set -e
 
 echo "Activation SOLR feature"
 
-download_url="https://dlcdn.apache.org/solr/solr/$SOLR_VERSION/solr-$SOLR_VERSION.tgz"
+download_url="https://archive.apache.org/dist/solr/solr/$SOLR_VERSION/solr-$SOLR_VERSION.tgz"
 
 curl -sSL -o solr.tgz "$download_url"
 mkdir -p /opt
