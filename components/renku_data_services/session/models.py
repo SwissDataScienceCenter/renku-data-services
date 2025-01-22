@@ -49,7 +49,7 @@ class ImageBuilder:
 
     builder_id: ULID
     repository: str
-    branch: str | None = None
+    revision: str | None = None
     subdir: PurePosixPath | None = None
     venv_kind: VEnvKind
     frontend_kind: FrontendKind

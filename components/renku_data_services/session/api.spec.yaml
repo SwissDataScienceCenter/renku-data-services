@@ -658,8 +658,8 @@ components:
           $ref: "#/components/schemas/Ulid"
         repository:
           $ref: "#/components/schemas/Repository"
-        branch:
-          $ref: "#/components/schemas/branch"
+        revision:
+          $ref: "#/components/schemas/Revision"
         subdir:
           $ref: "#/components/schemas/ImageBuilderSubDir"
         venv_kind:
@@ -676,7 +676,7 @@ components:
         builder_id: 01AN4Z79ZS6XX96588FDX0H099
         container_image: my_project_name/environment_name:mytag
         repository: https://gitlab.com/my_namespace/my_project_repo.git
-        branch: main
+        revision: main
         subdir: "."
         venv_kind: conda
         frontend_kind: jupyterlab
@@ -688,9 +688,9 @@ components:
           $ref: "#/components/schemas/Ulid"
         repository:
           $ref: "#/components/schemas/Repository"
-        branch:
+        revision:
           allOf:
-            - $ref: "#/components/schemas/branch"
+            - $ref: "#/components/schemas/Revision"
             - default: main
         subdir:
           allOf:
@@ -714,8 +714,8 @@ components:
           $ref: "#/components/schemas/Ulid"
         repository:
           $ref: "#/components/schemas/Repository"
-        branch:
-          $ref: "#/components/schemas/branch"
+        revision:
+          $ref: "#/components/schemas/Revision"
         subdir:
           $ref: "#/components/schemas/ImageBuilderSubDir"
         venv_kind:
@@ -735,8 +735,8 @@ components:
       type: string
       maxLength: 500
       example: "https://github.com/voila-gallery/gaussian-density"
-    Branch:
-      description: The branch of the repository used as a basis for a custom builder
+    Revision:
+      description: The revision of the repository used as a basis for a custom builder
       type: string
       maxLength: 100
       example: "main"

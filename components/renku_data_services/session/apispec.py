@@ -4,6 +4,7 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 #   timestamp: 2025-01-13T09:07:25+00:00
 =======
 #   timestamp: 2025-01-21T16:12:21+00:00
@@ -17,6 +18,9 @@
 =======
 #   timestamp: 2025-01-22T10:39:25+00:00
 >>>>>>> 46558d1b (fix(apispec): assume container_image is deterministic for image builders)
+=======
+#   timestamp: 2025-01-22T10:45:36+00:00
+>>>>>>> 4369a8c4 (fix(apispec): branch to revision in image builders)
 
 from __future__ import annotations
 
@@ -45,15 +49,6 @@ class EnvironmentKind(Enum):
     global_ = "global"
     custom = "custom"
     builder = "builder"
-
-
-class Branch1(RootModel[str]):
-    root: str = Field(
-        ...,
-        description="The branch of the repository used as a basis for a custom builder",
-        example="main",
-        max_length=100,
-    )
 
 
 class Error(BaseAPISpec):
@@ -360,7 +355,12 @@ class ImageBuilder(BaseAPISpec):
         example="https://github.com/voila-gallery/gaussian-density",
         max_length=500,
     )
-    branch: Optional[Any] = None
+    revision: Optional[str] = Field(
+        None,
+        description="The revision of the repository used as a basis for a custom builder",
+        example="main",
+        max_length=100,
+    )
     subdir: Optional[str] = Field(
         None,
         description="The sub directory of the repository used as a basis for a custom builder",
@@ -385,7 +385,12 @@ class ImageBuilderPost(BaseAPISpec):
         example="https://github.com/voila-gallery/gaussian-density",
         max_length=500,
     )
-    branch: Optional[Any] = None
+    revision: Optional[str] = Field(
+        None,
+        description="The revision of the repository used as a basis for a custom builder",
+        example="main",
+        max_length=100,
+    )
     subdir: Optional[str] = Field(
         None,
         description="The sub directory of the repository used as a basis for a custom builder",
@@ -413,7 +418,12 @@ class ImageBuilderPatch(BaseAPISpec):
         example="https://github.com/voila-gallery/gaussian-density",
         max_length=500,
     )
-    branch: Optional[Any] = None
+    revision: Optional[str] = Field(
+        None,
+        description="The revision of the repository used as a basis for a custom builder",
+        example="main",
+        max_length=100,
+    )
     subdir: Optional[str] = Field(
         None,
         description="The sub directory of the repository used as a basis for a custom builder",
