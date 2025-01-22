@@ -2,7 +2,6 @@
 
 Revision ID: 483af0d70cf4
 Revises: 64edf7ac0de0
-
 Create Date: 2025-01-22 10:37:40.218992
 
 """
