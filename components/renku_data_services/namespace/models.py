@@ -60,6 +60,7 @@ class NamespaceKind(str, Enum):
 
     group = "group"
     user = "user"
+    project = "project"  # For now only applicable to data connectors
 
 
 @dataclass
