@@ -1570,25 +1570,41 @@ class Authz:
 
     def _add_data_connector(self, data_connector: DataConnector) -> _AuthzChange:
         """Create the new data connector and associated resources and relations in the DB."""
-        creator = SubjectReference(object=_AuthzConverter.user(data_connector.created_by))
         data_connector_res = _AuthzConverter.data_connector(data_connector.id)
-        creator_is_owner = Relationship(resource=data_connector_res, relation=_Relation.owner.value, subject=creator)
+        match data_connector.namespace.kind:
+            case NamespaceKind.project:
+                project_id = (
+                    ULID.from_str(data_connector.namespace.underlying_resource_id)
+                    if isinstance(data_connector.namespace.underlying_resource_id, str)
+                    else data_connector.namespace.underlying_resource_id
+                )
+                owned_by = _AuthzConverter.project(project_id)
+            case NamespaceKind.user:
+                owned_by = _AuthzConverter.user_namespace(data_connector.namespace.id)
+            case NamespaceKind.group:
+                group_id = (
+                    ULID.from_str(data_connector.namespace.underlying_resource_id)
+                    if isinstance(data_connector.namespace.underlying_resource_id, str)
+                    else data_connector.namespace.underlying_resource_id
+                )
+                owned_by = _AuthzConverter.group(group_id)
+            case _:
+                raise errors.ProgrammingError(
+                    message="Tried to match unexpected data connector namespace kind", quiet=True
+                )
+        owner = Relationship(
+            resource=data_connector_res,
+            relation=_Relation.data_connector_namespace,
+            subject=SubjectReference(object=owned_by),
+        )
         all_users = SubjectReference(object=_AuthzConverter.all_users())
         all_anon_users = SubjectReference(object=_AuthzConverter.anonymous_users())
-        data_connector_namespace = SubjectReference(
-            object=_AuthzConverter.user_namespace(data_connector.namespace.id)
-            if data_connector.namespace.kind == NamespaceKind.user
-            else _AuthzConverter.group(cast(ULID, data_connector.namespace.underlying_resource_id))
-        )
         data_connector_in_platform = Relationship(
             resource=data_connector_res,
             relation=_Relation.data_connector_platform,
             subject=SubjectReference(object=self._platform),
         )
-        data_connector_in_namespace = Relationship(
-            resource=data_connector_res, relation=_Relation.data_connector_namespace, subject=data_connector_namespace
-        )
-        relationships = [creator_is_owner, data_connector_in_platform, data_connector_in_namespace]
+        relationships = [owner, data_connector_in_platform]
         if data_connector.visibility == Visibility.PUBLIC:
             all_users_are_viewers = Relationship(
                 resource=data_connector_res,

@@ -18,6 +18,8 @@ from renku_data_services.base_models.core import Slug
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors import orm as schemas
 from renku_data_services.namespace import orm as ns_schemas
+from renku_data_services.project.db import ProjectRepository
+from renku_data_services.project.models import Project
 from renku_data_services.secrets import orm as secrets_schemas
 from renku_data_services.secrets.core import encrypt_user_secret
 from renku_data_services.secrets.models import SecretKind
@@ -32,9 +34,11 @@ class DataConnectorRepository:
         self,
         session_maker: Callable[..., AsyncSession],
         authz: Authz,
+        project_repo: ProjectRepository,
     ) -> None:
         self.session_maker = session_maker
         self.authz = authz
+        self.project_repo = project_repo
 
     async def get_data_connectors(
         self, user: base_models.APIUser, pagination: PaginationRequest, namespace: str | None = None
@@ -192,24 +196,47 @@ class DataConnectorRepository:
         if user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
-        resource_type, resource_id = (
-            (ResourceType.group, ns.group_id) if ns.group and ns.group_id else (ResourceType.user_namespace, ns.id)
-        )
+        project: Project | None = None
+        if data_connector.project_slug:
+            error_msg = (
+                f"The project with slug {data_connector.project_slug} does not exist or you do not have access to it."
+            )
+            project_slug = await session.scalar(
+                select(ns_schemas.EntitySlugORM)
+                .where(ns_schemas.EntitySlugORM.slug == data_connector.project_slug)
+                .where(ns_schemas.EntitySlugORM.project_id.is_not(None))
+            )
+            if not project_slug or not project_slug.project_id:
+                raise errors.MissingResourceError(message=error_msg)
+            project = await self.project_repo.get_project(user, project_slug.project_id)
+            if not project:
+                raise errors.MissingResourceError(message=error_msg)
+            resource_type = ResourceType.project
+            resource_id = project.id
+        elif ns.group and ns.group_id:
+            resource_type, resource_id = (ResourceType.group, ns.group_id)
+        else:
+            resource_type, resource_id = (ResourceType.user_namespace, ns.id)
+
         has_permission = await self.authz.has_permission(user, resource_type, resource_id, Scope.WRITE)
         if not has_permission:
-            raise errors.ForbiddenError(
-                message=f"The data connector cannot be created because you do not have sufficient permissions with the namespace {data_connector.namespace}"  # noqa: E501
-            )
+            error_msg = f"The data connector cannot be created because you do not have sufficient permissions with the namespace {data_connector.namespace}"  # noqa: E501
+            if data_connector.project_slug:
+                error_msg = f"The data connector cannot be created because you do not have sufficient permissions with the project {data_connector.namespace}/{data_connector.project_slug}"  # noqa: E501
+            raise errors.ForbiddenError(message=error_msg)
 
         slug = data_connector.slug or base_models.Slug.from_name(data_connector.name).value
 
-        existing_slug = await session.scalar(
+        existing_slug_stmt = (
             select(ns_schemas.EntitySlugORM)
             .where(ns_schemas.EntitySlugORM.namespace_id == ns.id)
             .where(ns_schemas.EntitySlugORM.slug == slug)
         )
+        if project:
+            existing_slug_stmt = existing_slug_stmt.where(ns_schemas.EntitySlugORM.project_id == project.id)
+        existing_slug = await session.scalar(existing_slug_stmt)
         if existing_slug is not None:
-            raise errors.ConflictError(message=f"An entity with the slug '{ns.slug}/{slug}' already exists.")
+            raise errors.ConflictError(message=f"An entity with the slug '{data_connector.path}' already exists.")
 
         visibility_orm = (
             apispec.Visibility(data_connector.visibility)
@@ -229,7 +256,10 @@ class DataConnectorRepository:
             keywords=data_connector.keywords,
         )
         data_connector_slug = ns_schemas.EntitySlugORM.create_data_connector_slug(
-            slug, data_connector_id=data_connector_orm.id, namespace_id=ns.id
+            slug,
+            data_connector_id=data_connector_orm.id,
+            namespace_id=ns.id,
+            project_id=project.id if project else None,
         )
 
         session.add(data_connector_orm)
@@ -262,6 +292,9 @@ class DataConnectorRepository:
         if data_connector is None:
             raise errors.MissingResourceError(message=not_found_msg)
         old_data_connector = data_connector.dump()
+
+        if old_data_connector.project and old_data_connector.project.slug != patch.project_slug:
+            raise NotImplementedError("Moving the data connector to another project or namespace is not supported")
 
         required_scope = Scope.WRITE
         if patch.visibility is not None and patch.visibility != old_data_connector.visibility:
