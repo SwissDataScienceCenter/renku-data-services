@@ -7,7 +7,9 @@ from typing import TYPE_CHECKING, Any
 from ulid import ULID
 
 from renku_data_services.authz.models import Visibility
+from renku_data_services.base_models.core import EntityPath
 from renku_data_services.namespace.models import Namespace
+from renku_data_services.project.models import Project
 from renku_data_services.utils.etag import compute_etag_from_timestamp
 
 if TYPE_CHECKING:
@@ -47,11 +49,19 @@ class DataConnector(BaseDataConnector):
     id: ULID
     namespace: Namespace
     updated_at: datetime
+    project: Project | None = None
 
     @property
     def etag(self) -> str:
         """Entity tag value for this data connector object."""
         return compute_etag_from_timestamp(self.updated_at)
+
+    @property
+    def path(self) -> EntityPath:
+        """The full path (i.e. sequence of slugs) for the data connector including group or user and/or project."""
+        if self.project:
+            return EntityPath.join(self.namespace.slug, self.project.slug, self.slug)
+        return EntityPath.join(self.namespace.slug, self.slug)
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -59,6 +69,14 @@ class UnsavedDataConnector(BaseDataConnector):
     """A data connector that hasn't been stored in the database."""
 
     namespace: str
+    project_slug: str | None = None
+
+    @property
+    def path(self) -> EntityPath:
+        """The full path (i.e. sequence of slugs) for the data connector including group or user and/or project."""
+        if self.project_slug:
+            return EntityPath.join(self.namespace, self.project_slug, self.slug)
+        return EntityPath.join(self.namespace, self.slug)
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -90,6 +108,7 @@ class DataConnectorPatch:
     description: str | None
     keywords: list[str] | None
     storage: CloudStorageCorePatch | None
+    project_slug: str | None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

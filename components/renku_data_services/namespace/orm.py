@@ -4,7 +4,6 @@ from datetime import datetime
 from typing import Optional, Self, cast
 
 from sqlalchemy import CheckConstraint, DateTime, Identity, Index, Integer, MetaData, String, func
-from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
 from ulid import ULID
