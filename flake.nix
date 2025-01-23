@@ -30,6 +30,11 @@
             enable = true;
             openapi-spec = "http://localhost:8000/api/data/spec.json";
           };
+          services.dev-solr = {
+            enable = true;
+            cores = [ "renku-search-dev"];
+            heap = 1024;
+          };
         };
       in {
         rdsdev-vm = devshell-tools.lib.mkVm {
