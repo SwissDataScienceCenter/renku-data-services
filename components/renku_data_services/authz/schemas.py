@@ -557,8 +557,8 @@ definition project {
     relation editor: user
     relation viewer: user
     relation public_viewer: user:* | anonymous_user:*
-    permission read = public_viewer + read_children
-    permission read_children = viewer + write + project_namespace->read_children
+    permission read = read_children
+    permission read_children = public_viewer + viewer + write + project_namespace->read_children
     permission write = editor + delete + project_namespace->write
     permission change_membership = delete
     permission delete = owner + project_platform->is_admin + project_namespace->delete
@@ -573,7 +573,7 @@ definition data_connector {
     relation editor: user
     relation viewer: user
     relation public_viewer: user:* | anonymous_user:*
-    permission read = public_viewer + viewer + write + data_connector_namespace->read
+    permission read = public_viewer + viewer + write + data_connector_namespace->read_children
     permission write = editor + delete + data_connector_namespace->write
     permission change_membership = delete
     permission delete = owner + data_connector_platform->is_admin + data_connector_namespace->delete
