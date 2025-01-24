@@ -139,3 +139,19 @@ async def test_get_one_repository_not_found(
     assert result.get("connection_id") == connection["id"]
     assert result.get("provider_id") == "provider_1"
     assert result.get("repository_metadata") is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "repository_url,status_code",
+    [
+        ("https://github.com/SwissDataScienceCenter/renku.git", 200),
+        ("https://example.org/does-not-exist.git", 404),
+        ("http://foobar", 404),
+    ],
+)
+async def test_get_one_repository_probe(sanic_client: SanicASGITestClient, repository_url, status_code):
+    repository_url_param = quote_plus(repository_url)
+    _, response = await sanic_client.get(f"/api/data/repositories/{repository_url_param}/probe")
+
+    assert response.status_code == status_code, response.text
