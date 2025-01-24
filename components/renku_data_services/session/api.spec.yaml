@@ -28,12 +28,12 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - image_builder
-  /image_builder/{builder_id}:
+  /image_builder/{image_builder_id}:
     get:
       summary: Get an image builder
       parameters:
         - in: path
-          name: builder_id
+          name: image_builder_id
           required: true
           schema:
             $ref: "#/components/schemas/Ulid"
@@ -55,10 +55,10 @@ paths:
       tags:
         - image_builder
     patch:
-      summary: Update specific fields of an existing global session environment
+      summary: Update specific fields of an existing image builder
       parameters:
         - in: path
-          name: builder_id
+          name: image_builder_id
           required: true
           schema:
             $ref: "#/components/schemas/Ulid"
@@ -74,7 +74,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ImageBuilderPatch"
+                $ref: "#/components/schemas/ImageBuilder"
         "404":
           description: The image builder does not exist
           content:
@@ -86,10 +86,10 @@ paths:
       tags:
         - image_builder
     delete:
-      summary: Remove an image_builder environment
+      summary: Remove an image builder
       parameters:
         - in: path
-          name: builder_id
+          name: image_builder_id
           required: true
           schema:
             $ref: "#/components/schemas/Ulid"
@@ -366,8 +366,8 @@ components:
           $ref: "#/components/schemas/Description"
         container_image:
           $ref: "#/components/schemas/ContainerImage"
-        builder_id:
-          $ref: "#/components/schemas/ULID"
+        image_builder_id:
+          $ref: "#/components/schemas/Ulid"
         default_url:
           $ref: "#/components/schemas/DefaultUrl"
         uid:
@@ -417,8 +417,6 @@ components:
               $ref: "#/components/schemas/EnvironmentKind"
           required:
             - environment_kind
-          example:
-            environment_kind: global_environment
     EnvironmentPostInLauncher:
       allOf:
         - $ref: "#/components/schemas/EnvironmentPost"
@@ -428,8 +426,6 @@ components:
               $ref: "#/components/schemas/EnvironmentKind"
           required:
             - environment_kind
-          example:
-            environment_kind: global_environment
     EnvironmentPost:
       description: Data required to create a session environment
       type: object
@@ -600,15 +596,13 @@ components:
       minLength: 1
       maxLength: 99
       example: My Renku Session :)
-    VEnvKind:
-      description: Type of virtual environment manager.
+    BuilderVariant:
+      description: Type of virtual environment manager when building custom environments.
       type: string
       enum:
         - conda
         - pip
-        - r
-        - dockerfile
-    FrontendKind:
+    FrontendVariant:
       description: User's Frontend Choice.
       type: string
       enum:
@@ -634,7 +628,6 @@ components:
         - global
         - custom
         - builder
-      example: custom
     EnvironmentId:
       description: Id of the environment to use
       type: string
@@ -650,11 +643,11 @@ components:
       type: string
       maxLength: 500
     ImageBuilder:
-      description: A container image builder
+      description: A strategy to create an image builder
       type: object
       additionalProperties: false
       properties:
-        builder_id:
+        id:
           $ref: "#/components/schemas/Ulid"
         repository:
           $ref: "#/components/schemas/Repository"
@@ -662,63 +655,47 @@ components:
           $ref: "#/components/schemas/Revision"
         subdir:
           $ref: "#/components/schemas/ImageBuilderSubDir"
-        venv_kind:
-          $ref: "#/components/schemas/VEnvKind"
-        frontend_kind:
-          $ref: "#/components/schemas/FrontendKind"
+        builder_variant:
+          $ref: "#/components/schemas/BuilderVariant"
+        frontend_variant:
+          $ref: "#/components/schemas/FrontendVariant"
       required:
         - repository
-        - venv_kind
-        - frontend_kind
-      example:
-        builder_id: 01AN4Z79ZS6XX96588FDX0H099
-        container_image: my_project_name/environment_name:mytag
-        repository: https://gitlab.com/my_namespace/my_project_repo.git
-        revision: main
-        subdir: "."
-        venv_kind: conda
-        frontend_kind: jupyterlab
+        - builder_variant
+        - frontend_variant
     ImageBuilderPost:
       description: Data required to create an image builder
       type: object
       properties:
-        builder_id:
-          $ref: "#/components/schemas/Ulid"
         repository:
           $ref: "#/components/schemas/Repository"
         revision:
-          allOf:
-            - $ref: "#/components/schemas/Revision"
-            - default: main
+          $ref: "#/components/schemas/Revision"
         subdir:
-          allOf:
-            - $ref: "#/components/schemas/ImageBuilderSubDir"
-            - default: /
-        venv_kind:
-          $ref: "#/components/schemas/VEnvKind"
-        frontend_kind:
-          $ref: "#/components/schemas/FrontendKind"
+          $ref: "#/components/schemas/ImageBuilderSubDir"
+        builder_variant:
+          $ref: "#/components/schemas/BuilderVariant"
+        frontend_variant:
+          $ref: "#/components/schemas/FrontendVariant"
       required:
         - repository
-        - venv_kind
-        - frontend_kind
+        - builder_variant
+        - frontend_variant
     ImageBuilderPatch:
       description: Update an image builder
       type: object
       additionalProperties: false
       properties:
-        builder_id:
-          $ref: "#/components/schemas/Ulid"
         repository:
           $ref: "#/components/schemas/Repository"
         revision:
           $ref: "#/components/schemas/Revision"
         subdir:
           $ref: "#/components/schemas/ImageBuilderSubDir"
-        venv_kind:
-          $ref: "#/components/schemas/VEnvKind"
-        frontend_kind:
-          $ref: "#/components/schemas/FrontendKind"
+        builder_variant:
+          $ref: "#/components/schemas/BuilderVariant"
+        frontend_variant:
+          $ref: "#/components/schemas/FrontendVariant"
     ContainerImage:
       description: A container image
       type: string
@@ -736,12 +713,10 @@ components:
       description: The revision of the repository used as a basis for a custom builder
       type: string
       maxLength: 100
-      example: "main"
     ImageBuilderSubDir:
       description: The sub directory of the repository used as a basis for a custom builder
       type: string
       minLength: 1
-      example: "."
     DefaultUrl:
       description: The default path to open in a session
       type: string
