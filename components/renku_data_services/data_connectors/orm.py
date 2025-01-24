@@ -90,15 +90,12 @@ class DataConnectorORM(BaseORM):
 
     def dump(self) -> models.DataConnector:
         """Create a data connector model from the DataConnectorORM."""
-        match self.slug:
-            case EntitySlugORM(project=project) if project is not None:
-                ns = project.dump_as_namespace()
-            case EntitySlugORM(namespace=namespace, project=None):
-                ns = namespace.dump()
-            case _:
-                raise errors.ProgrammingError(
-                    message="Cannot determine the data connector namespace from the ORM object"
-                )
+        if self.slug.project is not None:
+            ns = self.slug.project.dump_as_namespace()
+        elif self.slug.namespace and self.slug.project is None:
+            ns = self.slug.namespace.dump()
+        else:
+            raise errors.ProgrammingError(message="Cannot determine the data connector namespace from the ORM object")
         return models.DataConnector(
             id=self.id,
             name=self.name,

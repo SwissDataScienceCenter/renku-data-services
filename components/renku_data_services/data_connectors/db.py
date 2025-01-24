@@ -478,22 +478,15 @@ class DataConnectorProjectLinkRepository:
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
 
-        data_connector_ids = await self.authz.resources_with_permission(
-            user, user.id, ResourceType.data_connector, Scope.READ
-        )
-
         async with self.session_maker() as session:
-            stmt = (
-                select(schemas.DataConnectorToProjectLinkORM)
-                .where(schemas.DataConnectorToProjectLinkORM.project_id == project_id)
-                .where(schemas.DataConnectorToProjectLinkORM.data_connector_id.in_(data_connector_ids))
+            stmt = select(schemas.DataConnectorToProjectLinkORM).where(
+                schemas.DataConnectorToProjectLinkORM.project_id == project_id
             )
             result = await session.scalars(stmt)
             links_orm = result.all()
             return [link.dump() for link in links_orm]
 
     @with_db_transaction
-    @Authz.authz_change(AuthzOperation.create_link, ResourceType.data_connector)
     async def insert_link(
         self,
         user: base_models.APIUser,
@@ -508,15 +501,29 @@ class DataConnectorProjectLinkRepository:
         if user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
+        dc_error_msg = (
+            f"Data connector with id '{link.data_connector_id}' does not exist or you do not have access to it."
+        )
+        allowed_from = await self.authz.has_permission(
+            user, ResourceType.data_connector, link.data_connector_id, Scope.READ
+        )
+        if not allowed_from:
+            raise errors.MissingResourceError(message=dc_error_msg)
+        allowed_to = await self.authz.has_permission(user, ResourceType.project, link.project_id, Scope.WRITE)
+        if not allowed_to:
+            raise errors.MissingResourceError(
+                message=f"The user with ID {user.id} cannot perform operation {Scope.WRITE} "
+                f"on {ResourceType.project.value} "
+                f"with ID {link.project_id} or the resource does not exist."
+            )
+
         data_connector = (
             await session.scalars(
                 select(schemas.DataConnectorORM).where(schemas.DataConnectorORM.id == link.data_connector_id)
             )
         ).one_or_none()
         if data_connector is None:
-            raise errors.MissingResourceError(
-                message=f"Data connector with id '{link.data_connector_id}' does not exist or you do not have access to it."  # noqa E501
-            )
+            raise errors.MissingResourceError(message=dc_error_msg)
 
         project = (
             await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == link.project_id))
