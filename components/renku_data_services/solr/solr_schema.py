@@ -9,21 +9,36 @@ import json
 import pydantic
 
 
-
 TypeName = NewType("TypeName", str)
 FieldName = NewType("FieldName", str)
 
 
 class SchemaModel(BaseModel):
+    """Base class of a solr schema type."""
+
     def to_dict(self) -> dict[str, Any]:
+        """Return the dict representation of this schema model type."""
         return self.model_dump(by_alias=True, exclude_defaults=True)
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict())
 
+
 @final
 class Tokenizer(SchemaModel):
     name: TypeName
+
+
+@final
+class Tokenizers:
+    standard: Tokenizer = Tokenizer(name="standard")
+    whitespace: Tokenizer = Tokenizer(name="whitespace")
+    classic: Tokenizer = Tokenizer(name="classic")
+
+    # https://solr.apache.org/guide/solr/latest/indexing-guide/tokenizers.html#uax29-url-email-tokenizer
+    uax29UrlEmail: Tokenizer = Tokenizer(name="uax29UrlEmail")
+    icu: Tokenizer = Tokenizer(name="icu")
+    openNlp: Tokenizer = Tokenizer(name="openNlp")
 
 
 @final
@@ -37,21 +52,20 @@ class Filter(BaseModel):
     def to_dict(self) -> dict[str, Any]:
         match self.settings:
             case None:
-                return {"name":self.name}
+                return {"name": self.name}
             case _:
                 data = self.settings.copy()
                 data.update({"name": self.name})
                 return data
 
 
-
 @final
 class Filters:
     """A list of predefined filters supported by SOLR."""
 
-    ascii_folding = Filter(name = "asciiFolding")
-    lowercase = Filter(name = "lowercase")
-    stop = Filter(name = "stop")
+    ascii_folding = Filter(name="asciiFolding")
+    lowercase = Filter(name="lowercase")
+    stop = Filter(name="stop")
     english_minimal_stem = Filter(name="englishMinimalStem")
     classic = Filter(name="classic")
     ngram = Filter(name="nGram")
@@ -78,6 +92,7 @@ class Analyzer(SchemaModel):
 FieldTypeClass = NewType("FieldTypeClass", str)
 
 
+@final
 class FieldTypeClasses:
     """A list of field type classses."""
 
@@ -183,7 +198,7 @@ class SchemaCommand:
 
 @dataclass
 @final
-class AddCommand:
+class AddCommand(SchemaCommand):
     value: Field | FieldType | DynamicFieldRule | CopyFieldRule
 
     def command_name(self) -> str:
@@ -213,6 +228,66 @@ class AddCommand:
 
             case CopyFieldRule() as f:
                 return f.to_dict()
+
+
+@dataclass
+@final
+class ReplaceCommand(SchemaCommand):
+    value: FieldType | Field | DynamicFieldRule
+
+    def command_name(self) -> str:
+        match self.value:
+            case Field():
+                return "replace-field"
+            case FieldType():
+                return "replace-field-type"
+            case DynamicFieldRule():
+                return "replace-dynamic-field"
+
+    def to_dict(self) -> dict[str, Any]:
+        match self.value:
+            case Field() as f:
+                return f.to_dict()
+            case FieldType() as f:
+                return f.to_dict()
+            case DynamicFieldRule() as f:
+                return f.to_dict()
+
+
+@dataclass
+@final
+class DeleteFieldCommand(SchemaCommand):
+    name: FieldName
+
+    def command_name(self) -> str:
+        return "delete-field"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"name": self.name}
+
+
+@dataclass
+@final
+class DeleteFieldTypeCommand(SchemaCommand):
+    name: TypeName
+
+    def command_name(self) -> str:
+        return "delete-field-type"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"name": self.name}
+
+
+@dataclass
+@final
+class DeleteDynamicFieldCommand(SchemaCommand):
+    name: TypeName
+
+    def command_name(self) -> str:
+        return "delete-dynamic-field"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"name": self.name}
 
 
 @dataclass

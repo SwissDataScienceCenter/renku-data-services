@@ -5,9 +5,12 @@ import logging
 
 from renku_data_services.solr.solr_schema import (
     Analyzer,
+    DeleteFieldCommand,
     Field,
     FieldName,
     FieldType,
+    ReplaceCommand,
+    Tokenizers,
     TypeName,
     CopyFieldRule,
     AddCommand,
@@ -38,7 +41,7 @@ async def _test():
 
 
 async def _test2():
-    tokenizer = Tokenizer(name=TypeName("classic"))
+    tokenizer = Tokenizers.uax29UrlEmail
     filter = Filters.ngram
     analyzer = Analyzer(tokenizer=tokenizer, filters=[filter])
     ft = FieldType(name=TypeName("name_s"), clazz=FieldTypeClasses.type_text, index_analyzer=analyzer)
@@ -52,6 +55,8 @@ async def _test2():
             AddCommand(CopyFieldRule(source=FieldName("other_name_s"), dest=FieldName("target_name_s"))),
             AddCommand(field),
             AddCommand(Field.of(name=FieldName("user_name"), type=ft)),
+            ReplaceCommand(ft),
+            DeleteFieldCommand(FieldName("user_n_s"))
         ]
     )
     print(cmds.to_json())
