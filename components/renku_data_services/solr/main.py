@@ -20,18 +20,24 @@ from renku_data_services.solr.solr_schema import (
     Tokenizer,
 )
 
+from renku_data_services.solr.solr_client import SolrClient, DefaultSolrClient, SolrClientConfig, SolrQuery
+
 logging.basicConfig()
 logging.getLogger().setLevel(logging.DEBUG)
 
 
-# async def _test():
-#     client = await solr_client.DefaultSolrClient("http://rsdevcnt:8983/solr/renku-search-dev")
-#     doc = await client.query("*:*")
-#     await client.close()
-#     print(doc.docs)
-
-
 async def _test():
+    cfg = SolrClientConfig(base_url="http://rsdevcnt:8983", core="renku-search-dev", user=None)
+    async with DefaultSolrClient(cfg) as client:
+        r = await client.modify_schema(
+            SchemaCommandList(
+                [ReplaceCommand(FieldType(name=TypeName("content_all"), clazz=FieldTypeClasses.type_text))]
+            )
+        )
+        print(r.raise_for_status().json())
+
+
+async def _test0():
     tokenizer = Tokenizer(name=TypeName("classic"))
     filter = Filters.edgeNgram()
     analyzer = Analyzer(tokenizer=tokenizer, filters=[filter, Filters.ascii_folding])
@@ -56,11 +62,11 @@ async def _test2():
             AddCommand(field),
             AddCommand(Field.of(name=FieldName("user_name"), type=ft)),
             ReplaceCommand(ft),
-            DeleteFieldCommand(FieldName("user_n_s"))
+            DeleteFieldCommand(FieldName("user_n_s")),
         ]
     )
     print(cmds.to_json())
 
 
 if __name__ == "__main__":
-    asyncio.run(_test2())
+    asyncio.run(_test())

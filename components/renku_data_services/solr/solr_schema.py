@@ -295,6 +295,12 @@ class DeleteDynamicFieldCommand(SchemaCommand):
 class SchemaCommandList:
     value: list[SchemaCommand]
 
+    def is_not_empty(self) -> bool:
+        return not self.value
+
+    def is_empty(self) -> bool:
+        return not self.is_not_empty
+
     def to_json(self) -> str:
         result = "{"
         for e in self.value:
