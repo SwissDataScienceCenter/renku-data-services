@@ -461,17 +461,12 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
                 return await self.renku_ns_client.list_servers(label_selector)
             else:
                 raise
-        except CacheError:
-            logging.warning(f"Skipping the cache to list servers for user: {safe_username}")
-            label_selector = f"{self.username_label}={safe_username}"
-            return await self.renku_ns_client.list_servers(label_selector)
 
     async def get_server(self, name: str, safe_username: str) -> _SessionType | None:
         """Attempt to get a specific server by name from the cache.
 
         If the request to the cache fails, fallback to the k8s API.
         """
-        server = None
         try:
             server = await self.cache.get_server(name)
         except CacheError:
@@ -479,8 +474,6 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
                 server = await self.renku_ns_client.get_server(name)
             else:
                 raise
-        except CacheError:
-            server = await self.renku_ns_client.get_server(name)
 
         # NOTE: only the user that the server belongs to can read it, without the line
         # below anyone can request and read any one else's server
