@@ -138,22 +138,6 @@ files = [
 frozenlist = ">=1.1.0"
 
 [[package]]
-name = "aiosolr"
-version = "5.0.2"
-description = "Lightweight AsyncIO Python client for Apache Solr"
-optional = false
-python-versions = ">=3.10"
-groups = ["main"]
-files = [
-    {file = "aiosolr-5.0.2-py3-none-any.whl", hash = "sha256:0a69f9d7c3986d8effe62d444c9ec3af7b93a2969717439e5a1f9b8f850127cb"},
-    {file = "aiosolr-5.0.2.tar.gz", hash = "sha256:678fb1e46097e9760f1f34372cd2a22a472d0db7718eef600659d2b1a660397e"},
-]
-
-[package.dependencies]
-aiohttp = ">=3.8"
-bleach = ">=6"
-
-[[package]]
 name = "aiosqlite"
 version = "0.20.0"
 description = "asyncio bridge to the standard sqlite3 module"
@@ -492,24 +476,6 @@ colorama = ["colorama (>=0.4.3)"]
 d = ["aiohttp (>=3.10)"]
 jupyter = ["ipython (>=7.8.0)", "tokenize-rt (>=3.2.0)"]
 uvloop = ["uvloop (>=0.15.2)"]
-
-[[package]]
-name = "bleach"
-version = "6.2.0"
-description = "An easy safelist-based HTML-sanitizing tool."
-optional = false
-python-versions = ">=3.9"
-groups = ["main"]
-files = [
-    {file = "bleach-6.2.0-py3-none-any.whl", hash = "sha256:117d9c6097a7c3d22fd578fcd8d35ff1e125df6736f554da4e432fdd63f31e5e"},
-    {file = "bleach-6.2.0.tar.gz", hash = "sha256:123e894118b8a599fd80d3ec1a6d4cc7ce4e5882b1317a7e1ba69b56e95f991f"},
-]
-
-[package.dependencies]
-webencodings = "*"
-
-[package.extras]
-css = ["tinycss2 (>=1.1.0,<1.5)"]
 
 [[package]]
 name = "build"
@@ -5197,18 +5163,6 @@ files = [
 ]
 
 [[package]]
-name = "webencodings"
-version = "0.5.1"
-description = "Character encoding aliases for legacy web content"
-optional = false
-python-versions = "*"
-groups = ["main"]
-files = [
-    {file = "webencodings-0.5.1-py2.py3-none-any.whl", hash = "sha256:a0af1213f3c2226497a97e2b3aa01a7e4bee4f403f95be16fc9acd2947514a78"},
-    {file = "webencodings-0.5.1.tar.gz", hash = "sha256:b36a1c245f2d304965eb4e0a82848379241dc04b865afcc4aab16748587e1923"},
-]
-
-[[package]]
 name = "websocket-client"
 version = "1.8.0"
 description = "WebSocket client for Python with low level API options"
@@ -5512,4 +5466,4 @@ propcache = ">=0.2.0"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "13d64b4b931a7c7ba74153bf736281e07dca36184c0b52713322a87e532ed169"
+content-hash = "5b5c7ed96bc4cab3a34b59590781ec9fa3851e512cfef00a4d34e7e03237613e"

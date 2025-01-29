@@ -83,7 +83,6 @@ aiofiles = "^24.1.0"
 # Detected incompatible Protobuf Gencode/Runtime versions when loading authzed/api/v1/core.proto: gencode 5.28.2 runtime 5.27.3.
 protobuf = "^5.29.2"
 poetry = "^2.0.0"
-aiosolr = "^5.0.2"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.8.0"

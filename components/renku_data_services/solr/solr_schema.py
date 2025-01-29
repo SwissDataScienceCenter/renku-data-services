@@ -2,7 +2,7 @@
 
 from abc import abstractmethod
 from dataclasses import dataclass
-from pydantic import BaseModel, model_serializer
+from pydantic import AliasChoices, BaseModel, model_serializer
 from typing import NewType, final, Self, Any
 import json
 
@@ -26,7 +26,7 @@ class SchemaModel(BaseModel):
 
 @final
 class Tokenizer(SchemaModel):
-    name: TypeName
+    name: str
 
 
 @final
@@ -112,16 +112,31 @@ class FieldTypeClasses:
 @final
 class FieldType(SchemaModel):
     name: TypeName
-    clazz: FieldTypeClass = pydantic.Field(serialization_alias="class")
-    index_analyzer: Analyzer | None = None
-    query_analyzer: Analyzer | None = None
+    clazz: FieldTypeClass = pydantic.Field(validation_alias=AliasChoices("clazz", "class"), serialization_alias="class")
+    indexAnalyzer: Analyzer | None = None
+    queryAnalyzer: Analyzer | None = None
     required: bool = False
     indexed: bool = False
     stored: bool = True
-    multi_valued: bool = False
+    multiValued: bool = False
     uninvertible: bool = False
-    doc_values: bool = False
-    sort_missing_last: bool = True
+    docValues: bool = False
+    sortMissingLast: bool = True
+
+    def make_doc_value(self) -> Self:
+        return self.model_copy(update={"doc_values": True})
+
+    def make_multi_valued(self) -> Self:
+        return self.model_copy(update={"multi_valued": True})
+
+    def with_analyzer(self, a: Analyzer) -> Self:
+        return self.model_copy(update={"query_analyzer": a, "index_analyzer": a})
+
+    def with_query_analyzer(self, a: Analyzer) -> Self:
+        return self.model_copy(update={"query_analyzer": a})
+
+    def with_index_analyzer(self, a: Analyzer) -> Self:
+        return self.model_copy(update={"index_analyzer": a})
 
     @classmethod
     def id(cls, name: TypeName) -> Self:
@@ -152,6 +167,10 @@ class FieldType(SchemaModel):
     def dateTime(cls, name: TypeName) -> Self:
         return FieldType(name=name, clazz=FieldTypeClasses.type_date_range)
 
+    @classmethod
+    def dateTimePoint(cls, name: TypeName) -> Self:
+        return FieldType(name=name, clazz=FieldTypeClasses.type_date_point)
+
 
 @final
 class Field(SchemaModel):
@@ -167,6 +186,10 @@ class Field(SchemaModel):
     @classmethod
     def of(cls, name: FieldName, type: FieldType) -> Self:
         return Field(name=name, type=type.name)
+
+    def make_multi_valued(self) -> Self:
+       return self.model_copy(update={"multiValued": True})
+
 
 
 @final
@@ -281,7 +304,7 @@ class DeleteFieldTypeCommand(SchemaCommand):
 @dataclass
 @final
 class DeleteDynamicFieldCommand(SchemaCommand):
-    name: TypeName
+    name: FieldName
 
     def command_name(self) -> str:
         return "delete-dynamic-field"
@@ -299,7 +322,7 @@ class SchemaCommandList:
         return not self.value
 
     def is_empty(self) -> bool:
-        return not self.is_not_empty
+        return not self.is_not_empty()
 
     def to_json(self) -> str:
         result = "{"
@@ -310,3 +333,14 @@ class SchemaCommandList:
 
         result = result[:-1] + "}"
         return result
+
+
+@final
+class CoreSchema(BaseModel):
+    name: str
+    version: float
+    uniqueKey: FieldName
+    fieldTypes: list[FieldType] = pydantic.Field(default_factory=list)
+    fields: list[Field] = pydantic.Field(default_factory=list)
+    dynamicFields: list[DynamicFieldRule] = pydantic.Field(default_factory=list)
+    copyFields: list[CopyFieldRule] = pydantic.Field(default_factory=list)
