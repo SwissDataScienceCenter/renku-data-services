@@ -1,16 +1,16 @@
 from renku_data_services.solr.solr_schema import (
-    SchemaCommand,
-    Tokenizers,
-    TypeName,
-    Filters,
-    SchemaCommandList,
-    Analyzer,
-    FieldTypeClasses,
     AddCommand,
-    FieldType,
+    Analyzer,
+    CopyFieldRule,
     Field,
     FieldName,
-    CopyFieldRule,
+    FieldType,
+    FieldTypeClasses,
+    Filters,
+    SchemaCommand,
+    SchemaCommandList,
+    Tokenizers,
+    TypeName,
 )
 
 
@@ -18,7 +18,7 @@ def test_multiple_commands_in_one_object():
     tokenizer = Tokenizers.classic
     analyzer = Analyzer(tokenizer=tokenizer, filters=[Filters.ngram])
 
-    ft = FieldType(name=TypeName("name_s"), clazz=FieldTypeClasses.type_text, index_analyzer=analyzer)
+    ft = FieldType(name=TypeName("name_s"), clazz=FieldTypeClasses.type_text, indexAnalyzer=analyzer)
 
     cmds: list[SchemaCommand] = [
         AddCommand(Field.of(name=FieldName("project_name_s"), type=ft)),
@@ -27,14 +27,18 @@ def test_multiple_commands_in_one_object():
     ]
 
     json = SchemaCommandList(value=cmds).to_json()
-    assert (
-        json
-        == '{"add-field":{"name": "project_name_s", "type": "name_s"},"add-field":{"name": "user_name_s", "type": "name_s"},"add-copy-field":{"source": "username", "dest": "content_all"}}'
+    assert json == "".join(
+        [
+            '{"add-field":{"name": "project_name_s", "type": "name_s"},',
+            '"add-field":{"name": "user_name_s", "type": "name_s"},',
+            '"add-copy-field":{"source": "username", "dest": "content_all"}}',
+        ]
     )
+
 
 def test_encode_schema_command_add():
     v = AddCommand(Field(name=FieldName("description"), type=TypeName("integer")))
-    assert (SchemaCommandList([v]).to_json(), """{"add-field":{"name":"description","type":"integer"}}""")
+    assert SchemaCommandList([v]).to_json() == """{"add-field":{"name": "description", "type": "integer"}}"""
 
 
 def test_encode_filter_with_settings():

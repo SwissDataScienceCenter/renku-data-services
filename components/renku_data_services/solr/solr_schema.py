@@ -1,13 +1,12 @@
 """Schema modification for solr."""
 
+import json
 from abc import abstractmethod
 from dataclasses import dataclass
-from pydantic import AliasChoices, BaseModel, model_serializer
-from typing import NewType, final, Self, Any
-import json
+from typing import Any, NewType, Self, final
 
 import pydantic
-
+from pydantic import AliasChoices, BaseModel, model_serializer
 
 TypeName = NewType("TypeName", str)
 FieldName = NewType("FieldName", str)
@@ -21,16 +20,21 @@ class SchemaModel(BaseModel):
         return self.model_dump(by_alias=True, exclude_defaults=True)
 
     def to_json(self) -> str:
+        """Return this schema model as JSON."""
         return json.dumps(self.to_dict())
 
 
 @final
 class Tokenizer(SchemaModel):
+    """A solr tokenizer: https://solr.apache.org/guide/solr/latest/indexing-guide/tokenizers.html."""
+
     name: str
 
 
 @final
 class Tokenizers:
+    """Some predefined tokenizer."""
+
     standard: Tokenizer = Tokenizer(name="standard")
     whitespace: Tokenizer = Tokenizer(name="whitespace")
     classic: Tokenizer = Tokenizer(name="classic")
@@ -50,6 +54,7 @@ class Filter(BaseModel):
 
     @model_serializer()
     def to_dict(self) -> dict[str, Any]:
+        """Return a dict representation for this filter."""
         match self.settings:
             case None:
                 return {"name": self.name}
@@ -85,6 +90,8 @@ class Filters:
 
 @final
 class Analyzer(SchemaModel):
+    """A solr analyzer: https://solr.apache.org/guide/solr/latest/indexing-guide/analyzers.html."""
+
     tokenizer: Tokenizer
     filters: list[Filter] = pydantic.Field(default_factory=list)
 
@@ -111,6 +118,8 @@ class FieldTypeClasses:
 
 @final
 class FieldType(SchemaModel):
+    """A solr field type: https://solr.apache.org/guide/solr/latest/indexing-guide/field-type-definitions-and-properties.html."""
+
     name: TypeName
     clazz: FieldTypeClass = pydantic.Field(validation_alias=AliasChoices("clazz", "class"), serialization_alias="class")
     indexAnalyzer: Analyzer | None = None
@@ -124,76 +133,70 @@ class FieldType(SchemaModel):
     sortMissingLast: bool = True
 
     def make_doc_value(self) -> Self:
-        return self.model_copy(update={"doc_values": True})
+        """Return a copy with docValues=True."""
+        return self.model_copy(update={"docValues": True})
 
     def make_multi_valued(self) -> Self:
-        return self.model_copy(update={"multi_valued": True})
+        """Return a copy with multiValued=True."""
+        return self.model_copy(update={"multiValued": True})
 
     def with_analyzer(self, a: Analyzer) -> Self:
-        return self.model_copy(update={"query_analyzer": a, "index_analyzer": a})
+        """Return a copy with both analyzers set to the given one."""
+        return self.model_copy(update={"queryAnalyzer": a, "indexAnalyzer": a})
 
     def with_query_analyzer(self, a: Analyzer) -> Self:
-        return self.model_copy(update={"query_analyzer": a})
+        """Return a copy with query analyzers set to the given one."""
+        return self.model_copy(update={"queryAnalyzer": a})
 
     def with_index_analyzer(self, a: Analyzer) -> Self:
-        return self.model_copy(update={"index_analyzer": a})
+        """Return a copy with index analyzers set to the given one."""
+        return self.model_copy(update={"indexAnalyzer": a})
 
     @classmethod
-    def id(cls, name: TypeName) -> Self:
+    def id(cls, name: TypeName) -> "FieldType":
         """Create a field that can be used as a document id."""
         return FieldType(name=name, clazz=FieldTypeClasses.type_str)
 
     @classmethod
-    def text(cls, name: TypeName) -> Self:
+    def text(cls, name: TypeName) -> "FieldType":
+        """Create a text field type."""
         return FieldType(name=name, clazz=FieldTypeClasses.type_text)
 
     @classmethod
-    def str(cls, name: TypeName) -> Self:
+    def str(cls, name: TypeName) -> "FieldType":
+        """Create a StrField field type."""
         return FieldType(name=name, clazz=FieldTypeClasses.type_str)
 
     @classmethod
-    def int(cls, name: TypeName) -> Self:
+    def int(cls, name: TypeName) -> "FieldType":
+        """Create an IntPointField field type."""
         return FieldType(name=name, clazz=FieldTypeClasses.type_int)
 
     @classmethod
-    def long(cls, name: TypeName) -> Self:
+    def long(cls, name: TypeName) -> "FieldType":
+        """Create a LongPointField field type."""
         return FieldType(name=name, clazz=FieldTypeClasses.type_long)
 
     @classmethod
-    def double(cls, name: TypeName) -> Self:
+    def double(cls, name: TypeName) -> "FieldType":
+        """Create a DoublePointField field type."""
         return FieldType(name=name, clazz=FieldTypeClasses.type_double)
 
     @classmethod
-    def dateTime(cls, name: TypeName) -> Self:
+    def dateTime(cls, name: TypeName) -> "FieldType":
+        """Create a DateRange field type."""
         return FieldType(name=name, clazz=FieldTypeClasses.type_date_range)
 
     @classmethod
-    def dateTimePoint(cls, name: TypeName) -> Self:
+    def dateTimePoint(cls, name: TypeName) -> "FieldType":
+        """Create a DatePoint field type."""
         return FieldType(name=name, clazz=FieldTypeClasses.type_date_point)
 
 
 @final
 class Field(SchemaModel):
-    name: FieldName
-    type: TypeName
-    required: bool = False
-    indexed: bool = True
-    stored: bool = True
-    multiValued: bool = False
-    uninvertible: bool = True
-    docValues: bool = False
+    """A solr field: https://solr.apache.org/guide/solr/latest/indexing-guide/fields.html."""
 
-    @classmethod
-    def of(cls, name: FieldName, type: FieldType) -> Self:
-        return Field(name=name, type=type.name)
-
-    def make_multi_valued(self) -> Self:
-       return self.model_copy(update={"multiValued": True})
-
-
-
-@final
-class DynamicFieldRule(SchemaModel):
     name: FieldName
     type: TypeName
     required: bool = False
@@ -201,30 +204,68 @@ class DynamicFieldRule(SchemaModel):
     stored: bool = True
     multiValued: bool = False
     uninvertible: bool = False
-    docValues: bool = False
+    docValues: bool = True
+
+    @classmethod
+    def of(cls, name: FieldName, type: FieldType) -> "Field":
+        """Alternative constructor given a `FieldType` instead of a `TypeName`."""
+        return Field(name=name, type=type.name)
+
+    def make_multi_valued(self) -> Self:
+        """Return a copy with multiValued=True."""
+        return self.model_copy(update={"multiValued": True})
+
+
+@final
+class DynamicFieldRule(SchemaModel):
+    """A solr dynamic field: https://solr.apache.org/guide/solr/latest/indexing-guide/dynamic-fields.html."""
+
+    name: FieldName
+    type: TypeName
+    required: bool = False
+    indexed: bool = True
+    stored: bool = True
+    multiValued: bool = False
+    uninvertible: bool = False
+    docValues: bool = True
 
 
 @final
 class CopyFieldRule(SchemaModel):
+    """A solr copy field: https://solr.apache.org/guide/solr/latest/indexing-guide/copy-fields.html."""
+
     source: FieldName
     dest: FieldName
     maxChars: int | None = None
 
 
 class SchemaCommand:
-    @abstractmethod
-    def to_dict(self) -> dict[str, Any]: ...
+    """A base class for a schema command.
+
+    A schema command is a single action modifying the solr schema.
+    See https://solr.apache.org/guide/solr/latest/indexing-guide/schema-api.html
+    """
 
     @abstractmethod
-    def command_name(self) -> str: ...
+    def to_dict(self) -> dict[str, Any]:
+        """Return the dict representation for this schema command."""
+        ...
+
+    @abstractmethod
+    def command_name(self) -> str:
+        """Return the command name."""
+        ...
 
 
 @dataclass
 @final
 class AddCommand(SchemaCommand):
+    """SchemaCommand to add a field, field-type, dynamic field or copy field."""
+
     value: Field | FieldType | DynamicFieldRule | CopyFieldRule
 
     def command_name(self) -> str:
+        """Return the command name."""
         match self.value:
             case Field():
                 return "add-field"
@@ -239,6 +280,7 @@ class AddCommand(SchemaCommand):
                 return "add-copy-field"
 
     def to_dict(self) -> dict[str, Any]:
+        """Return the dict representation for this schema command."""
         match self.value:
             case Field() as f:
                 return f.to_dict()
@@ -256,9 +298,12 @@ class AddCommand(SchemaCommand):
 @dataclass
 @final
 class ReplaceCommand(SchemaCommand):
+    """Replace a field, field type or dynamic field."""
+
     value: FieldType | Field | DynamicFieldRule
 
     def command_name(self) -> str:
+        """Return the command name."""
         match self.value:
             case Field():
                 return "replace-field"
@@ -268,6 +313,7 @@ class ReplaceCommand(SchemaCommand):
                 return "replace-dynamic-field"
 
     def to_dict(self) -> dict[str, Any]:
+        """Return the dict representation for this schema command."""
         match self.value:
             case Field() as f:
                 return f.to_dict()
@@ -280,51 +326,72 @@ class ReplaceCommand(SchemaCommand):
 @dataclass
 @final
 class DeleteFieldCommand(SchemaCommand):
+    """Delete a field."""
+
     name: FieldName
 
     def command_name(self) -> str:
+        """Return the command name."""
         return "delete-field"
 
     def to_dict(self) -> dict[str, Any]:
+        """Return the dict representation for this schema command."""
         return {"name": self.name}
 
 
 @dataclass
 @final
 class DeleteFieldTypeCommand(SchemaCommand):
+    """Delete a field type."""
+
     name: TypeName
 
     def command_name(self) -> str:
+        """Return the command name."""
         return "delete-field-type"
 
     def to_dict(self) -> dict[str, Any]:
+        """Return the dict representation for this schema command."""
         return {"name": self.name}
 
 
 @dataclass
 @final
 class DeleteDynamicFieldCommand(SchemaCommand):
+    """Delete a dynamic field."""
+
     name: FieldName
 
     def command_name(self) -> str:
+        """Return the command name."""
         return "delete-dynamic-field"
 
     def to_dict(self) -> dict[str, Any]:
+        """Return the dict representation for this schema command."""
         return {"name": self.name}
 
 
 @dataclass
 @final
 class SchemaCommandList:
+    """A list of `SchemaCommand`s that provide a to_json method as expected by the solr schema api."""
+
     value: list[SchemaCommand]
 
     def is_not_empty(self) -> bool:
+        """The command list is non empty."""
         return not self.value
 
     def is_empty(self) -> bool:
+        """The command list is empty."""
         return not self.is_not_empty()
 
     def to_json(self) -> str:
+        """Return the JSON for all schema commands.
+
+        Solr uses multiple same named keys in a JSON object to refer to multiple schema
+        commands. So this implementation is a bit awkward to produce the required format.
+        """
         result = "{"
         for e in self.value:
             result += '"' + e.command_name() + '":'
@@ -337,6 +404,8 @@ class SchemaCommandList:
 
 @final
 class CoreSchema(BaseModel):
+    """The complete schema of a solr core."""
+
     name: str
     version: float
     uniqueKey: FieldName

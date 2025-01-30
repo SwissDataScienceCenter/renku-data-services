@@ -1,24 +1,26 @@
 """This defines an interface to SOLR."""
 
+import json
+import logging
+from abc import abstractmethod
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
-import logging
-
 from enum import Enum
 from types import TracebackType
-from urllib.parse import urljoin, urlparse, urlencode, urlunparse
-import json
-from typing import Any, Literal, Optional, Protocol, final, Self
+from typing import Any, Literal, Optional, Protocol, Self, final
+from urllib.parse import urlencode, urljoin, urlparse, urlunparse
 
 from httpx import AsyncClient, BasicAuth, Response
-
 from pydantic import AliasChoices, BaseModel, Field
-from renku_data_services.solr.solr_schema import SchemaCommandList, CoreSchema
+
+from renku_data_services.solr.solr_schema import CoreSchema, FieldName, SchemaCommandList
 
 
 @dataclass
 @final
 class SolrUser:
+    """User for authenticating at SOLR."""
+
     username: str
     password: str
 
@@ -26,6 +28,8 @@ class SolrUser:
 @dataclass
 @final
 class SolrClientConfig:
+    """Configuration object for instantiating a client."""
+
     base_url: str
     core: str
     user: Optional[SolrUser] = None
@@ -34,23 +38,32 @@ class SolrClientConfig:
 
 @final
 class SolrQuery(BaseModel):
+    """A query to solr using the JSON request api.
+
+    See: https://solr.apache.org/guide/solr/latest/query-guide/json-request-api.html
+    """
+
     query: str
     filter: list[str] = Field(default_factory=list)
     limit: int = 50
     offset: int = 0
-    fields: list[str] = Field(default_factory=list)
+    fields: list[str | FieldName] = Field(default_factory=list)
     params: dict[str, str] = Field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        return self.model_dump(exclude_unset=True)
+        """Return the dict representation of this query."""
+        return self.model_dump(exclude_defaults=True)
 
     @classmethod
-    def query_all(cls, qstr: str) -> Self:
+    def query_all_fields(cls, qstr: str) -> "SolrQuery":
+        """Create a query with defaults returning all fields of a document."""
         return SolrQuery(query=qstr, fields=["*"])
 
 
 @final
 class ResponseHeader(BaseModel):
+    """The responseHeader object as returned by solr."""
+
     status: int
     queryTime: int = Field(serialization_alias="QTime", validation_alias=AliasChoices("QTime", "queryTime"), default=0)
     params: dict[str, str] = Field(default_factory=dict)
@@ -58,16 +71,25 @@ class ResponseHeader(BaseModel):
 
 @final
 class UpsertSuccess(BaseModel):
+    """Response for an successful update."""
+
     header: ResponseHeader
 
 
 class DocVersion(Enum):
+    """Possible values for the _version_ field.
+
+    The _version_ field can be used to enable optimistic concurrency control:
+    https://solr.apache.org/guide/solr/latest/indexing-guide/partial-document-updates.html#optimistic-concurrency
+    """
+
     not_exists = -1
     exists = 1
     off = 0
 
     @classmethod
     def exact(cls, n: int) -> int:
+        """Return the argument, denoting an exact version."""
         return n
 
 
@@ -75,13 +97,21 @@ type UpsertResponse = UpsertSuccess | Literal["VersionConflict"]
 
 
 class SolrDocument(Protocol):
+    """The base for a document in SOLR.
+
+    All documents should have an `id` property denoting their primary identity.
+    """
+
     id: str
 
     def to_dict(self) -> dict[str, Any]:
         """Return a dict representation of this document."""
+        ...
 
 
 class ResponseBody(BaseModel):
+    """The body of a search response."""
+
     numFound: int
     start: int
     numFoundExact: bool
@@ -89,29 +119,55 @@ class ResponseBody(BaseModel):
 
 
 class QueryResponse(BaseModel):
+    """The complete response object for running a query.
+
+    Note, solr doesn't set the `responseHeader` for get-by-id requests. Otherwise it will be set.
+    """
+
     responseHeader: ResponseHeader = ResponseHeader(status=200)
     response: ResponseBody
 
 
-class SolrClient(Protocol):
+class SolrClient:
     """A client to SOLR."""
 
     async def close(self) -> None:
         """Shuts down this client."""
 
-    async def get_raw(self, id: str) -> Response: ...
+    @abstractmethod
+    async def get_raw(self, id: str) -> Response:
+        """Get a document by id and return the http response."""
+        ...
 
-    async def query_raw(self, query: SolrQuery) -> Response: ...
+    @abstractmethod
+    async def query_raw(self, query: SolrQuery) -> Response:
+        """Query documents and return the http response."""
+        ...
 
-    async def get(self, id: str) -> QueryResponse: ...
+    @abstractmethod
+    async def get(self, id: str) -> QueryResponse:
+        """Get a document by id, returning a `QueryResponse`."""
+        ...
 
-    async def query(self, query: SolrQuery) -> QueryResponse: ...
+    @abstractmethod
+    async def query(self, query: SolrQuery) -> QueryResponse:
+        """Query documents, returning a `QueryResponse`."""
+        ...
 
-    async def modify_schema(self, cmds: SchemaCommandList) -> Response: ...
+    @abstractmethod
+    async def modify_schema(self, cmds: SchemaCommandList) -> Response:
+        """Updates the schema with the given commands."""
+        ...
 
-    async def upsert(self, docs: list[SolrDocument]) -> UpsertResponse: ...
+    @abstractmethod
+    async def upsert(self, docs: list[SolrDocument]) -> UpsertResponse:
+        """Inserts or updates a document in SOLR."""
+        ...
 
-    async def get_schema(self) -> CoreSchema: ...
+    @abstractmethod
+    async def get_schema(self) -> CoreSchema:
+        """Return the schema of the core."""
+        ...
 
 
 class DefaultSolrClient(SolrClient, AbstractAsyncContextManager):
@@ -142,18 +198,22 @@ class DefaultSolrClient(SolrClient, AbstractAsyncContextManager):
         return await self.delegate.__aexit__(exc_type, exc, tb)
 
     async def get_raw(self, id: str) -> Response:
+        """Query documents and return the http response."""
         url = self._make_url("/get", {"ids": id})
         return await self.delegate.get(url)
 
     async def query_raw(self, query: SolrQuery) -> Response:
+        """Query documents and return the http response."""
         url = self._make_url("/query", {})
         return await self.delegate.post(url, json=query.to_dict())
 
     async def get(self, id: str) -> QueryResponse:
+        """Get a document by id, returning a `QueryResponse`."""
         resp = await self.get_raw(id)
         return QueryResponse.model_validate(resp.raise_for_status().json())
 
     async def query(self, query: SolrQuery) -> QueryResponse:
+        """Query documents, returning a `QueryResponse`."""
         resp = await self.query_raw(query)
         return QueryResponse.model_validate(resp.raise_for_status().json())
 

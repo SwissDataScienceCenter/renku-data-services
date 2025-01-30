@@ -1,10 +1,17 @@
-from dataclasses import dataclass
+"""Manage solr schema migrations."""
+
 import logging
+from dataclasses import dataclass
 from typing import Any, Self
 
-from pydantic import AliasChoices, BaseModel
 import pydantic
-from renku_data_services.solr.solr_client import DefaultSolrClient, DocVersion, SolrClient, SolrClientConfig
+from pydantic import AliasChoices, BaseModel
+
+from renku_data_services.solr.solr_client import (
+    DefaultSolrClient,
+    DocVersion,
+    SolrClientConfig,
+)
 from renku_data_services.solr.solr_schema import (
     AddCommand,
     CopyFieldRule,
@@ -22,6 +29,7 @@ from renku_data_services.solr.solr_schema import (
 
 
 def _is_applied(schema: CoreSchema, cmd: SchemaCommand) -> bool:
+    """Check whether a schema command is already applied to the given schema."""
     match cmd:
         case AddCommand(FieldType() as ft):
             return any(x.name == ft.name for x in schema.fieldTypes)
@@ -56,20 +64,30 @@ def _is_applied(schema: CoreSchema, cmd: SchemaCommand) -> bool:
 
 @dataclass
 class SchemaMigration:
+    """A migration consisting of the version and a set of schema commands."""
+
     version: int
     commands: list[SchemaCommand]
     requires_reindex: bool
 
     def is_empty(self) -> bool:
+        """Return whether the migration contains any commands."""
         return self.commands == []
 
     def align_with(self, schema: CoreSchema) -> Self:
-        cmds = list(filter(lambda e: not(_is_applied(schema, e)), self.commands))
+        """Aligns the list of schema commands to the given schema.
+
+        Return a copy of this value, removing all schema commands that have already
+        been applied to the given schema.
+        """
+        cmds = list(filter(lambda e: not (_is_applied(schema, e)), self.commands))
         return type(self)(version=self.version, commands=cmds, requires_reindex=self.requires_reindex)
 
 
 @dataclass
 class MigrateResult:
+    """The overall result of running a set of migrations."""
+
     startVersion: int | None
     endVersion: int | None
     migrationsRun: int
@@ -78,6 +96,7 @@ class MigrateResult:
 
     @classmethod
     def empty(cls) -> "MigrateResult":
+        """Create an empty MigrateResult."""
         return MigrateResult(None, None, 0, 0, False)
 
 
@@ -92,16 +111,21 @@ class VersionDoc(BaseModel):
     )
 
     def to_dict(self) -> dict[str, Any]:
+        """Return the dict representation of this document."""
         return self.model_dump(by_alias=True)
 
 
 class MigrationState(BaseModel):
+    """A private class tracking intermediate schema changes per migration."""
+
     solr_schema: CoreSchema
     doc: VersionDoc
     skippedMigrations: int
 
 
 class SchemaMigrator:
+    """Allows to inspect the current schema version and run schema migrations against a solr core."""
+
     def __init__(self, cfg: SolrClientConfig) -> None:
         self.__config = cfg
         self.__docId: str = "VERSION_ID_EB779C6B-1D96-47CB-B304-BECF15E4A607"
@@ -116,7 +140,7 @@ class SchemaMigrator:
                 return doc.current_schema_version_l
 
     async def __current_version0(self, client: DefaultSolrClient) -> VersionDoc | None:
-        """Return the current schema version."""
+        """Return the current schema version document."""
         resp = await client.get_raw(self.__docId)
         docs = resp.raise_for_status().json()["response"]["docs"]
         if docs == []:
@@ -138,7 +162,12 @@ class SchemaMigrator:
         self, client: DefaultSolrClient, migrations: list[SchemaMigration], initialDoc: VersionDoc
     ) -> MigrateResult:
         logging.info(
-            f"Core {self.__config.core}: Found current schema version: {initialDoc.current_schema_version_l} using {self.__docId}"
+            "".join(
+                [
+                    f"Core {self.__config.core}: Found current schema version: ",
+                    f"{initialDoc.current_schema_version_l} using {self.__docId}",
+                ]
+            )
         )
         remain = [e for e in migrations if e.version > initialDoc.current_schema_version_l]
         logging.info(f"There are {len(remain)} migrations to run")
