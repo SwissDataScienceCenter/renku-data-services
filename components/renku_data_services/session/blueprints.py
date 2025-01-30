@@ -55,7 +55,7 @@ class EnvironmentsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.EnvironmentPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.EnvironmentPost) -> JSONResponse:
-            new_environment = validate_unsaved_environment(body, models.EnvironmentKind.global_)
+            new_environment = validate_unsaved_environment(body, models.EnvironmentKind.GLOBAL)
             environment = await self.session_repo.insert_environment(user=user, environment=new_environment)
             return validated_json(apispec.Environment, environment, status=201)
 

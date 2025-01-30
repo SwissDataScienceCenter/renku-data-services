@@ -21,9 +21,9 @@ class Member:
 class EnvironmentKind(StrEnum):
     """The type of environment."""
 
-    global_: str = "global"
-    custom: str = "custom"
-    builder: str = "builder"
+    GLOBAL: str = "GLOBAL"
+    CUSTOM: str = "CUSTOM"
+    BUILDER: str = "BUILDER"
 
 
 class VEnvKind(StrEnum):
@@ -75,11 +75,11 @@ class UnsavedEnvironment:
     is_archived: bool = False
 
     def __post_init__(self) -> None:
-        if self.builder_id and not self.environment_kind == EnvironmentKind.builder:
+        if self.builder_id and not self.environment_kind == EnvironmentKind.BUILDER:
             raise errors.ValidationError(
                 message="For a BUILDER enviroment kind, the builder_id should define the ImageBuilder"
             )
-        if self.builder_id and not self.environment_kind != EnvironmentKind.builder:
+        if self.builder_id and not self.environment_kind != EnvironmentKind.BUILDER:
             raise errors.ValidationError(message="If the environment kind is not a BUILDER, builder_id is useless")
         if self.working_directory and not self.working_directory.is_absolute():
             raise errors.ValidationError(message="The working directory for a session is supposed to be absolute")

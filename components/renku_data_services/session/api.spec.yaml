@@ -625,9 +625,9 @@ components:
       description: Kind of environment to use
       type: string
       enum:
-        - global
-        - custom
-        - builder
+        - GLOBAL
+        - CUSTOM
+        - BUILDER
     EnvironmentId:
       description: Id of the environment to use
       type: string
