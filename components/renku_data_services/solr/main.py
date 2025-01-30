@@ -15,6 +15,7 @@ from renku_data_services.solr.solr_schema import (
     FieldName,
     FieldType,
     ReplaceCommand,
+    SchemaCommand,
     Tokenizers,
     TypeName,
     CopyFieldRule,
@@ -42,6 +43,7 @@ class ProjectDoc(BaseModel):
 
     id: str
     name: str
+    etag: int
     version: int = pydantic.Field(serialization_alias="_version_")
 
     def to_dict(self) -> dict[str, Any]:
@@ -65,9 +67,11 @@ async def _test_schema():
 async def _test_upsert():
     cfg = SolrClientConfig(base_url="http://rsdevcnt:8983", core="renku-search-dev", user=None)
     async with DefaultSolrClient(cfg) as client:
-        mydoc = ProjectDoc(id="p123", name="my project", version=DocVersion.exact(15654))
+        mydoc = ProjectDoc(id="p123", name="my project", version=DocVersion.off.value)
         res = await client.upsert([mydoc])
         print(res)
+        doc = await client.query(SolrQuery.query_all('*:*'))
+        print(doc.response.docs)
 
 
 async def _test_get_schema():
@@ -104,7 +108,7 @@ async def _test2():
     tokenizer = Tokenizers.uax29UrlEmail
     filter = Filters.ngram
     analyzer = Analyzer(tokenizer=tokenizer, filters=[filter])
-    ft = FieldType(name=TypeName("name_s"), clazz=FieldTypeClasses.type_text, index_analyzer=analyzer)
+    ft = FieldType(name=TypeName("name_s"), clazz=FieldTypeClasses.type_text, indexAnalyzer=analyzer)
     field = Field.of(name=FieldName("project_name"), type=ft)
     field.required = True
     field.indexed = True
@@ -128,5 +132,19 @@ async def _test_entity_schema():
     r = await migrator.migrate(entity_schema.all_migrations)
     print(r)
 
+async def _test_etag():
+    cfg = SolrClientConfig(base_url="http://rsdevcnt:8983", core="renku-search-dev", user=None)
+
+    schema: list[SchemaCommand] = [
+        AddCommand(Field(name=FieldName("etag"), type=TypeName("plong"))),
+        AddCommand(Field(name=FieldName("name"), type=TypeName("string"))),
+        AddCommand(CopyFieldRule(source=FieldName("etag"), dest=FieldName("_version_")))
+    ]
+    async with DefaultSolrClient(cfg) as client:
+        await client.modify_schema(SchemaCommandList(value=schema))
+
+        p = ProjectDoc(id="p1", name="ai stuff", etag=2, version=DocVersion.not_exists.value)
+        await client.upsert([p])
+
 if __name__ == "__main__":
-    asyncio.run(_test_entity_schema())
+    asyncio.run(_test_etag())

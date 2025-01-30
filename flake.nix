@@ -76,6 +76,8 @@
         ZED_ENDPOINT = "localhost:50051";
         ZED_TOKEN = "dev";
 
+        SOLR_BIN_PATH = "${devshellToolsPkgs.solr}/bin/solr";
+
         shellHook = ''
           export FLAKE_ROOT="$(git rev-parse --show-toplevel)"
           export PATH="$FLAKE_ROOT/.venv/bin:$PATH"
@@ -90,6 +92,7 @@
         postgresql
         jq
         devshellToolsPkgs.openapi-docs
+        devshellToolsPkgs.solr
         spicedb
         cargo
         rustc
