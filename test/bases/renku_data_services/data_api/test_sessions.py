@@ -414,6 +414,7 @@ async def test_post_session_launcher(
     assert res.json.get("project_id") == project["id"]
     assert res.json.get("description") == "A session launcher."
     environment = res.json.get("environment", {})
+    assert environment.get("name") == "custom_name"
     assert environment.get("environment_kind") == "CUSTOM"
     assert environment.get("container_image") == "some_image:some_tag"
     assert environment.get("id") is not None
