@@ -8,44 +8,44 @@ info:
 servers:
   - url: /api/data
 paths:
-  /image_builder:
+  /build_parameters:
     post:
-      summary: Create a new image builder
+      summary: Create a new build parameter
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ImageBuilderPost"
+              $ref: "#/components/schemas/BuildParameterPost"
       responses:
         "201":
-          description: The image builder was created
+          description: The build parameter was created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ImageBuilder"
+                $ref: "#/components/schemas/BuildParameter"
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - image_builder
-  /image_builder/{image_builder_id}:
+        - build_parameters
+  /build_parameters/{build_parameter_id}:
     get:
-      summary: Get an image builder
+      summary: Get a build parameter
       parameters:
         - in: path
-          name: image_builder_id
+          name: build_parameter_id
           required: true
           schema:
             $ref: "#/components/schemas/Ulid"
       responses:
         "200":
-          description: The image builder
+          description: The build parameter
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ImageBuilder"
+                $ref: "#/components/schemas/BuildParameter"
         "404":
-          description: The image builder does not exist
+          description: The build parameter does not exist
           content:
             application/json:
               schema:
@@ -53,12 +53,12 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - image_builder
+        - build_parameters
     patch:
-      summary: Update specific fields of an existing image builder
+      summary: Update specific fields of an existing build parameter
       parameters:
         - in: path
-          name: image_builder_id
+          name: build_parameter_id
           required: true
           schema:
             $ref: "#/components/schemas/Ulid"
@@ -67,16 +67,16 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ImageBuilderPatch"
+              $ref: "#/components/schemas/BuildParameterPatch"
       responses:
         "200":
-          description: The patched image builder
+          description: The patched build parameter
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ImageBuilder"
+                $ref: "#/components/schemas/BuildParameter"
         "404":
-          description: The image builder does not exist
+          description: The build parameter does not exist
           content:
             application/json:
               schema:
@@ -84,22 +84,22 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - image_builder
+        - build_parameters
     delete:
-      summary: Remove an image builder
+      summary: Remove a build parameter
       parameters:
         - in: path
-          name: image_builder_id
+          name: build_parameter_id
           required: true
           schema:
             $ref: "#/components/schemas/Ulid"
       responses:
         "204":
-          description: The image builder was removed or did not exist in the first place
+          description: The build parameter was removed or did not exist in the first place
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - image_builder
+        - build_parameters
   /environments:
     get:
       summary: Get all global environments
@@ -366,7 +366,7 @@ components:
           $ref: "#/components/schemas/Description"
         container_image:
           $ref: "#/components/schemas/ContainerImage"
-        image_builder_id:
+        build_parameter_id:
           $ref: "#/components/schemas/Ulid"
         default_url:
           $ref: "#/components/schemas/DefaultUrl"
@@ -642,8 +642,8 @@ components:
       description: A description for the resource
       type: string
       maxLength: 500
-    ImageBuilder:
-      description: A strategy to create an image builder
+    BuildParameter:
+      description: A strategy to create a build parameter
       type: object
       additionalProperties: false
       properties:
@@ -654,7 +654,7 @@ components:
         revision:
           $ref: "#/components/schemas/Revision"
         subdir:
-          $ref: "#/components/schemas/ImageBuilderSubDir"
+          $ref: "#/components/schemas/SubDir"
         builder_variant:
           $ref: "#/components/schemas/BuilderVariant"
         frontend_variant:
@@ -663,8 +663,8 @@ components:
         - repository
         - builder_variant
         - frontend_variant
-    ImageBuilderPost:
-      description: Data required to create an image builder
+    BuildParameterPost:
+      description: Data required to create a build parameter
       type: object
       properties:
         repository:
@@ -672,7 +672,7 @@ components:
         revision:
           $ref: "#/components/schemas/Revision"
         subdir:
-          $ref: "#/components/schemas/ImageBuilderSubDir"
+          $ref: "#/components/schemas/SubDir"
         builder_variant:
           $ref: "#/components/schemas/BuilderVariant"
         frontend_variant:
@@ -681,8 +681,8 @@ components:
         - repository
         - builder_variant
         - frontend_variant
-    ImageBuilderPatch:
-      description: Update an image builder
+    BuildParameterPatch:
+      description: Update a build parameter
       type: object
       additionalProperties: false
       properties:
@@ -691,7 +691,7 @@ components:
         revision:
           $ref: "#/components/schemas/Revision"
         subdir:
-          $ref: "#/components/schemas/ImageBuilderSubDir"
+          $ref: "#/components/schemas/SubDir"
         builder_variant:
           $ref: "#/components/schemas/BuilderVariant"
         frontend_variant:
@@ -713,7 +713,7 @@ components:
       description: The revision of the repository used as a basis for a custom builder
       type: string
       maxLength: 100
-    ImageBuilderSubDir:
+    SubDir:
       description: The sub directory of the repository used as a basis for a custom builder
       type: string
       minLength: 1
@@ -766,7 +766,9 @@ components:
       example: "/home/jovyan/work"
     EnvironmentMountDirectory:
       type: string
-      description: The location where the persistent storage for the session will be mounted, usually it should be identical to or a parent of the working directory, if left unset will default to the working directory.
+      description:
+        The location where the persistent storage for the session will be mounted, usually it should be identical to or
+        a parent of the working directory, if left unset will default to the working directory.
       minLength: 1
       example: "/home/jovyan/work"
     EnvironmentMountDirectoryPatch:
