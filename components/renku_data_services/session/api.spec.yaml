@@ -8,98 +8,6 @@ info:
 servers:
   - url: /api/data
 paths:
-  /build_parameters:
-    post:
-      summary: Create a new build parameter
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/BuildParameterPost"
-      responses:
-        "201":
-          description: The build parameter was created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BuildParameter"
-        default:
-          $ref: "#/components/responses/Error"
-      tags:
-        - build_parameters
-  /build_parameters/{build_parameter_id}:
-    get:
-      summary: Get a build parameter
-      parameters:
-        - in: path
-          name: build_parameter_id
-          required: true
-          schema:
-            $ref: "#/components/schemas/Ulid"
-      responses:
-        "200":
-          description: The build parameter
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BuildParameter"
-        "404":
-          description: The build parameter does not exist
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        default:
-          $ref: "#/components/responses/Error"
-      tags:
-        - build_parameters
-    patch:
-      summary: Update specific fields of an existing build parameter
-      parameters:
-        - in: path
-          name: build_parameter_id
-          required: true
-          schema:
-            $ref: "#/components/schemas/Ulid"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/BuildParameterPatch"
-      responses:
-        "200":
-          description: The patched build parameter
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BuildParameter"
-        "404":
-          description: The build parameter does not exist
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        default:
-          $ref: "#/components/responses/Error"
-      tags:
-        - build_parameters
-    delete:
-      summary: Remove a build parameter
-      parameters:
-        - in: path
-          name: build_parameter_id
-          required: true
-          schema:
-            $ref: "#/components/schemas/Ulid"
-      responses:
-        "204":
-          description: The build parameter was removed or did not exist in the first place
-        default:
-          $ref: "#/components/responses/Error"
-      tags:
-        - build_parameters
   /environments:
     get:
       summary: Get all global environments
@@ -651,12 +559,10 @@ components:
       type: string
       maxLength: 500
     BuildParameter:
-      description: A strategy to create a build parameter
+      description: A build parameter
       type: object
       additionalProperties: false
       properties:
-        id:
-          $ref: "#/components/schemas/Ulid"
         repository:
           $ref: "#/components/schemas/Repository"
         revision:
@@ -668,7 +574,6 @@ components:
         frontend_variant:
           $ref: "#/components/schemas/FrontendVariant"
       required:
-        - id
         - repository
         - builder_variant
         - frontend_variant
