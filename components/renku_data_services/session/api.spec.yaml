@@ -557,10 +557,6 @@ components:
       properties:
         repository:
           $ref: "#/components/schemas/Repository"
-        revision:
-          $ref: "#/components/schemas/Revision"
-        subdir:
-          $ref: "#/components/schemas/SubDir"
         builder_variant:
           $ref: "#/components/schemas/BuilderVariant"
         frontend_variant:
@@ -575,10 +571,6 @@ components:
       properties:
         repository:
           $ref: "#/components/schemas/Repository"
-        revision:
-          $ref: "#/components/schemas/Revision"
-        subdir:
-          $ref: "#/components/schemas/SubDir"
         builder_variant:
           $ref: "#/components/schemas/BuilderVariant"
         frontend_variant:
@@ -605,14 +597,6 @@ components:
       type: string
       maxLength: 500
       example: "https://github.com/voila-gallery/gaussian-density"
-    Revision:
-      description: The revision of the repository used as a basis for a custom builder
-      type: string
-      maxLength: 100
-    SubDir:
-      description: The sub directory of the repository used as a basis for a custom builder
-      type: string
-      minLength: 1
     DefaultUrl:
       description: The default path to open in a session
       type: string
