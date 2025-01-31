@@ -274,8 +274,8 @@ components:
           $ref: "#/components/schemas/Description"
         container_image:
           $ref: "#/components/schemas/ContainerImage"
-        build_parameter:
-          $ref: "#/components/schemas/BuildParameter"
+        build_parameters:
+          $ref: "#/components/schemas/BuildParameters"
         environment_image_source:
           $ref: "#/components/schemas/EnvironmentImageSource"
         default_url:
@@ -318,7 +318,7 @@ components:
     EnvironmentPostInLauncher:
       oneOf:
         - $ref: "#/components/schemas/EnvironmentPost"
-        - $ref: "#/components/schemas/BuildParameterPost"
+        - $ref: "#/components/schemas/BuildParametersPost"
     EnvironmentPost:
       description: Data required to create a session environment
       type: object
@@ -405,8 +405,8 @@ components:
           $ref: "#/components/schemas/EnvironmentArgs"
         is_archived:
           $ref: "#/components/schemas/IsArchived"
-        build_parameter:
-          $ref: "#/components/schemas/BuildParameter"
+        build_parameters:
+          $ref: "#/components/schemas/BuildParameters"
         environment_image_source:
           $ref: "#/components/schemas/EnvironmentImageSource"
     SessionLaunchersList:
@@ -550,8 +550,8 @@ components:
       description: A description for the resource
       type: string
       maxLength: 500
-    BuildParameter:
-      description: A build parameter
+    BuildParameters:
+      description: Build parameters
       type: object
       additionalProperties: false
       properties:
@@ -565,8 +565,8 @@ components:
         - repository
         - builder_variant
         - frontend_variant
-    BuildParameterPost:
-      description: Data required to create a build parameter
+    BuildParametersPost:
+      description: Data required to create a build
       type: object
       properties:
         repository:
