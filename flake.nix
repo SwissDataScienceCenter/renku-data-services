@@ -88,6 +88,7 @@
       };
 
       commonPackages = with pkgs; [
+        devcontainer
         redis
         postgresql
         jq

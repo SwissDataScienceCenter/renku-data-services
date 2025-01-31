@@ -28,7 +28,10 @@
 			"command": "alias k=kubectl"
 		},
 		"ghcr.io/devcontainers-contrib/features/rclone:1": {},
-		"./k3d": {}
+		"./k3d": {},
+    "ghcr.io/devcontainers/features/nix:1": {
+      "flakeUrl": "https://github.com/eikek/devshell-tools"
+    }
 	},
 	"overrideFeatureInstallOrder": [
 		"ghcr.io/devcontainers-contrib/features/poetry",
