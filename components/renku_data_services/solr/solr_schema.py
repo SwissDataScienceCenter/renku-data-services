@@ -12,7 +12,7 @@ TypeName = NewType("TypeName", str)
 FieldName = NewType("FieldName", str)
 
 
-class SchemaModel(BaseModel):
+class SchemaModel(BaseModel, frozen=True):
     """Base class of a solr schema type."""
 
     def to_dict(self) -> dict[str, Any]:
@@ -25,7 +25,7 @@ class SchemaModel(BaseModel):
 
 
 @final
-class Tokenizer(SchemaModel):
+class Tokenizer(SchemaModel, frozen=True):
     """A solr tokenizer: https://solr.apache.org/guide/solr/latest/indexing-guide/tokenizers.html."""
 
     name: str
@@ -89,7 +89,7 @@ class Filters:
 
 
 @final
-class Analyzer(SchemaModel):
+class Analyzer(SchemaModel, frozen=True):
     """A solr analyzer: https://solr.apache.org/guide/solr/latest/indexing-guide/analyzers.html."""
 
     tokenizer: Tokenizer
@@ -117,7 +117,7 @@ class FieldTypeClasses:
 
 
 @final
-class FieldType(SchemaModel):
+class FieldType(SchemaModel, frozen=True):
     """A solr field type: https://solr.apache.org/guide/solr/latest/indexing-guide/field-type-definitions-and-properties.html."""
 
     name: TypeName
@@ -194,7 +194,7 @@ class FieldType(SchemaModel):
 
 
 @final
-class Field(SchemaModel):
+class Field(SchemaModel, frozen=True):
     """A solr field: https://solr.apache.org/guide/solr/latest/indexing-guide/fields.html."""
 
     name: FieldName
@@ -217,7 +217,7 @@ class Field(SchemaModel):
 
 
 @final
-class DynamicFieldRule(SchemaModel):
+class DynamicFieldRule(SchemaModel, frozen=True):
     """A solr dynamic field: https://solr.apache.org/guide/solr/latest/indexing-guide/dynamic-fields.html."""
 
     name: FieldName
@@ -231,7 +231,7 @@ class DynamicFieldRule(SchemaModel):
 
 
 @final
-class CopyFieldRule(SchemaModel):
+class CopyFieldRule(SchemaModel, frozen=True):
     """A solr copy field: https://solr.apache.org/guide/solr/latest/indexing-guide/copy-fields.html."""
 
     source: FieldName

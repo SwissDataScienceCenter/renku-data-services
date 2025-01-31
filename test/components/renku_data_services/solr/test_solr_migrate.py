@@ -1,9 +1,6 @@
-from asyncio import sleep
-from os import getenv
-
 import pytest
+
 from renku_data_services.solr import entity_schema
-from renku_data_services.solr.solr_client import DefaultSolrClient
 from renku_data_services.solr.solr_migrate import SchemaMigrator
 
 

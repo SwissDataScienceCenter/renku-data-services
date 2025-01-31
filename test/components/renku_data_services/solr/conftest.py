@@ -8,11 +8,11 @@ from os import getenv
 import httpx
 import pytest
 import pytest_asyncio
-from renku_data_services.solr import entity_schema
-from renku_data_services.solr.solr_migrate import SchemaMigrator
 from ulid import ULID
 
+from renku_data_services.solr import entity_schema
 from renku_data_services.solr.solr_client import SolrClientConfig
+from renku_data_services.solr.solr_migrate import SchemaMigrator
 
 
 @pytest.fixture(scope="session")
@@ -40,6 +40,7 @@ def solr_bin_path():
 
 
 async def __wait_for_solr(host: str, port: int) -> None:
+    tries = 0
     with httpx.Client() as c:
         while True:
             try:
@@ -47,7 +48,11 @@ async def __wait_for_solr(host: str, port: int) -> None:
                 return None
             except Exception as err:
                 print(err)
-                await sleep(1)
+                if tries >= 20:
+                    raise Exception(f"Cannot connect to solr, gave up after {tries} tries.")
+                else:
+                    tries = tries + 1
+                    await sleep(1)
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -70,11 +75,7 @@ async def solr_instance(tmp_path_factory, free_port, monkeysession, solr_bin_pat
             "-t",
             f"{solr_root}",
         ],
-        # env = {
-        #     "PATH": getenv("PATH"),
-        #     "SOLR_LOGS_DIR": f"{solr_root}",
-        #     "SOLR_ULIMIT_CHECKS": "false"
-        # }
+        env={"PATH": getenv("PATH", ""), "SOLR_LOGS_DIR": f"{solr_root}", "SOLR_ULIMIT_CHECKS": "false"},
     )
     monkeysession.setenv("SOLR_HOST", "localhost")
     monkeysession.setenv("SOLR_PORT", f"{port}")
@@ -112,6 +113,7 @@ def solr_config(solr_core, solr_bin_path):
     subprocess.run(["chmod", "644", conf_file])
 
     return solr_config
+
 
 @pytest_asyncio.fixture()
 async def solr_search(solr_config):

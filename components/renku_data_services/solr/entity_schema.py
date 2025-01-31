@@ -1,3 +1,5 @@
+"""Defines the solr schema used for the renku entities."""
+
 from renku_data_services.solr.solr_migrate import SchemaMigration
 from renku_data_services.solr.solr_schema import (
     AddCommand,
@@ -14,27 +16,31 @@ from renku_data_services.solr.solr_schema import (
 
 
 class Fields:
-    created_by: FieldName = FieldName("createdBy")
-    creation_date: FieldName = FieldName("creationDate")
-    description: FieldName = FieldName("description")
-    entityType: FieldName = FieldName("_type")
-    kind: FieldName = FieldName("_kind")
-    firstName: FieldName = FieldName("firstName")
-    id: FieldName = FieldName("id")
-    lastName: FieldName = FieldName("lastName")
-    members: FieldName = FieldName("members")
-    name: FieldName = FieldName("name")
-    repositories: FieldName = FieldName("repositories")
-    slug: FieldName = FieldName("slug")
-    visibility: FieldName = FieldName("visibility")
-    keywords: FieldName = FieldName("keywords")
-    namespace: FieldName = FieldName("namespace")
-    contentAll: FieldName = FieldName("content_all")
+    """A collection of fields."""
+
+    created_by = FieldName("createdBy")
+    creation_date = FieldName("creationDate")
+    description = FieldName("description")
+    entityType = FieldName("_type")
+    kind = FieldName("_kind")
+    firstName = FieldName("firstName")
+    id = FieldName("id")
+    lastName = FieldName("lastName")
+    members = FieldName("members")
+    name = FieldName("name")
+    repositories = FieldName("repositories")
+    slug = FieldName("slug")
+    visibility = FieldName("visibility")
+    keywords = FieldName("keywords")
+    namespace = FieldName("namespace")
+    contentAll = FieldName("content_all")
     # virtual score field
-    score: FieldName = FieldName("score")
+    score = FieldName("score")
 
 
 class Analyzers:
+    """A collection of analyzers."""
+
     textIndex = Analyzer(
         tokenizer=Tokenizers.uax29UrlEmail,
         filters=[
@@ -58,6 +64,8 @@ class Analyzers:
 
 
 class FieldTypes:
+    """A collection of field types."""
+
     id: FieldType = FieldType.id(TypeName("SearchId")).make_doc_value()
     string: FieldType = FieldType.str(TypeName("SearchString")).make_doc_value()
     text: FieldType = (

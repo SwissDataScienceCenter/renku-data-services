@@ -5,13 +5,13 @@ import logging
 from abc import abstractmethod
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
-from enum import Enum
+from enum import Enum, StrEnum
 from types import TracebackType
 from typing import Any, Literal, Optional, Protocol, Self, final
 from urllib.parse import urlencode, urljoin, urlparse, urlunparse
 
 from httpx import AsyncClient, BasicAuth, Response
-from pydantic import AliasChoices, BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field, field_serializer
 
 from renku_data_services.solr.solr_schema import CoreSchema, FieldName, SchemaCommandList
 
@@ -36,8 +36,15 @@ class SolrClientConfig:
     timeout: int = 600
 
 
+class SortDirection(StrEnum):
+    """Direction for sorting a field."""
+
+    asc = "asc"
+    desc = "desc"
+
+
 @final
-class SolrQuery(BaseModel):
+class SolrQuery(BaseModel, frozen=True):
     """A query to solr using the JSON request api.
 
     See: https://solr.apache.org/guide/solr/latest/query-guide/json-request-api.html
@@ -48,16 +55,25 @@ class SolrQuery(BaseModel):
     limit: int = 50
     offset: int = 0
     fields: list[str | FieldName] = Field(default_factory=list)
+    sort: list[tuple[FieldName, SortDirection]] = Field(default_factory=list)
     params: dict[str, str] = Field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """Return the dict representation of this query."""
         return self.model_dump(exclude_defaults=True)
 
+    def with_sort(self, s: list[tuple[FieldName, SortDirection]]) -> Self:
+        """Return a copy of this with an updated sort."""
+        return self.model_copy(update={"sort": s})
+
+    @field_serializer("sort", when_used="always")
+    def __serialize_sort(self, sort: list[tuple[FieldName, SortDirection]]) -> str:
+        return ",".join(list(map(lambda t: f"{t[0]} {t[1].value}", sort)))
+
     @classmethod
-    def query_all_fields(cls, qstr: str) -> "SolrQuery":
+    def query_all_fields(cls, qstr: str) -> Self:
         """Create a query with defaults returning all fields of a document."""
-        return SolrQuery(query=qstr, fields=["*"])
+        return SolrQuery(query=qstr, fields=["*", "score"])
 
 
 @final
