@@ -276,6 +276,8 @@ components:
           $ref: "#/components/schemas/ContainerImage"
         build_parameter:
           $ref: "#/components/schemas/BuildParameter"
+        environment_image_source:
+          $ref: "#/components/schemas/EnvironmentImageSource"
         default_url:
           $ref: "#/components/schemas/DefaultUrl"
         uid:
@@ -303,19 +305,7 @@ components:
         - uid
         - gid
         - default_url
-      example:
-        id: 01AN4Z79ZS6XX96588FDX0H099
-        name: JupyterLab environment
-        creation_date: "2023-11-01T17:32:28Z"
-        description: JupyterLab session environment
-        container_image: renku-jupyter:latest
-        default_url: "/lab"
-        port: 8080
-        working_directory: /home/jovyan/work
-        mount_directory: /home/jovyan/work
-        uid: 1000
-        gid: 1000
-        is_archive: false
+        - environment_image_source
     EnvironmentGetInLauncher:
       allOf:
         - $ref: "#/components/schemas/Environment"
@@ -326,23 +316,9 @@ components:
           required:
             - environment_kind
     EnvironmentPostInLauncher:
-      allOf:
-        - $ref: "#/components/schemas/EnvironmentPost"
-        - type: object
-          properties:
-            environment_kind:
-              $ref: "#/components/schemas/EnvironmentKind"
-            build_parameter:
-              $ref: "#/components/schemas/BuildParameterPost"
       oneOf:
-        - required:
-            - name
-            - environment_kind
-            - container_image
-        - required:
-            - name
-            - environment_kind
-            - build_parameter
+        - $ref: "#/components/schemas/EnvironmentPost"
+        - $ref: "#/components/schemas/BuildParameterPost"
     EnvironmentPost:
       description: Data required to create a session environment
       type: object
@@ -384,6 +360,15 @@ components:
         is_archived:
           $ref: "#/components/schemas/IsArchived"
           default: false
+        environment_image_source:
+          description: Source of the environment
+          type: string
+          enum:
+            - image
+      required:
+        - name
+        - container_image
+        - environment_image_source
     EnvironmentPatchInLauncher:
       allOf:
         - $ref: "#/components/schemas/EnvironmentPatch"
@@ -391,8 +376,6 @@ components:
           properties:
             environment_kind:
               $ref: "#/components/schemas/EnvironmentKind"
-            build_parameter:
-              $ref: "#/components/schemas/BuildParameterPatch"
     EnvironmentPatch:
       type: object
       description: Update a session environment
@@ -422,6 +405,10 @@ components:
           $ref: "#/components/schemas/EnvironmentArgs"
         is_archived:
           $ref: "#/components/schemas/IsArchived"
+        build_parameter:
+          $ref: "#/components/schemas/BuildParameter"
+        environment_image_source:
+          $ref: "#/components/schemas/EnvironmentImageSource"
     SessionLaunchersList:
       description: A list of Renku session launchers
       type: array
@@ -538,12 +525,17 @@ components:
       required:
         - id
     EnvironmentKind:
-      description: Kind of environment to use
+      description: Kind of the environment
       type: string
       enum:
-        - GLOBAL
-        - CUSTOM
-        - BUILDER
+        - global
+        - custom
+    EnvironmentImageSource:
+      description: Source of the environment's image
+      type: string
+      enum:
+        - image
+        - build
     EnvironmentId:
       description: Id of the environment to use
       type: string
@@ -591,25 +583,15 @@ components:
           $ref: "#/components/schemas/BuilderVariant"
         frontend_variant:
           $ref: "#/components/schemas/FrontendVariant"
+        environment_image_source:
+          type: string
+          enum:
+            - build
       required:
         - repository
         - builder_variant
         - frontend_variant
-    BuildParameterPatch:
-      description: Update a build parameter
-      type: object
-      additionalProperties: false
-      properties:
-        repository:
-          $ref: "#/components/schemas/Repository"
-        revision:
-          $ref: "#/components/schemas/Revision"
-        subdir:
-          $ref: "#/components/schemas/SubDir"
-        builder_variant:
-          $ref: "#/components/schemas/BuilderVariant"
-        frontend_variant:
-          $ref: "#/components/schemas/FrontendVariant"
+        - environment_image_source
     ContainerImage:
       description: A container image
       type: string
