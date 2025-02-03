@@ -440,7 +440,7 @@ components:
         environment_image_source:
           $ref: "#/components/schemas/EnvironmentImageSource"
         build_parameters:
-          $ref: "#/components/schemas/BuildParameters"
+          $ref: "#/components/schemas/BuildParametersPatch"
     SessionLaunchersList:
       description: A list of Renku session launchers
       type: array
@@ -621,6 +621,16 @@ components:
         - builder_variant
         - frontend_variant
         - environment_image_source
+    BuildParametersPatch:
+      description: Data for updating a build
+      type: object
+      properties:
+        repository:
+          $ref: "#/components/schemas/Repository"
+        builder_variant:
+          $ref: "#/components/schemas/BuilderVariant"
+        frontend_variant:
+          $ref: "#/components/schemas/FrontendVariant"
     ContainerImage:
       description: A container image
       type: string
