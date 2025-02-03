@@ -343,6 +343,7 @@ def v5_schema() -> SpiceDBSchema:
     )
 
 
+@pytest.fixture
 def v6_schema() -> SpiceDBSchema:
     return SpiceDBSchema(
         schemas._v6,
