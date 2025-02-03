@@ -26,6 +26,7 @@ def upgrade() -> None:
         schema="common",
         postgresql_nulls_not_distinct=True,
     )
+    op.drop_constraint("either_project_id_or_data_connector_id_is_set", "entity_slugs", schema="common", type_="check")
     # ### end Alembic commands ###
 
 
@@ -35,4 +36,10 @@ def downgrade() -> None:
         "entity_slugs_unique_slugs", table_name="entity_slugs", schema="common", postgresql_nulls_not_distinct=True
     )
     op.create_index("entity_slugs_unique_slugs", "entity_slugs", ["namespace_id", "slug"], unique=True, schema="common")
+    op.create_check_constraint(
+        "either_project_id_or_data_connector_id_is_set",
+        "entity_slugs",
+        "CAST (project_id IS NOT NULL AS int) + CAST (data_connector_id IS NOT NULL AS int) BETWEEN 0 AND 1",
+        schema="common",
+    )
     # ### end Alembic commands ###
