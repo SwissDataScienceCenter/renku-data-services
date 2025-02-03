@@ -107,6 +107,7 @@ async def test_post_session_environment(sanic_client: SanicASGITestClient, admin
         "name": "Environment 1",
         "description": "A session environment.",
         "container_image": image_name,
+        "environment_image_source": "image",
     }
 
     _, res = await sanic_client.post("/api/data/environments", headers=admin_headers, json=payload)

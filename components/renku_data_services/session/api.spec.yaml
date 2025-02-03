@@ -274,10 +274,6 @@ components:
           $ref: "#/components/schemas/Description"
         container_image:
           $ref: "#/components/schemas/ContainerImage"
-        build_parameters:
-          $ref: "#/components/schemas/BuildParameters"
-        environment_image_source:
-          $ref: "#/components/schemas/EnvironmentImageSource"
         default_url:
           $ref: "#/components/schemas/DefaultUrl"
         uid:
@@ -305,20 +301,49 @@ components:
         - uid
         - gid
         - default_url
-        - environment_image_source
     EnvironmentGetInLauncher:
       allOf:
-        - $ref: "#/components/schemas/Environment"
+        - oneOf:
+          - $ref: "#/components/schemas/EnvironmentWithImageGet"
+          - $ref: "#/components/schemas/EnvironmentWithBuildGet"
         - type: object
           properties:
             environment_kind:
               $ref: "#/components/schemas/EnvironmentKind"
           required:
             - environment_kind
+    EnvironmentWithImageGet:
+      allOf:
+        - $ref: "#/components/schemas/Environment"
+        - type: object
+          properties:
+            environment_image_source:
+              $ref: "#/components/schemas/EnvironmentImageSourceImage"
+          required:
+            - environment_image_source
+    EnvironmentWithBuildGet:
+      allOf:
+        - $ref: "#/components/schemas/Environment"
+        - type: object
+          properties:
+            build_parameters:
+              $ref: "#/components/schemas/BuildParameters"
+            environment_image_source:
+              $ref: "#/components/schemas/EnvironmentImageSourceBuild"
+          required:
+            - build_parameters
+            - environment_image_source
     EnvironmentPostInLauncher:
-      oneOf:
-        - $ref: "#/components/schemas/EnvironmentPost"
-        - $ref: "#/components/schemas/BuildParametersPost"
+      allOf:
+        - oneOf:
+          - $ref: "#/components/schemas/EnvironmentPost"
+          - $ref: "#/components/schemas/BuildParametersPost"
+        - type: object
+          properties:
+          environment_kind:
+            $ref: "#/components/schemas/EnvironmentKind"
+          required:
+            - environment_kind
     EnvironmentPost:
       description: Data required to create a session environment
       type: object
@@ -361,21 +386,22 @@ components:
           $ref: "#/components/schemas/IsArchived"
           default: false
         environment_image_source:
-          description: Source of the environment
-          type: string
-          enum:
-            - image
+          $ref: "#/components/schemas/EnvironmentImageSourceImage"
       required:
         - name
         - container_image
         - environment_image_source
     EnvironmentPatchInLauncher:
       allOf:
-        - $ref: "#/components/schemas/EnvironmentPatch"
+        - oneOf:
+          - $ref: "#/components/schemas/EnvironmentPatch"
+          - $ref: "#/components/schemas/BuildParametersPatch"
         - type: object
           properties:
-            environment_kind:
-              $ref: "#/components/schemas/EnvironmentKind"
+          environment_kind:
+            $ref: "#/components/schemas/EnvironmentKind"
+          required:
+            - environment_kind
     EnvironmentPatch:
       type: object
       description: Update a session environment
@@ -405,10 +431,10 @@ components:
           $ref: "#/components/schemas/EnvironmentArgs"
         is_archived:
           $ref: "#/components/schemas/IsArchived"
-        build_parameters:
-          $ref: "#/components/schemas/BuildParameters"
         environment_image_source:
-          $ref: "#/components/schemas/EnvironmentImageSource"
+          $ref: "#/components/schemas/EnvironmentImageSourceImage"
+      required:
+        - environment_image_source
     SessionLaunchersList:
       description: A list of Renku session launchers
       type: array
@@ -530,12 +556,19 @@ components:
       enum:
         - global
         - custom
-    EnvironmentImageSource:
-      description: Source of the environment's image
+    EnvironmentImageSourceImage:
       type: string
       enum:
         - image
+    EnvironmentImageSourceBuild:
+      type: string
+      enum:
         - build
+    EnvironmentImageSource:
+      description: Source of the environment's image
+      oneOf:
+        - $ref: "#/components/schemas/EnvironmentImageSourceImage"
+        - $ref: "#/components/schemas/EnvironmentImageSourceBuild"
     EnvironmentId:
       description: Id of the environment to use
       type: string
@@ -576,13 +609,25 @@ components:
         frontend_variant:
           $ref: "#/components/schemas/FrontendVariant"
         environment_image_source:
-          type: string
-          enum:
-            - build
+          $ref: "#/components/schemas/EnvironmentImageSourceBuild"
       required:
         - repository
         - builder_variant
         - frontend_variant
+        - environment_image_source
+    BuildParametersPatch:
+      description: Data required to update a build
+      type: object
+      properties:
+        repository:
+          $ref: "#/components/schemas/Repository"
+        builder_variant:
+          $ref: "#/components/schemas/BuilderVariant"
+        frontend_variant:
+          $ref: "#/components/schemas/FrontendVariant"
+        environment_image_source:
+          $ref: "#/components/schemas/EnvironmentImageSourceBuild"
+      required:
         - environment_image_source
     ContainerImage:
       description: A container image
