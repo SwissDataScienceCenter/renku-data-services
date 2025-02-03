@@ -47,7 +47,12 @@ class ProjectORM(BaseORM):
     # NOTE: The project slugs table has a foreign key from the projects table, but there is a stored procedure
     # triggered by the deletion of slugs to remove the project used by the slug. See migration 89aa4573cfa9.
     slug: Mapped["EntitySlugORM"] = relationship(
-        lazy="joined", init=False, repr=False, viewonly=True, back_populates="project"
+        # NOTE: joined lazy relationship can cause duplicates to be returned
+        lazy="selectin",
+        init=False,
+        repr=False,
+        viewonly=True,
+        back_populates="project",
     )
     repositories: Mapped[list["ProjectRepositoryORM"]] = relationship(
         back_populates="project",

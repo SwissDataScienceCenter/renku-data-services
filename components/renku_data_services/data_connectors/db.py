@@ -1,6 +1,5 @@
 """Adapters for data connectors database classes."""
 
-from operator import is_not
 import random
 import string
 from collections.abc import AsyncIterator, Callable
@@ -9,6 +8,7 @@ from typing import TypeVar, cast
 from cryptography.hazmat.primitives.asymmetric import rsa
 from sqlalchemy import Select, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 from ulid import ULID
 
 from renku_data_services import base_models, errors
@@ -21,6 +21,7 @@ from renku_data_services.data_connectors import orm as schemas
 from renku_data_services.namespace import orm as ns_schemas
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.models import Project
+from renku_data_services.project.orm import ProjectORM
 from renku_data_services.secrets import orm as secrets_schemas
 from renku_data_services.secrets.core import encrypt_user_secret
 from renku_data_services.secrets.models import SecretKind
@@ -50,7 +51,15 @@ class DataConnectorRepository:
         )
 
         async with self.session_maker() as session:
-            stmt = select(schemas.DataConnectorORM).where(schemas.DataConnectorORM.id.in_(data_connector_ids))
+            stmt = (
+                select(schemas.DataConnectorORM)
+                .where(schemas.DataConnectorORM.id.in_(data_connector_ids))
+                .options(
+                    joinedload(schemas.DataConnectorORM.slug)
+                    .joinedload(ns_schemas.EntitySlugORM.project)
+                    .selectinload(ProjectORM.slug)
+                )
+            )
             if namespace:
                 stmt = _filter_by_namespace_slug(stmt, namespace)
             stmt = stmt.limit(pagination.per_page).offset(pagination.offset)
@@ -81,7 +90,13 @@ class DataConnectorRepository:
 
         async with self.session_maker() as session:
             result = await session.scalars(
-                select(schemas.DataConnectorORM).where(schemas.DataConnectorORM.id == data_connector_id)
+                select(schemas.DataConnectorORM)
+                .where(schemas.DataConnectorORM.id == data_connector_id)
+                .options(
+                    joinedload(schemas.DataConnectorORM.slug)
+                    .joinedload(ns_schemas.EntitySlugORM.project)
+                    .selectinload(ProjectORM.slug)
+                )
             )
             data_connector = result.one_or_none()
             if data_connector is None:
@@ -270,7 +285,8 @@ class DataConnectorRepository:
         await session.flush()
         await session.refresh(data_connector_orm)
         await session.refresh(data_connector_slug)
-        await session.refresh(data_connector_slug.project)
+        if project:
+            await session.refresh(data_connector_slug.project)
 
         return data_connector_orm.dump()
 
@@ -641,12 +657,21 @@ class DataConnectorSecretRepository:
         )
 
         async with self.session_maker() as session:
-            stmt = select(schemas.DataConnectorORM).where(
-                schemas.DataConnectorORM.project_links.any(
-                    schemas.DataConnectorToProjectLinkORM.project_id == project_id
-                ),
-                schemas.DataConnectorORM.id.in_(data_connector_ids),
+            stmt = (
+                select(schemas.DataConnectorORM)
+                .where(
+                    schemas.DataConnectorORM.project_links.any(
+                        schemas.DataConnectorToProjectLinkORM.project_id == project_id
+                    ),
+                    schemas.DataConnectorORM.id.in_(data_connector_ids),
+                )
+                .options(
+                    joinedload(schemas.DataConnectorORM.slug)
+                    .joinedload(ns_schemas.EntitySlugORM.project)
+                    .selectinload(ProjectORM.slug)
+                )
             )
+
             results = await session.stream_scalars(stmt)
             async for dc in results:
                 secrets = await self.get_data_connector_secrets(user, dc.id)
