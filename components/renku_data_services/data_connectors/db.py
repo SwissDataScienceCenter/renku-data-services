@@ -1,5 +1,6 @@
 """Adapters for data connectors database classes."""
 
+from operator import is_not
 import random
 import string
 from collections.abc import AsyncIterator, Callable
@@ -205,6 +206,7 @@ class DataConnectorRepository:
                 select(ns_schemas.EntitySlugORM)
                 .where(ns_schemas.EntitySlugORM.slug == data_connector.project_slug)
                 .where(ns_schemas.EntitySlugORM.project_id.is_not(None))
+                .where(ns_schemas.EntitySlugORM.data_connector_id.is_(None))
             )
             if not project_slug or not project_slug.project_id:
                 raise errors.MissingResourceError(message=error_msg)
@@ -231,6 +233,7 @@ class DataConnectorRepository:
             select(ns_schemas.EntitySlugORM)
             .where(ns_schemas.EntitySlugORM.namespace_id == ns.id)
             .where(ns_schemas.EntitySlugORM.slug == slug)
+            .where(ns_schemas.EntitySlugORM.data_connector_id.is_not(None))
         )
         if project:
             existing_slug_stmt = existing_slug_stmt.where(ns_schemas.EntitySlugORM.project_id == project.id)
@@ -266,6 +269,8 @@ class DataConnectorRepository:
         session.add(data_connector_slug)
         await session.flush()
         await session.refresh(data_connector_orm)
+        await session.refresh(data_connector_slug)
+        await session.refresh(data_connector_slug.project)
 
         return data_connector_orm.dump()
 

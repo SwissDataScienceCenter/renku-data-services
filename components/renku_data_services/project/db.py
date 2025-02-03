@@ -261,6 +261,7 @@ class ProjectRepository:
             select(ns_schemas.EntitySlugORM)
             .where(ns_schemas.EntitySlugORM.namespace_id == ns.id)
             .where(ns_schemas.EntitySlugORM.slug == slug)
+            .where(ns_schemas.EntitySlugORM.data_connector_id.is_(None))
         )
         if existing_slug is not None:
             raise errors.ConflictError(message=f"An entity with the slug '{ns.slug}/{slug}' already exists.")
