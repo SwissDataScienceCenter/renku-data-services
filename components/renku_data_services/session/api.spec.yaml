@@ -260,7 +260,7 @@ components:
       type: array
       items:
         $ref: "#/components/schemas/Environment"
-    Environment:
+    EnvironmentWithoutContainerImage:
       description: A Renku 2.0 session environment
       type: object
       properties:
@@ -272,8 +272,6 @@ components:
           $ref: "#/components/schemas/CreationDate"
         description:
           $ref: "#/components/schemas/Description"
-        container_image:
-          $ref: "#/components/schemas/ContainerImage"
         default_url:
           $ref: "#/components/schemas/DefaultUrl"
         uid:
@@ -296,11 +294,19 @@ components:
         - id
         - name
         - creation_date
-        - container_image
         - port
         - uid
         - gid
         - default_url
+    Environment:
+      allOf:
+        - $ref: "#/components/schemas/EnvironmentWithoutContainerImage"
+        - type: object
+          properties:
+            container_image:
+              $ref: "#/components/schemas/ContainerImage"
+          required:
+            - container_image
     EnvironmentGetInLauncher:
       allOf:
         - oneOf:
@@ -323,9 +329,11 @@ components:
             - environment_image_source
     EnvironmentWithBuildGet:
       allOf:
-        - $ref: "#/components/schemas/Environment"
+        - $ref: "#/components/schemas/EnvironmentWithoutContainerImage"
         - type: object
           properties:
+            container_image:
+              $ref: "#/components/schemas/ContainerImage"
             build_parameters:
               $ref: "#/components/schemas/BuildParameters"
             environment_image_source:
@@ -340,8 +348,8 @@ components:
           - $ref: "#/components/schemas/BuildParametersPost"
         - type: object
           properties:
-          environment_kind:
-            $ref: "#/components/schemas/EnvironmentKind"
+            environment_kind:
+              $ref: "#/components/schemas/EnvironmentKind"
           required:
             - environment_kind
     EnvironmentPost:
@@ -393,13 +401,11 @@ components:
         - environment_image_source
     EnvironmentPatchInLauncher:
       allOf:
-        - oneOf:
-          - $ref: "#/components/schemas/EnvironmentPatch"
-          - $ref: "#/components/schemas/BuildParametersPatch"
+        - $ref: "#/components/schemas/EnvironmentPatch"
         - type: object
           properties:
-          environment_kind:
-            $ref: "#/components/schemas/EnvironmentKind"
+            environment_kind:
+              $ref: "#/components/schemas/EnvironmentKind"
           required:
             - environment_kind
     EnvironmentPatch:
@@ -432,9 +438,9 @@ components:
         is_archived:
           $ref: "#/components/schemas/IsArchived"
         environment_image_source:
-          $ref: "#/components/schemas/EnvironmentImageSourceImage"
-      required:
-        - environment_image_source
+          $ref: "#/components/schemas/EnvironmentImageSource"
+        build_parameters:
+          $ref: "#/components/schemas/BuildParameters"
     SessionLaunchersList:
       description: A list of Renku session launchers
       type: array
@@ -614,20 +620,6 @@ components:
         - repository
         - builder_variant
         - frontend_variant
-        - environment_image_source
-    BuildParametersPatch:
-      description: Data required to update a build
-      type: object
-      properties:
-        repository:
-          $ref: "#/components/schemas/Repository"
-        builder_variant:
-          $ref: "#/components/schemas/BuilderVariant"
-        frontend_variant:
-          $ref: "#/components/schemas/FrontendVariant"
-        environment_image_source:
-          $ref: "#/components/schemas/EnvironmentImageSourceBuild"
-      required:
         - environment_image_source
     ContainerImage:
       description: A container image
