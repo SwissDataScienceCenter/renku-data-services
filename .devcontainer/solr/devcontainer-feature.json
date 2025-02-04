@@ -1,0 +1,18 @@
+{
+    "name": "solr",
+    "id": "solr",
+    "version": "1.0.0",
+    "description": "A feature adding solr",
+    "options": {
+      "solr_version": {
+        "type": "string",
+        "description": "solr version to install",
+        "proposals": ["9.8.0"],
+        "default": "9.8.0"
+      }
+    },
+  "installsAfter": [
+    "ghcr.io/devcontainers/features/java",
+    "ghcr.io/devcontainers-contrib/features/bash-command"
+  ],
+}
