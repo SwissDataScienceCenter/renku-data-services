@@ -148,6 +148,33 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - projects
+  /projects/migrated/{project_v1_id}:
+    get:
+      summary: Check if a v1 project has been migrated to v2
+      parameters:
+        - in: path
+          name: project_v1_id
+          required: true
+          description: The ID of the project in the v1 system
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Project exists in v2 and has been migrated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          description: No corresponding project found in v2
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - projects
   /namespaces/{namespace}/projects/{slug}:
     get:
       summary: Get a project by namespace and project slug
@@ -644,6 +671,8 @@ components:
           $ref: "#/components/schemas/ProjectDocumentation"
         secrets_mount_directory:
           $ref: "#/components/schemas/SecretsMountDirectory"
+        project_v1_id:
+          type: integer
       required:
         - name
         - namespace
