@@ -282,3 +282,74 @@ async def test_entity_slug_uniqueness(sanic_client, user_headers) -> None:
     }
     _, response = await sanic_client.post("/api/data/data_connectors", headers=user_headers, json=payload)
     assert response.status_code == 201, response.text
+
+
+@pytest.mark.asyncio
+async def test_creating_dc_in_project(sanic_client, user_headers) -> None:
+    # Create a group i.e. /test1
+    payload = {
+        "name": "test1",
+        "slug": "test1",
+        "description": "Group 1 Description",
+    }
+    _, response = await sanic_client.post("/api/data/groups", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    # Create a project in the group /test1/prj1
+    payload = {
+        "name": "prj1",
+        "namespace": "test1",
+        "slug": "prj1",
+    }
+    _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    project_id = response.json["id"]
+
+    # Ensure there is only one project
+    _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
+    assert response.status_code == 200, response.text
+    assert len(response.json) == 1
+
+    # Create a data connector in the project /test1/proj1/dc1
+    payload = {
+        "name": "dc1",
+        "namespace": "test1/prj1",
+        "slug": "dc1",
+        "storage": {
+            "configuration": {"type": "s3", "endpoint": "http://s3.aws.com"},
+            "source_path": "giab",
+            "target_path": "giab",
+        },
+    }
+    _, response = await sanic_client.post("/api/data/data_connectors", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    dc_id = response.json["id"]
+
+    # Ensure there is only one project
+    _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
+    assert response.status_code == 200, response.text
+    assert len(response.json) == 1
+
+    # Ensure that you can list the data connector
+    _, response = await sanic_client.get(f"/api/data/data_connectors/{dc_id}", headers=user_headers)
+    assert response.status_code == 200, response.text
+
+    # Link the data connector to the project
+    payload = {"project_id": project_id}
+    _, response = await sanic_client.post(
+        f"/api/data/data_connectors/{dc_id}/project_links", headers=user_headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+
+    # Ensure that you can see the data connector link
+    _, response = await sanic_client.get(f"/api/data/data_connectors/{dc_id}/project_links", headers=user_headers)
+    assert response.status_code == 200, response.text
+    assert len(response.json) == 1
+    dc_link = response.json[0]
+    assert dc_link["project_id"] == project_id
+    assert dc_link["data_connector_id"] == dc_id
+
+    # Ensure that you can list data connectors
+    _, response = await sanic_client.get("/api/data/data_connectors", headers=user_headers)
+    assert response.status_code == 200, response.text
+    assert len(response.json) == 1
