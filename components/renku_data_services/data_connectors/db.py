@@ -8,7 +8,7 @@ from typing import TypeVar, cast
 from cryptography.hazmat.primitives.asymmetric import rsa
 from sqlalchemy import Select, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 from ulid import ULID
 
 from renku_data_services import base_models, errors
