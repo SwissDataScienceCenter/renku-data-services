@@ -26,6 +26,8 @@ from renku_data_services.errors.errors import (
     ValidationError,
 )
 from renku_data_services.migrations.core import run_migrations_for_app
+from renku_data_services.solr import entity_schema
+from renku_data_services.solr.solr_migrate import SchemaMigrator
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.utils.middleware import validate_null_byte
 
@@ -136,6 +138,13 @@ def create_app() -> Sanic:
         logger.info("running migrations")
         run_migrations_for_app("common")
         await config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
+
+    @app.main_process_start
+    async def do_solr_migrations(_: Sanic) -> None:
+        logger.info("Running SOLR migrations")
+        migrator = SchemaMigrator(config.solr_config)
+        result = await migrator.migrate(entity_schema.all_migrations)
+        logger.info(f"SOLR migration done: {result}")
 
     @app.before_server_start
     async def setup_rclone_validator(app: Sanic) -> None:

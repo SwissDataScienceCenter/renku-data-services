@@ -32,7 +32,7 @@
           };
           services.dev-solr = {
             enable = true;
-            cores = [ "renku-search-dev"];
+            cores = ["renku-search-dev"];
             heap = 1024;
           };
         };
@@ -65,7 +65,7 @@
         DB_NAME = "renku";
         DB_PASSWORD = "dev";
         PGPASSWORD = "dev";
-        AUTHZ_DB_KEY = "dev";
+        AUTHZ_DB_KEY = "renku";
         AUTHZ_DB_NO_TLS_CONNECTION = "true";
         AUTHZ_DB_GRPC_PORT = "50051";
         ALEMBIC_CONFIG = "./components/renku_data_services/migrations/alembic.ini";
@@ -78,7 +78,7 @@
         POETRY_INSTALLER_NO_BINARY = "ruff";
 
         ZED_ENDPOINT = "localhost:50051";
-        ZED_TOKEN = "dev";
+        ZED_TOKEN = "renku";
 
         SOLR_BIN_PATH = "${devshellToolsPkgs.solr}/bin/solr";
 
@@ -126,6 +126,8 @@
             DB_HOST = "localhost";
             DB_PORT = "15432";
             AUTHZ_DB_HOST = "localhost";
+            SOLR_URL = "http://localhost:18983";
+            SOLR_CORE = "renku-search-dev";
           });
 
         cnt = let
@@ -148,6 +150,8 @@
               DB_HOST = "rsdevcnt";
               DB_PORT = "5432";
               AUTHZ_DB_HOST = "localhost";
+              SOLR_URL = "http://rsdevcnt:8983";
+              SOLR_CORE = "renku-search-dev";
             }
           );
       };
