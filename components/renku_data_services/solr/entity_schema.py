@@ -20,30 +20,30 @@ from renku_data_services.solr.solr_schema import (
 class Fields:
     """A collection of fields."""
 
-    created_by = FieldName("createdBy")
-    creation_date = FieldName("creationDate")
-    description = FieldName("description")
-    entity_type = FieldName("_type")
-    kind = FieldName("_kind")
-    first_name = FieldName("firstName")
-    id = FieldName("id")
-    last_name = FieldName("lastName")
-    members = FieldName("members")
-    name = FieldName("name")
-    repositories = FieldName("repositories")
-    slug = FieldName("slug")
-    visibility = FieldName("visibility")
-    keywords = FieldName("keywords")
-    namespace = FieldName("namespace")
-    content_all = FieldName("content_all")
+    created_by: Final[FieldName] = FieldName("createdBy")
+    creation_date: Final[FieldName] = FieldName("creationDate")
+    description: Final[FieldName] = FieldName("description")
+    entity_type: Final[FieldName] = FieldName("_type")
+    kind: Final[FieldName] = FieldName("_kind")
+    first_name: Final[FieldName] = FieldName("firstName")
+    id: Final[FieldName] = FieldName("id")
+    last_name: Final[FieldName] = FieldName("lastName")
+    members: Final[FieldName] = FieldName("members")
+    name: Final[FieldName] = FieldName("name")
+    repositories: Final[FieldName] = FieldName("repositories")
+    slug: Final[FieldName] = FieldName("slug")
+    visibility: Final[FieldName] = FieldName("visibility")
+    keywords: Final[FieldName] = FieldName("keywords")
+    namespace: Final[FieldName] = FieldName("namespace")
+    content_all: Final[FieldName] = FieldName("content_all")
     # virtual score field
-    score = FieldName("score")
+    score: Final[FieldName] = FieldName("score")
 
 
 class Analyzers:
     """A collection of analyzers."""
 
-    text_index = Analyzer(
+    text_index: Final[Analyzer] = Analyzer(
         tokenizer=Tokenizers.uax29UrlEmail,
         filters=[
             Filters.lowercase,
@@ -54,7 +54,7 @@ class Analyzers:
         ],
     )
 
-    text_query = Analyzer(
+    text_query: Final[Analyzer] = Analyzer(
         tokenizer=Tokenizers.uax29UrlEmail,
         filters=[
             Filters.lowercase,
@@ -68,20 +68,20 @@ class Analyzers:
 class FieldTypes:
     """A collection of field types."""
 
-    id: FieldType = FieldType.id(TypeName("SearchId")).make_doc_value()
-    string: FieldType = FieldType.str(TypeName("SearchString")).make_doc_value()
-    text: FieldType = (
+    id: Final[FieldType] = FieldType.id(TypeName("SearchId")).make_doc_value()
+    string: Final[FieldType] = FieldType.str(TypeName("SearchString")).make_doc_value()
+    text: Final[FieldType] = (
         FieldType.text(TypeName("SearchText"))
         .with_index_analyzer(Analyzers.text_index)
         .with_query_analyzer(Analyzers.text_query)
     )
-    text_all: FieldType = (
+    text_all: Final[FieldType] = (
         FieldType.text(TypeName("SearchTextAll"))
         .with_index_analyzer(Analyzers.text_index)
         .with_query_analyzer(Analyzers.text_query)
         .make_multi_valued()
     )
-    date_time: FieldType = FieldType.date_time_point(TypeName("SearchDateTime"))
+    date_time: Final[FieldType] = FieldType.date_time_point(TypeName("SearchDateTime"))
 
 
 initial_entity_schema: Final[list[SchemaCommand]] = [
