@@ -10,7 +10,7 @@ from ulid import ULID
 
 from renku_data_services.authz.models import Visibility
 from renku_data_services.base_models.core import Slug
-from renku_data_services.solr.solr_client import DocVersion, ResponseBody
+from renku_data_services.solr.solr_client import DocVersion, DocVersions, ResponseBody
 
 
 def _str_to_slug(value: Any) -> Slug:
@@ -33,10 +33,10 @@ class EntityDoc(BaseModel, ABC, frozen=True):
     """Base class for entity document models."""
 
     namespace: Annotated[Slug, BeforeValidator(_str_to_slug)]
-    version: int = Field(
+    version: DocVersion = Field(
         serialization_alias="_version_",
         validation_alias=AliasChoices("version", "_version_"),
-        default=DocVersion.not_exists.value,
+        default=DocVersions.not_exists(),
     )
     score: float | None = None
 
@@ -55,7 +55,7 @@ class EntityDoc(BaseModel, ABC, frozen=True):
 
     def reset_solr_fields(self) -> Self:
         """Resets fields that are filled by solr when querying."""
-        return self.model_copy(update={"version": DocVersion.not_exists.value, "score": None})
+        return self.model_copy(update={"version": DocVersions.not_exists(), "score": None})
 
 
 class User(EntityDoc, frozen=True):

@@ -1,9 +1,10 @@
 import logging
+import os
 import socket
+import stat
 import subprocess
 from asyncio import sleep
 from multiprocessing import Lock
-from os import getenv
 
 import httpx
 import pytest
@@ -33,7 +34,7 @@ def monkeysession():
 
 @pytest.fixture(scope="session")
 def solr_bin_path():
-    solr_bin = getenv("SOLR_BIN_PATH")
+    solr_bin = os.getenv("SOLR_BIN_PATH")
     if solr_bin is None:
         solr_bin = "solr"
     return solr_bin
@@ -75,7 +76,7 @@ async def solr_instance(tmp_path_factory, free_port, monkeysession, solr_bin_pat
             "-t",
             f"{solr_root}",
         ],
-        env={"PATH": getenv("PATH", ""), "SOLR_LOGS_DIR": f"{solr_root}", "SOLR_ULIMIT_CHECKS": "false"},
+        env={"PATH": os.getenv("PATH", ""), "SOLR_LOGS_DIR": f"{solr_root}", "SOLR_ULIMIT_CHECKS": "false"},
     )
     monkeysession.setenv("SOLR_HOST", "localhost")
     monkeysession.setenv("SOLR_PORT", f"{port}")
@@ -101,16 +102,17 @@ def solr_core(solr_instance, monkeysession):
 @pytest.fixture()
 def solr_config(solr_core, solr_bin_path):
     core = solr_core
-    solr_host = getenv("SOLR_HOST")
-    solr_port = getenv("SOLR_PORT")
+    solr_host = os.getenv("SOLR_HOST")
+    solr_port = os.getenv("SOLR_PORT")
     solr_config = SolrClientConfig(base_url=f"http://{solr_host}:{solr_port}", core=core)
     solr_bin = solr_bin_path
     subprocess.run([solr_bin, "create", "-c", core])
 
-    # TODO this is annoying!
-    dir = getenv("SOLR_ROOT_DIR")
+    # Unfortunately, solr creates core directories with only read permissions
+    # Then changing the schema via the api fails, because it can't write to that file
+    dir = os.getenv("SOLR_ROOT_DIR")
     conf_file = f"{dir}/{core}/conf/managed-schema.xml"
-    subprocess.run(["chmod", "644", conf_file])
+    os.chmod(conf_file, stat.S_IRUSR | stat.S_IWUSR | stat.S_IROTH | stat.S_IRGRP)
 
     return solr_config
 

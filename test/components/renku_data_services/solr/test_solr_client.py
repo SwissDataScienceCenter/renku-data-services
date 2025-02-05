@@ -1,9 +1,11 @@
 import pytest
 
+from renku_data_services.base_models.core import Slug
 from renku_data_services.solr.entity_documents import Group, Project, User
 from renku_data_services.solr.entity_schema import Fields
 from renku_data_services.solr.solr_client import (
     DefaultSolrClient,
+    DocVersions,
     SolrQuery,
     SortDirection,
     UpsertResponse,
@@ -19,6 +21,13 @@ def assert_upsert_result(r: UpsertResponse):
             assert s.header.query_time > 0
         case _:
             raise Exception(f"Unexpected result: {r}")
+
+
+def test_serialize_document():
+    d = User(id="one", namespace=Slug("one"), version=DocVersions.not_exists())
+    djson = '{"id":"one", "namespace":"one", "_version_": -1}'
+    nd = User.model_validate_json(djson)
+    assert nd == d
 
 
 def test_serialize_solr_query():

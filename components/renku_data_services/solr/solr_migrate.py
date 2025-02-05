@@ -10,6 +10,7 @@ from pydantic import AliasChoices, BaseModel
 from renku_data_services.solr.solr_client import (
     DefaultSolrClient,
     DocVersion,
+    DocVersions,
     SolrClientConfig,
 )
 from renku_data_services.solr.solr_schema import (
@@ -101,12 +102,19 @@ class MigrateResult:
 
 
 class VersionDoc(BaseModel):
-    """A document tracking the schema migration."""
+    """A document tracking the schema migration.
+
+    The field names correspond to solr dynamic fields. Since this is
+    the document that gets inserted before any of our schema migration
+    runs, it uses solr dynamic fields: Appending a `_<type-letter>` to
+    a name to indicate the type of the field. So a `_b` is a bool and
+    a `_l` is a long/int.
+    """
 
     id: str
     current_schema_version_l: int
     migration_running_b: bool
-    version: int = pydantic.Field(
+    version: DocVersion = pydantic.Field(
         serialization_alias="_version_", validation_alias=AliasChoices("version", "_version_")
     )
 
@@ -157,7 +165,7 @@ class SchemaMigrator:
                     id=self.__docId,
                     current_schema_version_l=-1,
                     migration_running_b=False,
-                    version=DocVersion.not_exists.value,
+                    version=DocVersions.not_exists(),
                 )
             return await self.__doMigrate(client, migrations, initialDoc)
 
@@ -165,12 +173,8 @@ class SchemaMigrator:
         self, client: DefaultSolrClient, migrations: list[SchemaMigration], initialDoc: VersionDoc
     ) -> MigrateResult:
         logging.info(
-            "".join(
-                [
-                    f"Core {self.__config.core}: Found current schema version: ",
-                    f"{initialDoc.current_schema_version_l} using {self.__docId}",
-                ]
-            )
+            f"Core {self.__config.core}: Found current schema version: "
+            f"{initialDoc.current_schema_version_l} using {self.__docId}"
         )
         remain = [e for e in migrations if e.version > initialDoc.current_schema_version_l]
         logging.info(f"There are {len(remain)} migrations to run")

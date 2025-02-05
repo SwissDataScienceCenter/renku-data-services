@@ -5,9 +5,9 @@ import logging
 from abc import ABC, abstractmethod
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
-from enum import IntEnum, StrEnum
+from enum import StrEnum
 from types import TracebackType
-from typing import Any, Literal, Optional, Protocol, Self, final
+from typing import Any, Literal, NewType, Optional, Protocol, Self, final
 from urllib.parse import urljoin, urlparse, urlunparse
 
 from httpx import AsyncClient, BasicAuth, Response
@@ -94,21 +94,38 @@ class UpsertSuccess(BaseModel):
     header: ResponseHeader
 
 
-class DocVersion(IntEnum):
-    """Possible values for the _version_ field.
+DocVersion = NewType("DocVersion", int)
+""" The `_version_` field can be used to enable optimistic concurrency control:
+ https://solr.apache.org/guide/solr/latest/indexing-guide/partial-document-updates.html#optimistic-concurrency
+"""
 
-    The _version_ field can be used to enable optimistic concurrency control:
-    https://solr.apache.org/guide/solr/latest/indexing-guide/partial-document-updates.html#optimistic-concurrency
-    """
 
-    not_exists = -1
-    exists = 1
-    off = 0
+class DocVersions:
+    """Possible values for the _version_ field."""
 
     @classmethod
-    def exact(cls, n: int) -> int:
-        """Return the argument, denoting an exact version."""
-        return n
+    def not_exists(cls) -> DocVersion:
+        """Specifies a version requiring a document to not exist."""
+        return DocVersion(-1)
+
+    @classmethod
+    def exists(cls) -> DocVersion:
+        """Specifies a version requiring a document to exist."""
+        return DocVersion(1)
+
+    @classmethod
+    def off(cls) -> DocVersion:
+        """Specifies a version indicating no version requirement.
+
+        Optimistic concurrency control is not used. With this value a
+        document will be overwritting if it exists or inserted.
+        """
+        return DocVersion(0)
+
+    @classmethod
+    def exact(cls, n: int) -> DocVersion:
+        """Specifies an exact version."""
+        return DocVersion(n)
 
 
 type UpsertResponse = UpsertSuccess | Literal["VersionConflict"]
