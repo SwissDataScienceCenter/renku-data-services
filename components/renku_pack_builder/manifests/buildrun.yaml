@@ -1,7 +1,35 @@
+# Session Launcher Configuration:
+# container_image: "harbor.dev.renku.ch/<PROJECT>/<REPOSITORY>@sha256:<DIGEST_FROM_BUILDRUN>"
+# default_url: "/"
+# port: <any>
+# mount_directory: "/home/ubuntu/work"
+# working_directory: "/home/ubuntu/work"
+# uid: 1000
+# gid: 1000
+# command: ["/cnb/process/bash"]
+# args: ["/entrypoint.sh"]
+
 apiVersion: shipwright.io/v1beta1
 kind: BuildRun
 metadata:
-  name: buildpack-python-env-3
+  # TEMPLETIZE AS PARAM
+  name: buildpack-python-simple
 spec:
   build:
-    name: buildpack-renku-build-dev
+    spec:
+      source:
+        type: Git
+        git:
+          # TEMPLETIZE AS PARAM
+          url: https://gitlab.dev.renku.ch/flora.thiebaut/python-simple.git
+      strategy:
+        name: renku-buildpacks
+        kind: BuildStrategy
+      paramValues:
+        - name: run-image
+          # TEMPLETIZE AS PARAM
+          value: harbor.dev.renku.ch/flora-dev/run-image-vscodium
+      output:
+        # TEMPLETIZE AS PARAM
+        image: harbor.dev.renku.ch/flora-dev/python-simple
+        pushSecret: flora-docker-secret
