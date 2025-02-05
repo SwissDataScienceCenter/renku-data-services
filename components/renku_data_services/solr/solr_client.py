@@ -105,6 +105,11 @@ class DocVersion(IntEnum):
     exists = 1
     off = 0
 
+    @classmethod
+    def exact(cls, n: int) -> int:
+        """Return the argument, denoting an exact version."""
+        return n
+
 
 type UpsertResponse = UpsertSuccess | Literal["VersionConflict"]
 
