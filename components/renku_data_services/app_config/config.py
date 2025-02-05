@@ -21,6 +21,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.types import PublicKeyTypes
 from jwt import PyJWKClient
+from renku_data_services.solr.solr_client import SolrClientConfig
 from yaml import safe_load
 
 import renku_data_services.base_models as base_models
@@ -160,6 +161,7 @@ class Config:
     """The encryption key to encrypt user keys at rest in the database."""
 
     authz_config: AuthzConfig = field(default_factory=lambda: AuthzConfig.from_env())
+    solr_config: SolrClientConfig = field(default_factory=lambda: SolrClientConfig.from_env())
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     version: str = "0.0.1"
     app_name: str = "renku_data_services"
@@ -461,6 +463,7 @@ class Config:
         max_pinned_projects = int(os.environ.get(f"{prefix}MAX_PINNED_PROJECTS", "10"))
         user_preferences_config = UserPreferencesConfig(max_pinned_projects=max_pinned_projects)
         db = DBConfig.from_env(prefix)
+        solr_config = SolrClientConfig.from_env(prefix)
         kc_api: IKeycloakAPI
         secrets_service_public_key: PublicKeyTypes
         gitlab_url: str | None
@@ -553,6 +556,7 @@ class Config:
             server_options_file=server_options_file,
             user_preferences_config=user_preferences_config,
             db=db,
+            solr_config=solr_config,
             redis=redis,
             kc_api=kc_api,
             message_queue=message_queue,
