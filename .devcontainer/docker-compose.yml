@@ -30,7 +30,6 @@ services:
     depends_on:
       - db
       - authz
-      - solr
 
   db:
     image: postgres:latest
@@ -71,18 +70,5 @@ services:
     command:
       - serve
 
-  solr:
-    image: solr:latest
-    restart: unless-stopped
-    volumes:
-      - solr_data:/var/solr
-    command:
-      - bash
-      - -c
-      - 'precreate-core renku-search-dev; exec solr -f -Dsolr.modules=analysis-extras'
-    ports:
-      - "8983:8983"
-
 volumes:
   postgres-data:
-  solr_data:
