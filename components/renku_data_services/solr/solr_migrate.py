@@ -12,6 +12,7 @@ from renku_data_services.solr.solr_client import (
     DocVersion,
     DocVersions,
     SolrClientConfig,
+    UpsertSuccess,
 )
 from renku_data_services.solr.solr_schema import (
     AddCommand,
@@ -159,15 +160,33 @@ class SchemaMigrator:
     async def migrate(self, migrations: list[SchemaMigration]) -> MigrateResult:
         """Run all given migrations, skipping those that have been done before."""
         async with DefaultSolrClient(self.__config) as client:
-            initialDoc = await self.__current_version0(client)
-            if initialDoc is None:
-                initialDoc = VersionDoc(
+            initial_doc = await self.__current_version0(client)
+            if initial_doc is None:
+                initial_doc = VersionDoc(
                     id=self.__docId,
                     current_schema_version_l=-1,
                     migration_running_b=False,
                     version=DocVersions.not_exists(),
                 )
-            return await self.__doMigrate(client, migrations, initialDoc)
+
+            if initial_doc.migration_running_b:
+                logging.info("A solr migration is already running")
+                return MigrateResult.empty()
+            else:
+                initial_doc.migration_running_b = True
+                update_result = await client.upsert([initial_doc])
+                match update_result:
+                    case "VersionConflict":
+                        logging.info("Another solr migration just begun. Skipping this one.")
+                        return MigrateResult.empty()
+                    case UpsertSuccess():
+                        try:
+                            return await self.__doMigrate(client, migrations, initial_doc)
+                        finally:
+                            last_doc = await self.__current_version0(client)
+                            if last_doc is not None:
+                                last_doc.migration_running_b = False
+                                await client.upsert([last_doc])
 
     async def __doMigrate(
         self, client: DefaultSolrClient, migrations: list[SchemaMigration], initialDoc: VersionDoc
