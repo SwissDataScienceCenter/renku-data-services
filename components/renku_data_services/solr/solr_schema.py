@@ -1,7 +1,7 @@
 """Schema modification for solr."""
 
 import json
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, NewType, Self, final
 
@@ -183,12 +183,12 @@ class FieldType(SchemaModel, frozen=True):
         return FieldType(name=name, clazz=FieldTypeClasses.type_double)
 
     @classmethod
-    def dateTime(cls, name: TypeName) -> "FieldType":
+    def date_time(cls, name: TypeName) -> "FieldType":
         """Create a DateRange field type."""
         return FieldType(name=name, clazz=FieldTypeClasses.type_date_range)
 
     @classmethod
-    def dateTimePoint(cls, name: TypeName) -> "FieldType":
+    def date_time_point(cls, name: TypeName) -> "FieldType":
         """Create a DatePoint field type."""
         return FieldType(name=name, clazz=FieldTypeClasses.type_date_point)
 
@@ -239,7 +239,7 @@ class CopyFieldRule(SchemaModel, frozen=True):
     maxChars: int | None = None
 
 
-class SchemaCommand:
+class SchemaCommand(ABC):
     """A base class for a schema command.
 
     A schema command is a single action modifying the solr schema.

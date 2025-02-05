@@ -120,5 +120,9 @@ async def solr_search(solr_config):
     migrator = SchemaMigrator(solr_config)
     migrations = entity_schema.all_migrations.copy()
     result = await migrator.migrate(migrations)
-    assert result.migrationsRun == len(migrations)
+    assert result.migrations_run == len(migrations)
     return solr_config
+
+
+logging.basicConfig()
+logging.getLogger().setLevel(logging.DEBUG)

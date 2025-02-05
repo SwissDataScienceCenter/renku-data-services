@@ -11,7 +11,7 @@ async def test_creating_schema(solr_config):
     result = await migrator.migrate(migrations)
     migrations.sort(key=lambda e: e.version)
     last = migrations[-1]
-    assert result.endVersion == last.version
-    assert result.migrationsRun == len(migrations)
-    assert result.migrationsSkipped == 0
-    assert result.requiresReindex
+    assert result.end_version == last.version
+    assert result.migrations_run == len(migrations)
+    assert result.migrations_skipped == 0
+    assert result.requires_reindex

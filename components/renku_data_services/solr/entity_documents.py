@@ -1,11 +1,11 @@
 """Defines the entity documents used with Solr."""
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Annotated, Any, Self
 
-from pydantic import AliasChoices, BaseModel, BeforeValidator, Field, field_serializer, field_validator
+from pydantic import AliasChoices, BaseModel, BeforeValidator, Field, errors, field_serializer, field_validator
 from ulid import ULID
 
 from renku_data_services.authz.models import Visibility
@@ -29,7 +29,7 @@ class EntityType(StrEnum):
     group = "Group"
 
 
-class EntityDoc(BaseModel, frozen=True):
+class EntityDoc(BaseModel, ABC, frozen=True):
     """Base class for entity document models."""
 
     namespace: Annotated[Slug, BeforeValidator(_str_to_slug)]
@@ -40,6 +40,7 @@ class EntityDoc(BaseModel, frozen=True):
     )
     score: float | None = None
 
+    @property
     @abstractmethod
     def entity_type(self) -> EntityType:
         """Return the type of this entity."""
@@ -49,7 +50,7 @@ class EntityDoc(BaseModel, frozen=True):
         """Return the dict of this group."""
         dict = self.model_dump(by_alias=True, exclude_defaults=True)
         # note: _kind=fullentity is for being backwards compatible, it might not be needed in the future
-        dict.update(_type=self.entity_type().value, _kind="fullentity")
+        dict.update(_type=self.entity_type.value, _kind="fullentity")
         return dict
 
     def reset_solr_fields(self) -> Self:
@@ -64,6 +65,7 @@ class User(EntityDoc, frozen=True):
     firstName: str | None = None
     lastName: str | None = None
 
+    @property
     def entity_type(self) -> EntityType:
         """Return the type of this entity."""
         return EntityType.user
@@ -85,6 +87,7 @@ class Group(EntityDoc, frozen=True):
     name: str
     description: str | None = None
 
+    @property
     def entity_type(self) -> EntityType:
         """Return the type of this entity."""
         return EntityType.group
@@ -118,6 +121,7 @@ class Project(EntityDoc, frozen=True):
     namespaceDetails: ResponseBody | None = None
     creatorDetails: ResponseBody | None = None
 
+    @property
     def entity_type(self) -> EntityType:
         """Return the type of this entity."""
         return EntityType.project

@@ -88,11 +88,11 @@ class SchemaMigration:
 class MigrateResult:
     """The overall result of running a set of migrations."""
 
-    startVersion: int | None
-    endVersion: int | None
-    migrationsRun: int
-    migrationsSkipped: int
-    requiresReindex: bool
+    start_version: int | None
+    end_version: int | None
+    migrations_run: int
+    migrations_skipped: int
+    requires_reindex: bool
 
     @classmethod
     def empty(cls) -> "MigrateResult":
@@ -103,7 +103,7 @@ class MigrateResult:
 class VersionDoc(BaseModel):
     """A document tracking the schema migration."""
 
-    id: str = "VERSION_ID_EB779C6B-1D96-47CB-B304-BECF15E4A607"
+    id: str
     current_schema_version_l: int
     migration_running_b: bool
     version: int = pydantic.Field(
@@ -120,7 +120,7 @@ class MigrationState(BaseModel):
 
     solr_schema: CoreSchema
     doc: VersionDoc
-    skippedMigrations: int
+    skipped_migrations: int
 
 
 class SchemaMigrator:
@@ -154,7 +154,10 @@ class SchemaMigrator:
             initialDoc = await self.__current_version0(client)
             if initialDoc is None:
                 initialDoc = VersionDoc(
-                    current_schema_version_l=-1, migration_running_b=False, version=DocVersion.not_exists.value
+                    id=self.__docId,
+                    current_schema_version_l=-1,
+                    migration_running_b=False,
+                    version=DocVersion.not_exists.value,
                 )
             return await self.__doMigrate(client, migrations, initialDoc)
 
@@ -176,14 +179,14 @@ class SchemaMigrator:
 
         remain.sort(key=lambda m: m.version)
         schema = await client.get_schema()
-        state = MigrationState(solr_schema=schema, doc=initialDoc, skippedMigrations=0)
+        state = MigrationState(solr_schema=schema, doc=initialDoc, skipped_migrations=0)
         [finalState := await self.__applyMigration(client, state, x) for x in remain]
         return MigrateResult(
-            startVersion=initialDoc.current_schema_version_l,
-            endVersion=remain[-1].version,
-            migrationsRun=len(remain),
-            migrationsSkipped=finalState.skippedMigrations,
-            requiresReindex=any(x.requires_reindex for x in remain),
+            start_version=initialDoc.current_schema_version_l,
+            end_version=remain[-1].version,
+            migrations_run=len(remain),
+            migrations_skipped=finalState.skipped_migrations,
+            requires_reindex=any(x.requires_reindex for x in remain),
         )
 
     async def __applyMigration(
@@ -193,13 +196,13 @@ class SchemaMigrator:
         if cmds.is_empty():
             logging.info(f"Migration {m.version} seems to be applied. Skipping it")
             v = await self.__upsert_version(client, state.doc, m.version)
-            return state.model_copy(update={"skippedMigrations": state.skippedMigrations + 1, "doc": v})
+            return state.model_copy(update={"skippedMigrations": state.skipped_migrations + 1, "doc": v})
         else:
             r = await client.modify_schema(SchemaCommandList(cmds.commands))
             r.raise_for_status()
             schema = await client.get_schema()
             doc = await self.__upsert_version(client, state.doc, m.version)
-            return MigrationState(solr_schema=schema, doc=doc, skippedMigrations=state.skippedMigrations)
+            return MigrationState(solr_schema=schema, doc=doc, skipped_migrations=state.skipped_migrations)
 
     async def __upsert_version(self, client: DefaultSolrClient, current: VersionDoc, next: int) -> VersionDoc:
         logging.info(f"core {self.__config.core}: set schema migration version to {next}")

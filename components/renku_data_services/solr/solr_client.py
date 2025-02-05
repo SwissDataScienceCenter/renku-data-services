@@ -2,13 +2,13 @@
 
 import json
 import logging
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
-from enum import Enum, StrEnum
+from enum import IntEnum, StrEnum
 from types import TracebackType
 from typing import Any, Literal, Optional, Protocol, Self, final
-from urllib.parse import urlencode, urljoin, urlparse, urlunparse
+from urllib.parse import urljoin, urlparse, urlunparse
 
 from httpx import AsyncClient, BasicAuth, Response
 from pydantic import AliasChoices, BaseModel, Field, field_serializer
@@ -71,7 +71,7 @@ class SolrQuery(BaseModel, frozen=True):
         return ",".join(list(map(lambda t: f"{t[0]} {t[1].value}", sort)))
 
     @classmethod
-    def query_all_fields(cls, qstr: str) -> Self:
+    def query_all_fields(cls, qstr: str) -> "SolrQuery":
         """Create a query with defaults returning all fields of a document."""
         return SolrQuery(query=qstr, fields=["*", "score"])
 
@@ -81,7 +81,9 @@ class ResponseHeader(BaseModel):
     """The responseHeader object as returned by solr."""
 
     status: int
-    queryTime: int = Field(serialization_alias="QTime", validation_alias=AliasChoices("QTime", "queryTime"), default=0)
+    query_time: int = Field(
+        serialization_alias="QTime", validation_alias=AliasChoices("QTime", "queryTime", "query_time"), default=0
+    )
     params: dict[str, str] = Field(default_factory=dict)
 
 
@@ -92,7 +94,7 @@ class UpsertSuccess(BaseModel):
     header: ResponseHeader
 
 
-class DocVersion(Enum):
+class DocVersion(IntEnum):
     """Possible values for the _version_ field.
 
     The _version_ field can be used to enable optimistic concurrency control:
@@ -102,11 +104,6 @@ class DocVersion(Enum):
     not_exists = -1
     exists = 1
     off = 0
-
-    @classmethod
-    def exact(cls, n: int) -> int:
-        """Return the argument, denoting an exact version."""
-        return n
 
 
 type UpsertResponse = UpsertSuccess | Literal["VersionConflict"]
@@ -128,9 +125,11 @@ class SolrDocument(Protocol):
 class ResponseBody(BaseModel):
     """The body of a search response."""
 
-    numFound: int
+    num_found: int = Field(serialization_alias="numFound", validation_alias=AliasChoices("numFound", "num_found"))
     start: int
-    numFoundExact: bool
+    num_found_exact: bool = Field(
+        serialization_alias="numFoundExact", validation_alias=AliasChoices("numFoundExact", "num_found_exact")
+    )
     docs: list[dict[str, Any]]
 
 
@@ -140,11 +139,15 @@ class QueryResponse(BaseModel):
     Note, solr doesn't set the `responseHeader` for get-by-id requests. Otherwise it will be set.
     """
 
-    responseHeader: ResponseHeader = ResponseHeader(status=200)
+    responseHeader: ResponseHeader = Field(
+        serialization_alias="responseHeader",
+        validation_alias=AliasChoices("responseHeader", "response_header"),
+        default_factory=lambda: ResponseHeader(status=200),
+    )
     response: ResponseBody
 
 
-class SolrClient:
+class SolrClient(AbstractAsyncContextManager, ABC):
     """A client to SOLR."""
 
     async def close(self) -> None:
@@ -186,7 +189,7 @@ class SolrClient:
         ...
 
 
-class DefaultSolrClient(SolrClient, AbstractAsyncContextManager):
+class DefaultSolrClient(SolrClient):
     """Default implementation of the solr client."""
 
     delegate: AsyncClient
@@ -200,10 +203,6 @@ class DefaultSolrClient(SolrClient, AbstractAsyncContextManager):
         bauth = BasicAuth(username=cfg.user.username, password=cfg.user.password) if cfg.user is not None else None
         self.delegate = AsyncClient(auth=bauth, base_url=burl, timeout=cfg.timeout)
 
-    def _make_url(self, path: str, qp: dict[str, Any]) -> str:
-        qp.update({"wt": "json"})
-        return f"{path}?{urlencode(qp)}"
-
     async def __aenter__(self) -> Self:
         await self.delegate.__aenter__()
         return self
@@ -215,13 +214,11 @@ class DefaultSolrClient(SolrClient, AbstractAsyncContextManager):
 
     async def get_raw(self, id: str) -> Response:
         """Query documents and return the http response."""
-        url = self._make_url("/get", {"ids": id})
-        return await self.delegate.get(url)
+        return await self.delegate.get("/get", params={"wt": "json", "ids": id})
 
     async def query_raw(self, query: SolrQuery) -> Response:
         """Query documents and return the http response."""
-        url = self._make_url("/query", {})
-        return await self.delegate.post(url, json=query.to_dict())
+        return await self.delegate.post("/query", params={"wt": "json"}, json=query.to_dict())
 
     async def get(self, id: str) -> QueryResponse:
         """Get a document by id, returning a `QueryResponse`."""
@@ -237,9 +234,9 @@ class DefaultSolrClient(SolrClient, AbstractAsyncContextManager):
         """Updates the schema with the given commands."""
         data = cmds.to_json()
         logging.debug(f"modify schema: {data}")
-        url = self._make_url("/schema", {"commit": "true", "overwrite": "true"})
         return await self.delegate.post(
-            url,
+            "/schema",
+            params={"commit": "true", "overwrite": "true"},
             content=data.encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
@@ -251,10 +248,14 @@ class DefaultSolrClient(SolrClient, AbstractAsyncContextManager):
         case the result is either expected to be successful or a version conflict. All
         other outcomes are raised as an exception.
         """
-        j = json.dumps(list(map(lambda e: e.to_dict(), docs)))
+        j = json.dumps([e.to_dict() for e in docs])
         logging.debug(f"upserting: {j}")
-        url = self._make_url("/update", {"commit": "true"})
-        res = await self.delegate.post(url, content=j.encode("utf-8"), headers={"Content-Type": "application/json"})
+        res = await self.delegate.post(
+            "/update",
+            params={"commit": "true"},
+            content=j.encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
         match res.status_code:
             case 200:
                 h = ResponseHeader.model_validate(res.json()["responseHeader"])

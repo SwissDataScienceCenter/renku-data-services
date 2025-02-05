@@ -16,7 +16,7 @@ def assert_upsert_result(r: UpsertResponse):
     match r:
         case UpsertSuccess() as s:
             assert s.header.status == 0
-            assert s.header.queryTime > 0
+            assert s.header.query_time > 0
         case _:
             raise Exception(f"Unexpected result: {r}")
 
@@ -43,7 +43,7 @@ async def test_insert_and_query_project(solr_search):
 
         qr = await client.query(SolrQuery.query_all_fields(f"id:{str(p.id)}"))
         assert qr.responseHeader.status == 0
-        assert qr.response.numFound == 1
+        assert qr.response.num_found == 1
         assert len(qr.response.docs) == 1
 
         doc = Project.model_validate(qr.response.docs[0])
@@ -62,10 +62,10 @@ async def test_insert_and_query_user(solr_search):
         assert_upsert_result(r1)
 
         qr = await client.query(
-            SolrQuery.query_all_fields("_type:User").with_sort([(Fields.firstName, SortDirection.asc)])
+            SolrQuery.query_all_fields("_type:User").with_sort([(Fields.first_name, SortDirection.asc)])
         )
         assert qr.responseHeader.status == 0
-        assert qr.response.numFound == 2
+        assert qr.response.num_found == 2
         assert len(qr.response.docs) == 2
 
         su1 = User.from_dict(qr.response.docs[0])
@@ -85,7 +85,7 @@ async def test_insert_and_query_group(solr_search):
 
         qr = await client.query(SolrQuery.query_all_fields("_type:Group"))
         assert qr.responseHeader.status == 0
-        assert qr.response.numFound == 1
+        assert qr.response.num_found == 1
         assert len(qr.response.docs) == 1
 
         sg = Group.from_dict(qr.response.docs[0])
