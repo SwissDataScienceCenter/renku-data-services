@@ -13,11 +13,12 @@ from renku_data_services.base_models.core import Slug
 from renku_data_services.solr.solr_client import DocVersion, ResponseBody
 
 
-def _str_to_slug(value: Any) -> Any:
+def _str_to_slug(value: Any) -> Slug:
     if isinstance(value, str):
         return Slug.from_name(value)
-    else:
+    elif isinstance(value, Slug):
         return value
+    raise errors.ValidationError(message="converting to slug in solr documents was not successful")
 
 
 class EntityType(StrEnum):
