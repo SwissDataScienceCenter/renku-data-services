@@ -30,6 +30,11 @@
             enable = true;
             openapi-spec = "http://localhost:8000/api/data/spec.json";
           };
+          services.dev-solr = {
+            enable = true;
+            cores = [ "renku-search-dev"];
+            heap = 1024;
+          };
         };
       in {
         rdsdev-vm = devshell-tools.lib.mkVm {
@@ -71,6 +76,8 @@
         ZED_ENDPOINT = "localhost:50051";
         ZED_TOKEN = "dev";
 
+        SOLR_BIN_PATH = "${devshellToolsPkgs.solr}/bin/solr";
+
         shellHook = ''
           export FLAKE_ROOT="$(git rev-parse --show-toplevel)"
           export PATH="$FLAKE_ROOT/.venv/bin:$PATH"
@@ -81,10 +88,12 @@
       };
 
       commonPackages = with pkgs; [
+        devcontainer
         redis
         postgresql
         jq
         devshellToolsPkgs.openapi-docs
+        devshellToolsPkgs.solr
         spicedb
         cargo
         rustc
