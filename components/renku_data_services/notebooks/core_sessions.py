@@ -79,11 +79,20 @@ async def get_extra_containers(
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     repositories: list[Repository],
     git_providers: list[GitProvider],
+    uid: int,
+    gid: int,
+    fs_group: int,
 ) -> list[ExtraContainer]:
     """Get the extra containers added to amalthea sessions."""
     conts: list[ExtraContainer] = []
     git_proxy_container = await git_proxy.main_container(
-        user=user, config=nb_config, repositories=repositories, git_providers=git_providers
+        user=user,
+        config=nb_config,
+        repositories=repositories,
+        git_providers=git_providers,
+        uid=uid,
+        gid=gid,
+        fs_group=fs_group,
     )
     if git_proxy_container:
         conts.append(ExtraContainer.model_validate(nb_config.k8s_v2_client.sanitize(git_proxy_container)))
@@ -369,7 +378,11 @@ async def patch_session(
     """Patch an Amalthea session."""
     session = await nb_config.k8s_v2_client.get_server(session_id, user.id)
     if session is None:
-        raise errors.MissingResourceError(message=f"The sesison with ID {session_id} does not exist", quiet=True)
+        raise errors.MissingResourceError(message=f"The session with ID {session_id} does not exist", quiet=True)
+    if session.spec is None:
+        raise errors.ProgrammingError(
+            message=f"The session {session_id} being patched is missing the expected 'spec' field.", quiet=True
+        )
 
     patch = AmaltheaSessionV1Alpha1Patch(spec=AmaltheaSessionV1Alpha1SpecPatch())
     is_getting_hibernated: bool = False
@@ -428,6 +441,9 @@ async def patch_session(
         user,
         repositories,
         git_providers,
+        gid=session.spec.session.runAsGroup,
+        fs_group=session.spec.session.runAsGroup,
+        uid=session.spec.session.runAsUser,
     )
     if extra_containers:
         patch.spec.extraContainers = extra_containers
