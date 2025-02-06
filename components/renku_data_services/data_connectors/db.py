@@ -8,7 +8,7 @@ from typing import TypeVar, cast
 from cryptography.hazmat.primitives.asymmetric import rsa
 from sqlalchemy import Select, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import joinedload
 from ulid import ULID
 
 from renku_data_services import base_models, errors
@@ -657,12 +657,21 @@ class DataConnectorSecretRepository:
         )
 
         async with self.session_maker() as session:
-            stmt = select(schemas.DataConnectorORM).where(
-                schemas.DataConnectorORM.project_links.any(
-                    schemas.DataConnectorToProjectLinkORM.project_id == project_id
-                ),
-                schemas.DataConnectorORM.id.in_(data_connector_ids),
+            stmt = (
+                select(schemas.DataConnectorORM)
+                .where(
+                    schemas.DataConnectorORM.project_links.any(
+                        schemas.DataConnectorToProjectLinkORM.project_id == project_id
+                    ),
+                    schemas.DataConnectorORM.id.in_(data_connector_ids),
+                )
+                .options(
+                    joinedload(schemas.DataConnectorORM.slug)
+                    .joinedload(ns_schemas.EntitySlugORM.project)
+                    .selectinload(ProjectORM.slug)
+                )
             )
+
             results = await session.stream_scalars(stmt)
             async for dc in results:
                 secrets = await self.get_data_connector_secrets(user, dc.id)
