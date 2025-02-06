@@ -56,6 +56,7 @@ class Scope(Enum):
     READ_CHILDREN = "read_children"
     ADD_LINK = "add_link"
     IS_ADMIN = "is_admin"
+    NON_PUBLIC_READ = "non_public_read"
 
 
 @dataclass

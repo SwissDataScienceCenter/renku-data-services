@@ -28,7 +28,12 @@
 			"command": "alias k=kubectl"
 		},
 		"ghcr.io/devcontainers-contrib/features/rclone:1": {},
-		"./k3d": {}
+    "./k3d": {},
+    "ghcr.io/devcontainers/features/java:1": {
+        "version": "21",
+        "jdkDistro": "open"
+    },
+    "./solr": {}
 	},
 	"overrideFeatureInstallOrder": [
 		"ghcr.io/devcontainers-contrib/features/poetry",
