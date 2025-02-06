@@ -148,12 +148,12 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - projects
-  /projects/migrated/{project_v1_id}:
+  /renku_v1_projects/{v1_id}/migrations:
     get:
       summary: Check if a v1 project has been migrated to v2
       parameters:
         - in: path
-          name: project_v1_id
+          name: v1_id
           required: true
           description: The ID of the project in the v1 system
           schema:
@@ -171,6 +171,25 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - projects
+    post:
+      summary: Create a new project migrated from Renku v1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MigrateProjectPost"
+      responses:
+        "201":
+          description: The project was created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -671,11 +690,41 @@ components:
           $ref: "#/components/schemas/ProjectDocumentation"
         secrets_mount_directory:
           $ref: "#/components/schemas/SecretsMountDirectory"
-        project_v1_id:
+      required:
+        - name
+        - namespace
+    MigrateProjectPost:
+      description: Project metadata to be created in Renku, it belongs a project from Renku v1
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/ProjectName"
+        namespace:
+          $ref: "#/components/schemas/Slug"
+        slug:
+          $ref: "#/components/schemas/Slug"
+        repositories:
+          $ref: "#/components/schemas/RepositoriesList"
+        visibility:
+          # When copying a project from a template project, the default visibility is the same as template project's
+          # visibility.
+          # Its default value is ``private``, when creating a project without copying.
+          $ref: "#/components/schemas/Visibility"
+        description:
+          $ref: "#/components/schemas/Description"
+        keywords:
+          $ref: "#/components/schemas/KeywordsList"
+        documentation:
+          $ref: "#/components/schemas/ProjectDocumentation"
+        secrets_mount_directory:
+          $ref: "#/components/schemas/SecretsMountDirectory"
+        v1_id:
           type: integer
       required:
         - name
         - namespace
+        - v1_id
     ProjectPatch:
       type: object
       description: Patch of a project
