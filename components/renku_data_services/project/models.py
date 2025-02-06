@@ -155,3 +155,17 @@ class SessionSecretPatchSecretValue:
 
     secret_slot_id: ULID
     value: str | None
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectMigration:
+    """Model representing a migration from an old project version."""
+
+    id: ULID
+    project: Project
+    project_v1_id: int
+    migrated_at: datetime = field(default_factory=lambda: datetime.now(UTC).replace(microsecond=0))
+
+    @property
+    def etag(self) -> str:
+        """Entity tag value for this project migration object."""
+        return compute_etag_from_fields(self.migrated_at, self.project.id)
