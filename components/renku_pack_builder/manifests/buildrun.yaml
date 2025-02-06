@@ -6,7 +6,7 @@
 # working_directory: "/home/ubuntu/work"
 # uid: 1000
 # gid: 1000
-# command: ["/cnb/process/bash"]
+# command: ["bash"]
 # args: ["/entrypoint.sh"]
 
 apiVersion: shipwright.io/v1beta1
