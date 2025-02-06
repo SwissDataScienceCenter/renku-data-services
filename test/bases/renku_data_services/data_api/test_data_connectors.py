@@ -1407,4 +1407,4 @@ async def test_creating_dc_in_project(sanic_client, user_headers) -> None:
     _, response = await sanic_client.get("/api/data/data_connectors", headers=user_headers)
     assert response.status_code == 200, response.text
     assert len(response.json) == 1
-    assert response[0].json["namespace"] == dc_namespace
+    assert response.json[0]["namespace"] == dc_namespace
