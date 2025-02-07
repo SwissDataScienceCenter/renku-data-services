@@ -394,6 +394,7 @@ components:
           default: false
         environment_image_source:
           $ref: "#/components/schemas/EnvironmentImageSourceImage"
+          default: image
       required:
         - name
         - container_image
