@@ -308,16 +308,9 @@ components:
           required:
             - container_image
     EnvironmentGetInLauncher:
-      allOf:
-        - oneOf:
-          - $ref: "#/components/schemas/EnvironmentWithImageGet"
-          - $ref: "#/components/schemas/EnvironmentWithBuildGet"
-        - type: object
-          properties:
-            environment_kind:
-              $ref: "#/components/schemas/EnvironmentKind"
-          required:
-            - environment_kind
+      oneOf:
+        - $ref: "#/components/schemas/EnvironmentWithImageGet"
+        - $ref: "#/components/schemas/EnvironmentWithBuildGet"
     EnvironmentWithImageGet:
       allOf:
         - $ref: "#/components/schemas/Environment"
@@ -325,8 +318,12 @@ components:
           properties:
             environment_image_source:
               $ref: "#/components/schemas/EnvironmentImageSourceImage"
+            environment_kind:
+              $ref: "#/components/schemas/EnvironmentKind"
+              default: custom
           required:
             - environment_image_source
+            - environment_kind
     EnvironmentWithBuildGet:
       allOf:
         - $ref: "#/components/schemas/EnvironmentWithoutContainerImage"
@@ -341,17 +338,19 @@ components:
           required:
             - build_parameters
             - environment_image_source
-    EnvironmentPostInLauncher:
+    EnvironmentPostInLauncherHelper:
       allOf:
-        - oneOf:
-          - $ref: "#/components/schemas/EnvironmentPost"
-          - $ref: "#/components/schemas/BuildParametersPost"
+        - $ref: "#/components/schemas/EnvironmentPost"
         - type: object
           properties:
             environment_kind:
               $ref: "#/components/schemas/EnvironmentKind"
           required:
             - environment_kind
+    EnvironmentPostInLauncher:
+      oneOf:
+        - $ref: "#/components/schemas/EnvironmentPostInLauncherHelper"
+        - $ref: "#/components/schemas/BuildParametersPost"
     EnvironmentPost:
       description: Data required to create a session environment
       type: object
@@ -406,8 +405,10 @@ components:
           properties:
             environment_kind:
               $ref: "#/components/schemas/EnvironmentKind"
-          required:
-            - environment_kind
+            environment_image_source:
+              $ref: "#/components/schemas/EnvironmentImageSource"
+            build_parameters:
+              $ref: "#/components/schemas/BuildParametersPatch"
     EnvironmentPatch:
       type: object
       description: Update a session environment
@@ -437,10 +438,6 @@ components:
           $ref: "#/components/schemas/EnvironmentArgs"
         is_archived:
           $ref: "#/components/schemas/IsArchived"
-        environment_image_source:
-          $ref: "#/components/schemas/EnvironmentImageSource"
-        build_parameters:
-          $ref: "#/components/schemas/BuildParametersPatch"
     SessionLaunchersList:
       description: A list of Renku session launchers
       type: array
@@ -534,16 +531,13 @@ components:
     BuilderVariant:
       description: Type of virtual environment manager when building custom environments.
       type: string
-      enum:
-        - conda
-        - pip
+      minLength: 1
+      maxLength: 99
     FrontendVariant:
       description: User's Frontend Choice.
       type: string
-      enum:
-        - vscodium
-        - jupyterlab
-        - streamlit
+      minLength: 1
+      maxLength: 99
     EnvironmentIdOnlyPatch:
       type: object
       properties:
