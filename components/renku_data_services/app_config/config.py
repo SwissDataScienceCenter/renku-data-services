@@ -21,7 +21,6 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.types import PublicKeyTypes
 from jwt import PyJWKClient
-from renku_data_services.solr.solr_client import SolrClientConfig
 from yaml import safe_load
 
 import renku_data_services.base_models as base_models
@@ -64,8 +63,10 @@ from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.platform.db import PlatformRepository
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository, ProjectSessionSecretRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
+from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsRepo
 from renku_data_services.session.db import SessionRepository
+from renku_data_services.solr.solr_client import SolrClientConfig
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.config import UserPreferencesConfig
 from renku_data_services.users.db import UserPreferencesRepository
@@ -177,6 +178,7 @@ class Config:
     _group_repo: GroupRepository | None = field(default=None, repr=False, init=False)
     _event_repo: EventRepository | None = field(default=None, repr=False, init=False)
     _reprovisioning_repo: ReprovisioningRepository | None = field(default=None, repr=False, init=False)
+    _search_updates_repo: SearchUpdatesRepo | None = field(default=None, repr=False, init=False)
     _session_repo: SessionRepository | None = field(default=None, repr=False, init=False)
     _user_preferences_repo: UserPreferencesRepository | None = field(default=None, repr=False, init=False)
     _kc_user_repo: KcUserRepo | None = field(default=None, repr=False, init=False)
@@ -286,6 +288,13 @@ class Config:
         if not self._reprovisioning_repo:
             self._reprovisioning_repo = ReprovisioningRepository(session_maker=self.db.async_session_maker)
         return self._reprovisioning_repo
+
+    @property
+    def search_updates_repo(self) -> SearchUpdatesRepo:
+        """The DB adapter to the search_updates table."""
+        if not self._search_updates_repo:
+            self._search_updates_repo = SearchUpdatesRepo(session_maker=self.db.async_session_maker)
+        return self._search_updates_repo
 
     @property
     def project_repo(self) -> ProjectRepository:
