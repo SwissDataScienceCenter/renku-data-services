@@ -9,6 +9,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_co
 from sqlalchemy.schema import ForeignKey
 from ulid import ULID
 
+from renku_data_services import errors
 from renku_data_services.crc.orm import ResourceClassORM
 from renku_data_services.project.orm import ProjectORM
 from renku_data_services.session import models
@@ -162,4 +163,61 @@ class SessionLauncherORM(BaseORM):
             resource_class_id=self.resource_class_id,
             disk_storage=self.disk_storage,
             environment=self.environment.dump(),
+        )
+
+
+class BuildORM(BaseORM):
+    """A build of a container image."""
+
+    __tablename__ = "builds"
+
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    """ID of this container image build."""
+
+    # TODO: Link to session environments
+    # environment_id: Mapped[ULID] = mapped_column("environment_id", ForeignKey(EnvironmentORM.id, ondelete="CASCADE"))
+    # environment: Mapped[EnvironmentORM] = relationship(init=False, repr=False, lazy="selectin")
+
+    status: Mapped[models.BuildStatus] = mapped_column("status")
+
+    result_image: Mapped[str | None] = mapped_column("result_image", String(500))
+
+    completed_at: Mapped[datetime | None] = mapped_column("completed_at", DateTime(timezone=True))
+
+    result_repository_url: Mapped[str | None] = mapped_column("result_repository_url", String(500))
+
+    result_repository_git_commit_sha: Mapped[str | None] = mapped_column(
+        "result_repository_git_commit_sha", String(100)
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        "created_at", DateTime(timezone=True), default=func.now(), nullable=False
+    )
+
+    def dump(self) -> models.Build:
+        """Create a build object from the ORM object."""
+        result = self._dump_result()
+        return models.Build(
+            id=self.id,
+            environment_id=ULID.from_str("1V7AD1KQ2H01E3Q907EN8GBJE3"),  # TODO: use real environment_id foreign key
+            created_at=self.created_at,
+            status=self.status,
+            result=result,
+        )
+
+    def _dump_result(self) -> models.BuildResult | None:
+        if self.status != models.BuildStatus.succeeded:
+            return None
+        if (
+            self.result_image is None
+            or self.completed_at is None
+            or self.result_repository_url is None
+            or self.result_repository_git_commit_sha is None
+        ):
+            raise errors.ProgrammingError(message=f"Build with id '{self.id}' is invalid.")
+        return models.BuildResult(
+            image=self.result_image,
+            completed_at=self.completed_at,
+            repository_url=self.result_repository_url,
+            repository_git_commit_sha=self.result_repository_git_commit_sha,
         )
