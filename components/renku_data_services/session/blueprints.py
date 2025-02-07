@@ -179,3 +179,38 @@ class SessionLaunchersBP(CustomBlueprint):
             return validated_json(apispec.SessionLaunchersList, launchers)
 
         return "/projects/<project_id:ulid>/session_launchers", ["GET"], _get_launcher
+
+
+@dataclass(kw_only=True)
+class BuildsBP(CustomBlueprint):
+    """Handlers for manipulating container image builds."""
+
+    # session_repo: SessionRepository
+    authenticator: base_models.Authenticator
+
+    def get_one(self) -> BlueprintFactoryResponse:
+        """Get a specific container image build."""
+
+        @authenticate(self.authenticator)
+        async def _get_one(_: Request, user: base_models.APIUser, build_id: ULID) -> HTTPResponse:
+            raise errors.ProgrammingError(message="Not implemented")
+
+        return "/builds/<build_id:ulid>", ["GET"], _get_one
+
+    def post(self) -> BlueprintFactoryResponse:
+        """Create a new container image build."""
+
+        @authenticate(self.authenticator)
+        async def _post(_: Request, user: base_models.APIUser) -> HTTPResponse:
+            raise errors.ProgrammingError(message="Not implemented")
+
+        return "/builds", ["POST"], _post
+
+    def get_environment_builds(self) -> BlueprintFactoryResponse:
+        """Get all container image builds belonging to a session environment."""
+
+        @authenticate(self.authenticator)
+        async def _get_environment_builds(_: Request, user: base_models.APIUser, project_id: ULID) -> JSONResponse:
+            raise errors.ProgrammingError(message="Not implemented")
+
+        return "/environments/<environment_id:ulid>/builds", ["GET"], _get_environment_builds
