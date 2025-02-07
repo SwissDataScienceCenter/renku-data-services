@@ -64,7 +64,8 @@ from renku_data_services.platform.db import PlatformRepository
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository, ProjectSessionSecretRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsRepo
-from renku_data_services.session.db import SessionRepository
+from renku_data_services.session.db import BuildRepository, SessionRepository
+from renku_data_services.session.shipwright_client import ShipwrightClient
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.config import UserPreferencesConfig
 from renku_data_services.users.db import UserPreferencesRepository
@@ -143,6 +144,7 @@ class Config:
     authenticator: base_models.Authenticator
     gitlab_authenticator: base_models.Authenticator
     quota_repo: QuotaRepository
+    shipwright_client: ShipwrightClient | None
     user_preferences_config: UserPreferencesConfig
     db: DBConfig
     redis: RedisConfig
@@ -176,6 +178,7 @@ class Config:
     _event_repo: EventRepository | None = field(default=None, repr=False, init=False)
     _reprovisioning_repo: ReprovisioningRepository | None = field(default=None, repr=False, init=False)
     _session_repo: SessionRepository | None = field(default=None, repr=False, init=False)
+    _build_repo: BuildRepository | None = field(default=None, repr=False, init=False)
     _user_preferences_repo: UserPreferencesRepository | None = field(default=None, repr=False, init=False)
     _kc_user_repo: KcUserRepo | None = field(default=None, repr=False, init=False)
     _low_level_user_secrets_repo: LowLevelUserSecretsRepo | None = field(default=None, repr=False, init=False)
@@ -344,6 +347,15 @@ class Config:
         return self._session_repo
 
     @property
+    def build_repo(self) -> BuildRepository:
+        """The DB adapter for container image builds."""
+        if not self._build_repo:
+            self._build_repo = BuildRepository(
+                session_maker=self.db.async_session_maker, authz=self.authz, shipwright_client=self.shipwright_client
+            )
+        return self._build_repo
+
+    @property
     def user_preferences_repo(self) -> UserPreferencesRepository:
         """The DB adapter for user preferences."""
         if not self._user_preferences_repo:
@@ -479,6 +491,7 @@ class Config:
             authenticator = DummyAuthenticator()
             gitlab_authenticator = DummyAuthenticator()
             quota_repo = QuotaRepository(DummyCoreClient({}, {}), DummySchedulingClient({}), namespace=k8s_namespace)
+            shipwright_client = None
             user_always_exists = os.environ.get("DUMMY_USERSTORE_USER_ALWAYS_EXISTS", "true").lower() == "true"
             user_store = DummyUserStore(user_always_exists=user_always_exists)
             gitlab_client = DummyGitlabAPI()
@@ -499,6 +512,7 @@ class Config:
                 Path(secrets_service_public_key_path).read_bytes()
             )
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
+            shipwright_client = ShipwrightClient(namespace=k8s_namespace)
             keycloak_url = os.environ.get(f"{prefix}KEYCLOAK_URL")
             if keycloak_url is None:
                 raise errors.ConfigurationError(message="The Keycloak URL has to be specified.")
@@ -547,6 +561,7 @@ class Config:
             gitlab_client=gitlab_client,
             user_store=user_store,
             quota_repo=quota_repo,
+            shipwright_client=shipwright_client,
             sentry=sentry,
             trusted_proxies=trusted_proxies,
             server_defaults_file=server_defaults_file,

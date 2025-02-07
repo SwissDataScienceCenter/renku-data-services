@@ -278,3 +278,8 @@ def validate_session_launcher_patch(
         resource_class_id=resource_class_id,
         disk_storage=disk_storage,
     )
+
+
+def validate_unsaved_build(build: apispec.BuildPost) -> models.UnsavedBuild:
+    """Validate an unsaved container image build."""
+    return models.UnsavedBuild(environment_id=ULID.from_str(build.environment_id))
