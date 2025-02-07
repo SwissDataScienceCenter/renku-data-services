@@ -65,7 +65,7 @@
         DB_NAME = "renku";
         DB_PASSWORD = "dev";
         PGPASSWORD = "dev";
-        AUTHZ_DB_KEY = "renku";
+        AUTHZ_DB_KEY = "dev";
         AUTHZ_DB_NO_TLS_CONNECTION = "true";
         AUTHZ_DB_GRPC_PORT = "50051";
         ALEMBIC_CONFIG = "./components/renku_data_services/migrations/alembic.ini";
@@ -78,7 +78,7 @@
         POETRY_INSTALLER_NO_BINARY = "ruff";
 
         ZED_ENDPOINT = "localhost:50051";
-        ZED_TOKEN = "renku";
+        ZED_TOKEN = "dev";
 
         SOLR_BIN_PATH = "${devshellToolsPkgs.solr}/bin/solr";
 
