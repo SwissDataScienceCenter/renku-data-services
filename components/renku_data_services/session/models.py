@@ -175,3 +175,33 @@ class SessionLauncherPatch:
     environment: str | EnvironmentPatch | UnsavedEnvironment | UnsavedBuildParameters | None = None
     resource_class_id: int | None | ResetType = None
     disk_storage: int | None | ResetType = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class BuildResult:
+    """Model to represent the result of a build of a container image."""
+
+    image: str
+    completed_at: datetime
+    repository_url: str
+    repository_git_commit_sha: str
+
+
+class BuildStatus(StrEnum):
+    """The status of a build."""
+
+    in_progress = "in_progress"
+    failed = "failed"
+    cancelled = "cancelled"
+    succeeded = "succeeded"
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class Build:
+    """Model to represent the build of a container image."""
+
+    id: ULID
+    environment_id: ULID
+    created_at: datetime
+    status: BuildStatus
+    result: BuildResult | None = None
