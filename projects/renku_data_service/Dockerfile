@@ -1,4 +1,4 @@
-FROM python:3.12-bookworm as builder
+FROM python:3.12-bookworm AS builder
 ARG DEV_BUILD=false
 ARG USER_UID=1000
 ARG RCLONE_VERSION=v1.65.2
