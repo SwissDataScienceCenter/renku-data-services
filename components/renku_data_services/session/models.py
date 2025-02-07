@@ -193,3 +193,14 @@ class Build:
     created_at: datetime
     status: BuildStatus
     result: BuildResult | None = None
+
+    def get_k8s_name(self) -> str:
+        """Returns the name of the corresponding BuildRun."""
+        return f"renku-{self.id}"
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedBuild:
+    """Model to represent a requested container image build."""
+
+    environment_id: ULID

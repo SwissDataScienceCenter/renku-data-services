@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, nullcontext
 from datetime import UTC, datetime
@@ -19,6 +20,24 @@ from renku_data_services.base_models.core import RESET
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.session import models
 from renku_data_services.session import orm as schemas
+from renku_data_services.session.shipwright_client import ShipwrightClient
+from renku_data_services.session.shipwright_crs import (
+    BuildRun as ShipwrightBuildRun,
+)
+from renku_data_services.session.shipwright_crs import (
+    BuildRunSpec as ShipwrightBuildRunSpec,
+)
+from renku_data_services.session.shipwright_crs import (
+    BuildSpec as ShipwrightBuildSpec,
+)
+from renku_data_services.session.shipwright_crs import (
+    GitSource,
+    Metadata,
+    StrategyRef,
+)
+from renku_data_services.session.shipwright_crs import (
+    InlineBuild as ShipwrightInlineBuild,
+)
 
 
 class SessionRepository:
@@ -526,3 +545,70 @@ class SessionRepository:
             await session.delete(launcher)
             if launcher.environment.environment_kind == models.EnvironmentKind.CUSTOM:
                 await session.delete(launcher.environment)
+
+
+class BuildRepository:
+    """Repository for container image builds."""
+
+    def __init__(
+        self, session_maker: Callable[..., AsyncSession], authz: Authz, shipwright_client: ShipwrightClient | None
+    ) -> None:
+        self.session_maker = session_maker
+        self.authz: Authz = authz
+        self.shipwright_client = shipwright_client
+
+    async def insert_build(self, user: base_models.APIUser, build: models.UnsavedBuild) -> models.Build:
+        """Insert a new build."""
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session, session.begin():
+            build_orm = schemas.BuildORM(
+                # environment_id=build.environment_id,
+                status=models.BuildStatus.in_progress,
+            )
+            session.add(build_orm)
+            await session.flush()
+            await session.refresh(build_orm)
+
+        result = build_orm.dump()
+
+        # TODO: Get this from the session environment
+        git_repository = "https://gitlab.dev.renku.ch/flora.thiebaut/python-simple.git"
+
+        if self.shipwright_client is None:
+            logging.warning("ShipWright client not defined, BuildRun creation skipped.")
+        else:
+            await self.shipwright_client.create_build_run(
+                ShipwrightBuildRun(
+                    metadata=Metadata(name=result.get_k8s_name()),
+                    spec=ShipwrightBuildRunSpec(
+                        build=ShipwrightInlineBuild(
+                            spec=ShipwrightBuildSpec(
+                                source=GitSource(
+                                    git=git_repository,
+                                ),
+                                strategy=StrategyRef(kind="BuildStrategy", name="renku-buildpacks"),
+                                # source:
+                                #     type: Git
+                                #     git:
+                                #     # TEMPLETIZE AS PARAM
+                                #     url: https://gitlab.dev.renku.ch/flora.thiebaut/python-simple.git
+                                # strategy:
+                                #     name: renku-buildpacks
+                                #     kind: BuildStrategy
+                                # paramValues:
+                                #     - name: run-image
+                                #     # TEMPLETIZE AS PARAM
+                                #     value: harbor.dev.renku.ch/flora-dev/run-image-vscodium
+                                # output:
+                                #     # TEMPLETIZE AS PARAM
+                                #     image: harbor.dev.renku.ch/flora-dev/python-simple
+                                #     pushSecret: flora-docker-secret
+                            )
+                        )
+                    ),
+                )
+            )
+
+        return result
