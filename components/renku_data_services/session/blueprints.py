@@ -210,7 +210,7 @@ class BuildsBP(CustomBlueprint):
         """Get all container image builds belonging to a session environment."""
 
         @authenticate(self.authenticator)
-        async def _get_environment_builds(_: Request, user: base_models.APIUser, project_id: ULID) -> JSONResponse:
+        async def _get_environment_builds(_: Request, user: base_models.APIUser, environment_id: ULID) -> JSONResponse:
             raise errors.ProgrammingError(message="Not implemented")
 
         return "/environments/<environment_id:ulid>/builds", ["GET"], _get_environment_builds
