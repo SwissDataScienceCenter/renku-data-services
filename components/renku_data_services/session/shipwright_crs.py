@@ -125,6 +125,15 @@ class Build(BaseModel):
     spec: BuildSpec
 
 
+class InlineBuild(BaseModel):
+    """A shipwright build."""
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    spec: BuildSpec
+
+
 class BuildRef(BuildSpec):
     """Reference to a build."""
 
@@ -134,7 +143,7 @@ class BuildRef(BuildSpec):
 class BuildRunSpec(BaseModel):
     """Spec for a build run."""
 
-    build: BuildRef
+    build: BuildRef | InlineBuild
 
 
 class BuildRun(BaseModel):

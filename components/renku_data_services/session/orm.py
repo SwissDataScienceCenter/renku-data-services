@@ -220,18 +220,18 @@ class BuildORM(BaseORM):
 
     status: Mapped[models.BuildStatus] = mapped_column("status")
 
-    result_image: Mapped[str | None] = mapped_column("result_image", String(500))
-
-    completed_at: Mapped[datetime | None] = mapped_column("completed_at", DateTime(timezone=True))
-
-    result_repository_url: Mapped[str | None] = mapped_column("result_repository_url", String(500))
-
-    result_repository_git_commit_sha: Mapped[str | None] = mapped_column(
-        "result_repository_git_commit_sha", String(100)
-    )
-
     created_at: Mapped[datetime] = mapped_column(
         "created_at", DateTime(timezone=True), default=func.now(), nullable=False
+    )
+
+    result_image: Mapped[str | None] = mapped_column("result_image", String(500), default=None)
+
+    completed_at: Mapped[datetime | None] = mapped_column("completed_at", DateTime(timezone=True), default=None)
+
+    result_repository_url: Mapped[str | None] = mapped_column("result_repository_url", String(500), default=None)
+
+    result_repository_git_commit_sha: Mapped[str | None] = mapped_column(
+        "result_repository_git_commit_sha", String(100), default=None
     )
 
     def dump(self) -> models.Build:
