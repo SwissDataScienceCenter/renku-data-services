@@ -71,6 +71,7 @@ class Namespace:
     slug: str
     kind: NamespaceKind
     created_by: str
+    path: list[str]
     underlying_resource_id: ULID | str  # The user, group or project ID depending on the Namespace kind
     latest_slug: str | None = None
     name: str | None = None

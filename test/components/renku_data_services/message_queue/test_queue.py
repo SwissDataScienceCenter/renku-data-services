@@ -35,6 +35,7 @@ async def test_queue_send(app_config_instance) -> None:
                     NamespaceKind.user,
                     created_by="some-user",
                     underlying_resource_id="some-user",
+                    path=["namespace"],
                 ),
                 visibility=Visibility.PRIVATE,
                 created_by="some-user",

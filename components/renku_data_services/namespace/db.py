@@ -7,9 +7,10 @@ import string
 from collections.abc import AsyncGenerator, Callable
 from contextlib import nullcontext
 from datetime import UTC, datetime
+from typing import Any
 
 from sanic.log import logger
-from sqlalchemy import delete, func, select, text
+from sqlalchemy import Select, delete, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -18,7 +19,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.authz.models import CheckPermissionItem, Member, MembershipChange, Role, Scope, UnsavedMember
-from renku_data_services.base_api.pagination import PaginationRequest
+from renku_data_services.base_api.pagination import PaginationRequest, paginate_queries
 from renku_data_services.base_models.core import Slug
 from renku_data_services.message_queue import events
 from renku_data_services.message_queue.avro_models.io.renku.events.v2 import GroupAdded, GroupRemoved, GroupUpdated
@@ -27,6 +28,7 @@ from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import dispatch_message
 from renku_data_services.namespace import models
 from renku_data_services.namespace import orm as schemas
+from renku_data_services.project.orm import ProjectORM
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.decorators import update_search_document
 from renku_data_services.users import models as user_models
@@ -346,7 +348,11 @@ class GroupRepository:
         return permissions
 
     async def get_namespaces(
-        self, user: base_models.APIUser, pagination: PaginationRequest, minimum_role: Role | None = None
+        self,
+        user: base_models.APIUser,
+        pagination: PaginationRequest,
+        minimum_role: Role | None = None,
+        kinds: list[models.NamespaceKind] | None = None,
     ) -> tuple[list[models.Namespace], int]:
         """Get all namespaces."""
         scope = Scope.READ
@@ -358,27 +364,43 @@ class GroupRepository:
             scope = Scope.DELETE
 
         async with self.session_maker() as session, session.begin():
-            group_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.group, scope)
-            group_ns_stmt = select(schemas.NamespaceORM).where(schemas.NamespaceORM.group_id.in_(group_ids))
-            output = []
-            personal_ns_stmt = select(schemas.NamespaceORM).where(schemas.NamespaceORM.user_id == user.id)
-            personal_ns = await session.scalar(personal_ns_stmt)
-            if personal_ns and pagination.page == 1:
-                output.append(personal_ns.dump())
-            # NOTE: in the first page the personal namespace is added, so the offset and per page params are modified
-            group_per_page = pagination.per_page - 1 if personal_ns and pagination.page == 1 else pagination.per_page
-            group_offset = pagination.offset - 1 if personal_ns and pagination.page > 1 else pagination.offset
-            group_ns = await session.scalars(
-                group_ns_stmt.limit(group_per_page).offset(group_offset).order_by(schemas.NamespaceORM.id)
-            )
-            group_count = (
-                await session.scalar(group_ns_stmt.with_only_columns(func.count(schemas.NamespaceORM.id))) or 0
-            )
-            if personal_ns is not None:
-                group_count += 1
-            for ns_orm in group_ns:
-                output.append(ns_orm.dump())
-            return output, group_count
+            group_ids: list[str] = []
+            project_ids: list[str] = []
+            user_ids: list[str] = []
+            if not kinds or models.NamespaceKind.group in kinds:
+                group_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.group, scope)
+            if (not kinds or models.NamespaceKind.user in kinds) and user.id:
+                user_ids.append(user.id)
+            if not kinds or models.NamespaceKind.project in kinds:
+                project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, scope)
+
+            queries: list[tuple[Select[tuple[Any]], int]] = [
+                (
+                    select(schemas.NamespaceORM)
+                    .where(schemas.NamespaceORM.user_id.in_(user_ids))
+                    .order_by(schemas.NamespaceORM.id),
+                    len(user_ids),
+                ),
+                (
+                    select(schemas.NamespaceORM)
+                    .where(schemas.NamespaceORM.group_id.in_(group_ids))
+                    .order_by(schemas.NamespaceORM.id),
+                    len(group_ids),
+                ),
+                (select(ProjectORM).where(ProjectORM.id.in_(project_ids)).order_by(ProjectORM.id), len(project_ids)),
+            ]
+
+            results = await paginate_queries(pagination, session, queries)
+            output: list[models.Namespace] = []
+            for res in results:
+                match res:
+                    case schemas.NamespaceORM():
+                        output.append(res.dump())
+                    case ProjectORM():
+                        output.append(res.dump_as_namespace())
+                    case _:
+                        raise errors.ProgrammingError()
+            return output, len(group_ids) + len(user_ids) + len(project_ids)
 
     async def _get_user_namespaces(self) -> AsyncGenerator[user_models.UserInfo, None]:
         """Lists all user namespaces without regard for authorization or permissions, used for migrations."""

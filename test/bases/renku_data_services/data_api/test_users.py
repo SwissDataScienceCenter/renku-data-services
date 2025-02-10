@@ -21,6 +21,7 @@ async def test_get_all_users_as_admin(sanic_client, users) -> None:
             kind=NamespaceKind.user,
             underlying_resource_id="admin-id",
             created_by="admin-id",
+            path=["admin.adminson"],
         ),
     )
     admin_token = {
@@ -174,7 +175,7 @@ async def test_logged_in_user_check_adds_user_if_missing(sanic_client, users, ad
         "first_name": user["first_name"],
         "last_name": user["last_name"],
         "email": user["email"],
-        "name": f"{user["first_name"]} {user["last_name"]}",
+        "name": f"{user['first_name']} {user['last_name']}",
     }
     # Just by hitting the users endpoint with valid credentials the user will be aded to the database
     _, res = await sanic_client.get(
@@ -223,7 +224,7 @@ async def test_delete_user(sanic_client, admin_headers) -> None:
         "first_name": user["first_name"],
         "last_name": user["last_name"],
         "email": user["email"],
-        "name": f"{user["first_name"]} {user["last_name"]}",
+        "name": f"{user['first_name']} {user['last_name']}",
     }
     # Just by hitting the users endpoint with valid credentials the user will be added to the database
     _, res = await sanic_client.get(

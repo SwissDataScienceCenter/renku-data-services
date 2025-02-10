@@ -131,6 +131,7 @@ class NamespaceORM(BaseORM):
             underlying_resource_id=self.underlying_resource_id,
             latest_slug=self.slug,
             name=self.name,
+            path=[self.slug],
         )
 
     def dump_user(self) -> UserInfo:
@@ -189,6 +190,7 @@ class NamespaceOldORM(BaseORM):
                 kind=models.NamespaceKind.group,
                 underlying_resource_id=self.latest_slug.group_id,
                 name=self.latest_slug.group.name,
+                path=[self.slug],
             )
 
         if not self.latest_slug.user or not self.latest_slug.user_id:
@@ -210,6 +212,7 @@ class NamespaceOldORM(BaseORM):
             kind=models.NamespaceKind.user,
             underlying_resource_id=self.latest_slug.user_id,
             name=name,
+            path=[self.slug],
         )
 
 
