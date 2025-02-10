@@ -145,22 +145,6 @@ class ProjectsProjectIdCopiesGetParametersQuery(BaseAPISpec):
     writable: bool = False
 
 
-class ProjectsProjectIdGetParametersQuery(BaseAPISpec):
-    with_documentation: Optional[bool] = Field(
-        None, description="Projects with or without possibly extensive documentation?"
-    )
-
-
-class NamespacesNamespaceProjectsSlugGetParametersQuery(BaseAPISpec):
-    with_documentation: Optional[bool] = Field(
-        None, description="Projects with or without possibly extensive documentation?"
-    )
-
-
-class ProjectsProjectIdCopiesGetParametersQuery(BaseAPISpec):
-    writable: bool = False
-
-
 class ProjectMemberPatchRequest(BaseAPISpec):
     model_config = ConfigDict(
         extra="forbid",
@@ -507,68 +491,6 @@ class ProjectPost(BaseAPISpec):
         example="/secrets",
         min_length=1,
     )
-
-
-class MigrateProjectPost(BaseAPISpec):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    name: str = Field(
-        ...,
-        description="Renku project name",
-        example="My Renku Project :)",
-        max_length=99,
-        min_length=1,
-    )
-    namespace: str = Field(
-        ...,
-        description="A command-line/url friendly name for a namespace",
-        example="a-slug-example",
-        max_length=99,
-        min_length=1,
-        pattern="^(?!.*\\.git$|.*\\.atom$|.*[\\-._][\\-._].*)[a-z0-9][a-z0-9\\-_.]*$",
-    )
-    slug: Optional[str] = Field(
-        None,
-        description="A command-line/url friendly name for a namespace",
-        example="a-slug-example",
-        max_length=99,
-        min_length=1,
-        pattern="^(?!.*\\.git$|.*\\.atom$|.*[\\-._][\\-._].*)[a-z0-9][a-z0-9\\-_.]*$",
-    )
-    repositories: Optional[List[str]] = Field(
-        None,
-        description="A list of repositories",
-        example=[
-            "https://github.com/SwissDataScienceCenter/project-1.git",
-            "git@github.com:SwissDataScienceCenter/project-2.git",
-        ],
-        min_length=0,
-    )
-    visibility: Optional[Visibility] = None
-    description: Optional[str] = Field(
-        None, description="A description for the resource", max_length=500
-    )
-    keywords: Optional[List[Keyword]] = Field(
-        None,
-        description="Project keywords",
-        example=["project", "keywords"],
-        min_length=0,
-    )
-    documentation: Optional[str] = Field(
-        None,
-        description="Renku project documentation",
-        example="My Renku Project Documentation :)",
-        max_length=5000,
-        min_length=0,
-    )
-    secrets_mount_directory: Optional[str] = Field(
-        None,
-        description="The location where the secrets will be provided inside sessions, if left unset it will default to `/secrets`.\nRelative locations are supported and will be mounted relative to the session environment's mount directory.\n",
-        example="/secrets",
-        min_length=1,
-    )
-    v1_id: int
 
 
 class ProjectPatch(BaseAPISpec):

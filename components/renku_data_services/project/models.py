@@ -156,12 +156,14 @@ class SessionSecretPatchSecretValue:
     secret_slot_id: ULID
     value: str | None
 
+
 @dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedProjectMigration:
     """Model representing a migration from an old project version that has not been persisted."""
 
     project: Project
     project_v1_id: int
+
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class ProjectMigration:

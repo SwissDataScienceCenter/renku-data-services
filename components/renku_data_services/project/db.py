@@ -895,6 +895,8 @@ class ProjectSessionSecretRepository:
 
 
 class ProjectMigrationRepository:
+    """Repository for project migrations."""
+
     def __init__(
         self,
         session_maker: Callable[..., AsyncSession],
@@ -927,7 +929,7 @@ class ProjectMigrationRepository:
             raise errors.ValidationError(
                 message=f"Failed to create a project for migration from v1 (project_v1_id={project_v1_id})."
             )
-        
+
         result = await session.scalars(
             select(schemas.ProjectMigrationsORM)
             .where(schemas.ProjectMigrationsORM.project_id == created_project.id)
@@ -936,7 +938,10 @@ class ProjectMigrationRepository:
         project_migration = result.one_or_none()
         if project_migration is not None:
             raise errors.ValidationError(
-                message=f"Project with project_v1_id '{project_v1_id}' and Project id '{created_project.id}' already exists."
+                message=(
+                    f"Project with project_v1_id '{project_v1_id}' and "
+                    f"Project id '{created_project.id}' already exists."
+                )
             )
 
         migration_entry = models.UnsavedProjectMigration(project=created_project, project_v1_id=project_v1_id)

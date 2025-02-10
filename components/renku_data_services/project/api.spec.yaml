@@ -155,7 +155,7 @@ paths:
         - in: path
           name: v1_id
           required: true
-          description: The ID of the project in the v1 system
+          description: The ID of the project in Renku v1
           schema:
             type: integer
       responses:
@@ -177,12 +177,19 @@ paths:
         - projects
     post:
       summary: Create a new project migrated from Renku v1
+      parameters:
+        - in: path
+          name: v1_id
+          required: true
+          description: The ID of the project in Renku v1
+          schema:
+            type: integer
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/MigrateProjectPost"
+              $ref: "#/components/schemas/ProjectPost"
       responses:
         "201":
           description: The project was created
@@ -693,38 +700,6 @@ components:
       required:
         - name
         - namespace
-    MigrateProjectPost:
-      description: Project metadata to be created in Renku, it belongs a project from Renku v1
-      type: object
-      additionalProperties: false
-      properties:
-        name:
-          $ref: "#/components/schemas/ProjectName"
-        namespace:
-          $ref: "#/components/schemas/Slug"
-        slug:
-          $ref: "#/components/schemas/Slug"
-        repositories:
-          $ref: "#/components/schemas/RepositoriesList"
-        visibility:
-          # When copying a project from a template project, the default visibility is the same as template project's
-          # visibility.
-          # Its default value is ``private``, when creating a project without copying.
-          $ref: "#/components/schemas/Visibility"
-        description:
-          $ref: "#/components/schemas/Description"
-        keywords:
-          $ref: "#/components/schemas/KeywordsList"
-        documentation:
-          $ref: "#/components/schemas/ProjectDocumentation"
-        secrets_mount_directory:
-          $ref: "#/components/schemas/SecretsMountDirectory"
-        v1_id:
-          type: integer
-      required:
-        - name
-        - namespace
-        - v1_id
     ProjectPatch:
       type: object
       description: Patch of a project
