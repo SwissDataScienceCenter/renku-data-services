@@ -23,7 +23,7 @@ class ShipwrightBuildV1Beta2Kr8s(APIObject):
     plural: str = "builds"
     singular: str = "build"
     scalable: bool = False
-    endpoint: str = "build"
+    endpoint: str = "builds"
 
 
 class ShipwrightBuildRunV1Beta2Kr8s(APIObject):
@@ -35,7 +35,7 @@ class ShipwrightBuildRunV1Beta2Kr8s(APIObject):
     plural: str = "buildruns"
     singular: str = "buildrun"
     scalable: bool = False
-    endpoint: str = "buildrun"
+    endpoint: str = "buildruns"
 
 
 class ShipwrightClient:
