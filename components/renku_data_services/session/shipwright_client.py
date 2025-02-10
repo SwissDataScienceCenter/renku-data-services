@@ -18,7 +18,7 @@ class ShipwrightBuildV1Beta2Kr8s(APIObject):
     """Spec for shipwright build used by the k8s client."""
 
     kind: str = "Build"
-    version: str = "shipwright.io/v1beta2"
+    version: str = "shipwright.io/v1beta1"
     namespaced: bool = True
     plural: str = "builds"
     singular: str = "build"
@@ -30,7 +30,7 @@ class ShipwrightBuildRunV1Beta2Kr8s(APIObject):
     """Spec for shipwright build used by the k8s client."""
 
     kind: str = "BuildRun"
-    version: str = "shipwright.io/v1beta2"
+    version: str = "shipwright.io/v1beta1"
     namespaced: bool = True
     plural: str = "buildruns"
     singular: str = "buildrun"

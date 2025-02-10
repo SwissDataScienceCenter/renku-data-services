@@ -120,7 +120,7 @@ class Build(BaseModel):
         extra="allow",
     )
     kind: str = "Build"
-    apiVersion: str = "shipwright.io/v1beta2"
+    apiVersion: str = "shipwright.io/v1beta1"
     metadata: Metadata
     spec: BuildSpec
 
@@ -153,6 +153,6 @@ class BuildRun(BaseModel):
         extra="allow",
     )
     kind: str = "BuildRun"
-    apiVersion: str = "shipwright.io/v1beta2"
+    apiVersion: str = "shipwright.io/v1beta1"
     metadata: Metadata
     spec: BuildRunSpec
