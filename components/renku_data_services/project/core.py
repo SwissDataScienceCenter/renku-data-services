@@ -2,6 +2,7 @@
 
 from pathlib import PurePosixPath
 from urllib.parse import urlparse
+from typing import Union
 
 from ulid import ULID
 
@@ -14,7 +15,7 @@ from renku_data_services.project.db import ProjectRepository
 from renku_data_services.session.db import SessionRepository
 
 
-def validate_unsaved_project(body: apispec.ProjectPost, created_by: str) -> models.UnsavedProject:
+def validate_unsaved_project(body: Union[apispec.ProjectPost, apispec.MigrateProjectPost], created_by: str) -> models.UnsavedProject:
     """Validate an unsaved project."""
     keywords = [kw.root for kw in body.keywords] if body.keywords is not None else []
     visibility = Visibility.PRIVATE if body.visibility is None else Visibility(body.visibility.value)
