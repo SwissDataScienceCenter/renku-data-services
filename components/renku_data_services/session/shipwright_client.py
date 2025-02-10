@@ -74,19 +74,6 @@ class ShipwrightClient:
             return None
         return Build.model_validate(build.to_dict())
 
-    async def get_build_raw(self, name: str) -> ShipwrightBuildV1Beta2Kr8s | None:
-        """Get an image build."""
-        try:
-            build = await ShipwrightBuildV1Beta2Kr8s.get(name=name, namespace=self.namespace)
-        except NotFoundError:
-            return None
-        except ServerError as e:
-            if not e.response or e.response.status_code not in [400, 404]:
-                logging.exception(f"Cannot get the build {name} because of {e}")
-                raise IntermittentError(f"Cannot get build {name} from the k8s API.")
-            return None
-        return build
-
     async def list_builds(self, label_selector: str | None = None) -> list[Build]:
         """Get a list of shipwright builds."""
         try:
@@ -139,6 +126,19 @@ class ShipwrightClient:
                 raise IntermittentError(f"Cannot get build {name} from the k8s API.")
             return None
         return BuildRun.model_validate(build.to_dict())
+
+    async def get_build_run_raw(self, name: str) -> ShipwrightBuildRunV1Beta2Kr8s | None:
+        """Get an image build run."""
+        try:
+            build = await ShipwrightBuildRunV1Beta2Kr8s.get(name=name, namespace=self.namespace)
+        except NotFoundError:
+            return None
+        except ServerError as e:
+            if not e.response or e.response.status_code not in [400, 404]:
+                logging.exception(f"Cannot get the build {name} because of {e}")
+                raise IntermittentError(f"Cannot get build {name} from the k8s API.")
+            return None
+        return build
 
     async def list_build_runs(self, label_selector: str | None = None) -> list[BuildRun]:
         """Get a list of shipwright build runs."""
