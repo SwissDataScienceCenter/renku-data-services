@@ -22,6 +22,14 @@ from renku_data_services.session import models
 from renku_data_services.session import orm as schemas
 from renku_data_services.session.shipwright_client import ShipwrightClient
 from renku_data_services.session.shipwright_crs import (
+    BuildOutput,
+    GitRef,
+    GitSource,
+    Metadata,
+    ParamValue,
+    StrategyRef,
+)
+from renku_data_services.session.shipwright_crs import (
     BuildRun as ShipwrightBuildRun,
 )
 from renku_data_services.session.shipwright_crs import (
@@ -29,11 +37,6 @@ from renku_data_services.session.shipwright_crs import (
 )
 from renku_data_services.session.shipwright_crs import (
     BuildSpec as ShipwrightBuildSpec,
-)
-from renku_data_services.session.shipwright_crs import (
-    GitSource,
-    Metadata,
-    StrategyRef,
 )
 from renku_data_services.session.shipwright_crs import (
     InlineBuild as ShipwrightInlineBuild,
@@ -702,6 +705,8 @@ class BuildRepository:
 
         # TODO: Get this from the session environment
         git_repository = "https://gitlab.dev.renku.ch/flora.thiebaut/python-simple.git"
+        run_image = "renku/renkulab-vscodium-python-runimage:ubuntu-c794f36"
+        output_image = "harbor.dev.renku.ch/flora-dev/python-simple"
 
         if self.shipwright_client is None:
             logging.warning("ShipWright client not defined, BuildRun creation skipped.")
@@ -712,26 +717,13 @@ class BuildRepository:
                     spec=ShipwrightBuildRunSpec(
                         build=ShipwrightInlineBuild(
                             spec=ShipwrightBuildSpec(
-                                source=GitSource(
-                                    git=git_repository,
-                                ),
+                                source=GitSource(git=GitRef(url=git_repository)),
                                 strategy=StrategyRef(kind="BuildStrategy", name="renku-buildpacks"),
-                                # source:
-                                #     type: Git
-                                #     git:
-                                #     # TEMPLETIZE AS PARAM
-                                #     url: https://gitlab.dev.renku.ch/flora.thiebaut/python-simple.git
-                                # strategy:
-                                #     name: renku-buildpacks
-                                #     kind: BuildStrategy
-                                # paramValues:
-                                #     - name: run-image
-                                #     # TEMPLETIZE AS PARAM
-                                #     value: harbor.dev.renku.ch/flora-dev/run-image-vscodium
-                                # output:
-                                #     # TEMPLETIZE AS PARAM
-                                #     image: harbor.dev.renku.ch/flora-dev/python-simple
-                                #     pushSecret: flora-docker-secret
+                                paramValues=[ParamValue(name="run-image", value=run_image)],
+                                output=BuildOutput(
+                                    image=output_image,
+                                    pushSecret="flora-docker-secret",
+                                ),
                             )
                         )
                     ),

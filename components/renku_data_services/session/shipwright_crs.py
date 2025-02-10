@@ -75,15 +75,15 @@ class ParamValue(BaseModel):
 
     name: str
     value: str | None
-    configMapValue: ConfigMapRef | None
+    configMapValue: ConfigMapRef | None = None
 
 
 class GitRef(BaseModel):
     """A reference to a git repo."""
 
     url: str
-    revision: str
-    cloneSecret: str
+    revision: str | None = None
+    cloneSecret: str | None = None
 
 
 class GitSource(BaseModel):
@@ -91,7 +91,7 @@ class GitSource(BaseModel):
 
     type: str = "Git"
     git: GitRef
-    contextDir: str
+    contextDir: str | None = None
 
 
 class Retention(BaseModel):
@@ -110,7 +110,7 @@ class BuildSpec(BaseModel):
     paramValues: list[ParamValue]
     strategy: StrategyRef
     output: BuildOutput
-    retention: Retention
+    retention: Retention | None = None
 
 
 class Build(BaseModel):
