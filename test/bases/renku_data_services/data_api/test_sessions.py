@@ -969,3 +969,26 @@ async def test_starting_session_anonymous(
     assert res.status_code == 200, res.text
     assert len(res.json) > 0
     assert session_res.json["name"] in [i["name"] for i in res.json]
+
+
+@pytest.mark.asyncio
+async def test_post_build(
+    sanic_client: SanicASGITestClient,
+    user_headers,
+) -> None:
+    payload = {"environment_id": "7232Y90Z6XSAXJPT79GB5Y269E"}
+
+    _, response = await sanic_client.post(
+        "/api/data/builds",
+        json=payload,
+        headers=user_headers,
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json is not None
+    build = response.json
+    assert build.get("id") is not None
+    assert build.get("environment_id") is not None
+    assert build.get("created_at") is not None
+    assert build.get("status") == "in_progress"
+    assert build.get("result") is None
