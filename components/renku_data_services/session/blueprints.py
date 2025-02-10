@@ -7,13 +7,14 @@ from sanic.response import JSONResponse
 from sanic_ext import validate
 from ulid import ULID
 
-from renku_data_services import base_models, errors
+from renku_data_services import base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.session import apispec, apispec_extras, models
 from renku_data_services.session.core import (
+    validate_build_patch,
     validate_environment_patch,
     validate_session_launcher_patch,
     validate_unsaved_build,
@@ -193,8 +194,9 @@ class BuildsBP(CustomBlueprint):
         """Get a specific container image build."""
 
         @authenticate(self.authenticator)
-        async def _get_one(_: Request, user: base_models.APIUser, build_id: ULID) -> HTTPResponse:
-            raise errors.ProgrammingError(message="Not implemented")
+        async def _get_one(_: Request, user: base_models.APIUser, build_id: ULID) -> JSONResponse:
+            build = await self.build_repo.get_build(user=user, build_id=build_id)
+            return validated_json(apispec_extras.RootBuild, build)
 
         return "/builds/<build_id:ulid>", ["GET"], _get_one
 
@@ -210,6 +212,21 @@ class BuildsBP(CustomBlueprint):
             return validated_json(apispec_extras.RootBuild, build, status=201)
 
         return "/builds", ["POST"], _post
+
+    def patch(self) -> BlueprintFactoryResponse:
+        """Update a specific container image build."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @validate(json=apispec.BuildPatch)
+        async def _patch(
+            _: Request, user: base_models.APIUser, build_id: ULID, body: apispec.BuildPatch
+        ) -> JSONResponse:
+            build_patch = validate_build_patch(body)
+            build = await self.build_repo.update_build(user=user, build_id=build_id, patch=build_patch)
+            return validated_json(apispec_extras.RootBuild, build)
+
+        return "/builds/<build_id:ulid>", ["PATCH"], _patch
 
     def get_environment_builds(self) -> BlueprintFactoryResponse:
         """Get all container image builds belonging to a session environment."""
