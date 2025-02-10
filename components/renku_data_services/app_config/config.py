@@ -65,7 +65,7 @@ from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.platform.db import PlatformRepository
-from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository, ProjectSessionSecretRepository
+from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository, ProjectSessionSecretRepository, ProjectMigrationRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsRepo
@@ -277,6 +277,7 @@ class Config:
     _rp_repo: ResourcePoolRepository | None = field(default=None, repr=False, init=False)
     _storage_repo: StorageRepository | None = field(default=None, repr=False, init=False)
     _project_repo: ProjectRepository | None = field(default=None, repr=False, init=False)
+    _project_migration_repo: ProjectMigrationRepository | None = field(default=None, repr=False, init=False)
     _group_repo: GroupRepository | None = field(default=None, repr=False, init=False)
     _event_repo: EventRepository | None = field(default=None, repr=False, init=False)
     _reprovisioning_repo: ReprovisioningRepository | None = field(default=None, repr=False, init=False)
@@ -412,6 +413,19 @@ class Config:
                 search_updates_repo=self.search_updates_repo,
             )
         return self._project_repo
+    
+    @property
+    def project_migration_repo(self) -> ProjectMigrationRepository:
+        """The DB adapter for Renku native project migrations."""
+        if not self._project_migration_repo:
+            self._project_migration_repo = ProjectMigrationRepository(
+                session_maker=self.db.async_session_maker,
+                authz=self.authz,
+                message_queue=self.message_queue,
+                project_repo=self.project_repo,
+                event_repo=self.event_repo,
+            )
+        return self._project_migration_repo
 
     @property
     def project_member_repo(self) -> ProjectMemberRepository:

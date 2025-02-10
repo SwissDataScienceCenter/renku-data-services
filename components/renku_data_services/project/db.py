@@ -892,3 +892,81 @@ class ProjectSessionSecretRepository:
             )
             for secret in result:
                 await session.delete(secret)
+
+
+class ProjectMigrationRepository:
+    def __init__(
+        self,
+        session_maker: Callable[..., AsyncSession],
+        authz: Authz,
+        message_queue: IMessageQueue,
+        event_repo: EventRepository,
+        project_repo: ProjectRepository,
+    ) -> None:
+        self.session_maker = session_maker
+        self.authz = authz
+        self.message_queue: IMessageQueue = message_queue
+        self.project_repo = project_repo
+        self.event_repo: EventRepository = event_repo
+
+    @with_db_transaction
+    @Authz.authz_change(AuthzOperation.create, ResourceType.project)
+    @dispatch_message(avro_schema_v2.ProjectCreated)
+    async def migrate_v1_project(
+        self,
+        user: base_models.APIUser,
+        project: models.UnsavedProject,
+        project_v1_id: int,
+        session: AsyncSession | None = None,
+    ) -> models.Project:
+        """Migrate a v1 project by creating a new project and tracking the migration."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required")
+        created_project = await self.project_repo.insert_project(user, project)
+        if not created_project:
+            raise errors.ValidationError(
+                message=f"Failed to create a project for migration from v1 (project_v1_id={project_v1_id})."
+            )
+        
+        result = await session.scalars(
+            select(schemas.ProjectMigrationsORM)
+            .where(schemas.ProjectMigrationsORM.project_id == created_project.id)
+            .where(schemas.ProjectMigrationsORM.project_v1_id == project_v1_id)
+        )
+        project_migration = result.one_or_none()
+        if project_migration is not None:
+            raise errors.ValidationError(
+                message=f"Project with project_v1_id '{project_v1_id}' and Project id '{created_project.id}' already exists."
+            )
+
+        migration_entry = models.UnsavedProjectMigration(project=created_project, project_v1_id=project_v1_id)
+        session.add(migration_entry)
+        await session.flush()
+        await session.refresh(migration_entry)
+
+        return created_project
+
+    async def get_migrations_by_project_id(self, user: base_models.APIUser, v1_id: int) -> list[models.Project]:
+        """Retrieve all migration records for a given project v1 ID."""
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session:
+            stmt = select(schemas.ProjectMigrationsORM).where(schemas.ProjectMigrationsORM.project_v1_id == v1_id)
+            result = await session.execute(stmt)
+            project_ids = [row[0] for row in result.fetchall()]
+
+            if not project_ids:
+                return []
+
+            # NOTE: Show only those projects that user has access to
+            allowed_project_ids = await self.authz.resources_with_permission(
+                user, user.id, ResourceType.project, scope=Scope.WRITE
+            )
+            stmt = select(schemas.ProjectORM).where(
+                schemas.ProjectORM.id.in_(project_ids), schemas.ProjectORM.id.in_(allowed_project_ids)
+            )
+            result = await session.execute(stmt)
+            project_orms = result.scalars().all()
+
+            return [p.dump() for p in project_orms]
