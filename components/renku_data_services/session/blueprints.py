@@ -12,14 +12,15 @@ from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_models.validation import validated_json
-from renku_data_services.session import apispec, models
+from renku_data_services.session import apispec, apispec_extras, models
 from renku_data_services.session.core import (
     validate_environment_patch,
     validate_session_launcher_patch,
+    validate_unsaved_build,
     validate_unsaved_environment,
     validate_unsaved_session_launcher,
 )
-from renku_data_services.session.db import SessionRepository
+from renku_data_services.session.db import BuildRepository, SessionRepository
 
 
 @dataclass(kw_only=True)
@@ -175,7 +176,7 @@ class SessionLaunchersBP(CustomBlueprint):
 class BuildsBP(CustomBlueprint):
     """Handlers for manipulating container image builds."""
 
-    # session_repo: SessionRepository
+    build_repo: BuildRepository
     authenticator: base_models.Authenticator
 
     def get_one(self) -> BlueprintFactoryResponse:
@@ -191,8 +192,12 @@ class BuildsBP(CustomBlueprint):
         """Create a new container image build."""
 
         @authenticate(self.authenticator)
-        async def _post(_: Request, user: base_models.APIUser) -> HTTPResponse:
-            raise errors.ProgrammingError(message="Not implemented")
+        @only_authenticated
+        @validate(json=apispec.BuildPost)
+        async def _post(_: Request, user: base_models.APIUser, body: apispec.BuildPost) -> JSONResponse:
+            new_build = validate_unsaved_build(body)
+            build = await self.build_repo.insert_build(user=user, build=new_build)
+            return validated_json(apispec_extras.RootBuild, dict(root=build), status=201)
 
         return "/builds", ["POST"], _post
 
