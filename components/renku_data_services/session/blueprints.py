@@ -207,7 +207,9 @@ class BuildsBP(CustomBlueprint):
         async def _post(_: Request, user: base_models.APIUser, body: apispec.BuildPost) -> JSONResponse:
             new_build = validate_unsaved_build(body)
             build = await self.build_repo.insert_build(user=user, build=new_build)
-            return validated_json(apispec_extras.RootBuild, dict(root=build), status=201)
+            # raise errors.ProgrammingError(message=f"{build}")
+            # return validated_json(apispec_extras.RootBuild, dict(root=build), status=201)
+            return validated_json(apispec_extras.RootBuild, build, status=201)
 
         return "/builds", ["POST"], _post
 

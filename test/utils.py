@@ -189,6 +189,7 @@ class TestAppConfig(Config):
         authenticator = DummyAuthenticator()
         gitlab_authenticator = DummyAuthenticator()
         quota_repo = QuotaRepository(DummyCoreClient({}, {}), DummySchedulingClient({}), namespace=k8s_namespace)
+        shipwright_client = None
         user_always_exists = os.environ.get("DUMMY_USERSTORE_USER_ALWAYS_EXISTS", "true").lower() == "true"
         user_store = DummyUserStore(user_always_exists=user_always_exists)
         gitlab_client = DummyGitlabAPI()
@@ -211,6 +212,7 @@ class TestAppConfig(Config):
             gitlab_client=gitlab_client,
             user_store=user_store,
             quota_repo=quota_repo,
+            shipwright_client=shipwright_client,
             sentry=sentry,
             trusted_proxies=trusted_proxies,
             server_defaults_file=server_defaults_file,
