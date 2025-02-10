@@ -196,7 +196,8 @@ class Build:
 
     def get_k8s_name(self) -> str:
         """Returns the name of the corresponding BuildRun."""
-        return f"renku-{self.id}"
+        name = f"renku-{self.id}"
+        return name.lower()
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
