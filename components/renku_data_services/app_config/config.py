@@ -61,7 +61,12 @@ from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.platform.db import PlatformRepository
-from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository, ProjectSessionSecretRepository, ProjectMigrationRepository
+from renku_data_services.project.db import (
+    ProjectMemberRepository,
+    ProjectMigrationRepository,
+    ProjectRepository,
+    ProjectSessionSecretRepository,
+)
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsRepo
 from renku_data_services.session.db import SessionRepository
@@ -298,7 +303,7 @@ class Config:
                 group_repo=self.group_repo,
             )
         return self._project_repo
-    
+
     @property
     def project_migration_repo(self) -> ProjectMigrationRepository:
         """The DB adapter for Renku native project migrations."""

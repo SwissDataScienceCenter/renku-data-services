@@ -35,9 +35,9 @@ from renku_data_services.project.core import (
 )
 from renku_data_services.project.db import (
     ProjectMemberRepository,
+    ProjectMigrationRepository,
     ProjectRepository,
     ProjectSessionSecretRepository,
-    ProjectMigrationRepository,
 )
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.users.db import UserRepo
@@ -95,7 +95,7 @@ class ProjectsBP(CustomBlueprint):
             projects_dump = [self._dump_project(p) for p in projects]
             return validated_json(apispec.ProjectsList, projects_dump)
 
-        return "/renku_v1_projects/<v1_id:integer>/migrations", ["GET"], _get_all_migrations
+        return "/renku_v1_projects/<v1_id:int>/migrations", ["GET"], _get_all_migrations
 
     def post_migration(self) -> BlueprintFactoryResponse:
         """Migrate v1 project."""
@@ -104,16 +104,15 @@ class ProjectsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.ProjectPost)
         async def _post_migration(
-            _: Request, user: base_models.APIUser, body: apispec.MigrateProjectPost
+            _: Request, user: base_models.APIUser, v1_id: int, body: apispec.ProjectPost
         ) -> JSONResponse:
-            
             new_project = validate_unsaved_project(body, created_by=user.id or "")
             result = await self.project_migration_repo.migrate_v1_project(
-                user, project=new_project, project_v1_id=body.v1_id
+                user, project=new_project, project_v1_id=v1_id
             )
             return validated_json(apispec.Project, self._dump_project(result), status=201)
 
-        return "/renku_v1_projects/<v1_id:integer>/migrations", ["POST"], _post_migration
+        return "/renku_v1_projects/<v1_id:int>/migrations", ["POST"], _post_migration
 
     def copy(self) -> BlueprintFactoryResponse:
         """Create a new project by copying it from a template project."""
