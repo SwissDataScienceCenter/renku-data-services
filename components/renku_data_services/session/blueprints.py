@@ -197,8 +197,6 @@ class BuildsBP(CustomBlueprint):
         async def _post(_: Request, user: base_models.APIUser, body: apispec.BuildPost) -> JSONResponse:
             new_build = validate_unsaved_build(body)
             build = await self.build_repo.insert_build(user=user, build=new_build)
-            # raise errors.ProgrammingError(message=f"{build}")
-            # return validated_json(apispec_extras.RootBuild, dict(root=build), status=201)
             return validated_json(apispec_extras.RootBuild, build, status=201)
 
         return "/builds", ["POST"], _post
@@ -208,6 +206,7 @@ class BuildsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _get_environment_builds(_: Request, user: base_models.APIUser, environment_id: ULID) -> JSONResponse:
-            raise errors.ProgrammingError(message="Not implemented")
+            builds = await self.build_repo.get_environment_builds(user=user, environment_id=environment_id)
+            return validated_json(apispec.BuildList, builds)
 
         return "/environments/<environment_id:ulid>/builds", ["GET"], _get_environment_builds
