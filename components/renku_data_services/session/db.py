@@ -724,7 +724,8 @@ class BuildRepository:
         # TODO: Get this from the session environment
         git_repository = "https://gitlab.dev.renku.ch/flora.thiebaut/python-simple.git"
         run_image = "renku/renkulab-vscodium-python-runimage:ubuntu-c794f36"
-        output_image = "harbor.dev.renku.ch/flora-dev/python-simple"
+        # output_image = "harbor.dev.renku.ch/flora-dev/python-simple"
+        output_image = f"harbor.dev.renku.ch/flora-dev/renku-builds:{result.get_k8s_name()}"
 
         if self.shipwright_client is None:
             logging.warning("ShipWright client not defined, BuildRun creation skipped.")
@@ -773,9 +774,10 @@ class BuildRepository:
             conditions: list[Box] | None = k8s_build.status.get("conditions")
             condition: Box | None = next(filter(lambda c: c.get("type") == "Succeeded", conditions or []), None)
 
-            result_image = "huh-need-to-get-image-digest-or-tag-here"
-
             buildSpec: Box = k8s_build.status.get("buildSpec", Box())
+            output: Box = buildSpec.get("output", Box())
+            result_image: str = output.get("image", "unknown")
+
             source: Box = buildSpec.get("source", Box())
             git_obj: Box = source.get("git", Box())
             result_repository_url: str = git_obj.get("url", "unknown")
