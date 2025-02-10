@@ -283,3 +283,9 @@ def validate_session_launcher_patch(
 def validate_unsaved_build(build: apispec.BuildPost) -> models.UnsavedBuild:
     """Validate an unsaved container image build."""
     return models.UnsavedBuild(environment_id=ULID.from_str(build.environment_id))
+
+
+def validate_build_patch(patch: apispec.BuildPatch) -> models.BuildPatch:
+    """Validate the update to a session launcher."""
+    status = models.BuildStatus(patch.status.value) if patch.status else None
+    return models.BuildPatch(status=status)

@@ -688,6 +688,26 @@ class BuildRepository:
         self.authz: Authz = authz
         self.shipwright_client = shipwright_client
 
+    async def get_build(self, user: base_models.APIUser, build_id: ULID) -> models.Build:
+        """Get a specific build."""
+
+        # TODO: check READ permissions on this chain: build->environment->launcher->project
+
+        async with self.session_maker() as session, session.begin():
+            stmt = select(schemas.BuildORM).where(schemas.BuildORM.id == build_id)
+            result = await session.scalars(stmt)
+            build = result.one_or_none()
+
+            if build is None:
+                raise errors.MissingResourceError(
+                    message=f"Build with id '{build_id}' does not exist or you do not have access to it."
+                )
+
+            # Check and refresh the status of in-progress builds
+            await self._refresh_build(build=build, session=session)
+
+            return build.dump()
+
     async def get_environment_builds(self, user: base_models.APIUser, environment_id: ULID) -> list[models.Build]:
         """Get all builds from a session environment."""
 
@@ -750,6 +770,47 @@ class BuildRepository:
             )
 
         return result
+
+    async def update_build(self, user: base_models.APIUser, build_id: ULID, patch: models.BuildPatch) -> models.Build:
+        """Update a build entry."""
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        # TODO: check READ permissions on this chain: build->environment->launcher->project
+
+        async with self.session_maker() as session, session.begin():
+            stmt = select(schemas.BuildORM).where(schemas.BuildORM.id == build_id)
+            result = await session.scalars(stmt)
+            build = result.one_or_none()
+
+            if build is None:
+                raise errors.MissingResourceError(
+                    message=f"Build with id '{build_id}' does not exist or you do not have access to it."
+                )
+
+            # Check and refresh the status of in-progress builds
+            await self._refresh_build(build=build, session=session)
+
+            if build.status == models.BuildStatus.succeeded or build.status == models.BuildStatus.failed:
+                raise errors.ValidationError(
+                    message=f"Cannot update build with id '{build_id}': the build has status {build.status}."
+                )
+
+            # Only accept build cancellations
+            if patch.status == models.BuildStatus.cancelled:
+                build.status = patch.status
+
+            await session.flush()
+            await session.refresh(build)
+
+        build_model = build.dump()
+
+        if self.shipwright_client is None:
+            logging.warning("ShipWright client not defined, BuildRun deletion skipped.")
+        else:
+            await self.shipwright_client.delete_build_run(name=build_model.get_k8s_name())
+
+        return build_model
 
     async def _refresh_build(self, build: schemas.BuildORM, session: AsyncSession) -> None:
         if build.status != models.BuildStatus.in_progress:

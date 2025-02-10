@@ -217,3 +217,10 @@ class UnsavedBuild:
     """Model to represent a requested container image build."""
 
     environment_id: ULID
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class BuildPatch:
+    """Model to represent the requested update to a container image build."""
+
+    status: BuildStatus | None = None
