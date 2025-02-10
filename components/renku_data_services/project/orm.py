@@ -99,13 +99,14 @@ class ProjectORM(BaseORM):
         """Get the namespace representation of the project."""
         return Namespace(
             id=self.id,
-            slug=f"{self.slug.namespace.slug}/{self.slug.slug}",
+            slug=self.slug.slug,
             kind=NamespaceKind.project,
             created_by=self.created_by_id,
             underlying_resource_id=self.id,
             latest_slug=self.slug.slug,
             name=self.name,
             creation_date=self.creation_date,
+            path=[self.slug.namespace.slug, self.slug.slug],
         )
 
 
