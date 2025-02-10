@@ -632,7 +632,7 @@ class BuildRepository:
             return
 
         k8s_name = build.dump().get_k8s_name()
-        k8s_build = await self.shipwright_client.get_build_raw(name=k8s_name)
+        k8s_build = await self.shipwright_client.get_build_run_raw(name=k8s_name)
 
         if k8s_build is None:
             build.status = models.BuildStatus.failed
