@@ -24,11 +24,6 @@ CR_CODEGEN_PARAMS := \
 	--allow-extra-fields \
 	--use-default-kwarg
 
-#  --output components/renku_data_services/notebooks/cr_jupyter_server.py
-#   --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.notebooks.cr_base.BaseCRD --allow-extra-fields --use-default-kwarg
-# --base-class renku_data_services.notebooks.cr_base.BaseCRD
-
-
 .PHONY: all
 all: help
 
@@ -169,8 +164,8 @@ install_amaltheas:  ## Installs both version of amalthea in the. NOTE: It uses t
 # TODO: Add the version variables from the top of the file here when the charts are fully published
 .PHONY: amalthea_schema
 amalthea_schema:  ## Updates generates pydantic classes from CRDs
-	curl https://raw.githubusercontent.com/SwissDataScienceCenter/amalthea/main/config/crd/bases/amalthea.dev_amaltheasessions.yaml | yq '.spec.versions[0].schema.openAPIV3Schema' | poetry run datamodel-codegen --input-file-type jsonschema --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/notebooks/cr_amalthea_session.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.notebooks.cr_base.BaseCRD --allow-extra-fields --use-default-kwarg
-	curl https://raw.githubusercontent.com/SwissDataScienceCenter/amalthea/main/controller/crds/jupyter_server.yaml | yq '.spec.versions[0].schema.openAPIV3Schema' | poetry run datamodel-codegen --input-file-type jsonschema --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/notebooks/cr_jupyter_server.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.notebooks.cr_base.BaseCRD --allow-extra-fields --use-default-kwarg
+	curl https://raw.githubusercontent.com/SwissDataScienceCenter/amalthea/main/config/crd/bases/amalthea.dev_amaltheasessions.yaml | yq '.spec.versions[0].schema.openAPIV3Schema' | poetry run datamodel-codegen --output components/renku_data_services/notebooks/cr_amalthea_session.py --base-class renku_data_services.notebooks.cr_base.BaseCRD ${CR_CODEGEN_PARAMS}
+	curl https://raw.githubusercontent.com/SwissDataScienceCenter/amalthea/main/controller/crds/jupyter_server.yaml | yq '.spec.versions[0].schema.openAPIV3Schema' | poetry run datamodel-codegen --output components/renku_data_services/notebooks/cr_jupyter_server.py --base-class renku_data_services.notebooks.cr_base.BaseCRD ${CR_CODEGEN_PARAMS}
 
 .PHONY: shipwright_schema
 shipwright_schema:  ## Updates the ShipWright pydantic classes
