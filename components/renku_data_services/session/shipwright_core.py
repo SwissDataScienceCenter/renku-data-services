@@ -93,3 +93,11 @@ async def create_build(
                 ),
             )
         )
+
+
+async def cancel_build(build: schemas.BuildORM, shipwright_client: ShipwrightClient | None) -> None:
+    """Cancel a build by deleting the corresponding BuildRun from ShipWright."""
+    if shipwright_client is None:
+        logging.warning("ShipWright client not defined, BuildRun deletion skipped.")
+    else:
+        await shipwright_client.delete_build_run(name=build.dump().get_k8s_name())

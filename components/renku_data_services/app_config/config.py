@@ -140,7 +140,8 @@ class TrustedProxiesConfig:
 class BuildsConfig:
     """Configuration for container image builds."""
 
-    build_output_image_prefix : str | None = None
+    enabled: bool = False
+    build_output_image_prefix: str | None = None
     vscodium_python_run_image: str | None = None
     build_strategy_name: str | None = None
     push_secret_name: str | None = None
@@ -148,11 +149,13 @@ class BuildsConfig:
     @classmethod
     def from_env(cls, prefix: str = "") -> "BuildsConfig":
         """Create a config from environment variables."""
+        enabled = os.environ.get(f"{prefix}IMAGE_BUILDERS_ENABLED", "false").lower() == "true"
         build_output_image_prefix = os.environ.get(f"{prefix}BUILD_OUTPUT_IMAGE_PREFIX")
-        vscodium_python_run_image = os.environ.get(f"{prefix}VSCODIUM_PYTHON_RUN_IMAGE")
+        vscodium_python_run_image = os.environ.get(f"{prefix}BUILD_VSCODIUM_PYTHON_RUN_IMAGE")
         build_strategy_name = os.environ.get(f"{prefix}BUILD_STRATEGY_NAME")
-        push_secret_name = os.environ.get(f"{prefix}BUILD_STRATEGY_NAME")
+        push_secret_name = os.environ.get(f"{prefix}BUILD_PUSH_SECRET_NAME")
         return cls(
+            enabled=enabled or False,
             build_output_image_prefix=build_output_image_prefix or None,
             vscodium_python_run_image=vscodium_python_run_image or None,
             build_strategy_name=build_strategy_name or None,
