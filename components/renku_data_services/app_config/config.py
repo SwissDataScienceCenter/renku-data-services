@@ -65,7 +65,7 @@ from renku_data_services.project.db import ProjectMemberRepository, ProjectRepos
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsRepo
 from renku_data_services.session.db import SessionRepository
-from renku_data_services.session.shipwright_client import ShipwrightClient
+from renku_data_services.session.k8s_client import ShipwrightClient
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.config import UserPreferencesConfig
 from renku_data_services.users.db import UserPreferencesRepository
@@ -534,7 +534,7 @@ class Config:
                 Path(secrets_service_public_key_path).read_bytes()
             )
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
-            shipwright_client = ShipwrightClient(namespace=k8s_namespace)
+            shipwright_client = ShipwrightClient.from_env(namespace=k8s_namespace)
             keycloak_url = os.environ.get(f"{prefix}KEYCLOAK_URL")
             if keycloak_url is None:
                 raise errors.ConfigurationError(message="The Keycloak URL has to be specified.")
