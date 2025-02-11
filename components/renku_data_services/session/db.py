@@ -14,11 +14,12 @@ from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from renku_data_services.app_config.config import BuildsConfig
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import RESET
 from renku_data_services.crc.db import ResourcePoolRepository
-from renku_data_services.session import models, shipwright_core
+from renku_data_services.session import constants, models, shipwright_core
 from renku_data_services.session import orm as schemas
 from renku_data_services.session.shipwright_client import ShipwrightClient
 
@@ -27,11 +28,18 @@ class SessionRepository:
     """Repository for sessions."""
 
     def __init__(
-        self, session_maker: Callable[..., AsyncSession], project_authz: Authz, resource_pools: ResourcePoolRepository
+        self,
+        session_maker: Callable[..., AsyncSession],
+        project_authz: Authz,
+        resource_pools: ResourcePoolRepository,
+        shipwright_client: ShipwrightClient | None,
+        builds_config: BuildsConfig,
     ) -> None:
         self.session_maker = session_maker
         self.project_authz: Authz = project_authz
         self.resource_pools: ResourcePoolRepository = resource_pools
+        self.shipwright_client = shipwright_client
+        self.builds_config = builds_config
 
     async def get_environments(self, include_archived: bool = False) -> list[models.Environment]:
         """Get all global session environments from the database."""
@@ -529,17 +537,6 @@ class SessionRepository:
             if launcher.environment.environment_kind == models.EnvironmentKind.CUSTOM:
                 await session.delete(launcher.environment)
 
-
-class BuildRepository:
-    """Repository for container image builds."""
-
-    def __init__(
-        self, session_maker: Callable[..., AsyncSession], authz: Authz, shipwright_client: ShipwrightClient | None
-    ) -> None:
-        self.session_maker = session_maker
-        self.authz: Authz = authz
-        self.shipwright_client = shipwright_client
-
     async def get_build(self, user: base_models.APIUser, build_id: ULID) -> models.Build:
         """Get a specific build."""
 
@@ -597,8 +594,12 @@ class BuildRepository:
 
         # TODO: Get this from the session environment
         git_repository = "https://gitlab.dev.renku.ch/flora.thiebaut/python-simple.git"
-        run_image = "renku/renkulab-vscodium-python-runimage:ubuntu-c794f36"
-        output_image = f"harbor.dev.renku.ch/flora-dev/renku-builds:{result.get_k8s_name()}"
+        run_image = self.builds_config.vscodium_python_run_image or constants.BUILD_VSCODIUM_PYTHON_DEFAULT_RUN_IMAGE
+        # TODO: move `output_image_prefix` into constants
+        output_image_prefix = "harbor.dev.renku.ch/flora-dev/"
+        output_image_name = constants.BUILD_OUTPUT_IMAGE_NAME
+        output_image_tag = result.get_k8s_name()
+        output_image = f"{output_image_prefix}{output_image_name}{output_image_tag}"
 
         await shipwright_core.create_build(
             build=build_orm,
@@ -606,6 +607,7 @@ class BuildRepository:
             run_image=run_image,
             output_image=output_image,
             shipwright_client=self.shipwright_client,
+            builds_config=self.builds_config,
         )
 
         return result

@@ -21,7 +21,7 @@ from renku_data_services.session.core import (
     validate_unsaved_environment,
     validate_unsaved_session_launcher,
 )
-from renku_data_services.session.db import BuildRepository, SessionRepository
+from renku_data_services.session.db import SessionRepository
 
 
 @dataclass(kw_only=True)
@@ -177,7 +177,7 @@ class SessionLaunchersBP(CustomBlueprint):
 class BuildsBP(CustomBlueprint):
     """Handlers for manipulating container image builds."""
 
-    build_repo: BuildRepository
+    session_repo: SessionRepository
     authenticator: base_models.Authenticator
 
     def get_one(self) -> BlueprintFactoryResponse:
@@ -185,7 +185,7 @@ class BuildsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _get_one(_: Request, user: base_models.APIUser, build_id: ULID) -> JSONResponse:
-            build = await self.build_repo.get_build(user=user, build_id=build_id)
+            build = await self.session_repo.get_build(user=user, build_id=build_id)
             return validated_json(apispec_extras.RootBuild, build)
 
         return "/builds/<build_id:ulid>", ["GET"], _get_one
@@ -198,7 +198,7 @@ class BuildsBP(CustomBlueprint):
         @validate(json=apispec.BuildPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.BuildPost) -> JSONResponse:
             new_build = validate_unsaved_build(body)
-            build = await self.build_repo.insert_build(user=user, build=new_build)
+            build = await self.session_repo.insert_build(user=user, build=new_build)
             return validated_json(apispec_extras.RootBuild, build, status=201)
 
         return "/builds", ["POST"], _post
@@ -213,7 +213,7 @@ class BuildsBP(CustomBlueprint):
             _: Request, user: base_models.APIUser, build_id: ULID, body: apispec.BuildPatch
         ) -> JSONResponse:
             build_patch = validate_build_patch(body)
-            build = await self.build_repo.update_build(user=user, build_id=build_id, patch=build_patch)
+            build = await self.session_repo.update_build(user=user, build_id=build_id, patch=build_patch)
             return validated_json(apispec_extras.RootBuild, build)
 
         return "/builds/<build_id:ulid>", ["PATCH"], _patch
@@ -223,7 +223,7 @@ class BuildsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _get_environment_builds(_: Request, user: base_models.APIUser, environment_id: ULID) -> JSONResponse:
-            builds = await self.build_repo.get_environment_builds(user=user, environment_id=environment_id)
+            builds = await self.session_repo.get_environment_builds(user=user, environment_id=environment_id)
             return validated_json(apispec.BuildList, builds)
 
         return "/environments/<environment_id:ulid>/builds", ["GET"], _get_environment_builds

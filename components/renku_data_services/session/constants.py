@@ -11,5 +11,5 @@ BUILD_VSCODIUM_PYTHON_DEFAULT_RUN_IMAGE: Final[str] = "renku/renkulab-vscodium-p
 BUILD_DEFAULT_BUILD_STRATEGY_NAME: Final[str] = "renku-buildpacks"
 """The name of the default build strategy."""
 
-BUILD_DEFAULT_PUSH_SECRET_NAME: Final[str] = "renku-build-secret"
+BUILD_DEFAULT_PUSH_SECRET_NAME: Final[str] = "flora-docker-secret"  # TODO: "renku-build-secret"
 """The name of the default secret to use when pushing Renku builds."""
