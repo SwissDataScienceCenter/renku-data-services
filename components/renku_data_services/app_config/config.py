@@ -64,7 +64,7 @@ from renku_data_services.platform.db import PlatformRepository
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository, ProjectSessionSecretRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsRepo
-from renku_data_services.session.db import BuildRepository, SessionRepository
+from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.shipwright_client import ShipwrightClient
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.config import UserPreferencesConfig
@@ -200,7 +200,6 @@ class Config:
     _event_repo: EventRepository | None = field(default=None, repr=False, init=False)
     _reprovisioning_repo: ReprovisioningRepository | None = field(default=None, repr=False, init=False)
     _session_repo: SessionRepository | None = field(default=None, repr=False, init=False)
-    _build_repo: BuildRepository | None = field(default=None, repr=False, init=False)
     _user_preferences_repo: UserPreferencesRepository | None = field(default=None, repr=False, init=False)
     _kc_user_repo: KcUserRepo | None = field(default=None, repr=False, init=False)
     _low_level_user_secrets_repo: LowLevelUserSecretsRepo | None = field(default=None, repr=False, init=False)
@@ -364,18 +363,13 @@ class Config:
         """The DB adapter for sessions."""
         if not self._session_repo:
             self._session_repo = SessionRepository(
-                session_maker=self.db.async_session_maker, project_authz=self.authz, resource_pools=self.rp_repo
+                session_maker=self.db.async_session_maker,
+                project_authz=self.authz,
+                resource_pools=self.rp_repo,
+                shipwright_client=self.shipwright_client,
+                builds_config=self.builds_config,
             )
         return self._session_repo
-
-    @property
-    def build_repo(self) -> BuildRepository:
-        """The DB adapter for container image builds."""
-        if not self._build_repo:
-            self._build_repo = BuildRepository(
-                session_maker=self.db.async_session_maker, authz=self.authz, shipwright_client=self.shipwright_client
-            )
-        return self._build_repo
 
     @property
     def user_preferences_repo(self) -> UserPreferencesRepository:
