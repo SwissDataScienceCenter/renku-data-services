@@ -74,6 +74,12 @@ async def test_post_user_preferences_pinned_projects(
     _, res = await sanic_client.post(
         "/api/data/user/preferences/pinned_projects",
         headers={"Authorization": f"bearer {api_user.access_token}"},
+        data=json.dumps(dict(project_slug="/user.2/second-project///")),
+    )
+    assert res.status_code == 422
+    _, res = await sanic_client.post(
+        "/api/data/user/preferences/pinned_projects",
+        headers={"Authorization": f"bearer {api_user.access_token}"},
         data=json.dumps(dict(project_slug="user.2/second-project")),
     )
 
