@@ -137,6 +137,27 @@ class TrustedProxiesConfig:
 
 
 @dataclass
+class BuildsConfig:
+    """Configuration for container image builds."""
+
+    vscodium_python_run_image: str | None = None
+    build_strategy_name: str | None = None
+    push_secret_name: str | None = None
+
+    @classmethod
+    def from_env(cls, prefix: str = "") -> "BuildsConfig":
+        """Create a config from environment variables."""
+        vscodium_python_run_image = os.environ.get(f"{prefix}VSCODIUM_PYTHON_RUN_IMAGE")
+        build_strategy_name = os.environ.get(f"{prefix}BUILD_STRATEGY_NAME")
+        push_secret_name = os.environ.get(f"{prefix}BUILD_STRATEGY_NAME")
+        return cls(
+            vscodium_python_run_image=vscodium_python_run_image or None,
+            build_strategy_name=build_strategy_name or None,
+            push_secret_name=push_secret_name or None,
+        )
+
+
+@dataclass
 class Config:
     """Configuration for the Data service."""
 
@@ -155,6 +176,7 @@ class Config:
     message_queue: IMessageQueue
     gitlab_url: str | None
     nb_config: NotebooksConfig
+    builds_config: BuildsConfig
 
     secrets_service_public_key: rsa.RSAPublicKey
     """The public key of the secrets service, used to encrypt user secrets that only it can decrypt."""
@@ -553,6 +575,7 @@ class Config:
         trusted_proxies = TrustedProxiesConfig.from_env(prefix)
         message_queue = RedisQueue(redis)
         nb_config = NotebooksConfig.from_env(db)
+        builds_config = BuildsConfig.from_env(prefix)
 
         return cls(
             version=version,
@@ -575,4 +598,5 @@ class Config:
             secrets_service_public_key=secrets_service_public_key,
             gitlab_url=gitlab_url,
             nb_config=nb_config,
+            builds_config=builds_config,
         )

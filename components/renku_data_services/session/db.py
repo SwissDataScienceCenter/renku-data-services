@@ -8,7 +8,6 @@ from contextlib import AbstractAsyncContextManager, nullcontext
 from datetime import UTC, datetime
 from pathlib import PurePosixPath
 
-from box import Box
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
@@ -19,29 +18,9 @@ from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import RESET
 from renku_data_services.crc.db import ResourcePoolRepository
-from renku_data_services.session import models
+from renku_data_services.session import models, shipwright_core
 from renku_data_services.session import orm as schemas
 from renku_data_services.session.shipwright_client import ShipwrightClient
-from renku_data_services.session.shipwright_crs import (
-    BuildOutput,
-    GitRef,
-    GitSource,
-    Metadata,
-    ParamValue,
-    StrategyRef,
-)
-from renku_data_services.session.shipwright_crs import (
-    BuildRun as ShipwrightBuildRun,
-)
-from renku_data_services.session.shipwright_crs import (
-    BuildRunSpec as ShipwrightBuildRunSpec,
-)
-from renku_data_services.session.shipwright_crs import (
-    BuildSpec as ShipwrightBuildSpec,
-)
-from renku_data_services.session.shipwright_crs import (
-    InlineBuild as ShipwrightInlineBuild,
-)
 
 
 class SessionRepository:
@@ -603,6 +582,8 @@ class BuildRepository:
         if not user.is_authenticated or user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
+        # TODO: check WRITE permissions on this chain: environment->launcher->project
+
         async with self.session_maker() as session, session.begin():
             build_orm = schemas.BuildORM(
                 # environment_id=build.environment_id,
@@ -617,30 +598,15 @@ class BuildRepository:
         # TODO: Get this from the session environment
         git_repository = "https://gitlab.dev.renku.ch/flora.thiebaut/python-simple.git"
         run_image = "renku/renkulab-vscodium-python-runimage:ubuntu-c794f36"
-        # output_image = "harbor.dev.renku.ch/flora-dev/python-simple"
         output_image = f"harbor.dev.renku.ch/flora-dev/renku-builds:{result.get_k8s_name()}"
 
-        if self.shipwright_client is None:
-            logging.warning("ShipWright client not defined, BuildRun creation skipped.")
-        else:
-            await self.shipwright_client.create_build_run(
-                ShipwrightBuildRun(
-                    metadata=Metadata(name=result.get_k8s_name()),
-                    spec=ShipwrightBuildRunSpec(
-                        build=ShipwrightInlineBuild(
-                            spec=ShipwrightBuildSpec(
-                                source=GitSource(git=GitRef(url=git_repository)),
-                                strategy=StrategyRef(kind="BuildStrategy", name="renku-buildpacks"),
-                                paramValues=[ParamValue(name="run-image", value=run_image)],
-                                output=BuildOutput(
-                                    image=output_image,
-                                    pushSecret="flora-docker-secret",
-                                ),
-                            )
-                        )
-                    ),
-                )
-            )
+        await shipwright_core.create_build(
+            build=build_orm,
+            git_repository=git_repository,
+            run_image=run_image,
+            output_image=output_image,
+            shipwright_client=self.shipwright_client,
+        )
 
         return result
 
@@ -649,7 +615,7 @@ class BuildRepository:
         if not user.is_authenticated or user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
-        # TODO: check READ permissions on this chain: build->environment->launcher->project
+        # TODO: check WRITE permissions on this chain: build->environment->launcher->project
 
         async with self.session_maker() as session, session.begin():
             stmt = select(schemas.BuildORM).where(schemas.BuildORM.id == build_id)
@@ -689,46 +655,7 @@ class BuildRepository:
         if build.status != models.BuildStatus.in_progress:
             return
 
-        if self.shipwright_client is None:
-            logging.warning("ShipWright client not defined, BuildRun refresh skipped.")
-            return
-
-        k8s_name = build.dump().get_k8s_name()
-        k8s_build = await self.shipwright_client.get_build_run_raw(name=k8s_name)
-
-        if k8s_build is None:
-            build.status = models.BuildStatus.failed
-        else:
-            completion_time_str: str | None = k8s_build.status.get("completionTime")
-            completion_time = datetime.fromisoformat(completion_time_str) if completion_time_str else None
-
-            if completion_time is None:
-                return
-
-            conditions: list[Box] | None = k8s_build.status.get("conditions")
-            condition: Box | None = next(filter(lambda c: c.get("type") == "Succeeded", conditions or []), None)
-
-            buildSpec: Box = k8s_build.status.get("buildSpec", Box())
-            output: Box = buildSpec.get("output", Box())
-            result_image: str = output.get("image", "unknown")
-
-            source: Box = buildSpec.get("source", Box())
-            git_obj: Box = source.get("git", Box())
-            result_repository_url: str = git_obj.get("url", "unknown")
-
-            source_2: Box = k8s_build.status.get("source", Box())
-            git_obj_2: Box = source_2.get("git", Box())
-            result_repository_git_commit_sha: str = git_obj_2.get("commitSha", "unknown")
-
-            if condition is not None and condition.get("status") == "True":
-                build.status = models.BuildStatus.succeeded
-                build.completed_at = completion_time
-                build.result_image = result_image
-                build.result_repository_url = result_repository_url
-                build.result_repository_git_commit_sha = result_repository_git_commit_sha
-            else:
-                build.status = models.BuildStatus.failed
-                build.completed_at = completion_time
+        await shipwright_core.update_build_status(build=build, shipwright_client=self.shipwright_client)
 
         await session.flush()
         await session.refresh(build)
