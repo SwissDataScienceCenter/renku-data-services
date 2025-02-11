@@ -132,7 +132,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
     builds = BuildsBP(
         name="builds",
         url_prefix=url_prefix,
-        build_repo=config.build_repo,
+        session_repo=config.session_repo,
         authenticator=config.authenticator,
     )
     oauth2_clients = OAuth2ClientsBP(

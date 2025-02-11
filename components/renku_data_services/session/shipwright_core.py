@@ -5,7 +5,8 @@ from datetime import datetime
 
 from box import Box
 
-from renku_data_services.session import models
+from renku_data_services.app_config.config import BuildsConfig
+from renku_data_services.session import constants, models
 from renku_data_services.session import orm as schemas
 from renku_data_services.session import shipwright_crs as sw_schemas
 from renku_data_services.session.shipwright_client import ShipwrightClient
@@ -64,12 +65,16 @@ async def create_build(
     run_image: str,
     output_image: str,
     shipwright_client: ShipwrightClient | None,
+    builds_config: BuildsConfig,
 ) -> None:
     """Create a new BuildRun in ShipWright to support a newly created build."""
 
     if shipwright_client is None:
         logging.warning("ShipWright client not defined, BuildRun creation skipped.")
     else:
+        build_strategy_name = builds_config.build_strategy_name or constants.BUILD_DEFAULT_BUILD_STRATEGY_NAME
+        push_secret_name = builds_config.push_secret_name or constants.BUILD_DEFAULT_PUSH_SECRET_NAME
+
         await shipwright_client.create_build_run(
             sw_schemas.BuildRun(
                 metadata=sw_schemas.Metadata(name=build.dump().get_k8s_name()),
@@ -77,11 +82,11 @@ async def create_build(
                     build=sw_schemas.InlineBuild(
                         spec=sw_schemas.BuildSpec(
                             source=sw_schemas.GitSource(git=sw_schemas.GitRef(url=git_repository)),
-                            strategy=sw_schemas.StrategyRef(kind="BuildStrategy", name="renku-buildpacks"),
+                            strategy=sw_schemas.StrategyRef(kind="BuildStrategy", name=build_strategy_name),
                             paramValues=[sw_schemas.ParamValue(name="run-image", value=run_image)],
                             output=sw_schemas.BuildOutput(
                                 image=output_image,
-                                pushSecret="flora-docker-secret",
+                                pushSecret=push_secret_name,
                             ),
                         )
                     )
