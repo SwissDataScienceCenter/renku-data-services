@@ -31,8 +31,8 @@ async def reprovision(
         logging.info(f"Starting reprovisioning with ID {reprovisioning.id}")
         started = datetime.now()
         await search_updates_repo.clear_all()
-        all_users = user_repo.get_all_users(requested_by=requested_by)
         counter = 0
+        all_users = user_repo.get_all_users(requested_by=requested_by)
         async for user_entity in all_users:
             await search_updates_repo.insert(user_entity, started)
             counter += 1
@@ -52,6 +52,8 @@ async def reprovision(
 
         logging.info(f"Inserted {counter} entities into the staging table.")
 
+    except Exception as e:
+        logging.error("Error while reprovisioning entities!", e)
         ## TODO error handling. skip or fail?
     finally:
         await reprovisioning_repo.stop()
