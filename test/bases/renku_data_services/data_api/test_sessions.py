@@ -992,3 +992,105 @@ async def test_post_build(
     assert build.get("created_at") is not None
     assert build.get("status") == "in_progress"
     assert build.get("result") is None
+
+
+@pytest.mark.asyncio
+async def test_get_build(
+    sanic_client: SanicASGITestClient,
+    user_headers,
+) -> None:
+    payload = {"environment_id": "7232Y90Z6XSAXJPT79GB5Y269E"}
+    _, response = await sanic_client.post(
+        "/api/data/builds",
+        json=payload,
+        headers=user_headers,
+    )
+    assert response.status_code == 201, response.text
+    build = response.json
+    build_id = build["id"]
+
+    _, response = await sanic_client.get(
+        f"/api/data/builds/{build_id}",
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == build_id
+    assert response.json.get("environment_id") is not None
+    assert response.json.get("created_at") is not None
+    assert response.json.get("status") == "in_progress"
+    assert response.json.get("result") is None
+
+
+@pytest.mark.asyncio
+async def test_get_environment_builds(
+    sanic_client: SanicASGITestClient,
+    user_headers,
+) -> None:
+    environment_id = "7232Y90Z6XSAXJPT79GB5Y269E"
+    payload = {"environment_id": environment_id}
+    _, response = await sanic_client.post(
+        "/api/data/builds",
+        json=payload,
+        headers=user_headers,
+    )
+    assert response.status_code == 201, response.text
+    build1 = response.json
+
+    _, response = await sanic_client.post(
+        "/api/data/builds",
+        json=payload,
+        headers=user_headers,
+    )
+    assert response.status_code == 201, response.text
+    build2 = response.json
+
+    _, response = await sanic_client.get(
+        f"/api/data/environments/{environment_id}/builds",
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    builds = response.json
+    assert len(builds) == 2
+    assert {build.get("id") for build in builds} == {build1["id"], build2["id"]}
+
+@pytest.mark.asyncio
+async def test_patch_build(
+    sanic_client: SanicASGITestClient,
+    user_headers,
+) -> None:
+    payload = {"environment_id": "7232Y90Z6XSAXJPT79GB5Y269E"}
+    _, response = await sanic_client.post(
+        "/api/data/builds",
+        json=payload,
+        headers=user_headers,
+    )
+    assert response.status_code == 201, response.text
+    build = response.json
+    build_id = build["id"]
+
+    payload = {"status": "cancelled"}
+
+    _, response = await sanic_client.patch(
+        f"/api/data/builds/{build_id}",
+        json=payload,
+        headers=user_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == build_id
+    assert response.json.get("status") == "cancelled"
+
+    _, response = await sanic_client.get(
+        f"/api/data/builds/{build_id}",
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == build_id
+    assert response.json.get("environment_id") is not None
+    assert response.json.get("created_at") is not None
+    assert response.json.get("status") == "cancelled"
+    assert response.json.get("result") is None
