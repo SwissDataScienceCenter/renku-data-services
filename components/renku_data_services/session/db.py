@@ -594,9 +594,10 @@ class SessionRepository:
 
         # TODO: Get this from the session environment
         git_repository = "https://gitlab.dev.renku.ch/flora.thiebaut/python-simple.git"
+
         run_image = self.builds_config.vscodium_python_run_image or constants.BUILD_VSCODIUM_PYTHON_DEFAULT_RUN_IMAGE
-        # TODO: move `output_image_prefix` into constants
-        output_image_prefix = "harbor.dev.renku.ch/flora-dev/"
+        
+        output_image_prefix = self.builds_config.build_output_image_prefix or constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
         output_image_name = constants.BUILD_OUTPUT_IMAGE_NAME
         output_image_tag = result.get_k8s_name()
         output_image = f"{output_image_prefix}{output_image_name}{output_image_tag}"
