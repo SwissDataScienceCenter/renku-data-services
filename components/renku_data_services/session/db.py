@@ -7,6 +7,7 @@ from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, nullcontext
 from datetime import UTC, datetime
 from pathlib import PurePosixPath
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +15,6 @@ from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
-from renku_data_services.app_config.config import BuildsConfig
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import RESET
@@ -22,6 +22,9 @@ from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.session import constants, models, shipwright_core
 from renku_data_services.session import orm as schemas
 from renku_data_services.session.shipwright_client import ShipwrightClient
+
+if TYPE_CHECKING:
+    from renku_data_services.app_config.config import BuildsConfig
 
 
 class SessionRepository:
