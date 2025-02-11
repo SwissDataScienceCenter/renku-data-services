@@ -56,11 +56,6 @@ class Project(BaseProject):
         """Get the entity slug path for the project."""
         return self.namespace.path / ProjectSlug(self.slug)
 
-    @property
-    def path(self) -> ProjectPath:
-        """Get the entity slug path for the project."""
-        return ProjectPath.from_strings(self.namespace.slug, self.slug)
-
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedProject(BaseProject):

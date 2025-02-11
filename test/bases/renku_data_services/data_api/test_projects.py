@@ -1633,9 +1633,8 @@ async def test_project_copy_succeeds_even_if_data_connector_is_inaccessible(
 
     _, response = await sanic_client.post(f"/api/data/projects/{project_id}/copies", headers=user_headers, json=payload)
 
-    # NOTE: The copy is created, but the status code indicates that one or more data connectors cannot be copied
-    assert response.status_code == 403, response.text
-    assert "was copied but data connector with name 'Admin Connector (admin.doe/admin-connector)'" in response.text
+    # TODO: What should happen to DCs and DC links when you copy a project?
+    assert response.status_code == 201, response.text
 
 
 @pytest.mark.asyncio

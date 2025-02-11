@@ -1366,7 +1366,7 @@ async def test_creating_dc_in_project(sanic_client, user_headers) -> None:
     dc_namespace = "test1/prj1"
     payload = {
         "name": "dc1",
-        "namespace": "test1/prj1",
+        "namespace": dc_namespace,
         "slug": "dc1",
         "storage": {
             "configuration": {"type": "s3", "endpoint": "http://s3.aws.com"},
@@ -1408,3 +1408,146 @@ async def test_creating_dc_in_project(sanic_client, user_headers) -> None:
     assert response.status_code == 200, response.text
     assert len(response.json) == 1
     assert response.json[0]["namespace"] == dc_namespace
+
+
+@pytest.mark.asyncio
+async def test_users_cannot_see_private_data_connectors_in_project(
+    sanic_client,
+    member_1_headers,
+    member_2_user: UserInfo,
+    member_2_headers,
+    user_headers,
+    regular_user: UserInfo,
+) -> None:
+    # Create a group i.e. /test1
+    group_slug = "test1"
+    payload = {
+        "name": group_slug,
+        "slug": group_slug,
+        "description": "Group 1 Description",
+    }
+    _, response = await sanic_client.post("/api/data/groups", headers=member_1_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    # Add member_2 as reader on the group
+    payload = [
+        {
+            "id": member_2_user.id,
+            "role": "viewer",
+        }
+    ]
+    _, response = await sanic_client.patch(
+        f"/api/data/groups/{group_slug}/members", headers=member_1_headers, json=payload
+    )
+    assert response.status_code == 200, response.text
+
+    # Create a public project in the group /test1/prj1
+    payload = {
+        "name": "prj1",
+        "namespace": "test1",
+        "slug": "prj1",
+        "visibility": "public",
+    }
+    _, response = await sanic_client.post("/api/data/projects", headers=member_1_headers, json=payload)
+    assert response.status_code == 201, response.text
+    project_id = response.json["id"]
+
+    # Create a private data connector in the group
+    dc_namespace = "test1"
+    storage_config = {
+        "configuration": {"type": "s3", "endpoint": "http://s3.aws.com"},
+        "source_path": "giab",
+        "target_path": "giab",
+    }
+    payload = {
+        "name": "dc-private",
+        "namespace": dc_namespace,
+        "slug": "dc-private",
+        "storage": storage_config,
+        "visibility": "private",
+    }
+    _, response = await sanic_client.post("/api/data/data_connectors", headers=member_1_headers, json=payload)
+    assert response.status_code == 201, response.text
+    assert response.json["namespace"] == dc_namespace
+    group_dc_id = response.json["id"]
+
+    # Link the private data connector to the project
+    payload = {"project_id": project_id}
+    _, response = await sanic_client.post(
+        f"/api/data/data_connectors/{group_dc_id}/project_links", headers=member_1_headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+
+    # Create a data connector in the project /test1/proj1/dc1
+    dc_namespace = "test1/prj1"
+    payload = {
+        "name": "dc1",
+        "namespace": dc_namespace,
+        "slug": "dc1",
+        "storage": storage_config,
+    }
+    _, response = await sanic_client.post("/api/data/data_connectors", headers=member_1_headers, json=payload)
+    assert response.status_code == 201, response.text
+    assert response.json["namespace"] == dc_namespace
+    project_dc_id = response.json["id"]
+
+    # Link the data connector to the project
+    payload = {"project_id": project_id}
+    _, response = await sanic_client.post(
+        f"/api/data/data_connectors/{project_dc_id}/project_links", headers=member_1_headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+
+    # Ensure that member_1 and member_2 can see both data connectors and their links
+    for req_headers in [member_1_headers, member_2_headers]:
+        _, response = await sanic_client.get("/api/data/data_connectors", headers=req_headers)
+        assert response.status_code == 200, response.text
+        assert len(response.json) == 2
+        assert response.json[0]["id"] == project_dc_id
+        assert response.json[1]["id"] == group_dc_id
+        _, response = await sanic_client.get(
+            f"/api/data/projects/{project_id}/data_connector_links", headers=req_headers
+        )
+        assert len(response.json) == 2
+        assert response.json[0]["data_connector_id"] == group_dc_id
+        assert response.json[1]["data_connector_id"] == project_dc_id
+
+    # The project is public so user should see it
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
+    assert response.status_code == 200, response.text
+    # User is not part of the project and the data connector is private so they should not see any data connectors
+    _, response = await sanic_client.get("/api/data/data_connectors", headers=user_headers)
+    assert response.status_code == 200, response.text
+    assert len(response.json) == 0
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/data_connector_links", headers=user_headers)
+    assert len(response.json) == 0
+
+    # Anonymous users should see the project but not any of the DCs or the links
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}")
+    assert response.status_code == 200, response.text
+    _, response = await sanic_client.get("/api/data/data_connectors")
+    assert response.status_code == 200, response.text
+    assert len(response.json) == 0
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/data_connector_links")
+    assert len(response.json) == 0
+
+    # Add user to the project
+    payload = [
+        {
+            "id": regular_user.id,
+            "role": "viewer",
+        }
+    ]
+    _, response = await sanic_client.patch(
+        f"/api/data/projects/{project_id}/members", headers=member_1_headers, json=payload
+    )
+    assert response.status_code == 200, response.text
+
+    # Now since the user is part of the project they should see only the project DC but not the private one from
+    # the group that user does not have access to
+    _, response = await sanic_client.get("/api/data/data_connectors", headers=user_headers)
+    assert response.status_code == 200, response.text
+    assert len(response.json) == 1
+    assert response.json[0]["id"] == project_dc_id
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/data_connector_links", headers=user_headers)
+    assert response.json[0]["data_connector_id"] == project_dc_id
