@@ -1,5 +1,6 @@
 import base64
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -255,3 +256,63 @@ async def test_migration_to_1ef98b967767_and_086eb60b42c8(app_config_instance: C
         '--ServerApp.token="" --ServerApp.password="" --ServerApp.allow_remote_access=true '
         '--ContentsManager.allow_hidden=true --ServerApp.allow_origin=* --ServerApp.root_dir="/home/jovyan/work"',
     ]
+
+
+@pytest.mark.asyncio
+async def test_migration_create_global_envs(
+    app_config_instance: Config,
+    sanic_client_no_migrations: SanicASGITestClient,
+    admin_headers: dict,
+    admin_user: UserInfo,
+    tmpdir_factory,
+    monkeysession,
+) -> None:
+    tmp_path = tmpdir_factory.mktemp("envs")
+    env_file_path = Path(tmp_path) / "env.json"
+
+    with open(env_file_path, "w") as f:
+        f.write("""[
+  {
+    "args": [
+      "test2"
+    ],
+    "command": [
+      "sh",
+      "-c"
+    ],
+    "container_image": "renku/renkulab-py:3.10-0.23.0",
+    "default_url": "/lab",
+    "description": "Standard python environment",
+    "gid": 100,
+    "mount_directory": "/home/jovyan/work",
+    "name": "Python/Jupyter",
+    "port": 8888,
+    "uid": 1000,
+    "working_directory": "/home/jovyan/work"
+  },
+  {
+    "args": [
+      "test"
+    ],
+    "command": [
+      "sh",
+      "-c"
+    ],
+    "container_image": "renku/renkulab-r:4.3.1-0.23.0",
+    "default_url": "/rstudio",
+    "description": "Standard R environment",
+    "gid": 100,
+    "mount_directory": "/home/jovyan/work",
+    "name": "R/Rstudio",
+    "port": 8888,
+    "uid": 1000,
+    "working_directory": "/home/jovyan/work"
+  }
+]""")
+    monkeysession.setenv("SESSIONS_INITIAL_ENVIRONMENTS_PATH", str(env_file_path))
+
+    run_migrations_for_app("common", "head")
+    envs = await app_config_instance.session_repo.get_environments()
+    assert len(envs) == 2
+    assert any(e.name == "Python/Jupyter" for e in envs)
+    assert any(e.name == "R/Rstudio" for e in envs)
