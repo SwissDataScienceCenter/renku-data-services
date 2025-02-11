@@ -199,17 +199,15 @@ class ProjectMigrationsORM(BaseORM):
     """Tracks project migrations from an old project (project_v1_id) to a new project (project_id)."""
 
     __tablename__ = "project_migrations"
-    __table_args__ = (UniqueConstraint("project_id", "project_v1_id", name="uq_project_migrations"),)
+    __table_args__ = (UniqueConstraint("project_v1_id", name="uq_project_v1_id"),)
 
     id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
 
-    project_v1_id: Mapped[int] = mapped_column("project_v1_id", Integer, nullable=False)
-    """The old project being migrated."""
+    project_v1_id: Mapped[int] = mapped_column("project_v1_id", Integer, nullable=False, unique=True)
+    """The old project being migrated. Must be unique."""
 
-    project_id: Mapped[Optional[ULID]] = mapped_column(
-        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    """The new project that replaces the old one."""
+    project_id: Mapped[ULID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    """The new project of the migration of the v1."""
 
     project: Mapped[Optional[ProjectORM]] = relationship("ProjectORM", foreign_keys=[project_id], default=None)
     """Relationship to the new project."""

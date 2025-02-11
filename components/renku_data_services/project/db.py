@@ -924,30 +924,30 @@ class ProjectMigrationRepository:
         """Migrate a v1 project by creating a new project and tracking the migration."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
+
+        result = await session.scalars(
+            select(schemas.ProjectMigrationsORM).where(schemas.ProjectMigrationsORM.project_v1_id == project_v1_id)
+        )
+        project_migration = result.one_or_none()
+        if project_migration is not None:
+            raise errors.ValidationError(message=f"Project V1 with id '{project_v1_id}' already exists.")
         created_project = await self.project_repo.insert_project(user, project)
         if not created_project:
             raise errors.ValidationError(
                 message=f"Failed to create a project for migration from v1 (project_v1_id={project_v1_id})."
             )
 
-        result = await session.scalars(
-            select(schemas.ProjectMigrationsORM)
-            .where(schemas.ProjectMigrationsORM.project_id == created_project.id)
-            .where(schemas.ProjectMigrationsORM.project_v1_id == project_v1_id)
-        )
-        project_migration = result.one_or_none()
-        if project_migration is not None:
-            raise errors.ValidationError(
-                message=(
-                    f"Project with project_v1_id '{project_v1_id}' and "
-                    f"Project id '{created_project.id}' already exists."
-                )
-            )
+        if not created_project.id:
+            raise errors.ValidationError(message="Failed to create project with a valid ID.")
 
-        migration_entry = models.UnsavedProjectMigration(project=created_project, project_v1_id=project_v1_id)
-        session.add(migration_entry)
+        migration_orm = schemas.ProjectMigrationsORM(project_id=created_project.id, project_v1_id=project_v1_id)
+
+        if migration_orm.project_id is None:
+            raise errors.ValidationError(message="Project ID cannot be None for the migration entry.")
+
+        session.add(migration_orm)
         await session.flush()
-        await session.refresh(migration_entry)
+        await session.refresh(migration_orm)
 
         return created_project
 

@@ -161,7 +161,7 @@ class SessionSecretPatchSecretValue:
 class UnsavedProjectMigration:
     """Model representing a migration from an old project version that has not been persisted."""
 
-    project: Project
+    project_id: ULID
     project_v1_id: int
 
 
@@ -170,11 +170,11 @@ class ProjectMigration:
     """Model representing a migration from an old project version."""
 
     id: ULID
-    project: Project
+    project_id: ULID
     project_v1_id: int
     migrated_at: datetime = field(default_factory=lambda: datetime.now(UTC).replace(microsecond=0))
 
     @property
     def etag(self) -> str:
         """Entity tag value for this project migration object."""
-        return compute_etag_from_fields(self.migrated_at, self.project.id)
+        return compute_etag_from_fields(self.migrated_at, self.project_v1_id)
