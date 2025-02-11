@@ -1,8 +1,8 @@
 """add project migrations
 
-Revision ID: 32fab117ebec
+Revision ID: 6e4dfb1ca90f
 Revises: d71f0f795d30
-Create Date: 2025-02-06 15:20:45.667192
+Create Date: 2025-02-11 10:05:25.003625
 
 """
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision = "32fab117ebec"
+revision = "6e4dfb1ca90f"
 down_revision = "d71f0f795d30"
 branch_labels = None
 depends_on = None
@@ -25,7 +25,8 @@ def upgrade() -> None:
         sa.Column("project_id", sa.String(length=26), nullable=False),
         sa.ForeignKeyConstraint(["project_id"], ["projects.projects.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("project_id", "project_v1_id", name="uq_project_migrations"),
+        sa.UniqueConstraint("project_v1_id"),
+        sa.UniqueConstraint("project_v1_id", name="uq_project_v1_id"),
         schema="projects",
     )
     op.create_index(
