@@ -41,6 +41,14 @@ class SessionRepository:
         self.shipwright_client = shipwright_client
         self.builds_config = builds_config
 
+        # TODO: remove this later?
+        logging.info(f"BUILDS_ENABLED={self.builds_config.enabled}")
+        if self.builds_config.enabled:
+            logging.info(f"build_output_image_prefix={self.builds_config.build_output_image_prefix}")
+            logging.info(f"vscodium_python_run_image={self.builds_config.vscodium_python_run_image}")
+            logging.info(f"build_strategy_name={self.builds_config.build_strategy_name}")
+            logging.info(f"push_secret_name={self.builds_config.push_secret_name}")
+
     async def get_environments(self, include_archived: bool = False) -> list[models.Environment]:
         """Get all global session environments from the database."""
         async with self.session_maker() as session:
@@ -596,8 +604,10 @@ class SessionRepository:
         git_repository = "https://gitlab.dev.renku.ch/flora.thiebaut/python-simple.git"
 
         run_image = self.builds_config.vscodium_python_run_image or constants.BUILD_VSCODIUM_PYTHON_DEFAULT_RUN_IMAGE
-        
-        output_image_prefix = self.builds_config.build_output_image_prefix or constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
+
+        output_image_prefix = (
+            self.builds_config.build_output_image_prefix or constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
+        )
         output_image_name = constants.BUILD_OUTPUT_IMAGE_NAME
         output_image_tag = result.get_k8s_name()
         output_image = f"{output_image_prefix}{output_image_name}{output_image_tag}"
@@ -647,10 +657,7 @@ class SessionRepository:
 
         build_model = build.dump()
 
-        if self.shipwright_client is None:
-            logging.warning("ShipWright client not defined, BuildRun deletion skipped.")
-        else:
-            await self.shipwright_client.delete_build_run(name=build_model.get_k8s_name())
+        await shipwright_core.cancel_build(build=build, shipwright_client=self.shipwright_client)
 
         return build_model
 
