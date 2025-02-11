@@ -2,14 +2,17 @@
 
 import logging
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from box import Box
 
-from renku_data_services.app_config.config import BuildsConfig
 from renku_data_services.session import constants, models
 from renku_data_services.session import orm as schemas
 from renku_data_services.session import shipwright_crs as sw_schemas
 from renku_data_services.session.shipwright_client import ShipwrightClient
+
+if TYPE_CHECKING:
+    from renku_data_services.app_config.config import BuildsConfig
 
 
 async def update_build_status(build: schemas.BuildORM, shipwright_client: ShipwrightClient | None) -> None:
@@ -65,7 +68,7 @@ async def create_build(
     run_image: str,
     output_image: str,
     shipwright_client: ShipwrightClient | None,
-    builds_config: BuildsConfig,
+    builds_config: "BuildsConfig",
 ) -> None:
     """Create a new BuildRun in ShipWright to support a newly created build."""
 
