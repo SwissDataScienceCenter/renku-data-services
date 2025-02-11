@@ -63,7 +63,7 @@ class SearchUpdatesRepo:
             case Group() as g:
                 dg = _group_to_entity_doc(g)
                 return {
-                    "entity_id": dg.id,
+                    "entity_id": str(dg.id),
                     "entity_type": "Group",
                     "created_at": started,
                     "payload": json.dumps(dg.to_dict()),
@@ -81,7 +81,7 @@ class SearchUpdatesRepo:
             case Project() as p:
                 dp = _project_to_entity_doc(p)
                 return {
-                    "entity_id": dp.id,
+                    "entity_id": str(dp.id),
                     "entity_type": "Project",
                     "created_at": started,
                     "payload": json.dumps(dp.to_dict()),
@@ -114,7 +114,7 @@ class SearchUpdatesRepo:
             el = result.first()
             if el is None:
                 raise Exception(f"Inserting {entity} did not result in returning an id.")
-            return cast(ULID, ULID.from_str(el.id))  # huh?
+            return cast(ULID, ULID.from_str(el.id))  # huh? mypy wants this cast
 
     async def insert(self, entity: Group | UserInfo | Project, started_at: datetime | None) -> ULID:
         """Insert a entity document into the staging table.
