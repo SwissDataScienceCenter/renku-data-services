@@ -7,7 +7,7 @@ from sanic.response import JSONResponse
 from sanic_ext import validate
 from ulid import ULID
 
-from renku_data_services import base_models
+from renku_data_services import base_models, errors
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_query
