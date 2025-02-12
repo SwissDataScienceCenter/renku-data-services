@@ -57,6 +57,8 @@ async def test_get_all_session_environments(
         "Environment 1",
         "Environment 2",
         "Environment 3",
+        "Python/Jupyter",  # environments added by bootstrap migration
+        "Rstudio",
     }
     _, res = await sanic_client.get("/api/data/environments?include_archived=true", headers=unauthorized_headers)
 
@@ -68,6 +70,8 @@ async def test_get_all_session_environments(
         "Environment 2",
         "Environment 3",
         "Environment 4",
+        "Python/Jupyter",  # environments added by bootstrap migration
+        "Rstudio",
     }
 
 
