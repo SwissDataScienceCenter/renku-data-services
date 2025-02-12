@@ -21,7 +21,7 @@ from renku_data_services.base_models.core import RESET
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.session import constants, models, shipwright_core
 from renku_data_services.session import orm as schemas
-from renku_data_services.session.shipwright_client import ShipwrightClient
+from renku_data_services.session.k8s_client import ShipwrightClient
 
 if TYPE_CHECKING:
     from renku_data_services.app_config.config import BuildsConfig

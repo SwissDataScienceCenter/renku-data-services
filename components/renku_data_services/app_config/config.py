@@ -65,7 +65,7 @@ from renku_data_services.project.db import ProjectMemberRepository, ProjectRepos
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsRepo
 from renku_data_services.session.db import SessionRepository
-from renku_data_services.session.shipwright_client import ShipwrightClient
+from renku_data_services.session.k8s_client import ShipwrightClient, ShipwrightClientBase
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.config import UserPreferencesConfig
 from renku_data_services.users.db import UserPreferencesRepository
@@ -140,6 +140,8 @@ class TrustedProxiesConfig:
 class BuildsConfig:
     """Configuration for container image builds."""
 
+    shipwright_client: ShipwrightClient | None
+
     enabled: bool = False
     build_output_image_prefix: str | None = None
     vscodium_python_run_image: str | None = None
@@ -147,19 +149,32 @@ class BuildsConfig:
     push_secret_name: str | None = None
 
     @classmethod
-    def from_env(cls, prefix: str = "") -> "BuildsConfig":
+    def from_env(cls, prefix: str = "", namespace: str = "") -> "BuildsConfig":
         """Create a config from environment variables."""
         enabled = os.environ.get(f"{prefix}IMAGE_BUILDERS_ENABLED", "false").lower() == "true"
         build_output_image_prefix = os.environ.get(f"{prefix}BUILD_OUTPUT_IMAGE_PREFIX")
         vscodium_python_run_image = os.environ.get(f"{prefix}BUILD_VSCODIUM_PYTHON_RUN_IMAGE")
         build_strategy_name = os.environ.get(f"{prefix}BUILD_STRATEGY_NAME")
         push_secret_name = os.environ.get(f"{prefix}BUILD_PUSH_SECRET_NAME")
+
+        if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
+            shipwright_client = None
+        else:
+            # TODO: Use the k8s cache
+            shipwright_cache = None
+            shipwright_base_client = ShipwrightClientBase(namespace=namespace)
+            shipwright_client = ShipwrightClient(
+                cache=shipwright_cache,
+                base_client=shipwright_base_client,
+            )
+
         return cls(
             enabled=enabled or False,
             build_output_image_prefix=build_output_image_prefix or None,
             vscodium_python_run_image=vscodium_python_run_image or None,
             build_strategy_name=build_strategy_name or None,
             push_secret_name=push_secret_name or None,
+            shipwright_client=shipwright_client,
         )
 
 
@@ -171,7 +186,6 @@ class Config:
     authenticator: base_models.Authenticator
     gitlab_authenticator: base_models.Authenticator
     quota_repo: QuotaRepository
-    shipwright_client: ShipwrightClient | None
     user_preferences_config: UserPreferencesConfig
     db: DBConfig
     redis: RedisConfig
@@ -372,7 +386,7 @@ class Config:
                 session_maker=self.db.async_session_maker,
                 project_authz=self.authz,
                 resource_pools=self.rp_repo,
-                shipwright_client=self.shipwright_client,
+                shipwright_client=self.builds_config.shipwright_client,
                 builds_config=self.builds_config,
             )
         return self._session_repo
@@ -513,7 +527,6 @@ class Config:
             authenticator = DummyAuthenticator()
             gitlab_authenticator = DummyAuthenticator()
             quota_repo = QuotaRepository(DummyCoreClient({}, {}), DummySchedulingClient({}), namespace=k8s_namespace)
-            shipwright_client = None
             user_always_exists = os.environ.get("DUMMY_USERSTORE_USER_ALWAYS_EXISTS", "true").lower() == "true"
             user_store = DummyUserStore(user_always_exists=user_always_exists)
             gitlab_client = DummyGitlabAPI()
@@ -534,7 +547,6 @@ class Config:
                 Path(secrets_service_public_key_path).read_bytes()
             )
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
-            shipwright_client = ShipwrightClient(namespace=k8s_namespace)
             keycloak_url = os.environ.get(f"{prefix}KEYCLOAK_URL")
             if keycloak_url is None:
                 raise errors.ConfigurationError(message="The Keycloak URL has to be specified.")
@@ -575,7 +587,7 @@ class Config:
         trusted_proxies = TrustedProxiesConfig.from_env(prefix)
         message_queue = RedisQueue(redis)
         nb_config = NotebooksConfig.from_env(db)
-        builds_config = BuildsConfig.from_env(prefix)
+        builds_config = BuildsConfig.from_env(prefix, k8s_namespace)
 
         return cls(
             version=version,
@@ -584,7 +596,6 @@ class Config:
             gitlab_client=gitlab_client,
             user_store=user_store,
             quota_repo=quota_repo,
-            shipwright_client=shipwright_client,
             sentry=sentry,
             trusted_proxies=trusted_proxies,
             server_defaults_file=server_defaults_file,
