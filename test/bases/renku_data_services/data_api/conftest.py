@@ -9,7 +9,7 @@ from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 from ulid import ULID
 
-from components.renku_data_services.utils.middleware import validate_null_byte
+from renku_data_services.utils.middleware import validate_null_byte
 from renku_data_services.app_config.config import Config
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.authz.authz import _AuthzConverter
