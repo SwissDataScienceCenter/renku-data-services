@@ -721,7 +721,7 @@ class SessionRepository:
 
         async with self.session_maker() as session, session.begin():
             build_orm = schemas.BuildORM(
-                # environment_id=build.environment_id,
+                environment_id=build.environment_id,
                 status=models.BuildStatus.in_progress,
             )
             session.add(build_orm)

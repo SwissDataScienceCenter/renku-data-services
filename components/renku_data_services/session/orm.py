@@ -214,9 +214,8 @@ class BuildORM(BaseORM):
     id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
     """ID of this container image build."""
 
-    # TODO: Link to session environments
-    # environment_id: Mapped[ULID] = mapped_column("environment_id", ForeignKey(EnvironmentORM.id, ondelete="CASCADE"))
-    # environment: Mapped[EnvironmentORM] = relationship(init=False, repr=False, lazy="selectin")
+    environment_id: Mapped[ULID] = mapped_column("environment_id", ForeignKey(EnvironmentORM.id, ondelete="CASCADE"))
+    environment: Mapped[EnvironmentORM] = relationship(init=False, repr=False, lazy="selectin")
 
     status: Mapped[models.BuildStatus] = mapped_column("status")
 
