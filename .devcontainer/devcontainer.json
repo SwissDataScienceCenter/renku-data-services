@@ -6,16 +6,16 @@
 	"workspaceFolder": "/workspace",
 	"shutdownAction": "stopCompose",
 	"features": {
-		"ghcr.io/devcontainers-contrib/features/poetry:2": {},
-		"ghcr.io/devcontainers-contrib/features/bash-command:1": {
+		"ghcr.io/devcontainers-extra/features/poetry:2": {},
+		"ghcr.io/devcontainers-extra/features/bash-command:1": {
 			"command": "poetry self add poetry-polylith-plugin"
 		},
 		"ghcr.io/devcontainers/features/docker-in-docker:2": {},
-		"ghcr.io/devcontainers-contrib/features/gh-release:1": {
+		"ghcr.io/devcontainers-extra/features/gh-release:1": {
 			"repo": "authzed/zed",
 			"binaryNames": "zed"
 		},
-		"ghcr.io/devcontainers-contrib/features/spicedb:1": {},
+		"ghcr.io/devcontainers-extra/features/spicedb:1": {},
 		"ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {
 			"minikube": "none"
 		},
@@ -27,12 +27,12 @@
 		"ghcr.io/EliiseS/devcontainer-features/bash-profile:1": {
 			"command": "alias k=kubectl"
 		},
-		"ghcr.io/devcontainers-contrib/features/rclone:1": {},
+		"ghcr.io/devcontainers-extra/features/rclone:1": {},
 		"./k3d": {}
 	},
 	"overrideFeatureInstallOrder": [
-		"ghcr.io/devcontainers-contrib/features/poetry",
-		"ghcr.io/devcontainers-contrib/features/bash-command"
+		"ghcr.io/devcontainers-extra/features/poetry",
+		"ghcr.io/devcontainers-extra/features/bash-command"
 	],
 	"postCreateCommand": "poetry install --with dev && mkdir -p /home/vscode/.config/k9s",
 	"customizations": {
