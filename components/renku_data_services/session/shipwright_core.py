@@ -3,65 +3,72 @@
 import logging
 from typing import TYPE_CHECKING
 
-from renku_data_services.session import constants, models
-from renku_data_services.session import crs as sw_schemas
-from renku_data_services.session import orm as schemas
+from renku_data_services.session import constants, crs, models
 from renku_data_services.session.k8s_client import ShipwrightClient
 
 if TYPE_CHECKING:
     from renku_data_services.app_config.config import BuildsConfig
 
 
-async def update_build_status(build: schemas.BuildORM, shipwright_client: ShipwrightClient | None) -> None:
+async def update_build_status(
+    build: models.Build, shipwright_client: ShipwrightClient | None
+) -> models.ShipWrightBuildStatusUpdate | None:
     """Update the status of a build by pulling the corresponding BuildRun from ShipWright.
 
     Note: this method will update `build` in place.
     """
     if shipwright_client is None:
         logging.warning("ShipWright client not defined, BuildRun refresh skipped.")
-        return
+        return None
 
-    k8s_name = build.dump().get_k8s_name()
+    k8s_name = build.get_k8s_name()
     k8s_build = await shipwright_client.get_build_run(name=k8s_name)
 
     if k8s_build is None:
-        build.status = models.BuildStatus.failed
+        return models.ShipWrightBuildStatusUpdate(status=models.BuildStatus.failed)
+
+    k8s_build_status = k8s_build.status
+    completion_time = k8s_build_status.completionTime if k8s_build_status else None
+
+    if k8s_build_status is None or completion_time is None:
+        return None
+
+    conditions = k8s_build_status.conditions
+    condition = next(filter(lambda c: c.type == "Succeeded", conditions or []), None)
+
+    buildSpec = k8s_build_status.buildSpec
+    output = buildSpec.output if buildSpec else None
+    result_image = output.image if output else "unknown"
+
+    source = buildSpec.source if buildSpec else None
+    git_obj = source.git if source else None
+    result_repository_url = git_obj.url if git_obj else "unknown"
+
+    source_2 = k8s_build_status.source
+    git_obj_2 = source_2.git if source_2 else None
+    result_repository_git_commit_sha = git_obj_2.commitSha if git_obj_2 else None
+    result_repository_git_commit_sha = result_repository_git_commit_sha or "unknown"
+
+    if condition is not None and condition.status == "True":
+        return models.ShipWrightBuildStatusUpdate(
+            status=models.BuildStatus.succeeded,
+            completed_at=completion_time,
+            result=models.BuildResult(
+                completed_at=completion_time,
+                image=result_image,
+                repository_url=result_repository_url,
+                repository_git_commit_sha=result_repository_git_commit_sha,
+            ),
+        )
     else:
-        k8s_build_status = k8s_build.status
-        completion_time = k8s_build_status.completionTime if k8s_build_status else None
-
-        if k8s_build_status is None or completion_time is None:
-            return
-
-        conditions = k8s_build_status.conditions
-        condition = next(filter(lambda c: c.type == "Succeeded", conditions or []), None)
-
-        buildSpec = k8s_build_status.buildSpec
-        output = buildSpec.output if buildSpec else None
-        result_image = output.image if output else "unknown"
-
-        source = buildSpec.source if buildSpec else None
-        git_obj = source.git if source else None
-        result_repository_url = git_obj.url if git_obj else "unknown"
-
-        source_2 = k8s_build_status.source
-        git_obj_2 = source_2.git if source_2 else None
-        result_repository_git_commit_sha = git_obj_2.commitSha if git_obj_2 else None
-        result_repository_git_commit_sha = result_repository_git_commit_sha or "unknown"
-
-        if condition is not None and condition.status == "True":
-            build.status = models.BuildStatus.succeeded
-            build.completed_at = completion_time
-            build.result_image = result_image
-            build.result_repository_url = result_repository_url
-            build.result_repository_git_commit_sha = result_repository_git_commit_sha
-        else:
-            build.status = models.BuildStatus.failed
-            build.completed_at = completion_time
+        return models.ShipWrightBuildStatusUpdate(
+            status=models.BuildStatus.failed,
+            completed_at=completion_time,
+        )
 
 
 async def create_build(
-    build: schemas.BuildORM,
+    build: models.Build,
     git_repository: str,
     run_image: str,
     output_image: str,
@@ -76,15 +83,15 @@ async def create_build(
         build_strategy_name = builds_config.build_strategy_name or constants.BUILD_DEFAULT_BUILD_STRATEGY_NAME
         push_secret_name = builds_config.push_secret_name or constants.BUILD_DEFAULT_PUSH_SECRET_NAME
 
-        build_run = sw_schemas.BuildRun(
-            metadata=sw_schemas.Metadata(name=build.dump().get_k8s_name()),
-            spec=sw_schemas.BuildRunSpec(
-                build=sw_schemas.Build(
-                    spec=sw_schemas.BuildSpec(
-                        source=sw_schemas.GitSource(git=sw_schemas.Git(url=git_repository)),
-                        strategy=sw_schemas.Strategy(kind="BuildStrategy", name=build_strategy_name),
-                        paramValues=[sw_schemas.ParamValue(name="run-image", value=run_image)],
-                        output=sw_schemas.BuildOutput(
+        build_run = crs.BuildRun(
+            metadata=crs.Metadata(name=build.get_k8s_name()),
+            spec=crs.BuildRunSpec(
+                build=crs.Build(
+                    spec=crs.BuildSpec(
+                        source=crs.GitSource(git=crs.Git(url=git_repository)),
+                        strategy=crs.Strategy(kind="BuildStrategy", name=build_strategy_name),
+                        paramValues=[crs.ParamValue(name="run-image", value=run_image)],
+                        output=crs.BuildOutput(
                             image=output_image,
                             pushSecret=push_secret_name,
                         ),
@@ -96,9 +103,9 @@ async def create_build(
         await shipwright_client.create_build_run(build_run)
 
 
-async def cancel_build(build: schemas.BuildORM, shipwright_client: ShipwrightClient | None) -> None:
+async def cancel_build(build: models.Build, shipwright_client: ShipwrightClient | None) -> None:
     """Cancel a build by deleting the corresponding BuildRun from ShipWright."""
     if shipwright_client is None:
         logging.warning("ShipWright client not defined, BuildRun deletion skipped.")
     else:
-        await shipwright_client.delete_build_run(name=build.dump().get_k8s_name())
+        await shipwright_client.delete_build_run(name=build.get_k8s_name())

@@ -811,7 +811,7 @@ class SessionRepository:
         output_image = f"{output_image_prefix}{output_image_name}:{output_image_tag}"
 
         await shipwright_core.create_build(
-            build=build_orm,
+            build=result,
             git_repository=git_repository,
             run_image=run_image,
             output_image=output_image,
@@ -872,7 +872,7 @@ class SessionRepository:
 
         build_model = build.dump()
 
-        await shipwright_core.cancel_build(build=build, shipwright_client=self.shipwright_client)
+        await shipwright_core.cancel_build(build=build_model, shipwright_client=self.shipwright_client)
 
         return build_model
 
@@ -880,7 +880,35 @@ class SessionRepository:
         if build.status != models.BuildStatus.in_progress:
             return
 
-        await shipwright_core.update_build_status(build=build, shipwright_client=self.shipwright_client)
+        status_update = await shipwright_core.update_build_status(
+            build=build.dump(), shipwright_client=self.shipwright_client
+        )
+
+        if status_update is not None and status_update.status == models.BuildStatus.failed:
+            build.status = models.BuildStatus.failed
+            build.completed_at = status_update.completed_at
+        elif (
+            status_update is not None
+            and status_update.status == models.BuildStatus.succeeded
+            and status_update.result is not None
+        ):
+            build.status = models.BuildStatus.succeeded
+            build.completed_at = status_update.completed_at
+            build.result_image = status_update.result.image
+            build.result_repository_url = status_update.result.repository_url
+            build.result_repository_git_commit_sha = status_update.result.repository_git_commit_sha
+            # Also update the session environment here
+            # TODO: move this to its own method where build parameters determine args
+            environment = build.environment
+            environment.container_image = build.result_image
+            environment.default_url = "/"
+            environment.port = 8888
+            environment.mount_directory = PurePosixPath("/home/ubuntu/work")
+            environment.working_directory = PurePosixPath("/home/ubuntu/work")
+            environment.uid = 1000
+            environment.gid = 1000
+            environment.command = ["bash"]
+            environment.args = ["/entrypoint.sh"]
 
         await session.flush()
         await session.refresh(build)
