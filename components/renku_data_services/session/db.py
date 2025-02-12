@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, nullcontext
 from datetime import UTC, datetime
@@ -43,14 +42,6 @@ class SessionRepository:
         self.resource_pools: ResourcePoolRepository = resource_pools
         self.shipwright_client = shipwright_client
         self.builds_config = builds_config
-
-        # TODO: remove this later?
-        logging.info(f"BUILDS_ENABLED={self.builds_config.enabled}")
-        if self.builds_config.enabled:
-            logging.info(f"build_output_image_prefix={self.builds_config.build_output_image_prefix}")
-            logging.info(f"vscodium_python_run_image={self.builds_config.vscodium_python_run_image}")
-            logging.info(f"build_strategy_name={self.builds_config.build_strategy_name}")
-            logging.info(f"push_secret_name={self.builds_config.push_secret_name}")
 
     async def get_environments(self, include_archived: bool = False) -> list[models.Environment]:
         """Get all global session environments from the database."""
@@ -678,14 +669,31 @@ class SessionRepository:
     async def get_build(self, user: base_models.APIUser, build_id: ULID) -> models.Build:
         """Get a specific build."""
 
-        # TODO: check READ permissions on this chain: build->environment->launcher->project
-
         async with self.session_maker() as session, session.begin():
             stmt = select(schemas.BuildORM).where(schemas.BuildORM.id == build_id)
             result = await session.scalars(stmt)
             build = result.one_or_none()
 
             if build is None:
+                raise errors.MissingResourceError(
+                    message=f"Build with id '{build_id}' does not exist or you do not have access to it."
+                )
+
+            if build.environment.environment_kind == models.EnvironmentKind.GLOBAL:
+                authorized = True
+            else:
+                launcher = await session.scalar(
+                    select(schemas.SessionLauncherORM).where(
+                        schemas.SessionLauncherORM.environment_id == build.environment_id
+                    )
+                )
+                if launcher is None:
+                    authorized = False
+                else:
+                    authorized = await self.project_authz.has_permission(
+                        user, ResourceType.project, launcher.project_id, Scope.READ
+                    )
+            if not authorized:
                 raise errors.MissingResourceError(
                     message=f"Build with id '{build_id}' does not exist or you do not have access to it."
                 )
@@ -698,11 +706,38 @@ class SessionRepository:
     async def get_environment_builds(self, user: base_models.APIUser, environment_id: ULID) -> list[models.Build]:
         """Get all builds from a session environment."""
 
-        # TODO: check READ permissions on this chain: environment->launcher->project
-        # TODO: query DB based on environment_id
-
         async with self.session_maker() as session, session.begin():
-            stmt = select(schemas.BuildORM).order_by(schemas.BuildORM.id.desc())
+            environment = await session.scalar(
+                select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == environment_id)
+            )
+            if environment is None:
+                raise errors.MissingResourceError(
+                    message=f"Session environment with id '{environment_id}' does not exist or you do not have access to it."  # noqa: E501
+                )
+            if environment.environment_kind == models.EnvironmentKind.GLOBAL:
+                authorized = True
+            else:
+                launcher = await session.scalar(
+                    select(schemas.SessionLauncherORM).where(
+                        schemas.SessionLauncherORM.environment_id == environment_id
+                    )
+                )
+                if launcher is None:
+                    authorized = False
+                else:
+                    authorized = await self.project_authz.has_permission(
+                        user, ResourceType.project, launcher.project_id, Scope.READ
+                    )
+            if not authorized:
+                raise errors.MissingResourceError(
+                    message=f"Session environment with id '{environment_id}' does not exist or you do not have access to it."  # noqa: E501
+                )
+
+            stmt = (
+                select(schemas.BuildORM)
+                .where(schemas.BuildORM.environment_id == environment_id)
+                .order_by(schemas.BuildORM.id.desc())
+            )
             result = await session.scalars(stmt)
             builds = result.all()
 
@@ -717,9 +752,42 @@ class SessionRepository:
         if not user.is_authenticated or user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
-        # TODO: check WRITE permissions on this chain: environment->launcher->project
-
         async with self.session_maker() as session, session.begin():
+            environment = await session.scalar(
+                select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == build.environment_id)
+            )
+            if environment is None:
+                raise errors.MissingResourceError(
+                    message=f"Session environment with id '{build.environment_id}' does not exist or you do not have access to it."  # noqa: E501
+                )
+            if (
+                environment.environment_image_source != models.EnvironmentImageSource.build
+                or environment.build_parameters is None
+            ):
+                raise errors.ValidationError(
+                    message=f"Session environment with id '{build.environment_id}' does not support builds."
+                )
+            build_parameters = environment.build_parameters.dump()
+
+            if environment.environment_kind == models.EnvironmentKind.GLOBAL:
+                authorized = user.is_admin
+            else:
+                launcher = await session.scalar(
+                    select(schemas.SessionLauncherORM).where(
+                        schemas.SessionLauncherORM.environment_id == build.environment_id
+                    )
+                )
+                if launcher is None:
+                    authorized = False
+                else:
+                    authorized = await self.project_authz.has_permission(
+                        user, ResourceType.project, launcher.project_id, Scope.WRITE
+                    )
+            if not authorized:
+                raise errors.MissingResourceError(
+                    message=f"Session environment with id '{build.environment_id}' does not exist or you do not have access to it."  # noqa: E501
+                )
+
             build_orm = schemas.BuildORM(
                 environment_id=build.environment_id,
                 status=models.BuildStatus.in_progress,
@@ -730,9 +798,9 @@ class SessionRepository:
 
         result = build_orm.dump()
 
-        # TODO: Get this from the session environment
-        git_repository = "https://gitlab.dev.renku.ch/flora.thiebaut/python-simple.git"
+        git_repository = build_parameters.repository
 
+        # TODO: define the run image from `build_parameters`
         run_image = self.builds_config.vscodium_python_run_image or constants.BUILD_VSCODIUM_PYTHON_DEFAULT_RUN_IMAGE
 
         output_image_prefix = (
@@ -758,14 +826,31 @@ class SessionRepository:
         if not user.is_authenticated or user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
-        # TODO: check WRITE permissions on this chain: build->environment->launcher->project
-
         async with self.session_maker() as session, session.begin():
             stmt = select(schemas.BuildORM).where(schemas.BuildORM.id == build_id)
             result = await session.scalars(stmt)
             build = result.one_or_none()
 
             if build is None:
+                raise errors.MissingResourceError(
+                    message=f"Build with id '{build_id}' does not exist or you do not have access to it."
+                )
+
+            if build.environment.environment_kind == models.EnvironmentKind.GLOBAL:
+                authorized = user.is_admin
+            else:
+                launcher = await session.scalar(
+                    select(schemas.SessionLauncherORM).where(
+                        schemas.SessionLauncherORM.environment_id == build.environment_id
+                    )
+                )
+                if launcher is None:
+                    authorized = False
+                else:
+                    authorized = await self.project_authz.has_permission(
+                        user, ResourceType.project, launcher.project_id, Scope.WRITE
+                    )
+            if not authorized:
                 raise errors.MissingResourceError(
                     message=f"Build with id '{build_id}' does not exist or you do not have access to it."
                 )
