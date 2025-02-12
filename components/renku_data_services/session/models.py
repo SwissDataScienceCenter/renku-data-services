@@ -224,3 +224,12 @@ class BuildPatch:
     """Model to represent the requested update to a container image build."""
 
     status: BuildStatus | None = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ShipWrightBuildStatusUpdate:
+    """Model to represent an update from about a build from ShipWright."""
+
+    status: BuildStatus
+    result: BuildResult | None = None
+    completed_at: datetime | None = None
