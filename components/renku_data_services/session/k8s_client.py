@@ -1,7 +1,6 @@
 """An abstraction over the kr8s kubernetes client and the k8s-watcher."""
 
 import logging
-import os
 from urllib.parse import urljoin
 
 import httpx
@@ -97,7 +96,7 @@ class ShipwrightCache:
         self.url = url
         self.client = httpx.AsyncClient(timeout=10)
 
-    async def list_buildruns(self) -> list[BuildRun]:
+    async def list_build_runs(self) -> list[BuildRun]:
         """Get a list of ShipWright BuildRuns."""
         url = urljoin(self.url, "/buildruns")
         try:
@@ -115,7 +114,7 @@ class ShipwrightCache:
 
         return [BuildRun.model_validate(server) for server in res.json()]
 
-    async def get_buildrun(self, name: str) -> BuildRun | None:
+    async def get_build_run(self, name: str) -> BuildRun | None:
         """Get a ShipWright BuildRun."""
         url = urljoin(self.url, f"/buildruns/{name}")
         try:
@@ -145,7 +144,7 @@ class ShipwrightClient:
 
     def __init__(
         self,
-        cache: ShipwrightCache,
+        cache: ShipwrightCache | None,
         base_client: ShipwrightClientBase,
         # NOTE: If cache skipping is enabled then when the cache fails a large number of
         # buildruns can overload the k8s API by submitting a lot of calls directly.
@@ -155,21 +154,24 @@ class ShipwrightClient:
         self.base_client = base_client
         self.skip_cache_if_unavailable = skip_cache_if_unavailable
 
-    @classmethod
-    def from_env(cls, namespace: str, skip_cache_if_unavailable: bool = False) -> "ShipwrightClient":
-        """Generate a configuration from environment variables."""
-        # TODO: how to pass this?
-        cache_url = os.environ["NB_AMALTHEA_V2__CACHE_URL"]
-        return cls(
-            cache=ShipwrightCache(url=cache_url),
-            base_client=ShipwrightClientBase(namespace=namespace),
-            skip_cache_if_unavailable=skip_cache_if_unavailable,
-        )
+    # @classmethod
+    # def from_env(cls, namespace: str, skip_cache_if_unavailable: bool = False) -> "ShipwrightClient":
+    #     """Generate a configuration from environment variables."""
+    #     # TODO: how to pass this?
+    #     cache_url = os.environ["NB_AMALTHEA_V2__CACHE_URL"]
+    #     return cls(
+    #         cache=ShipwrightCache(url=cache_url),
+    #         base_client=ShipwrightClientBase(namespace=namespace),
+    #         skip_cache_if_unavailable=skip_cache_if_unavailable,
+    #     )
 
     async def list_build_runs(self) -> list[BuildRun]:
         """Get a list of ShipWright BuildRuns."""
+        if self.cache is None:
+            return await self.base_client.list_build_runs()
+
         try:
-            return await self.cache.list_buildruns()
+            return await self.cache.list_build_runs()
         except CacheError:
             if self.skip_cache_if_unavailable:
                 logging.warning("Skipping the cache to list BuildRuns")
@@ -179,8 +181,11 @@ class ShipwrightClient:
 
     async def get_build_run(self, name: str) -> BuildRun | None:
         """Get a ShipWright BuildRun."""
+        if self.cache is None:
+            return await self.base_client.get_build_run(name)
+
         try:
-            return await self.cache.get_buildrun(name)
+            return await self.cache.get_build_run(name)
         except CacheError:
             if self.skip_cache_if_unavailable:
                 return await self.base_client.get_build_run(name)
