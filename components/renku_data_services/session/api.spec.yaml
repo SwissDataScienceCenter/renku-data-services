@@ -557,8 +557,8 @@ components:
       description: Kind of the environment
       type: string
       enum:
-        - global
-        - custom
+        - GLOBAL
+        - CUSTOM
     EnvironmentImageSourceImage:
       type: string
       enum:

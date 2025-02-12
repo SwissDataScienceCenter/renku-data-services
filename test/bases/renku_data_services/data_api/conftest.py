@@ -345,7 +345,7 @@ async def create_session_launcher(sanic_client: SanicASGITestClient, user_header
         payload["description"] = payload.get("description") or "A session launcher."
         if "environment" not in payload:
             payload["environment"] = {
-                "environment_kind": "custom",
+                "environment_kind": "CUSTOM",
                 "name": "Test",
                 "container_image": "some_image:some_tag",
                 "environment_image_source": "image",

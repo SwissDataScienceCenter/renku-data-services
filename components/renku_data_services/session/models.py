@@ -21,8 +21,8 @@ class Member:
 class EnvironmentKind(StrEnum):
     """The type of environment."""
 
-    global_ = "global"
-    custom = "custom"
+    GLOBAL = "GLOBAL"
+    CUSTOM = "CUSTOM"
 
 
 class EnvironmentImageSource(StrEnum):

@@ -35,7 +35,7 @@ class SessionRepository:
         """Get all global session environments from the database."""
         async with self.session_maker() as session:
             statement = select(schemas.EnvironmentORM).where(
-                schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.global_.value
+                schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.GLOBAL.value
             )
             if not include_archived:
                 statement = statement.where(schemas.EnvironmentORM.is_archived.is_(False))
@@ -49,7 +49,7 @@ class SessionRepository:
             res = await session.scalars(
                 select(schemas.EnvironmentORM)
                 .where(schemas.EnvironmentORM.id == environment_id)
-                .where(schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.global_.value)
+                .where(schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.GLOBAL.value)
             )
             environment = res.one_or_none()
             if environment is None:
@@ -119,7 +119,7 @@ class SessionRepository:
             mount_directory=None,  # TODO: This should come from the build
             uid=1000,  # TODO: This should come from the build
             gid=1000,  # TODO: This should come from the build
-            environment_kind=models.EnvironmentKind.custom,
+            environment_kind=models.EnvironmentKind.CUSTOM,
             command=None,  # TODO: This should come from the build
             args=None,  # TODO: This should come from the build
             creation_date=datetime.now(UTC).replace(microsecond=0),
@@ -138,7 +138,7 @@ class SessionRepository:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
         if not user.is_admin:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
-        if environment.environment_kind != models.EnvironmentKind.global_:
+        if environment.environment_kind != models.EnvironmentKind.GLOBAL:
             raise errors.ValidationError(message="This endpoint only supports adding global environments", quiet=True)
 
         async with self.session_maker() as session, session.begin():
@@ -223,7 +223,7 @@ class SessionRepository:
             mount_directory=None,  # TODO: This should come from the build
             uid=1000,  # TODO: This should come from the build
             gid=1000,  # TODO: This should come from the build
-            environment_kind=models.EnvironmentKind.custom,
+            environment_kind=models.EnvironmentKind.CUSTOM,
             command=None,  # TODO: This should come from the build
             args=None,  # TODO: This should come from the build
             creation_date=datetime.now(UTC).replace(microsecond=0),
@@ -245,7 +245,7 @@ class SessionRepository:
             res = await session.scalars(
                 select(schemas.EnvironmentORM)
                 .where(schemas.EnvironmentORM.id == str(environment_id))
-                .where(schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.global_)
+                .where(schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.GLOBAL)
             )
             environment = res.one_or_none()
             if environment is None:
@@ -265,7 +265,7 @@ class SessionRepository:
             res = await session.scalars(
                 select(schemas.EnvironmentORM)
                 .where(schemas.EnvironmentORM.id == environment_id)
-                .where(schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.global_.value)
+                .where(schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.GLOBAL.value)
             )
             environment = res.one_or_none()
 
@@ -389,7 +389,7 @@ class SessionRepository:
                     mount_directory=None,  # TODO: This should come from the build
                     uid=1000,  # TODO: This should come from the build
                     gid=1000,  # TODO: This should come from the build
-                    environment_kind=models.EnvironmentKind.custom,
+                    environment_kind=models.EnvironmentKind.CUSTOM,
                     command=None,  # TODO: This should come from the build
                     args=None,  # TODO: This should come from the build
                     creation_date=datetime.now(UTC).replace(microsecond=0),
@@ -403,7 +403,7 @@ class SessionRepository:
                 res_env = await session.scalars(
                     select(schemas.EnvironmentORM)
                     .where(schemas.EnvironmentORM.id == environment_id)
-                    .where(schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.global_.value)
+                    .where(schemas.EnvironmentORM.environment_kind == models.EnvironmentKind.GLOBAL.value)
                 )
                 environment_orm = res_env.one_or_none()
                 if environment_orm is None:
@@ -589,7 +589,7 @@ class SessionRepository:
                         message=f"Session environment with id '{new_environment_id}' does not exist or "
                         "you do not have access to it."
                     )
-                if new_environment.environment_kind != models.EnvironmentKind.global_:
+                if new_environment.environment_kind != models.EnvironmentKind.GLOBAL:
                     raise errors.ValidationError(
                         message="Cannot set the environment for a launcher to an existing environment if that "
                         "existing environment is not global",
@@ -597,19 +597,19 @@ class SessionRepository:
                     )
                 launcher.environment_id = new_environment_id
                 launcher.environment = new_environment
-                if old_environment.environment_kind == models.EnvironmentKind.custom:
+                if old_environment.environment_kind == models.EnvironmentKind.CUSTOM:
                     # A custom environment exists, but it is being updated to a global one
                     # We remove the custom environment to avoid accumulating custom environments that are not associated
                     # with any launchers.
                     await session.delete(old_environment)
-            case models.EnvironmentPatch(), models.EnvironmentKind.custom:
+            case models.EnvironmentPatch(), models.EnvironmentKind.CUSTOM:
                 # Custom environment being updated
                 if launcher.environment.environment_image_source == models.EnvironmentImageSource.build:
                     await self.__update_environment_build_parameters(launcher.environment, update, session, launcher)
                 else:
                     self.__update_environment(launcher.environment, update)
             case models.UnsavedEnvironment() as new_custom_environment, _ if (
-                new_custom_environment.environment_kind == models.EnvironmentKind.custom
+                new_custom_environment.environment_kind == models.EnvironmentKind.CUSTOM
             ):
                 # Global environment replaced by a custom one
                 new_env = self.__insert_environment(user, session, new_custom_environment)
@@ -651,5 +651,5 @@ class SessionRepository:
                 raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
             await session.delete(launcher)
-            if launcher.environment.environment_kind == models.EnvironmentKind.custom:
+            if launcher.environment.environment_kind == models.EnvironmentKind.CUSTOM:
                 await session.delete(launcher.environment)

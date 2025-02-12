@@ -352,7 +352,7 @@ async def test_get_session_launcher(
     assert res.json.get("project_id") == project["id"]
     assert res.json.get("description") == "Some launcher."
     environment = res.json.get("environment", {})
-    assert environment.get("environment_kind") == "global"
+    assert environment.get("environment_kind") == "GLOBAL"
     assert environment.get("id") == env["id"]
     assert environment.get("container_image") == env["container_image"]
     assert res.json.get("resource_class_id") is None
@@ -395,7 +395,7 @@ async def test_post_session_launcher(sanic_client, admin_headers, create_project
         "environment": {
             "container_image": "some_image:some_tag",
             "name": "custom_name",
-            "environment_kind": "custom",
+            "environment_kind": "CUSTOM",
             "environment_image_source": "image",
         },
     }
@@ -409,7 +409,7 @@ async def test_post_session_launcher(sanic_client, admin_headers, create_project
     assert res.json.get("description") == "A session launcher."
     environment = res.json.get("environment", {})
     assert environment.get("name") == "custom_name"
-    assert environment.get("environment_kind") == "custom"
+    assert environment.get("environment_kind") == "CUSTOM"
     assert environment.get("environment_image_source") == "image"
     assert environment.get("container_image") == "some_image:some_tag"
     assert environment.get("id") is not None
@@ -448,7 +448,7 @@ async def test_post_session_launcher_with_environment_build(
     environment = response.json.get("environment", {})
     assert environment.get("id") is not None
     assert environment.get("name") == "Launcher 1"
-    assert environment.get("environment_kind") == "custom"
+    assert environment.get("environment_kind") == "CUSTOM"
     assert environment.get("build_parameters") == {
         "repository": "https://github.com/some/repo",
         "builder_variant": "pip",
@@ -525,7 +525,7 @@ async def test_patch_session_launcher(
         "environment": {
             "container_image": "some_image:some_tag",
             "name": "custom_name",
-            "environment_kind": "custom",
+            "environment_kind": "CUSTOM",
             "environment_image_source": "image",
         },
     }
@@ -537,7 +537,7 @@ async def test_patch_session_launcher(
     assert res.json.get("name") == "Launcher 1"
     assert res.json.get("description") == "A session launcher."
     environment = res.json.get("environment", {})
-    assert environment.get("environment_kind") == "custom"
+    assert environment.get("environment_kind") == "CUSTOM"
     assert environment.get("container_image") == "some_image:some_tag"
     assert environment.get("id") is not None
     assert res.json.get("resource_class_id") == resource_pool["classes"][0]["id"]
@@ -583,7 +583,7 @@ async def test_patch_session_launcher_environment(
         "environment": {
             "container_image": "some_image:some_tag",
             "name": "custom_name",
-            "environment_kind": "custom",
+            "environment_kind": "CUSTOM",
             "environment_image_source": "image",
         },
     }
@@ -591,7 +591,7 @@ async def test_patch_session_launcher_environment(
     assert res.status_code == 201, res.text
     assert res.json is not None
     environment = res.json.get("environment", {})
-    assert environment.get("environment_kind") == "custom"
+    assert environment.get("environment_kind") == "CUSTOM"
     assert environment.get("container_image") == "some_image:some_tag"
     assert environment.get("id") is not None
 
@@ -606,7 +606,7 @@ async def test_patch_session_launcher_environment(
     )
     assert res.status_code == 200, res.text
     assert res.json is not None
-    global_env["environment_kind"] = "global"
+    global_env["environment_kind"] = "GLOBAL"
     global_env["environment_image_source"] = "image"
     assert res.json["environment"] == global_env
 
@@ -634,7 +634,7 @@ async def test_patch_session_launcher_environment(
         "environment": {
             "container_image": "new_image",
             "name": "new_custom",
-            "environment_kind": "custom",
+            "environment_kind": "CUSTOM",
             "environment_image_source": "image",
         },
     }
@@ -698,7 +698,7 @@ async def test_patch_session_launcher_environment(
     environment = res.json.get("environment", {})
     assert environment.get("id") is not None
     assert environment.get("name") == "Launcher 1"
-    assert environment.get("environment_kind") == "custom"
+    assert environment.get("environment_kind") == "CUSTOM"
     assert environment.get("build_parameters") == {
         "repository": "https://github.com/some/repo",
         "builder_variant": "pip",
@@ -731,7 +731,7 @@ async def test_patch_session_launcher_environment_with_build_parameters(
     _, res = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
     assert res.status_code == 201, res.text
     assert res.json is not None
-    global_env["environment_kind"] = "global"
+    global_env["environment_kind"] = "GLOBAL"
     global_env["environment_image_source"] = "image"
     assert res.json["environment"] == global_env
 
@@ -739,7 +739,7 @@ async def test_patch_session_launcher_environment_with_build_parameters(
 
     patch_payload = {
         "environment": {
-            "environment_kind": "custom",
+            "environment_kind": "CUSTOM",
             "environment_image_source": "build",
             "build_parameters": {
                 "repository": "https://github.com/some/repo",
@@ -761,7 +761,7 @@ async def test_patch_session_launcher_environment_with_build_parameters(
     environment = res.json.get("environment", {})
     assert environment.get("id") is not None
     assert environment.get("name") == "Launcher 1"
-    assert environment.get("environment_kind") == "custom"
+    assert environment.get("environment_kind") == "CUSTOM"
     assert environment.get("build_parameters") == {
         "repository": "https://github.com/some/repo",
         "builder_variant": "pip",
@@ -792,7 +792,7 @@ async def test_patch_session_launcher_environment_with_build_parameters(
     environment = res.json.get("environment", {})
     assert environment.get("id") is not None
     assert environment.get("name") == "Launcher 1"
-    assert environment.get("environment_kind") == "custom"
+    assert environment.get("environment_kind") == "CUSTOM"
     assert environment.get("build_parameters") == {
         "repository": "new_repo",
         "builder_variant": "conda",
@@ -806,7 +806,7 @@ async def test_patch_session_launcher_environment_with_build_parameters(
         "environment": {
             "container_image": "new_image",
             "name": "new_custom",
-            "environment_kind": "custom",
+            "environment_kind": "CUSTOM",
             "environment_image_source": "image",
         },
     }
@@ -820,7 +820,7 @@ async def test_patch_session_launcher_environment_with_build_parameters(
     environment = res.json.get("environment", {})
     assert environment.get("id") is not None
     assert environment.get("name") == "new_custom"
-    assert environment.get("environment_kind") == "custom"
+    assert environment.get("environment_kind") == "CUSTOM"
     assert environment.get("build_parameters") is None
     assert environment.get("environment_image_source") == "image"
     assert environment.get("container_image") == "new_image"
@@ -847,7 +847,7 @@ async def test_patch_session_launcher_reset_fields(
         "environment": {
             "container_image": "some_image:some_tag",
             "name": "custom_name",
-            "environment_kind": "custom",
+            "environment_kind": "CUSTOM",
             "environment_image_source": "image",
         },
     }
@@ -859,7 +859,7 @@ async def test_patch_session_launcher_reset_fields(
     assert res.json.get("name") == "Launcher 1"
     assert res.json.get("description") == "A session launcher."
     environment = res.json.get("environment", {})
-    assert environment.get("environment_kind") == "custom"
+    assert environment.get("environment_kind") == "CUSTOM"
     assert environment.get("container_image") == "some_image:some_tag"
     assert environment.get("id") is not None
     assert res.json.get("resource_class_id") == resource_pool["classes"][0]["id"]
@@ -889,7 +889,7 @@ async def test_patch_session_launcher_keeps_unset_values(
         disk_storage=42,
         environment={
             "container_image": "some_image:some_tag",
-            "environment_kind": "custom",
+            "environment_kind": "CUSTOM",
             "name": "custom_name",
             "environment_image_source": "image",
         },
@@ -908,7 +908,7 @@ async def test_patch_session_launcher_keeps_unset_values(
     assert response.json.get("disk_storage") == 42
     environment = response.json.get("environment", {})
     assert environment.get("container_image") == "some_image:some_tag"
-    assert environment.get("environment_kind") == "custom"
+    assert environment.get("environment_kind") == "CUSTOM"
     assert environment.get("name") == "custom_name"
     assert environment.get("id") is not None
 
@@ -949,7 +949,7 @@ async def test_starting_session_anonymous(
         project_id=project["id"],
         environment={
             "container_image": "renku/renkulab-py:3.10-0.23.0-amalthea-sessions-3",
-            "environment_kind": "custom",
+            "environment_kind": "CUSTOM",
             "name": "test",
             "port": 8888,
         },

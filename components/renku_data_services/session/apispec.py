@@ -13,8 +13,8 @@ from renku_data_services.session.apispec_base import BaseAPISpec
 
 
 class EnvironmentKind(Enum):
-    global_ = "global"
-    custom = "custom"
+    GLOBAL = "GLOBAL"
+    CUSTOM = "CUSTOM"
 
 
 class EnvironmentImageSourceImage(Enum):
@@ -131,7 +131,7 @@ class Environment(EnvironmentWithoutContainerImage):
 
 class EnvironmentWithImageGet(Environment):
     environment_image_source: EnvironmentImageSourceImage
-    environment_kind: EnvironmentKind = EnvironmentKind.custom
+    environment_kind: EnvironmentKind = EnvironmentKind.CUSTOM
 
 
 class EnvironmentPost(BaseAPISpec):
@@ -331,7 +331,7 @@ class EnvironmentWithBuildGet(EnvironmentWithoutContainerImage):
     )
     build_parameters: BuildParameters
     environment_image_source: EnvironmentImageSourceBuild
-    environment_kind: EnvironmentKind = EnvironmentKind.custom
+    environment_kind: EnvironmentKind = EnvironmentKind.CUSTOM
 
 
 class EnvironmentPostInLauncherHelper(EnvironmentPost):

@@ -149,7 +149,7 @@ def validate_unsaved_session_launcher(launcher: apispec.SessionLauncherPost) -> 
         if isinstance(launcher.environment, apispec.EnvironmentIdOnlyPost)
         else validate_unsaved_build_parameters(launcher.environment)
         if isinstance(launcher.environment, apispec.BuildParametersPost)
-        else validate_unsaved_environment(launcher.environment, models.EnvironmentKind.custom),
+        else validate_unsaved_environment(launcher.environment, models.EnvironmentKind.CUSTOM),
     )
 
 
@@ -161,7 +161,7 @@ def validate_session_launcher_patch(
     environment: str | models.EnvironmentPatch | models.UnsavedEnvironment | models.UnsavedBuildParameters | None = None
     if isinstance(patch.environment, apispec.EnvironmentPatchInLauncher):
         match current_launcher.environment.environment_kind, patch.environment.environment_kind:
-            case models.EnvironmentKind.global_, apispec.EnvironmentKind.custom:
+            case models.EnvironmentKind.GLOBAL, apispec.EnvironmentKind.CUSTOM:
                 # This means that the global environment is being swapped for a custom one,
                 # so we have to create a brand-new environment, but we have to validate here.
                 if (
@@ -196,7 +196,7 @@ def validate_session_launcher_patch(
                         data_dict.get("environment", {}).get("build_parameters", {})
                     )
                     environment = validate_unsaved_build_parameters(validated_build_parameters)
-            case models.EnvironmentKind.global_, None:
+            case models.EnvironmentKind.GLOBAL, None:
                 # Trying to patch a global environment with a custom environment patch.
                 raise errors.ValidationError(
                     message=(
@@ -204,12 +204,12 @@ def validate_session_launcher_patch(
                         "'custom'"
                     )
                 )
-            case _, apispec.EnvironmentKind.global_:
+            case _, apispec.EnvironmentKind.GLOBAL:
                 # This means that the custom environment is being swapped for a global one, but the patch is not valid.
                 raise errors.ValidationError(
                     message="There are errors in the following fields, environment.id: Input should be a valid string"
                 )
-            case models.EnvironmentKind.custom, _:
+            case models.EnvironmentKind.CUSTOM, _:
                 # This means that the custom environment is being updated.
                 current = current_launcher.environment.environment_image_source.value
                 new = (
