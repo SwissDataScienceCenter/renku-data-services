@@ -255,3 +255,19 @@ async def test_migration_to_1ef98b967767_and_086eb60b42c8(app_config_instance: C
         '--ServerApp.token="" --ServerApp.password="" --ServerApp.allow_remote_access=true '
         '--ContentsManager.allow_hidden=true --ServerApp.allow_origin=* --ServerApp.root_dir="/home/jovyan/work"',
     ]
+
+
+@pytest.mark.asyncio
+async def test_migration_create_global_envs(
+    app_config_instance: Config,
+    sanic_client_no_migrations: SanicASGITestClient,
+    admin_headers: dict,
+    admin_user: UserInfo,
+    tmpdir_factory,
+    monkeysession,
+) -> None:
+    run_migrations_for_app("common", "head")
+    envs = await app_config_instance.session_repo.get_environments()
+    assert len(envs) == 2
+    assert any(e.name == "Python/Jupyter" for e in envs)
+    assert any(e.name == "Rstudio" for e in envs)
